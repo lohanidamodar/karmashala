@@ -10,8 +10,7 @@ class VmServiceUriFile {
   final String path;
   final Uri uri;
 
-  /// What to call the app before we have talked to it: the file's basename
-  /// without its extension, which is whatever the agent chose to call the run.
+  /// What to call the app before we have talked to it: the file's basename.
   String get label {
     final name = path.split(Platform.pathSeparator).last.split('/').last;
     final dot = name.lastIndexOf('.');
@@ -19,29 +18,11 @@ class VmServiceUriFile {
   }
 }
 
-/// The directory Karmashala watches for the addresses **its own runs** write.
+/// The directory Karmashala watches for the addresses **its own runs** write;
+/// runs started elsewhere are found through their tooling daemon instead.
 ///
-/// It is not a place anybody else is asked to write to. It used to be: the
-/// empty pane offered a `--vmservice-out-file` pointed here, which meant
-/// rewriting somebody's command to aim it into this app's private
-/// application-support folder. Runs started elsewhere are found through their
-/// tooling daemon now (`DtdPidFiles`), and a device's apps through its log.
-///
-/// **Why a directory of files and not a scan of terminal output.**
-/// `flutter run --vmservice-out-file=<path>` writes the `ws://…/ws` address
-/// and nothing else, which is a structured source with no parsing and no
-/// ambiguity — the same mechanism VS Code's Dart extension uses in preference
-/// to reading stdout. It also falls out right for several apps at once: a
-/// desktop app, an app on the mirrored phone and one on a simulator are three
-/// files, discovered and reconciled independently, with no agreement needed
-/// between whoever started them.
-///
-/// **Why the directory is the durable half and the files are not.** §20's
-/// distinction exactly. The path of this directory is stable and worth
-/// keeping; the addresses in it die with the runs that wrote them, and
-/// `flutter run` does not delete its file on the way out. So a file here is a
-/// *candidate*, never a fact, and whether anything answers on it is measured
-/// on demand — never on a timer.
+/// `flutter run` does not delete its file on the way out, so a file here is a
+/// candidate and never a fact: whether anything answers is measured on demand.
 class VmServiceUriDirectory {
   VmServiceUriDirectory(this.directory);
 
@@ -55,12 +36,8 @@ class VmServiceUriDirectory {
     }
   }
 
-  /// Every readable address in the directory, in name order.
-  ///
-  /// Liberal about what it accepts and strict about what it keeps: any regular
-  /// file is read, and one whose contents are not a VM service address is
-  /// ignored rather than reported. The directory belongs to the user and may
-  /// well hold a stray note.
+  /// Every readable address in the directory, in name order. A file that is
+  /// not an address is ignored — the directory belongs to the user.
   Future<List<VmServiceUriFile>> scan() async {
     if (!directory.existsSync()) return const <VmServiceUriFile>[];
     final found = <VmServiceUriFile>[];
@@ -79,8 +56,7 @@ class VmServiceUriDirectory {
       } on FileSystemException {
         continue;
       }
-      // A file that is being written as we read it is empty, not broken; the
-      // watch will bring us back when it has content.
+      // A file caught mid-write reads empty; the watch brings us back.
       final uri = normaliseVmServiceUri(raw);
       if (uri == null) continue;
       found.add(VmServiceUriFile(path: entry.path, uri: uri));
@@ -88,13 +64,9 @@ class VmServiceUriDirectory {
     return found;
   }
 
-  /// Fires whenever the directory's contents change.
-  ///
-  /// This is the whole discovery mechanism and it is a subscription, not a
-  /// poll: the OS reports the write, we look again. A host that cannot watch
-  /// (a network share, a container without inotify) yields an empty stream and
-  /// the panel's explicit re-check is then the only way in, which is why that
-  /// button exists rather than being a fallback timer.
+  /// Fires whenever the directory's contents change — a subscription, never a
+  /// poll. A host that cannot watch yields an empty stream, and the panel's
+  /// explicit re-check is then the only way in.
   Stream<FileSystemEvent> changes() {
     if (!directory.existsSync()) return const Stream<FileSystemEvent>.empty();
     try {
@@ -104,19 +76,15 @@ class VmServiceUriDirectory {
     }
   }
 
-  /// Deletes one address file.
-  ///
-  /// Offered for a file nothing answers on, and only when the user asks: the
-  /// file was written by someone else's process and removing it silently would
-  /// be this app deciding their run is over.
+  /// Deletes one address file, only when the user asks: it was written by
+  /// someone else's process.
   Future<void> forget(String filePath) async {
     final file = File(filePath);
     if (!file.existsSync()) return;
     try {
       await file.delete();
     } on FileSystemException {
-      // Nothing to do about it and nothing to say: the row it belongs to
-      // already reports that nothing answers there.
+      // The row already reports that nothing answers there.
     }
   }
 }

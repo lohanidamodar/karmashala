@@ -36,10 +36,8 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
       case HostStatusEvent(:final status):
         _lastHostStatus = status;
         // The greeting that opens a connection arrives while the client is
-        // still about to persist its own copy of the record; applying it here
-        // would be overwritten by that write. The connect loop applies it once
-        // the link is up. A later announcement — the host toggled a relay
-        // under us — is applied at once, which is the whole point of it.
+        // still about to persist its own record, so applying it here would be
+        // overwritten; the connect loop applies it once the link is up.
         if (_link.value == CompanionLinkState.connected) {
           unawaited(_applyHostStatus(status));
         }
@@ -47,11 +45,8 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
   }
 
   /// The refresh that removes re-pairing for good: the host says where it can
-  /// be met, and this phone's saved candidates become that — health carried
-  /// over for the relays that survive. A DHCP move retires the stale
-  /// `ws://<old-ip>:<port>`; a hosted relay switched on months later simply
-  /// shows up. An empty announcement (an older host) changes nothing, and a
-  /// set that has not moved is not re-written.
+  /// be met and this phone's saved candidates become that, health carried over
+  /// for the relays that survive. An empty announcement changes nothing.
   Future<void> _applyHostStatus(RemoteHostStatus status) async {
     final record = _record;
     if (record == null || _closed) return;
@@ -107,11 +102,9 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
       next.insert(_placeFor(next, summary), summary);
     }
     _setSessions(next);
-    // Re-derived, never accumulated. The event above is the live path, and
-    // this is what covers a phone that was asleep for it: every snapshot —
-    // including the one `session.subscribe` pushes on reconnect — carries
-    // whether the session is still asking, so a card the phone kept through a
-    // dead link is retired the moment it hears the truth again.
+    // Re-derived, never accumulated: every snapshot carries whether the session
+    // is still asking, so a card the phone kept through a dead link is retired
+    // the moment it hears the truth again.
     if (snapshot.attention != kAttentionNeedsApproval) {
       _retireApproval(snapshot.sessionId, CompanionApprovalOutcome.elsewhere);
     }

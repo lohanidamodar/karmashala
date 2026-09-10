@@ -3,10 +3,9 @@ import 'package:test/test.dart';
 
 /// Turning a row of a rendered diff into a line of the file.
 ///
-/// This is the translation the old review comments never did: they stored the
-/// row index, which is a fact about a rendering and changes whenever the diff
-/// is regenerated. Every number here is a line of the **new** file, which is
-/// what an anchor can be checked against.
+/// The old review comments stored the row index, which is a fact about a
+/// rendering and changes whenever the diff is regenerated. Every number here is a
+/// line of the **new** file, which is what an anchor can be checked against.
 void main() {
   List<int?> numbersFor(String diff) =>
       newFileLineNumbers(parseUnifiedDiff(diff));
@@ -40,9 +39,8 @@ index 1111111..2222222 100644
   test('a removed line gets no number rather than its neighbour\'s', () {
     const diff = '@@ -1,3 +1,2 @@\n a\n-b\n c';
     // Handing back 2 — the line that now follows the deletion — would anchor a
-    // comment about `b` onto `c`. That is the exact class of silent
-    // mis-anchoring this feature exists to remove, so the answer is null and
-    // the caller makes it a file-level thread instead.
+    // comment about `b` onto `c`, so the answer is null and the caller makes it
+    // a file-level thread.
     expect(numbersFor(diff), [null, 1, null, 2]);
   });
 

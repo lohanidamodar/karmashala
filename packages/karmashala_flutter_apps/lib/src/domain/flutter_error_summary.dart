@@ -1,25 +1,12 @@
 import 'app_log_record.dart';
 
-/// The most lines of a structured error we will keep.
-///
-/// A `Flutter.Error` payload is a serialised `DiagnosticsNode` tree and can run
-/// to hundreds of nodes — the offending widget, its whole ancestor chain, every
-/// relevant property. The console keeps the summary plus a bounded body,
-/// because the value of an error in a tail is that it is *readable*.
+/// The most lines of a structured error we will keep: a `Flutter.Error`
+/// payload is a `DiagnosticsNode` tree and can run to hundreds of nodes.
 const int kFlutterErrorDetailLines = 40;
 
-/// Turns one `Flutter.Error` event's `extensionData` into a console line.
-///
-/// The framework already decided which sentence is the summary — the node it
-/// marks `level: "summary"`, which is `ErrorSummary` — so that is what the
-/// headline uses rather than a heuristic over the text. When there is no such
-/// node the tree's own `description` is used, which is the framework's category
-/// ("Exception caught by widgets library") and is at least true.
-///
-/// The rest is flattened depth-first with the indentation the tree implies, so
-/// a stack trace and a widget chain stay legible without a tree renderer. This
-/// is deliberately not DevTools' error display; it is the two things a person
-/// reading a log tail needs, and nothing that needs a widget to show.
+/// Turns one `Flutter.Error` event's `extensionData` into a console line. The
+/// headline is the node the framework marked `level: "summary"`, never a
+/// heuristic over the text; the rest is flattened depth-first.
 AppLogRecord summariseFlutterError(
   Map<Object?, Object?> data, {
   required DateTime at,

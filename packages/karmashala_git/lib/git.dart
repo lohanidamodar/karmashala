@@ -1,15 +1,9 @@
 /// Git, as this app reads and drives it.
 ///
-/// The domain is the vocabulary — a change, a commit, a worktree, a stat, a
-/// review thread — and the data layer is everything that produces one: the
-/// porcelain v2 and unified-diff parsers, the on-disk `.git` reader that
-/// answers without spawning anything, and `GitService`, which runs `git`
-/// through a `CommandRunner` so the same code works locally, inside WSL and
-/// over SSH.
-///
-/// Nothing here opens a database or reads a provider. The DAOs that persist
-/// review threads and worktree setups stay in the application that owns the
-/// schema (docs/PACKAGE_SPLIT.md §2).
+/// Values, the porcelain v2 and unified-diff parsers, the on-disk `.git` reader
+/// that answers without spawning anything, and `GitService`, which runs `git`
+/// through a `CommandRunner` so one code path works locally, in WSL and over SSH.
+/// Nothing here opens a database or reads a provider.
 library;
 
 export 'src/git/data/file_edit_diff.dart';

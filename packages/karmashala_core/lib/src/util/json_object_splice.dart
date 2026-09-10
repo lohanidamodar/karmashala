@@ -1,16 +1,10 @@
-/// Textually replaces the value of a **top-level** property in a JSON object,
-/// leaving the rest of the document byte-for-byte intact.
+/// Textually replaces the value of a **top-level** property, leaving the rest of
+/// the document byte-for-byte intact — `~/.claude.json` holds keys differing
+/// only by case (`g:/x`, `G:/x`) that a decode→encode round-trip would collapse.
 ///
-/// This exists because `~/.claude.json` can contain keys that differ only by
-/// case (e.g. `g:/x` and `G:/x`) — legal JSON that a decode→encode round-trip
-/// would silently collapse, losing data. When we only need to swap
-/// `oauthAccount`, splicing avoids re-serializing (and corrupting) everything
-/// else.
-///
-/// [newValueJson] must already be a valid JSON value (object, array, string,
-/// number, bool, or null) — it is inserted verbatim. If [key] is not present at
-/// the top level it is inserted as the first property. Throws [FormatException]
-/// if [rawJson] is not a JSON object or is malformed.
+/// [newValueJson] is inserted verbatim and must already be valid JSON; an
+/// absent [key] is inserted first. Throws [FormatException] on anything that is
+/// not a well-formed JSON object.
 String replaceTopLevelJsonValue(
   String rawJson,
   String key,
@@ -35,7 +29,7 @@ String replaceTopLevelJsonValue(
     if (rawJson[i] != '"') {
       throw FormatException('Expected property name at offset $i');
     }
-    final nameEnd = scanner.endOfString(i); // index just past closing quote
+    final nameEnd = scanner.endOfString(i);
     final name = _decodeJsonString(rawJson.substring(i, nameEnd));
     var afterName = scanner.skipWsFrom(nameEnd);
     if (afterName >= rawJson.length || rawJson[afterName] != ':') {
@@ -52,7 +46,6 @@ String replaceTopLevelJsonValue(
           rawJson.substring(valueEnd);
     }
 
-    // Move past this pair to the next: skip ws, then a ',' or the closing '}'.
     final afterValue = scanner.skipWsFrom(valueEnd);
     if (afterValue >= rawJson.length) {
       throw const FormatException('Unterminated JSON object');
@@ -68,16 +61,10 @@ String replaceTopLevelJsonValue(
   }
 }
 
-/// Removes a **top-level** property from a JSON object, leaving the rest of the
-/// document byte-for-byte intact. Returns [rawJson] unchanged when [key] is
-/// absent.
-///
-/// [replaceTopLevelJsonValue] can only ever swap a value, so a block written
-/// under a name the app no longer uses could be emptied but never removed —
-/// which would have left `"karmashala": {}` at the root of somebody's
-/// `hooks.json` for ever after the rename to Karmashala. Deleting our own key
-/// is the difference between tidying up after ourselves and leaving litter
-/// nothing can identify.
+/// Removes a **top-level** property, leaving the rest byte-for-byte intact;
+/// returns [rawJson] unchanged when [key] is absent. Needed because
+/// [replaceTopLevelJsonValue] can only empty a block, never remove one, so a
+/// key we stop using would stay in the user's file for ever.
 String removeTopLevelJsonKey(String rawJson, String key) {
   final scanner = _Scanner(rawJson);
   final objectStart = scanner.skipWsFrom(0);
@@ -110,8 +97,7 @@ String removeTopLevelJsonKey(String rawJson, String key) {
     }
 
     if (name == key) {
-      // Take the separating comma with the pair, whichever side it is on, so
-      // the object stays valid whether ours was first, last or in the middle.
+      // Take the separating comma with the pair, whichever side it is on.
       if (rawJson[afterValue] == ',') {
         return rawJson.substring(0, pairStart) +
             rawJson.substring(scanner.skipWsFrom(afterValue + 1));
@@ -157,7 +143,6 @@ class _Scanner {
   int skipWsFrom(int i) {
     while (i < s.length) {
       final c = s.codeUnitAt(i);
-      // space, tab, newline, carriage return
       if (c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D) {
         i++;
       } else {
@@ -167,8 +152,7 @@ class _Scanner {
     return i;
   }
 
-  /// [start] points at the opening quote; returns the index just past the
-  /// closing quote.
+  /// [start] points at the opening quote; returns the index past the closer.
   int endOfString(int start) {
     var i = start + 1;
     while (i < s.length) {
@@ -183,8 +167,7 @@ class _Scanner {
     throw FormatException('Unterminated string starting at offset $start');
   }
 
-  /// [start] points at the first char of a JSON value; returns the index just
-  /// past that value.
+  /// [start] points at a value's first char; returns the index past that value.
   int endOfValue(int start) {
     if (start >= s.length) {
       throw const FormatException('Expected a value but reached end of input');
@@ -192,7 +175,7 @@ class _Scanner {
     final c = s[start];
     if (c == '"') return endOfString(start);
     if (c == '{' || c == '[') return _endOfContainer(start);
-    // Primitive: number, true, false, null — read until a structural delimiter.
+    // A primitive runs until a structural delimiter.
     var i = start;
     while (i < s.length) {
       final ch = s[i];
@@ -220,7 +203,6 @@ class _Scanner {
         depth--;
         if (depth == 0) return i + 1;
       } else if (c == '{' || c == '[') {
-        // A nested container of the other kind — recurse to skip it.
         i = _endOfContainer(i);
         continue;
       }

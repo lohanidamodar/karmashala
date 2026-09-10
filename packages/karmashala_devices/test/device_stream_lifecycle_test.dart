@@ -1,11 +1,7 @@
-// What a restart is allowed to leave behind.
-//
-// Restarting used to happen every eleven seconds, and each restart deploys a
-// jar, opens a forward, starts a server and holds two sockets — four things
-// that do not clean themselves up. Killing the host-side `adb shell` does not
-// kill the `app_process` it started, and the forward outlives both: four live
-// servers on one device were found that way. These count what is left after a
-// run of restarts; they never time it.
+// What a restart is allowed to leave behind. Each restart deploys a jar, opens
+// a forward, starts a server and holds two sockets, none of which clean
+// themselves up: killing the host-side `adb shell` does not kill the
+// `app_process` it started, and four live servers on one device were found.
 @Tags(['cost'])
 library;
 
@@ -64,29 +60,17 @@ void main() {
         reason: 'every host-side adb shell was killed',
       );
 
-      // Two sockets per session — video and control — and every one of them
-      // let go by the host.
-      //
-      // Waited for, not assumed. Both counts live on the device's side of a
-      // real loopback socket and are fed by its own events: `session.stop()`
-      // destroys this end, and the far end learns of it when the FIN crosses
-      // and its `onDone` runs. Reading the count on the turn after `stop()`
-      // returns is asking a busy machine to have already got there, which is
-      // the shape this file kept failing in under load and passing alone.
+      // Two sockets per session — video and control — waited for, not assumed:
+      // both counts are fed by the far end's own `onDone`, after the FIN has
+      // crossed a real loopback socket.
       await device.untilSocketsClosed(restarts * 2);
       expect(device.socketsAccepted, restarts * 2);
       expect(device.socketsClosedByHost, restarts * 2);
 
-      // The loopback HTTP shim each session served the player from. Sound to
-      // ask by port because `stop()` awaits `HttpServer.close(force: true)`
-      // before it returns, so the release has happened rather than been
-      // scheduled — and because nothing else answers for a port this suite
-      // just gave back. That last part was the other suspect and it was
-      // measured on this machine, under a full concurrent test run: of 200
-      // loopback ephemeral ports bound and closed, **zero** were answered by
-      // anybody on the next connect. Windows hands ephemeral ports out in
-      // rotation across a 16k range, so a sibling's `bind(…, 0)` does not
-      // land on one of these five inside a run.
+      // Sound to ask by port: `stop()` awaits `HttpServer.close(force: true)`
+      // before it returns. Measured under a full concurrent run: of 200
+      // loopback ephemeral ports bound and closed, zero were answered by
+      // anybody on the next connect.
       for (final url in urls) {
         await expectLater(
           Socket.connect(url.host, url.port),
@@ -119,9 +103,8 @@ void main() {
     });
 
     test('a second stop is not a second teardown', () async {
-      // The pane's dispose cannot await a stop, so stop and the next start's
-      // reap can both be in flight; stopping twice must not kill a session
-      // that is no longer this one's.
+      // The pane's dispose cannot await a stop, so stopping twice must not kill
+      // a session that is no longer this one's.
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
       final runner = device.runner();

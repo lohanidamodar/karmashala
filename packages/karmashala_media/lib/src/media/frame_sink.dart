@@ -9,11 +9,8 @@ import 'package:path/path.dart' as p;
 import 'media_foundation.dart';
 import 'video_writer.dart';
 
-/// One rendered frame, as straight RGBA rows.
-///
-/// The currency of the whole encode side. Anything that can produce these —
-/// a replayed terminal cast, a device's screen stream — can use any [FrameSink]
-/// here without either side knowing about the other.
+/// One rendered frame, as straight RGBA rows — the currency of the encode
+/// side, so any producer works with any [FrameSink].
 class RgbaFrame {
   const RgbaFrame({
     required this.rgba,
@@ -46,13 +43,9 @@ class FrameSinkResult {
   final int frames;
   final int bytes;
 
-  /// The tool the user still has to run, when the sink could not finish the
-  /// job on its own — `'ffmpeg'` for the frame sequence. Null means [path] is
-  /// finished and playable.
-  ///
-  /// Never left null by a sink that only wrote half a video. A file the user's
-  /// player cannot open is not a video, and calling it one is the failure this
-  /// field exists to prevent.
+  /// The tool the user still has to run — `'ffmpeg'` for the frame sequence.
+  /// Null only when [path] is finished and playable, never for a half-written
+  /// file.
   final String? externalTool;
 
   /// The exact command line that turns [path] into that tool's output.
@@ -63,16 +56,13 @@ class FrameSinkResult {
 
 /// Turns a sequence of rendered frames into a file.
 ///
-/// **The seam.** Rendering has to happen on the isolate that owns the Flutter
-/// engine — `Picture.toImage` rasterises nowhere else — but encoding is pure
-/// Dart arithmetic over bytes, and hundreds of frames of it would freeze the
-/// app for the length of the recording. So the split is here: frames cross this
-/// interface, and what is behind it is free to be somewhere else. [IsolateFrameSink]
-/// is, and is the only implementation that ships.
+/// The seam exists because `Picture.toImage` rasterises only on the engine's
+/// isolate while the encode is pure byte arithmetic that would freeze the app
+/// for the length of the recording; [IsolateFrameSink] is the only shipping
+/// implementation.
 abstract interface class FrameSink {
-  /// Hands over one frame. Awaiting this is the back-pressure: a renderer that
-  /// awaits cannot get further ahead of the encoder than one frame, so peak
-  /// memory is one frame rather than the whole recording.
+  /// Hands over one frame. Awaiting it is the back-pressure: peak memory is
+  /// one frame rather than the whole recording.
   Future<void> addFrame(RgbaFrame frame);
 
   /// Finishes the file and returns what was written.
@@ -101,10 +91,8 @@ enum RecordingFormat {
   /// Whether the file this writes is a video, rather than a folder of pictures.
   bool get isVideo => this != pngSequence;
 
-  /// What the user must be told before they pick this.
-  ///
-  /// [pngSequence] needs a tool this app does not bundle and will not pretend
-  /// to have; saying so on the button is the whole point of the field.
+  /// What the user must be told before they pick this — [pngSequence] needs a
+  /// tool the app does not bundle and will not pretend to have.
   String? get needsToolNote => switch (this) {
     gif => null,
     mp4 => null,
@@ -114,12 +102,9 @@ enum RecordingFormat {
   };
 }
 
-/// A [FrameSink] whose encoding runs on a worker isolate.
-///
-/// The worker holds the encoder's state and never sends a frame back, so the
-/// only things crossing between isolates are the frames going in — as
-/// [TransferableTypedData], which moves the bytes rather than copying them —
-/// and one small result at the end.
+/// A [FrameSink] whose encoding runs on a worker isolate. Frames cross as
+/// [TransferableTypedData], which moves the bytes rather than copying them;
+/// nothing comes back but one small result.
 class IsolateFrameSink implements FrameSink {
   IsolateFrameSink({
     required this.format,
@@ -213,13 +198,9 @@ class IsolateFrameSink implements FrameSink {
     return _done.future;
   }
 
-  /// Asks the worker to give up, and waits for it to say it has.
-  ///
-  /// **Asked, not killed.** The worker holds the container and its file handle,
-  /// so it is the only one that can close and remove a half-written MP4 — a
-  /// killed isolate leaves the handle open on Windows, the delete fails, and
-  /// what is left on disk is a file that looks like a recording and opens in
-  /// nothing. Waiting costs one frame's encode.
+  /// Asks the worker to give up, and waits for it to say it has: killing it
+  /// instead leaves the file handle open on Windows, the delete fails, and a
+  /// half-written MP4 is left looking like a recording.
   @override
   Future<void> abort() async {
     if (_closed) return;
@@ -239,8 +220,7 @@ class IsolateFrameSink implements FrameSink {
     }
     if (!_done.isCompleted) {
       _done.completeError(StateError('encode aborted'));
-      // A caller who does await `close()` still gets the error; this only says
-      // that nobody *having* to is not itself a fault.
+      // A caller who awaits `close()` still gets the error.
       _done.future.ignore();
     }
   }
@@ -249,13 +229,9 @@ class IsolateFrameSink implements FrameSink {
   int get frameCount => _frames;
 }
 
-/// Frames per second every recording is rendered and encoded at.
-///
-/// Twelve, not thirty: a terminal changes in bursts of whole lines rather than
-/// continuously, so the extra frames cost their full encode and show nothing
-/// new. GIF's own delay field is hundredths of a second, which 12 divides into
-/// unevenly at 8.33 — the encoder rounds, and a third of a hundredth per frame
-/// is below anything a viewer can see.
+/// Frames per second every recording is rendered and encoded at. Twelve, not
+/// thirty: a terminal changes in bursts, so the extra frames cost a full encode
+/// and show nothing new.
 const int kRecordingFrameRate = 12;
 
 const String kFrameEncoderIsolateName = 'karmashala.frame-encoder';
@@ -345,11 +321,9 @@ Future<void> _encodeWorker(_EncodeRequest request) async {
   }
 }
 
-/// The encoding itself — pure Dart, no `dart:ui`, so it runs wherever it is put.
-///
-/// Exposed rather than hidden inside the worker so a test can encode a handful
-/// of frames without spawning an isolate, and so the device-recording work can
-/// reuse the encode without inheriting this file's isolate plumbing.
+/// The encoding itself — pure Dart, no `dart:ui`, so it runs wherever it is
+/// put. Exposed so a test, or the device-recording path, can encode without
+/// spawning an isolate.
 class FrameEncoder {
   FrameEncoder({
     required this.format,
@@ -382,13 +356,9 @@ class FrameEncoder {
   /// Opened on the first frame, because only a frame knows the picture size.
   VideoEncoder? _video;
 
-  /// Octree rather than the package default's neural quantizer, and no dither.
-  ///
-  /// A terminal frame is a couple of dozen flat colours over one ground —
-  /// nothing a 256-entry palette has to approximate. Neural spends its time
-  /// learning a palette that octree can read straight off, and Floyd-Steinberg
-  /// scatters the error it has none of across the glyph edges, which on text
-  /// reads as grain.
+  /// Octree rather than the package default's neural quantizer, and no dither:
+  /// a terminal frame is a couple of dozen flat colours, and dithering the
+  /// error it does not have reads as grain on glyph edges.
   late final img.GifEncoder _gif = img.GifEncoder(
     quantizerType: img.QuantizerType.octree,
     dither: img.DitherKernel.none,
@@ -418,17 +388,15 @@ class FrameEncoder {
       width: frame.width,
       height: frame.height,
       bytes: frame.rgba.buffer,
-      // A `ByteData.buffer` may be longer than the view onto it; say where the
-      // pixels start rather than copying the whole thing to move them.
+      // A `ByteData.buffer` may be longer than the view onto it.
       bytesOffset: frame.rgba.offsetInBytes,
       numChannels: 4,
       order: img.ChannelOrder.rgba,
     );
     switch (format) {
       case RecordingFormat.gif:
-        // GIF delays are hundredths of a second, and zero means "as fast as the
-        // viewer likes" in most players — clamp to one so a frame is never
-        // skipped outright.
+        // GIF delays are hundredths of a second and zero means "as fast as
+        // the viewer likes" in most players, so clamp to one.
         final hundredths = (frame.hold.inMicroseconds / 10000).round();
         _gif.addFrame(image, duration: hundredths < 1 ? 1 : hundredths);
       case RecordingFormat.mp4:
@@ -491,12 +459,9 @@ class FrameEncoder {
   }
 }
 
-/// The command that turns a rendered frame sequence into a Full HD MP4.
-///
-/// Written into the folder beside the frames as well as shown, because a
-/// command the user has to retype from a dialog is a command they will not run.
-/// `yuv420p` and the even-dimension scale are what makes the result play in
-/// QuickTime, PowerPoint and a browser rather than only in VLC.
+/// The command that turns a rendered frame sequence into a Full HD MP4, also
+/// written beside the frames so nobody has to retype it. `yuv420p` and the
+/// even-dimension scale are what make it play outside VLC.
 String ffmpegCommandFor(String frameDirectory, {int frameRate = kRecordingFrameRate}) =>
     'ffmpeg -framerate $frameRate '
     '-i "${p.join(frameDirectory, 'frame_%05d.png')}" '

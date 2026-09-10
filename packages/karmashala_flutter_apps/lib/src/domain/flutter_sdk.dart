@@ -1,19 +1,11 @@
 import 'package:agent_cli/process.dart';
 
-/// How long a Flutter SDK reading is taken as still true.
-///
-/// The same twelve hours `kVersionReadingFreshFor` gives an agent CLI, for the
-/// same reason and not by coincidence: a `flutter --version` is a whole tool
-/// start, sessions here are long, and a number nobody is looking at is not
-/// worth a process per launch. §20's durable half is the **age** beside the
-/// reading, not the cadence that wrote it.
+/// How long a Flutter SDK reading is taken as still true — the same twelve
+/// hours `kVersionReadingFreshFor` gives an agent CLI, for the same reason.
 const Duration kFlutterSdkReadingFreshFor = Duration(hours: 12);
 
-/// Why an environment has no Flutter we are willing to run.
-///
-/// Five values because they need five different things done about them, and
-/// because collapsing [windowsInstallOnPosixPath] into "not found" is
-/// precisely the silent failure CLAUDE.md §17 is about.
+/// Why an environment has no Flutter we are willing to run. Collapsing
+/// [windowsInstallOnPosixPath] into "not found" is the §17 silent failure.
 enum FlutterSdkRefusal {
   /// Nothing named `flutter` on that environment's PATH.
   notFound,
@@ -30,47 +22,21 @@ enum FlutterSdkRefusal {
   /// It was located and would not say what version it is.
   versionUnreadable,
 
-  /// The path **a person named** for this environment could not be run.
-  ///
-  /// Its own value rather than [notFound], because the thing to do about it is
-  /// different and nothing else can be done at all: installing a Flutter will
-  /// not help, and neither will PATH — the row says where to look and the
-  /// answer is not there. Correct the row, or clear it and let PATH answer
-  /// again. See `ExecutionEnvironment.flutterSdkPath`.
+  /// The path **a person named** could not be run. Its own value rather than
+  /// [notFound]: only correcting or clearing the row helps.
   handSetUnusable,
 }
 
-/// What `flutter` is called in [kind], and CLAUDE.md §17 written as code.
-///
-/// On Windows the name is `flutter.bat` and never `flutter`: the extensionless
-/// file beside it is a **POSIX shell script**, and running it makes Flutter
-/// decide it needs a Linux Dart SDK and swap one into the cache every terminal
-/// on the machine shares. Naming the `.bat` is the whole of the fix, so it is
-/// spelled once, here.
+/// What `flutter` is called in [kind] — `flutter.bat` on Windows, never the
+/// extensionless POSIX script beside it (CLAUDE.md §17).
 String flutterExecutableFor(EnvironmentKind kind) =>
     usesWindowsPaths(kind) ? 'flutter.bat' : 'flutter';
 
-/// The refusal for a POSIX-environment `flutter` that is really the Windows
-/// one, or null when the path is that environment's own.
+/// The refusal for a POSIX-environment `flutter` that is really the Windows one
+/// (CLAUDE.md §17), or null when the path is that environment's own.
 ///
-/// `command -v flutter` inside a WSL distribution resolves to
-/// `/mnt/c/Users/<you>/flutter/bin/flutter` whenever `/mnt/c` is on PATH,
-/// which it is by default — and that file is the same POSIX script §17 forbids,
-/// reached over DrvFs. It runs, it looks like it worked, and it replaces the
-/// Windows `dart-sdk` with a Linux one for everybody. So a path under a drive
-/// mount is **refused before anything is spawned**: the harm is in the
-/// running, not in the looking.
-///
-/// [handSet] changes only where the sentence says the path came from, and it
-/// exists because the other wording would be a small lie: a path somebody
-/// typed into Settings is not "the only flutter on this distribution's PATH",
-/// and telling them to install one inside the distribution is not the fix when
-/// they have already named a file. The danger, and the refusal, are identical.
-///
-/// The judgement is the automount root, `/mnt/<letter>/`, which is what WSL
-/// uses unless `/etc/wsl.conf` moves it. A distribution that has moved it hides
-/// its Windows drives from this check and would be run — recorded here rather
-/// than guessed at, because the alternative is spawning the thing to find out.
+/// The test is the `/mnt/<letter>/` automount root, so a distribution that has
+/// moved it in `/etc/wsl.conf` hides its drives here and would be run.
 String? windowsInstallRefusal(
   EnvironmentKind kind,
   String path, {
@@ -93,12 +59,8 @@ String? windowsInstallRefusal(
       'shares, and it fails silently for whoever ran it (CLAUDE.md §17). $fix';
 }
 
-/// What one environment answered when it was asked where `flutter` is.
-///
-/// **A reading, not a setting.** It carries the moment it was taken, and it is
-/// never a bare yes: an environment that could not be reached is not an
-/// environment with no Flutter (§19), and a path we refuse to run is not a
-/// path we failed to find.
+/// What one environment answered when asked where `flutter` is — a reading,
+/// not a setting: unreachable is not "no Flutter", refused is not "not found".
 class FlutterSdkReading {
   const FlutterSdkReading({
     required this.environmentId,

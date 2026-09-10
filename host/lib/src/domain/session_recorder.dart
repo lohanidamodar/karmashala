@@ -4,18 +4,14 @@ import '../pty/pty.dart';
 import 'output_backlog.dart';
 import 'session_lifecycle.dart';
 
-/// Where one session's bytes are kept beyond this process's memory.
-///
-/// The ring is the session's *memory*; this is its *record*. They are written
-/// from the same place and bounded to the same size, which is what makes a
-/// restarted host able to answer `attach since N` at all — and what stops the
-/// answer growing without limit.
+/// One session's bytes beyond this process's memory. Written from the same
+/// place as the ring and bounded to the same size, which is what lets a
+/// restarted host answer `attach since N` without growing without limit.
 abstract class SessionRecorder {
   /// One chunk, exactly as it went into the ring.
   void record(Uint8List bytes);
 
-  /// The session ended, and how. Written when the child was reaped, which is an
-  /// event the host already observes.
+  /// The session ended, and how — written when the child was reaped.
   void ended(SessionLifecycle lifecycle);
 
   /// Releases the handle. Forgetting the record itself is the store's job.
@@ -37,25 +33,19 @@ class RestoredSession {
   final PtySpawnRequest request;
   final DateTime startedAt;
 
-  /// What the record is able to say about how it ended — including saying it
-  /// cannot, which is the case a lost session takes.
+  /// What the record can say about how it ended, including that it cannot.
   final SessionLifecycle lifecycle;
 
-  /// Whether the record said this session was still **running** when the host
-  /// that owned it stopped. Its process did not survive; its output did. The
-  /// two deserve different sentences and this is the difference.
+  /// Whether the record said it was still running when its host stopped: the
+  /// process did not survive, the output did, and they deserve different words.
   final bool wasRunning;
 
-  /// Seeded with the absolute total the session reached, so `attach since N`
-  /// answers exactly — including telling a client how much was discarded.
+  /// Seeded with the absolute total reached, so `attach since N` answers exactly.
   final OutputBacklog backlog;
 }
 
-/// Where sessions are kept beyond this process.
-///
-/// Declared in the domain and implemented in `serve/` so nothing here has to
-/// import `dart:io` to have a backlog that survives a restart, and so a test
-/// can hand the registry a store with no filesystem behind it.
+/// Where sessions are kept beyond this process. Declared here and implemented
+/// in `serve/`, so the domain never imports `dart:io`.
 abstract class SessionBacklogStore {
   /// Opens the record for a session starting now.
   SessionRecorder open(String id, PtySpawnRequest request, DateTime startedAt);

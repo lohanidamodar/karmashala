@@ -2,17 +2,9 @@ import 'dart:convert';
 
 import '../domain/ios_simulator.dart';
 
-/// Parses `xcrun simctl list devices -j`.
-///
-/// JSON rather than the plain-text listing on purpose. The text form groups
-/// devices under `-- iOS 26.4 --` headers and pads names to align a column,
-/// which makes every name ambiguous the moment one contains two spaces; the
-/// JSON form names the runtime as a key and needs no scanning at all.
-///
-/// Tolerant in the same way the adb parsers are: a malformed document, an
-/// entry missing a udid, or a runtime whose value is not a list is skipped
-/// rather than thrown over. A simulator list is a convenience, and one bad row
-/// must not cost the user the other twenty.
+/// Parses `xcrun simctl list devices -j`. JSON rather than the plain-text
+/// listing, which pads names to align a column and so makes any name with two
+/// spaces ambiguous. Tolerant like the adb parsers: one bad row is skipped.
 List<IosSimulator> parseSimctlDevices(String json) {
   final Object? decoded;
   try {
@@ -60,21 +52,10 @@ List<IosSimulator> parseSimctlDevices(String json) {
 }
 
 /// Pixel dimensions of the device's own screen, from
-/// `xcrun simctl io <udid> enumerate`.
-///
-/// The output is a list of `Port:` blocks, and **the first width/height pair in
-/// it is not the phone**. A booted iPhone 17 Pro enumerates two displays: one
-/// at 720x480 with `Display class: 1`, and the real screen at 1206x2622 with
-/// `Display class: 0`. Taking the first pair — or the first `width:` line
-/// anywhere, which also matches the `IOSurface port:` sub-block — reports a
-/// 720x480 phone, and every coordinate derived from it is wrong.
-///
-/// So the internal display is selected by `Display class: 0`, falling back to
-/// the largest display when no block declares one, and `null` when the output
-/// is not this shape at all.
-///
-/// These are **pixels**. `idb ui describe-all` reports frames, and takes taps,
-/// in points; on a 3x device the two differ by a factor of three.
+/// `simctl io <udid> enumerate`. **The first width/height pair in the output is
+/// not the phone** — a booted iPhone enumerates a 720x480 `Display class: 1`
+/// beside it — so the internal display is selected by `Display class: 0`. These
+/// are **pixels**; taps are in points, three times smaller on a 3x device.
 ({int width, int height})? parseSimctlScreenSize(String output) {
   ({int width, int height, int displayClass})? best;
 

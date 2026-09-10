@@ -1,16 +1,6 @@
-/// Driving an Android device or an iOS simulator from a desktop.
-///
-/// `devices.dart` is the whole vocabulary and every driver; import that, or
-/// this, which adds the two policies that sit just above them:
-///
-/// * `DeviceFileStaging` — where a file pulled off a device is put, and what it
-///   is called once two devices have a `screenshot.png`;
-/// * `StreamRestartPolicy` — whether a mirror that just died should be dialled
-///   again, and how long to wait first.
-///
-/// Both are decisions rather than drivers, which is why they were in the app's
-/// `application/` layer; neither reaches a provider, so they travel with the
-/// code they decide about.
+/// Driving an Android device or an iOS simulator from a desktop. `devices.dart`
+/// is the vocabulary and every driver; this adds the two policies above them —
+/// where a pulled file is put, and whether a dead mirror is dialled again.
 library;
 
 export 'devices.dart';

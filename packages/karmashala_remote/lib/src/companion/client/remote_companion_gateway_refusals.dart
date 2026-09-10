@@ -9,22 +9,11 @@ const String _kNotPaired = 'This phone is not paired with a host.';
 const String _kUnreachable =
     'The host is unreachable right now, so nothing was sent.';
 
-/// A request that went out and was not answered in time.
-///
-/// Deliberately *not* [_kUnreachable]. The owner's report was exactly this
-/// sentence being wrong: "this did not work host is unreachable now. which is
-/// not the case host is here this session is running on the host" — said while
-/// the status bar beside it read "Working · running here". Both halves of that
-/// sentence are false for a timeout: the host is demonstrably reachable, since
-/// the link is carrying frames, and the request *was* sent. Only the answer is
-/// missing, and the honest reason is usually that the desktop is busy.
-///
-/// It no longer says *why*, though. "The link is up, so it is busy with
-/// something else" is a claim the phone cannot support from one unanswered
-/// request — and after a revoke it is flatly wrong: the relay socket does
-/// outlive the pairing, so the link looks up while the host will never answer
-/// again. That case is now told outright ([_kRevoked]); everything left here is
-/// genuinely unknown, and reads that way.
+/// A request that went out and was not answered in time. Deliberately *not*
+/// [_kUnreachable]: the host is demonstrably reachable — the link is carrying
+/// frames — and the request was sent; only the answer is missing. It no longer
+/// says why, because "busy" is a claim one unanswered request cannot support,
+/// and is flatly wrong after a revoke ([_kRevoked]).
 const String _kUnanswered =
     'The desktop did not answer in time. The request was sent, so it may still '
     'be working on it.';
@@ -34,18 +23,10 @@ const String _kRevoked =
     'This pairing was revoked on the desktop. Pair again to reconnect.';
 
 /// How many of those the link is given before the phone stops calling it
-/// connected.
-///
-/// ONE is a busy desktop, and must cost nothing: the host serialises every
-/// frame for one device on a single chain (`_DeviceRuntime._chain`, so that
-/// `Envelope.seq` and the sealed sequence agree), so one slow binding call
-/// holds up whatever is behind it. Re-dialling would not help — the same
-/// runtime, with the same busy chain, is still there afterwards.
-///
-/// TWO in a row, with nothing answered in between, is a different animal:
-/// the phone is putting frames into a link that brings nothing back. That is
-/// where the owner's phone sat, showing the last list the desktop ever sent
-/// and calling itself connected, for as long as the app was left open.
+/// connected. ONE is a busy desktop and must cost nothing: the host serialises
+/// every frame for one device on a single chain, so a slow binding call holds
+/// up what is behind it and a re-dial reaches the same chain. TWO in a row,
+/// with nothing answered between, is a link that brings nothing back.
 const int _kUnansweredBeforeDoubt = 2;
 
 const String _kHostSilentTrouble =
@@ -103,11 +84,9 @@ extension _GatewayRefusals on RemoteCompanionGateway {
   }
 
   void _noteUnanswered() {
-    // A promotion is deciding whether a second link carries. A request that
-    // goes unanswered while it does is news about that candidate, not about
-    // the link this phone is holding — and the promotion's own rollback is
-    // what answers it. Counting it here would declare the working link dead
-    // for the sake of one that never became a link at all.
+    // A request that goes unanswered while a promotion is deciding is news
+    // about that candidate, not about the link this phone is holding; the
+    // promotion's own rollback is what answers it.
     if (_promoting) return;
     _unanswered++;
     if (_unanswered < _kUnansweredBeforeDoubt) {
@@ -130,17 +109,9 @@ extension _GatewayRefusals on RemoteCompanionGateway {
     _declareDead();
   }
 
-  /// What a link that carries frames one way and brings nothing back reads
-  /// like. Never "connected", and never "check your connection": the socket is
-  /// up, the relay is fine, and the list on screen is real — it is simply the
-  /// last thing the desktop sent rather than anything it is saying now.
-  /// The sentence for a link that cannot be used right now.
-  ///
-  /// "Unreachable" is only true when the phone cannot get to the desktop at
-  /// all. When the link was torn down *because* the desktop stopped answering,
-  /// that word contradicts the banner directly above it — which says the
-  /// desktop is holding the connection open and not answering — and the owner
-  /// saw both sentences on one screen at once.
+  /// The sentence for a link that cannot be used right now. Never "connected",
+  /// and never "unreachable" when the link was torn down *because* the desktop
+  /// stopped answering: that word contradicts the banner directly above it.
   String get _unusableLink =>
       _trouble.value == _kHostSilentTrouble ? _kUnanswered : _kUnreachable;
 

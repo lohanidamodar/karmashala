@@ -9,32 +9,25 @@ enum BranchProtectionRead {
   /// GitHub answered with the branch's rules.
   read,
 
-  /// GitHub answered **403**. `/branches/{b}/protection` is admin-only on a
-  /// great many repositories, so this is the ordinary outcome for anyone who
-  /// is not an owner — a fact about the token, not about the branch, and the
-  /// message says so rather than guessing a rule.
+  /// GitHub answered **403**. `/branches/{b}/protection` is admin-only on a great
+  /// many repositories: a fact about the token, not about the branch.
   forbidden,
 
-  /// Nothing usable: `gh` missing or logged out, a 404 because classic branch
-  /// protection is not what is guarding this branch (a ruleset can block a
-  /// merge and answer "Branch not protected" here), or a body that did not
-  /// parse. Never read as "there are no rules".
+  /// Nothing usable: `gh` missing or logged out, a 404 because a *ruleset* rather
+  /// than classic protection guards the branch, or a body that did not parse.
+  /// Never read as "there are no rules".
   unknown,
 }
 
 /// What `gh api repos/{owner}/{repo}/branches/{b}/protection` says a branch
 /// requires.
 ///
-/// **This exists because `mergeStateStatus: BLOCKED` names nothing.** It is
-/// one value covering every branch-protection rule GitHub has, and every open
-/// pull request in a protected repository reports it — so the strip could only
-/// ever say "GitHub is blocking this merge; open the pull request to see why".
-/// The rule is a second call away, and this is that call's answer.
+/// **`mergeStateStatus: BLOCKED` names nothing** — one value covering every
+/// branch-protection rule GitHub has — so the rule is a second call away, and
+/// this is that call's answer.
 ///
-/// **Every field degrades to "did not say", never to a zero or a false.** A
-/// body that arrives without `required_pull_request_reviews` means the reading
-/// did not carry it; reading that as "no review is required" would let the
-/// strip announce a rule that is not the one holding the merge.
+/// **Every field degrades to "did not say", never to a zero or a false**, or the
+/// strip would announce a rule that is not the one holding the merge.
 @immutable
 class BranchProtection {
   const BranchProtection({
@@ -91,14 +84,9 @@ class BranchProtection {
   /// What to say about a `BLOCKED` merge, or null when this reading adds
   /// nothing and the caller should keep its own sentence.
   ///
-  /// **Only a rule we can show is unmet gets named as the reason.** The
-  /// endpoint says which rules *exist*; whether each one is satisfied is a
-  /// separate question, and for two of them the pull request already answers
-  /// it — a review decision that is not `APPROVED` against a required approval
-  /// count, and a check rollup that has not finished against required
-  /// contexts. Those two are named outright. For the rest the honest sentence
-  /// lists what the branch requires and leaves the choosing to the page,
-  /// which is still strictly more than `BLOCKED` said.
+  /// **Only a rule we can show is unmet gets named as the reason.** The endpoint
+  /// says which rules exist, not whether each is satisfied; the pull request
+  /// answers that for approvals and checks, and the rest are listed instead.
   String? describeFor(PullRequestSnapshot pr) {
     final on = branch == null ? 'this branch' : '`$branch`';
     switch (status) {

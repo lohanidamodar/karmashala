@@ -1,14 +1,7 @@
-/// The reconnect schedule, written down as the list of delays it produces.
-///
-/// A list rather than a clock on purpose: the claim is what the sequence *is*,
-/// and a test that waits for a delay to elapse proves only that a timer fires.
-/// So `jitter` is turned off and the delays are read one after another, which
-/// is also the only way to see the difference the ceiling makes.
-///
-/// The failure behind the change: a floor of 250 ms turned one desktop-side
-/// refusal — a relay that is up and answering, with no host at the rendezvous —
-/// into four dials and four log lines a second, for as long as an idle app
-/// stayed open, to learn the same refusal each time.
+/// The reconnect schedule, written down as the list of delays it produces — a
+/// list rather than a clock, because the claim is what the sequence *is*. The
+/// failure behind it: a 250 ms floor turned one desktop-side refusal into four
+/// dials and four log lines a second for as long as an idle app stayed open.
 library;
 
 import 'package:test/test.dart';

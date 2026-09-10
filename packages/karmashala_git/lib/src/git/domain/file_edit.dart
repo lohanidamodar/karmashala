@@ -1,9 +1,7 @@
 /// What an agent's file-writing tool did to one path.
 ///
-/// Deliberately smaller than [FileChangeType]: git reports what a *tree* looks
-/// like and has to describe renames and copies; an agent's write tool only ever
-/// creates, rewrites or removes one file, and a kind the readers can never
-/// produce would be a branch nothing tests.
+/// Smaller than [FileChangeType] on purpose: an agent's write tool only ever
+/// creates, rewrites or removes one file.
 enum FileEditKind {
   created,
   modified,
@@ -21,24 +19,10 @@ enum FileEditKind {
 /// One file an agent wrote, as **the agent's own record of the write**
 /// describes it.
 ///
-/// ## Why this is not read off the disk
-///
-/// Every field here comes out of the transcript the CLI wrote for itself, and
-/// nothing in this feature opens the file. Three reasons, in order of how much
-/// they matter:
-///
-/// 1. **The disk has moved on.** A turn edits a file five times; the working
-///    tree only remembers the fifth. Diffing edit #2 against what is there now
-///    shows a change nobody made.
-/// 2. **The file may not be reachable.** A session can run in WSL or over SSH,
-///    where the path in the record does not resolve in this process.
-/// 3. **The UI isolate must not read files.** This app's database bindings are
-///    synchronous and its window shares that isolate; a `readAsStringSync` per
-///    visible edit is a frozen window.
-///
-/// The record is also *better* evidence than the file: for Claude Code and
-/// Codex it already contains a computed patch ([recordedDiff]), so the common
-/// case costs no diffing at all.
+/// **Nothing here opens the file.** A turn edits a file five times and the disk
+/// only remembers the fifth; the path may be in WSL or over SSH; and a
+/// `readAsStringSync` per visible edit on the UI isolate is a frozen window. The
+/// record is better evidence anyway — it usually carries a computed patch.
 class FileEditRecord {
   const FileEditRecord({
     required this.path,
@@ -70,9 +54,8 @@ class FileEditRecord {
 
   /// A unified diff the agent computed itself, when its record kept one.
   ///
-  /// Hunk bodies only (`@@ … @@` plus ` `/`+`/`-` lines) — there is no
-  /// `diff --git` header, because neither CLI records one and inventing one
-  /// would put a repository-relative path we do not have into the output.
+  /// Hunk bodies only: neither CLI records a `diff --git` header, and inventing
+  /// one would put a repository-relative path we do not have into the output.
   final String? recordedDiff;
 
   /// Where the file moved to, for the one tool that can rename (Codex's
@@ -82,8 +65,7 @@ class FileEditRecord {
   /// Whether [oldText]/[newText] are excerpts rather than whole files.
   ///
   /// True exactly when there is no recorded patch to place them: a fragment has
-  /// no line numbers in the file, so a diff built from it must not print a
-  /// `@@ -a,b +c,d @@` header claiming it has.
+  /// no line numbers, so a diff from it must not print a `@@ -a,b +c,d @@` header.
   bool get isFragment =>
       recordedDiff == null && kind == FileEditKind.modified;
 
@@ -98,10 +80,9 @@ class FileEditRecord {
       other.recordedDiff == recordedDiff &&
       other.renamedTo == renamedTo;
 
-  /// Hashed on **lengths**, not contents: the texts here run to hundreds of
-  /// kilobytes and this type is a cache key, so hashing them would walk the
-  /// whole file on every lookup. Equality still compares them in full; a
-  /// collision costs one string compare, hashing costs one per lookup.
+  /// Hashed on **lengths**, not contents: these texts run to hundreds of kilobytes
+  /// and this type is a cache key. Equality still compares in full — a collision
+  /// costs one string compare, hashing would cost one walk per lookup.
   @override
   int get hashCode => Object.hash(
     path,

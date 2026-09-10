@@ -1,29 +1,9 @@
 /// What an agent should *do* about a browser failure, as a token it can branch
-/// on rather than a sentence it has to interpret.
-///
-/// ## Why this is text and not a field
-///
-/// There is nowhere structured to put it. A tool that throws is rendered by
-/// `McpServer._callTool` as one text block, `Error: $error`, with `isError:
-/// true` and nothing else — see `mcp_protocol.dart`, and the same two lines in
-/// `mcp_bridge/bin/karmashala_mcp.dart`. There is no error `data` field on the
-/// way out, and adding one would change a wire format two transports and an
-/// external bridge already agree on.
-///
-/// So the recovery is a trailer on the message, in a shape stable enough to
-/// match on: one line, fixed key order, fixed vocabulary. That is a lower
-/// ambition than a typed field and a much higher one than what was there
-/// before, which was an actionable English sentence for a human and nothing at
-/// all for a machine.
-///
-/// ## Why "retry" is its own axis
-///
-/// The expensive failure mode with a real browser is not a wrong first move,
-/// it is a loop: an agent that re-issues `browser_click(selector: "#go")` after
-/// `elementNotFound` will get `elementNotFound` again, forever, because nothing
-/// about the page changed between the two calls. "What to do next" and "is
-/// doing it again ever going to work" are different questions, and answering
-/// only the first is how that loop starts.
+/// on. There is nowhere structured to put it — a thrown tool is rendered as one
+/// `Error: $e` text block with no error `data` field — so it rides as a trailer
+/// on the message. Retry is its own axis because "what to do next" and "will
+/// doing it again ever work" are different questions, and answering only the
+/// first is how an agent loops on `elementNotFound` forever.
 library;
 
 import 'browser_failure.dart';
@@ -83,16 +63,12 @@ class BrowserRecovery {
   final BrowserRecoveryAction action;
   final BrowserRetryAdvice retry;
 
-  /// The specific next call, named as a tool the agent already has. Kept
-  /// concrete — "browser_find" beats "look again" — because a generic
-  /// suggestion is one an agent has to re-derive.
+  /// The specific next call, named as a tool the agent already has —
+  /// "browser_find" beats "look again", which an agent has to re-derive.
   final String next;
 
-  /// The trailer, on its own line at the end of the error message.
-  ///
-  /// Square-bracketed and single-line so it survives being embedded in
-  /// `Error: $e` and can be found by a fixed prefix; `|`-separated because none
-  /// of the three values ever contains one.
+  /// The trailer, on its own line. Square-bracketed and single-line so it
+  /// survives `Error: $e`; `|`-separated because no value ever contains one.
   String get line =>
       '[recovery: ${action.token} | retry: ${retry.token} | next: $next]';
 
@@ -100,36 +76,28 @@ class BrowserRecovery {
   String toString() => line;
 }
 
-/// The recovery for each way the browser client can fail.
-///
-/// One entry per [BrowserFailure] and no default arm, so a new failure kind
-/// cannot be added without deciding what an agent does about it — the same
-/// discipline `describeBrowserFailure` already applies to the human sentence.
+/// The recovery for each way the browser client can fail. No default arm, so a
+/// new failure cannot be added without deciding what an agent does about it.
 BrowserRecovery recoveryFor(BrowserFailure failure) => switch (failure) {
-  // Nothing to attach to and nothing an agent can install. The one honest
-  // answer is to stop and say what the developer has to do.
+  // Nothing to attach to, and nothing an agent can install.
   BrowserFailure.chromeNotFound => const BrowserRecovery(
     BrowserRecoveryAction.askUser,
     BrowserRetryAdvice.never,
     'ask the developer to install Chrome or set CHROME_EXECUTABLE',
   ),
-  // Someone else owns the port. A different port is an argument change the
-  // agent can make on its own, which is why this is not askUser.
+  // A different port is an argument change the agent can make, so not askUser.
   BrowserFailure.portInUse => const BrowserRecovery(
     BrowserRecoveryAction.fixArguments,
     BrowserRetryAdvice.afterRecovery,
     'browser_connect(port: <another port>)',
   ),
-  // `spawn: false` was passed, or spawning is off. Connecting again with the
-  // default is the whole fix.
   BrowserFailure.notRunning => const BrowserRecovery(
     BrowserRecoveryAction.reconnect,
     BrowserRetryAdvice.afterRecovery,
     'browser_connect() to attach, or browser_navigate(url: …) which connects',
   ),
-  // A browser was started and never answered. Often it is a second Chrome on
-  // the same profile that took the launch, in which case attaching to what is
-  // now listening works where launching again does not.
+  // Often a second Chrome on the same profile took the launch, in which case
+  // attaching to what is now listening works where launching again does not.
   BrowserFailure.startupFailed => const BrowserRecovery(
     BrowserRecoveryAction.reconnect,
     BrowserRetryAdvice.afterRecovery,
@@ -140,8 +108,7 @@ BrowserRecovery recoveryFor(BrowserFailure failure) => switch (failure) {
     BrowserRetryAdvice.afterRecovery,
     'browser_connect() — the previous session is gone',
   ),
-  // The tab we held is gone, so both the connection *and* every selector taken
-  // from it are void. Listed as reconnect because that has to happen first.
+  // Both the connection and every selector taken from the old tab are void.
   BrowserFailure.targetGone => const BrowserRecovery(
     BrowserRecoveryAction.reconnect,
     BrowserRetryAdvice.afterRecovery,
@@ -152,8 +119,7 @@ BrowserRecovery recoveryFor(BrowserFailure failure) => switch (failure) {
     BrowserRetryAdvice.afterRecovery,
     'ask the developer to open a tab, then browser_tabs()',
   ),
-  // A navigation that timed out may still be in flight, and issuing it again is
-  // idempotent — the same URL, the same end state.
+  // The navigation may still be in flight, and re-issuing it is idempotent.
   BrowserFailure.navigationTimeout => const BrowserRecovery(
     BrowserRecoveryAction.retry,
     BrowserRetryAdvice.safe,
@@ -164,8 +130,6 @@ BrowserRecovery recoveryFor(BrowserFailure failure) => switch (failure) {
     BrowserRetryAdvice.safe,
     'retry once; if it times out again, browser_screenshot() for a dialog',
   ),
-  // The browser rejected the request itself. Re-sending the identical command
-  // gets the identical rejection.
   BrowserFailure.protocolError => const BrowserRecovery(
     BrowserRecoveryAction.fixArguments,
     BrowserRetryAdvice.never,
@@ -176,22 +140,19 @@ BrowserRecovery recoveryFor(BrowserFailure failure) => switch (failure) {
     BrowserRetryAdvice.never,
     'fix the expression; the page threw on it',
   ),
-  // The single most loop-prone failure in this set: the page changed, and the
-  // selector an agent is holding came from before it changed.
+  // The most loop-prone failure here: the selector predates the page's change.
   BrowserFailure.elementNotFound => const BrowserRecovery(
     BrowserRecoveryAction.resnapshot,
     BrowserRetryAdvice.afterRecovery,
     'browser_find(text: …) for a current selector — the old one is stale',
   ),
-  // The developer declined, or walked away. Asking again immediately is worse
-  // than useless; it is nagging a person who already answered.
+  // Asking again immediately is nagging a person who already answered.
   BrowserFailure.pickCancelled => const BrowserRecovery(
     BrowserRecoveryAction.askUser,
     BrowserRetryAdvice.never,
     'ask the developer what they meant, in words, before picking again',
   ),
-  // The browser said something this client cannot parse. That is a defect
-  // here, not a mistake the caller made, and a retry hides it.
+  // A defect here, not a mistake the caller made, and a retry hides it.
   BrowserFailure.malformedResponse => const BrowserRecovery(
     BrowserRecoveryAction.stop,
     BrowserRetryAdvice.never,
@@ -199,23 +160,17 @@ BrowserRecovery recoveryFor(BrowserFailure failure) => switch (failure) {
   ),
 };
 
-/// The recovery for a call this app refused before the browser ever saw it —
-/// a missing argument, an unknown key name, an index past the end.
-///
-/// Its own constant rather than a [BrowserFailure] arm because these never
-/// reach the CDP client: they are argument errors, and the only fix is
-/// different arguments.
+/// The recovery for a call this app refused before the browser saw it. Its own
+/// constant rather than a [BrowserFailure] arm: these never reach the CDP
+/// client, and the only fix is different arguments.
 const BrowserRecovery badArgumentsRecovery = BrowserRecovery(
   BrowserRecoveryAction.fixArguments,
   BrowserRetryAdvice.never,
   'correct the arguments and call again',
 );
 
-/// The recovery for a tool refused by the consent gate.
-///
-/// `never` is the important half. A permission an agent does not have is not a
-/// transient condition it can wait out, and an agent that retries a denied
-/// `browser_evaluate` is burning turns on a decision only a person can make.
+/// The recovery for a tool refused by the consent gate. `never` is the important
+/// half: a permission is not a transient condition an agent can wait out.
 const BrowserRecovery consentRequiredRecovery = BrowserRecovery(
   BrowserRecoveryAction.askUser,
   BrowserRetryAdvice.never,

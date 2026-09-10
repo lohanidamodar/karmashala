@@ -1,17 +1,7 @@
 /// Everything about a Flutter app that is not the app: where its project is,
 /// which SDK would build it, where the running VM service is, and what can be
-/// asked of it once attached.
-///
-/// * **domain** — the value types and the pure rules: a project and its
-///   platforms, an SDK reading and its refusals, a VM service URI and the four
-///   routes to one (an out-file, an adb-logcat announcement, an mDNS record, a
-///   DTD registration), a log record, an error summary, a widget selection.
-/// * **data** — the readers and links that produce them: the project scanner,
-///   the SDK probe, the out-file directory watcher, the DTD channel and its pid
-///   files, and `FlutterAppLink` over `package:vm_service`.
-///
-/// Nothing here holds a database, a provider or a widget: a scan takes a
-/// `CommandRunner`, a link takes a socket, and the app composes them.
+/// asked of it once attached. Nothing here holds a database, a provider or a
+/// widget — the app composes them.
 library;
 
 export 'src/domain/app_log_record.dart';

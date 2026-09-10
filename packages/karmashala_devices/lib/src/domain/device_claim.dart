@@ -1,21 +1,10 @@
 /// One session's hold on one physical device, and the refusal a second caller
 /// gets while it stands.
 ///
-/// ## Why a device gets a lock when a repository does not
-///
-/// `SETTLED.md` refuses leases for `terminal_run`, and that refusal is right
-/// there for two reasons that both fail here. It rests on *"a lease an agent
-/// cannot see is a hang"* — so this one is **visible**: every refusal names the
-/// holder, says since when, and carries the age of both readings (§19). And it
-/// rests on the leverage being capped, because an agent can always type into
-/// its own pane. There is no such side door to a phone: `adb` is the only way
-/// in and it is ours.
-///
-/// The thing being protected is different too. We run several agents against
-/// one repository *by design* — a repository is a directory that can be
-/// branched. A phone is a single physical surface, and two agents interleaving
-/// taps on it produces garbage that reads as a flaky app rather than as a
-/// collision.
+/// `SETTLED.md` refuses leases for `terminal_run` because a lease an agent
+/// cannot see is a hang — this one names its holder, and its age, in every
+/// refusal. And a phone has no side door: `adb` is the only way in, where an
+/// agent can always type into its own pane.
 library;
 
 /// A session's standing hold on one device.
@@ -42,11 +31,8 @@ class DeviceClaim {
   final DateTime takenAt;
 
   /// When the holder last called *any* device tool on this device, reads
-  /// included.
-  ///
-  /// A drive is look-tap-look, so a read is as much evidence that the holder is
-  /// still working as a tap is. Ageing only the taps would let a claim lapse in
-  /// the middle of a careful drive, which is the one moment it exists for.
+  /// included. A drive is look-tap-look, so ageing only the taps would lapse a
+  /// claim in the middle of a careful one.
   final DateTime lastCallAt;
 
   final String lastVerb;
@@ -82,12 +68,9 @@ class DeviceClaim {
       : '"$holderTitle" (session $holderSessionId)';
 }
 
-/// The device is somebody else's right now.
-///
-/// Its own type rather than a `DeviceRefusal` so a caller — and a test — can
-/// tell "another agent is driving this" apart from "this device cannot do
-/// that". They call for opposite responses: one is worth waiting out, the other
-/// never will be.
+/// The device is somebody else's right now. Its own type so a caller can tell
+/// "another agent is driving this" from "this device cannot do that": one is
+/// worth waiting out and the other never will be.
 class DeviceBusy implements Exception {
   const DeviceBusy(this.message, {required this.claim});
 
@@ -98,22 +81,14 @@ class DeviceBusy implements Exception {
   String toString() => message;
 }
 
-/// How long a claim survives with no device call from its holder.
-///
-/// Two minutes because a drive is a tight loop — dump, tap, dump — whose gaps
-/// are seconds, and because the cost of getting this wrong is symmetric and
-/// visible in both directions: too short and the displaced holder's next call
-/// is refused *by name* and it can simply take the device back; too long and a
-/// second agent waits. Silence is not.
+/// How long a claim survives with no device call from its holder. Two minutes:
+/// a drive's gaps are seconds, and a displaced holder's next call is refused *by
+/// name*, so it can simply take the device back.
 const Duration kDeviceClaimLapse = Duration(minutes: 2);
 
 /// An age in the seconds-to-minutes range, which is the range a drive lives in.
-///
-/// `describeAge` is deliberately coarse — everything under a minute is "just
-/// now" — because it exists to say how much to trust a stored reading. Here the
-/// question is whether the holder is still tapping, and rendering a claim taken
-/// forty seconds ago and one taken two seconds ago with the same three words is
-/// exactly the reading that hides the answer.
+/// `describeAge` is too coarse here — forty seconds and two seconds both read as
+/// "just now", which is exactly the reading that hides the answer.
 String describeDriveAge(Duration age) {
   if (age.isNegative || age.inSeconds < 1) return 'just now';
   if (age.inSeconds < 60) return '${age.inSeconds}s ago';

@@ -229,9 +229,7 @@ void main() {
   group('appearance', () {
     test('flips the ui mode through the service the tile uses', () async {
       // `cmd uimode night`, not `settings put secure ui_night_mode`: the
-      // setting records the preference, but the running system UI and every
-      // foreground app keep the appearance they were configured with until
-      // `UiModeManager` tells them otherwise.
+      // setting alone does not repaint the running system UI.
       final runner = FakeCommandRunner();
       await AdbService(
         runner: runner,
@@ -260,9 +258,8 @@ void main() {
     });
 
     test('reads the device rather than trusting the last write', () async {
-      // The Quick Settings tile and a scheduled switch at dusk both move this
-      // behind the pane's back, so a remembered flag would offer "dark" on a
-      // device that is already dark.
+      // The Quick Settings tile and a dusk schedule both move this behind the
+      // pane's back, so a remembered flag would offer "dark" on a dark device.
       final runner = FakeCommandRunner(
         responder: (_) => const CommandResult(
           exitCode: 0,
@@ -334,9 +331,7 @@ void main() {
       'a link nothing can handle is a failure, exit code notwithstanding',
       () async {
         // Measured against an API 34 emulator: `am start` exits **0** when the
-        // intent resolves to nothing and complains on stderr instead. Trusting
-        // the exit code would report success for the single most likely mistake
-        // anyone makes here — a scheme no installed app registers.
+        // intent resolves to nothing and complains on stderr instead.
         final runner = FakeCommandRunner(
           responder: (_) => const CommandResult(
             exitCode: 0,
@@ -539,8 +534,7 @@ void main() {
 
     test('appends the slimming flags after our own', () async {
       // The argv is the caller's policy: `AdbService` knows nothing about what
-      // these mean, which is what keeps a settings decision out of the process
-      // layer.
+      // these mean.
       final runner = FakeCommandRunner();
       await AdbService(runner: runner, sdk: _sdk()).bootAvd(
         'Pixel_8_Pro',
@@ -560,10 +554,8 @@ void main() {
     test(
       'drains the emulator output, which is what stops a boot wedging',
       () async {
-        // Found by running it: the emulator is chatty during boot and its stdout
-        // is a pipe of a few kilobytes. With no reader it fills, the emulator
-        // blocks on write, and the boot silently stops part-way — indisting-
-        // uishable from a slow emulator.
+        // The emulator's stdout is a pipe of a few kilobytes; with no reader it
+        // fills, the boot stops part-way, and it looks like a slow emulator.
         final handle = FakeProcessHandle();
         final runner = FakeCommandRunner(processFactory: (_) => handle);
         final lines = <String>[];
@@ -1059,12 +1051,8 @@ void main() {
   });
 }
 
-/// Turning "not enough space" into a number and a remedy.
-///
-/// `adb install` on a full emulator reports
-/// `IOException: Requested internal only, but not enough space`, which names
-/// neither the partition nor what to do. From the field report: it happened
-/// twice and cost a full re-run each time.
+/// Turning "not enough space" into a number and a remedy: `adb install` on a
+/// full emulator names neither the partition nor what to do about it.
 void _installSpaceTests() {
   group('install failures about space', () {
     test('are recognised across the wordings different API levels use', () {

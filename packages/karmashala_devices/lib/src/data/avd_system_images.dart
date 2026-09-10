@@ -1,20 +1,11 @@
-/// Whether an AVD's system image is actually installed.
-///
-/// **`emulator -list-avds` is not evidence that an AVD can boot.** It lists
-/// directories. On 2026-09-03 two of this machine's AVDs listed perfectly and
-/// then died on launch with `PANIC: Cannot find AVD system path`, because the
-/// system image their `config.ini` names had never been downloaded — and
-/// nothing in the app could say so before the boot attempt burned three
-/// minutes. The image is named in a file; reading it costs nothing.
-///
-/// Everything here is pure: paths in, path out. The existence checks belong to
-/// the caller, which is what makes this testable without an SDK.
+/// Whether an AVD's system image is actually installed. **`emulator -list-avds`
+/// is not evidence that an AVD can boot** — it lists directories, and two of
+/// this machine's listed perfectly and then died with `PANIC: Cannot find AVD
+/// system path`. The image is named in a file; reading it costs nothing.
 library;
 
-/// Reads `key=value` out of an AVD `.ini` / `config.ini`.
-///
-/// These files are `key=value` per line with `#` comments; values are taken
-/// verbatim after the first `=`, since a Windows path is full of characters a
+/// Reads `key=value` out of an AVD `.ini` / `config.ini`. Values are taken
+/// verbatim after the first `=`: a Windows path is full of characters a
 /// cleverer parse would mangle.
 String? iniValue(String content, String key) {
   for (final raw in content.split(RegExp(r'[\r\n]+'))) {
@@ -29,11 +20,9 @@ String? iniValue(String content, String key) {
   return null;
 }
 
-/// The `<name>.avd` directory an AVD's `<name>.ini` points at.
-///
-/// `path` is absolute and authoritative when present. `path.rel` is the
-/// relative form Android Studio writes for a portable SDK home, resolved
-/// against [avdHome]'s parent — the `.android` directory it names things from.
+/// The `<name>.avd` directory an AVD's `<name>.ini` points at. `path` is
+/// authoritative when present; `path.rel` is the portable form Android Studio
+/// writes, resolved against [avdHome]'s parent.
 String? avdDirectory(
   String iniContent, {
   required String avdHome,
@@ -49,10 +38,8 @@ String? avdDirectory(
 }
 
 /// The system-image directory an AVD's `config.ini` names, under [sdkRoot].
-///
-/// `image.sysdir.1` is stored with forward slashes and a trailing one
-/// regardless of platform; both are normalised here so the result can be
-/// handed straight to an existence check.
+/// `image.sysdir.1` is stored with forward slashes and a trailing one whatever
+/// the platform; both are normalised so the result can be stat-ed directly.
 String? systemImageDirectory(
   String configContent, {
   required String sdkRoot,
@@ -77,9 +64,8 @@ class AvdImageStatus {
     : missingImage = true,
       problem = null;
 
-  /// The AVD's own files could not be read, so nothing was learned about it.
-  /// Deliberately not "broken": an unreadable `.ini` is our blind spot, not
-  /// necessarily the AVD's fault.
+  /// The AVD's own files could not be read. Deliberately not "broken": an
+  /// unreadable `.ini` is our blind spot, not necessarily the AVD's fault.
   const AvdImageStatus.unknown(this.name, this.problem)
     : imagePath = null,
       missingImage = false;

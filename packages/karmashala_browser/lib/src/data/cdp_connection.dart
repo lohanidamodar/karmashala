@@ -5,13 +5,9 @@ import '../domain/cdp_message.dart';
 import 'cdp_protocol.dart';
 import 'cdp_socket.dart';
 
-/// Correlates CDP requests with their replies over a single [CdpSocket], and
-/// republishes everything else as events.
-///
-/// The contract that matters: **a pending request never resolves successfully
-/// once the peer is gone**. When the socket closes — the user quit Chrome, the
-/// tab was closed, the target crashed — every outstanding request completes
-/// with a [BrowserException], and every later [send] throws immediately.
+/// Correlates CDP requests with their replies over one [CdpSocket]. The contract
+/// that matters: a pending request never resolves successfully once the peer is
+/// gone — everything outstanding fails, and every later [send] throws.
 class CdpConnection {
   CdpConnection(
     this._socket, {
@@ -55,7 +51,6 @@ class CdpConnection {
   /// Every event frame the peer sends, in arrival order.
   Stream<CdpEvent> get events => _events.stream;
 
-  /// Events with exactly this `method`.
   Stream<CdpEvent> on(String method) =>
       _events.stream.where((event) => event.method == method);
 
@@ -66,11 +61,9 @@ class CdpConnection {
   /// null if it was closed deliberately.
   Future<BrowserException?> get done => _closed.future;
 
-  /// Sends `method` and waits for its reply.
-  ///
-  /// Throws [BrowserException] with [BrowserFailure.protocolError] when the
-  /// browser rejects the command, [BrowserFailure.timeout] when no reply
-  /// arrives, and [BrowserFailure.disconnected] when the peer vanishes.
+  /// Sends `method` and waits for its reply. Throws [BrowserException]:
+  /// protocolError when the browser rejects it, timeout when nothing arrives,
+  /// disconnected when the peer vanishes.
   Future<Map<String, Object?>> send(
     String method, {
     Map<String, Object?>? params,

@@ -1,6 +1,5 @@
-// Parser for scrcpy-server's video stream framing.
-//
-// Wire format (scrcpy v4.1, confirmed against `Streamer.java`):
+// Parser for scrcpy-server's video stream framing (scrcpy v4.1, confirmed
+// against `Streamer.java`):
 //
 // ```
 // 4 bytes   codec id, e.g. "h264"
@@ -10,13 +9,8 @@
 // ```
 //
 // A **SESSION** header carries the video `(width, height)` and has **no
-// payload**; it is re-sent whenever the device rotates or is resized. Every
-// other header is followed by `size` bytes of Annex-B H.264.
-//
-// Getting the flag bits wrong is a silent corruption bug (a keyframe read as a
-// config packet), and missing the payload-less SESSION packet desyncs the
-// stream on the first rotation — hence this is a pure, unit-tested class rather
-// than inline socket handling.
+// payload**; missing that desyncs the stream on the first rotation, and getting
+// the flag bits wrong reads a keyframe as a config packet.
 
 import 'dart:typed_data';
 
@@ -77,10 +71,8 @@ class ScrcpyFrame extends ScrcpyPacket {
       'config=$isConfig, key=$isKeyFrame)';
 }
 
-/// Incremental parser: feed it socket chunks, get whole packets back.
-///
-/// TCP delivers arbitrary fragments, so partial headers and partial payloads are
-/// the normal case, not an edge case.
+/// Incremental parser: feed it socket chunks, get whole packets back. TCP
+/// delivers arbitrary fragments, so partial headers are the normal case.
 class ScrcpyStreamParser {
   final BytesBuilder _buffer = BytesBuilder();
   bool _haveCodec = false;

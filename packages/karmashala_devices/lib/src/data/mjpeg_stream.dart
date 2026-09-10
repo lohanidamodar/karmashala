@@ -2,18 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
-/// Splits a `multipart/x-mixed-replace` body into the JPEG frames inside it.
-///
-/// Written because **libmpv cannot read this stream**. media_kit ships a
-/// reduced ffmpeg: its `Mpv.framework` has `mjpeg`, `image2pipe`, `h264` and
-/// `mpegts` but no `mpjpeg`, so probing fell back to the *playlist* demuxer
-/// (`Reading plaintext playlist`) and naming the demuxer outright answered
-/// `Unknown lavf format mpjpeg`. Either way the pane got a black rectangle.
-///
-/// No player is needed for it. An MJPEG stream is a sequence of complete JPEGs
-/// with a few headers between them, and Flutter decodes JPEG natively — so the
-/// frames are pulled apart here and painted directly, with no muxer, no
-/// loopback server and no libmpv in the path at all.
+/// Splits a `multipart/x-mixed-replace` body into the JPEG frames inside it,
+/// because **libmpv cannot read this stream**: media_kit's reduced ffmpeg has no
+/// `mpjpeg` demuxer, so the pane got a black rectangle. No player is needed —
+/// the frames are complete JPEGs and Flutter decodes those natively.
 class MjpegStream {
   /// Frames from [url], until the subscription is cancelled.
   ///
@@ -76,12 +68,9 @@ class MjpegStream {
 }
 
 /// Pulls complete JPEGs out of a multipart body arriving in arbitrary chunks.
-///
 /// Driven by the part's `Content-Length` rather than by scanning for the
-/// boundary. WebDriverAgent sends one, and trusting it means never having to
-/// search a 120 KB frame for a delimiter that could also occur inside the JPEG.
-/// A part without one falls back to scanning for the JPEG end marker, so a
-/// server that omits it still works.
+/// boundary, which could also occur inside the JPEG; a part without one falls
+/// back to scanning for the end marker.
 class _MultipartJpegParser {
   final BytesBuilder _buffer = BytesBuilder(copy: false);
 
@@ -100,14 +89,9 @@ class _MultipartJpegParser {
 
     while (true) {
       // WebDriverAgent writes CRLF CRLF *after* each frame as well as after the
-      // part headers, so what follows a frame is `\r\n\r\n--Boundary...`.
-      // Searching straight for the header terminator found that trailing pair
-      // instead, at offset zero: the headers came out empty, there was no
-      // Content-Length to read, and the fallback scan then returned everything
-      // from the boundary line to the next end marker. Every frame after the
-      // first began with `--BoundaryString` rather than a JPEG header — which
-      // decodes to nothing, and showed up as a picture that never advanced past
-      // its first frame.
+      // part headers, so searching straight for the header terminator finds that
+      // trailing pair at offset zero — and every frame after the first then
+      // begins with the boundary line rather than a JPEG header.
       var lead = 0;
       while (lead < bytes.length &&
           (bytes[lead] == 13 || bytes[lead] == 10)) {

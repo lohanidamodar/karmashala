@@ -1,10 +1,6 @@
-/// What the page complained about while we were driving it.
-///
-/// Two kinds, kept apart because they answer different questions: a console
-/// message is the page's own code saying something went wrong, and a network
-/// failure is a request that did not come back. A verification run collects
-/// both without being asked, because the whole value of a recorded run is
-/// catching what nobody thought to look at.
+/// What the page complained about while we were driving it. Two kinds, kept
+/// apart because a console message is the page's own code saying something went
+/// wrong and a network failure is a request that did not come back.
 class ConsoleMessage {
   const ConsoleMessage({
     required this.level,
@@ -26,9 +22,8 @@ class ConsoleMessage {
 
   bool get isError => level == 'error';
 
-  /// The identity used to drop duplicates. Chrome reports one `console.error`
-  /// through both `Runtime.consoleAPICalled` and `Log.entryAdded` on some
-  /// versions, and a run that lists the same error twice reads as two bugs.
+  /// The identity used to drop duplicates: some Chrome versions report one
+  /// `console.error` twice, and a run listing it twice reads as two bugs.
   String get fingerprint => '$level|$text|${source ?? ''}';
 
   String toLine() => '[$level] $text${source == null ? '' : '  ($source)'}';

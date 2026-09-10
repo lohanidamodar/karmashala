@@ -1,10 +1,7 @@
 import 'element_capture.dart';
 
-/// One element a search matched, in the shape the page reports it.
-///
-/// The same descriptor is used for "what did I find" and "what did I click",
-/// so a caller can list candidates and then act on one of them without a
-/// second round trip through a different representation.
+/// One element a search matched. The same descriptor answers "what did I find"
+/// and "what did I click", so a caller can list candidates then act on one.
 class FoundElement {
   const FoundElement({
     required this.tagName,
@@ -22,9 +19,8 @@ class FoundElement {
     this.centerY,
   });
 
-  /// A selector the page verified resolves back to this element, or null when
-  /// none could be derived (shadow DOM). Null means the element can only be
-  /// acted on by position.
+  /// A selector the page verified resolves back to this element, or null (shadow
+  /// DOM) — null means the element can only be acted on by position.
   final String? selector;
   final String tagName;
   final String? elementId;
@@ -38,8 +34,7 @@ class FoundElement {
   final String? role;
   final bool visible;
 
-  /// Whether this is something a user can act on — a link, a button, a field,
-  /// or anything carrying an interactive role.
+  /// Whether a user can act on this — a link, a button, a field, or a role.
   final bool interactive;
 
   /// Whether the element's centre is currently inside the viewport.
@@ -107,7 +102,6 @@ class FoundElement {
   }
 }
 
-/// What a click actually did.
 class ClickResult {
   const ClickResult({
     required this.element,
@@ -146,7 +140,6 @@ class TypeResult {
   /// read (a contenteditable, or no element was targeted).
   final String? value;
 
-  /// Whether Enter was pressed afterwards.
   final bool submitted;
 
   /// Whether the field ended up holding exactly what was sent.

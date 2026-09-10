@@ -1,6 +1,5 @@
 /// The companion's session-API client: connect over relay or LAN, typed
-/// requests with correlation ids, typed events. Pure Dart — the phone UI
-/// (another loop) renders what this returns; tests drive it over loopback.
+/// requests with correlation ids, typed events.
 library;
 
 import 'dart:async';
@@ -38,13 +37,11 @@ class RemoteApiException implements Exception {
   final ErrorCode? code;
 
   /// True when the failure is "nobody was at the rendezvous": the relay took
-  /// the socket and no host ever answered the hello. A different fact from a
-  /// refusal or a broken network, and the phone says so.
+  /// the socket and no host ever answered the hello.
   final bool hostAbsent;
 
-  /// True when the relay itself never took the socket. A different fact
-  /// again: the desktop may be perfectly awake, and the phone must not tell
-  /// its owner to go and check it.
+  /// True when the relay itself never took the socket — the desktop may be
+  /// perfectly awake, and the phone must not send its owner to check it.
   final bool relayUnreachable;
 
   @override
@@ -151,14 +148,9 @@ class CompanionClient {
   /// The generation this connection runs at.
   int get generation => _generation;
 
-  /// Connects and waits for the host's `host.status`.
-  ///
-  /// With [transport] (the LAN path after discovery, or a test loopback) the
-  /// link is used as-is at [generation] (default: the stored counter).
-  /// Without it, the relay is dialled at the stored counter, probing forward
-  /// through [kCompanionProbeWindow] generations for a host whose counter
-  /// fell behind. On success the NEXT counter is persisted, so the following
-  /// session lands on a fresh rendezvous.
+  /// Connects and waits for the host's `host.status`. Without [transport] the
+  /// relay is dialled at the stored counter, probing forward through
+  /// [kCompanionProbeWindow] generations for a host whose counter fell behind.
   Future<RemoteHostStatus> connect({
     RemoteTransport? transport,
     int? generation,
@@ -177,10 +169,9 @@ class CompanionClient {
       final g = _pairing.generation + probe;
       final rendezvous = await rendezvousFor(_key, g);
       final dialled = _relayFactory(_pairing.relay, rendezvous);
-      // Probing forward only means anything once this relay has actually
-      // taken a socket. A relay nobody can reach is silent at every
-      // generation, and waiting out the hello window three times over turns
-      // one unreachable address into a minute of "Connecting…".
+      // Probing forward means something only once this relay has taken a
+      // socket: waiting out the hello window three times over turns one
+      // unreachable address into a minute of "Connecting…".
       var socketOpened = false;
       final watching = dialled.states.listen((state) {
         if (state == TransportState.connected) socketOpened = true;
@@ -233,17 +224,10 @@ class CompanionClient {
     return arrived.future.timeout(helloTimeout);
   }
 
-  /// Re-proves the host is still at the far end of a socket that came back.
-  ///
-  /// A relay accepts a socket at a rendezvous whether or not anybody else is
-  /// there, so a reconnected transport says nothing about the host. This
-  /// re-sends [LinkHello] on the SAME channel and waits for a fresh
-  /// `host.status`: the host tolerates a repeat hello — it reattaches the
-  /// transport, keeps the channel and its sequences, and re-announces — so
-  /// nothing about the key schedule or the replay window moves.
-  ///
-  /// Throws [TimeoutException] when nobody answers, which is the caller's cue
-  /// that the link is dead however healthy the socket looks.
+  /// Re-proves the host is still at the far end of a socket that came back: a
+  /// relay accepts one whether or not anybody else is there. Re-sends
+  /// [LinkHello] on the SAME channel, so no sequence or key schedule moves.
+  /// Throws [TimeoutException] when nobody answers.
   Future<RemoteHostStatus> rehandshake({
     Duration timeout = const Duration(seconds: 8),
   }) async {
@@ -272,10 +256,8 @@ class CompanionClient {
       await _pairing.save(store).timeout(storeTimeout);
     } on Object catch (error) {
       // A counter that did not stick costs a probe forward on the next dial,
-      // which is exactly what the probe window is for. A keystore that stalls
-      // or refuses must never cost the link that is already up — that trade
-      // is what leaves a phone reading "Connecting…" with a live host at the
-      // other end.
+      // which is what the probe window is for. A keystore that stalls or
+      // refuses must never cost the link that is already up.
       onLog?.call('could not persist the generation counter: $error');
     }
   }
@@ -422,11 +404,9 @@ class CompanionClient {
     return RemoteTranscriptPage.fromJson(payload);
   }
 
-  /// Asks outright what one session is doing right now.
-  ///
-  /// The phone's own question, for opening a session and for coming back from
-  /// a reconnect — the unsolicited frames it missed while away cannot be
-  /// replayed. A pairing without `view_activity` is refused here in words.
+  /// Asks outright what one session is doing right now — for opening a session
+  /// and for coming back from a reconnect, where the unsolicited frames it
+  /// missed cannot be replayed. Refused in words without `view_activity`.
   Future<RemoteSessionActivity> activity(String sessionId) async {
     final payload = await _request(FrameType.sessionActivity, {
       'sessionId': sessionId,
@@ -434,13 +414,9 @@ class CompanionClient {
     return RemoteSessionActivity.fromJson(payload);
   }
 
-  /// Sends a prompt, optionally quoting an upload this link completed.
-  ///
-  /// Answers what became of it: a prompt of plain words is typed into the
-  /// agent, and one carrying a file is left in the desktop's own message box
-  /// for the person sitting there. An older host answers neither, which reads
-  /// as [RemotePromptDelivery.sent] — the behaviour every build before this
-  /// one had.
+  /// Sends a prompt, optionally quoting an upload this link completed, and
+  /// answers what became of it. An older host answers neither, which reads as
+  /// [RemotePromptDelivery.sent].
   Future<RemotePromptDelivery> sendPrompt(
     String sessionId,
     String text, {
@@ -454,22 +430,16 @@ class CompanionClient {
     return RemotePromptDelivery.parse(payload['delivery']);
   }
 
-  /// Asks to send a file, **before any of it crosses**.
-  ///
-  /// Where a refusal costs one small frame instead of the megabytes of a photo
-  /// the desktop was never going to be able to use. A pairing without
-  /// `send_attachment` is refused here in words.
+  /// Asks to send a file, **before any of it crosses**, so a refusal costs one
+  /// small frame. Refused in words without `send_attachment`.
   Future<RemoteAttachmentOffer> beginAttachment(
     RemoteAttachmentBegin request,
   ) async => RemoteAttachmentOffer.fromJson(
     await _request(FrameType.attachmentBegin, request.toJson()),
   );
 
-  /// Hands over one slice, and waits for the host to say it landed.
-  ///
-  /// Awaited on purpose: the outbound queue drops its **oldest** frame under
-  /// pressure, so a chunk nobody acknowledged is a chunk that is gone, and
-  /// sending the next regardless would commit a file with a hole in it.
+  /// Hands over one slice, and waits for the host to say it landed. Awaited on
+  /// purpose: the outbound queue drops its **oldest** frame under pressure.
   Future<void> sendAttachmentChunk(
     String uploadId,
     int seq,
@@ -499,8 +469,7 @@ class CompanionClient {
   }
 
   /// `workspace.list` — the projects, checkouts and installed agents a session
-  /// could be started in. A row this build cannot parse is dropped rather than
-  /// failing the whole listing.
+  /// could be started in. A row this build cannot parse is dropped.
   Future<List<RemoteWorkspaceProject>> listWorkspace() async {
     final payload = await _request(FrameType.workspaceList, const {});
     final projects = payload['projects'];
@@ -536,12 +505,9 @@ class CompanionClient {
     return RemoteWorkspaceProject.fromJson(payload);
   }
 
-  /// `session.start`.
-  ///
-  /// [requestId] is the idempotency key. The SAME value must be resent for a
-  /// retry of the same intention — that is what makes a link that dropped
-  /// between the launch and the answer cost one session rather than two — and
-  /// a fresh one minted the moment the user changes what they are asking for.
+  /// `session.start`. [requestId] is the idempotency key: the SAME value for a
+  /// retry of the same intention, a fresh one the moment the user changes what
+  /// they are asking for.
   Future<RemoteSessionStarted> startSession({
     required String requestId,
     required String repositoryId,
@@ -572,11 +538,9 @@ class CompanionClient {
     return RemoteSessionStarted.fromJson(payload);
   }
 
-  /// Registers for notifications, and says what this companion is doing.
-  ///
-  /// The presence fields are **additive**: a host that predates them reads
-  /// `token` and `platform` and never looks at the rest, and a companion with
-  /// nothing to say sends exactly the two keys it always sent.
+  /// Registers for notifications, and says what this companion is doing. The
+  /// presence fields are **additive**: a host that predates them reads `token`
+  /// and `platform` and never looks at the rest.
   Future<void> registerNotifications({
     required String token,
     required String platform,

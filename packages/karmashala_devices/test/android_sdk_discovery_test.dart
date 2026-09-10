@@ -19,11 +19,8 @@ ExecutionEnvironment _wsl() => ExecutionEnvironment(
   createdAt: DateTime.utc(2026),
 );
 
-/// The environment probe's answer, in the shape the one shell prints it.
-///
-/// Every variable is read in a single call now, so a fake that answers "the
-/// value of ANDROID_HOME" per request describes a discovery that no longer
-/// happens — it has to answer them all at once, as a login shell would.
+/// The environment probe's answer, in the shape the one shell prints it. Every
+/// variable is read in a single call, so a fake must answer them all at once.
 CommandResult _env(Map<String, String> values) => CommandResult(
   exitCode: 0,
   stdout: [
@@ -114,8 +111,7 @@ void main() {
     test('a profile that prints things cannot shift a value', () {
       // The reason each value names itself instead of being read off a line
       // number: a login shell runs the user's profile, and profiles print
-      // banners, warnings and fortunes. On line numbers, the SDK root becomes
-      // whatever the version manager said.
+      // banners.
       final values = parseEnvironmentOutput(
         'Welcome to your shell!\n'
         'nvm: using node v22\n'
@@ -128,8 +124,7 @@ void main() {
 
     test('an unset variable is absent, on either platform', () {
       // POSIX prints an empty value; `cmd` echoes the literal `%NAME%`. Both
-      // mean "not set", and a path of `%ANDROID_HOME%` would send discovery
-      // looking for an SDK in a folder named after the variable.
+      // mean "not set", and a path of `%ANDROID_HOME%` misdirects discovery.
       expect(
         parseEnvironmentOutput(
           '${kEnvMarker}ANDROID_HOME=\n'

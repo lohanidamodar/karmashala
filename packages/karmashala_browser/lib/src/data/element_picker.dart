@@ -8,12 +8,9 @@ import '../domain/picked_element.dart';
 import 'cdp_page.dart';
 import 'picker_script.dart';
 
-/// Drives the in-page element picker and turns a click into an
-/// [ElementCapture].
-///
-/// The mechanism: `Runtime.addBinding` installs a function on the page's
-/// global object, the injected script calls it on click, and the browser
-/// surfaces that as a `Runtime.bindingCalled` event on our socket. No polling.
+/// Drives the in-page element picker and turns a click into an [ElementCapture].
+/// `Runtime.addBinding` puts a function on the page's global object and the
+/// click comes back as a `Runtime.bindingCalled` event — no polling.
 class ElementPicker {
   ElementPicker(this._page, {this.bindingName = kPickerBindingName});
 
@@ -26,10 +23,8 @@ class ElementPicker {
   bool get isActive => _pending != null;
 
   /// Highlights elements on hover and resolves with the one the user clicks.
-  ///
-  /// Fails with [BrowserFailure.pickCancelled] on Escape,
-  /// [BrowserFailure.targetGone] if the page navigates away underneath the
-  /// picker, and [BrowserFailure.disconnected] if the browser is closed.
+  /// Fails as pickCancelled on Escape, targetGone if the page navigates away
+  /// underneath the picker, and disconnected if the browser is closed.
   Future<ElementCapture> pick({
     Duration timeout = const Duration(minutes: 2),
   }) async {
@@ -43,17 +38,9 @@ class ElementPicker {
       );
     }
     await _page.enableDomains();
-    // Raise the tab before arming anything. A pick is a request for a click in
-    // another window, and until now nothing put that window in front of the
-    // user — the pane said "Click an element in the browser…" and then waited
-    // two minutes on a page they might not be looking at.
-    //
-    // `Page.bringToFront` rather than the `/json/activate/<id>` sibling on
-    // `DevToolsHttpEndpoint`: the picker already holds this connection and not
-    // that endpoint, and ordering on one socket is what makes "forward, then
-    // armed" a fact rather than a hope. What it activates is the *target*; how
-    // far its window rises above ours is the platform's decision, not a thing
-    // this client observes.
+    // Raise the tab before arming anything: a pick asks for a click in another
+    // window, and `Page.bringToFront` rides this same connection, so "forward,
+    // then armed" is ordering on one socket rather than a hope.
     await _page.connection.send('Page.bringToFront');
 
     final completer = Completer<PickOutcome>();
@@ -186,21 +173,16 @@ class ElementPicker {
     }
   }
 
-  /// Tears down a pick in progress; the pending [pick] fails as cancelled.
-  ///
-  /// The injected script's own `stop()` is deliberately silent — it only
-  /// dismantles — so cancellation has to be signalled here rather than waiting
-  /// for a report that will never come.
+  /// Tears down a pick in progress; the pending [pick] fails as cancelled. The
+  /// injected script's own `stop()` is silent, so cancellation is signalled here.
   void cancel() {
     final pending = _pending;
     if (pending == null || pending.isCompleted) return;
     pending.complete(const PickCancelled());
   }
 
-  /// Removes the binding and the injected script.
-  ///
-  /// Best effort by design: if the browser is already gone there is nothing to
-  /// clean up, and the caller is being told about that failure anyway.
+  /// Removes the binding and the injected script, best effort: if the browser is
+  /// already gone there is nothing to clean up.
   Future<void> _cleanUp() async {
     if (_page.connection.isClosed) return;
     try {

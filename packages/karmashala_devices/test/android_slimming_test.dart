@@ -8,9 +8,8 @@ Set<AndroidSlimmingCategory> _layer(AndroidSlimmingLayer layer) =>
 void main() {
   group('ids', () {
     test('are unique, and are not the enum constant names', () {
-      // The id is what a saved preference stores. Deriving it from `name` would
-      // mean a rename silently changes which categories somebody's emulator
-      // gets, which is the whole reason it is a separate field.
+      // The id is what a saved preference stores; deriving it from `name` would
+      // let a rename change which categories somebody's emulator gets.
       final ids = AndroidSlimmingCategory.values.map((c) => c.id).toList();
       expect(ids.toSet(), hasLength(ids.length));
       expect(AndroidSlimmingCategory.playServices.id, 'gms');
@@ -44,9 +43,8 @@ void main() {
 
   group('defaults', () {
     test('apply both harmless layers and no package group', () {
-      // Layer 3 is where all the memory is and also the only layer that breaks
-      // apps, so it is opt-in. A user who never opens the dialog must not end
-      // up with Play services disabled.
+      // Layer 3 is where all the memory is and the only layer that breaks apps,
+      // so a user who never opens the dialog must not lose Play services.
       final defaults = categoriesFromIds(kDefaultAndroidSlimming);
       expect(defaults, containsAll(_layer(AndroidSlimmingLayer.launch)));
       expect(defaults, containsAll(_layer(AndroidSlimmingLayer.settings)));
@@ -74,9 +72,8 @@ void main() {
     });
 
     test('leave the renderer to the emulator on automatic', () {
-      // `-gpu auto` and passing no flag are not the same thing: without the
-      // flag the AVD's own `hw.gpu.mode` still applies, so this is the only
-      // option that cannot make a working emulator stop working.
+      // `-gpu auto` and passing no flag differ: without the flag the AVD's own
+      // `hw.gpu.mode` still applies.
       expect(AndroidGpuMode.auto.arguments, isEmpty);
       expect(launchArguments(gpu: AndroidGpuMode.auto), isEmpty);
     });
@@ -118,9 +115,7 @@ void main() {
 
     test('restore deletes every managed key rather than writing 1.0', () {
       // Stock Android leaves these unset and treats absent as 1.0, so deleting
-      // restores the state the device shipped with. Writing 1.0 would leave our
-      // fingerprint behind — the same reason the iOS side removes its plist
-      // keys instead of writing an explicit `false`.
+      // restores what the device shipped with rather than our fingerprint.
       final restore = settingsRestoreArguments();
       expect(restore.map((c) => c[4]).toSet(), allManagedSettingsKeys);
       for (final command in restore) {
@@ -144,10 +139,8 @@ void main() {
     });
 
     test('the allowlist never reaches anything the system needs', () {
-      // This is the safety mechanism, and the reason `pm` is only ever handed a
-      // name from this table. Every entry below was considered and left out on
-      // purpose; the keyboard one matters most here, because this pane types
-      // through it.
+      // The safety mechanism: `pm` is only ever handed a name from this table.
+      // The keyboard one matters most, because this pane types through it.
       const forbidden = [
         'android',
         'com.android.systemui',

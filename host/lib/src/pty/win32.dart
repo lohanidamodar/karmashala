@@ -26,10 +26,8 @@ final class ProcessInformation extends Struct {
   external int dwThreadId;
 }
 
-/// `STARTUPINFOEXW`. Laid out field by field rather than as opaque bytes so the
-/// ABI is the compiler's problem: `lpAttributeList` is the whole reason this
-/// struct exists here, and finding it at the wrong offset would hand
-/// `CreateProcess` garbage that still returns TRUE.
+/// `STARTUPINFOEXW`, laid out field by field so the ABI is the compiler's
+/// problem: `lpAttributeList` at the wrong offset still returns TRUE.
 final class StartupInfoExW extends Struct {
   @Uint32()
   external int cb;
@@ -66,9 +64,8 @@ final class StartupInfoExW extends Struct {
   external Pointer<Void> lpAttributeList;
 }
 
-/// `PROCESSENTRY32W`, for the parent-pid walk that closing a session needs.
-/// `szExeFile` is never read — it is here so `dwSize` matches what the OS
-/// expects, which `Process32FirstW` rejects the call over.
+/// `PROCESSENTRY32W`, for the parent-pid walk. `szExeFile` is never read; it is
+/// here so `dwSize` matches, which `Process32FirstW` rejects the call over.
 final class ProcessEntry32W extends Struct {
   @Uint32()
   external int dwSize;
@@ -92,9 +89,8 @@ final class ProcessEntry32W extends Struct {
   external Array<Uint16> szExeFile;
 }
 
-/// `ProcThreadAttributeValue(22, FALSE, TRUE, FALSE)` — number 22, marked as an
-/// input attribute (0x00020000). Spelled as the arithmetic the macro does so it
-/// can be checked against the SDK header rather than trusted as a magic number.
+/// `ProcThreadAttributeValue(22, FALSE, TRUE, FALSE)`, spelled as the macro's
+/// arithmetic so it can be checked against the SDK header.
 const int kProcThreadAttributePseudoConsole = 22 | 0x00020000;
 
 const int kExtendedStartupInfoPresent = 0x00080000;
@@ -113,10 +109,8 @@ const int kErrorBrokenPipe = 109;
 const int kJobObjectExtendedLimitInformation = 9;
 const int kJobObjectLimitKillOnJobClose = 0x00002000;
 
-/// `sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION)` on x64, and the byte offset
-/// of `BasicLimitInformation.LimitFlags` inside it. Written as two numbers
-/// rather than a struct because every other field is zero and declaring 20 of
-/// them to reach one would be more to get wrong, not less.
+/// `sizeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION)` on x64, and the byte offset of
+/// `BasicLimitInformation.LimitFlags` inside it; every other field is zero.
 const int kJobExtendedLimitBytes = 144;
 const int kJobLimitFlagsOffset = 16;
 const int kErrorInsufficientBuffer = 122;
@@ -128,11 +122,8 @@ typedef CreatePseudoConsoleDart = int Function(Coord, int, int, int, Pointer<Int
 typedef ResizePseudoConsoleNative = Int32 Function(IntPtr, Coord);
 typedef ResizePseudoConsoleDart = int Function(int, Coord);
 
-/// kernel32 as this process sees it, plus the three ConPTY entry points.
-///
-/// One instance per isolate, for the same reason [Libc] is: a `DynamicLibrary`
-/// does not travel over a `SendPort`, so the reader and writer isolates call
-/// [open] again rather than receiving this object.
+/// kernel32 as this process sees it, plus the three ConPTY entry points. One
+/// instance per isolate: a `DynamicLibrary` cannot travel over a `SendPort`.
 class Kernel32 {
   Kernel32._(DynamicLibrary lib, this.createPseudoConsole, this.resizePseudoConsole,
       this.closePseudoConsole)
@@ -231,9 +222,8 @@ class Kernel32 {
           .lookup<NativeFunction<Int32 Function(IntPtr, IntPtr)>>('AssignProcessToJobObject')
           .asFunction();
 
-  /// Null on a Windows older than 10 1809, which has no pseudoconsole at all.
-  /// Reported as an absence rather than crashed on: the host says it cannot
-  /// serve here instead of dying at the first `open`.
+  /// Null on a Windows older than 10 1809, so the host can refuse with a
+  /// sentence rather than die at the first `open`.
   final CreatePseudoConsoleDart? createPseudoConsole;
   final ResizePseudoConsoleDart? resizePseudoConsole;
   final void Function(int)? closePseudoConsole;
@@ -274,9 +264,7 @@ class Kernel32 {
   /// Whether this machine can host a pseudoconsole at all.
   bool get providesPseudoConsole => createPseudoConsole != null;
 
-  /// Which library carried the ConPTY entry points, for the host's own `hello`.
-  /// The counterpart of [Libc.ptySymbolLibrary]; it names what was measured,
-  /// not what was assumed.
+  /// Which library carried the ConPTY entry points — measured, not assumed.
   String get ptyLibrary => providesPseudoConsole ? 'kernel32.dll' : 'kernel32.dll (no ConPTY)';
 
   static Kernel32 open() {
@@ -301,10 +289,8 @@ class Kernel32 {
   }
 }
 
-/// Windows' own quoting rules, which are the *callee's* and not the shell's:
-/// `CreateProcessW` takes one string and every runtime unpicks it the same way.
-/// Ported from `flutter_pty`'s `append_quoted_argument` so a pane launched by
-/// the host receives the argv a pane launched in-process does.
+/// Windows' quoting rules are the *callee's*, not a shell's: `CreateProcessW`
+/// takes one string. Ported from `flutter_pty`'s `append_quoted_argument`.
 String quoteWindowsArgument(String argument) {
   final out = StringBuffer('"');
   var backslashes = 0;

@@ -1,15 +1,6 @@
-/// A file crossing the link, and everything that must be refused instead.
-///
-/// Two questions this file exists to answer, both of them measured rather than
-/// assumed:
-///
-/// * **Does a chunk fit?** An envelope stops at [kMaxEnvelopeBytes] and the
-///   sealing layer adds its own bytes on top. A frame protocol sized by
-///   optimism fails on the first real photo, so the arithmetic is pinned here
-///   with a full chunk actually encoded.
-/// * **What does a half-delivered attachment do?** Counted, not timed: how many
-///   slices were accepted, and whether anything an agent could be told to read
-///   came out of it.
+/// A file crossing the link, and everything that must be refused instead: does
+/// a chunk actually fit inside an envelope once base64 and the seal are on it,
+/// and what a half-delivered attachment leaves behind.
 library;
 
 import 'dart:convert';
@@ -62,10 +53,8 @@ Uint8List _bytes(int length) =>
 
 void main() {
   group('the size the link can carry', () {
-    // The check the whole design turns on. Base64 costs four characters per
-    // three bytes, the envelope adds its own JSON, and the sealing layer adds
-    // a nonce, a tag and a sequence — so a chunk sized against the raw cap
-    // would be over it on the wire.
+    // Base64 costs four characters per three bytes, and the envelope and the
+    // seal add their own, so a chunk sized against the raw cap would be over it.
     test('a full chunk clears the envelope and transport caps', () {
       final wire = Envelope.of(
         FrameType.attachmentChunk,

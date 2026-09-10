@@ -1,28 +1,12 @@
 /// Which iOS Simulator background services this build is willing to switch off,
 /// and the pure logic that turns a choice of categories into a set of launchd
-/// labels to disable.
-///
-/// A stock iOS 26 simulator boots ~358 launchd services. Most of them exist to
-/// serve a *user* — widgets, Siri, iCloud sync, Health, the App Store — and
-/// nothing a developer does with a simulator needs them. Measured on an
-/// iPhone 17 / iOS 26.5 device here: 358 services down to 192, 149 running down
-/// to 52, summed `phys_footprint` **3.09 GB down to 0.91 GB**, boot 15.8s down
-/// to 9.6s, with SpringBoard still compositing and app launch and screenshot
-/// still working.
-///
-/// Everything here is pure. The file that makes it real, and the rules about
-/// when it may be written, live in `data/simulator_slimming_service.dart`.
+/// labels. A stock iOS 26 simulator boots ~358 services, most of them there to
+/// serve a *user* rather than anything a developer does with a simulator.
 library;
 
-/// A group of launchd services that are switched on and off together.
-///
-/// Grouping is what makes this safe to put in front of a person: "I still want
-/// push notifications" is a decision somebody can make, and
-/// "com.apple.apsd" is not.
-///
-/// The [id] is deliberately a field rather than [name]: it is what a saved
-/// preference or a CLI flag stores, so renaming a constant must not silently
-/// re-enable a category on everybody's machines.
+/// A group of launchd services switched on and off together, because "I still
+/// want push notifications" is a decision somebody can make and `apsd` is not.
+/// [id] is a field rather than [name]: it is what a saved preference stores.
 enum SlimmingCategory {
   /// The single biggest win, and the one nobody misses: `PosterBoard` renders
   /// the lock-screen widget gallery, `chronod` runs widget timelines.
@@ -249,21 +233,15 @@ enum SlimmingCategory {
   /// One paragraph a developer can decide from.
   final String description;
 
-  /// Rough resident memory this category accounts for, in megabytes.
-  ///
-  /// **Not additive.** These are medians measured one category at a time;
-  /// services share dirty pages and wake each other up, so summing all fifteen
-  /// overshoots the ~2.2 GB actually observed. Present them as relative
-  /// weights ("widgets is the big one"), never as a total.
+  /// Rough resident memory this category accounts for, in megabytes. **Not
+  /// additive:** services share dirty pages, so summing all fifteen overshoots.
   final int approxSavingMb;
 
   /// The launchd labels this category owns, fully qualified.
   final List<String> labels;
 
-  /// What visibly stops working, keyed by the label that causes it.
-  ///
-  /// Only entries confirmed by hand are listed. An empty map means "nothing a
-  /// developer was likely to be using", not "verified harmless".
+  /// What visibly stops working, keyed by the label that causes it. An empty map
+  /// means "nothing a developer was likely to be using", not "verified harmless".
   final Map<String, String> featureLoss;
 
   /// The category whose [id] is [id], or null.
@@ -275,37 +253,16 @@ enum SlimmingCategory {
   }
 }
 
-/// The categories left running by default, as ids.
-///
-/// The three a Flutter app is most likely to actually need, and the three whose
-/// absence is hardest to diagnose from inside the app:
-///
-/// * `store` — `com.apple.apsd` *is* APNs, so without it remote notifications
-///   never arrive and `firebase_messaging` looks broken rather than disabled.
-/// * `photos` — `assetsd` backs `image_picker`; the picker opens empty.
-/// * `web` — `swcd` resolves associated domains, so a universal link opens
-///   Safari instead of the app under test.
-///
-/// Everything else is off by default. This is a starting point, not a policy:
-/// each category can be switched either way, and an app that never touches
-/// push, the photo library or universal links should turn these off too.
+/// The categories left running by default, as ids: the three a Flutter app most
+/// likely needs and whose absence is hardest to diagnose from inside it — APNs
+/// without `apsd`, `image_picker` without `assetsd`, universal links without
+/// `swcd`. A starting point, not a policy; each can be switched either way.
 const List<String> kDefaultSlimmingKept = ['store', 'photos', 'web'];
 
-/// Every label this build will ever write, in either direction.
-///
-/// **This set is the safety mechanism.** Slimming is an allowlist, never a
-/// denylist: [applyDelta] only ever touches keys that are in here, so a typo,
-/// a stale saved category id or a bad caller cannot reach a daemon the system
-/// cannot live without.
-///
-/// Disabling `com.apple.SpringBoard`, `com.apple.backboardd`,
-/// `com.apple.runningboardd` or `com.apple.mobile.installd` was tried, and
-/// produces a half-alive device that is worse than a dead one: `simctl list`
-/// still reports **Booted** (so device state is not a health check),
-/// `simctl bootstatus -b` never returns, `simctl launch` fails with
-/// `FBSOpenApplicationServiceErrorDomain code=5`, and `simctl io screenshot`
-/// times out. Those four labels are absent from the table below, and a test
-/// asserts they stay absent.
+/// Every label this build will ever write, in either direction. **This set is
+/// the safety mechanism:** slimming is an allowlist, so a typo or a stale saved
+/// id cannot reach a daemon the system cannot live without. SpringBoard,
+/// backboardd, runningboardd and installd are absent, and a test keeps them out.
 Set<String> get allManagedLabels => _allManagedLabels;
 
 final Set<String> _allManagedLabels = Set.unmodifiable({
@@ -318,16 +275,9 @@ Set<SlimmingCategory> categoriesFor(String label) => {
     if (category.labels.contains(label)) category,
 };
 
-/// The labels that should be disabled for a given choice.
-///
-/// [except] names the categories to leave running, [keep] individual labels to
-/// leave running regardless of category.
-///
-/// A handful of labels are listed by two categories on purpose — `passd` is
-/// both a Wallet daemon and a Store one, `amsaccountsd` is both iCloud and
-/// Store. The rule is that **a label stays enabled if _any_ excepted category
-/// lists it**: sparing "store" has to actually leave StoreKit working, and it
-/// would not if `other` were still free to disable `passd` out from under it.
+/// The labels that should be disabled for a given choice. [except] names the
+/// categories to leave running, [keep] individual labels. **A label stays
+/// enabled if _any_ excepted category lists it** — a few are listed by two.
 Set<String> desiredDisabled({
   Set<SlimmingCategory> except = const {},
   Set<String> keep = const {},
@@ -358,30 +308,10 @@ Map<String, String> featureLossFor({
   };
 }
 
-/// Merges [desired] into the labels already in a device's `disabled.plist`.
-///
-/// The plist is tri-state — `true` disabled, `false` explicitly enabled, absent
-/// enabled by default — and it is **not ours alone**. launchd writes its own
-/// entries into it: after one boot here it had added seventeen explicit `false`
-/// keys of its own (`com.apple.pairedsyncd`, `com.apple.nanoappregistryd`,
-/// `com.apple.security.otpaird`, …). So this is a merge, never a replacement:
-/// [existing] must be what was actually read back from the device, and every
-/// key that is not in [allManagedLabels] is returned untouched.
-///
-/// Managed labels move as follows:
-///
-/// * in [desired] — set to `true` (disabled).
-/// * not in [desired], currently `true` — **removed**, restoring the default.
-///   Removal rather than an explicit `false` because that is the recovery path
-///   that was verified: shut down, drop our keys, boot. `simctl erase` is not
-///   needed.
-/// * not in [desired], currently `false` — left exactly as found. That value is
-///   usually launchd's own, it already means "enabled", and rewriting it would
-///   be churn in a file another process owns.
-///
-/// Anything in [desired] that is not a managed label is ignored. That is the
-/// allowlist doing its job, and it is the reason a wrong category id cannot
-/// turn into a bricked device.
+/// Merges [desired] into the labels already in a device's `disabled.plist`. The
+/// file is tri-state and **not ours alone** — launchd writes its own entries —
+/// so [existing] must be what was read back, and unmanaged keys are untouched. A
+/// managed label dropped from [desired] is *removed*, restoring the default.
 Map<String, bool> applyDelta(Map<String, bool> existing, Set<String> desired) {
   final next = Map<String, bool>.of(existing);
   for (final label in allManagedLabels) {
@@ -394,11 +324,8 @@ Map<String, bool> applyDelta(Map<String, bool> existing, Set<String> desired) {
   return next;
 }
 
-// ---------------------------------------------------------------------------
-// The table. Every label below was confirmed present in a stock iOS 26.5 boot;
-// an unknown label is inert to launchd, so a stale entry costs nothing and no
-// validation pass is needed.
-// ---------------------------------------------------------------------------
+// Every label below was confirmed present in a stock iOS 26.5 boot; an unknown
+// label is inert to launchd, so a stale entry costs nothing.
 
 const List<String> _widgets = [
   'com.apple.PosterBoard',

@@ -16,8 +16,7 @@ void main() {
   });
 
   test('wrapped at the space before the address, which is what a pane does', () {
-    // `_wrapTextAsLines` backs up to the last whitespace, so the sentence ends
-    // one row and the address begins the next.
+    // Wrapping backs up to the last whitespace, so the address starts a row.
     expect(
       vmServiceUriInPaneRows([
         'A Dart VM Service on sdk gphone64 x86 64 is available at:',
@@ -58,10 +57,8 @@ void main() {
   });
 
   test('measured 2026-09-09: DevTools shares the VM service host AND port', () {
-    // Copied verbatim out of a real `flutter run -d windows` on the owner's
-    // machine. The DevTools URL is the same authority as the app's, with
-    // `/devtools/` on the path — so "the first URL after the word available"
-    // would have connected a VM service client to a web server.
+    // Copied verbatim out of a real `flutter run -d windows`: "the first URL
+    // after the word available" would have connected to the DevTools server.
     expect(
       vmServiceUriInPaneRows([
         'A Dart VM Service on Windows is available at: '

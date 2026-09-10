@@ -20,11 +20,8 @@ AndroidSdk _sdk() => const AndroidSdk(
   ),
 );
 
-/// A staging directory of this test's own.
-///
-/// The whole point of the host-side change: a test writing four dummy bytes
-/// must not be able to reach the file a live session is about to push to a
-/// phone.
+/// A staging directory of this test's own: a test writing four dummy bytes must
+/// not reach the file a live session is about to push to a phone.
 Directory _staging() {
   final dir = Directory.systemTemp.createTempSync('cg_scrcpy_stage');
   addTearDown(() {
@@ -41,9 +38,8 @@ List<String> _stagedNames(Directory directory) => [
 ];
 
 /// A runner whose `forward tcp:0` answers with a port nothing is listening on,
-/// so both attempts run to exhaustion and `start` gives up — and which records
-/// the size of the file each `adb push` was actually handed, read at the moment
-/// of the push rather than afterwards.
+/// so both attempts run to exhaustion — and which records the size of the file
+/// each `adb push` was handed, at the moment of the push.
 FakeCommandRunner _pushRecorder(List<({String path, int length})> pushes) =>
     FakeCommandRunner(
       responder: (request) {
@@ -90,10 +86,8 @@ void main() {
         );
 
     test('kills our leaked servers and removes our stale forwards', () async {
-      // Both leaks were observed on this machine at once: on a phone the server
-      // had exited while its forward stayed registered, and on an emulator four
-      // servers were alive because killing the host-side `adb shell` does not
-      // kill the app_process it started.
+      // Both leaks were observed on this machine at once: a server that had
+      // exited with its forward still registered, and four servers alive.
       final runner = FakeCommandRunner(
         responder: (request) {
           if (request.arguments.contains('ps')) {
@@ -157,13 +151,9 @@ void main() {
   });
 
   group('scrcpy-server deployment', () {
-    // The bug this group exists for, seen on F6IZLV6LMFT4U4ZT: every start
-    // pushed the jar to ONE fixed path, and scrcpy-server 4.1 deletes its own
-    // jar as it starts (`unlinkSelf`). The `control=true` attempt therefore
-    // removed the jar that the `control=false` retry needed, and that retry's
-    // `app_process` died with
-    // `ClassNotFoundException: com.genymobile.scrcpy.Server` — SIGABRT, adb
-    // reporting "Aborted". Confirmed on the device from the crash log.
+    // scrcpy-server 4.1 deletes its own jar as it starts (`unlinkSelf`), so one
+    // fixed path meant the `control=true` attempt removed the jar the
+    // `control=false` retry needed — `ClassNotFoundException`, SIGABRT.
     test('every session gets its own jar, under one reapable prefix', () {
       final first = scrcpyJarPathFor('3f3c4fef');
       final second = scrcpyJarPathFor('12a9795f');
@@ -251,12 +241,9 @@ void main() {
   });
 
   group('host-side staging', () {
-    // The hazard this group exists for: `start` used to write the jar to ONE
-    // fixed path in the system temp directory, `karmashala-scrcpy-server-4.1
-    // .jar`, shared by every start on the machine and by the tests — which
-    // stage four dummy bytes there. A test run overlapping a live stream
-    // restart handed a real phone a 4-byte jar, and `app_process` aborted with
-    // `ClassNotFoundException` on a device nobody was testing against.
+    // One fixed path in the system temp directory was shared by every start on
+    // the machine *and by the tests*, which stage four dummy bytes there: a run
+    // overlapping a live restart handed a real phone a 4-byte jar.
     test('two concurrent starts cannot reach each other\'s jar', () async {
       final staging = _staging();
       final live = <({String path, int length})>[];
@@ -273,10 +260,8 @@ void main() {
             stagingDirectory: staging,
           );
 
-      // A live session staging the real jar, and a test staging its dummy —
-      // interleaved, which is exactly what a test run during a stream restart
-      // does. The live session pushes twice, and its second push happens after
-      // the other has written its own file.
+      // A live session staging the real jar and a test staging its dummy,
+      // interleaved — what a test run during a stream restart does.
       await Future.wait([
         expectLater(
           serviceOver(liveRunner, 700).start('F6IZLV6LMFT4U4ZT'),
@@ -401,9 +386,8 @@ void main() {
     });
 
     test('a device with nothing new to show is healthy, and stays up', () {
-      // The distinction the restart loop turned on: frame silence is what an
-      // untouched device looks like, so it is neither unhealthy nor a reason
-      // to tear a working stream down.
+      // Frame silence is what an untouched device looks like, so it is neither
+      // unhealthy nor a reason to tear a working stream down.
       const idle = DeviceStreamHealth(
         state: DeviceStreamState.idle,
         detail: 'No screen changes for 20s.',

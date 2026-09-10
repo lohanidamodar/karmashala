@@ -5,12 +5,9 @@ import 'git_files.dart';
 
 /// One fact read off disk, or the admission that the files could not answer it.
 ///
-/// [known] is the whole type. `null` on its own cannot carry the difference
-/// between *"this clone has no `origin`"* and *"these bytes did not tell me"*,
-/// and the two need opposite responses: the first is an answer, the second is a
-/// reason to spend a process. Collapsing them is how a reader like this turns a
-/// slow app into a wrong one — the same rule §19 states for the health panel,
-/// applied to a file instead of a probe.
+/// [known] is the whole type: `null` alone cannot separate "this clone has no
+/// `origin`" from "these bytes did not tell me", and the two need opposite
+/// responses — an answer, or a reason to spend a process.
 class ReadFact<T> {
   const ReadFact.known(this.value) : known = true;
   const ReadFact.unknown() : value = null, known = false;
@@ -27,21 +24,13 @@ class ReadFact<T> {
 
 /// What `.git` says about `origin`, read instead of asked.
 ///
-/// **Why this exists.** `git remote get-url origin` and `git rev-parse
-/// --abbrev-ref origin/HEAD` are two subprocesses answering two single lines of
-/// text. On Windows a subprocess is never free however it is awaited —
-/// `CreateProcessW` runs on the *calling thread* before the future exists,
-/// which is why a profile of this app named `RtlCreateUnicodeString` and
-/// `NtCreateUserProcess` among its top Dart CPU leaves — and for a repository
-/// inside WSL each one also crosses the 9p boundary. Two reads of two files
-/// cost no `CreateProcessW` at all. They are still 9p reads for a WSL
-/// checkout: cheaper than a process, not free.
+/// Two file reads instead of two subprocesses: on Windows `CreateProcessW` runs
+/// on the *calling thread* before the future exists, and a WSL checkout crosses
+/// the 9p boundary once per process.
 ///
-/// **Every uncertainty is a [ReadFact.unknown], and the caller then asks git.**
-/// A wrong answer here is worse than a slow one: the URL decides whether a row
-/// looks for a pull request and what its commit links point at, and
-/// `origin/HEAD` is the base every `ahead/behind` count is measured against.
-/// The guards below are all of that shape.
+/// **Every uncertainty is a [ReadFact.unknown], and the caller then asks git.** A
+/// wrong answer here is worse than a slow one: the URL decides whether a row
+/// looks for a pull request, and `origin/HEAD` is the ahead/behind base.
 class GitOriginReader {
   GitOriginReader({required this.files, required this.hostPathOf});
 
@@ -55,10 +44,8 @@ class GitOriginReader {
   /// `origin`'s URL and `origin/HEAD` for the working tree at [checkout],
   /// written as its own environment spells it.
   ///
-  /// Costs **two reads** for an ordinary checkout — `.git/config` and
-  /// `.git/refs/remotes/origin/HEAD` — and up to four for a working tree whose
-  /// `.git` is a *file* naming the real git directory, which is what git writes
-  /// for a worktree and for a submodule.
+  /// Two reads for an ordinary checkout, up to four when `.git` is a *file*
+  /// naming the real git directory — which is what a worktree and a submodule have.
   Future<({ReadFact<String?> url, ReadFact<String?> head})> read(
     String checkout,
   ) async {
@@ -70,10 +57,8 @@ class GitOriginReader {
     if (host == null) return unknown;
     final context = gitPathContextFor(host);
 
-    // The ordinary case first and with no `stat` in front of it: `.git` is a
-    // directory, so `.git/config` is simply there. A failed read is how this
-    // learns otherwise, because on a `\\wsl.localhost` share asking *whether*
-    // a file exists costs the same as reading it.
+    // No `stat` in front of it: on a `\\wsl.localhost` share asking *whether* a
+    // file exists costs the same as reading it, so a failed read is the check.
     final dotGit = context.join(host, '.git');
     var common = dotGit;
     var config = await files.readString(context.join(common, 'config'));
@@ -93,10 +78,8 @@ class GitOriginReader {
     }
 
     final url = _originUrlIn(config);
-    // An unreadable URL hands the **whole** reading to git. Reporting a known
-    // `origin/HEAD` beside an unknown URL would be the one genuinely wrong
-    // answer available here: the caller would ask git for the URL, get one,
-    // and then take this reader's word that there is no default branch.
+    // An unreadable URL hands the **whole** reading to git: a known `origin/HEAD`
+    // beside an unknown URL is the one genuinely wrong answer available here.
     if (!url.known) {
       return (url: url, head: const ReadFact<String?>.unknown());
     }
@@ -111,23 +94,13 @@ class GitOriginReader {
   /// **The git directory this working tree shares with the rest of its
   /// family**, or null when the files could not say.
   ///
-  /// Two worktrees of one clone answer with the same string and two unrelated
-  /// checkouts never do, which is exactly what "same family" means to git — so
-  /// this is the key a caller needs to ask `git worktree list` *once per
-  /// family* rather than once per row. It is [read]'s own first step, extracted:
-  /// the config and the remote refs live in the common directory, and finding
-  /// it is what that method already does before reading either.
+  /// Two worktrees of one clone answer the same string and two unrelated
+  /// checkouts never do, so this is the key for asking `git worktree list` once
+  /// per family rather than once per row. One `typeOf`, one more read for a
+  /// worktree, and no process at all.
   ///
-  /// **Costs one `typeOf` for a clone and one more read for a worktree**, and
-  /// no process at all — which is the point, since the alternative it saves is
-  /// a `CreateProcessW` per checkout.
-  ///
-  /// **Null is "we could not tell", never "it is its own family".** A path this
-  /// process cannot open (an SSH checkout), a `.git` that is neither a
-  /// directory nor a pointer, a distribution that did not answer — all read as
-  /// unknown, and a caller must fall back to whatever it did before rather than
-  /// treat each unknown row as a family of one. That is §19's rule applied to a
-  /// grouping key: an unknown is not a value.
+  /// **Null is "we could not tell", never "it is its own family"** — an SSH
+  /// checkout, an unrecognised `.git`, a distribution that did not answer.
   Future<String?> commonDirectory(String checkout) async {
     final host = hostPathOf(checkout);
     if (host == null) return null;
@@ -154,10 +127,8 @@ class GitOriginReader {
 
   /// The git directory two worktrees of one clone **share**.
   ///
-  /// A worktree's own git directory is `<common>/worktrees/<name>`; the config
-  /// and the remote refs live one level up from that pair. Anything else —
-  /// a submodule's `<super>/.git/modules/<name>`, a bare `GIT_DIR` — is
-  /// already its own common directory and is left alone.
+  /// A worktree's own git directory is `<common>/worktrees/<name>`; anything else
+  /// — a submodule, a bare `GIT_DIR` — is already its own common directory.
   String _commonDirOf(String gitDir, p.Context context) {
     final parts = gitDir.split(RegExp(r'[\\/]'));
     if (parts.length < 2) return gitDir;
@@ -167,23 +138,11 @@ class GitOriginReader {
 
   /// `remote.origin.url` as `.git/config` records it.
   ///
-  /// Unknown — ask git — in three cases, each of which is a way for the file to
-  /// be true and the answer still wrong:
-  ///
-  /// * **An `[include]` or `[includeIf …]` section.** The remote may be defined
-  ///   in a file this does not open.
-  /// * **A `[url "…"]` section**, which is where `insteadOf` rewriting lives.
-  ///   `git remote get-url` expands those; a read cannot.
-  /// * **A URL that does not look like a URL.** That is either a local path or
-  ///   an `insteadOf` shorthand — the point of a shorthand being that it is
-  ///   short — and only git can tell them apart. This is also the guard that
-  ///   covers an `insteadOf` in the user's *global* config, which is invisible
-  ///   from here: the shorthand it rewrites is by construction not URL-shaped.
-  ///
-  /// A config with no `[remote "origin"]` at all is a confident **null**: a
-  /// `git init` with no remote, which is an ordinary row with nothing to say.
-  /// A section that exists but carries no `url` is unknown, because that is not
-  /// a shape git writes and something else is going on.
+  /// Unknown — ask git — for an `[include]`/`[includeIf]` section, for a
+  /// `[url "…"]` section where `insteadOf` rewriting lives that a read cannot
+  /// expand, and for a value that is not URL-shaped, which is a local path or a
+  /// shorthand only git can tell apart. No `[remote "origin"]` at all is a
+  /// confident **null**; a section with no `url` is not a shape git writes.
   ReadFact<String?> _originUrlIn(String config) {
     if (_indirection.hasMatch(config)) return const ReadFact.unknown();
     var inOrigin = false;
@@ -219,23 +178,11 @@ class GitOriginReader {
   /// `origin/HEAD` as this clone recorded it, from the ref file or from
   /// `packed-refs`.
   ///
-  /// The loose ref is a symbolic ref — `ref: refs/remotes/origin/main` — and is
-  /// what a normal `git clone` writes. Three other shapes:
-  ///
-  /// * **A bare sha** in that file. `git rev-parse --abbrev-ref origin/HEAD`
-  ///   then answers `origin/HEAD`, which the git path already reads as "no
-  ///   default branch recorded", so this answers the same **null**.
-  /// * **A named line in `packed-refs`.** Deliberately unknown: `git pack-refs`
-  ///   does not pack symbolic refs, so a line naming `origin/HEAD` is
-  ///   something this parse does not understand, and guessing null would be
-  ///   guessing.
-  /// * **Neither file.** Also unknown, and this is the case that matters most:
-  ///   git's `reftable` backend keeps no `refs/` tree and no `packed-refs`, so
-  ///   "I found nothing" there would be a wrong answer rather than an absence.
-  ///
-  /// A `packed-refs` that exists and names no `origin/HEAD` **is** an answer:
-  /// this clone records no default branch, which is what a single-branch clone
-  /// and an older `git remote add` both produce.
+  /// The loose ref is symbolic. A bare sha reads as **null**, which is what `git
+  /// rev-parse` answers for it. A named line in `packed-refs` is unknown, since
+  /// `git pack-refs` does not pack symbolic refs; neither file is unknown too,
+  /// because the `reftable` backend keeps no `refs/` tree. A `packed-refs` that
+  /// names no `origin/HEAD` *is* an answer.
   Future<ReadFact<String?>> _originHeadIn(
     String common,
     p.Context context,
@@ -263,9 +210,7 @@ class GitOriginReader {
     return const ReadFact.known(null);
   }
 
-  /// Whether [header] is the `origin` remote's section header, in either of the
-  /// two spellings git's own parser accepts for a subsection: the quoted form
-  /// `remote "origin"` that `git clone` writes, and the dotted `remote.origin`.
+  /// Whether [header] is the `origin` remote's section header, quoted or dotted.
   ///
   /// A section name is case-insensitive to git; a *subsection* is not, so
   /// `[remote "Origin"]` is a different remote and must not match.
@@ -295,9 +240,6 @@ class GitOriginReader {
     return at >= 0 || rest.substring(0, colon).contains('.');
   }
 
-  /// Whether [path] is absolute **in its own environment's spelling** — a POSIX
-  /// root, a Windows drive, or a UNC root. Asked of a `gitdir:` line, which is
-  /// written by git in that environment and not by this process.
   /// `[include]`, `[includeIf "…"]` or `[url "…"]` — the three section headers
   /// that can make a correctly-read `remote.origin.url` the wrong answer.
   static final _indirection = RegExp(

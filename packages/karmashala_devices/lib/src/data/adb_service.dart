@@ -22,12 +22,8 @@ import 'uiautomator_parsing.dart';
 /// the filesystem.
 typedef HostFileReader = Future<Uint8List> Function(String path);
 
-/// Escapes text for `adb shell input text`.
-///
-/// The device's shell re-parses the argument, so a literal space would split it
-/// into two arguments; Android's `input` accepts `%s` for a space. Shell
-/// metacharacters are backslash-escaped for the same reason. Getting this wrong
-/// silently truncates whatever an agent tries to type.
+/// Escapes text for `adb shell input text`: the device's shell re-parses the
+/// argument, so a literal space would split it and `%s` is the escape.
 String encodeInputText(String text) {
   final buffer = StringBuffer();
   for (final rune in text.runes) {
@@ -47,12 +43,7 @@ String encodeInputText(String text) {
 }
 
 /// Every adb interaction with one Android SDK, routed through a
-/// [CommandRunner] so nothing in this feature touches `Process` directly
-/// (architecture constraint 6).
-///
-/// The service is bound to one [AndroidSdk], and therefore to one execution
-/// environment: a Windows adb server and a WSL adb server are different servers
-/// with different device lists.
+/// [CommandRunner]. A Windows adb server and a WSL one list different devices.
 class AdbService {
   AdbService({
     required this.runner,
@@ -67,18 +58,11 @@ class AdbService {
   final HostFileReader _readHostFile;
 
   /// Who is recording what this service does to devices, or null for nobody.
-  ///
-  /// A seam rather than a recording subclass: the device pane, the `device_*`
-  /// MCP tools and any harness all share one [AdbService], so installing a sink
-  /// here records all of them without a second implementation to keep in step.
-  /// Reads that are pure plumbing — listing devices, asking for a screen size —
-  /// are deliberately *not* reported: they are how the app works, not what
-  /// somebody did to the device.
+  /// Plumbing reads — listing devices, asking a screen size — are not reported.
   DeviceActionSink? actionSink;
 
-  /// Writable scratch directory on the device. `/data/local/tmp` is writable by
-  /// the shell user on every supported Android version, unlike `/sdcard` on
-  /// devices with scoped storage.
+  /// Writable scratch directory. `/data/local/tmp` is writable by the shell user
+  /// on every supported Android version, unlike `/sdcard` under scoped storage.
   final String deviceTempDirectory;
 
   /// How long to wait before retrying a `uiautomator dump` that failed because
@@ -102,11 +86,8 @@ class AdbService {
     return parseAdbDevices(result.stdout, environmentId: sdk.environmentId);
   }
 
-  /// Whether this adb server can discover services over mDNS.
-  ///
-  /// Three answers, not two: an adb that could not be run has *not* told us
-  /// discovery is off, and reporting it as off would send the user looking for
-  /// a setting that is already correct (§19).
+  /// Whether this adb server can discover services over mDNS. Three answers: an
+  /// adb that could not be run has *not* told us discovery is off (§19).
   Future<MdnsAvailability> mdnsAvailability() async {
     try {
       return parseMdnsCheck(await runner.run(_adb(const ['mdns', 'check'])));
@@ -115,11 +96,8 @@ class AdbService {
     }
   }
 
-  /// One reading of what is advertising itself on the local network.
-  ///
-  /// Run to completion, deliberately: the wireless-pairing flow polls this
-  /// while a QR is on screen, and `run` creates its process on the spawner's
-  /// worker isolate while `start` would charge it to the caller.
+  /// One reading of what is advertising itself on the local network. `run`, not
+  /// `start`: the process is created on the spawner's isolate, not the caller's.
   Future<MdnsScan> mdnsServices() async {
     try {
       return parseMdnsServices(
@@ -130,13 +108,8 @@ class AdbService {
     }
   }
 
-  /// Completes the wireless-debugging pairing handshake with [address].
-  ///
-  /// [code] is passed as an argument rather than typed into a prompt — adb
-  /// accepts it either way, and there is no prompt to drive from here.
-  ///
-  /// Neither the code nor anything derived from it is logged; only the
-  /// [AdbPairResult] leaves this method.
+  /// Completes the wireless-debugging pairing handshake with [address]. Neither
+  /// [code] nor anything derived from it is logged.
   Future<AdbPairResult> pair(
     PairingAddress address, {
     required String code,
@@ -165,10 +138,8 @@ class AdbService {
     }
   }
 
-  /// Lists AVDs, marking any that are currently running.
-  ///
-  /// An emulator's serial (`emulator-5554`) does not contain the AVD name, so
-  /// each running emulator is asked for it via `emu avd name`.
+  /// Lists AVDs, marking any that are running. An emulator's serial does not
+  /// contain the AVD name, so each running one is asked via `emu avd name`.
   Future<List<Avd>> listAvds() async {
     final emulator = sdk.emulator;
     if (emulator == null) return const [];
@@ -205,25 +176,8 @@ class AdbService {
     }
   }
 
-  /// Boots an AVD. Returns immediately: booting takes tens of seconds, and the
-  /// device appears in [listDevices] once it is up.
-  ///
-  /// [headless] passes `-no-window`, so the emulator has no window of its own
-  /// and this pane's live view is the only way to see it — which is the point:
-  /// the preview, its gestures and its accessibility tree are what this feature
-  /// exists for, and a second floating window is in the way. A real window is
-  /// still one toggle away, because the extended controls (rotation, location,
-  /// simulated calls) only exist there.
-  ///
-  /// Use [bootAvdAndWait] when you need to know it is actually usable —
-  /// headless there is nothing to watch, so "it appeared in `adb devices`" is
-  /// not the same as "it has booted".
-  ///
-  /// [extraArguments] are appended verbatim — the emulator slimming flags come
-  /// through here (`launchArguments` in `domain/android_slimming.dart`). This
-  /// service deliberately knows nothing about what they mean: the argv is the
-  /// caller's policy, and building it here would put a settings decision inside
-  /// the process layer.
+  /// Boots an AVD and returns immediately; use [bootAvdAndWait] to know it is
+  /// usable. [headless] passes `-no-window`; [extraArguments] are appended as-is.
   Future<ProcessHandle> bootAvd(
     String name, {
     bool headless = true,
@@ -250,12 +204,8 @@ class AdbService {
         ],
       ),
     );
-    // Both streams must be drained even when nobody wants the output. The
-    // emulator is chatty during boot and its stdout is a pipe of a few
-    // kilobytes; with no reader it fills, the emulator blocks on write, and the
-    // boot simply stops — observed on this machine, and it looks exactly like a
-    // slow emulator rather than a wedged one. It is also where the emulator
-    // explains itself when it refuses to start.
+    // Both streams must be drained even when nobody wants the output: the
+    // emulator's stdout pipe fills during boot and the boot silently stops.
     void drain(Stream<String> lines) {
       lines.listen(
         (line) => onLog?.call(line),
@@ -269,13 +219,8 @@ class AdbService {
     return handle;
   }
 
-  /// Serial of the running emulator booted from the AVD [name], or `null`.
-  ///
-  /// Asks each emulator which AVD it booted rather than diffing `adb devices`
-  /// across the boot. The diff is wrong as soon as two emulators start close
-  /// together — it cannot say which new serial is which — and it is also wrong
-  /// when the AVD was already running. The console answers this even before the
-  /// system has finished booting, which is exactly when it is needed.
+  /// Serial of the running emulator booted from AVD [name], or `null`. Asks each
+  /// emulator which AVD it booted; diffing `adb devices` races two boots.
   Future<String?> serialForAvd(String name) async {
     for (final device in await listDevices()) {
       if (!device.isEmulator) continue;
@@ -284,12 +229,8 @@ class AdbService {
     return null;
   }
 
-  /// Whether Android has finished booting on [serial].
-  ///
-  /// `sys.boot_completed` is the property Android sets when it broadcasts
-  /// `BOOT_COMPLETED`. A device answers adb well before that, so without this
-  /// check the first `wm size`, `uiautomator dump` or scrcpy start can land on
-  /// a half-booted system and fail in ways that look like our bugs.
+  /// Whether Android has finished booting on [serial]. A device answers adb well
+  /// before `sys.boot_completed`, and half-booted calls fail like our own bugs.
   Future<bool> isBootCompleted(String serial) async {
     try {
       final result = await runner.run(
@@ -302,9 +243,7 @@ class AdbService {
   }
 
   /// Boots [name] and waits until it is genuinely usable, returning its serial.
-  ///
-  /// Bounded: an emulator that never comes up says so rather than leaving a
-  /// spinner running forever.
+  /// Bounded: an emulator that never comes up says so.
   Future<String> bootAvdAndWait(
     String name, {
     bool headless = true,
@@ -318,8 +257,7 @@ class AdbService {
       headless: headless,
       extraArguments: extraArguments,
       onLog: (line) {
-        // Its last words, for the failure message. The emulator normally
-        // explains why it would not start.
+        // Its last words: the emulator normally explains why it would not start.
         log.add(line);
         if (log.length > 20) log.removeAt(0);
       },
@@ -350,11 +288,8 @@ class AdbService {
     return parseScreenSize(result.stdout);
   }
 
-  /// Captures the screen as PNG bytes.
-  ///
-  /// Deliberately goes device-file → `adb pull` → host-file rather than
-  /// `exec-out screencap -p`: the runner decodes stdout as text, which would
-  /// corrupt binary PNG data.
+  /// Captures the screen as PNG bytes. Goes device-file → `adb pull` rather than
+  /// `exec-out screencap -p`: the runner decodes stdout as text and corrupts it.
   Future<Uint8List> screenshot(String serial, {String? hostPath}) async {
     final devicePath = '$deviceTempDirectory/karmashala_screen.png';
     final capture = await runner.run(
@@ -386,18 +321,8 @@ class AdbService {
     return bytes;
   }
 
-  /// Dumps the current accessibility (view) hierarchy.
-  ///
-  /// Goes device-file → `shell cat` rather than `uiautomator dump /dev/tty`:
-  /// `/dev/tty` interleaves uiautomator's own log line with the XML, and older
-  /// devices do not accept it at all. `cat` is safe here in a way it is not for
-  /// screenshots — the payload is text, so the runner decoding stdout as text
-  /// costs nothing.
-  ///
-  /// Retries while the failure is retryable. The common one is
-  /// `ERROR: could not get idle state.`, which means the screen was animating;
-  /// it is transient by definition, and uiautomator reports it with **exit code
-  /// 0**, so the retry decision cannot be made from the exit status.
+  /// Dumps the accessibility hierarchy via device-file → `shell cat`; a dump to
+  /// `/dev/tty` interleaves uiautomator's own log line. Retryable errors exit 0.
   Future<UiHierarchy> dumpUiHierarchy(String serial, {int attempts = 3}) async {
     final devicePath = '$deviceTempDirectory/karmashala_ui_dump.xml';
     UiDumpFailure? failure;
@@ -425,8 +350,7 @@ class AdbService {
       }
       final hierarchy = parseUiAutomatorXml(read.stdout);
       if (hierarchy.isEmpty) {
-        // A syntactically fine dump with no nodes in it. Seen mid-transition;
-        // trying again usually catches the settled screen.
+        // A syntactically fine dump with no nodes: seen mid-transition, retry.
         failure = const UiDumpFailure(
           message:
               'The dump contained no nodes. The screen was probably '
@@ -463,21 +387,8 @@ class AdbService {
     throw error;
   }
 
-  /// Installs an APK, replacing any build of the same package already there.
-  ///
-  /// `-r` rather than a clean install: an agent's loop is build, install, look,
-  /// and wiping the app's data between iterations would throw away the state
-  /// it just spent five taps setting up. `-t` allows an APK whose manifest is
-  /// marked `testOnly`, which is what `flutter build apk --debug` and every
-  /// `assembleDebug` produce — without it the ordinary output of a debug build
-  /// is refused with `INSTALL_FAILED_TEST_ONLY`, and the message does not say
-  /// that a flag would have fixed it.
-  ///
-  /// The decision is made on the output as well as the exit status. adb has
-  /// returned 0 for `Failure [INSTALL_FAILED_*]` on and off across releases —
-  /// it is the same trap [launchPackage] documents below — and an install that
-  /// reported success without installing anything sends the caller on to a
-  /// launch that fails for a reason that looks unrelated.
+  /// Installs an APK over any build of the same package. `-t` allows the
+  /// `testOnly` manifest every debug build produces; adb can exit 0 on failure.
   Future<void> installApk(String serial, String apkPath) async {
     const verb = 'install';
     final summary = 'Installed $apkPath';
@@ -486,9 +397,8 @@ class AdbService {
     );
     final output = '${result.stdout}\n${result.stderr}';
     if (!result.ok || output.contains('Failure [')) {
-      // A full /data reports as `IOException: Requested internal only, but not
-      // enough space`, which names neither the partition nor the remedy. The
-      // number is worth one extra call on a path that has already failed.
+      // A full /data reports as an IOException naming neither partition nor
+      // remedy, so the number is worth one extra call on a path that failed.
       var advice = '';
       if (installFailedForSpace(output)) {
         final df = await runner.run(
@@ -543,17 +453,8 @@ class AdbService {
     _report(DeviceAction(verb: verb, serial: serial, summary: summary));
   }
 
-  /// Starts one named activity: `am start -n <package>/<activity>`.
-  ///
-  /// The explicit counterpart of [launchPackage], for the cases where the
-  /// launcher activity is the wrong entry point — a deep-linked screen, or one
-  /// of several activities in a test harness. `.MainActivity` is accepted as
-  /// well as a fully-qualified class, because that is the shorthand every
-  /// AndroidManifest is written in and `am` expands it against the package.
-  ///
-  /// `am start` **exits 0 when the activity does not exist** and says so only
-  /// on stdout (`Error: Activity class {…} does not exist.`), so the exit code
-  /// alone would report a successful launch of nothing.
+  /// Starts one named activity: `am start -n <package>/<activity>`. It **exits 0
+  /// when the activity does not exist**, so the exit code alone is not a verdict.
   Future<void> startActivity(
     String serial,
     String packageName,
@@ -584,12 +485,8 @@ class AdbService {
     _report(DeviceAction(verb: verb, serial: serial, summary: summary));
   }
 
-  /// Stops every process of [packageName].
-  ///
-  /// `am force-stop` is silent and exits 0 whether the app was running or not,
-  /// which is the behaviour a caller wants: asking for a state the app is
-  /// already in is not a failure — the same rule `SimctlService.terminateApp`
-  /// follows. Nothing is asserted about the output because there is none.
+  /// Stops every process of [packageName]. `am force-stop` is silent and exits 0
+  /// whether the app was running or not, so there is no output to assert on.
   Future<void> forceStopPackage(String serial, String packageName) async {
     final result = await runner.run(
       _forDevice(serial, ['shell', 'am', 'force-stop', packageName]),
@@ -612,12 +509,8 @@ class AdbService {
     _report(DeviceAction(verb: verb, serial: serial, summary: summary));
   }
 
-  /// Launches [packageName]'s launcher activity.
-  ///
-  /// Goes through `monkey`, which resolves the launcher activity itself, so the
-  /// caller does not have to know the activity name. `monkey` **exits 0 when it
-  /// finds no activity**, so the decision is made on its output and not on the
-  /// exit status — the same trap `uiautomator dump` sets above.
+  /// Launches [packageName]'s launcher activity through `monkey`, which resolves
+  /// it. `monkey` **exits 0 when it finds no activity**, so the output decides.
   Future<void> launchPackage(String serial, String packageName) async {
     final result = await runner.run(
       _forDevice(serial, [
@@ -707,12 +600,8 @@ class AdbService {
     );
   }
 
-  /// Presses a raw Android `KEYCODE_*` value.
-  ///
-  /// Numeric because the keyboard-forwarding path works in numbers all the way
-  /// down — scrcpy's `INJECT_KEYCODE` carries an int, and `input keyevent`
-  /// accepts one — and because [DeviceKey] only names the handful of keys the
-  /// hardware-button row offers.
+  /// Presses a raw Android `KEYCODE_*` value. Numeric because the whole
+  /// keyboard-forwarding path is, down to scrcpy's `INJECT_KEYCODE`.
   Future<void> pressKeyCode(String serial, int keyCode) async {
     await _runInput(
       serial,
@@ -747,14 +636,8 @@ class AdbService {
     _report(DeviceAction(verb: verb, serial: serial, summary: summary));
   }
 
-  /// Whether the device is in dark mode, or `null` when it will not say.
-  ///
-  /// Read rather than remembered. The appearance can be changed from the
-  /// device's own Quick Settings tile or by a scheduled switch at dusk, so a
-  /// toggle that trusted its last write would sit inverted — offering "dark"
-  /// on a device that is already dark. `cmd uimode night` answers with one
-  /// line, `Night mode: yes`, which is why this is a cheap thing to ask before
-  /// every flip rather than something to cache.
+  /// Whether the device is in dark mode, or `null` when it will not say. Read
+  /// rather than remembered: Quick Settings or a dusk schedule flips it too.
   Future<bool?> isNightMode(String serial) async {
     final result = await runner.run(
       _forDevice(serial, const ['shell', 'cmd', 'uimode', 'night']),
@@ -763,14 +646,8 @@ class AdbService {
     return parseNightMode(result.stdout);
   }
 
-  /// Switches the device between light and dark.
-  ///
-  /// `cmd uimode night`, not `settings put secure ui_night_mode`. The setting
-  /// is only half the story: it records the preference, but the running system
-  /// UI and every foreground app keep the appearance they were configured with
-  /// until something tells them otherwise. `cmd` goes through the same
-  /// `UiModeManager` call the Quick Settings tile makes, so what is on screen
-  /// changes with it.
+  /// Switches the device between light and dark. `cmd uimode night`, not
+  /// `settings put`: the setting alone does not repaint the running system UI.
   Future<void> setNightMode(String serial, {required bool dark}) async {
     final value = dark ? 'yes' : 'no';
     final summary = 'Set night mode to $value';
@@ -793,20 +670,8 @@ class AdbService {
     _report(DeviceAction(verb: 'appearance', serial: serial, summary: summary));
   }
 
-  /// Opens a URL — a web link, or a custom scheme to reach a deep link in an
-  /// installed app.
-  ///
-  /// The exit code is **not** the answer here, which is the whole reason this
-  /// does not go through the usual "ok or throw" shape. Measured against an
-  /// API 34 emulator: an intent nothing can handle still exits 0, printing
-  ///
-  /// ```
-  /// Error: Activity not started, unable to resolve Intent { … }
-  /// ```
-  ///
-  /// to stderr. A deep link typed with the wrong scheme — the single most
-  /// likely thing to get wrong here — would otherwise report success and do
-  /// nothing at all, which is the failure this control exists to make visible.
+  /// Opens a URL, or a custom scheme to reach a deep link. An intent nothing can
+  /// handle still **exits 0**, so this is not shaped as ok-or-throw.
   Future<void> openUrl(String serial, String url) async {
     final summary = 'Opened $url';
     final result = await runner.run(
@@ -837,20 +702,8 @@ class AdbService {
     _report(DeviceAction(verb: 'openUrl', serial: serial, summary: summary));
   }
 
-  /// Reads recent log lines, newest last.
-  ///
-  /// When [packageName] is given the log is filtered to that package's live
-  /// processes; a package that is not running yields an empty list rather than
-  /// the whole system log.
   /// The pids [packageName] is running under, empty when it is not running.
-  ///
-  /// Exposed rather than left inside [readLogcat] because "no log lines" and
-  /// "no process" are different answers and a caller has to be able to tell
-  /// them apart. `device_logcat` used to report an empty read as "the app does
-  /// not appear to be running", which is a statement about the device it had
-  /// not checked — and it was wrong the moment a level filter was the real
-  /// reason nothing came back. Seen on a live emulator: the app was up, its pid
-  /// was 4866, and the tool said it was not running.
+  /// Exposed because "no log lines" and "no process" are different answers.
   Future<List<int>> pidsOf(String serial, String packageName) async {
     final result = await runner.run(
       _forDevice(serial, ['shell', 'pidof', packageName]),
@@ -905,10 +758,7 @@ class AdbService {
   }
 
   /// Starts a live `logcat` stream. The caller owns the handle and must kill it.
-  ///
-  /// [tags] narrows the stream at adb with `-s`, which silences every other
-  /// tag. A reader after one line — the Dart VM's service announcement — pays
-  /// nothing for a device that is otherwise chatty.
+  /// [tags] narrows the stream at adb with `-s`, silencing every other tag.
   Future<ProcessHandle> streamLogcat(
     String serial, {
     List<int> pids = const [],
@@ -948,12 +798,8 @@ class AdbService {
     }
   }
 
-  /// Forwards to a device port, letting adb pick the host port, and returns
-  /// the port it picked — or null when adb refused.
-  ///
-  /// `tcp:0` is adb's own way of saying "choose one": it prints the number on
-  /// stdout, which is how `flutter attach` gets a host port too. Picking one
-  /// ourselves would race every other tool on the machine.
+  /// Forwards to a device port, letting adb pick the host port, and returns the
+  /// port — or null when adb refused. Picking one ourselves races every tool.
   Future<int?> forwardToFreePort(String serial, int devicePort) async {
     final result = await runner.run(
       _forDevice(serial, ['forward', 'tcp:0', 'tcp:$devicePort']),
@@ -968,10 +814,8 @@ class AdbService {
     );
   }
 
-  /// Every `adb forward` currently registered, across all devices.
-  ///
-  /// Not filtered by serial here: `adb forward --list` ignores `-s` and always
-  /// prints the whole table, so the filtering is [parseScrcpyForwards]'s job.
+  /// Every `adb forward` currently registered, across all devices: `--list`
+  /// ignores `-s`, so filtering by serial is [parseScrcpyForwards]'s job.
   Future<String> listForwards() async {
     final result = await runner.run(_adb(const ['forward', '--list']));
     return result.ok ? result.stdout : '';
@@ -997,30 +841,12 @@ class AdbService {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Files
-  //
-  // Every path that reaches the device's own shell goes through [shellQuote];
-  // every path handed to `adb pull`/`adb push` deliberately does **not**,
-  // because those use adb's sync service and never see a shell. Getting that
-  // backwards quotes the quotes into the filename.
-  // ---------------------------------------------------------------------------
+  // Every path reaching the device's own shell goes through [shellQuote]; every
+  // path handed to `adb pull`/`push` must not — those never see a shell.
 
-  /// Lists one directory on the device.
-  ///
-  /// **A directory that cannot be read throws rather than coming back empty.**
-  /// That is the whole reason this returns a listing and not a `List` — an
-  /// empty folder and a refusal look identical in a file browser, and this
-  /// codebase has been bitten by that class of silence more than once.
-  ///
-  /// The trailing slash is load-bearing. `/sdcard` is a symlink on every
-  /// Android device, and `ls -l /sdcard` prints *the link*, one row, rather
-  /// than what is inside it — measured on the owner's handset, which answered
-  /// `lrw-r--r-- … /sdcard -> /storage/self/primary` and nothing else. A
-  /// trailing slash dereferences the argument alone, which `-L` would not: that
-  /// dereferences every entry in the listing too, and a browser would then show
-  /// `/system/bin` as a directory the user cannot navigate back out of by the
-  /// name they clicked.
+  /// Lists one directory. **A directory that cannot be read throws** rather than
+  /// listing empty. The trailing slash dereferences `/sdcard`'s symlink; `-L`
+  /// would dereference every entry too.
   Future<DeviceDirectoryListing> listDirectory(
     String serial,
     String path,
@@ -1048,12 +874,8 @@ class AdbService {
           );
   }
 
-  /// What [path] is, or null when nothing is there.
-  ///
-  /// `ls -lad`: `-d` reports the entry itself rather than a directory's
-  /// contents, and no trailing slash, so a symlink is reported as a symlink.
-  /// A missing path is null; a path that exists but cannot be reached throws,
-  /// because the two lead to opposite next moves.
+  /// What [path] is, or null when nothing is there. `ls -lad` reports the entry
+  /// itself, so a symlink stays one; unreachable throws rather than answering.
   Future<DeviceFileEntry?> statPath(String serial, String path) async {
     final read = await _readDeviceText(serial, 'ls -lad ${shellQuote(path)}');
     final failure = classifyLsFailure(read.combined, ok: read.ok);
@@ -1068,34 +890,9 @@ class AdbService {
     return listing.entries.firstOrNull;
   }
 
-  /// Runs a device command **whose output contains filenames**, and gets those
-  /// filenames back intact.
-  ///
-  /// The problem this exists for is real and was measured, not anticipated. A
-  /// device's filesystem is UTF-8; `CommandRunner` decodes a process's output
-  /// with `SystemEncoding`, which on Windows is the machine's ANSI code page.
-  /// So a file the emulator lists as `my file नेपाली.txt` arrived here as
-  /// `my file à¤¨à¥‡à¤ªà¤¾à¤²à¥€.txt` — a name that cannot be clicked, cannot
-  /// be pulled, and looks like the device is broken rather than the pipe.
-  /// Every non-Latin filename on the machine of the developer this app is
-  /// written for would have come out that way.
-  ///
-  /// The fix is to make the wire ASCII: `… | base64` on the device, decoded
-  /// here. base64 is in toybox and is present on every device this app
-  /// supports — checked on an Android 11 handset and an Android 14 emulator —
-  /// and it costs no extra round trip, because the pipe runs inside the one
-  /// `adb shell` that was happening anyway.
-  ///
-  /// Two fallbacks, because a device without `base64` must still list its
-  /// files: if the shell says it has no such command, or if what comes back is
-  /// not base64 at all, the plain output is used and [_DeviceText.note] says
-  /// the names may be wrong. Wrong-and-labelled beats a directory that refuses
-  /// to open.
-  ///
-  /// **Not fixed globally**, deliberately. `LocalCommandRunner`'s
-  /// `SystemEncoding` is what several Windows tools need — `wsl.exe` emits
-  /// UTF-16 — and changing it would reach every process this app runs for the
-  /// sake of one surface.
+  /// Runs a device command **whose output contains filenames** and gets them
+  /// back intact: `CommandRunner` decodes with `SystemEncoding`, which mangles
+  /// non-Latin names on Windows, so the wire is base64 with two fallbacks.
   Future<_DeviceText> _readDeviceText(String serial, String command) async {
     final encoded = await runner.run(
       _forDevice(serial, ['shell', '$command | base64']),
@@ -1106,9 +903,7 @@ class AdbService {
       if (decoded != null) {
         return _DeviceText(text: decoded, combined: combined, ok: encoded.ok);
       }
-      // Output that is neither an error nor base64. Nothing seen does this,
-      // but reporting "cannot read" for a directory that listed fine would be
-      // a worse answer than showing it with a warning.
+      // Neither an error nor base64: better shown with a warning than refused.
       if (encoded.stdout.trim().isEmpty) {
         return _DeviceText(text: '', combined: combined, ok: encoded.ok);
       }
@@ -1142,14 +937,8 @@ class AdbService {
     }
   }
 
-  /// Copies a file off the device.
-  ///
-  /// No progress is reported, and that is measured rather than lazy: adb draws
-  /// its `[ 47%]` bar only when stdout is a terminal, and here it is a pipe, so
-  /// there is nothing to read until the transfer finishes. Inventing a
-  /// percentage from the file size would be a bar that is wrong for the whole
-  /// of a slow pull. Callers show that a transfer is running and how big it is;
-  /// [DeviceFileTransfer.bytes] is what adb actually moved.
+  /// Copies a file off the device. No progress is reported: adb draws its bar
+  /// only when stdout is a terminal, and here it is a pipe.
   Future<DeviceFileTransfer> pullFile(
     String serial, {
     required String devicePath,
@@ -1158,9 +947,8 @@ class AdbService {
     final result = await runner.run(
       _forDevice(serial, ['pull', devicePath, hostPath]),
     );
-    // The summary lands on **stderr with exit code 0** — measured against a
-    // real device. Reading only stdout sees an empty string and concludes
-    // nothing moved; treating stderr as failure reports a good pull as broken.
+    // The summary lands on **stderr with exit code 0**, so neither stream alone
+    // is the answer.
     final combined = '${result.stdout}\n${result.stderr}';
     if (!result.ok || !transferSucceeded(combined)) {
       final error = DeviceRefusal(
@@ -1192,9 +980,8 @@ class AdbService {
     );
   }
 
-  /// Copies a file onto the device. Overwrites whatever is at [devicePath] —
-  /// the *decision* not to belongs one layer up, in the driver, which is where
-  /// the destination is checked and where the refusal is worded.
+  /// Copies a file onto the device, overwriting [devicePath]. The decision not
+  /// to belongs in the driver, where the destination is checked.
   Future<DeviceFileTransfer> pushFile(
     String serial, {
     required String hostPath,
@@ -1234,14 +1021,8 @@ class AdbService {
     );
   }
 
-  /// Removes a path on the device. There is no undo on the other side of this.
-  ///
-  /// `rm` without `-f`, so a path that is not there is an error rather than a
-  /// silent success: a delete that reports "done" for a path it never found
-  /// tells the user their file is gone when it is somewhere else.
-  ///
-  /// See [copyPath] and [movePath] below for the same output-not-exit-code
-  /// rule, which they share for the same reason.
+  /// Removes a path on the device. There is no undo. No `-f`, so a path that is
+  /// not there is an error rather than a silent success.
   Future<void> removePath(
     String serial,
     String path, {
@@ -1255,9 +1036,8 @@ class AdbService {
       ]),
     );
     final combined = '${result.stdout}\n${result.stderr}'.trim();
-    // `rm` says nothing when it works, so any output at all is the failure —
-    // which is just as well, because a device from before Android 7 does not
-    // forward the exit code.
+    // `rm` says nothing when it works, so any output is the failure — a device
+    // before Android 7 does not forward the exit code anyway.
     if (!result.ok || combined.isNotEmpty) {
       final error = DeviceRefusal(
         'Could not delete $path on $serial: '
@@ -1281,17 +1061,8 @@ class AdbService {
     );
   }
 
-  /// Copies a path **within** the device — nothing crosses the wire.
-  ///
-  /// That is the point: pulling a 2 GB video to this computer and pushing it
-  /// back into the next folder is two transfers to achieve a `cp` the device
-  /// can do in place. Both paths go through [shellQuote] because both reach the
-  /// device's own shell.
-  ///
-  /// `cp -p` preserves the timestamp and mode. Without it every copy is dated
-  /// now, which quietly destroys the one piece of metadata a file browser is
-  /// normally sorted by. `-r` is the caller's decision; the driver refuses a
-  /// directory without it rather than assuming.
+  /// Copies a path **within** the device — nothing crosses the wire. `cp -p`
+  /// keeps timestamp and mode; `-r` is the caller's decision, refused above.
   Future<void> copyPath(
     String serial,
     String from,
@@ -1307,16 +1078,8 @@ class AdbService {
     past: 'Copied',
   );
 
-  /// Moves a path within the device.
-  ///
-  /// `mv` rather than copy-then-delete, and it matters beyond speed: within one
-  /// filesystem `mv` is a rename, so it cannot half-finish. A cut that copied
-  /// and then failed to delete would leave two files and report success.
-  /// Across filesystems — `/sdcard` to `/data/local/tmp` — the device's own
-  /// `mv` falls back to copy-and-unlink, which is its business and not ours to
-  /// reimplement.
-  ///
-  /// No `-r`: `mv` needs none, for a directory or anything else.
+  /// Moves a path within the device. Within one filesystem `mv` is a rename, so
+  /// it cannot half-finish the way copy-then-delete can.
   Future<void> movePath(String serial, String from, String to) => _moveOrCopy(
     serial,
     from,
@@ -1327,12 +1090,8 @@ class AdbService {
     past: 'Moved',
   );
 
-  /// The shared half of [copyPath] and [movePath].
-  ///
-  /// Neither `cp` nor `mv` says anything when it works, so — exactly as
-  /// [removePath] documents — **any output at all is the failure**. Which is
-  /// just as well: a device from before Android 7 does not forward a remote
-  /// exit code through `adb shell`, so the exit status alone cannot be trusted.
+  /// The shared half of [copyPath] and [movePath]. Neither says anything when it
+  /// works, so **any output at all is the failure**.
   Future<void> _moveOrCopy(
     String serial,
     String from,
@@ -1378,9 +1137,7 @@ class AdbService {
     required String path,
   }) => switch (failure) {
     LsFailure.permissionDenied => _appPrivate(path)
-        // The one refusal worth explaining rather than reporting, because the
-        // path looks like it should work and the reason it does not is a
-        // property of the *build on the device*, not of this app.
+        // Worth explaining rather than reporting: the path looks like it works.
         ? '$path is an app\'s own directory, and adb\'s shell user cannot read '
               'one. Reaching it needs `run-as <package>`, which only works on a '
               'debuggable build of that app — this build does not do it. '
@@ -1417,13 +1174,8 @@ class AdbService {
     );
   }
 
-  /// Shuts a running emulator down.
-  ///
-  /// `emu kill` talks to the emulator's own console rather than to the device,
-  /// so it does nothing on a physical phone — callers must check
-  /// [AndroidDevice.isEmulator] first. Returns whether the emulator actually
-  /// went away, rather than whether the command was accepted: the console
-  /// answers `OK` before the process has finished exiting.
+  /// Shuts a running emulator down. `emu kill` reaches the emulator's console,
+  /// so it does nothing on a handset; returns whether it actually went away.
   Future<bool> stopEmulator(
     String serial, {
     Duration timeout = const Duration(seconds: 20),
@@ -1446,11 +1198,7 @@ class AdbService {
 }
 
 /// Whether an `adb install` failure is about free space rather than the APK.
-///
-/// The wording varies by API level — the package installer says
-/// `INSUFFICIENT_STORAGE`, the newer one wraps an `IOException: Requested
-/// internal only, but not enough space` — so this matches on the idea rather
-/// than on one string.
+/// The wording varies by API level, so this matches the idea, not one string.
 bool installFailedForSpace(String output) {
   final upper = output.toUpperCase();
   return upper.contains('INSUFFICIENT_STORAGE') ||
@@ -1458,10 +1206,8 @@ bool installFailedForSpace(String output) {
       upper.contains('NO SPACE LEFT');
 }
 
-/// The `Use%` column for `/data` out of `df` output, e.g. `92%`.
-///
-/// Returns null rather than guessing when the layout is not the expected one:
-/// a wrong number in an error message is worse than no number.
+/// The `Use%` column for `/data` out of `df` output, e.g. `92%`. Null rather
+/// than a guess when the layout is not the expected one.
 String? dataPartitionUse(String dfOutput) {
   for (final line in const LineSplitter().convert(dfOutput)) {
     if (!line.contains('/data')) continue;
@@ -1476,12 +1222,8 @@ String? dataPartitionUse(String dfOutput) {
   return null;
 }
 
-/// Device output that has been brought back to UTF-8, with what it cost.
-///
-/// [combined] is stdout *and* stderr of whichever attempt produced [text], and
-/// exists because every failure decision in this file is made on the output
-/// rather than the exit status — `adb shell` did not forward a remote exit code
-/// before Android 7, and a pipe replaces it with the last command's anyway.
+/// Device output brought back to UTF-8, with what it cost. [combined] is stdout
+/// *and* stderr: `adb shell` forwarded no remote exit code before Android 7.
 class _DeviceText {
   const _DeviceText({
     required this.text,

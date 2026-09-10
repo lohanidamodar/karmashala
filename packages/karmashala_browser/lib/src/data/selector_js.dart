@@ -1,11 +1,7 @@
-/// JavaScript that derives a CSS selector for an element and **verifies it**.
-///
-/// Shared by the element picker and the input verbs so there is exactly one
-/// definition of "a selector for this element": an id when the id is unique,
-/// otherwise a structural `tag:nth-of-type(n) > …` path — and, either way,
-/// `null` unless `document.querySelector` resolves it back to the same node.
-/// A selector that points somewhere else is worse than none at all, because
-/// the caller would act on the wrong element and be told it worked.
+/// JavaScript that derives a CSS selector for an element and verifies it, so
+/// there is one definition of "a selector for this element": null unless
+/// `querySelector` resolves it back to the same node. A selector that points
+/// elsewhere is worse than none — the caller acts on the wrong element.
 const String kUniqueSelectorJs = r'''
   function unique(el) {
     if (!el || el.nodeType !== 1) return null;

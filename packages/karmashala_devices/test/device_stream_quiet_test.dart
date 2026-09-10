@@ -1,17 +1,8 @@
-// **What a live view does while a host file dialog is being built.**
-//
-// Every byte of this stream is handled on the Dart isolate — parsed, muxed and
-// written to the player's HTTP response, once per frame — and on Windows that
-// isolate is the thread `IFileOpenDialog` is created on. `PickerQuiet` in
-// `core/util/file_picking.dart` is what asks; [DeviceStreamSession.setQuiet] is
-// what answers, and these are the two things it must not get wrong: it must
-// really stop taking bytes, and it must not cost the session anything to have
-// stopped — no closed socket, no restart, and no watchdog verdict about a
-// silence this app asked for.
-//
-// Real loopback sockets throughout, via [FakeScrcpyDevice]: pausing a
-// `StreamSubscription` on a `Socket` is the behaviour under test, so a mock of
-// one would be testing the mock.
+// **What a live view does while a host file dialog is being built.** Every byte
+// of this stream is handled on the Dart isolate, which on Windows is the thread
+// `IFileOpenDialog` is created on. Two things must hold: it must really stop
+// taking bytes, and stopping must cost the session nothing — no closed socket,
+// no restart, and no watchdog verdict about a silence this app asked for.
 import 'dart:async';
 
 import 'package:karmashala_devices/src/data/device_stream.dart';
@@ -93,9 +84,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 200));
 
     // Not merely "never stalled": nothing at all. An `idle` verdict is healthy
-    // and would still put "No screen changes for 1s" under the picture every
-    // time the user opened a picker, and would still be handed to
-    // `StreamRestartPolicy` as though the device had gone quiet by itself.
+    // and would still put "No screen changes for 1s" under the picture.
     expect(
       reports,
       isEmpty,
@@ -117,8 +106,7 @@ void main() {
     await _until(() => session.mark.frames > 0);
 
     await session.stop();
-    // The registry lets go of its hook after the session has gone, so the last
-    // word a session hears is often one it can no longer act on. Pausing a
+    // The registry lets go of its hook after the session has gone. Pausing a
     // cancelled subscription throws; this must not.
     expect(() => session.setQuiet(true), returnsNormally);
     expect(() => session.setQuiet(false), returnsNormally);

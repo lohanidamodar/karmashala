@@ -3,10 +3,8 @@ import 'dart:convert';
 
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
-/// A Dart Tooling Daemon that answers in Dart.
-///
-/// Only the two calls this app makes are implemented — `streamListen` and
-/// `ConnectedApp.getVmServices` — plus the one event it listens for.
+/// A Dart Tooling Daemon that answers in Dart: only `streamListen`,
+/// `ConnectedApp.getVmServices` and the one event this app listens for.
 class FakeDtd implements DtdChannel {
   FakeDtd({List<Map<String, Object?>> apps = const []}) : _apps = [...apps];
 
@@ -42,8 +40,7 @@ class FakeDtd implements DtdChannel {
     );
   }
 
-  /// An app registering after the first read — what an IDE's long-lived daemon
-  /// does on every debug session.
+  /// An app registering after the first read, as an IDE's daemon does.
   void announce(String uri, {String? name}) {
     _apps.add(<String, Object?>{'uri': uri, 'name': ?name});
     _incoming.add(

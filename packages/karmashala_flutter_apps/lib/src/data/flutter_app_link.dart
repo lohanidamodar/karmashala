@@ -11,21 +11,12 @@ import '../domain/flutter_error_summary.dart';
 import '../domain/widget_selection.dart';
 import 'vm_service_connector.dart';
 
-/// The `ToolEvent` stream, which the generated `EventStreams` does not name.
-///
-/// `dart:developer`'s `postEvent(…, stream: 'ToolEvent')` writes to it and the
-/// framework's `_notifyToolsOfSelection` is the only thing in Flutter that
-/// does. Verified listenable on Flutter 3.47.2 / Dart 3.13.2: `streamListen`
-/// accepts it and the events arrive with `streamId: "ToolEvent"`.
+/// The `ToolEvent` stream, which the generated `EventStreams` does not name;
+/// the framework's `_notifyToolsOfSelection` is its only producer.
 const String kToolEventStream = 'ToolEvent';
 
-/// Service extension names, spelled once.
-///
-/// **These are the names this SDK actually registers**, read out of
-/// `WidgetInspectorServiceExtensions` in
-/// `packages/flutter/lib/src/widgets/service_extensions.dart` rather than
-/// guessed. In particular the selection read is `getSelectedSummaryWidget`,
-/// not `getSelectedSummaryWidgetTree`.
+/// Service extension names as this SDK registers them: the selection read is
+/// `getSelectedSummaryWidget`, not `getSelectedSummaryWidgetTree`.
 const String kInspectorShow = 'ext.flutter.inspector.show';
 const String kInspectorSelectedSummary =
     'ext.flutter.inspector.getSelectedSummaryWidget';
@@ -37,16 +28,11 @@ const String kInspectorDisposeGroup = 'ext.flutter.inspector.disposeGroup';
 const String kReloadSourcesService = 'reloadSources';
 const String kHotRestartService = 'hotRestart';
 
-/// One live connection to one running Flutter app.
-///
-/// Everything this feature does to a running app goes through here, and it is
-/// entirely event-driven: streams are subscribed once at attach and nothing is
-/// ever asked again on a timer. The app going away arrives as [done]
-/// completing, not as a probe noticing.
+/// One live connection to one running Flutter app: streams are subscribed once
+/// at attach, and the app going away arrives as [done] completing, never a poll.
 class FlutterAppLink {
-  // Positional for the two injected collaborators: a named parameter cannot
-  // be an initializing formal for a private field, and `prefer_initializing_formals`
-  // is right that the assignment adds nothing.
+  // Positional: a named parameter cannot be an initializing formal for a
+  // private field.
   FlutterAppLink._(
     this._service,
     this.uri,
@@ -67,11 +53,9 @@ class FlutterAppLink {
   /// what is happening now — see [AppLogRecord.beforeAttach].
   final DateTime attachedAt;
 
-  /// Whether this VM service accepted `streamListen` for `ToolEvent`.
-  ///
-  /// Reported rather than assumed: without it the framework's `navigate` event
-  /// cannot reach us, so the widget picker has to say it is unavailable
-  /// instead of waiting for something that will never arrive.
+  /// Whether this VM service accepted `streamListen` for `ToolEvent`; without
+  /// it the widget picker must say so rather than wait for a `navigate` event
+  /// that cannot arrive.
   final bool toolEventStreamListenable;
 
   final Logger _logger;
@@ -92,9 +76,8 @@ class FlutterAppLink {
   /// 's1.reloadSources'}` on this connection.
   final Map<String, String> _registered = <String, String>{};
 
-  /// Whether the handshake has finished, which is the second half of the
-  /// history test: DDS replays its buffered events to a new subscriber, and
-  /// those arrive between `streamListen` and the reply to the next request.
+  /// Second half of the history test: DDS replays its buffered events between
+  /// `streamListen` and the reply to the next request.
   bool _handshakeDone = false;
 
   var _disposed = false;
@@ -114,9 +97,8 @@ class FlutterAppLink {
   /// change in the running app, pushed by the framework.
   Stream<WidgetSourceLocation> get navigations => _navigations.stream;
 
-  /// Fires whenever a service registration on this connection appears or goes
-  /// away — which is how "a Flutter tool is attached" stops being true while
-  /// the app itself keeps running.
+  /// Fires when a service registration appears or goes away — how "a Flutter
+  /// tool is attached" stops being true while the app itself keeps running.
   Stream<void> get servicesChanged => _servicesChanged.stream;
 
   /// The newest [limit] console lines, oldest first.
@@ -131,11 +113,8 @@ class FlutterAppLink {
 
   /// Opens a connection and finishes the handshake, or throws.
   ///
-  /// The order matters: the streams are subscribed *before* `getVM`, because
-  /// the reply to `getVM` is what marks the end of the replayed history, and
-  /// because `Extension` must have a listener at all for the framework's
-  /// `postEvent` calls to be emitted (`dart:developer` makes `postEvent` a
-  /// no-op when the Extension stream has none).
+  /// Streams are subscribed *before* `getVM`: its reply ends the replayed
+  /// history, and `postEvent` is a no-op while `Extension` has no listener.
   static Future<FlutterAppLink> attach(
     Uri wsUri, {
     VmServiceConnector connect = connectVmServiceOverWebSocket,
@@ -258,9 +237,8 @@ class FlutterAppLink {
       await service.streamListen(stream);
       return true;
     } on RPCError catch (error) {
-      // 103 is "stream already subscribed", which is a success for our
-      // purposes. Anything else means this VM service does not have the
-      // stream, which is reported rather than retried.
+      // 103 is "stream already subscribed", a success here; anything else means
+      // this VM service lacks the stream, and is reported rather than retried.
       if (error.code == 103) return true;
       log.fine('streamListen $stream refused: ${error.message}');
       return false;
@@ -321,9 +299,8 @@ class FlutterAppLink {
   }
 
   void _onExtension(Event event) {
-    // `Flutter.Frame` arrives here too, several times a second. There is no
-    // server-side filter for an extension kind, so the subscription is the
-    // price of `Flutter.Error` and everything else is dropped here.
+    // `Flutter.Frame` arrives here several times a second and there is no
+    // server-side filter for extension kind, so the rest is dropped here.
     if (event.extensionKind != 'Flutter.Error') return;
     final data = event.extensionData?.data;
     if (data == null) return;
@@ -362,10 +339,7 @@ class FlutterAppLink {
     if (!_navigations.isClosed) _navigations.add(location);
   }
 
-  /// The event's own clock where it has one.
-  ///
-  /// Falls back to ours rather than to zero, and the fallback is visible in
-  /// the record because the record is what carries the age.
+  /// The event's own clock where it has one, ours rather than zero when not.
   DateTime _stampOf(Event event) {
     final timestamp = event.timestamp;
     return timestamp == null
@@ -373,14 +347,9 @@ class FlutterAppLink {
         : DateTime.fromMillisecondsSinceEpoch(timestamp);
   }
 
-  /// Whether an event describes something that happened before we attached.
-  ///
-  /// Two independent tests, either of which is enough. The handshake test is
-  /// exact and needs no clock: DDS flushes its buffered events between
-  /// `streamListen` and the reply to the next request. The timestamp test
-  /// covers a replay that arrives later, and is skipped when the app's clock
-  /// is the one we cannot trust — a device across an `adb forward` keeps its
-  /// own — by only ever *adding* history, never taking it away.
+  /// Whether an event happened before we attached. The handshake test is exact;
+  /// the timestamp test covers a later replay and only ever *adds* history,
+  /// because a device's clock across an `adb forward` is not ours to trust.
   bool _isHistory(Event event) {
     if (!_handshakeDone) return true;
     final timestamp = event.timestamp;
@@ -413,9 +382,8 @@ class FlutterAppLink {
   /// Asks the Flutter tool that owns this process to recompile and reload.
   ///
   /// Not a VM service RPC: `reloadSources` is a service `flutter_tools`
-  /// *registers* on the connection, because the reload needs the frontend
-  /// server the tool owns. The method name is read off the `ServiceRegistered`
-  /// event rather than assumed — see [AttachedApp.reloadMethod].
+  /// registers, and its method name is read off `ServiceRegistered`, not
+  /// assumed.
   Future<void> hotReload() async {
     final method = reloadMethod;
     if (method == null) {
@@ -459,12 +427,8 @@ class FlutterAppLink {
     }
   }
 
-  /// Turns the running app's own widget-select mode on or off.
-  ///
-  /// This is the whole hit-testing story: the framework highlights on hover,
-  /// hit-tests the tap and picks the nearest widget written in the project.
-  /// The value is a *string* — `_registerBoolServiceExtension` compares
-  /// `parameters['enabled'] == 'true'`.
+  /// Turns the running app's own widget-select mode on or off. The value is a
+  /// *string*: `_registerBoolServiceExtension` compares `enabled == 'true'`.
   Future<void> setWidgetSelectMode({required bool enabled}) => _call(
     kInspectorShow,
     <String, dynamic>{
@@ -473,10 +437,8 @@ class FlutterAppLink {
     },
   );
 
-  /// Reads whatever the inspector has selected right now.
-  ///
-  /// Returns `null` when nothing is selected, which is a real answer: select
-  /// mode can be on with no tap yet.
+  /// Reads whatever the inspector has selected right now, or `null` when
+  /// nothing is — select mode can be on with no tap yet.
   Future<WidgetSelection?> selectedWidget() async {
     final group = 'karmashala-${_objectGroup++}';
     try {
@@ -487,9 +449,8 @@ class FlutterAppLink {
       );
       return WidgetSelection.fromInspectorNode(reply.json?['result']);
     } finally {
-      // The inspector holds every object it hands out until its group is
-      // disposed, so a pick that did not clean up would pin an element tree
-      // in the app under development.
+      // The inspector pins every object it hands out until its group is
+      // disposed, so a pick that skipped this would leak an element tree.
       try {
         await _service.callServiceExtension(
           kInspectorDisposeGroup,

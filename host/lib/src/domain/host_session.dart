@@ -16,11 +16,8 @@ class OutputChunk {
   int get nextOffset => offset + bytes.length;
 }
 
-/// One pty, its backlog, and its single writer.
-///
-/// The session outlives every client of it. Nothing here is driven by a timer:
-/// output arrives because the pty produced it, and [lifecycle] changes because
-/// the child was reaped.
+/// One pty, its backlog, and its single writer. The session outlives every
+/// client of it, and nothing here is driven by a timer.
 class HostSession {
   HostSession({
     required this.id,
@@ -46,12 +43,8 @@ class HostSession {
     );
   }
 
-  /// A session read back from disk after the host that owned it stopped.
-  ///
-  /// It has no process and never had one *here*: [lifecycle] is what the record
-  /// said, including the case the whole feature exists for — it was running,
-  /// and its process did not survive. Nothing is invented, so an ended session
-  /// keeps the exit code it really had and a lost one keeps none at all.
+  /// A session read back from disk: no process, and [lifecycle] is whatever the
+  /// record said. Nothing is invented, so a lost session keeps no exit code.
   HostSession.restored({
     required this.id,
     required this.request,
@@ -66,8 +59,7 @@ class HostSession {
        _lifecycle = lifecycle,
        _outputDone = true,
        _released = true {
-    // Closed at once, so a client that attaches gets the replay and then the
-    // end of the stream rather than a channel that never finishes.
+    // Closed at once, so an attaching client gets the replay and then an end.
     unawaited(_live.close());
     _ended.complete(lifecycle);
   }
@@ -77,9 +69,8 @@ class HostSession {
   final DateTime startedAt;
   final OutputBacklog backlog;
 
-  /// Where the ring is mirrored so it outlives this process. Null for a session
-  /// that was itself restored — its record is already on disk and rewriting it
-  /// from a replay would double every byte.
+  /// Where the ring is mirrored so it outlives this process. Null for a restored
+  /// session: replaying into its own record would double every byte.
   final SessionRecorder? recorder;
   final WriteToken token = WriteToken();
   final PtyHandle _pty;
@@ -101,7 +92,6 @@ class HostSession {
     if (bytes.isEmpty) return;
     final offset = backlog.totalBytes;
     backlog.add(bytes);
-    // The same bytes, in the same order, to the record beside the ring.
     recorder?.record(bytes);
     // Synchronous broadcast, so a listener attached in the same turn as the
     // backlog read cannot miss the chunk between the two.
@@ -110,13 +100,8 @@ class HostSession {
 
   void _onOutputDone() {
     if (!_live.isClosed) _live.close();
-    // Here rather than in [_finish], because these two arrive in either order.
-    // A pty handle delivers its bytes through a stream and its exit code
-    // through a future, and a stream schedules delivery one event per
-    // microtask: completing the exit between two queued chunks is ordinary, and
-    // closing the record there dropped the last thing the session ever wrote.
-    // The end of the output stream is the only moment after which no byte can
-    // arrive.
+    // Here rather than in [_finish]: the exit can complete between two queued
+    // chunks, and only the end of output means no byte can still arrive.
     _outputDone = true;
     recorder?.close();
     _releasePty();
@@ -130,34 +115,23 @@ class HostSession {
     _releasePty();
   }
 
-  /// Gives the operating system its handles back, once neither half of the pty
-  /// has anything left to say.
-  ///
-  /// Both conditions, never either alone. Releasing on the end of output would
-  /// publish an unknown code for a child whose real one was a microtask away;
-  /// releasing on the exit would cut off bytes still queued behind it. An ended
-  /// session is kept so a pane reconnecting a moment late can read its code, and
-  /// what it does *not* need to keep is a master fd, a pipe and a job object —
-  /// which nothing would ever close again, because pruning drops the session
-  /// without reaching them.
+  /// Gives the OS its handles back once both halves of the pty are done — never
+  /// either alone, or a queued chunk or a microtask-away exit code is lost.
   void _releasePty() {
     if (!_outputDone || !_lifecycle.hasEnded) return;
     unawaited(_closePty());
   }
 
-  /// Closes the pty at most once, whoever asks. [terminate] and [_releasePty]
-  /// can both arrive at it and a handle must not be closed twice.
+  /// Closes at most once: [terminate] and [_releasePty] both reach it, and a
+  /// handle must not be closed twice.
   Future<void> _closePty() async {
     if (_released) return;
     _released = true;
     await _pty.close();
   }
 
-  /// Replay from [offset], then live, with no gap and no repeat.
-  ///
-  /// The backlog read and the live subscription happen in one synchronous turn
-  /// inside `onListen`, which is the whole reason a reattach neither loses a
-  /// byte nor shows one twice.
+  /// Replay from [offset], then live, with no gap and no repeat: the backlog
+  /// read and the live subscription happen in one synchronous `onListen` turn.
   Stream<OutputChunk> readFrom(int offset) {
     late final StreamController<OutputChunk> controller;
     StreamSubscription<OutputChunk>? subscription;
@@ -208,12 +182,8 @@ class HostSession {
 
   void signal(int number) => _pty.kill(number);
 
-  /// Ends the session for good. A client disconnect must never call this —
-  /// that is the entire point of the host.
-  ///
-  /// The real exit code is preferred over "terminated": killing the child still
-  /// produces a wait status, and [reapWithin] is a failure bound, not a poll.
-  /// Only when the reaping does not happen is the code recorded as unknown.
+  /// Ends the session for good; a client disconnect must never call this. The
+  /// real exit code wins over "terminated" — [reapWithin] is a bound, not a poll.
   Future<SessionLifecycle> terminate({
     int signal = 15,
     Duration reapWithin = const Duration(seconds: 5),
@@ -239,13 +209,8 @@ class HostSession {
   }
 }
 
-/// The absence of a process, for a session that was read back from disk.
-///
-/// Not a fake and not a stub for a test: a restored session genuinely has no
-/// child, and this is how that is spelled without every reader of [HostSession]
-/// having to check a nullable pty. [exitCode] never completes, because the
-/// lifecycle came from the record and inventing a second one here would
-/// overwrite it with today's timestamp.
+/// The absence of a process, so no reader of [HostSession] needs a nullable pty.
+/// [exitCode] never completes: the lifecycle came from the record.
 class _NoProcess implements PtyHandle {
   const _NoProcess();
 

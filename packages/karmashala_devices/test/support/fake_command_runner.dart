@@ -3,11 +3,9 @@ import 'dart:async';
 
 import 'package:agent_cli/process.dart';
 
-/// A deterministic [CommandRunner] test double.
-///
-/// Records every [CommandRequest] it receives and returns scripted results via
-/// [responder] (or a default success), or throws [throwError] to simulate a
-/// missing executable / unavailable environment.
+/// A deterministic [CommandRunner] test double: records every [CommandRequest],
+/// returns scripted results via [responder], or throws [throwError] to simulate
+/// a missing executable.
 class FakeCommandRunner implements CommandRunner {
   FakeCommandRunner({
     this.environmentId = 'windows',
@@ -51,9 +49,8 @@ class FakeCommandRunner implements CommandRunner {
   }
 }
 
-/// A scriptable [ProcessHandle] test double. Feed stdout lines with
-/// [emitStdout], inspect what was written with [written], and observe lifecycle
-/// via [killed]/[complete].
+/// A scriptable [ProcessHandle] test double. Feed stdout with [emitStdout],
+/// inspect [written], and observe lifecycle via [killed]/[complete].
 class FakeProcessHandle implements ProcessHandle {
   final StreamController<String> _stdout = StreamController<String>();
   final StreamController<String> _stderr = StreamController<String>();
@@ -152,8 +149,7 @@ class FakeCommandRunnerFactory implements CommandRunnerFactory {
       byEnvironmentId[environment.id] ?? fallback;
 
   /// This factory as the `RunnerResolver` the adapters and `CliStoreLocator`
-  /// take — the seam that replaced the factory-plus-DAO trio
-  /// (docs/PACKAGE_SPLIT.md §3).
+  /// take (docs/PACKAGE_SPLIT.md §3).
   RunnerResolver get resolver =>
       (String environmentId) => byEnvironmentId[environmentId] ?? fallback;
 }

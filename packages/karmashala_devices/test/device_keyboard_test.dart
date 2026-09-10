@@ -69,8 +69,7 @@ void main() {
   group('DeviceKeyTranslator: printable text', () {
     test('a printable character becomes text, not a keycode', () {
       // The device's own layout decides which key produces "@"; sending
-      // KEYCODE_2 with shift assumes it is the desktop's. scrcpy runs text
-      // through the device's KeyCharacterMap instead.
+      // KEYCODE_2 with shift assumes it is the desktop's.
       final translator = DeviceKeyTranslator();
       final intent = translator.translate(
         _down(DesktopKey.printable('2'), character: '@'),
@@ -114,9 +113,8 @@ void main() {
     });
 
     test('a control character is never sent as text', () {
-      // Enter arrives with character "\n" on some platforms. Typing a newline
-      // is not the same as pressing Enter: a search field submits on one and
-      // ignores the other.
+      // Enter arrives with character "\n" on some platforms, and typing a
+      // newline is not pressing Enter: a search field submits on one.
       final translator = DeviceKeyTranslator();
       final intent = translator.translate(
         _down(DesktopKey.enter, character: '\n'),
@@ -146,9 +144,8 @@ void main() {
     });
 
     test('the key that was pressed travels with its Android keycode', () {
-      // A sink that does not speak Android — the iOS one — maps by logical
-      // key. Without this it would be handed an `int` from a numbering scheme
-      // its device has never heard of, and would have to refuse every key.
+      // A sink that does not speak Android maps by logical key; without this it
+      // would be handed an int from a numbering its device never heard of.
       final translator = DeviceKeyTranslator();
       final down =
           translator.translate(_down(DesktopKey.arrowLeft), _plain)!
@@ -240,8 +237,7 @@ void main() {
       expect(released.single.action, AndroidKeyAction.up);
       expect(released.single.keyCode, AndroidKeyCode.dpadDown);
       // The release goes out with no key event in hand, so the logical key has
-      // to have been remembered — a sink that maps by it cannot lift a key it
-      // cannot name.
+      // to have been remembered.
       expect(released.single.logicalKey, DesktopKey.arrowDown);
       // And the second call has nothing left to lift.
       expect(translator.releaseAll(), isEmpty);

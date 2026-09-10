@@ -7,19 +7,12 @@ import 'package:path/path.dart' as p;
 
 import 'log_entry.dart';
 
-/// Appends log lines to a rotating file.
+/// Appends log lines to a rotating file — the only sink that survives the
+/// process, and what a bug report attaches.
 ///
-/// **This is the sink that survives.** The ring buffer dies with the process
-/// and the console does not exist in a windowed release build, so a crash, a
-/// hang, or "it did this yesterday" has nothing to read without a file. It is
-/// also what a bug report attaches.
-///
-/// **[add] never blocks and never throws.** It appends one already-formatted
-/// string to an in-memory queue and arms a timer; the write, the `stat` and the
-/// rotation all happen later, off the caller's stack, serialised behind a
-/// single future chain so two flushes cannot interleave. A disk that is full,
-/// read-only or gone costs the caller nothing — the failure is recorded in
-/// [lastError] for the settings screen to show, and logging carries on.
+/// [add] never blocks and never throws: it queues a formatted string and arms a
+/// timer, and the writes are serialised behind one future chain. A full or gone
+/// disk costs the caller nothing and shows up in [lastError].
 class LogFileSink {
   LogFileSink({
     required this.directory,
@@ -42,16 +35,15 @@ class LogFileSink {
   /// How many files to keep, the live one included.
   final int keep;
 
-  /// How long records may sit in memory before they are written. Short enough
-  /// that a crash loses ~nothing, long enough that a flood is one write.
+  /// How long records may sit in memory: short enough that a crash loses
+  /// ~nothing, long enough that a flood is one write.
   final Duration flushInterval;
 
-  /// The floor for what is written. The buffer keeps everything regardless;
-  /// this is only about how much of it is worth spending disk on.
+  /// The floor for what is written; the buffer keeps everything regardless.
   Level minimumLevel;
 
-  /// The most lines that may queue before the oldest are dropped — the bound
-  /// that stops a dead disk from turning into an out-of-memory.
+  /// The most lines that may queue before the oldest are dropped, so a dead
+  /// disk cannot become an out-of-memory.
   final int maxPending;
 
   final Queue<String> _pending = ListQueue<String>();
@@ -97,8 +89,7 @@ class LogFileSink {
     _closed = true;
   }
 
-  /// Every log file that exists, newest first — what "copy report" attaches and
-  /// what the reveal button points at.
+  /// Every log file that exists, newest first.
   Future<List<File>> files() async {
     final out = <File>[];
     if (await file.exists()) out.add(file);

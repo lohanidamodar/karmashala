@@ -56,10 +56,8 @@ Matcher failsWith(BrowserFailure failure) => throwsA(
 );
 
 /// A connected [BrowserService] whose page answers whatever the test says.
-///
-/// [onEvaluate] receives the actual JavaScript we send, so a test asserts on
-/// the real script and not on a stand-in for it: if the wrong script is built,
-/// the fake does not recognise it and the test fails.
+/// [onEvaluate] receives the actual JavaScript we send, so a wrong script goes
+/// unrecognised by the fake and the test fails.
 class FakeBrowser {
   FakeBrowser({
     this.onEvaluate,
@@ -146,9 +144,8 @@ class FakeBrowser {
   }
 }
 
-/// A [BrowserService] whose pick gives up after [pickTimeout] rather than the
-/// two minutes a person gets, so the "nobody clicked" branch is reachable from
-/// a test without a two-minute wait.
+/// A [BrowserService] whose pick gives up after [pickTimeout], so the "nobody
+/// clicked" branch is reachable without a two-minute wait.
 class _TimeboxedBrowserService extends BrowserService {
   _TimeboxedBrowserService({
     required this.pickTimeout,

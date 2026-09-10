@@ -3,12 +3,9 @@ import 'dart:convert';
 import '../domain/browser_failure.dart';
 import '../domain/browser_target.dart';
 
-/// Reads the value out of a `Runtime.evaluate` / `Runtime.callFunctionOn`
-/// reply, raising [BrowserException] when the page threw.
-///
-/// Assumes `returnByValue: true`; without it CDP returns an object handle and
-/// there is no `value` to read, which this reports rather than silently
-/// yielding null.
+/// Reads the value out of a `Runtime.evaluate` reply, raising [BrowserException]
+/// when the page threw. Assumes `returnByValue: true`; without it CDP returns an
+/// object handle and there is no `value` to read, which this reports.
 Object? unwrapEvaluateResult(Map<String, Object?> reply) {
   final details = reply['exceptionDetails'];
   if (details is Map<String, Object?>) {
@@ -108,11 +105,8 @@ BrowserTarget parseTarget(Map<String, Object?> json) => BrowserTarget(
   webSocketDebuggerUrl: json['webSocketDebuggerUrl'] as String?,
 );
 
-/// Whether a `/json/version` body really is a Chrome DevTools endpoint.
-///
-/// This is how "port occupied by an unrelated server" is told apart from
-/// "Chrome is listening here": any HTTP server can answer on the port, but
-/// only DevTools reports a browser and a browser-level WebSocket URL.
+/// Whether a `/json/version` body really is a Chrome DevTools endpoint: any HTTP
+/// server can answer on the port, only DevTools names a browser-level socket.
 bool isDevToolsVersionBody(String body) {
   try {
     final decoded = jsonDecode(body);

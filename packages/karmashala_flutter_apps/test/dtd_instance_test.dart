@@ -2,17 +2,15 @@ import 'package:test/test.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 void main() {
-  /// Verbatim `C:\Users\dlohani\AppData\Local\Dart\dtd\36984`, written by the
-  /// DTD that `flutter run -d emulator-5554` started from a plain terminal on
-  /// 2026-09-09. Nothing asked for it: DDS starts a DTD whenever DevTools is
-  /// enabled, which is the default, and the daemon records itself here.
+  /// Verbatim a real `…\Local\Dart\dtd\36984`, written 2026-09-09 by the DTD
+  /// a plain-terminal `flutter run` started without being asked.
   const pidFile =
       '{"wsUri":"ws://127.0.0.1:54382/xkQinOxHDeY=","epoch":1788941794103,'
       '"pid":36984,"dartVersion":"3.13.2 (stable) (Tue Aug 25 01:01:12 2026 '
       '-0700) on \\"windows_x64\\"","workspaceRoot":"C:\\\\kw\\\\vmprobe"}';
 
-  /// Verbatim the reply to `ConnectedApp.getVmServices` on that daemon, asked
-  /// over a plain WebSocket with no secret, the same day.
+  /// Verbatim that daemon's `ConnectedApp.getVmServices` reply, asked over a
+  /// plain WebSocket with no secret.
   const reply =
       '{"type":"VmServicesResponse","vmServices":[{"uri":'
       '"ws://127.0.0.1:54385/Rzp5Wq0-P2o=/ws","name":"Kind: Flutter - Device: '

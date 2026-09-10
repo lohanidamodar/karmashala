@@ -6,10 +6,8 @@ import 'package:karmashala_devices/src/domain/ui_node.dart';
 import 'package:test/test.dart';
 
 /// Real `uiautomator dump` output, captured from the devices this project is
-/// developed against. Synthetic XML would not have caught the two findings that
-/// shaped the query interface: a Flutter app puts its labels in `content-desc`
-/// and leaves `text` empty, and the Settings list is full of `&amp;` and
-/// non-ASCII punctuation.
+/// developed against. Synthetic XML would not have caught that a Flutter app
+/// puts its labels in `content-desc` and leaves `text` empty.
 String _fixture(String name) =>
     File('test/fixtures/$name').readAsStringSync();
 

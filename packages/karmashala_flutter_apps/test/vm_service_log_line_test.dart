@@ -2,10 +2,8 @@ import 'package:test/test.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 void main() {
-  /// Captured 2026-09-09 from `adb -s emulator-5554 logcat -v threadtime`
-  /// while `flutter run -d emulator-5554` launched a debug app on the
-  /// `sambandha_test` AVD (Android 14, google_apis, x86_64). Verbatim,
-  /// including the logcat prefix and the `flutter :` tag.
+  /// Captured verbatim 2026-09-09 from `adb logcat -v threadtime`, logcat
+  /// prefix and `flutter :` tag included.
   const captured =
       '09-09 14:01:30.298  4419  4478 I flutter : The Dart VM service is '
       'listening on http://127.0.0.1:42771/nQyjZWDSaNM=/';
@@ -16,8 +14,7 @@ void main() {
 
       expect(uri, isNotNull);
       expect(uri!.port, 42771);
-      // The token is the half nothing outside the app can recompute, so it is
-      // carried verbatim — trailing slash included, which the VM requires.
+      // The token is carried verbatim, trailing slash included.
       expect(uri.path, '/nQyjZWDSaNM=/');
       expect(uri.host, '127.0.0.1');
       expect(uri.scheme, 'http');
@@ -67,9 +64,8 @@ void main() {
 
   group('the same service through an adb forward', () {
     test('moves the port and keeps the token', () {
-      // Measured 2026-09-09: `adb -s emulator-5554 forward tcp:0 tcp:42771`
-      // answered 59152, and GET http://127.0.0.1:59152/nQyjZWDSaNM=/ was 200
-      // while the same port with any other token was 403.
+      // Measured 2026-09-09: the forwarded port answered 200 for this token
+      // and 403 for any other.
       final device = vmServiceUriInDeviceLogLine(captured)!;
       final host = vmServiceUriOnHost(device, 59152);
 

@@ -9,14 +9,9 @@ const _udid = '70592006-11CD-44A3-96BC-25EE8E72CA3D';
 const _directory = '/private/var/tmp/com.apple.CoreSimulator.SimDevice.$_udid';
 const _plist = '$_directory/disabled.plist';
 
-/// Labels that must never appear in the table.
-///
-/// The first four were disabled by hand on a real device to see what happened:
-/// the simulator came up a zombie that `simctl list` still called **Booted**,
-/// `bootstatus -b` hung forever, `launch` failed with
-/// `FBSOpenApplicationServiceErrorDomain code=5` and `io screenshot` timed out.
-/// The rest were observed to be load-bearing for the simulator, for preferences
-/// or for Xcode's own tooling.
+/// Labels that must never appear in the table. Disabling the first four by hand
+/// produced a zombie that `simctl list` still called **Booted**, with
+/// `bootstatus -b` hanging forever and `io screenshot` timing out.
 const _neverDisable = [
   'com.apple.SpringBoard',
   'com.apple.backboardd',
@@ -52,9 +47,8 @@ const _shared = [
   'com.apple.financed',
 ];
 
-/// A device that has been booted once writes entries of its own into this
-/// file. Seventeen of them, all explicit `false`, all launchd's business and
-/// none of ours — this is the shape a read-modify-write has to survive.
+/// A device that has been booted once writes seventeen explicit `false` entries
+/// of its own into this file — the shape a read-modify-write must survive.
 const _launchdEntries = <String, bool>{
   'com.apple.NPKCompanionAgent': false,
   'com.apple.addressbooksyncd': false,
@@ -92,9 +86,8 @@ String _devicesJson(String state) =>
 }
 ''';
 
-/// An in-memory [SlimmingFileStore]. Nothing in this file may reach
-/// `/private/var/tmp`: a stray write there edits one of the developer's real
-/// simulators, and the damage only shows up the next time they boot it.
+/// An in-memory [SlimmingFileStore]. Nothing here may reach
+/// `/private/var/tmp`: a stray write edits a developer's real simulator.
 class _FakeFileStore implements SlimmingFileStore {
   _FakeFileStore([Map<String, String>? seed]) : files = {...?seed};
 
@@ -208,8 +201,7 @@ void main() {
 
       expect(allManagedLabels, hasLength(170));
       // The five deliberate duplicates account for the difference. A sixth
-      // would mean somebody added a label to a second category without
-      // thinking about the any-excepted-category rule.
+      // would mean a label was added to a second category without thinking.
       expect(entries, 175);
     });
 
@@ -283,10 +275,8 @@ void main() {
     });
 
     test('keeps a shared label enabled when ANY excepted category lists it', () {
-      // `passd` and `financed` are also listed by `other`, and the AMS trio by
-      // `icloud`. Sparing "store" has to actually leave StoreKit working: if
-      // the other category were still free to disable them, the checkbox the
-      // user ticked would be a lie.
+      // `passd` and `financed` are also listed by `other`. Sparing "store" has
+      // to actually leave StoreKit working, or the checkbox is a lie.
       final disabled = desiredDisabled(except: {SlimmingCategory.store});
 
       for (final label in _shared) {
@@ -379,9 +369,8 @@ void main() {
     });
 
     test('leaves a managed label that is explicitly enabled as found', () {
-      // launchd writes `false` entries of its own, and some are for labels
-      // this table also owns. "Enabled" is already what that says, so
-      // rewriting it would be churn in a file another process manages.
+      // launchd writes `false` entries of its own, some for labels this table
+      // also owns. "Enabled" is already what that says.
       const existing = {'com.apple.chronod': false, 'com.apple.searchd': false};
 
       final next = applyDelta(existing, {'com.apple.searchd'});
@@ -548,9 +537,8 @@ void main() {
         files,
       ).status(_udid.toLowerCase());
 
-      // A lower-case udid is accepted by simctl on the command line, so a
-      // caller can easily be holding one; reading the wrong path would report
-      // every device as un-slimmed.
+      // `simctl` accepts a lower-case udid, so a caller can easily be holding
+      // one; reading the wrong path reports every device as un-slimmed.
       expect(status.plistPath, _plist);
       expect(status.isSlimmed, isTrue);
     });
@@ -805,11 +793,8 @@ void main() {
     });
 
     test('names the labels a booted device does not know about', () async {
-      // Stands in for Apple renaming a label between iOS releases: the
-      // category table still lists the old name, but the device's own
-      // launchd answers with something else entirely. Disabling — or
-      // un-disabling — a name it has never heard of is a silent no-op, which
-      // is exactly the failure mode this check exists to surface.
+      // Stands in for Apple renaming a label between iOS releases: disabling a
+      // name launchd has never heard of is a silent no-op.
       final present = allManagedLabels.difference({
         'com.apple.chronod',
         'com.apple.searchd',
@@ -832,9 +817,8 @@ void main() {
     });
 
     test('refuses to guess when the device cannot be reached', () async {
-      // `simctl spawn` fails outright on a device that is not booted — this
-      // check needs the real launchd, so it must say so rather than reporting
-      // every managed label as missing.
+      // `simctl spawn` fails outright on a device that is not booted, so this
+      // must say so rather than reporting every managed label as missing.
       final runner = FakeCommandRunner(
         environmentId: 'macos',
         responder: (request) => const CommandResult(

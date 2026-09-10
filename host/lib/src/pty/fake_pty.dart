@@ -3,9 +3,8 @@ import 'dart:typed_data';
 
 import 'pty.dart';
 
-/// A [PtyLauncher] with no operating system behind it, so every layer above
-/// the pty is testable on Windows. It records rather than simulates: a test
-/// asserts what was written and resized, and drives output and exit itself.
+/// A [PtyLauncher] with no operating system behind it. It records rather than
+/// simulates: a test drives the output and the exit itself.
 class FakePtyLauncher implements PtyLauncher {
   FakePtyLauncher({this.onStart});
 

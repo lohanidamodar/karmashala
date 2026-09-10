@@ -1,5 +1,4 @@
-/// A source of the current time, abstracted so timestamps are deterministic in
-/// tests (inject a fixed clock) instead of reading the wall clock directly.
+/// A source of the current time, abstracted so a test can inject a fixed one.
 abstract interface class Clock {
   /// The current instant, in UTC.
   DateTime nowUtc();

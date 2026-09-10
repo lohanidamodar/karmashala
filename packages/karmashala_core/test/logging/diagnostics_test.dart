@@ -36,8 +36,7 @@ void main() {
     });
 
     test('the entry is in the buffer the moment the caller returns', () {
-      // The point of the whole sink design: logging is a synchronous store, so
-      // nothing that logs is waiting on a disk, a frame or a microtask.
+      // Logging is a synchronous store: nothing that logs waits on a disk.
       final diagnostics = Diagnostics(echoToConsole: false);
       Diagnostics.instance = diagnostics;
       AppLogger.initialize(level: Level.ALL);
@@ -73,8 +72,7 @@ void main() {
     });
 
     test('warnings are recorded with debug mode off (root at INFO)', () {
-      // The buffer has to be filling *before* anybody opens the panel —
-      // otherwise seeing a failure means reproducing it first.
+      // The buffer fills before anybody opens the panel.
       final diagnostics = Diagnostics(echoToConsole: false);
       Diagnostics.instance = diagnostics;
       AppLogger.initialize();
@@ -89,8 +87,7 @@ void main() {
     });
 
     test('a token never reaches the buffer', () {
-      // The buffer is the source for the panel, the clipboard, the report and
-      // the log file, so this is the one place the invariant has to hold.
+      // The buffer is the source for every consumer, so redaction holds here.
       const token = 'sk-ant-api03-Zx9Qw8Lm2Nv4Bt7Rk1Cy6Hd0Sf3Jg5Pu-AA';
       const hostKey =
           'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH4tFbGqDLrRcYqPZ0mQeRs7WvKjBn';
@@ -136,8 +133,7 @@ void main() {
         expect(diagnostics.buffer.length, 1000);
         expect(diagnostics.buffer.dropped, 49000);
         expect(diagnostics.buffer.snapshot().last.message, 'frame 49999');
-        // Generous by two orders of magnitude: this is a smoke alarm for a sink
-        // that has started doing I/O on the caller's thread, not a benchmark.
+        // A smoke alarm for I/O on the caller's thread, not a benchmark.
         expect(watch.elapsed, lessThan(const Duration(seconds: 10)));
       },
     );

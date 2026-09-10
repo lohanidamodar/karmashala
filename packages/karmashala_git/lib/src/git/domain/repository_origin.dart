@@ -1,12 +1,9 @@
 /// What a clone records about `origin`: where it points, and which branch it
 /// calls the default.
 ///
-/// **Both are properties of the repository, not of a working tree.** They live
-/// in `.git/config` and in `refs/remotes/origin/HEAD`, and a worktree's `.git`
-/// is a *file* pointing at the clone's git directory — so every worktree of one
-/// clone shares one answer. They were asked once per *checkout* until Loop 74,
-/// which on a workspace built out of `wt-*` folders meant asking the same
-/// question of the same files once per row.
+/// **Both are properties of the repository, not of a working tree** — they live
+/// in the clone's git directory, so every worktree of one clone shares one answer,
+/// and asking per checkout asks the same files once per row.
 class RepositoryOrigin {
   const RepositoryOrigin({this.url, this.head});
 

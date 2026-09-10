@@ -1,65 +1,12 @@
 // Turning the desktop's keyboard into something a mirrored device understands.
-//
-// The owner's request was "scrcpy can also send keyboard events right, can we
-// send keyboard events in live when actively focused there? with a option to
-// stop sending keyboard?" — so: type into the mirror, and be able to stop.
-//
-// **Two devices, one translation.** This file was written for Android alone and
-// now also serves an iOS simulator, so it is worth being exact about what is
-// shared and what is not. The *split* below — printable text one way, named keys
-// the other — is shared, because it follows from how desktop keyboards report
-// characters rather than from anything Android does. The *vocabulary* is not:
-// Android takes `KEYCODE_*` integers and a meta-state bitmask, while
-// WebDriverAgent takes a string it feeds to `XCUIElement.typeText`, and there is
-// no honest correspondence between an int and a private-use code point. So
-// [DeviceKeycodeIntent] carries the originating [DesktopKey] alongside
-// the Android keycode, and [simulatorKeyFor] maps that key — not the keycode — onto
-// what iOS understands. Round-tripping desktop → Android → iOS would make the
-// second device's behaviour depend on the first device's numbering, which is
-// exactly the kind of coupling that is invisible until it is wrong.
-//
-// **The split, and why.** Every key arriving here goes one of two ways:
-//
-// * A **printable character** with no Ctrl/Alt/Meta held is sent as *text*.
-//   The device's own `KeyCharacterMap` then decides which key and which
-//   modifier produce it (`Controller.injectText` → `KeyCharacterMap.getEvents`).
-//   Sending `KEYCODE_2` + shift for `@` instead would be this side asserting
-//   that the phone's layout matches the desktop's, which is false the moment
-//   either is not US English — and it fails silently, typing `2`.
-// * Everything else — Enter, Backspace, Tab, Escape, the arrows, Home/End,
-//   Page Up/Down, the function keys, the Android hardware keys, and *any* key
-//   pressed with Ctrl, Alt or Meta — is sent as a **keycode** with a meta
-//   state. These have no character to compose (`KeyCharacterMap` cannot express
-//   them at all), they need Android's repeat counter to hold down sensibly, and
-//   a chord is only a chord if the modifier travels with it: Ctrl+A sent as
-//   text is the letter "a" typed over the selection the user wanted.
-//
-// One thing worth being plain about, because "text" invites the wrong
-// assumption: on scrcpy 4.1 **neither** path is an IME. `injectText` walks the
-// string through the device's char map and injects ordinary hardware-keyboard
-// `KeyEvent`s, exactly as the keycode path does. So the phone behaves as if a
-// USB keyboard were plugged into it — autocorrect and the suggestion strip stay
-// out of the way, and an app that only listens for IME commits (rare) sees
-// nothing. That is the same bargain `adb shell input text` makes, so the
-// fallback behaves the same way rather than differently.
+// Printable characters with no Ctrl/Alt/Meta go as *text*, so the device's own
+// `KeyCharacterMap` picks the key; everything else goes as a keycode with a meta
+// state, because a chord is only a chord if the modifier travels with it.
 
 import 'simulator_backend.dart';
 
-/// A desktop keyboard key, identified the way Flutter's `DesktopKey`
-/// identifies one.
-///
-/// **Why not the Flutter type.** This layer is the translation *from* a desktop
-/// keyboard *to* a device's, and every line of it is arithmetic over an integer
-/// id and a label — none of it needs a widget, a binding or a render tree. So
-/// the key is a value here: `keyId` is byte-for-byte Flutter's, which is what
-/// makes the app's `DesktopKey` convertible in one expression
-/// (`DesktopKey(event.logicalKey.keyId)`) and makes the tables below the same
-/// tables the app has always had.
-///
-/// [keyLabel] follows Flutter's own rule — a printable key labels itself with
-/// its upper-cased character, everything else looks its name up — so
-/// [androidKeyCodeFor]'s letter and digit fallback works for every printable
-/// key without listing one of them.
+/// A desktop keyboard key, identified the way Flutter's `DesktopKey` does.
+/// A value, not the Flutter type: none of this needs a widget or a binding.
 class DesktopKey {
   const DesktopKey(this.keyId);
 
@@ -81,7 +28,6 @@ class DesktopKey {
   String toString() =>
       'DesktopKey(0x${keyId.toRadixString(16)}${keyLabel.isEmpty ? '' : ', $keyLabel'})';
 
-  // Modifiers.
   static const control = DesktopKey(0x002000001f0);
   static const controlLeft = DesktopKey(0x00200000100);
   static const controlRight = DesktopKey(0x00200000101);
@@ -96,7 +42,6 @@ class DesktopKey {
   static const metaRight = DesktopKey(0x00200000107);
   static const fn = DesktopKey(0x00100000106);
 
-  // Editing and navigation.
   static const backspace = DesktopKey(0x00100000008);
   static const delete = DesktopKey(0x0010000007f);
   static const enter = DesktopKey(0x0010000000d);
@@ -148,15 +93,12 @@ class DesktopKey {
   static const f11 = DesktopKey(0x0010000080b);
   static const f12 = DesktopKey(0x0010000080c);
 
-  /// The trigger of [kDeviceKeyboardEscape]. A printable key, so its id is its
-  /// code point — but a `const` chord needs a `const` key, and [printable] is
-  /// a function.
+  /// The trigger of [kDeviceKeyboardEscape]. A `const` chord needs a `const`
+  /// key, and [printable] is a function.
   static const keyK = DesktopKey(0x0000000006b);
 
-  /// The key that produces [character] unmodified — `keyA` is `printable('a')`.
-  ///
-  /// A printable key's id *is* its lower-case code point, which is why the
-  /// letters and digits need no table of their own here or in Flutter.
+  /// The key that produces [character] unmodified. A printable key's id *is* its
+  /// lower-case code point, so letters and digits need no table.
   static DesktopKey printable(String character) =>
       DesktopKey(character.toLowerCase().codeUnitAt(0));
 
@@ -210,22 +152,15 @@ class DesktopKey {
   };
 }
 
-/// The key's position on the keyboard, Flutter's `DesktopPhysicalKey.usbHidUsage`.
-///
-/// Only ever an identity here: [DeviceKeyTranslator] tracks what is held by
-/// position, because that is what a release names — the *logical* key can
-/// change under a modifier between press and release while the finger has not
-/// moved.
+/// The key's position, Flutter's `DesktopPhysicalKey.usbHidUsage`. What is held
+/// is tracked by position: the logical key can change under a modifier.
 extension type const DesktopPhysicalKey(int usbHidUsage) {}
 
 /// Which edge of a key press this is.
 enum DesktopKeyEventKind { down, up, repeat }
 
-/// One desktop key event, as Flutter's `KeyEvent` hierarchy reports it.
-///
-/// A record-shaped value rather than three classes: the translator switches on
-/// [kind] in one place, and building one in a test is a constructor call
-/// instead of a binding.
+/// One desktop key event, as Flutter's `KeyEvent` hierarchy reports it. A value,
+/// so building one in a test is a constructor call instead of a binding.
 class DesktopKeyEvent {
   const DesktopKeyEvent({
     required this.kind,
@@ -254,11 +189,8 @@ abstract final class AndroidKeyAction {
   static const int up = 1;
 }
 
-/// Android `KeyEvent.META_*`.
-///
-/// Only the generic bits are sent, not the left/right ones: what a focused view
-/// actually reads is `isCtrlPressed()`/`isShiftPressed()`, and those test
-/// exactly these.
+/// Android `KeyEvent.META_*`. Only the generic bits are sent: `isCtrlPressed()`
+/// and its siblings test exactly these, not the left/right ones.
 abstract final class AndroidMetaState {
   static const int none = 0;
   static const int shiftOn = 0x1;
@@ -269,10 +201,8 @@ abstract final class AndroidMetaState {
   static const int numLockOn = 0x200000;
 }
 
-/// The AOSP `KEYCODE_*` values this app can send.
-///
-/// Numbers rather than names because both transports take numbers: scrcpy's
-/// `INJECT_KEYCODE` carries an int, and `adb shell input keyevent` accepts one.
+/// The AOSP `KEYCODE_*` values this app can send. Numbers rather than names
+/// because both transports take numbers.
 abstract final class AndroidKeyCode {
   // The hardware buttons, which have no desktop key at all.
   static const int home = 3;
@@ -284,7 +214,6 @@ abstract final class AndroidKeyCode {
   static const int menu = 82;
   static const int search = 84;
 
-  // Editing and navigation.
   static const int del = 67; // Backspace.
   static const int forwardDel = 112; // Delete.
   static const int enter = 66;
@@ -318,10 +247,8 @@ abstract final class AndroidKeyCode {
   static int functionKey(int number) => 131 + (number - 1);
 }
 
-/// Modifiers held on the desktop when a key event arrived.
-///
-/// A value rather than a read of `HardwareKeyboard`, so the translation is a
-/// pure function a test can drive without a binding.
+/// Modifiers held on the desktop when a key event arrived. A value, so the
+/// translation is a pure function a test can drive without a binding.
 class DesktopModifiers {
   const DesktopModifiers({
     this.shift = false,
@@ -332,11 +259,6 @@ class DesktopModifiers {
     this.numLock = false,
   });
 
-  // What is held *right now* is a read of Flutter's `HardwareKeyboard`, which
-  // needs a binding — so the host builds this value and hands it in. That is
-  // also what the class comment above asks for: a value, so the translation is
-  // a pure function.
-
   final bool shift;
   final bool control;
   final bool alt;
@@ -344,11 +266,8 @@ class DesktopModifiers {
   final bool capsLock;
   final bool numLock;
 
-  /// Whether a modifier is held that changes what a *character* key means.
-  ///
-  /// Shift is deliberately not one of them: it has already done its work by the
-  /// time Flutter reports the character, and treating it as a chord would send
-  /// `KEYCODE_A` + shift for a capital A instead of the letter itself.
+  /// Whether a modifier is held that changes what a *character* key means. Not
+  /// shift: it has already produced the character Flutter reported.
   bool get hasChordModifier => control || alt || meta;
 
   int get androidMetaState =>
@@ -392,18 +311,11 @@ final class DeviceKeycodeIntent extends DeviceKeyIntent {
   final int metaState;
 
   /// The desktop key this came from, kept so a sink that does not speak Android
-  /// can still say which key was pressed.
-  ///
-  /// Nullable rather than required because the intent is also constructed
-  /// straight from a keycode in tests and in [DeviceKeyTranslator.releaseAll]'s
-  /// older callers; a sink that needs it treats `null` as "no equivalent" and
-  /// refuses, which is the same answer it gives for a key it cannot map.
+  /// can still say which key was pressed. Null reads as "no equivalent".
   final DesktopKey? logicalKey;
 
-  /// Whether this needs a modifier the transport may not be able to carry.
-  ///
-  /// Shift does not count: the printable path has already applied it, and a
-  /// shifted arrow is a selection Android reads off the keycode alone.
+  /// Whether this needs a modifier the transport may not be able to carry. Shift
+  /// does not count: the printable path has already applied it.
   bool get needsChordModifier =>
       metaState &
           (AndroidMetaState.ctrlOn |
@@ -417,9 +329,8 @@ final class DeviceKeycodeIntent extends DeviceKeyIntent {
       'repeat: $repeat, metaState: $metaState)';
 }
 
-/// A modifier + key combination, described without reaching for the widget
-/// layer's `SingleActivator` — this is the domain, and the pane can build an
-/// activator from it if it ever needs one.
+/// A modifier + key combination, described without the widget layer's
+/// `SingleActivator` — this is the domain.
 class DeviceKeyChord {
   const DeviceKeyChord({
     required this.trigger,
@@ -434,15 +345,8 @@ class DeviceKeyChord {
   final bool shift;
 }
 
-/// The chord that turns forwarding on and off, and the one chord that is never
-/// sent to the device.
-///
-/// It has to be reserved rather than merely handled first: with forwarding on,
-/// the pane swallows every shortcut the app has — including the ones that would
-/// move focus away — so a user who armed it and then reached for the keyboard
-/// would have no way back. Ctrl+Alt+K is unclaimed by Karmashala (its Ctrl+K is
-/// the command palette, which *is* forwarded, deliberately), unclaimed by
-/// Android, and reachable one-handed.
+/// The chord that turns forwarding on and off, and the one chord never sent to
+/// the device: with forwarding on the pane swallows every other way back out.
 const DeviceKeyChord kDeviceKeyboardEscape = DeviceKeyChord(
   trigger: DesktopKey.keyK,
   control: true,
@@ -453,8 +357,8 @@ const DeviceKeyChord kDeviceKeyboardEscape = DeviceKeyChord(
 /// forwarding state is shown, because a hidden escape hatch is not one.
 const String kDeviceKeyboardEscapeLabel = 'Ctrl+Alt+K';
 
-/// Keys that are only ever a modifier. Android carries their state on every
-/// other event, so forwarding them on their own does nothing useful.
+/// Keys that are only ever a modifier; Android carries their state on every
+/// other event, so forwarding them alone does nothing.
 // `final`, not `const`: `DesktopKey` overrides `==`, and Dart refuses
 // such a value as a key in a constant collection.
 final Set<DesktopKey> _modifierKeys = {
@@ -541,21 +445,8 @@ int? androidKeyCodeFor(DesktopKey key) {
   return null;
 }
 
-/// Desktop keys that exist on an iOS keyboard too.
-///
-/// Deliberately shorter than [_keyCodes], and the gaps are the point rather
-/// than an unfinished table:
-///
-/// * **Back, Menu, Search, Volume** are Android hardware keys. iOS draws its own
-///   back button inside the app and has no system one, so pressing a
-///   best-effort substitute would silently do the wrong thing — the same
-///   reasoning that makes `SimulatorButton.forDeviceKey` partial.
-/// * **Punctuation** is absent because it is only ever reached here under a
-///   modifier, and a modifier cannot be held across a key press through this
-///   transport at all (see [SimulatorKey]). Unmodified punctuation is a
-///   character, and characters go down the text path.
-///
-/// Anything missing is refused out loud by the sink rather than approximated.
+/// Desktop keys that exist on an iOS keyboard too. The gaps are the point:
+/// Android hardware keys have no iOS equivalent, and a gap is refused out loud.
 final Map<DesktopKey, SimulatorKey> _simulatorKeys = {
   DesktopKey.backspace: SimulatorKey.backspace,
   DesktopKey.delete: SimulatorKey.forwardDelete,
@@ -587,31 +478,15 @@ final Map<DesktopKey, SimulatorKey> _simulatorKeys = {
   DesktopKey.f12: SimulatorKey.f12,
 };
 
-/// The iOS key for [key], or `null` if iOS has no such key.
-///
-/// Note there is no letter or digit fallback, unlike [androidKeyCodeFor]. On
-/// Android those exist so a *chord* can name its trigger — `KEYCODE_A` for
-/// Ctrl+A — and this transport cannot send a chord, so a letter arriving here
-/// would only ever be a letter, which the text path already types.
+/// The iOS key for [key], or `null` if iOS has no such key. No letter or digit
+/// fallback: this transport cannot send a chord, so a letter is just a letter.
 SimulatorKey? simulatorKeyFor(DesktopKey key) => _simulatorKeys[key];
 
-/// Translates one desktop keyboard into one Android keyboard.
-///
-/// Stateful for two reasons, both of which are bugs if they are skipped:
-///
-/// * A key sent as *text* on the way down must not send an `ACTION_UP` on the
-///   way back, because no `ACTION_DOWN` for that keycode was ever sent. A stray
-///   up is not ignored by Android — it is delivered.
-/// * A key still held when the pane loses focus has to be lifted explicitly
-///   ([releaseAll]), or the device believes it is held forever. An arrow key
-///   left down scrolls a list to the bottom on its own.
+/// Translates one desktop keyboard into one Android keyboard. Stateful: a key
+/// sent as text must send no `ACTION_UP`, and a held key must be lifted.
 class DeviceKeyTranslator {
-  /// Physical keys currently down *as a keycode*, and their repeat counters.
-  ///
-  /// The logical key is kept beside the keycode so [releaseAll] can build a
-  /// complete intent: a release goes out with no key event in hand, and a sink
-  /// that maps by logical key would otherwise be handed a keycode it cannot
-  /// read and refuse to lift a key the device thinks is held.
+  /// Physical keys currently down *as a keycode*, and their repeat counters. The
+  /// logical key is kept beside it so [releaseAll] can build a complete intent.
   final Map<
     DesktopPhysicalKey,
     ({int keyCode, int repeat, DesktopKey logicalKey})
@@ -683,10 +558,8 @@ class DeviceKeyTranslator {
   /// Whether anything is still held.
   bool get hasKeysDown => _down.isNotEmpty;
 
-  /// Whether [event] is [kDeviceKeyboardEscape], down or up.
-  ///
-  /// Both halves are matched: forwarding the *release* of a chord whose press
-  /// was swallowed would send an unpaired `ACTION_UP`.
+  /// Whether [event] is [kDeviceKeyboardEscape], down or up. Both halves, or the
+  /// release of a swallowed press goes out as an unpaired `ACTION_UP`.
   static bool isEscapeChord(DesktopKeyEvent event, DesktopModifiers modifiers) =>
       event.logicalKey == kDeviceKeyboardEscape.trigger &&
       modifiers.control &&
@@ -694,9 +567,7 @@ class DeviceKeyTranslator {
       !modifiers.meta;
 
   /// A character Flutter reports for a key that is not really text — `\n` for
-  /// Enter, `\t` for Tab, `\x08` for Backspace, depending on the platform.
-  /// Typing a newline is not the same as pressing Enter: a search field submits
-  /// on one and ignores the other.
+  /// Enter. A search field submits on Enter and ignores a typed newline.
   static bool _isControlCharacter(String character) {
     final unit = character.codeUnitAt(0);
     return unit < 0x20 || unit == 0x7F;

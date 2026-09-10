@@ -69,8 +69,7 @@ void main() {
         var fired = 0;
         watcher.watch(root, () => fired++);
 
-        // A build writing continuously: the quiet timer is reset before it can
-        // ever expire, so only the ceiling can report.
+        // Continuous writes reset the quiet timer, so only the ceiling fires.
         final ticker = Timer.periodic(
           const Duration(milliseconds: 20),
           (_) => paths.add('$root\\noisy'),
@@ -176,9 +175,7 @@ void main() {
   group(
     'against the real filesystem',
     () {
-      // The whole point of the mechanism is that a real OS watch reports a real
-      // file appearing. Injected streams cannot show that, and this is the
-      // platform the app ships on.
+      // Injected streams cannot show that a real OS watch sees a real file.
       late Directory dir;
       setUp(() => dir = Directory.systemTemp.createTempSync('cg_watch'));
       tearDown(() {

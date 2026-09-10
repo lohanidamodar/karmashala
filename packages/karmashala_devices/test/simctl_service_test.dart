@@ -11,9 +11,9 @@ import './support/fake_command_runner.dart';
 
 const _udid = '70592006-11CD-44A3-96BC-25EE8E72CA3D';
 
-/// The argv of the nth request. These are the strings that fail silently when
-/// wrong — `simctl` exits 0 for several kinds of nothing-happened — so they are
-/// asserted literally rather than with `contains`.
+/// The argv of the nth request. `simctl` exits 0 for several kinds of
+/// nothing-happened, so these are asserted literally rather than with
+/// `contains`.
 List<String> _argv(FakeCommandRunner runner, [int index = 0]) =>
     runner.requests[index].arguments;
 
@@ -105,10 +105,8 @@ void main() {
 
   group('screenSize', () {
     test('enumerates the displays and returns the phone, not the first', () async {
-      // Real output from a booted iPhone 17 Pro on Xcode 26.6. The first
-      // width/height pair belongs to a 720x480 display with `Display class: 1`;
-      // the phone is the `Display class: 0` block. This fixture used to be one
-      // I made up, which is how the parser shipped matching nothing at all.
+      // Real output from a booted iPhone 17 Pro. This fixture used to be one I
+      // made up, which is how the parser shipped matching nothing at all.
       final runner = FakeCommandRunner(
         responder: (_) => _ok('''
 Port:

@@ -3,11 +3,8 @@ part of 'remote_companion_gateway.dart';
 // One session's transcript as this phone assembles it: the first read, the
 // live append, and the walk that recovers a gap.
 //
-// **A page walk finishes only when `hasNewer` reads false.** Every page is
-// bounded at both ends, so one answer is not an answer — `_drainNewer` keeps
-// asking, and its doc below is where that rule is written down. Re-reading
-// the tail instead is correct only while the gap is smaller than a page;
-// past that it replaces the conversation with its end.
+// **A page walk finishes only when `hasNewer` reads false.** Re-reading the
+// tail instead is correct only while the gap is smaller than a page.
 
 extension _GatewayTranscript on RemoteCompanionGateway {
   Future<void> _primeTranscript(
@@ -61,11 +58,9 @@ extension _GatewayTranscript on RemoteCompanionGateway {
     _pushTranscript(state);
   }
 
-  /// The host's reason for an empty transcript, in the phone's own words.
-  ///
-  /// Null for a nothing nobody accounted for — an older desktop, or a reason
-  /// this build has never heard of — which leaves the screen's hedged hint in
-  /// place rather than inventing a specific claim.
+  /// The host's reason for an empty transcript, in the phone's own words. Null
+  /// for a nothing nobody accounted for, which leaves the screen's hedged hint
+  /// in place rather than inventing a specific claim.
   CompanionChatMessage? _absenceRow(RemoteTranscriptAbsence? absence) =>
       switch (absence) {
         RemoteTranscriptAbsence.noChatView => const CompanionChatMessage(
@@ -120,18 +115,10 @@ extension _GatewayTranscript on RemoteCompanionGateway {
   }
 
   /// Pages forward from what this phone holds until the host says there is
-  /// nothing newer, and answers whether it got there.
-  ///
-  /// **The rule the reconnect path turns on.** A page is bounded, so one answer
-  /// is not an answer: recovery is finished when, and only when, `hasNewer`
-  /// reads false. Re-reading the tail instead — which is what a reconnect used
-  /// to do — is correct only while the gap is smaller than a page; past that it
-  /// replaces the conversation with its end and says so in a line the reader
-  /// has no reason to connect to the turns that went missing.
-  ///
-  /// False means the pages stopped joining on to what is held, which is a
-  /// transcript that moved under us (a rotated store, a compaction) rather than
-  /// a gap. Only a full re-read settles that, and the caller does it.
+  /// nothing newer, and answers whether it got there. **A page is bounded, so
+  /// one answer is not an answer**: recovery finishes only when `hasNewer`
+  /// reads false. False means the pages stopped joining on — a transcript that
+  /// moved under us — which only a full re-read settles, and the caller does it.
   Future<bool> _drainNewer(String sessionId) async {
     if (!_draining.add(sessionId)) return true;
     try {
@@ -154,11 +141,9 @@ extension _GatewayTranscript on RemoteCompanionGateway {
     }
   }
 
-  /// Appends one resumed page, or answers false when it does not join on.
-  ///
-  /// Keyed by the id this phone *asked* with, never [RemoteTranscriptPage
-  /// .sessionId] — a superseded imported id is answered under the live one, and
-  /// the screen is still watching the id it opened.
+  /// Appends one resumed page, or answers false when it does not join on. Keyed
+  /// by the id this phone *asked* with: a superseded imported id is answered
+  /// under the live one, and the screen still watches the id it opened.
   bool _appendResumed(String sessionId, RemoteTranscriptPage page) {
     final state = _transcripts[sessionId];
     if (state == null || !state.loaded) return false;

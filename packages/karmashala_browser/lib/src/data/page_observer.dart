@@ -5,14 +5,8 @@ import '../domain/page_diagnostics.dart';
 import 'cdp_page.dart';
 
 /// Listens to a page's own complaints — console errors and failed requests.
-///
-/// Passive by construction: it enables two extra CDP domains and subscribes to
-/// events, and it never sends a command that changes the page. Nothing else in
-/// the browser feature depends on it, so a page that is only being driven pays
-/// nothing for it; a page that is being *verified* gets both records for free.
-///
-/// Bounded on purpose. A page in a redirect loop can emit thousands of failures
-/// a minute, and the run's evidence file must stay something a person reads.
+/// Passive: it subscribes and never sends a command that changes the page, and
+/// bounded, because a page in a redirect loop emits thousands a minute.
 class PageObserver {
   PageObserver({this.limit = 200});
 
@@ -46,13 +40,9 @@ class PageObserver {
 
   bool get isEmpty => _console.isEmpty && _network.isEmpty;
 
-  /// Points the collector at [page]: enables `Log` and `Network`, then starts
-  /// listening. Safe to call again with a new page after a reconnect — what was
-  /// already collected is kept, which is the whole reason one observer follows
-  /// the session instead of being replaced with it.
-  ///
-  /// `Runtime` is already on — every page enables it at attach — so console
-  /// calls need no extra domain, only a listener.
+  /// Points the collector at [page]. Safe to call again after a reconnect: what
+  /// was already collected is kept, which is why one observer follows the
+  /// session rather than being replaced with it.
   Future<void> watch(CdpPage page) async {
     await stop();
     _page = page;
@@ -81,8 +71,8 @@ class PageObserver {
     if (page == null) return;
     _subscriptions.add(
       page.connection.on(method).listen((event) {
-        // A malformed event must never take the run down: this is evidence
-        // collection, and losing one line is better than losing the run.
+        // A malformed event must never take the run down: losing one line of
+        // evidence is better than losing the run.
         try {
           handler(event.params);
         } on Object {
@@ -91,8 +81,6 @@ class PageObserver {
       }),
     );
   }
-
-  // --- Console ---------------------------------------------------------------
 
   void _onConsoleApi(Map<String, Object?> params) {
     final type = params['type'] as String?;
@@ -143,10 +131,8 @@ class PageObserver {
     if (entry is! Map) return;
     final level = entry['level'];
     if (level != 'error' && level != 'warning') return;
-    // A failed request arrives here *and* on Network.loadingFailed. Keeping
-    // both listed one fault twice, in two files, which reads as two bugs —
-    // caught by driving a real page against a host that does not resolve.
-    // Network failures belong to the network record; this one is the console.
+    // A failed request arrives here *and* on Network.loadingFailed; keeping both
+    // listed one fault twice, which reads as two bugs. This one is the console.
     if (entry['source'] == 'network') return;
     final text = entry['text'];
     if (text is! String || text.isEmpty) return;
@@ -172,8 +158,6 @@ class PageObserver {
     }
     _console.add(message);
   }
-
-  // --- Network ---------------------------------------------------------------
 
   void _onRequestWillBeSent(Map<String, Object?> params) {
     final id = params['requestId'];
@@ -229,8 +213,6 @@ class PageObserver {
     }
     _network.add(failure);
   }
-
-  // --- Rendering -------------------------------------------------------------
 
   /// A remote object as one short string. Chrome sends a value for primitives
   /// and only a description for everything else.

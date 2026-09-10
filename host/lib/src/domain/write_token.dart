@@ -30,11 +30,8 @@ class ClaimRefusal {
   }
 }
 
-/// One writer, many readers.
-///
-/// Observers never claim: a second app window watching a session must not be
-/// able to type into it by accident. A refusal names the holder and the age of
-/// the claim, because "someone else has it" is not something a user can act on.
+/// One writer, many readers; observers never claim. A refusal names the holder
+/// and the age of the claim, which "someone else has it" alone cannot be acted on.
 class WriteToken {
   WriteClaim? _holder;
 
@@ -42,9 +39,8 @@ class WriteToken {
   bool get isHeld => _holder != null;
   bool isHeldBy(String clientId) => _holder?.clientId == clientId;
 
-  /// Claims for [clientId], or refuses. Re-claiming by the current holder
-  /// succeeds and does not reset the claim's age — the age answers "how long
-  /// has this client been driving", not "when did it last ask".
+  /// Claims for [clientId], or refuses. A re-claim by the holder keeps the
+  /// original age: it says how long they have been driving, not when they asked.
   ClaimRefusal? claim(String clientId, DateTime now) {
     final current = _holder;
     if (current == null) {
@@ -55,8 +51,7 @@ class WriteToken {
     return ClaimRefusal.heldBy(current, now);
   }
 
-  /// Only the holder can release. A client releasing a token it never had is
-  /// not an error — it is the ordinary shape of a disconnect cleanup.
+  /// Only the holder can release; releasing one never held is not an error.
   bool release(String clientId) {
     if (_holder?.clientId != clientId) return false;
     _holder = null;

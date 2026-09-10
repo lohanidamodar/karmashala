@@ -1,10 +1,7 @@
 import 'element_capture.dart';
 
-/// What the page reports about an element — either from a user's click while
-/// picking, or from resolving a selector.
-///
-/// Both paths produce the same JSON shape so there is one parser and one set
-/// of tests for it.
+/// What the page reports about an element, from a pick or from a resolved
+/// selector. One JSON shape for both, so there is one parser and one set of tests.
 class PickedElement {
   const PickedElement({
     required this.tagName,
@@ -18,9 +15,8 @@ class PickedElement {
     this.clientY,
   });
 
-  /// A selector the page verified resolves back to this element, or null when
-  /// none could be derived (shadow DOM, for instance). Null means the caller
-  /// must fall back to hit-testing by coordinate.
+  /// A selector the page verified resolves back to this element, or null (shadow
+  /// DOM) — null means the caller must fall back to hit-testing by coordinate.
   final String? selector;
   final String tagName;
   final String? elementId;
@@ -58,7 +54,6 @@ sealed class PickOutcome {
   const PickOutcome();
 }
 
-/// The user clicked [element].
 class PickSelected extends PickOutcome {
   const PickSelected(this.element);
   final PickedElement element;

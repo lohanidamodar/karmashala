@@ -1,14 +1,8 @@
 import 'attached_app.dart';
 
 /// Every VM service address the app knows about right now, and when it last
-/// looked for one.
-///
-/// **Nothing in here is persisted, on purpose.** A VM service URI dies with the
-/// `flutter run` that printed it and gets a new port and a new auth token on
-/// the next one, so a stored address is exactly the state §20 is about: it
-/// would answer "installed" long after it stopped being true. The durable half
-/// is the *directory* the addresses are discovered in; the addresses themselves
-/// are re-derived every time we look.
+/// looked. Nothing here is persisted: a URI dies with the run that printed it,
+/// so the durable half is the directory, never the address (§20).
 class FlutterAppRegistry {
   const FlutterAppRegistry({
     this.apps = const <AttachedApp>[],
@@ -19,16 +13,12 @@ class FlutterAppRegistry {
 
   final List<AttachedApp> apps;
 
-  /// When discovery last ran, or `null` for **we have not looked**.
-  ///
-  /// The distinction this field exists for: an empty [apps] with a null
-  /// [lookedAt] says nothing at all, and an empty [apps] with a timestamp says
-  /// no Flutter app is running. Those are different sentences and the panel
-  /// prints them differently.
+  /// When discovery last ran, or `null` for **we have not looked** — which is
+  /// a different sentence from "no Flutter app is running".
   final DateTime? lookedAt;
 
-  /// Where the runs **Karmashala starts** write their address. Reported so a
-  /// reader can see what was looked at; nobody is asked to write here.
+  /// Where the runs **Karmashala starts** write their address, reported so a
+  /// reader can see what was looked at.
   final String? discoveryDirectory;
 
   /// Why discovery itself could not run — the directory could not be created
@@ -47,12 +37,8 @@ class FlutterAppRegistry {
     return null;
   }
 
-  /// The one app to act on when a caller named none, or `null` when the choice
-  /// is not obvious.
-  ///
-  /// Exactly one attached app is the common case and picking it saves every
-  /// caller an argument; two is ambiguous and is refused by name rather than
-  /// resolved by guessing, the way `DeviceFleet.driverFor` refuses.
+  /// The one app to act on when a caller named none, or `null` — two attached
+  /// apps are refused by name rather than resolved by guessing.
   AttachedApp? get onlyAttached {
     final live = attached.toList(growable: false);
     return live.length == 1 ? live.single : null;
@@ -75,12 +61,7 @@ class FlutterAppRegistry {
 }
 
 /// The one-line state of the world, in the words the user and an agent both
-/// read.
-///
-/// Four sentences, and they are four because they ask for four different
-/// things. This is the whole §19 contract for this feature in one function, so
-/// it is a pure function with its own tests rather than four `if`s in a
-/// `build()` and four more in a tool handler.
+/// read. Four sentences because they ask for four different things (§19).
 String describeRegistry(FlutterAppRegistry registry) {
   if (registry.discoveryFailure != null) {
     return 'We could not look: ${registry.discoveryFailure}';

@@ -17,10 +17,8 @@ class EncodedVideoFrame {
   final bool keyframe;
 }
 
-/// Turns RGBA frames into a finished, playable video file.
-///
-/// The counterpart of [FrameSink] on the far side of the encode: frames in,
-/// a file on disk out, and the encoder itself is somebody else's problem.
+/// Turns RGBA frames into a finished, playable video file — [FrameSink]'s
+/// counterpart on the far side of the encode.
 abstract interface class VideoEncoder {
   void add(RgbaFrame frame);
 
@@ -31,10 +29,8 @@ abstract interface class VideoEncoder {
   void abort();
 }
 
-/// Puts already-encoded H.264 into a container without re-encoding it.
-///
-/// The device path arrives here: scrcpy hands over the handset's own H.264, so
-/// a recording needs a container and nothing else.
+/// Puts already-encoded H.264 into a container without re-encoding it: the
+/// device path, where scrcpy hands over the handset's own stream.
 abstract interface class VideoRemuxer {
   void add(EncodedVideoFrame frame);
   int finish();
@@ -58,18 +54,16 @@ typedef VideoRemuxerOpener =
       required Uint8List sequenceHeader,
     });
 
-/// Whether this host can write an MP4, and what was actually seen.
-///
-/// §19: a format is offered because an encoder was found, never because the
-/// platform name looked right. [detail] is shown to the user as-is.
+/// Whether this host can write an MP4, and what was actually seen — §19: a
+/// format is offered because an encoder was found, not because the platform
+/// name looked right. [detail] is shown to the user as-is.
 class VideoSupport {
   const VideoSupport.available(this.detail) : available = true;
   const VideoSupport.unavailable(this.detail) : available = false;
 
   final bool available;
 
-  /// Names the encoder when there is one; says which platform and what to use
-  /// instead when there is not.
+  /// Names the encoder, or the platform and what to use instead.
   final String detail;
 
   @override

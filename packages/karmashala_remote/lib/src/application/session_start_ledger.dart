@@ -1,17 +1,8 @@
 /// What each `session.start` produced, remembered per paired device so a retry
-/// cannot start a second session.
-///
-/// The link the phone starts a session over can drop between the launch and
-/// the answer, and the only thing the phone can then do is ask again. Without
-/// a ledger that second ask is indistinguishable from a second intention, and
-/// the owner gets two agents in one checkout.
-///
-/// **Its lifetime is the device, not the connection**, and that is the whole
-/// point: the companion bumps its rendezvous generation on every successful
-/// dial, so the reconnect that carries the retry builds a *new*
-/// [HostSessionApi]. A ledger owned by the api would be empty at exactly the
-/// moment it is needed. `_DeviceRuntime` owns one and hands the same instance
-/// to every api it makes for that phone.
+/// cannot start a second session. **Its lifetime is the device, not the
+/// connection**: the reconnect that carries the retry builds a *new*
+/// [HostSessionApi], so a ledger owned by the api would be empty at exactly the
+/// moment it is needed.
 library;
 
 import 'dart:async';
@@ -50,12 +41,9 @@ class SessionStartLedger<T> {
     if (remembered != null) return remembered;
     final attempt = start();
     _answers[key] = attempt;
-    // A start that failed created nothing, so the key must go back to being
-    // free: the user's next tap is a real retry, not a request to be told
-    // about the failure again.
+    // A start that failed created nothing, so the key goes back to being free.
     // A statement body, not an expression: `remove` hands back the very future
-    // being listened to, and returning it from `onError` would chain the
-    // derived future onto the failure it is meant to absorb.
+    // being listened to, and returning it would chain onto that failure.
     unawaited(
       attempt.then<void>(
         (_) {},

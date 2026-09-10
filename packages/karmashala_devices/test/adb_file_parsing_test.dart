@@ -3,9 +3,7 @@ import 'package:karmashala_devices/src/data/adb_file_parsing.dart';
 import 'package:karmashala_devices/src/domain/device_files.dart';
 
 /// Every fixture here is output this build has actually seen, or a documented
-/// format from a device generation this app still supports. `ls -l` is not one
-/// format — toybox, the old toolbox and busybox each print a different one —
-/// and the whole value of these cases is that they are not invented.
+/// format from a device generation this app still supports — not invented.
 void main() {
   group('shellQuote', () {
     test('wraps a path so the device shell does not split it', () {
@@ -106,9 +104,8 @@ drwxrwx--- 4 root everybody   4096 2025-07-20 14:29 DCIM
   });
 
   group('rows a device could not stat', () {
-    // Also real, from `/` on the owner's handset. Half a dozen rows look like
-    // this, and hiding them would be wrong twice over: they exist, and *why*
-    // they cannot be read is the interesting part.
+    // Also real, from `/` on the owner's handset: the name is real and the
+    // metadata is not, so hiding the row would hide both.
     const unstattable =
         'd?????????   ? ?      ?             ?                ? data_mirror\n'
         'l?????????   ? ?      ?             ?                ? init -> ?\n';
@@ -144,9 +141,8 @@ drwxrwx--- 4 root everybody   4096 2025-07-20 14:29 DCIM
       expect(result.skipped, isEmpty);
       expect(result.entries.map((e) => e.name), ['old', 'notes.txt']);
       expect(result.entries.last.sizeBytes, 17);
-      // Kept as the device's own words. `Jan 14  2024` has a year and
-      // `Sep  3 18:52` does not, so turning either into a DateTime would mean
-      // inventing a year, a timezone, or both.
+      // Kept as the device's own words: `Jan 14  2024` has a year and
+      // `Sep  3 18:52` does not, so a DateTime would invent one.
       expect(result.entries.first.modifiedLabel, 'Jan 14  2024');
     });
 

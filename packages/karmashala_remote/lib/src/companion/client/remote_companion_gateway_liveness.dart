@@ -46,12 +46,9 @@ extension _GatewayLiveness on RemoteCompanionGateway {
         case TransportState.disconnected:
           dropped = true;
           // A drop while a second link is being proved to the SAME desktop is
-          // usually that promotion's own doing: the host moves to the new
-          // rendezvous the instant it reads the hello, and the relay closes
-          // the pair it was forwarding. Held, not reported — `connected` was
-          // observed a round trip ago and a better-proved link is on its way;
-          // the heal below still bounds it, and a promotion that does not
-          // happen hands the drop straight back.
+          // usually that promotion's own doing. Held, not reported; the heal
+          // below still bounds it, and a promotion that does not happen hands
+          // the drop straight back.
           if (_promoting) {
             _dropDeferred = true;
             _armHeal();
@@ -71,14 +68,10 @@ extension _GatewayLiveness on RemoteCompanionGateway {
     });
   }
 
-  /// Makes `connected` mean *the host answered*, after a socket came back.
-  ///
-  /// Re-sends the hello on the existing channel and waits for a fresh
-  /// `host.status`. The host reattaches the transport, keeps the channel and
-  /// its sequences and re-announces, so nothing about the key schedule moves.
-  /// Silence means the phone is alone at the rendezvous — which is a dead
-  /// link however healthy the socket looks — so the loop re-dials properly
-  /// instead of parking on a "connected" that answers nothing.
+  /// Makes `connected` mean *the host answered*, after a socket came back:
+  /// re-sends the hello on the existing channel, which the host reattaches
+  /// without moving any sequence or key. Silence means the phone is alone at
+  /// the rendezvous, so the loop re-dials instead of parking on a lie.
   Future<void> _reproveLink() async {
     final client = _client;
     if (client == null || _closed) return;
@@ -101,19 +94,14 @@ extension _GatewayLiveness on RemoteCompanionGateway {
   }
 
   /// The plainest true sentence about why the link is not up, or null when
-  /// there is nothing to add beyond the banner's own words.
-  ///
-  /// Two ways to learn the same thing: the relay hung up with "no peer" after
-  /// holding a lone socket for its timeout, or a dial found nobody at any
-  /// rendezvous. Neither is a network failure, and telling someone to check
-  /// their wifi when their desktop is simply closed wastes their afternoon.
+  /// there is nothing to add. Neither "no peer" nor "nobody at any rendezvous"
+  /// is a network failure, and telling someone to check their wifi when their
+  /// desktop is simply closed wastes their afternoon.
   String? _troubleFor([Object? error]) {
     if (error is RemoteApiException) {
       // "The relay would not take the socket" and "nobody was at the
-      // rendezvous" are different facts and deserve different sentences: one
-      // is about the meeting place, the other about the desktop. Telling
-      // someone to go and check a desktop that is awake is as useless as
-      // telling them to check a network that works.
+      // rendezvous" are different facts: one is about the meeting place, the
+      // other about the desktop.
       if (error.relayUnreachable) return _kRelayUnreachableTrouble;
       if (error.hostAbsent) return _kHostAbsentTrouble;
     }
@@ -127,25 +115,17 @@ extension _GatewayLiveness on RemoteCompanionGateway {
 
   void _noteTrouble(String? trouble) {
     if (_trouble.value == trouble) return;
-    // Said on its own stream, because it is learned on its own. A dial that
+    // Said on its own stream, because it is learned on its own: a dial that
     // failed while the phone was already `connecting` changes no link state,
-    // and re-emitting an unchanged one rebuilds nothing — so the first pass
-    // after launch used to show a bare "Connecting to your desktop…" with the
-    // reason already sitting in this field.
+    // and re-emitting an unchanged one rebuilds nothing.
     _trouble.value = trouble;
   }
 
   /// A transport that dropped redials its OWN endpoint forever, and that
-  /// endpoint may be one nobody is at any more — the desktop's LAN address
-  /// moved under it, or the relay it was reached through went away. Nothing
-  /// else watches that: the re-proof only runs when a socket comes BACK, so a
-  /// transport stuck in `connecting` is a loop parked on a completer that
-  /// will never fire and a phone reading "Connecting…" for ever.
-  ///
-  /// So give the transport one grace period to heal itself, and then declare
-  /// the link dead. That costs nothing when it was a blip — the link is
-  /// already down when the timer fires — and it is what lets the loop re-read
-  /// the candidate set, which is where the desktop's NEW address is.
+  /// endpoint may be one nobody is at any more. Nothing else watches it — the
+  /// re-proof runs only when a socket comes BACK — so the transport gets one
+  /// grace period to heal itself and is then declared dead, which is what lets
+  /// the loop re-read the candidate set.
   void _armHeal() {
     final scout = lan;
     final grace = _linkPath.value == CompanionLinkPath.lan && scout != null
@@ -177,12 +157,9 @@ extension _GatewayLiveness on RemoteCompanionGateway {
         state.stale = false;
         continue;
       }
-      // Resume from the cursor rather than re-read the tail. A phone that was
-      // away for a hundred turns is entitled to all hundred, and the tail is
-      // only the last page of them — the rest simply stopped existing, with a
-      // notice about "earlier messages" standing in for turns this phone had
-      // already been shown. `stale` is cleared first because the appends it
-      // blocks are precisely the ones being fetched here.
+      // Resume from the cursor rather than re-read the tail: a phone away for a
+      // hundred turns is entitled to all hundred. `stale` is cleared first
+      // because the appends it blocks are precisely the ones fetched here.
       state.stale = false;
       var resumed = false;
       try {
@@ -225,15 +202,10 @@ extension _GatewayLiveness on RemoteCompanionGateway {
     _dialled = null;
     _linkPath.value = null;
     _activeRelay = null;
-    // [_lastHostStatus] deliberately survives. It is what the host said about
-    // *itself* — where it can be met — not anything about the connection that
-    // just ended, and the announcement that matters most is the one that
-    // arrives seconds before a link dies: a local relay whose address moved
-    // announces the new one and then re-points its listeners, which takes the
-    // old socket down with it. Clearing it here meant a phone that heard "I
-    // have moved to :52918" while still coming up forgot it the instant that
-    // half-open connect failed, and then spent forever redialling the address
-    // it had already been told was dead. See [_relayOrder].
+    // [_lastHostStatus] deliberately survives: it is what the host said about
+    // *itself*, and the announcement that matters most arrives seconds before a
+    // link dies — a local relay whose address moved announces the new one and
+    // then takes the old socket down with it. See [_relayOrder].
     _subscribed.clear();
     for (final state in _transcripts.values) {
       if (state.loaded) state.stale = true;

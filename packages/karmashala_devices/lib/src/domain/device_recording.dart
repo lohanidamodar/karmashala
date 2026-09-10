@@ -3,14 +3,10 @@ import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart' show formatBytes;
 import 'device_target.dart';
 
-/// Where one recording of [target] is written.
-///
-/// The name is [DeviceTarget.fileSafeId] and a timestamp, and **neither half
-/// may carry a colon**. A wireless device is `192.168.1.24:37129`, and on
-/// Windows a colon in a filename does not fail — it opens an alternate data
-/// stream, so every write reports success and the file reads back empty. The
-/// obvious stamp, `DateTime.toIso8601String()`, has two colons of its own and
-/// would reintroduce the same fault from the other end.
+/// Where one recording of [target] is written. **Neither half of the name may
+/// carry a colon:** a wireless device is `192.168.1.24:37129`, and on Windows a
+/// colon opens an alternate data stream — every write succeeds, the file is
+/// empty.
 String deviceRecordingPath({
   required DeviceTarget target,
   required String directory,
@@ -39,13 +35,9 @@ String formatRecordingLength(Duration length) {
   return '${seconds}s';
 }
 
-/// The container a live-view recording is written in.
-///
-/// Both hold the handset's own H.264 with no re-encode; they differ in what
-/// they can represent. MP4 is the file every player double-clicks and fixes
-/// the picture size in one sample entry, so a rotation part way through leaves
-/// the rest stretched. MPEG-TS carries a size change in the stream and is what
-/// survives one.
+/// The container a live-view recording is written in. Both hold the handset's
+/// own H.264 with no re-encode; MP4 fixes the picture size in one sample entry,
+/// so only MPEG-TS survives a rotation part way through.
 enum DeviceRecordingContainer {
   mp4('mp4'),
   transportStream('ts');
@@ -67,12 +59,8 @@ enum DeviceRecordingResult {
   failed,
 }
 
-/// What became of one recording, in a sentence the user can act on.
-///
-/// The sentences are here rather than in a widget because each one is a
-/// separate outcome with a separate response — convert the file, look at the
-/// device, free some disk — and a single "recording failed" would collapse
-/// them into the one message that helps with none of them.
+/// What became of one recording, in a sentence the user can act on. Each outcome
+/// has a different response, which one "recording failed" would collapse.
 class DeviceRecordingOutcome {
   const DeviceRecordingOutcome({
     required this.result,
@@ -81,12 +69,8 @@ class DeviceRecordingOutcome {
     this.path,
   });
 
-  /// A recording that ended with a playable file.
-  ///
-  /// [gaps] and [geometryChanges] each add a sentence, because both change what
-  /// the file *is*: a gap means the capture stopped and started again, and a
-  /// rotation means the picture changes size partway through. Silence about
-  /// either would present a jump-cut as a continuous recording.
+  /// A recording that ended with a playable file. [gaps] and [geometryChanges]
+  /// each add a sentence, because both change what the file *is*.
   factory DeviceRecordingOutcome.saved({
     required DeviceTarget target,
     required String path,
@@ -120,13 +104,8 @@ class DeviceRecordingOutcome {
     );
   }
 
-  /// A recording that stopped without being asked to, but did capture
-  /// something.
-  ///
-  /// Its own sentence rather than a [saved] with a footnote, because the file
-  /// is **not** what the user asked for: it ends where the device or the
-  /// recorder gave out, and presenting a truncated recording as a complete one
-  /// is the thing this outcome exists to prevent.
+  /// A recording that stopped without being asked to, but did capture something.
+  /// Its own sentence: the file ends where the device gave out, not where asked.
   factory DeviceRecordingOutcome.endedEarly({
     required DeviceTarget target,
     required String path,
@@ -142,9 +121,8 @@ class DeviceRecordingOutcome {
         '${formatBytes(bytes)} over ${formatRecordingLength(length)}.',
   );
 
-  /// A recording that captured no frame at all. The file is removed rather
-  /// than left as a few hundred bytes of container header with no picture in
-  /// it, which no player opens and which reads as a recording that worked.
+  /// A recording that captured no frame at all. The file is removed rather than
+  /// left as a container header with no picture, which no player opens.
   factory DeviceRecordingOutcome.empty({
     required DeviceTarget target,
     required String reason,
@@ -172,8 +150,7 @@ class DeviceRecordingOutcome {
   );
 
   /// A write failed part way through — out of disk is the usual reason. What
-  /// had already reached the file is kept and named, because a truncated
-  /// MPEG-TS still plays up to the point it stops.
+  /// reached the file is kept and named: a truncated MPEG-TS still plays.
   factory DeviceRecordingOutcome.writeFailed({
     required DeviceTarget target,
     required String path,
@@ -213,18 +190,10 @@ class DeviceRecordingIdle extends DeviceRecordingState {
   final DeviceRecordingOutcome? last;
 }
 
-/// A recording is running.
-///
-/// [receiving] is false while the recorder has no source — on Android the live
-/// view is what supplies the frames, and the pane tears it down when the user
-/// switches surface. The recording is still open and still the user's to stop;
-/// what it is not doing is capturing, and the banner has to say which.
-///
-/// It deliberately carries **no running byte or frame count**. One would move
-/// on every frame, rebuilding the banner sixty times a second for a number
-/// nobody reads mid-recording, and an elapsed-time counter would need a timer
-/// — which is the thing this feature is not allowed to have. Everything
-/// measured is measured once, at the end, off the file itself.
+/// A recording is running. [receiving] is false while the recorder has no
+/// source — still open and still the user's to stop, but not capturing. It
+/// carries no running byte or frame count: that would rebuild the banner sixty
+/// times a second for a number nobody reads.
 class DeviceRecordingActive extends DeviceRecordingState {
   const DeviceRecordingActive({
     required this.target,

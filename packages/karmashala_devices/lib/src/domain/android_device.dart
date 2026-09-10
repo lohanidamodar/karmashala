@@ -22,11 +22,9 @@ enum DeviceConnectionState {
   };
 }
 
-/// An Android device or running emulator reachable through one adb server.
-///
-/// The [environmentId] records **which adb saw it**: a Windows adb server and a
-/// WSL adb server are different servers with different device lists, so a serial
-/// alone does not identify a reachable device (constraints 7 & 8).
+/// An Android device or running emulator reachable through one adb server. The
+/// [environmentId] records **which adb saw it**: a Windows adb server and a WSL
+/// one have different device lists, so a serial alone does not identify one.
 class AndroidDevice {
   const AndroidDevice({
     required this.serial,
@@ -97,11 +95,8 @@ class Avd {
       'Avd($name${isRunning ? ' running=$runningSerial' : ''})';
 }
 
-/// A located Android SDK, with the tools we actually invoke.
-///
-/// Every path is an [EnvironmentPath] because an SDK installed on Windows and
-/// one installed inside WSL are different installations with different adb
-/// servers.
+/// A located Android SDK, with the tools we actually invoke. Every path is an
+/// [EnvironmentPath]: a Windows SDK and a WSL one are different installations.
 class AndroidSdk {
   const AndroidSdk({required this.root, required this.adb, this.emulator});
 

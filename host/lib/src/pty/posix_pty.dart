@@ -13,14 +13,9 @@ const int _eintr = 4;
 const int _eio = 5;
 const int _eagain = 11;
 
-/// The real thing: a pty pair from `openpty`, a child from `posix_spawn`.
-///
-/// `forkpty` is not used even though it is the obvious call. After `fork` in a
-/// multithreaded VM only async-signal-safe code may run, and the child of
-/// `forkpty` returns into Dart — a malloc lock held by another thread at the
-/// moment of the fork would hang it forever, intermittently. `posix_spawn` with
-/// POSIX_SPAWN_SETSID reaches the same place: the child is a session leader, and
-/// opening the slave device without O_NOCTTY makes it the controlling terminal.
+/// A pty pair from `openpty`, a child from `posix_spawn`, never `forkpty`: its
+/// child returns into Dart after a fork in a multithreaded VM, where a malloc
+/// lock held by another thread hangs it forever, intermittently.
 class PosixPtyLauncher implements PtyLauncher {
   PosixPtyLauncher({Libc? libc}) : _libc = libc ?? Libc.open();
 
@@ -57,8 +52,7 @@ class PosixPtyLauncher implements PtyLauncher {
 
       final pid = _spawn(arena, request, name, masterFd, slaveFd);
 
-      // The parent must drop the slave, or the master never reports end-of-file
-      // when the child exits and the session would look alive forever.
+      // The parent must drop the slave, or the master never reports end-of-file.
       _libc.close(slaveFd);
       slaveFd = -1;
       final handle = _PosixPtyHandle(_libc, masterFd, pid);
@@ -84,8 +78,7 @@ class PosixPtyLauncher implements PtyLauncher {
     _check(_libc.attrInit(attr), 'posix_spawnattr_init');
     try {
       _check(_libc.attrSetFlags(attr, kPosixSpawnSetsid), 'posix_spawnattr_setflags');
-      // Order matters: the inherited fds go first, then the slave becomes 0,
-      // and only then is it duplicated onto 1 and 2.
+      // Order matters: inherited fds first, then the slave onto 0, then 1 and 2.
       _check(_libc.faAddClose(actions, masterFd), 'addclose(master)');
       _check(_libc.faAddClose(actions, slaveFd), 'addclose(slave)');
       _check(_libc.faAddOpen(actions, 0, slaveName, kOReadWrite, 0), 'addopen(slave)');
@@ -119,8 +112,7 @@ class PosixPtyLauncher implements PtyLauncher {
 
       final pidOut = arena<Int32>();
       // posix_spawn returns the error rather than setting errno, and resolves
-      // argv[0] on the caller's PATH only through posix_spawnp; we take the
-      // path as given so a session records exactly what was started.
+      // argv[0] on PATH only as posix_spawnp; the path is taken as given.
       final rc = _libc.posixSpawn(
         pidOut,
         cString(arena, request.argv.first),
@@ -184,11 +176,8 @@ class _PosixPtyHandle implements PtyHandle {
   }
 
   Future<SendPort> _ensureWriter() =>
-      // Memoised on the *future*, not on the result: three writes in one turn
-      // would otherwise each spawn their own isolate before the first finished,
-      // and the pty would receive them in whatever order those isolates
-      // started. Measured on the ConPTY twin of this class, 2026-09-09 — three
-      // typed lines arrived third, first, second.
+      // Memoised on the *future*: three writes in one turn would otherwise each
+      // spawn an isolate and reach the pty in whatever order those started.
       _writerReady ??= () async {
         final ready = ReceivePort();
         _writer = await Isolate.spawn(_writerMain, [
@@ -203,8 +192,7 @@ class _PosixPtyHandle implements PtyHandle {
   @override
   void write(Uint8List bytes) {
     if (_closed || bytes.isEmpty) return;
-    // A blocking write on a full pty buffer must never stall the host, so it
-    // happens on its own isolate; ordering is the port's, not a timer's.
+    // A blocking write on a full pty buffer must never stall the host.
     unawaited(_ensureWriter().then((port) => port.send(bytes)).catchError((_) {}));
   }
 
@@ -238,8 +226,7 @@ class _PosixPtyHandle implements PtyHandle {
   }
 }
 
-/// Blocking `read` until the child's side is gone, then `waitpid`. This is the
-/// reason nothing in the host polls a session for liveness.
+/// Blocking `read` until the child's side is gone, then `waitpid` — no poll.
 void _readerMain(List<Object> args) {
   final port = args[0] as SendPort;
   final fd = args[1] as int;
@@ -256,8 +243,7 @@ void _readerMain(List<Object> args) {
       if (n == 0) break; // end of file: every slave fd is closed
       final err = libc.errno;
       if (err == _eintr || err == _eagain) continue;
-      // EIO on Linux is how a master reports "the child hung up"; anything
-      // else is a real fault and is reported as one before we reap.
+      // EIO on Linux is the child hanging up; anything else is a fault.
       if (err != _eio) port.send(['error', 'read(pty) failed with errno $err']);
       break;
     }

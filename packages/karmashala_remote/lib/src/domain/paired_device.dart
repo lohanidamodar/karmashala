@@ -8,12 +8,9 @@ import 'companion_presence.dart';
 /// and port move while the fact "my own relay" does not.
 const String kLocalRelayMarker = 'local';
 
-/// One phone paired with this desktop host.
-///
-/// The row is the host's whole memory of the device: its identity, its
-/// long-lived key, what it was granted at pairing, and the rendezvous
-/// generation counter the key schedule rotates on (loop 64: one counter per
-/// device, never two sequence numbers).
+/// One phone paired with this desktop host — its identity, its long-lived key,
+/// what it was granted at pairing, and the rendezvous generation counter the
+/// key schedule rotates on: one counter per device, never two sequences.
 class PairedDevice {
   PairedDevice({
     required this.id,
@@ -59,19 +56,13 @@ class PairedDevice {
   final String? pushToken;
   final String? pushPlatform;
 
-  /// What the phone last said about itself on the same frame — its kind,
-  /// whether it is on screen, and the session it is showing.
-  ///
-  /// **Read only to route a notification** (`PushFanout`), never to decide
-  /// whether a frame is carried. A reading left over from before a restart is
-  /// harmless for that reason and for one more: the link is down too, so the
-  /// value is not even reached until the phone reconnects and re-registers.
+  /// What the phone last said about itself on the same frame. **Read only to
+  /// route a notification** (`PushFanout`), never to decide whether a frame is
+  /// carried, so a reading left over from before a restart is harmless.
   final CompanionPresence presence;
 
-  /// The relay this device was paired through: a hosted relay URL, or
-  /// [kLocalRelayMarker] for the embedded local relay. Null only for a row
-  /// somehow missed by the v19 backfill — treated as the configured hosted
-  /// relay, which is what every pre-v19 pairing used.
+  /// The relay this device was paired through, or [kLocalRelayMarker] for the
+  /// embedded local relay. Null only for a row missed by the v19 backfill.
   final String? relayUrl;
 
   /// Whether this device's frames travel through the embedded local relay.

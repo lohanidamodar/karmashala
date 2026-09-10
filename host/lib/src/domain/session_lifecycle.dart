@@ -1,16 +1,11 @@
-/// How a session ended, or that it has not.
-///
-/// The three cases exist because the second and third are not the same and a
-/// single nullable int cannot tell them apart. A session whose child was
-/// reaped by something else has no exit code, and reporting 0 for it would be
-/// the confident false statement this codebase spends its effort deleting.
+/// How a session ended, or that it has not. Three cases because a nullable int
+/// cannot tell "exited 0" from "reaped by something else, code unknown".
 sealed class SessionLifecycle {
   const SessionLifecycle();
 
   bool get hasEnded => this is! SessionRunning;
 
-  /// When the session ended, or null while it is running. The registry sorts
-  /// on this when it decides which ended sessions it can afford to forget.
+  /// When the session ended, or null while running; the registry prunes on it.
   DateTime? get endedAt => switch (this) {
     SessionExited(:final at) => at,
     SessionEndedWithoutCode(:final at) => at,

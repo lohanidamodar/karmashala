@@ -7,13 +7,13 @@ import '../support/fixtures.dart';
 /// **"Is this a git repository?", answered off the filesystem.**
 ///
 /// Git answers it in 132 ms; the spawn in front of it costs 90 ms locally,
-/// 208–439 ms through `wsl.exe`, 17.8 s for a cold distribution. This reader
-/// spends `stat`s instead, and every assertion here is about *how many* — never
-/// how long, which at `--concurrency=4` would be a coin toss.
+/// 208–439 ms through `wsl.exe`, 17.8 s for a cold distribution. Every assertion
+/// here counts `stat`s, never milliseconds, which at `--concurrency=4` would be a
+/// coin toss.
 ///
 /// The trap it is written around is git's **parent search**: a subfolder of a
-/// checkout is in a repository with no `.git` of its own, and calling that
-/// untracked would be a worse bug than the one being fixed.
+/// checkout has no `.git` of its own, and calling that untracked would be a worse
+/// bug than the one being fixed.
 void main() {
   GitPresenceReader readerFor(_StatFiles files) =>
       GitPresenceReader(
@@ -89,10 +89,9 @@ void main() {
 
     test('a WSL subfolder climbs in host spelling and stops at the share',
         () async {
-      // The environment decides the path shape, never the platform (§18): a
-      // WSL path is POSIX, its host spelling is a `\\wsl.localhost\…` UNC, and
-      // joining the two with the wrong context builds something no `File` can
-      // open.
+      // The environment decides the path shape, never the platform (§18): a WSL
+      // path is POSIX, its host spelling is a `\\wsl.localhost\…` UNC, and the
+      // wrong context builds something no `File` can open.
       final files = _StatFiles({
         r'\\wsl.localhost\Ubuntu\home\me\app\.git': PathEntry.directory,
       });
@@ -128,10 +127,9 @@ void main() {
 
   group('what it refuses to conclude', () {
     test('a filesystem that answered nothing at all is unknown', () async {
-      // Exactly what a stopped WSL distribution looks like from Windows: the
-      // UNC resolves to nothing, and so does every ancestor of it. Calling that
-      // "not a git repository" is the one genuinely damaging answer available
-      // here.
+      // Exactly what a stopped WSL distribution looks like from Windows: the UNC
+      // resolves to nothing, and so does every ancestor. Calling that "not a git
+      // repository" is the one genuinely damaging answer available here.
       final files = _StatFiles(const {});
       final reader = GitPresenceReader(
         files: files,

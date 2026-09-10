@@ -1,19 +1,12 @@
-/// The payload shapes both ends of the session API agree on.
-///
-/// The host builds these; the companion parses them. Pure Dart, no imports
-/// from the sessions feature — status, stage and attention travel as strings
-/// so the phone can render values this build has never heard of.
+/// The payload shapes both ends of the session API agree on. Status, stage and
+/// attention travel as strings so the phone can render values this build has
+/// never heard of.
 library;
 
 import '../client/relay_candidates.dart';
 import '../protocol.dart';
 
 /// The one attention word that means "a prompt is waiting on a person".
-///
-/// Named because three places now turn on it — the snapshot the host serves,
-/// the arbiter that refuses a second answer, and the phone's own retiring of
-/// a stale approval card — and a typo in any of them would leave an approval
-/// that cannot be answered or one that cannot be dismissed.
 const String kAttentionNeedsApproval = 'needs_approval';
 
 /// What one session looks like from a phone: `sessions.list` rows and the
@@ -80,9 +73,8 @@ class RemoteSessionSnapshot {
   /// True for a CLI session imported as read-only history.
   final bool imported;
 
-  /// The project this session belongs to — the Explorer's top grouping, so
-  /// the phone can draw the same headings the desktop does. Null when the
-  /// repository is gone, or from an older host.
+  /// The Explorer's top grouping. Null when the repository is gone, or from an
+  /// older host.
   final String? projectId;
   final String? projectName;
 
@@ -90,41 +82,31 @@ class RemoteSessionSnapshot {
   /// act on: the phone cannot reach this filesystem.
   final String? projectPath;
 
-  /// Whether the user pinned this session. Pinned sessions sort above the
-  /// rest within their row, which is the ordering the host already applies —
+  /// Whether the user pinned this session. The host already applies the order;
   /// the flag exists so the phone can *show* the pin, not re-sort by it.
   final bool pinned;
 
-  /// The session's working folder no longer exists on disk (the Explorer's
-  /// own "missing" mark). False also means "we could not tell": the desktop
-  /// never falsely flags a folder, and neither does this.
+  /// The session's working folder no longer exists on disk. False also means
+  /// "we could not tell": neither end falsely flags a folder.
   final bool folderMissing;
 
-  /// Where the agent works, written relative to the project root — the
-  /// Explorer row's own subtitle (`projects/app`). Null when it says nothing
-  /// the title does not.
+  /// Where the agent works, relative to the project root. Null when it says
+  /// nothing the title does not.
   final String? subPath;
 
   /// The worktree directory when the session runs in one, else null.
   final String? worktree;
 
-  /// The branch checked out where the session works, when the desktop has
-  /// **already** measured it. Null means "not measured", never "no branch":
-  /// this reads the cached checkout stat and deliberately starts no git.
+  /// The branch where the session works, when the desktop has already measured
+  /// it. Null means "not measured", never "no branch" — this starts no git.
   final String? branch;
 
-  /// What a file sent to **this** session would be allowed to be — carried on
-  /// the row so the phone knows before the user picks anything.
-  ///
-  /// Here rather than on `host.status` because the answer is per session, not
-  /// per desktop: it turns on the agent behind the row, on whether that agent
-  /// runs somewhere this desktop can write a file it will see, and on whether
-  /// the row is live at all. Null means an older host that was never asked —
-  /// the phone offers nothing, which is the honest reading of silence.
+  /// What a file sent to **this** session may be — a per-session answer, not a
+  /// per-desktop one. Null is an older host that was never asked, and the phone
+  /// then offers nothing.
   final RemoteAttachmentSupport? attachments;
 
-  /// The badge shown on non-local project/session cards (e.g. "WSL · Ubuntu", "SSH · build-box").
-  /// Null for local-host sessions.
+  /// The badge on a non-local session card ("WSL · Ubuntu"); null for local.
   final String? environmentBadge;
 
   /// [clearAttention] because "nothing is waiting" is a value a null argument
@@ -274,16 +256,8 @@ class RemoteSessionSnapshot {
 }
 
 /// What a file sent to one session may be, or the host's sentence for why none
-/// may be.
-///
-/// **A fact and a sentence, and they are not the same fact.** [mediaTypes] is
-/// what the phone filters its picker by; [refusal] is what it shows in place of
-/// the button when there is nothing to filter for. The host words the refusal
-/// because only the host knows which of the several reasons it is — an agent
-/// that cannot be handed a picture, a session running on a machine whose disk
-/// this one cannot write to, imported history that is read-only here — and a
-/// phone inventing that sentence would be inventing a claim about a CLI it has
-/// never seen. The same rule [RemotePermissionOption] follows.
+/// may be. The host words the refusal because only it knows which of the several
+/// reasons applies.
 class RemoteAttachmentSupport {
   const RemoteAttachmentSupport({
     required this.mediaTypes,
@@ -297,10 +271,8 @@ class RemoteAttachmentSupport {
       maxBytes = 0,
       refusal = reason;
 
-  /// The exact media types the agent behind this session will look at when a
-  /// prompt names a file's path. Never a wildcard: the phone hands one of
-  /// these back on `attachment.begin` and the host matches it literally, so a
-  /// pattern here would be a pattern two builds could disagree about.
+  /// The exact media types the agent will look at. Never a wildcard: the phone
+  /// hands one of these back verbatim and the host matches it literally.
   final List<String> mediaTypes;
 
   /// The largest file this session will take, in bytes. Never above
@@ -308,8 +280,7 @@ class RemoteAttachmentSupport {
   final int maxBytes;
 
   /// Why [mediaTypes] is empty, when the host can say. Null with an empty list
-  /// means the host had no words for it, which the phone shows as nothing
-  /// rather than as a guess.
+  /// means it had no words for it.
   final String? refusal;
 
   bool get allowsAnything => mediaTypes.isNotEmpty && maxBytes > 0;
@@ -350,11 +321,8 @@ class RemoteAttachmentSupport {
 }
 
 /// What became of a prompt: typed into the agent, or left in the desktop's own
-/// message box for the person sitting at it.
-///
-/// Told to the phone rather than left to be inferred, because the two are
-/// genuinely different outcomes and "sent" would be a false one. See
-/// `RemoteHostBindings.sendPrompt`.
+/// message box. Told rather than inferred, because "sent" would be false for
+/// the second.
 enum RemotePromptDelivery {
   sent('sent'),
   offered('offered');
@@ -381,17 +349,14 @@ class RemoteAttachmentBegin {
   final String sessionId;
 
   /// The file's name as the phone knows it. **A hint, never a path**: the host
-  /// keeps only its basename, strips it to a safe set of characters and puts
-  /// its own extension on, so nothing the phone says can decide where a byte
-  /// lands.
+  /// keeps a sanitised basename and puts its own extension on.
   final String name;
 
   /// One of the session's [RemoteAttachmentSupport.mediaTypes], exactly.
   final String mediaType;
 
-  /// The whole file's length. Declared up front so the host can refuse an
-  /// oversized one before a byte crosses, and so a short delivery is a fact
-  /// rather than something nobody notices.
+  /// The whole file's length, declared up front so the host can refuse an
+  /// oversized file before a byte crosses.
   final int bytes;
 
   Map<String, Object?> toJson() => {
@@ -433,8 +398,7 @@ class RemoteAttachmentOffer {
   final String uploadId;
 
   /// Raw bytes per `attachment.chunk`. Sent rather than assumed so an older
-  /// phone and a newer host cannot disagree about it — and so this can be
-  /// lowered later without stranding a build.
+  /// phone and a newer host cannot disagree about it.
   final int chunkBytes;
 
   Map<String, Object?> toJson() => {
@@ -482,38 +446,17 @@ class RemoteTranscriptMessage {
   int get hashCode => Object.hash(role, text);
 }
 
-/// Why a transcript page carries nothing, when the host can actually say.
-///
-/// An empty list has always meant two different things — *this agent keeps no
-/// record we can read* and *this session has not spoken yet* — and the host
-/// knew which while the phone could only hedge across both. That is how a
-/// running Antigravity session came to show a welcome screen with starter
-/// prompts on it: the desktop refuses that agent's store (protobuf in an
-/// unpublished schema, see `agentSupportsChatView`) and sent `[]`, which is
-/// also what a brand-new session sends.
-///
-/// **A fact, never a sentence.** The wire carries which nothing it is and the
-/// phone words it, so the wording stays a client decision and an older phone
-/// that has never heard of a value falls back to the hedge rather than
-/// rendering a word it cannot place.
-///
-/// ## Two keys, because falling back to the hedge is not good enough here
-///
-/// Since 2026-09-09 the desktop reads this per session, and the two answers it
-/// can reach are different facts. Adding a word for the second one would send
-/// an older phone straight back to the hedge — the welcome screen this field
-/// exists to replace — for a session that has a perfectly good sentence
-/// already. So `absence` keeps carrying the coarse word every build that has
-/// ever read this field understands, and `absenceKind` refines it beside.
+/// Why a transcript page carries nothing — a fact, never a sentence, so an
+/// older phone falls back to the hedge rather than rendering a word it cannot
+/// place. `absence` keeps the coarse word every build understands and
+/// `absenceKind` refines it beside.
 enum RemoteTranscriptAbsence {
   /// The agent keeps no record this app can read, so there is no chat view for
   /// this session at all — not now, and not after it answers.
   noChatView('no_chat_view'),
 
-  /// This session's store kept the conversation and no readable transcript
-  /// beside it. Structural like [noChatView], and about the **conversation**
-  /// rather than the agent: the WSL Antigravity install keeps a transcript for
-  /// all 25 of its conversations, the Windows one for none of its 1.
+  /// The store kept the conversation and no readable transcript beside it.
+  /// Structural like [noChatView], but about the conversation, not the agent.
   noTranscriptFile('no_transcript_file', olderWire: 'no_chat_view');
 
   const RemoteTranscriptAbsence(this.wire, {this.olderWire});
@@ -527,10 +470,8 @@ enum RemoteTranscriptAbsence {
   /// What goes in `absence`: the coarsest true word for this fact.
   String get coarseWire => olderWire ?? wire;
 
-  /// The refinement first, then the word beside it. A refinement this build has
-  /// never heard of reads as the coarse word rather than as nothing; an absent
-  /// or unrecognised coarse word reads as null — *we were not told why* —
-  /// which is exactly the hedge that existed before this field.
+  /// The refinement first, then the coarse word beside it. An absent or
+  /// unrecognised coarse word reads as null — *we were not told why*.
   static RemoteTranscriptAbsence? parse(Object? wire, {Object? refinement}) =>
       _byWire[refinement] ?? _byWire[wire];
 
@@ -557,30 +498,14 @@ class RemoteTranscriptPage {
   /// Position after the last message here — pass as `after` to resume.
   final int cursor;
 
-  /// How many messages before [messages] the host did not send.
-  ///
-  /// A conversation is opened at its end, and a long one cannot be carried in
-  /// a single frame: this session's own transcript is 53 MB of JSONL, and
-  /// sending every message of it produced a frame the phone never finished
-  /// receiving. So the host sends the tail and says how much it kept back,
-  /// rather than silently showing a conversation that appears to begin in the
-  /// middle. Defaults to zero, so a page from an older host reads as complete
-  /// — which is what it was.
+  /// How many messages before [messages] the host did not send. A long
+  /// conversation cannot cross in one frame, so the host sends the tail and
+  /// says how much it kept back. Zero from an older host, which was complete.
   final int omitted;
 
   /// Whether the host holds messages **after** [cursor] that this page could
-  /// not carry.
-  ///
-  /// The end condition of a gap recovery, and the reason it is a fact on the
-  /// wire rather than a count the reader infers: a phone that came back after
-  /// a hundred turns asks from its cursor, is answered a bounded page, and
-  /// asks again — recovery is finished when, and only when, this reads false.
-  /// Inferring it from `messages.length == kRemoteTranscriptPageMax` would
-  /// stop one page early whenever the last page happened to be full, and the
-  /// missing turns would look exactly like a quiet session.
-  ///
-  /// Absent on the wire from a host that predates it, which decodes as false —
-  /// what that host meant, since it always answered with the whole remainder.
+  /// not carry — the end condition of a gap recovery. Inferring it from a full
+  /// page would stop one page early. Absent from an older host reads as false.
   final bool hasNewer;
 
   /// Why [messages] is empty, when the host knows. Null means it did not say —
@@ -593,8 +518,7 @@ class RemoteTranscriptPage {
     'cursor': cursor,
     if (omitted > 0) 'omitted': omitted,
     if (hasNewer) 'hasNewer': true,
-    // The coarse word first and always, so a phone that has never heard of the
-    // refinement gets a sentence rather than the hedge.
+    // The coarse word first and always, so an older phone gets a sentence.
     if (absence != null) 'absence': absence!.coarseWire,
     if (absence != null && absence!.olderWire != null)
       'absenceKind': absence!.wire,
@@ -625,20 +549,10 @@ class RemoteTranscriptPage {
   }
 }
 
-/// Why an activity answer carries no calls, when the host can actually say.
-///
-/// The same split [RemoteTranscriptAbsence] is built to, for the same reason:
-/// an empty list has two meanings — *this session is working and nothing is
-/// outstanding* and *this session is working and we cannot see what on* — and
-/// only the host knows which. **A fact, never a sentence.** The wire carries
-/// which nothing it is and the phone words it, so an older phone that has never
-/// heard of a value falls back to the hedge rather than rendering a word it
-/// cannot place.
+/// Why an activity answer carries no calls, when the host can say. A fact,
+/// never a sentence — the same split [RemoteTranscriptAbsence] is built to.
 enum RemoteActivityAbsence {
-  /// The session is working and nothing the host can read records what on:
-  /// no CLI session id yet, an agent whose store the desktop cannot open, or a
-  /// session whose only record is the engine's event log — which has no result
-  /// event, and so cannot tell a finished call from a running one.
+  /// The session is working and nothing the host can read records what on.
   noRecord('no_record');
 
   const RemoteActivityAbsence(this.wire);
@@ -662,24 +576,20 @@ class RemoteActivityCall {
     this.subagent = false,
   });
 
-  /// The line the desktop transcript already prints — `Bash(git status)`,
-  /// `Agent(review the diff)`. For a shell call that line **is** the command,
-  /// so nothing extra is carried to name what is running.
+  /// The line the desktop transcript already prints — `Bash(git status)`. For a
+  /// shell call that line **is** the command.
   final String summary;
 
   /// The tool's own name, so the phone can ask what kind of call this is
   /// without parsing [summary] back apart.
   final String toolName;
 
-  /// Whether this is another agent rather than a tool. Sent as a fact rather
-  /// than left to the phone to work out from [toolName]: the CLI renamed that
-  /// tool from `Task` to `Agent` once already, and a phone updates on its own
-  /// schedule.
+  /// Whether this is another agent rather than a tool. A fact rather than
+  /// something to infer: the CLI renamed that tool `Task` → `Agent` once.
   final bool subagent;
 
-  /// When the agent issued it, on the **host's** clock and in UTC. Paired with
-  /// [RemoteSessionActivity.observedAt] so the phone measures elapsed against
-  /// one clock rather than against its own.
+  /// When the agent issued it, on the **host's** clock and UTC — paired with
+  /// [RemoteSessionActivity.observedAt] so elapsed is one clock's arithmetic.
   final DateTime startedAt;
 
   Map<String, Object?> toJson() => {
@@ -722,12 +632,8 @@ class RemoteActivityCall {
 }
 
 /// **What one session is doing right now**, as `session.activity` carries it.
-///
-/// [observedAt] is not decoration. The phone shows an elapsed time that keeps
-/// counting between frames, and its clock is not the desktop's — so it counts
-/// from `observedAt - startedAt`, which is a duration both ends agree on, plus
-/// whatever has passed locally since the frame landed. Without it the phone
-/// would be subtracting one machine's instant from another's.
+/// The phone counts elapsed from `observedAt - startedAt`, a duration both ends
+/// agree on, because its clock is not the desktop's.
 class RemoteSessionActivity {
   const RemoteSessionActivity({
     required this.sessionId,
@@ -776,15 +682,9 @@ class RemoteSessionActivity {
   }
 }
 
-/// What a session that has stopped for the user is actually waiting on — the
-/// wire's copy of the desktop's `AgentWaitKind`.
-///
-/// "This session is holding you up" and "a prompt is open" are different
-/// facts, and only the second one may be answered with a keystroke: Claude
-/// Code fires the same notification when it wants permission and when it has
-/// merely finished a turn, and the approve key types Enter, which at an idle
-/// prompt submits whatever is in the composer. The host names [approval] only
-/// for a wait a status source could identify as one.
+/// What a stopped session is waiting on — the wire's copy of `AgentWaitKind`.
+/// Only [approval] may be answered with a keystroke: Claude Code fires the same
+/// notification for an open prompt and for a merely finished turn.
 enum RemoteWaitKind {
   /// A prompt with options is open. Only here may a key be pressed for the
   /// user, and only here does the host name answers.
@@ -830,9 +730,8 @@ class RemoteApprovalRequest {
   /// so the phone can word the card without guessing.
   final RemoteWaitKind waiting;
 
-  /// The answers the agent itself names, and **only** for a prompt the host
-  /// can see ([RemoteWaitKind.approval]). A missing label means that answer
-  /// does not exist here, not that the phone should invent one.
+  /// The answers the agent itself names, and **only** for a prompt the host can
+  /// see. A missing label means that answer does not exist here.
   final String? approveLabel;
   final String? denyLabel;
 
@@ -867,13 +766,8 @@ class RemoteApprovalRequest {
 }
 
 /// How an approval stopped waiting, as far as the host can honestly say.
-///
-/// [approved] and [denied] are stated only for an answer this host applied on
-/// the asking device's behalf — it pressed the key, so it knows which. Every
-/// other route (the desktop's own card, a second paired phone, the agent
-/// giving up) is [elsewhere]: the host observes that the request is gone, not
-/// what was chosen, and inventing the decision would be a claim it cannot
-/// back.
+/// [approved] and [denied] only when this host pressed the key itself; every
+/// other route is [elsewhere], because the decision is not observable.
 enum RemoteApprovalOutcome {
   approved('approved'),
   denied('denied'),
@@ -894,11 +788,8 @@ enum RemoteApprovalOutcome {
 }
 
 /// What `approval.resolved` carries.
-///
-/// Correlated by session, because that is how the protocol correlates an
-/// approval: `approval.requested` carries no id of its own, and a session has
-/// at most one prompt waiting at a time — the phone's `approvalId` is a local
-/// label it mints for its own card, and has never been on the wire.
+/// Correlated by session: `approval.requested` carries no id of its own, and a
+/// session has at most one prompt waiting at a time.
 class RemoteApprovalResolved {
   const RemoteApprovalResolved({
     required this.sessionId,
@@ -934,8 +825,8 @@ class RemoteApprovalResolved {
   int get hashCode => Object.hash(sessionId, outcome);
 }
 
-/// What `host.status` carries on connect — and, since Loop 83, again whenever
-/// the host's relays change under a live link.
+/// What `host.status` carries on connect, and again whenever the host's relays
+/// change under a live link.
 class RemoteHostStatus {
   const RemoteHostStatus({
     required this.versions,
@@ -947,15 +838,13 @@ class RemoteHostStatus {
   final VersionRange versions;
   final String hostName;
 
-  /// Every relay this host is serving right now. The phone replaces its saved
-  /// candidate set with this, which is how a hosted relay switched on months
-  /// later — or a desktop whose LAN address moved — heals with no re-pairing.
-  /// Additive: an older host sends none, and the phone keeps what it has.
+  /// Every relay this host is serving right now; the phone replaces its saved
+  /// candidate set with this. Additive — an older host sends none and the phone
+  /// keeps what it has.
   final List<Uri> relays;
 
-  /// `host:port` of the host's direct LAN listener, when it has a LAN address
-  /// to name. A **discovery hint** — it goes stale the moment DHCP moves, and
-  /// the sealed hello remains the only proof of who answered.
+  /// `host:port` of the host's direct LAN listener. A **discovery hint** — the
+  /// sealed hello remains the only proof of who answered.
   final String? lanHint;
 
   Map<String, Object?> toJson() => {
@@ -981,13 +870,9 @@ class RemoteHostStatus {
   }
 }
 
-/// One permission mode an agent can be put into, worded by the host.
-///
-/// The mode travels as `PermissionMode.name` and everything the phone shows
-/// about it travels as the host's own sentences — the same rule the session
-/// snapshot follows for status and stage. A phone one release behind can
-/// therefore offer a mode this build of the companion has never heard of, and
-/// still say truthfully what it does to that agent.
+/// One permission mode an agent can be put into, worded by the host — so a
+/// phone one release behind can offer a mode it has never heard of and still
+/// say truthfully what it does to that agent.
 class RemotePermissionOption {
   const RemotePermissionOption({
     required this.mode,
@@ -1008,8 +893,7 @@ class RemotePermissionOption {
   final String summary;
 
   /// Whether the agent can be put into it at all. A mode it cannot express is
-  /// **sent and not selectable** rather than hidden: Loop 31 §4 option C, so
-  /// nobody wonders where the safe option went.
+  /// **sent and not selectable** rather than hidden.
   final bool selectable;
 
   /// True for the mode the desktop marks dangerous, so the phone can make the
@@ -1072,15 +956,13 @@ class RemoteAgentOption {
   final String name;
 
   /// The mode the desktop's own settings would start this agent under. The
-  /// phone preselects it and the user may change it; the phone never invents
-  /// one of its own.
+  /// phone preselects it and never invents one.
   final String defaultMode;
 
   final String? version;
 
-  /// Whether this agent's command line takes an opening message. False means
-  /// a start carrying one is refused (`SessionLaunchRefused`), so the phone
-  /// says so before the user types rather than after.
+  /// Whether this agent's command line takes an opening message. False means a
+  /// start carrying one is refused (`SessionLaunchRefused`).
   final bool acceptsOpeningMessage;
 
   final List<RemotePermissionOption> permissionModes;
@@ -1146,22 +1028,13 @@ class RemoteCheckoutOption {
   /// does not.
   final String? subPath;
 
-  /// The branch checked out here, when the desktop has **already** measured
-  /// it. Null means "not measured", never "no branch": this reads the cached
-  /// checkout stat and starts no git.
+  /// The branch checked out here, when already measured. Null means "not
+  /// measured", never "no branch": this starts no git.
   final String? branch;
 
-  /// The execution environment this checkout lives in, as the desktop names
-  /// it — `Windows`, `WSL · Ubuntu`, `SSH · build-box`.
-  ///
-  /// The same repository checked out twice — natively and inside a WSL
-  /// distribution — gives a project two checkouts of the same name, and the
-  /// path is the only other thing that differs. Naming the environment is
-  /// what makes that choice readable on a phone.
-  ///
-  /// Null when the desktop has nothing worth saying: an environment row it no
-  /// longer holds, or one saved with a blank name. The phone falls back to the
-  /// path rather than showing an empty line.
+  /// The execution environment this checkout lives in, as the desktop names it.
+  /// One repository checked out natively and inside WSL gives a project two
+  /// checkouts of one name; null when there is nothing worth saying.
   final String? environmentName;
 
   /// The desktop cannot see this folder on disk. False also means "could not
@@ -1207,10 +1080,8 @@ class RemoteCheckoutOption {
   }
 }
 
-/// One project of the desktop's workspace: what `workspace.list` answers with.
-///
-/// Reported, never guessed — a checkout the desktop does not hold a row for is
-/// absent from this list rather than inferred from a session that mentions it.
+/// One project of the desktop's workspace. Reported, never guessed — a checkout
+/// the desktop holds no row for is absent rather than inferred from a session.
 class RemoteWorkspaceProject {
   const RemoteWorkspaceProject({
     required this.projectId,
@@ -1225,13 +1096,11 @@ class RemoteWorkspaceProject {
   final String name;
   final String? path;
 
-  /// The environment the project's root folder lives in, named the way
-  /// [RemoteCheckoutOption.environmentName] is. Two projects of the same name
-  /// — one per environment — are otherwise told apart only by their paths.
+  /// The environment the project's root lives in. Two projects of one name, one
+  /// per environment, are otherwise told apart only by their paths.
   final String? environmentName;
 
-  /// The badge shown on non-local project cards (e.g. "WSL · Ubuntu", "SSH · build-box").
-  /// Null for local-host projects.
+  /// The badge on a non-local project card ("WSL · Ubuntu"); null for local.
   final String? environmentBadge;
 
   final List<RemoteCheckoutOption> checkouts;
@@ -1284,10 +1153,8 @@ class RemoteSessionStartRequest {
   final String repositoryId;
   final String installationId;
 
-  /// The mode the **user** picked, from the options `workspace.list` sent. Not
-  /// optional: a phone that named no mode would be asking the desktop to
-  /// choose one for it, and starting an agent in bypass is not a choice
-  /// anything but a person may make.
+  /// The mode the **user** picked. Not optional: starting an agent in bypass is
+  /// not a choice anything but a person may make.
   final String permissionMode;
 
   final String? title;
@@ -1313,9 +1180,8 @@ class RemoteSessionStarted {
   /// records none.
   final String? permissionMode;
 
-  /// True when this answer was remembered rather than acted on: the phone
-  /// sent the same idempotency key twice and the desktop started nothing the
-  /// second time.
+  /// True when this answer was remembered rather than acted on: the same
+  /// idempotency key arrived twice.
   final bool replayed;
 
   Map<String, Object?> toJson() => {

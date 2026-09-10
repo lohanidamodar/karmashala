@@ -1,14 +1,8 @@
 import 'browser_consent.dart';
 
-/// The consent check the browser tools run, bound to one caller.
-///
-/// Built per dispatch rather than held as a provider because the scope depends
-/// on the calling session, which arrives with the request and is not app state.
-///
-/// It lives here rather than beside the app's providers because it reads
-/// nothing but a [BrowserConsentStore] and a scope it is handed: *resolving*
-/// which project a call belongs to needs the session and repository tables and
-/// stays in the app, but deciding what to do with the answer does not.
+/// The consent check the browser tools run, bound to one caller. Built per
+/// dispatch because the scope depends on the calling session, which arrives with
+/// the request and is not app state.
 class ProjectScopedBrowserConsent implements BrowserConsent {
   const ProjectScopedBrowserConsent({required this.store, required this.scope});
 
@@ -25,9 +19,8 @@ class ProjectScopedBrowserConsent implements BrowserConsent {
     if (store.isGranted(resolved.id, capability)) {
       return const BrowserConsentDecision.allowed();
     }
-    // The refusal names the project and the exact place a person goes to say
-    // yes, because the agent's next move is to ask a human for something and a
-    // request the human cannot act on is worse than no request.
+    // The refusal names the project and where to say yes: the agent's next move
+    // is to ask a human, and a request they cannot act on is worse than none.
     return BrowserConsentDecision.denied(
       'Not permitted: running JavaScript in the attached page has not been '
       'granted for the project "${resolved.name}". This is a one-time consent, '

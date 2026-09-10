@@ -1,13 +1,9 @@
 import 'package:karmashala_devices/src/data/avd_system_images.dart';
 import 'package:test/test.dart';
 
-/// Where an AVD's system image is supposed to be.
-///
-/// `emulator -list-avds` lists directories, not bootable devices: two AVDs on
-/// this machine listed perfectly on 2026-09-03 and then died with
-/// `PANIC: Cannot find AVD system path` because their images had never been
-/// downloaded. The image is named in a file, so it can be checked before three
-/// minutes of boot are spent finding out.
+/// Where an AVD's system image is supposed to be. `emulator -list-avds` lists
+/// directories, not bootable devices: two here listed perfectly and then died
+/// with `PANIC: Cannot find AVD system path` after three minutes of boot.
 void main() {
   group('iniValue', () {
     test('takes the value verbatim after the first =', () {

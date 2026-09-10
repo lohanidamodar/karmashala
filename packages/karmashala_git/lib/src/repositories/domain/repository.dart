@@ -24,12 +24,9 @@ class Repository {
   /// The repository this checkout *is*, derived from `origin` — and null
   /// whenever that could not be established.
   ///
-  /// **Nullable by construction, not by accident.** A `git init` with no
-  /// remote, a `file://` URL and a folder that is not a repository all leave it
-  /// null, and so does a checkout the app has not read `origin` for yet. So
-  /// nothing may key on it without falling back to today's path-only
-  /// behaviour; see [canonicalRepositoryId] for the normalisation and
-  /// `recordRepositoryIdentity` for when it is refreshed.
+  /// **Nullable by construction, not by accident**: a `git init` with no remote, a
+  /// `file://` URL, a folder that is not a repository, or a checkout whose
+  /// `origin` has not been read. Nothing may key on it without a path-only fallback.
   final String? canonicalId;
 
   /// Convenience accessor for the environment the repository lives in.

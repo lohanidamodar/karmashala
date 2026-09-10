@@ -209,12 +209,9 @@ void main() {
   test(
     'closing frees the rendezvous, so the same one can be taken again',
     () async {
-      // The defect this pins (found by loop 80's park/return test): closing a
-      // `WebSocketChannel`'s sink did not close the socket, so the relay went on
-      // counting the departed listener. A host re-registering on the same
-      // rendezvous — parking a relay and switching it back on, or moving the
-      // relay URL — was then paired **with its own stale socket**, and the phone
-      // was refused as a third peer forever.
+      // The defect this pins: closing a `WebSocketChannel`'s sink did not close
+      // the socket, so the relay went on counting the departed listener and
+      // paired a re-registering host with its own stale socket.
       final host = connect(_rendezvous);
       final states = StateLog(host);
       await states.waitFor(TransportState.connected);

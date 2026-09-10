@@ -8,16 +8,9 @@ import 'posix_pty.dart';
 import 'pty.dart';
 import 'pty_platform.dart';
 
-/// The stage-zero proof, kept as a subcommand rather than a throwaway script so
-/// a deployed host can be asked, on the machine that matters, whether its pty
-/// layer actually works. Every step counts bytes; the deadline is a failure
-/// bound, never a poll.
-///
-/// Prints one `step ok/FAIL` line per check and exits non-zero on the first
-/// failure, so `karmashala_host probe-pty` is quotable evidence. The four steps
-/// are the same on both platforms — spawn, echo, resize, exit code — because
-/// they are the four things a pane needs and not four things a pty happens to
-/// do. Only the shell and the sentences it is asked differ.
+/// Asks a deployed host whether its pty layer works: spawn, echo, resize, exit
+/// code. One `step ok/FAIL` line each, non-zero on the first failure. Every step
+/// counts bytes and the deadline is a failure bound, never a poll.
 Future<int> runPtyProbe({IOSink? out}) async {
   final sink = out ?? stdout;
   var failures = 0;
@@ -42,9 +35,8 @@ Future<int> runPtyProbe({IOSink? out}) async {
     sink.writeln('chdir     ${launcher.honoursWorkingDirectory ? 'supported' : 'unsupported'}');
   }
   if (launcher is ConPtyLauncher) {
-    // Windows has no signals, so this is the one place the difference is
-    // visible before a session ends: say it here rather than let a caller find
-    // out from an exit code that is not 128 + anything.
+    // Windows has no signals: said here rather than found in an exit code that
+    // is not 128 + anything.
     sink.writeln('signals   none (kill terminates the process tree)');
   }
 
@@ -98,8 +90,8 @@ class _ProbeShell {
 
   final PtySpawnRequest request;
 
-  /// Written so the command *line* does not contain the answer: the echo of
-  /// what was typed cannot be mistaken for the child having run it.
+  /// The command line must not contain the answer, or the tty's echo of what
+  /// was typed passes for the child having run it.
   final String echoCommand;
   final String sizeCommand;
   final String expectedSize;
@@ -117,8 +109,7 @@ _ProbeShell _probeShell() {
         rows: 24,
       ),
       echoCommand: "Write-Output ('karma'+'shala')\r\n",
-      // The same question `live_pane_resize_test.dart` asks a real pane: does
-      // the process learn the size it was resized to?
+      // Does the process learn the size it was resized to?
       sizeCommand: 'Write-Output "\$(\$Host.UI.RawUI.WindowSize.Height) '
           '\$(\$Host.UI.RawUI.WindowSize.Width)"\r\n',
       expectedSize: '30 100',

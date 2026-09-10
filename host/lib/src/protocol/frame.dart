@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-/// Every message on the wire, as one byte.
-///
-/// The numbers are part of the protocol: adding a member is a compatible
-/// change, renumbering one is not.
+/// Every message on the wire, as one byte. The numbers are part of the
+/// protocol: adding a member is compatible, renumbering one is not.
 enum MessageType {
   hello(0x01),
   welcome(0x02),
@@ -36,19 +34,14 @@ enum MessageType {
 }
 
 /// The fixed header: type, flags, session ref, payload length. Eight bytes,
-/// big-endian, aligned, and free of a request id so `output` costs nothing
-/// beyond it.
-///
-/// The session ref is a small per-connection handle rather than the session's
-/// id: ids are strings the app chooses and the hot path must not carry one on
-/// every chunk. Ref 0 means "no particular session".
+/// big-endian, with no request id so `output` costs nothing beyond it. The
+/// session ref is a per-connection handle, not the id; ref 0 means none.
 class Frame {
   const Frame(this.type, this.sessionRef, this.payload, {this.flags = 0});
 
   static const int headerBytes = 8;
 
-  /// Refusing a silly length is the difference between a protocol error and an
-  /// out-of-memory kill. 16 MiB is far above any real frame.
+  /// Refusing a silly length is a protocol error rather than an OOM kill.
   static const int maxPayloadBytes = 16 * 1024 * 1024;
 
   final MessageType type;
@@ -78,17 +71,13 @@ class FrameFormatException implements Exception {
   String toString() => 'FrameFormatException: $message';
 }
 
-/// Turns a byte stream into frames.
-///
-/// A byte stream, not a message stream, is the point: the same parser reads an
-/// SSH exec channel in production and a pipe in a test, and neither can be
-/// trusted to deliver a frame per event.
+/// Turns a byte stream into frames. A stream of bytes, not messages: nothing
+/// carrying them can be trusted to deliver one frame per event.
 class FrameParser {
   final _buffer = BytesBuilder(copy: true);
 
-  /// Feeds bytes and yields whatever frames completed. Throws
-  /// [FrameFormatException] on a header that cannot be true, because carrying
-  /// on after one would resynchronise onto garbage.
+  /// Yields whatever frames completed. Throws [FrameFormatException] on an
+  /// impossible header rather than resynchronising onto garbage.
   List<Frame> add(List<int> chunk) {
     _buffer.add(chunk);
     final frames = <Frame>[];
@@ -138,11 +127,9 @@ extension FrameFlags on Frame {
   bool get hasUnknownFlags => flags != 0;
 }
 
-/// Never mixed into the codec: what a connection does with a frame is a
-/// separate concern from getting one off the wire.
+/// Kept out of the codec: handling a frame is not getting one off the wire.
 typedef FrameSink = void Function(Frame frame);
 
-/// The one asynchronous helper the codec owns, so a caller does not reimplement
-/// "the next frame of this type" three times.
+/// The codec's one asynchronous helper: the next frame of a given type.
 Future<Frame> firstFrameOfType(Stream<Frame> frames, MessageType type) =>
     frames.firstWhere((frame) => frame.type == type);

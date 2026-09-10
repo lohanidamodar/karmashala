@@ -5,10 +5,8 @@ import 'dart:typed_data';
 import 'package:karmashala_media/media.dart';
 
 /// One encoded frame off a device, with the stream state it was produced under.
-///
-/// The geometry and the SPS/PPS travel with the frame rather than with the
-/// stream because a rotation changes both mid-recording, and a container that
-/// fixes them (MP4) has to know which ones it committed to.
+/// The geometry and the SPS/PPS travel with the frame because a rotation changes
+/// both mid-recording, and MP4 has to know which ones it committed to.
 class DeviceAccessUnit {
   const DeviceAccessUnit({
     required this.bytes,
@@ -33,11 +31,7 @@ class DeviceAccessUnit {
 typedef AccessUnitStreamFactory = Stream<DeviceAccessUnit> Function();
 
 /// Where a screen recording's bytes go: a file in the app, a list in a test.
-///
-/// Small on purpose. The only thing a recorder needs of a destination is that
-/// it takes bytes, says when a write to it failed, and reports how much it
-/// ended up holding — and a test that had to stand in for `IOSink` would have
-/// to implement `StringSink` as well, for no gain.
+/// Small on purpose — a stand-in for `IOSink` would have to be a `StringSink`.
 abstract interface class RecordingSink {
   /// Hands [bytes] over. Does not wait for them: a live view produces frames
   /// faster than a disk acknowledges them, and awaiting each one would put the
@@ -45,18 +39,11 @@ abstract interface class RecordingSink {
   void add(List<int> bytes);
 
   /// Errors when a write failed, and never completes normally before [close].
-  ///
-  /// This is the out-of-disk path. [add] cannot report it — the write has not
-  /// happened yet when it returns — so the failure arrives here instead, and
-  /// arrives as an event rather than as something a caller has to go and ask
-  /// about.
+  /// The out-of-disk path: [add] returns before the write has happened.
   Future<void> get done;
 
-  /// Flushes, closes, and answers how many bytes the destination holds.
-  ///
-  /// The size is read back rather than counted on the way in, so a partial
-  /// write is reported as what reached the disk rather than as what was
-  /// offered to it.
+  /// Flushes, closes, and answers how many bytes the destination holds. Read
+  /// back rather than counted in, so a partial write reports what reached disk.
   Future<int> close();
 }
 
@@ -64,12 +51,9 @@ abstract interface class RecordingSink {
 class FileRecordingSink implements RecordingSink {
   FileRecordingSink._(this._file, this._sink);
 
-  /// Creates [path]'s directory if it is missing and opens the file.
-  ///
-  /// Throws whatever the filesystem throws — a read-only location, a name the
-  /// platform refuses, a full disk — and the caller turns that into the
-  /// "destination could not be opened" outcome, which is a different sentence
-  /// from a write that failed part way through.
+  /// Creates [path]'s directory if it is missing and opens the file. Throws
+  /// whatever the filesystem throws: "could not be opened" is a different
+  /// sentence from a write that failed part way through.
   static Future<RecordingSink> open(String path) async {
     final file = File(path);
     await file.parent.create(recursive: true);
@@ -93,16 +77,10 @@ class FileRecordingSink implements RecordingSink {
   }
 }
 
-/// Writes a device recording as MP4, muxing the handset's own H.264.
-///
-/// **No re-encode.** The frames arrive already encoded, so this is a container
-/// change: measured byte-identical in `video_writer_test.dart`.
-///
-/// The picture size and the SPS/PPS come from the **first** access unit and are
-/// then fixed, because that is what MP4 is: one sample entry for the track. A
-/// rotation part way through therefore keeps the first size and the later part
-/// is stretched — which is why MPEG-TS is still offered, and why the outcome
-/// says so when it happens.
+/// Writes a device recording as MP4, muxing the handset's own H.264 with **no
+/// re-encode**. The picture size and the SPS/PPS come from the **first** access
+/// unit and are then fixed — that is what MP4 is — so a rotation part way
+/// through leaves the rest stretched, which is why MPEG-TS is still offered.
 class Mp4RecordingWriter {
   Mp4RecordingWriter._(this.path, this._open);
 
@@ -176,8 +154,6 @@ class Mp4RecordingWriter {
   }
 }
 
-/// The rate an MP4 of a device declares.
-///
-/// scrcpy's own timestamps decide each frame's real duration; this is only the
-/// track's nominal rate, and a container needs one.
+/// The rate an MP4 of a device declares. scrcpy's own timestamps decide each
+/// frame's real duration; this is only the nominal rate a container needs.
 const int kDeviceRecordingFrameRate = 30;

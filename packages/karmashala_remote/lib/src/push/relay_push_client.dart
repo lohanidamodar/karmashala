@@ -1,8 +1,6 @@
-/// The host's HTTP client for the relay's push endpoints.
-///
-/// Two verbs, both best-effort: register a token under the opaque push tag,
-/// and hand over a sealed payload. The relay never sees more than the tag,
-/// the token and ciphertext.
+/// The host's HTTP client for the relay's push endpoints: register a token
+/// under the opaque push tag, and hand over a sealed payload. Both best-effort;
+/// the relay never sees more than the tag, the token and ciphertext.
 library;
 
 import 'dart:convert';

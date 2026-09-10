@@ -1,15 +1,9 @@
-/// Windows' own H.264 encoder and MP4 muxer, reached straight from Dart.
+/// Windows' own H.264 encoder and MP4 muxer, reached straight from Dart, so an
+/// MP4 costs no added download. The bundled `libmpv-2.dll` cannot stand in: its
+/// FFmpeg is built `--disable-encoders --disable-muxers`.
 ///
-/// Nothing is bundled. `mfplat.dll` and `mfreadwrite.dll` ship with Windows and
-/// the encoder is an operating-system MFT, so an MP4 costs zero added download
-/// — which is why this and not a vendored ffmpeg. The bundled `libmpv-2.dll`
-/// cannot do it: its FFmpeg is configured `--disable-encoders --disable-muxers`
-/// with nothing re-enabled, and says so itself ("Could not open libavcodec
-/// encoder for saving images").
-///
-/// Pure FFI rather than a C++ shim in the runner on purpose: a method channel
-/// only answers on the platform thread, and the encode has to stay off the
-/// isolate drawing the app.
+/// FFI rather than a channel to the runner because a method channel only
+/// answers on the platform thread, and the encode must stay off the UI isolate.
 library;
 
 import 'dart:ffi';
@@ -197,18 +191,12 @@ final _sinkWriterDisableThrottling = _guid(
 );
 final _enableHardwareTransforms = _guid('a634a91c-822b-41b9-a494-4de4643612b0');
 
-/// Whether a sink writer may use the vendor hardware encoder MFTs.
+/// Whether a sink writer may use the vendor hardware encoder MFTs: true in the
+/// app, false under `flutter test`, where loading `nvEncMFTH264x.dll` kills
+/// `flutter_tester.exe` inside the MP4 probe.
 ///
-/// **True in the app**, where the hardware encoder is the point of going
-/// through Media Foundation at all. **False under `flutter test`**: asking for
-/// them loads NVIDIA's `nvEncMFTH264x.dll` and Intel's media stack into
-/// `flutter_tester.exe`, and the tester has died at one fixed offset twenty
-/// times on this machine, every time inside the MP4 probe. The measurement and
-/// how to repeat it are in `test/core/media/video_writer_test.dart`.
-///
-/// Every caller passes it rather than the library reading the environment: one
-/// that quietly behaved differently when observed would make the tests a
-/// report on a different encoder than the app uses.
+/// Passed by every caller rather than read from the environment, so the library
+/// never behaves differently when observed.
 const bool appHardwareTransforms = true;
 final _transcodeContainerType = _guid('150ff23f-4abc-478b-ac4f-e81916b8aaa5');
 final _containerMpeg4 = _guid('dc6cd05d-b9d0-40ef-bd35-fa622c1ab28a');
@@ -279,9 +267,8 @@ Pointer<Uint16> _wide(String text) {
 }
 
 /// Everything both writers share: one MP4 sink, one video stream, samples in.
-///
-/// It knows nothing about the picture: the media types come from the writer
-/// above it, which is what lets the same sink both encode and stream-copy.
+/// The media types come from the writer above, which is what lets the same sink
+/// both encode and stream-copy.
 class _Mp4Sink {
   _Mp4Sink(this.path);
 
@@ -293,12 +280,8 @@ class _Mp4Sink {
   bool _closed = false;
   int _samples = 0;
 
-  /// Opens the file. [configureOutput] fills in the H.264 type; when
-  /// [passthrough] the same type is set as the input, which is what tells MF to
-  /// mux without an encoder.
-  ///
-  /// [hardwareTransforms] asks for the vendor encoder MFTs — see
-  /// [appHardwareTransforms].
+  /// Opens the file. [configureOutput] fills in the H.264 type; [passthrough]
+  /// sets it as the input too, which is what tells MF to mux without encoding.
   void open({
     required void Function(Pointer<Void> mediaType) configureOutput,
     required bool passthrough,
@@ -311,8 +294,7 @@ class _Mp4Sink {
     final writer = calloc<Pointer<Void>>();
     final url = _wide(path);
     try {
-      // The count is a sizing hint; it is short by one when the hardware
-      // attribute is not set.
+      // The count is a sizing hint, short by one without the hardware attribute.
       _check(
         _mf.createAttributes(attributes, hardwareTransforms ? 3 : 2),
         'MFCreateAttributes',
@@ -491,7 +473,7 @@ class _Mp4Sink {
       final file = File(path);
       if (file.existsSync()) file.deleteSync();
     } on Object {
-      // A part-written file left on disk is smaller than a failed delete.
+      // A part-written file on disk is a smaller problem than a failed delete.
     }
   }
 }
@@ -570,8 +552,8 @@ class MediaFoundationEncoder implements VideoEncoder {
     _at += hold;
   }
 
-  /// MF's RGB32 is B, G, R, A. Swapping the outer bytes of each pixel word
-  /// costs one integer op per pixel instead of four byte moves.
+  /// MF's RGB32 is B, G, R, A; swapping the outer bytes of the word is one
+  /// integer op per pixel instead of four byte moves.
   void _writeBgra(RgbaFrame frame, Pointer<Uint8> destination) {
     final aligned =
         frame.rgba.offsetInBytes % 4 == 0 && destination.address % 4 == 0;
@@ -613,10 +595,8 @@ class MediaFoundationEncoder implements VideoEncoder {
   void abort() => _sink.abort();
 }
 
-/// Already-encoded H.264 into an MP4, with no re-encode at all.
-///
-/// The input media type is the output media type, which is what makes MF mux
-/// rather than transcode. Measured: the payload comes out byte-identical.
+/// Already-encoded H.264 into an MP4, with no re-encode: the input media type
+/// is the output media type, and the payload comes out byte-identical.
 class MediaFoundationRemuxer implements VideoRemuxer {
   MediaFoundationRemuxer({
     required String path,
@@ -656,12 +636,9 @@ class MediaFoundationRemuxer implements VideoRemuxer {
     // Timestamps arrive from the handset's clock; the file starts at zero.
     _first ??= frame.at;
     final at = frame.at - _first!;
-    // Each sample's duration is the gap it *closes*, not the one it opens,
-    // because the gap it opens is not known until the next frame arrives.
-    // MP4 accumulates durations, so the whole track sits one frame late — a
-    // fixed offset, not a growing drift, and the length is short by the last
-    // frame. Holding a frame back to get it exact would put a frame of the
-    // live recording in memory for no visible gain.
+    // A sample's duration is the gap it *closes* — the one it opens is unknown
+    // until the next frame — so the track sits one frame late by a fixed
+    // offset, which is cheaper than buffering a frame to get it exact.
     final step = at > _last
         ? at - _last
         : Duration(microseconds: 1000000 ~/ frameRate);
@@ -683,8 +660,8 @@ class MediaFoundationRemuxer implements VideoRemuxer {
   void abort() => _sink.abort();
 }
 
-/// [hardwareTransforms] defaults rather than being required only because
-/// [VideoEncoderOpener] forbids a required parameter; tests pass `false`.
+/// [hardwareTransforms] has a default only because [VideoEncoderOpener] forbids
+/// a required parameter; tests pass `false`.
 VideoEncoder openMediaFoundationEncoder({
   required String path,
   required int width,
@@ -723,13 +700,9 @@ int _bitrateFor(int width, int height) {
   return (pixels * 2).clamp(800000, 12000000);
 }
 
-/// Whether this machine can write an MP4 — measured, never guessed.
-///
-/// It opens a real MP4 sink and asks it to take RGB32, which is the exact
-/// question, then throws the file away. `MFTEnumEx` was tried first and is
-/// **not** the question: on the owner's machine it lists 19 video decoders and
-/// **zero** video encoders while the sink writer encodes H.264 happily, so an
-/// enumeration would have reported "no MP4" on a machine that writes them.
+/// Whether this machine can write an MP4 — measured by opening a real sink and
+/// asking it to take RGB32, then throwing the file away. `MFTEnumEx` is not the
+/// question and answers it wrongly (see docs/SETTLED.md).
 VideoSupport probeVideoSupport({required bool hardwareTransforms}) {
   if (!Platform.isWindows) {
     return VideoSupport.unavailable(
@@ -742,9 +715,8 @@ VideoSupport probeVideoSupport({required bool hardwareTransforms}) {
     '${Directory.systemTemp.path}${Platform.pathSeparator}'
     'karmashala-mp4-probe-$pid.mp4',
   );
-  // 64x64 rather than something smaller: the H.264 MFT answers
-  // MF_E_INVALIDMEDIATYPE (0xC00D36B4) to a 16x16 frame, which would have read
-  // as "no encoder here".
+  // 64x64: the H.264 MFT answers MF_E_INVALIDMEDIATYPE to a 16x16 frame, which
+  // would read as "no encoder here".
   try {
     _Mp4Sink(probe.path)
       ..open(
@@ -775,8 +747,7 @@ VideoSupport probeVideoSupport({required bool hardwareTransforms}) {
     );
   } on Object catch (error) {
     // One message for every refusal: nothing here can tell "no encoder
-    // installed" from "the encoder would not take this", and inventing the
-    // difference would be worse than naming the code.
+    // installed" from "the encoder would not take this".
     return VideoSupport.unavailable(
       'Windows would not open an MP4 encoder here ($error), so use GIF.',
     );

@@ -1,13 +1,9 @@
 /// Splitting a unified diff into files and hunks, and putting a chosen subset
 /// back together as a patch `git apply` accepts.
 ///
-/// Pure text work, deliberately: Git produces the diff and Git applies the
-/// result, so the only thing this file owns is the arithmetic in between — and
-/// that arithmetic is the part that is easy to get quietly wrong. Dropping a
-/// hunk changes where every later hunk lands in the *new* file, so a patch made
-/// by deleting `@@` blocks from git's output is wrong in a way `git apply` will
-/// often accept anyway (it searches for context) and `git apply --cached` will
-/// not.
+/// Dropping a hunk changes where every later hunk lands in the *new* file, so a
+/// patch made by deleting `@@` blocks out of git's output is wrong in a way `git
+/// apply` often accepts anyway (it searches for context) and `--cached` does not.
 library;
 
 /// One `@@` block of a unified diff.
@@ -102,10 +98,9 @@ class FilePatch {
 
 /// Splits [diff] — the output of any `git diff` — into one [FilePatch] per file.
 ///
-/// Tolerant by design: text it does not recognise before the first `diff --git`
-/// is ignored, and a file whose body it cannot read as hunks comes back with an
-/// empty [FilePatch.hunks] rather than throwing. A diff this cannot split must
-/// never stop the diff being *shown*.
+/// Tolerant by design: text before the first `diff --git` is ignored and a body
+/// it cannot read as hunks comes back with no hunks rather than throwing. A diff
+/// this cannot split must never stop the diff being *shown*.
 List<FilePatch> splitUnifiedDiff(String diff) {
   final files = <FilePatch>[];
   final lines = diff.split('\n');
@@ -197,15 +192,9 @@ class HunkSelection {
 
 /// Rebuilds a patch out of [files], keeping only what [selection] asks for.
 ///
-/// The post-image line numbers are recomputed: a kept hunk starts where the
-/// hunks kept *before it* have left the file, not where git said it would start
-/// with every hunk applied. Dropping a hunk that adds two lines moves everything
-/// after it back by two, and a patch that does not say so is a patch that
-/// applies to a file that does not exist.
-///
-/// Returns an empty string when nothing was selected — callers must treat that
-/// as "nothing to do" rather than handing it to `git apply`, which rejects an
-/// empty patch.
+/// The post-image line numbers are recomputed: a kept hunk starts where the hunks
+/// kept *before it* have left the file, not where git said. Returns an empty
+/// string when nothing was selected — never hand that to `git apply`.
 String buildPatch(List<FilePatch> files, List<HunkSelection> selection) {
   final wanted = {for (final s in selection) s.path: s};
   final buffer = StringBuffer();
@@ -252,8 +241,6 @@ String patchForFiles(String diff, List<String> paths) => buildPatch(
   [for (final path in paths) HunkSelection(path)],
 );
 
-// --- internals ---------------------------------------------------------------
-
 final _hunkHeader = RegExp(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$');
 
 ({int oldStart, int oldCount, int newStart, int newCount, String heading})?
@@ -272,11 +259,9 @@ _parseHunkHeader(String line) {
 
 /// Pulls `a/<old>` and `b/<new>` out of a `diff --git` line.
 ///
-/// Paths with spaces make this ambiguous in general; git's own answer is the
-/// `---`/`+++` lines, but those are absent for a pure mode change. Splitting on
-/// ` b/` from the right handles every name that does not itself contain that
-/// sequence, and a name that does falls back to the whole remainder rather than
-/// to nothing.
+/// Paths with spaces are ambiguous and the `---`/`+++` lines are absent for a
+/// pure mode change; splitting on ` b/` from the right handles every name that
+/// does not itself contain that sequence.
 (String, String) _pathsFrom(String header) {
   final rest = header.substring('diff --git '.length);
   final split = rest.lastIndexOf(' b/');

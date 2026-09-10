@@ -14,12 +14,9 @@ class WdaUiRead {
   final DeviceScreenSize? screen;
 }
 
-/// Element types WebDriverAgent reports that a person can actually act on.
-///
-/// iOS describes *what a thing is*, not what can be done to it, so there is no
-/// `clickable` attribute to read and the flag the rest of the app filters on is
-/// derived from the type. Deliberately narrow: a false positive here is an
-/// agent tapping a label and reporting success.
+/// Element types WebDriverAgent reports that a person can actually act on. iOS
+/// describes *what a thing is*, so the flag is derived from the type;
+/// deliberately narrow, because a false positive is a tap on a label.
 const Set<String> kWdaInteractiveTypes = {
   'Button',
   'Cell',
@@ -38,12 +35,9 @@ const Set<String> kWdaInteractiveTypes = {
   'Toggle',
 };
 
-/// Parses WebDriverAgent's `/source?format=json` document.
-///
-/// Tolerant in the same way `parseUiAutomatorXml` is: a document that is not
-/// what this build expects yields an empty read rather than throwing. A UI dump
-/// is evidence for a decision, and evidence that failed to arrive is "I could
-/// not see", not a crash.
+/// Parses WebDriverAgent's `/source?format=json` document. Tolerant like
+/// `parseUiAutomatorXml`: an unexpected document yields an empty read, because
+/// evidence that failed to arrive is "I could not see", not a crash.
 WdaUiRead parseWdaUiRead(String json) {
   final Object? decoded;
   try {
@@ -60,10 +54,8 @@ WdaUiRead parseWdaUiRead(String json) {
       : decoded;
 
   final node = _nodeFrom(root, 0);
-  // A JSON object is not automatically an element. Without this, a response
-  // this build does not recognise — an error body, a future shape — becomes a
-  // one-node tree with no type and no rectangle, which reads downstream as
-  // "the screen has one blank thing on it" rather than as "I could not see".
+  // A JSON object is not automatically an element. Without this an unrecognised
+  // response becomes a one-node tree that reads as "one blank thing on screen".
   if (node == null || !_looksLikeElement(node)) {
     return WdaUiRead(hierarchy: UiHierarchy.empty);
   }
@@ -99,9 +91,9 @@ UiNode? _nodeFrom(Object? raw, int index) {
 
   return UiNode(
     index: index,
-    // A field's *content* is its value and its label is what it is called.
-    // uiautomator conflates them into `text`, which is what every caller
-    // downstream searches, so the value wins where there is one.
+    // A field's *content* is its value and its label is what it is called;
+    // uiautomator conflates them into `text`, so the value wins where there is
+    // one.
     text: value.isNotEmpty ? value : label,
     // The label keeps its place as the content-description when the value took
     // `text` — the fallback `UiNode.label` already has for Flutter semantics.
@@ -121,15 +113,10 @@ UiNode? _nodeFrom(Object? raw, int index) {
   );
 }
 
-/// WDA's structured `rect`, which is the same rectangle as `frame` without a
-/// string to parse. Preferred for exactly that reason; `frame` is the fallback
-/// for a build that predates it.
-///
-/// A zero rectangle is kept rather than discarded. WDA reports every element in
-/// the tree, including the ones on other home-screen pages, and those come back
-/// `isVisible: "0"` with a zero frame — that is a true statement about an
-/// element that is really there and really cannot be tapped, and
-/// [UiBounds.isEmpty] is what callers already test.
+/// WDA's structured `rect`, the same rectangle as `frame` without a string to
+/// parse; `frame` is the fallback for a build that predates it. A zero rectangle
+/// is kept: an element on another home-screen page really is there and really
+/// cannot be tapped, which [UiBounds.isEmpty] already says.
 UiBounds? _rectOf(Object? raw) {
   if (raw is! Map<String, Object?>) return null;
   final x = raw['x'];
@@ -145,10 +132,8 @@ UiBounds? _rectOf(Object? raw) {
   );
 }
 
-/// WDA writes a frame as the string `{{x, y}, {w, h}}`.
-///
-/// Parsed strictly: every tap by query is derived from these, and a guessed
-/// rectangle taps the wrong thing while reporting success.
+/// WDA writes a frame as the string `{{x, y}, {w, h}}`. Parsed strictly: every
+/// tap by query comes from these, and a guess taps the wrong thing.
 UiBounds? _boundsOf(Object? raw) {
   if (raw is! String) return null;
   final match = _framePattern.firstMatch(raw.trim());

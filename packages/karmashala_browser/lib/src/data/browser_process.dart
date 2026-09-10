@@ -1,13 +1,8 @@
 import 'dart:async';
 
-/// A browser process this package asked for, reduced to what the launcher
-/// reads from it.
-///
-/// The app drives every process through `CommandRunner`/`ProcessHandle`, whose
-/// request type carries an `EnvironmentPath` and so reaches back into the app's
-/// environments layer. A browser is always spawned on the machine the app runs
-/// on, so nothing here needs that: the launcher wants two line streams, an exit
-/// code and a way to stop it, and the app passes an adapter over its own runner.
+/// A browser process, reduced to what the launcher reads from it. The app's own
+/// `CommandRunner` request type carries an `EnvironmentPath`, which a browser —
+/// always spawned on this machine — does not need, so the app passes an adapter.
 abstract interface class BrowserProcess {
   /// Line-buffered stdout (decoded text, newline-stripped).
   Stream<String> get stdoutLines;
@@ -22,13 +17,9 @@ abstract interface class BrowserProcess {
   Future<void> kill();
 }
 
-/// Starts [executable] with [arguments] and returns a handle to it.
-///
-/// Throws when the process cannot be started at all — a missing binary, a
-/// refused spawn. [BrowserLauncher] reports any such throw as
-/// [BrowserFailure.startupFailed] and carries the message through, so the
-/// exception type is the caller's to choose; [BrowserProcessException] is here
-/// for callers that have no richer one.
+/// Starts [executable] and returns a handle. Any throw is reported by
+/// [BrowserLauncher] as startupFailed with the message carried through, so the
+/// exception type is the caller's to choose.
 typedef BrowserProcessStarter =
     Future<BrowserProcess> Function(String executable, List<String> arguments);
 

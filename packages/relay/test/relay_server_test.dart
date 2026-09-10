@@ -229,15 +229,8 @@ void main() {
     });
 
     test('is off entirely when the operator asks for no timeout', () async {
-      // The relay embedded in the desktop is the desktop's own. Every socket
-      // waiting alone on it is one of the desktop's own rendezvous listeners,
-      // waiting — correctly — for a phone that may be away for hours, so
-      // hanging up on it is the relay evicting its own operator.
-      //
-      // Measured on the owner's machine: three listeners, each evicted and
-      // re-dialled every 120.3 seconds, 58 times and counting in one run of
-      // the app. Every eviction is a window in which the desktop is absent
-      // from its own rendezvous.
+      // A lone socket on the embedded relay is the desktop's own listener
+      // waiting for an absent phone; evicting it evicts the operator.
       await _start(options: const RelayOptions(loneTimeout: Duration.zero));
       final lonely = await _connect();
       final closed = lonely.stream.drain<void>().then((_) => true);

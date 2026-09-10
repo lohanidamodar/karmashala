@@ -11,16 +11,9 @@ final _group = InternetAddress('239.255.42.201');
 const _port = 47699;
 
 /// The beacon advertises out of the loopback interface here, not out of every
-/// interface as it does in the app.
-///
-/// Two reasons, and the second is why these cases failed on macOS at all.
-/// A suite has no business putting datagrams on the machine's real network —
-/// and since macOS 15 it cannot: Local Network access is denied to a process
-/// until a human grants it, and a headless `flutter test` is never asked.
-/// Measured on this Mac, an unentitled process received **0** datagrams in six
-/// seconds on a network with live mDNS traffic. Loopback multicast is not
-/// gated that way, so it works everywhere and still exercises the real
-/// encode → send → join → receive path.
+/// interface as it does in the app: a suite has no business on the machine's
+/// real network, and since macOS 15 an unentitled process receives nothing
+/// there anyway. Loopback multicast is not gated and exercises the same path.
 final _bindAddress = InternetAddress.loopbackIPv4;
 
 void main() {
@@ -143,11 +136,9 @@ void main() {
     });
 
     test('a host stops being listed once it goes quiet', () async {
-      // The host's nominal period, and how many of them the listing
-      // forgives — the same shape as the shipped pair, where the host
-      // timeout is five `kLanBeaconInterval`s. Neither is ever slept
-      // through: the clock below is the discovery's own, and only this test
-      // moves it.
+      // The host's nominal period and how many of them the listing forgives —
+      // the same shape as the shipped pair. Neither is ever slept through: the
+      // clock below is the discovery's own, and only this test moves it.
       const interval = Duration(milliseconds: 50);
       const forgiven = 3;
 

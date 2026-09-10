@@ -6,21 +6,16 @@ import 'dart:typed_data';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
 
-/// A real `karmashala_host serve` on this machine, in a home of its own.
-///
-/// Its own `USERPROFILE`/`HOME` so a test never touches a host a person is
-/// using, and started rather than slept for: the daemon says where it bound and
-/// [start] waits on that line. If it exits first the failure quotes what it
-/// said, because "another host is already running" is the one that costs an
-/// hour.
+/// A real `karmashala_host serve` in a home of its own, so a test never touches
+/// a host a person is using. Started rather than slept for: [start] waits on the
+/// line the daemon prints, and quotes it if the daemon exits instead.
 class LocalHost {
   LocalHost._(this.process, this.paths, this.greeting);
 
   final Process process;
   final HostPaths paths;
 
-  /// Everything the daemon printed before it was ready, including which pty
-  /// layer it measured and how many sessions it restored.
+  /// Everything the daemon printed before it was ready.
   final String greeting;
 
   String get socketPath => paths.socketPath;
@@ -52,18 +47,16 @@ class LocalHost {
     return LocalHost._(process, HostPaths(Directory('${home.path}/.karmashala')), greeting);
   }
 
-  /// Kills the daemon the way the operating system would if the machine had
-  /// gone down under it: no chance to write anything, so every session it held
-  /// is left recorded as running.
+  /// Kills the daemon with no chance to write anything, so every session it
+  /// held is left recorded as running.
   Future<void> kill() async {
     process.kill();
     await process.exitCode.timeout(const Duration(seconds: 20), onTimeout: () => -1);
   }
 }
 
-/// The protocol over a plain socket — the local transport, with no `attach`
-/// process in between. The frames are the ones the SSH path sends, which is the
-/// point of `attach` being a byte proxy.
+/// The protocol over a plain socket, with no `attach` process in between; the
+/// frames are the ones the SSH path sends.
 class LocalHostClient {
   LocalHostClient._(this._socket, this.clientId);
 
@@ -72,9 +65,8 @@ class LocalHostClient {
   final _parser = FrameParser();
   final _messages = StreamController<HostMessage>.broadcast();
 
-  /// Answers that arrived before anybody asked for them. The host sends
-  /// `attached` and `exited` back to back for a session that has already ended,
-  /// and a broadcast stream drops whatever nobody was listening for yet.
+  /// Answers that arrived before anybody asked: `attached` and `exited` come
+  /// back to back for an ended session, and a broadcast stream drops those.
   final _pending = <HostMessage>[];
   final _seen = StringBuffer();
   var _requestId = 0;
@@ -129,8 +121,7 @@ class LocalHostClient {
   String? _wanted;
   Completer<bool>? _waiting;
 
-  /// Waits for a substring by counting the bytes that arrive, never by waking
-  /// up to look.
+  /// Waits for a substring by counting bytes, never by waking up to look.
   Future<bool> output(String needle, {Duration within = const Duration(seconds: 30)}) {
     if (_seen.toString().contains(needle)) return Future.value(true);
     _wanted = needle;
@@ -155,10 +146,8 @@ class LocalHostClient {
   }
 }
 
-/// The shell this platform runs, and how to make it say a word it was not told.
-///
-/// Assembled from two variables so the line the shell echoes back does not
-/// itself contain the answer: a match proves the child ran it.
+/// The shell this platform runs, asked in two variables so the line it echoes
+/// back does not itself contain the answer.
 List<String> get probeShell => Platform.isWindows ? const ['cmd.exe'] : const ['/bin/sh'];
 String get setA => Platform.isWindows ? 'set A=karma' : 'A=karma';
 String get setB => Platform.isWindows ? 'set B=shala' : 'B=shala';
@@ -171,8 +160,7 @@ Directory temporaryHome(String prefix) {
     try {
       home.deleteSync(recursive: true);
     } on FileSystemException {
-      // A socket node or a log can still be held on Windows; the temp
-      // directory is the OS's problem after that.
+      // A socket node or a log can still be held on Windows.
     }
   });
   return home;

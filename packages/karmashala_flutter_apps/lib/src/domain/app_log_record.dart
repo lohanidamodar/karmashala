@@ -1,9 +1,5 @@
-/// Where one line in the debug console came from.
-///
-/// The console is one list because that is how it is read — a `print`, an
-/// exception and a `dart:developer` record are the same investigation — but
-/// they arrive on four different VM service streams and mean different things,
-/// so the origin travels with the line.
+/// Where one line in the debug console came from: one list, but four VM
+/// service streams, so the origin travels with the line.
 enum AppLogSource {
   /// The `Stdout` stream. `print` and `stdout.write`, base64 in the event.
   stdout,
@@ -18,8 +14,8 @@ enum AppLogSource {
   /// exception, already structured.
   flutterError,
 
-  /// Written by this app, not by the running one: attached, reloaded, ended.
-  /// In the same list because the console's job is to explain a gap in it.
+  /// Written by this app, not the running one — in the same list because the
+  /// console's job is to explain a gap in it.
   lifecycle,
 }
 
@@ -37,14 +33,12 @@ class AppLogRecord {
 
   final AppLogSource source;
 
-  /// The event's own timestamp where it carries one, our arrival time
-  /// otherwise. Never both silently.
+  /// The event's own timestamp where it carries one, our arrival time else.
   final DateTime at;
 
   final String message;
 
-  /// `LogRecord.loggerName`, for a `dart:developer` record that named a
-  /// channel.
+  /// `LogRecord.loggerName`, when the record named a channel.
   final String? loggerName;
 
   /// `LogRecord.level`, on the `package:logging` scale.
@@ -53,15 +47,9 @@ class AppLogRecord {
   /// The rest of it: a stack trace, or the body of a structured error.
   final String? detail;
 
-  /// Whether this line was already in the buffer when we attached.
-  ///
-  /// **The Dart Development Service replays its buffered `Stdout`, `Stderr`,
-  /// `Logging` and `Extension` events to every new subscriber**, so the first
-  /// burst after `streamListen` is history — the app's startup, and whatever
-  /// happened while nobody was watching. That is worth having in a console and
-  /// is a lie in a live tail, which is the trap `tool/vm_probe.dart` already
-  /// records for `Flutter.Frame`. Marked rather than dropped, so the console
-  /// can rule off where we came in.
+  /// Whether this line was already buffered when we attached: DDS replays its
+  /// buffer to every new subscriber, so the first burst is history — marked
+  /// rather than dropped, because it is a lie in a live tail.
   final bool beforeAttach;
 
   bool get isError =>
@@ -78,12 +66,8 @@ class AppLogRecord {
   };
 }
 
-/// A bounded, newest-last buffer of one app's console.
-///
-/// Bounded because a chatty app writes without limit and this is held in
-/// memory for the life of a connection; [dropped] is a **count**, never a
-/// duration, so the console can say what it lost without pretending to know
-/// when.
+/// A bounded, newest-last buffer of one app's console. [dropped] is a count,
+/// never a duration: the console says what it lost, not when.
 class AppLogBuffer {
   AppLogBuffer({this.capacity = 2000}) : assert(capacity > 0);
 

@@ -6,16 +6,9 @@ import '../domain/working_tree_status.dart';
 
 /// Parses `git status --porcelain=v1` output into [FileChange]s.
 ///
-/// Each line is `XY <path>` where `X` is the index (staged) status and `Y` the
-/// work-tree (unstaged) status. `??` marks untracked; `R`/`C` lines carry
-/// `old -> new`. Pure and testable.
-///
-/// **The seven conflict pairs are read as a pair, not letter by letter**, which
-/// is the one place this differs from reading `X` and falling back to `Y`. v1
-/// has no separate record for an unmerged path — v2's `u` — so `AA` came out
-/// *added* and `DD` came out *deleted*, each a confident wrong verb about a
-/// file the merge has not finished with. Only [MergeConflict.ofCode] can tell
-/// them apart, because the pair is the whole word.
+/// **The seven conflict pairs are read as a pair, not letter by letter.** v1 has
+/// no record for an unmerged path, so `AA` came out *added* and `DD` *deleted* —
+/// a confident wrong verb about a file the merge has not finished with.
 List<FileChange> parseGitStatus(String porcelain) {
   final changes = <FileChange>[];
   for (final raw in porcelain.split(RegExp(r'[\r\n]'))) {
@@ -126,23 +119,9 @@ List<DiffLine> parseUnifiedDiff(String diff) {
 /// The line number each row of [lines] occupies **in the new file**, or null
 /// for a row that is not a line of it.
 ///
-/// This is the translation that makes a review comment anchorable. The row
-/// index a widget builder has is a position in a rendering — it is what the old
-/// `DiffAnnotation.diffIndex` stored, and it is meaningless the moment the diff
-/// is regenerated. The number this returns is a position in the *file*, which
-/// together with the file's content hash is a claim that can be checked later
-/// (see `review_thread.dart`).
-///
-/// Null for a header, a hunk marker, and — deliberately — for every **removed**
-/// line. A removed line is not in the new file at all, so there is no line
-/// number that could honestly be given for it. Handing back the number of the
-/// line that follows the deletion would be an anchor onto text the comment was
-/// not about, which is the exact failure mode this feature exists to remove;
-/// the caller turns a comment on a removed line into a file-level thread that
-/// quotes the removed text instead.
-///
-/// `\ No newline at end of file` is git's annotation, not a line of the file,
-/// and is skipped — counting it would shift every number after it by one.
+/// Null for a header, a hunk marker and — deliberately — every **removed** line,
+/// which is not in the new file at all. `\ No newline at end of file` is skipped;
+/// counting it would shift every number after it by one.
 List<int?> newFileLineNumbers(List<DiffLine> lines) {
   final numbers = List<int?>.filled(lines.length, null);
   var next = 0;
@@ -174,9 +153,8 @@ int? _newStartOf(String header) {
 
 /// Parses `git diff --name-status` output into [FileChange]s.
 ///
-/// This is a comparison between two committed states, so nothing in it is
-/// "staged" or "unstaged" — both flags are false, and callers that care about
-/// the index use [parseGitStatus] instead.
+/// Two committed states, so nothing here is staged or unstaged — both flags are
+/// false, and a caller that cares about the index uses [parseGitStatus].
 List<FileChange> parseNameStatus(String output) {
   final changes = <FileChange>[];
   for (final line in output.split(RegExp(r'[\r\n]+'))) {
@@ -201,10 +179,8 @@ List<FileChange> parseNameStatus(String output) {
 
 /// Parses `git diff --numstat` output — `added<TAB>removed<TAB>path` per file.
 ///
-/// A binary file reports `-` for both counts; it is counted as a file and as a
-/// binary file, and contributes no lines. Rename entries can carry NUL-separated
-/// paths under `-z`, which this deliberately does not ask for: the counts are
-/// the point, and the path is only used to know a row happened.
+/// A binary file reports `-` for both counts: counted as a file and as a binary
+/// file, contributing no lines.
 DiffStat parseNumstat(String output) {
   var added = 0;
   var removed = 0;
@@ -248,49 +224,12 @@ AheadBehind? parseAheadBehind(String output) {
 
 /// Parses `git status --porcelain=v2 --branch`.
 ///
-/// **v2 rather than v1, for the three header lines v1 does not have.** v1
-/// squeezes the branch, its upstream and their divergence into one `## ` line
-/// and a bracket — `## work...origin/work [ahead 2, behind 1]` — which has to
-/// be taken apart by string surgery, and which says nothing at all when the
-/// branch is level. v2 states each fact on its own line:
+/// **v2 for its header lines.** `branch.ab` is absent — so the distance is
+/// **null, not zero** — for a branch with no upstream and for one whose upstream
+/// has gone; level with an upstream is `+0 -0`, stated.
 ///
-/// ```txt
-/// # branch.oid 3f2a…            (or `(initial)` before the first commit)
-/// # branch.head work            (or `(detached)`)
-/// # branch.upstream origin/work (absent when the branch has no upstream)
-/// # branch.ab +2 -1             (absent when git cannot compute it)
-/// ```
-///
-/// So **how far the branch stands from its upstream comes free from a call the
-/// app already makes**. That is a different comparison from `rev-list --count`
-/// against the *base* branch, which is what `AheadBehind` measures and which
-/// stays exactly where it was.
-///
-/// `branch.ab` is absent, and the distance therefore **null rather than zero**,
-/// in the two cases where git does not know it: a branch with no upstream, and
-/// an upstream that has gone from the remote — v1's `[gone]`. Level with an
-/// upstream is `+0 -0`, stated, which is the case v1 expressed by saying
-/// nothing.
-///
-/// ## The two records v1 does not have, and both are silent when missed
-///
-/// * **`2` — a rename or a copy.** Its last field is `<path>\t<origPath>`, two
-///   paths on one line separated by a **tab**, which v1 never writes. Splitting
-///   the line on whitespace merges them into a single nonsense path and
-///   undercounts the dirty files by one per rename.
-/// * **`u` — an unmerged path.** v1 reported a conflict as an ordinary `UU`
-///   entry; v2 gives it its own record type. A parse that handles only `1`, `2`
-///   and `?` drops conflicted files out of the listing altogether — a row that
-///   is mid-merge would report itself clean.
-///
-/// The status letters themselves are v1's, with one substitution: v2 writes `.`
-/// where v1 wrote a space. So `1 .M` is modified-but-unstaged and `1 M.` is
-/// staged. A `u` record is the exception: its `<XY>` is not a pair of index and
-/// work-tree letters at all but one of the seven **conflict pairs**, which is
-/// why it reads through [MergeConflict.ofCode] rather than [_typeOf] — put
-/// through the latter a `u UU` came out [FileChangeType.unknown] and rendered
-/// as *"changed (unrecognised git status)"*, which is what a conflict looked
-/// like here until [FileChangeType.conflicted] existed.
+/// v2 writes `.` where v1 wrote a space, and a `u` record's `<XY>` is a conflict
+/// pair for [MergeConflict.ofCode], not a pair of status letters.
 WorkingTreeStatus parseGitStatusV2(String porcelain) {
   String? branch;
   String? upstream;
@@ -361,13 +300,8 @@ FileChange? _v2Record(String line) {
         originalPath: tab < 0 ? null : fields[9].substring(tab + 1),
       );
     // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
-    //
-    // **One path, always.** The three stage modes and their object names say
-    // which sides of the merge still hold the file, and `<XY>` says the same
-    // thing in two letters — so the kind is taken from there and the modes are
-    // read past. Nothing draws a file mode, and a second path to pair with it
-    // does not exist in this record: a rename is a `2`, and git writes the
-    // conflicted path once.
+    // **One path, always.** `<XY>` says which sides of the merge hold the file;
+    // a rename is a `2`, and git writes the conflicted path once.
     case 'u':
       final fields = _v2Fields(line, 11);
       if (fields == null) return null;
@@ -375,10 +309,8 @@ FileChange? _v2Record(String line) {
         path: fields[10],
         type: FileChangeType.conflicted,
         conflict: MergeConflict.ofCode(fields[1]),
-        // Both, and not because a letter said so: an unmerged path has entries
-        // in the index *and* a file in the working tree that differs from all
-        // of them. That is what `UU` already reported through [_typeOf], and it
-        // is what the two flags have always meant.
+        // Both: an unmerged path has entries in the index *and* a working-tree
+        // file that differs from all of them.
         staged: true,
         unstaged: true,
       );
@@ -416,9 +348,8 @@ List<String>? _v2Fields(String line, int count) {
 
 /// A `<XY>` field and a path as a [FileChange].
 ///
-/// `.` is v2's "unmodified", where v1 wrote a space; everything else is the
-/// same letter v1 used, so [_typeOf] is shared and a conflict still reads the
-/// way it always did.
+/// `.` is v2's "unmodified" where v1 wrote a space; every other letter is v1's,
+/// so [_typeOf] is shared.
 FileChange _v2Change(String xy, String path, {String? originalPath}) {
   final x = xy.isNotEmpty ? xy[0] : '.';
   final y = xy.length > 1 ? xy[1] : '.';

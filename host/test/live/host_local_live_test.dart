@@ -9,16 +9,8 @@ import 'package:test/test.dart';
 import 'local_host_harness.dart';
 
 /// The whole host on *this* machine: a real `serve`, a real unix domain socket
-/// on Windows, a real ConPTY behind it, and a client that connects to the
-/// socket directly rather than through `attach`.
-///
-/// This is the local stage's own proof, and the answer to "what listener".
-/// Nothing here is a named pipe or a loopback port: `HostPaths.socketPath`
-/// records why, and this test is what makes that claim checkable on the machine
-/// it is claimed about.
-///
-/// Everything counts — bytes, offsets, frames. Every `Duration` is a failure
-/// bound on a future, not a poll.
+/// on Windows, a real ConPTY, and a client connecting straight to the socket.
+/// Every `Duration` is a failure bound on a future, not a poll.
 void main() {
   late LocalHost host;
 
@@ -67,8 +59,7 @@ void main() {
 
     client.type(attached.sessionRef, 'exit 7');
     final exited = await client.expect<ExitedMessage>();
-    // The exit code the host reports is the child's, and a code it could not
-    // collect stays null rather than becoming a zero.
+    // The child's own code, and null rather than zero when it was not collected.
     expect(exited.exitCode, 7);
     expect(exited.sessionId, 'local-a');
   });

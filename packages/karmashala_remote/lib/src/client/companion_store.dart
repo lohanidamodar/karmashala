@@ -51,10 +51,9 @@ class CompanionPairing {
            ? candidatesFrom(relay, const [])
            : List.unmodifiable(candidates);
 
-  /// Where the ACTIVE pairing lives in the [CompanionStore] — the key every
-  /// pre-multi-host build read and wrote. [CompanionConnections] keeps it as a
-  /// mirror of the active record, so old readers (and a downgraded app) keep
-  /// seeing the pairing that is actually in use.
+  /// Where the ACTIVE pairing lives — the key every pre-multi-host build read
+  /// and wrote. [CompanionConnections] keeps it mirrored, so an old reader (or
+  /// a downgraded app) still sees the pairing actually in use.
   static const String storeKey = 'karmashala.remote.pairing';
 
   final DeviceId hostId;
@@ -62,10 +61,9 @@ class CompanionPairing {
   final Uint8List deviceKey;
   final CapabilitySet capabilities;
 
-  /// The relay to dial FIRST — the last one that actually worked, kept here
-  /// under the name every earlier build reads so a downgrade still connects.
-  /// Not an identity: see `relay_candidates.dart` for why any of
-  /// [candidates] is equally safe to try.
+  /// The relay to dial FIRST — the last one that actually worked, kept under
+  /// the name every earlier build reads so a downgrade still connects. Not an
+  /// identity: see `relay_candidates.dart`.
   final Uri relay;
 
   /// Every relay this host has been reachable at, with per-relay health. A
@@ -73,10 +71,8 @@ class CompanionPairing {
   /// read — no pairing is ever lost to the new shape.
   final List<RelayCandidate> candidates;
 
-  /// `host:port` where the host's LAN listener was last announced — a
-  /// discovery hint for a network that swallows multicast, nothing more. It
-  /// may be stale (DHCP moves), and the sealed hello is still what proves who
-  /// answered there.
+  /// `host:port` where the host's LAN listener was last announced — a discovery
+  /// hint that may be stale the moment DHCP moves, nothing more.
   final String? lanHint;
 
   /// The rendezvous generation counter — the companion's copy of the one
@@ -159,10 +155,9 @@ class CompanionPairing {
       lastConnectedAt: lastConnected is String
           ? DateTime.tryParse(lastConnected)?.toUtc()
           : null,
-      // The migration, done on every read: a legacy record carries no
-      // `relays`, so its single relay becomes the one-entry set. An unreadable
-      // entry is skipped, and a set that ends up empty falls back to `relay`
-      // in the constructor — a pairing is never lost to a bad candidate.
+      // The migration, done on every read: a legacy record carries no `relays`,
+      // so its single relay becomes the one-entry set. An unreadable entry is
+      // skipped, and a pairing is never lost to a bad candidate.
       candidates: _candidatesFromJson(json['relays']),
       lanHint: lanHint is String && lanHint.isNotEmpty ? lanHint : null,
     );
@@ -206,14 +201,10 @@ class CompanionPairing {
   }
 }
 
-/// Every desktop this phone has paired with, plus which one is active.
-///
-/// Stored under [storeKey]; the active record is mirrored under
-/// [CompanionPairing.storeKey] so a single-pairing build — this one before
-/// multi-host, or a downgrade after it — reads the desktop actually in use. A
-/// legacy store holding only the single-record key migrates transparently on
-/// [load]: the old record becomes the sole saved connection, active, and the
-/// first write persists the new shape.
+/// Every desktop this phone has paired with, plus which one is active. The
+/// active record is mirrored under [CompanionPairing.storeKey] so a
+/// single-pairing build — or a downgrade — reads the desktop actually in use;
+/// a legacy store migrates transparently on [load].
 class CompanionConnections {
   CompanionConnections({List<CompanionPairing>? records, this.activeHostId})
     : records = records ?? [];
@@ -279,19 +270,15 @@ class CompanionConnections {
     'records': [for (final record in records) record.toJson()],
   };
 
-  /// Reads the saved set — or migrates a legacy single-record store, whose
-  /// pairing becomes the sole, active connection. Anything unreadable —
-  /// missing keys, corrupt JSON, a record that will not parse — degrades to
-  /// fewer records, never a crash.
+  /// Reads the saved set, or migrates a legacy single-record store. Anything
+  /// unreadable degrades to fewer records, never a crash.
   static Future<CompanionConnections> load(CompanionStore store) async {
     final raw = await store.read(storeKey);
     if (raw != null) {
       final parsed = _tryParse(raw);
-      // A set that produced records is the whole truth. A set that produced
-      // NONE — every record unreadable, or a half-written `{"records":[]}` —
-      // knows nothing the mirror does not, so the mirror still gets its say.
-      // Silently unpairing a phone whose active record is sitting readable
-      // under the legacy key is the worst outcome available here.
+      // A set that produced NO records knows nothing the mirror does not, so
+      // the mirror still gets its say: silently unpairing a phone whose active
+      // record sits readable under the legacy key is the worst outcome here.
       if (parsed != null && parsed.records.isNotEmpty) return parsed;
     }
     // No (readable) set: a first run, or a store the pre-multi-host build
@@ -350,10 +337,9 @@ class CompanionConnections {
     }
   }
 
-  /// One serialized read-modify-write: loads the set, applies [change], and
-  /// persists. Serialization matters because the pairing client and the
-  /// session client both save mid-flight — an interleaved load/save pair
-  /// would silently drop the other's write.
+  /// One serialized read-modify-write. Serialization matters because the
+  /// pairing client and the session client both save mid-flight, and an
+  /// interleaved load/save pair would silently drop the other's write.
   static Future<T> mutate<T>(
     CompanionStore store,
     FutureOr<T> Function(CompanionConnections all) change,

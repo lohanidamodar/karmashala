@@ -19,11 +19,9 @@ enum DevToolsEndpointState {
   occupiedByOther,
 }
 
-/// Chrome's plain-HTTP discovery endpoint (`/json/*`) on the debugging port.
-///
-/// This is the half of CDP that is not WebSocket: it lists targets, opens new
-/// ones, and — most usefully here — tells us whether a browser is already
-/// listening before we consider spawning one.
+/// Chrome's plain-HTTP discovery endpoint (`/json/*`) on the debugging port: it
+/// lists targets, opens them, and says whether a browser is already listening
+/// before we consider spawning one.
 class DevToolsHttpEndpoint {
   DevToolsHttpEndpoint({
     required this.port,
@@ -60,9 +58,8 @@ class DevToolsHttpEndpoint {
   Future<List<BrowserTarget>> listTargets() async =>
       parseTargetList(await _request('GET', '/json/list'));
 
-  /// Opens a new tab at [url] and returns its target.
-  ///
-  /// `PUT` rather than `GET`: Chrome 111 and later reject the old GET form.
+  /// Opens a new tab at [url] and returns its target. `PUT` rather than `GET`:
+  /// Chrome 111 and later reject the old GET form.
   Future<BrowserTarget> openTab(String url) async {
     final body = await _request('PUT', '/json/new?${Uri.encodeComponent(url)}');
     final decoded = jsonDecode(body);
@@ -78,7 +75,6 @@ class DevToolsHttpEndpoint {
     return parseTarget(decoded);
   }
 
-  /// Closes the tab with [targetId].
   Future<void> closeTab(String targetId) async {
     await _request('GET', '/json/close/$targetId');
   }

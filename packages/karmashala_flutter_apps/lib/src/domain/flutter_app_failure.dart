@@ -1,9 +1,5 @@
-/// Why an operation against a running Flutter app failed.
-///
-/// Every failure carries one of these so a caller — the pane, or an agent
-/// through MCP — reacts to the *kind* of problem rather than to a string. Same
-/// contract as `BrowserFailure` next door, for the same reason: "something went
-/// wrong" must never reach the interface.
+/// Why an operation against a running Flutter app failed. A caller reacts to
+/// the kind, never to a string: "something went wrong" must not reach the UI.
 enum FlutterAppFailure {
   /// Nothing is attached, so there is nothing to act on.
   noAppAttached,
@@ -27,7 +23,7 @@ enum FlutterAppFailure {
   /// reload cannot be asked for.
   notToolDriven,
 
-  /// The app does not serve a service extension we need. In practice: a
+  /// The app does not serve a service extension we need — in practice a
   /// profile or release build, where the inspector is compiled out.
   extensionMissing,
 
@@ -47,7 +43,7 @@ class FlutterAppException implements Exception {
 
   final FlutterAppFailure failure;
 
-  /// User-facing and actionable. The taxonomy exists so this is never vague.
+  /// User-facing and actionable.
   final String message;
 
   final Object? cause;
@@ -56,11 +52,8 @@ class FlutterAppException implements Exception {
   String toString() => 'FlutterAppException(${failure.name}): $message';
 }
 
-/// Standard, actionable wording for each failure kind.
-///
-/// A pure function so the phrasing is unit-testable and identical wherever a
-/// failure is raised. [attachHint] is the `--vmservice-out-file` sentence — it
-/// is the remedy for half of these and the caller knows the real path.
+/// Standard, actionable wording for each failure kind. [attachHint] is the
+/// `--vmservice-out-file` sentence, which only the caller knows the path for.
 String describeFlutterAppFailure(
   FlutterAppFailure failure, {
   String? detail,

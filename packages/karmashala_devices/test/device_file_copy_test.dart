@@ -14,13 +14,8 @@ import 'package:karmashala_devices/src/domain/ios_simulator.dart';
 import './support/fake_command_runner.dart';
 
 /// Copying and moving *within* a device: no host round trip, and every refusal
-/// the surface is meant to give.
-///
-/// The point of the feature is that nothing crosses the wire — pulling a 2 GB
-/// video here and pushing it back into the next folder is two transfers to
-/// achieve one `cp` — so these tests assert on the **device command line**,
-/// which is the thing that silently does the wrong thing when the quoting or
-/// the flags are wrong.
+/// the surface is meant to give. These assert on the **device command line**,
+/// which is what silently does the wrong thing when the quoting is wrong.
 const _serial = 'emulator-5554';
 
 AndroidSdk _sdk() => const AndroidSdk(
@@ -46,8 +41,7 @@ CommandResult _out(String stdout) =>
     CommandResult(exitCode: 0, stdout: stdout, stderr: '');
 
 /// Device text as the service reads it back: base64, because anything holding
-/// filenames is piped through `base64` so a Windows console code page cannot
-/// mangle a name. See `AdbService._readDeviceText`.
+/// filenames is piped through it. See `AdbService._readDeviceText`.
 CommandResult _lsOut(String listing) =>
     _out(base64.encode(utf8.encode(listing)));
 
@@ -161,9 +155,9 @@ void main() {
 
   group('move within the device', () {
     test('is one mv — never a copy followed by a delete', () async {
-      // Within a filesystem `mv` is a rename and cannot half-finish. A cut
-      // that copied and then failed to delete would leave two files and
-      // report success.
+      // Within a filesystem `mv` is a rename and cannot half-finish. A cut that
+      // copied and then failed to delete would leave two files, reporting
+      // success.
       final runner = _runner({'/sdcard/a.txt': _file('a.txt')});
       await _driver(
         AdbService(runner: runner, sdk: _sdk()),
@@ -306,9 +300,8 @@ void main() {
     });
 
     test('a device that complains is a failure, whatever the exit code', () async {
-      // `cp` says nothing when it works, and `adb shell` did not forward a
-      // remote exit code before Android 7 — so any output at all is the
-      // failure.
+      // `cp` says nothing when it works, and `adb shell` forwarded no remote
+      // exit code before Android 7 — so any output at all is the failure.
       final runner = _runner(
         {'/sdcard/a.txt': _file('a.txt')},
         failWith: "cp: '/sdcard/b.txt': Permission denied",

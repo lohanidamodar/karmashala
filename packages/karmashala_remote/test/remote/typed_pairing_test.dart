@@ -1,8 +1,6 @@
-/// The typed-code pairing path, host and phone together over a real loopback
-/// link: the phone holds only the 20-byte code secret, derives everything,
-/// says `needHost` in its hello, reads the host's identity and grant out of a
-/// confirm sealed by the secret alone, and proves the id-bound device key with
-/// the ack/done round-trip before anything is persisted.
+/// The typed-code pairing path, host and phone over a real loopback link: the
+/// phone holds only the 20-byte code secret, derives everything, and proves the
+/// id-bound device key with the ack/done round-trip before anything persists.
 library;
 
 import 'dart:typed_data';

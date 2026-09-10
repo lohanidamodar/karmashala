@@ -89,9 +89,8 @@ void main() {
   });
 
   group('swipeDurationFor', () {
-    // The clamping below is written against the same constants it clamps to, so
-    // widening one of them would move the code and the test together. These pin
-    // the millisecond values that actually reach `adb shell input swipe`.
+    // The clamping is written against the same constants it clamps to, so these
+    // pin the millisecond values that actually reach `adb shell input swipe`.
     test('the bounds are the millisecond values adb is handed', () {
       expect(kMinSwipeDuration, const Duration(milliseconds: 60));
       expect(kMaxSwipeDuration, const Duration(milliseconds: 1500));
@@ -99,8 +98,7 @@ void main() {
 
     test('passes an ordinary gesture through unchanged', () {
       // `input swipe` interpolates over the duration it is given, so the
-      // duration IS the gesture's velocity: a fixed value would make a flick
-      // and a slow drag scroll by the same amount.
+      // duration IS the gesture's velocity.
       expect(
         swipeDurationFor(const Duration(milliseconds: 400)),
         const Duration(milliseconds: 400),
@@ -130,9 +128,7 @@ void main() {
 
   group('widgetPointToFraction', () {
     // Gestures are carried as fractions because the two transports want the
-    // same touch in different spaces: `adb shell input` in device pixels,
-    // scrcpy's control socket in *video* pixels. Converting once, late, keeps
-    // one mapping rather than two.
+    // same touch in different spaces: device pixels, and *video* pixels.
     test('the corners are 0 and 1 whatever the box size', () {
       const WidgetBox box = (width: 405, height: 900);
       expect(widgetPointToFraction(local: (dx: 0.0, dy: 0.0), box: box), (x: 0, y: 0));
@@ -164,9 +160,8 @@ void main() {
     const video = DeviceScreenSize(width: 472, height: 1024);
 
     test('scales into whichever space it is handed', () {
-      // 472x1024 is a real video size: scrcpy scaled a 1080x2340 phone down to
-      // max_size=1024. Sending device pixels with that video size declared is
-      // the mistake that makes touches silently vanish.
+      // 472x1024 is a real video size. Sending device pixels with that video
+      // size declared is the mistake that makes touches silently vanish.
       expect(fractionToDevice(fx: 0.5, fy: 0.25, screen: video), (
         x: 236,
         y: 256,

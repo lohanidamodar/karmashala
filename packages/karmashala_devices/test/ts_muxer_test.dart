@@ -4,11 +4,8 @@ import 'package:karmashala_devices/src/data/ts_muxer.dart';
 import 'package:test/test.dart';
 
 void main() {
-  // The muxer's own constants are what every structural assertion in this file
-  // and in `ts_stream_validator.dart` is written against, so a change to one of
-  // them would move the test and the code together and nothing would fail. Pin
-  // the three that are fixed by the wire format rather than by us — the same
-  // shape as `scrcpy_control_test.dart`'s 32-byte pin.
+  // The muxer's own constants are what every structural assertion here is
+  // written against, so these pin the three the wire format fixes.
   group('the wire constants are the ones the format fixes', () {
     test('a transport packet is 188 bytes (ISO 13818-1)', () {
       expect(kTsPacketSize, 188);

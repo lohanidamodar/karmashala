@@ -47,9 +47,8 @@ void main() {
     });
 
     test('an unavailable simulator is listed, and says so', () {
-      // It is still a row in the device set, and hiding it would leave a user
-      // wondering where their device went; offering it as bootable would leave
-      // them staring at a spinner.
+      // Still a row in the device set: hiding it loses the user's device, and
+      // offering it as bootable leaves them staring at a spinner.
       final stale = parseSimctlDevices(_real).last;
 
       expect(stale.name, 'iPhone 8');
@@ -152,11 +151,8 @@ Port:
 """;
 
     test('takes the phone, not the first display in the list', () {
-      // The first width/height pair here is a 720x480 display with
-      // `Display class: 1`. Taking it — or the first `width:` line anywhere,
-      // which also matches the IOSurface sub-block — reports a 720x480 phone,
-      // and every coordinate derived from it is wrong. Caught by running this
-      // against a real booted simulator, where it returned null.
+      // The first width/height pair is a 720x480 `Display class: 1`. Taking it
+      // reports a 720x480 phone, and every coordinate derived from it is wrong.
       expect(parseSimctlScreenSize(enumerate), (width: 1206, height: 2622));
     });
 
