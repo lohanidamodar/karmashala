@@ -1,7 +1,7 @@
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';

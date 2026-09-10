@@ -9,7 +9,7 @@ import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';
-import '../../ssh/domain/ssh_host.dart';
+import 'package:karmashala_ssh/connection.dart';
 import '../../ssh/presentation/ssh_connection_status_chip.dart';
 import '../application/environment_scan_controller.dart';
 import '../application/environments_controller.dart';

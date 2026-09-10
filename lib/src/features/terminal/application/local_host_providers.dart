@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
-import '../../ssh/domain/host_deployment.dart';
+import 'package:karmashala_ssh/host.dart';
 import '../data/local_host_access.dart';
 
 /// The session host on this machine, or null where there cannot be one. One per

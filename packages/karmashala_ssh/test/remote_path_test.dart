@@ -1,5 +1,5 @@
-import 'package:karmashala/src/features/ssh/domain/remote_directory_entry.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ssh/files.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('joinRemotePath', () {

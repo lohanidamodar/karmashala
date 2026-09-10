@@ -99,3 +99,12 @@ class HostKeyRejected implements Exception {
   @override
   String toString() => 'HostKeyRejected: ${presentation.describe()}';
 }
+
+/// Where trusted host keys are kept, one per `host:port`. The app backs this
+/// with its database; nothing here knows that.
+abstract interface class KnownHostStore {
+  KnownHostKey? find(String host, int port);
+
+  /// Records [key] as trusted, replacing whatever was there.
+  void trust(KnownHostKey key);
+}

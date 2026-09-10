@@ -1,7 +1,7 @@
 import 'package:dartssh2/dartssh2.dart';
 
 import 'package:agent_cli/process.dart';
-import '../domain/remote_directory_entry.dart';
+import 'remote_directory_entry.dart';
 import 'ssh_connection.dart';
 
 /// Raised when a remote directory cannot be listed.

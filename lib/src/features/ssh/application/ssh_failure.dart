@@ -1,7 +1,6 @@
 import 'package:agent_cli/process.dart';
-import '../data/remote_file_browser.dart';
-import '../data/ssh_connection.dart';
-import '../domain/ssh_host_key.dart';
+import 'package:karmashala_ssh/files.dart';
+import 'package:karmashala_ssh/connection.dart';
 
 /// Digs the [HostKeyRejected] out of [error], however deeply wrapped, so the UI
 /// never string-matches an error message to find the one failure that matters.

@@ -1,7 +1,7 @@
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host_key.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/ssh/presentation/known_hosts_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

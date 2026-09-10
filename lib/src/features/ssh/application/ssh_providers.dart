@@ -5,10 +5,8 @@ import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../data/environment_key_reader.dart';
 import '../data/known_host_dao.dart';
-import '../data/ssh_connection.dart';
-import '../data/ssh_connection_pool.dart';
+import 'package:karmashala_ssh/connection.dart';
 import '../data/ssh_host_dao.dart';
-import '../data/ssh_host_key_verifier.dart';
 import 'ssh_prompt_controller.dart';
 
 /// Persistence for saved SSH hosts.

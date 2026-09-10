@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/known_hosts_controller.dart';
-import '../domain/ssh_host_key.dart';
+import 'package:karmashala_ssh/connection.dart';
 
 /// The one SSH failure that is a warning, not a nuisance. There is deliberately
 /// **no "connect anyway"**; the only escape hatch is forgetting the stored key.

@@ -9,7 +9,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

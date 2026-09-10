@@ -121,3 +121,9 @@ ExecutionEnvironment sshEnvironment(SshHost host) => ExecutionEnvironment(
   sshHostId: host.id,
   createdAt: host.createdAt,
 );
+
+/// Where saved hosts are read from. The app backs this with its database; the
+/// pool only ever looks one up by id.
+abstract interface class SshHostStore {
+  SshHost? getById(String id);
+}

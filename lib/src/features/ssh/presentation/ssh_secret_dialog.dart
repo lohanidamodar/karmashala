@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../application/ssh_prompt_controller.dart';
-import '../domain/ssh_host.dart';
+import 'package:karmashala_ssh/connection.dart';
 
 /// Asks for a password or a passphrase, for one connection. There is no
 /// "remember this": what is typed reaches `dartssh2` and nothing else.

@@ -1,6 +1,6 @@
 import 'package:agent_cli/process.dart';
 import '../../environments/data/execution_environment_dao.dart';
-import 'ssh_connection.dart';
+import 'package:karmashala_ssh/connection.dart';
 
 /// Reads a private key from whichever **local** environment owns its path: the
 /// same text in a WSL distro and on Windows are two different files.

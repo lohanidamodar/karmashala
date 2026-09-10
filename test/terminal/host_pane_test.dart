@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';
+import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala/src/features/terminal/data/host_terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
 import 'package:karmashala_terminal_core/profiles.dart';

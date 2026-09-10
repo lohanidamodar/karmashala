@@ -25,6 +25,7 @@ workspace:
   - packages/karmashala_media
   - packages/karmashala_remote
   - packages/karmashala_session
+  - packages/karmashala_ssh
   - packages/karmashala_terminal_core
   - packages/local_ipc
 
@@ -75,6 +76,13 @@ dependencies:
     path: packages/karmashala_mcp
   karmashala_session:
     path: packages/karmashala_session
+  # Reaching a machine over SSH and running the session host on it: the
+  # connection and its pool, the host key policy, the SSH command runner, the
+  # deployer and the remote file browser. Not the DAOs — the package takes a
+  # store, never a database (docs/PACKAGE_SPLIT_2.md, the mcp/ssh correction).
+  # Pure Dart.
+  karmashala_ssh:
+    path: packages/karmashala_ssh
   # What a terminal is, as values: profiles and launch contexts, the pane and
   # workspace geometry, the grid vocabulary, OSC shell integration and the cast
   # format. A Flutter package — `xterm2`'s buffer types are its vocabulary

@@ -1,7 +1,6 @@
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_prompt_controller.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
-import 'package:karmashala/src/features/ssh/domain/ssh_host_key.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

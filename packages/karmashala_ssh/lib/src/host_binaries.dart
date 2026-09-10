@@ -1,7 +1,7 @@
 import 'dart:io';
 
 
-import '../domain/host_deployment.dart';
+import 'host_deployment.dart';
 
 /// Where the host binaries come from on this machine.
 abstract class HostBinarySource {

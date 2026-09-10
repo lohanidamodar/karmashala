@@ -13,7 +13,7 @@ import '../application/ssh_failure.dart';
 import '../application/ssh_hosts_controller.dart';
 import '../application/ssh_providers.dart';
 import '../data/environment_key_reader.dart';
-import '../domain/ssh_host.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'host_key_changed_alert.dart';
 
 /// Adds or edits one remote host. The form stores *where* a key is, never a key

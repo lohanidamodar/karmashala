@@ -4,8 +4,7 @@ import 'dart:typed_data';
 
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
-import '../domain/ssh_host_key.dart';
-import 'known_host_dao.dart';
+import 'ssh_host_key.dart';
 
 /// Asked when a host presents a key we have never seen; `true` trusts it from
 /// now on. Only called for an unknown key — a changed one is never offered.
@@ -24,7 +23,7 @@ class SshHostKeyVerifier {
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('ssh.hostkey');
 
-  final KnownHostDao knownHosts;
+  final KnownHostStore knownHosts;
   final String host;
   final int port;
   final Clock clock;
