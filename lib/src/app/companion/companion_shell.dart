@@ -11,14 +11,8 @@ import '../../features/companion/presentation/session_list_screen.dart';
 import '../theme/app_icons.dart';
 import '../theme/design_tokens.dart';
 
-/// The phone shell: pairing until a host exists, then three tabs — Projects,
-/// Inbox, Settings — under a persistent connection banner. Compact-breakpoint
-/// layout (CLAUDE.md §6): bottom navigation, no rail, no panes.
-///
-/// The first tab is named for what it lists. It was "Sessions" and showed
-/// projects *and* sessions in one flat list, which is exactly the confusion
-/// Loop 82 was asked to fix: the tab is the top of the hierarchy, and the
-/// hierarchy's top is projects.
+/// The phone shell: pairing until a host exists, then Projects, Inbox and
+/// Settings under a connection banner. Bottom navigation, no rail, no panes.
 class CompanionShell extends ConsumerStatefulWidget {
   const CompanionShell({super.key});
 
@@ -46,8 +40,8 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
     const inboxIcon = Icon(AppIcons.tray);
     return Scaffold(
       appBar: AppBar(
-        // Grown with the text scale rather than fixed: a 200% title does not
-        // fit a 56px bar, and the screen's own name is the worst thing to clip.
+        // Grown with the text scale rather than fixed: a 200% title does not fit a
+        // 56px bar, and the screen's own name is the worst thing to clip.
         toolbarHeight: Touch.appBarOf(context),
         title: Text(_titles[_tab]),
       ),
@@ -55,9 +49,8 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Which desktop these sessions belong to, above the tab body but
-            // below the outage banner — an unreachable host is the more
-            // urgent fact of the two.
+            // Which desktop these sessions belong to, below the outage banner — an
+            // unreachable host is the more urgent fact of the two.
             const LinkBanner(),
             if (_tab == 0) const HostSwitcherBar(),
             Expanded(

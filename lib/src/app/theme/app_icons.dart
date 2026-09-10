@@ -1,8 +1,5 @@
-// GENERATED — Phosphor icon glyphs as plain `const IconData` so the Flutter
-// icon tree-shaker can subset the bundled fonts. The glyphs are served by the
-// `picons` package's fonts (fontPackage: 'picons'); we only reference the
-// codepoints we actually use (values taken from picons' regular/fill sets). Add
-// a constant here when you need another Phosphor glyph.
+// GENERATED — Phosphor glyphs as plain `const IconData` so the icon
+// tree-shaker can subset the `picons` fonts. Add a constant to use another.
 import 'package:flutter/widgets.dart';
 
 /// Phosphor icons used across the app, as tree-shakeable `const IconData`.
@@ -535,10 +532,8 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
-  /// The same glyph filled, for a funnel that is actually narrowing something.
-  ///
-  /// Phosphor keeps one codepoint per icon across its weights — see
-  /// [pushPin]/[pushPinFill] — so the fill is the family, not the character.
+  /// The same glyph filled. Phosphor keeps one codepoint per icon across its
+  /// weights, so the fill is the family, not the character.
   static const IconData funnelFill = IconData(
     0xe266,
     fontFamily: 'PhosphorFill',
@@ -547,16 +542,7 @@ abstract final class AppIcons {
   );
 
   /// Every project at once — the unnarrowed end of the context filter.
-  ///
-  /// One third of a vocabulary that had collapsed into a single mark. In the
-  /// Explorer's chrome: [treeStructure] is the Explorer **surface** (its
-  /// title-bar toggle and its pane header), [folder] is one project, [folders]
-  /// is all of them, and [stack] is a context. All three used to be
-  /// [treeStructure], stacked ~30px apart in the same 16px column, so the
-  /// corner read as one glyph repeated and said nothing about which of the
-  /// three it meant. Elsewhere [treeStructure] still marks things that really
-  /// are trees — a worktree, a fan of subagents — where nothing it could be
-  /// confused with is on screen.
+  /// [treeStructure] is the Explorer surface, [folder] one project, [stack] a context.
   static const IconData folders = IconData(
     0xe260,
     fontFamily: 'PhosphorRegular',

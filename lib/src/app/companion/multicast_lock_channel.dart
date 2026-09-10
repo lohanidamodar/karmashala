@@ -1,10 +1,5 @@
 /// The real Android multicast lock, over the companion runner's own
-/// MethodChannel (`MainActivity.kt`) — not a plugin.
-///
-/// Android drops multicast datagrams unless a `WifiManager.MulticastLock` is
-/// held, so without this the desktop's LAN beacon is inaudible. Best-effort
-/// by design: on any platform where the channel does not exist (desktop,
-/// tests, iOS) every call completes quietly and the scout stays relay-only.
+/// MethodChannel. Without it the desktop's LAN beacon is inaudible.
 library;
 
 import 'package:flutter/services.dart';

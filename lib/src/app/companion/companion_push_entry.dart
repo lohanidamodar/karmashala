@@ -23,9 +23,8 @@ import '../../features/companion/client/secure_companion_store.dart';
 import '../../features/companion/notifications/companion_notifier.dart';
 import '../../features/companion/push/companion_push_receiver.dart';
 
-/// Handles one push message's `data` map: unseal the opaque payload with the
-/// stored device key, render the local notification. Safe to call from a
-/// background isolate — it builds everything it needs.
+/// Handles one push message's `data` map: unseal with the stored device key,
+/// render the local notification. Safe from a background isolate.
 Future<void> handleCompanionPushMessage(
   Map<Object?, Object?> data, {
   CompanionPushReceiver? receiver,

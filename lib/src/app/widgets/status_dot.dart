@@ -2,18 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/design_tokens.dart';
 
-/// A [Chrome.dot]-wide coloured dot that **cannot be unlabelled**.
-///
-/// Six places drew this by hand, and the one with the most to say — the fan-out
-/// candidate dot — carried four distinct states in colour alone: no glyph, no
-/// tooltip, no semantics. Two files away the session verdict mark states the
-/// house rule outright: *"A glyph as well as a colour … state is never carried
-/// by colour alone."*
-///
-/// So [label] is required, and required by construction rather than by review:
-/// a dot with nothing to say cannot be written. It says what the colour
-/// *means* — "failed", "3 waiting" — never what it looks like, and it reaches
-/// the semantics tree, which is what Narrator reads.
+/// A [Chrome.dot]-wide coloured dot that **cannot be unlabelled**: [label] is
+/// required by construction, and says what the colour means, not how it looks.
 class StatusDot extends StatelessWidget {
   const StatusDot({
     required this.color,

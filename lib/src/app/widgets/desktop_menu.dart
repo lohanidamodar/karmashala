@@ -69,13 +69,8 @@ class DesktopMenuItem<T> extends PopupMenuItem<T> {
        );
 }
 
-/// The two-line sibling of [DesktopMenuItem].
-///
-/// For the pickers whose choices cannot be named in one word — which checkout,
-/// which permission mode, which agent reviews this — where the row still has to
-/// sit on the same gutter and the same type ramp as every other menu in the
-/// app. A [detail] the user reads once is worth a taller row; a second menu
-/// chrome invented per feature is not.
+/// The two-line sibling of [DesktopMenuItem], for pickers whose choices cannot
+/// be named in one word, on the same gutter and type ramp as every other menu.
 class DesktopMenuDetailItem<T> extends PopupMenuItem<T> {
   // A super parameter is not in scope in an initializer list, and `enabled`
   // has to reach the row below as well as `PopupMenuItem`.
@@ -107,12 +102,8 @@ class DesktopMenuDetailItem<T> extends PopupMenuItem<T> {
          ),
        );
 
-  /// For the row whose detail is still being fetched when the menu opens.
-  ///
-  /// [child] is expected to build a [DesktopMenuDetailRow] once it knows what
-  /// to say — the checkout picker's branch names arrive from `git worktree
-  /// list` after the menu is on screen, and a row that cannot update is a row
-  /// that says "project root" forever.
+  /// For the row whose detail is still being fetched when the menu opens —
+  /// [child] builds a [DesktopMenuDetailRow] once it knows what to say.
   const DesktopMenuDetailItem.live({
     required super.value,
     required Widget super.child,
@@ -169,9 +160,8 @@ class DesktopMenuDetailRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // The gutter is held even when there is no glyph, so a menu whose rows
-        // are checked one at a time does not shuffle its labels sideways as
-        // the answer moves.
+        // The gutter is held even with no glyph, so a menu whose rows are checked one
+        // at a time does not shuffle its labels sideways as the answer moves.
         SizedBox(
           width: Chrome.icon,
           child: glyph == null
@@ -230,13 +220,8 @@ class DesktopMenuDivider extends PopupMenuDivider {
   const DesktopMenuDivider({super.key}) : super(height: 7);
 }
 
-/// A section heading inside a menu: not selectable, and not a row.
-///
-/// Added for the permission picker, where one menu holds **two** questions —
-/// Codex's sandbox and its approval policy are separate axes and a flat list
-/// would silently imply they are one. `enabled: false` rather than a custom
-/// entry so keyboard traversal skips it, which is the whole difference between
-/// a heading and a disabled option.
+/// A section heading inside a menu: not selectable, and not a row. `enabled:
+/// false` rather than a custom entry, so keyboard traversal skips it.
 class DesktopMenuHeader<T> extends PopupMenuItem<T> {
   DesktopMenuHeader(String label, {super.key})
     : super(
@@ -265,14 +250,8 @@ class _HeaderLabel extends StatelessWidget {
   }
 }
 
-/// Right-click, and only right-click.
-///
-/// **Prefer `RowContextMenu` in `row_menu.dart`.** A row's menu has to answer
-/// `Shift+F10`, the Menu key and a screen reader as well as a mouse — a menu
-/// reachable by one gesture and no keyboard is an accessibility regression
-/// (CLAUDE.md §5) — and that widget is this one plus those three. This is the
-/// pointer half it is built on, kept separate for the surfaces whose gesture is
-/// not on a row at all: a terminal's body, a tab chip, a pane strip.
+/// Right-click, and only right-click. **Prefer `RowContextMenu`** on a row;
+/// this is the pointer half, for a terminal body, a tab chip, a pane strip.
 class ContextMenuRegion extends StatelessWidget {
   const ContextMenuRegion({
     required this.itemBuilder,
@@ -281,9 +260,8 @@ class ContextMenuRegion extends StatelessWidget {
     super.key,
   });
 
-  /// Called when the menu opens, and not before. It used to be a `List`, built
-  /// on every build of every row for a menu that opens on one row at most —
-  /// see `RowMenuItemBuilder` in `row_menu.dart` for what that cost.
+  /// Called when the menu opens, and not before — as a `List` it was built on
+  /// every build of every row.
   final List<PopupMenuEntry<String>> Function() itemBuilder;
 
   final ValueChanged<String> onSelected;

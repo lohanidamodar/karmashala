@@ -8,11 +8,8 @@ import 'shell/app_shell.dart';
 import 'theme/app_theme.dart';
 import 'theme/ui_text_scale.dart';
 
-/// Root application widget.
-///
-/// Provides theming and renders the desktop shell. The `ProviderScope` is
-/// installed in `main.dart` (with the database override) so that bootstrap can
-/// supply already-initialised dependencies.
+/// Root application widget: theming and the desktop shell. The `ProviderScope`
+/// is installed in `main.dart`, with the database override.
 class KarmashalaApp extends ConsumerWidget {
   const KarmashalaApp({super.key});
 
@@ -42,10 +39,8 @@ class KarmashalaApp extends ConsumerWidget {
         AppThemeMode.light => ThemeMode.light,
         AppThemeMode.dark => ThemeMode.dark,
       },
-      // Wrapped in the SSH prompt host so a connection begun anywhere in the
-      // app can put a host key fingerprint in front of the user. It sits inside
-      // `home` rather than `builder` because it needs a Navigator above it to
-      // show a dialog on.
+      // Inside `home` rather than `builder` because the SSH prompt host needs a
+      // Navigator above it to show a host key fingerprint on.
       home: const SshPromptHost(child: AppShell()),
     );
   }
