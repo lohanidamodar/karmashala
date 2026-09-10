@@ -166,4 +166,23 @@ void main() {
     expect(stream.quiet, isFalse);
   });
 
+  testWidgets('a typed path never quiets anything, because nothing opens', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      show: occupying(const Duration(milliseconds: 250)),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('device-install-path')),
+      r'C:\builds\app.apk',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Install'));
+    await tester.pumpAndSettle();
+
+    expect(stream.told, isEmpty);
+    expect(stream.quiet, isFalse);
+  });
 }

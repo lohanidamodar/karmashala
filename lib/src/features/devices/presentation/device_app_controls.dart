@@ -23,6 +23,19 @@ import 'package:karmashala_devices/devices.dart';
 ///
 /// The answer line under the row carries its age (§19). "Installed" was true
 /// when the driver said it and is not a standing claim about the device now.
+///
+/// **Install takes a typed path as well as a picker**, and that is a rule
+/// rather than a convenience: `core/util/file_picking.dart` records that on
+/// Windows the host's dialog is built on this isolate's own thread, so a picker
+/// that never appears leaves the window Not Responding with nothing to press.
+/// Every Browse surface in this app therefore has a field beside it — this one
+/// was the last that did not, which is why the freeze reported on 2026-09-09
+/// had no way out. With a path in the field the button does not open a dialog
+/// at all, and says so by dropping its ellipsis.
+///
+/// **What it cannot offer is a drop from Explorer.** That needs a native
+/// `IDropTarget`, which is not in this app's dependencies — the same limit
+/// `DeviceFilesDialog` states for dragging a file to or from the device.
 class DeviceAppControls extends ConsumerStatefulWidget {
   const DeviceAppControls({required this.device, this.pickFile, super.key});
 
@@ -38,14 +51,32 @@ class DeviceAppControls extends ConsumerStatefulWidget {
   ConsumerState<DeviceAppControls> createState() => _DeviceAppControlsState();
 }
 
+/// A path as the host hands it over.
+///
+/// Explorer's **Copy as path** wraps what it puts on the clipboard in double
+/// quotes, and PowerShell's `Resolve-Path` prints them too. A field that
+/// refused those would fail at the one job it has — being the way out when the
+/// picker is not available — so they come off here rather than being a rule the
+/// user has to know.
+String unquotePath(String value) {
+  final trimmed = value.trim();
+  return trimmed.length >= 2 &&
+          trimmed.startsWith('"') &&
+          trimmed.endsWith('"')
+      ? trimmed.substring(1, trimmed.length - 1).trim()
+      : trimmed;
+}
+
 class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
   final _appId = TextEditingController();
+  final _buildPath = TextEditingController();
   DeviceActionOutcome<Object?>? _outcome;
   bool _busy = false;
 
   @override
   void dispose() {
     _appId.dispose();
+    _buildPath.dispose();
     super.dispose();
   }
 
@@ -65,13 +96,23 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
     });
   }
 
+  /// The path in the field, or null when there is none to act on.
+  String? get _typedPath {
+    final path = unquotePath(_buildPath.text);
+    return path.isEmpty ? null : path;
+  }
+
   Future<void> _install() async {
-    final file = await (widget.pickFile ?? _browse)();
-    if (file == null) return;
+    // The field wins when it has something in it. Falling back to the picker
+    // would put a dialog in front of a user who has already said which file
+    // they mean — and, on a frozen window, in front of the only control that
+    // still works.
+    final path = _typedPath ?? (await (widget.pickFile ?? _browse)())?.path;
+    if (path == null) return;
     await _run(
       (serial) => ref
           .read(deviceAppActionsProvider)
-          .install(deviceId: serial, path: file.path),
+          .install(deviceId: serial, path: path),
     );
   }
 
@@ -100,49 +141,85 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
             Insets.sm,
             Insets.xs,
           ),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              TextButton.icon(
-                icon: const Icon(
-                  AppIcons.downloadSimple,
-                  size: Chrome.iconAction,
-                ),
-                label: const Text('Install…'),
-                onPressed: _ready ? _install : null,
-              ),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: TextField(
-                  controller: _appId,
-                  style: theme.textTheme.bodySmall,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    hintText: 'applicationId, e.g. com.example.app',
+              Row(
+                children: [
+                  TextButton.icon(
+                    icon: const Icon(
+                      AppIcons.downloadSimple,
+                      size: Chrome.iconAction,
+                    ),
+                    // The ellipsis is a promise that a dialog is coming, so it
+                    // goes when there is a path to act on and nothing will open.
+                    label: Text(
+                      _typedPath == null ? 'Install…' : 'Install',
+                    ),
+                    onPressed: _ready ? _install : null,
                   ),
-                  onChanged: (_) => setState(() {}),
-                ),
+                  const SizedBox(width: Insets.sm),
+                  Expanded(
+                    child: TextField(
+                      key: const Key('device-install-path'),
+                      controller: _buildPath,
+                      style: theme.textTheme.bodySmall,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: 'or paste a path to an .apk or .app',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                      // Enter installs. A path typed into a window that is not
+                      // repainting still reaches this.
+                      onSubmitted: (_) => _ready ? _install() : null,
+                    ),
+                  ),
+                ],
               ),
-              IconButton(
-                tooltip: 'Launch this app',
-                icon: const Icon(AppIcons.playCircle, size: Chrome.iconAction),
-                onPressed: _ready && appId.isNotEmpty
-                    ? () => _run(
-                        (serial) => ref
-                            .read(deviceAppActionsProvider)
-                            .launch(deviceId: serial, appId: appId),
-                      )
-                    : null,
-              ),
-              IconButton(
-                tooltip: 'Force-stop this app',
-                icon: const Icon(AppIcons.stopCircle, size: Chrome.iconAction),
-                onPressed: _ready && appId.isNotEmpty
-                    ? () => _run(
-                        (serial) => ref
-                            .read(deviceAppActionsProvider)
-                            .terminate(deviceId: serial, appId: appId),
-                      )
-                    : null,
+              const SizedBox(height: Insets.xs),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const Key('device-app-id'),
+                      controller: _appId,
+                      style: theme.textTheme.bodySmall,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: 'applicationId, e.g. com.example.app',
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Launch this app',
+                    icon: const Icon(
+                      AppIcons.playCircle,
+                      size: Chrome.iconAction,
+                    ),
+                    onPressed: _ready && appId.isNotEmpty
+                        ? () => _run(
+                            (serial) => ref
+                                .read(deviceAppActionsProvider)
+                                .launch(deviceId: serial, appId: appId),
+                          )
+                        : null,
+                  ),
+                  IconButton(
+                    tooltip: 'Force-stop this app',
+                    icon: const Icon(
+                      AppIcons.stopCircle,
+                      size: Chrome.iconAction,
+                    ),
+                    onPressed: _ready && appId.isNotEmpty
+                        ? () => _run(
+                            (serial) => ref
+                                .read(deviceAppActionsProvider)
+                                .terminate(deviceId: serial, appId: appId),
+                          )
+                        : null,
+                  ),
+                ],
               ),
             ],
           ),
