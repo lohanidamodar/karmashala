@@ -27,10 +27,8 @@ String? loginShellPath() {
   return shell;
 }
 
-/// The shells listed in `/etc/shells` that actually exist — the system's own
-/// answer to what can be a login shell, which is what `chsh` validates against.
-/// Filtered by existence because the file outlives uninstalls; read
-/// synchronously, since it is a few hundred bytes and cached for the run.
+/// The shells in `/etc/shells` that actually exist — the system's own answer
+/// to what can be a login shell. Filtered, because the file outlives uninstalls.
 List<String> installedShells() {
   try {
     final file = File('/etc/shells');

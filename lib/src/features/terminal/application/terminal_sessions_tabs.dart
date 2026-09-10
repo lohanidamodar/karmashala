@@ -71,9 +71,7 @@ extension TerminalTabVerbs on TerminalSessionsController {
   }
 
   /// Opens an agent session in an empty split region without creating a tab;
-  /// null when [slotPaneId] is stale or occupied. The pane is created only
-  /// after the slot is validated, so the caller's fallback to [openAgentTab]
-  /// never starts the agent twice.
+  /// null when [slotPaneId] is stale or occupied. The pane comes after the check.
   ({String tabId, String paneId})? openAgentInSlot(
     String slotPaneId,
     AgentPaneLaunch launch,
@@ -118,10 +116,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
     _focusActivePane();
   }
 
-  /// Starts the panes in [tabId] that were running when the app last closed —
-  /// the other half of `shouldRestartOnLaunch`, which only covers the tab the
-  /// user was left in front of. Waiting for the tab to be opened is what keeps
-  /// it cheap: a tab nobody opens still spawns nothing.
+  /// Starts the panes in [tabId] that were running when the app last closed.
+  /// Waiting for the tab to be opened is what keeps it cheap.
   void _restoreLivePanesIn(String tabId) {
     final tab = _tabById(tabId);
     if (tab == null) return;

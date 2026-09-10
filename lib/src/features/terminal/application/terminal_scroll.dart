@@ -1,9 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 /// The scroll offset that centres buffer line [line], or null when there is
-/// nothing to scroll. `RenderTerminal` sets content height to
-/// `lines.length * cellHeight`, so the line height can be recovered from the
-/// scroll metrics without reaching into the vendored render object.
+/// nothing to scroll — the line height is recovered from the scroll metrics.
 double? terminalLineOffset({
   required int line,
   required int lineCount,

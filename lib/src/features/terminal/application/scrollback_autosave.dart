@@ -7,10 +7,8 @@ import 'package:riverpod/riverpod.dart';
 /// this is the trigger that matters: 20 s bounds the worst-case loss.
 const Duration kScrollbackAutosaveInterval = Duration(seconds: 20);
 
-/// How soon the next batch runs when the last tick left panes unsaved. A tick
-/// is capped at [kScrollbackAutosaveBudget], so at the hundred-pane scale
-/// target one cannot get through them all; coming back in a second drains the
-/// backlog at ~8 ms per second rather than in one freeze.
+/// How soon the next batch runs when the last tick left panes unsaved: a tick
+/// is capped, so at a hundred panes one cannot get through them all.
 const Duration kScrollbackAutosaveCatchUp = Duration(seconds: 1);
 
 /// Most main-isolate time one autosave tick may spend — half a 60 Hz frame,

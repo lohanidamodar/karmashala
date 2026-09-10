@@ -6,17 +6,13 @@ import '../domain/pane_layout.dart';
 /// Width of the draggable divider between two panes.
 const double kPaneDividerThickness = 8;
 
-/// Called when a divider is dragged: move [share] of the split [splitId]'s own
-/// extent from child `index + 1` to child [index]. A **share, not pixels**,
-/// because a split's weights divide up that split and nothing else — and only
-/// the split knows how much room it was given.
+/// Called when a divider is dragged: move [share] of split [splitId]'s own
+/// extent from child `index + 1` to [index]. A **share, not pixels**.
 typedef PaneResizeCallback =
     void Function(String splitId, int index, double share);
 
-/// Renders a [PaneLayout] as nested [Row]s and [Column]s. Takes a
-/// [regionBuilder] so `pane_layout_view_test.dart` can prove with instrumented
-/// children that a region inside a hidden `IndexedStack` child records zero
-/// paints — hidden tabs must cost VT parsing but no painting.
+/// Renders a [PaneLayout] as nested [Row]s and [Column]s. [regionBuilder] is
+/// what lets a test prove a hidden tab's region records zero paints.
 class PaneLayoutView extends StatelessWidget {
   const PaneLayoutView({
     super.key,
@@ -84,9 +80,7 @@ class PaneDivider extends StatelessWidget {
   final ValueChanged<double>? onDelta;
 
   /// The extent this divider's split gives its weights, or null before layout.
-  /// Measured off the render tree at drag time: handing it down would mean a
-  /// `LayoutBuilder` round every split, rebuilding every pane on every frame of
-  /// a window resize for a number only a drag reads.
+  /// Measured at drag time: handing it down means a `LayoutBuilder` per split.
   double? _room(BuildContext context) {
     final flex = context.findAncestorRenderObjectOfType<RenderFlex>();
     if (flex == null || !flex.hasSize) return null;

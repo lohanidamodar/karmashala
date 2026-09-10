@@ -7,10 +7,8 @@ part of 'terminal_panel.dart';
 /// geometry: the handle *is* the subject of the gesture.
 Key paneDragHandleKey(String paneId) => ValueKey('pane-handle/$paneId');
 
-/// The floating handle in the top-right corner of a split pane. A region draws
-/// no header (see [_buildRegion]), so this is the pane's only handle — the grip
-/// is what lets it be dropped on the tab strip, on a region's header, or on
-/// another pane to re-split.
+/// The floating handle in a split pane's top-right corner. A region draws no
+/// header, so this grip is the pane's only way to be dragged anywhere.
 class _PaneFloatingActions extends ConsumerStatefulWidget {
   const _PaneFloatingActions({
     required this.paneId,

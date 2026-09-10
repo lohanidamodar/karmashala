@@ -71,10 +71,8 @@ class TerminalSessionsState {
   /// died while its tab was in the background still repaints as dead.
   final Map<String, PaneLiveness> liveness;
 
-  /// Per-pane working directory, republished on every OSC 7 `cd`, so a label
-  /// follows the shell rather than the launch directory. Its own projection for
-  /// the reason [liveness] is: a `cd` in a background pane must not rebuild the
-  /// tab strip.
+  /// Per-pane working directory, republished on every OSC 7 `cd`. Its own
+  /// projection, so a `cd` in a background pane does not rebuild the tab strip.
   final Map<String, String?> workingDirectories;
 
   /// Incremented on every publish so title and metadata watchers can detect
@@ -99,10 +97,8 @@ class TerminalSessionsState {
     return null;
   }
 
-  /// Equal when every part is the **same object**. The controller rebuilds each
-  /// collection only when it changed, so a consumer selecting `state.tabs` is
-  /// not woken by a process exiting; a deep comparison would give the same
-  /// answer at O(N) per publish, which is the cost being removed.
+  /// Equal when every part is the **same object**: a consumer selecting
+  /// `state.tabs` is not woken by a process exiting, and no comparison is O(N).
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||

@@ -23,10 +23,8 @@ class DesktopDialogTitle extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          // 2px, and deliberately not an `Insets` step: this is optical
-          // alignment of the glyph's cap height to the title's, not spacing
-          // between two things. Putting it on the 4-pt scale would drop the
-          // icon visibly below the title.
+          // 2px, and deliberately not an `Insets` step: optical alignment of the
+          // glyph's cap height, which the 4-pt scale would drop below the title.
           padding: const EdgeInsets.only(top: 2),
           child: Icon(
             icon,

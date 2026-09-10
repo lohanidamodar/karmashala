@@ -40,10 +40,8 @@ extension TerminalPaneTitles on TerminalSessionsController {
   String titleForPane(String paneId) =>
       _titles.putIfAbsent(paneId, () => _titleForPane(paneId));
 
-  /// What one pane is called: an agent pane's session name (read live, so a
-  /// rename shows at once — and above OSC, because Claude Code and Codex name
-  /// their own window and would put the rename out of reach), then OSC 0/2,
-  /// then the shortened directory, then the profile label.
+  /// What one pane is called: an agent pane's session name read live, then OSC
+  /// 0/2, then the shortened directory, then the profile label.
   String _titleForPane(String paneId) {
     // A document names itself: no shell named its window and it is in no
     // directory.

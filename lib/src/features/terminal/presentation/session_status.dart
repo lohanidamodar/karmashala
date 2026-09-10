@@ -162,10 +162,8 @@ class BackgroundSessionsDialog extends StatelessWidget {
     return AlertDialog(
       title: const Text('Background sessions'),
       contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
-      // Both `scrollable` and the `FocusTraversalGroup` below, measured one at
-      // a time: without both, Tab cannot reach the rows past the fold of a list
-      // long enough to scroll, so those sessions have no keyboard route to
-      // their Attach and End buttons.
+      // Both `scrollable` and the `FocusTraversalGroup` below, measured one at a
+      // time: without both, Tab cannot reach the rows past the fold.
       scrollable: true,
       content: SizedBox(
         width: 520,

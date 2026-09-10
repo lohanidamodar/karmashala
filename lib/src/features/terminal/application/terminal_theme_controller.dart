@@ -3,10 +3,8 @@ import 'package:riverpod/riverpod.dart';
 import '../../settings/application/settings_controller.dart';
 import '../data/theme_discovery.dart';
 
-/// Themes found on this machine, Ghostty first then Warp.
-///
-/// Scanning is synchronous file I/O, so this is only ever read by the Settings
-/// screen — never by the terminal itself.
+/// Themes found on this machine, Ghostty first then Warp. Scanning is
+/// synchronous file I/O, so only Settings ever reads this.
 final discoveredTerminalThemesProvider = Provider<List<DiscoveredTheme>>((ref) {
   return [
     ...discoverTerminalThemes(

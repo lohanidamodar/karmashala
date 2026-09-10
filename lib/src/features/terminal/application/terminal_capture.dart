@@ -4,9 +4,7 @@ import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 
 /// Where a terminal selection came from. A plain shell can say nothing, and
-/// **that is an answer rather than a gap**: nothing falls back to the
-/// Explorer's selection or a panel's filter, because provenance is a claim
-/// about where the text *was*.
+/// **that is an answer**: nothing falls back to the Explorer's selection.
 class TerminalSelectionSource {
   const TerminalSelectionSource({
     this.sessionId,
@@ -41,10 +39,8 @@ final terminalSelectionSourceProvider = Provider.autoDispose
       );
     });
 
-/// A selection as the single line a todo is: every run of whitespace becomes
-/// one space, because a selection dragged down a terminal carries each row's
-/// padding out to the right edge. Nothing is truncated or summarised — the
-/// composer shows exactly what will be saved.
+/// A selection as the single line a todo is: a drag down a terminal carries
+/// each row's padding, so runs of whitespace collapse. Nothing is truncated.
 String todoLineFrom(String selection) =>
     selection.replaceAll(RegExp(r'\s+'), ' ').trim();
 

@@ -137,10 +137,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// Monotonically increasing revision number incremented on every publish.
   int _titleRevision = 0;
 
-  /// Whether the user closed a tab, pane or session since the restore — the one
-  /// thing the store cannot reconstruct, and so the only licence to write an
-  /// empty layout over the user's tabs. A pane exiting on its own does not set
-  /// it: a dead pane still has a row worth restoring.
+  /// Whether the user closed a tab, pane or session since the restore — the only
+  /// licence to write an empty layout. A pane exiting on its own does not set it.
   bool _userClosedSinceRestore = false;
 
   late final ScrollbackAutosave _autosave =
@@ -294,10 +292,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       for (final paneId in tab.layout.panes) paneId: tab.id,
   };
 
-  /// Tells every pane how visible it is: hot for a pane the active tab is
-  /// showing, warm for any other open tab's, cold for a detached session. Lives
-  /// here because a pane cannot see which tab is in front, and runs from
-  /// [_publish] so no second path can leave a pane at the wrong tier.
+  /// Tells every pane how visible it is — hot, warm, cold. Here because a pane
+  /// cannot see which tab is in front, and from [_publish] so no path skips it.
   void _applyIngestTiers() {
     final owner = _paneOwner;
     final onScreen = _activeTab?.layout.visiblePanes.toSet() ?? const <String>{};
@@ -366,10 +362,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// that are already open.
   bool get _restoreLivePanes => ref.read(restoreLivePanesProvider);
 
-  /// Gives the active tab's focused pane the keyboard. Deferred a frame because
-  /// [IndexedStack] wraps every unselected child in an `ExcludeFocus`, so until
-  /// the rebuild that selects it `requestFocus()` is silently dropped. The pane
-  /// is re-resolved in the callback, so a burst of switches lands on the last.
+  /// Gives the active tab's focused pane the keyboard, a frame late:
+  /// [IndexedStack] excludes focus from unselected children until the rebuild.
   void _focusActivePane() {
     _afterFrame(() {
       final tab = _activeTab;

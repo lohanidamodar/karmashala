@@ -12,10 +12,8 @@ final restoreLivePanesProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider).restoreLivePanes,
 );
 
-/// The production factory: each pane is backed by a real ConPTY, carrying the
-/// user's environment variables. The overlay is `ref.read` **inside** the
-/// closure, which is what makes a changed variable apply to the next pane and
-/// not to the ones already running.
+/// The production factory: a real ConPTY per pane, carrying the user's
+/// variables. The overlay is read *inside* the closure, so a change is next-pane.
 final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
   (ref) =>
       ({

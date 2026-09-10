@@ -4,10 +4,8 @@
 
 part of 'terminal_panel.dart';
 
-/// One workspace group's own toolbar — find, split, new tab, and the commands
-/// button that only appears when it has something to say. Beside that group's
-/// tabs, because every verb here acts on *that* group's focused pane; anything
-/// about the whole window is in [ShellTitleBar] instead.
+/// One workspace group's own toolbar. Beside that group's tabs, because every
+/// verb here acts on *that* group's focused pane.
 class TerminalToolbar extends ConsumerWidget {
   const TerminalToolbar({this.compact = false, super.key});
 

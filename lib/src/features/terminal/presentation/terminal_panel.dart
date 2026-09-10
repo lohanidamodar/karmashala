@@ -152,10 +152,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                           // element to whichever tab shifts into its slot.
                           key: ValueKey(tab.id),
                           layout: tab.layout,
-                          // Already a share of the split it belongs to — see
-                          // [PaneResizeCallback]. Pixels divided by the
-                          // *panel's* longest side moved a divider 36 px for
-                          // every 100 the pointer did, in a 1440x560 window.
+                          // Already a share of the split it belongs to. Pixels over the *panel's*
+                          // longest side moved a divider 36 px per 100 in a 1440x560 window.
                           onResize: (splitId, index, share) =>
                               _sessions.resizePane(tab.id, splitId, index, share),
                           regionBuilder: (group) => _buildRegion(

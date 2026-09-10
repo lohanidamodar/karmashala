@@ -42,10 +42,8 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     required bool showing,
   }) {
     final theme = Theme.of(context);
-    // Built **only while its tab is on screen**: [MountedTabs] keeping a few
-    // tabs mounted is right for a terminal and wrong for a settings page, which
-    // would hold a subscription to everything its section reads. The page it
-    // was on lives in `settingsTabSectionProvider`, so this is not a reset.
+    // Built **only while its tab is on screen**: a settings page kept mounted
+    // would hold a subscription to everything its section reads.
     if (isSettingsPane(paneId)) {
       return showing ? const SettingsTabView() : const SizedBox.shrink();
     }
@@ -116,10 +114,8 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
                 );
               },
             ),
-            // Its own `Consumer` over one bool, which moves when a recording
-            // starts or stops and never while somebody types. No elapsed clock
-            // and no byte count: one needs a ticker, the other rebuilds per
-            // chunk of output.
+            // Its own `Consumer` over one bool. No elapsed clock and no byte count: one
+            // needs a ticker, the other rebuilds per chunk of output.
             Consumer(
               builder: (context, ref, _) {
                 final recording = ref.watch(

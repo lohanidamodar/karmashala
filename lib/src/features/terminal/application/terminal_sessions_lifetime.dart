@@ -128,9 +128,7 @@ extension TerminalSessionLifetime on TerminalSessionsController {
   }
 
   /// Runs [launch] in the pane [paneId] already has, keeping its buffer; null
-  /// when there is no such pane or one is still running in it. The command is
-  /// the caller's, not the pane's — re-running the recorded launch would start
-  /// a new conversation instead of continuing the stored one.
+  /// if none or one is running. The command is the caller's, not the pane's.
   String? startAgentInPane(String paneId, AgentPaneLaunch launch) {
     final existing = _instances[paneId];
     if (existing == null || existing.liveness.value.isLive) return null;

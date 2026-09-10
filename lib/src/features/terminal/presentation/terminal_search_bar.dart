@@ -8,10 +8,8 @@ import '../application/terminal_search_controller.dart';
 import '../domain/pane_search.dart';
 import '../domain/terminal_search.dart';
 
-/// Find bar: query field, case / regex / all-panes toggles, match count and
-/// next/previous. Enter, Shift+Enter and Escape are bound here rather than in
-/// the terminal's key handling, because this field has the focus while it is
-/// open. Nothing here names a size, so the bar follows the text-size setting.
+/// Find bar. Enter, Shift+Enter and Escape are bound here rather than in the
+/// terminal's key handling, because this field has the focus while it is open.
 class TerminalSearchBar extends ConsumerStatefulWidget {
   const TerminalSearchBar({super.key});
 

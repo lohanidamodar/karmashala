@@ -124,10 +124,8 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     return !(group.panes.length == 1 && group.panes.first == tabId);
   }
 
-  /// Divides group [groupId] along [axis] and puts [tabId] in the new group —
-  /// what dropping a tab on the edge of a pane does. A tab owns a session, a
-  /// view and a status strip as one thing and only a group can host that, so a
-  /// tab never lands in a bare region; a *pane* still can.
+  /// Divides group [groupId] along [axis] and puts [tabId] in the new group. A
+  /// tab needs a group to host it, so it never lands in a bare region; a pane can.
   bool moveTabBesideGroup(
     String tabId,
     String groupId,

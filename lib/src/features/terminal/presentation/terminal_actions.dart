@@ -149,10 +149,8 @@ class TerminalActions {
     );
   }
 
-  /// What the button on a dormant pane's status bar does. One button, two
-  /// verbs, routed by [shouldResumeRatherThanRestart] — the same rule the bar
-  /// reads for its word, so the two cannot drift apart. A resume that cannot
-  /// happen says so, because a button that seems to do nothing reads as broken.
+  /// What the button on a dormant pane's status bar does — one button, two
+  /// verbs, routed by the same rule the bar reads for its word.
   Future<void> startOrResumePane(BuildContext context, String paneId) async {
     final instance = _sessions.instanceFor(paneId);
     if (instance == null) return;

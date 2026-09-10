@@ -83,10 +83,8 @@ final terminalPaneLivenessProvider = Provider.family<PaneLiveness, String>(
   ),
 );
 
-/// The object currently behind pane [paneId] — the patch for the hole in the
-/// narrow watches above: `startPane` swaps a pane's instance without moving any
-/// tab, so the view went on rendering a *disposed* one whose new `FocusNode`
-/// was never attached, and `requestFocus()` on that is a silent no-op.
+/// The object currently behind pane [paneId]: `startPane` swaps an instance
+/// without moving a tab, so the view kept rendering a disposed one.
 final terminalPaneInstanceProvider = Provider.autoDispose
     .family<TerminalInstance?, String>((ref, paneId) {
       ref.watch(terminalSessionsControllerProvider);

@@ -10,10 +10,8 @@ import '../../git/application/remote_links.dart';
 /// What is at a resolved path.
 enum TerminalPathKind { file, directory }
 
-/// Everything a Ctrl+click in a terminal pane needs from outside the widget.
-/// One injected seam, so a test records what a click *would* have done instead
-/// of starting a browser or an editor, and [kindOf] — the only filesystem call
-/// on this path — can be answered without a real directory tree.
+/// Everything a Ctrl+click in a pane needs from outside the widget. One seam,
+/// so a test records what a click would do and [kindOf] needs no real tree.
 abstract interface class TerminalLinkActions {
   /// Opens a URL outside the app.
   Future<void> openUrl(String url);
@@ -22,10 +20,8 @@ abstract interface class TerminalLinkActions {
   /// after detection decided the text is path-shaped, never while scanning.
   Future<TerminalPathKind?> kindOf(String hostPath);
 
-  /// Opens [hostPath], returning a message to show the user or null when it
-  /// worked. [line] and [column] are the `path:12:7` the output carried;
-  /// nothing honours them yet, but they are threaded this far so that doing so
-  /// later is a change to one method.
+  /// Opens [hostPath], returning a message to show or null when it worked.
+  /// [line] and [column] are threaded but not honoured yet.
   Future<String?> open(
     String hostPath,
     TerminalPathKind kind, {

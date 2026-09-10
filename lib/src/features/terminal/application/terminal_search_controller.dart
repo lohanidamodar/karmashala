@@ -605,9 +605,7 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
   }
 
   /// Runs on every coalesced write to the searched pane, so it is one bool
-  /// comparison in the common case. A highlight resolves its row against its
-  /// own buffer, so anchors from the scrollback would paint on unrelated rows
-  /// of a program's UI the moment that program takes the screen.
+  /// compare: an anchor from the scrollback would paint on a program's own rows.
   void _onPaneWrote() {
     final terminal = _watched;
     if (terminal == null || terminal.isUsingAltBuffer == _watchedAlternate) {

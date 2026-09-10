@@ -10,10 +10,8 @@ Future<void> pasteIntoTerminal(
   Terminal terminal, {
   TerminalController? controller,
 }) async {
-  // On Windows `OpenClipboard` fails while another app holds it — a clipboard
-  // manager, a browser mid-copy, RDP — and Flutter raises a
-  // `PlatformException`. Unhandled, the chord then did nothing at all, not even
-  // send `^V`. Unreadable is treated as "no text", which is already answered.
+  // On Windows `OpenClipboard` fails while another app holds it and Flutter
+  // raises; unhandled, the chord did nothing at all, not even send `^V`.
   String? text;
   try {
     text = (await Clipboard.getData(Clipboard.kTextPlain))?.text;

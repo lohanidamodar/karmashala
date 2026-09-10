@@ -172,9 +172,7 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
   }
 
   /// The pane went away rather than the user pressing stop. Deferred by a
-  /// microtask because it is called from a pane's `dispose()`, which on quit
-  /// runs inside the container's teardown, where Riverpod forbids touching any
-  /// provider's state — hence the `ref.mounted` check afterwards.
+  /// microtask: it is called from `dispose()`, where provider state is off limits.
   void _paneEnded(
     String paneId,
     CastRecorder recorder,

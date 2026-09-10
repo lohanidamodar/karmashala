@@ -38,9 +38,7 @@ class VisibleCommand {
 typedef VisibleCommandOpener = String? Function(VisibleCommand command);
 
 /// The one route from "the app wants to run something" to a pane: a second
-/// spelling would be a second chance to drop the WSL distribution or the SSH
-/// host from the launch. `openAgentTab` is the only route that starts a pane on
-/// a chosen command, and it buys the WSL, SSH and Windows wrapping for free.
+/// spelling is a second chance to drop the WSL distribution or the SSH host.
 final visibleCommandOpenerProvider = Provider<VisibleCommandOpener>((ref) {
   return (command) {
     final environment = command.environment;

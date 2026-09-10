@@ -28,10 +28,8 @@ extension TerminalPaneRegions on TerminalSessionsController {
     return slotId;
   }
 
-  /// Whether [paneId] is a region of a split with nothing in it yet.
-  ///
-  /// **The invariant, stated once:** a pane id a layout holds and [_instances]
-  /// does not is an empty region — so no parallel set of slot ids exists.
+  /// Whether [paneId] is a region of a split with nothing in it yet. A pane id a
+  /// layout holds and [_instances] does not *is* an empty region.
   bool isEmptySlot(String paneId) =>
       _isEmptyRegion(paneId) && _tabContaining(paneId) != null;
 
@@ -295,10 +293,8 @@ extension TerminalPaneRegions on TerminalSessionsController {
     _tabsMutated();
   }
 
-  /// Which pane holds the keyboard in [tab] once its layout became [next]. When
-  /// the focused pane is gone the keyboard stays in its *region* if that
-  /// survives — closing one tab of a stack must not throw focus across the
-  /// window — and otherwise falls to the first pane on screen.
+  /// Which pane holds the keyboard in [tab] once its layout became [next]. The
+  /// keyboard stays in its region if that survives, else the first pane on screen.
   String _refocused(TerminalTab tab, PaneLayout next) {
     final focused = tab.focusedPaneId;
     if (next.contains(focused)) return focused;

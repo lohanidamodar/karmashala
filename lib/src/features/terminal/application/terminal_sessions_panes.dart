@@ -140,10 +140,8 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
       }
       if (instance.liveness.value == PaneLiveness.exited &&
           _shouldCollapse(paneId, instance)) {
-        // Not inline: closing the pane disposes the notifier this runs inside.
-        // Re-asked a turn later because two panes exiting in one task queue two
-        // collapses, and the first close can take the tab — and the second
-        // pane — with it.
+        // Not inline: closing the pane disposes the notifier this runs inside, and
+        // two panes exiting in one task queue two collapses.
         Future.microtask(() {
           if (!_shouldCollapse(paneId, instance)) {
             _publish();
@@ -179,10 +177,8 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     }
   }
 
-  /// Says out loud that this pane's process stopped **by itself**, publishing a
-  /// fact rather than a conclusion. Only a pane's own liveness change reaches
-  /// it: closing, ending and quitting all dispose the instance with [_unlisten]
-  /// first, so the `exited` a disposal writes is announced to nobody.
+  /// Says out loud that this pane's process stopped **by itself**. Only a pane's
+  /// own liveness change reaches it — a disposal's `exited` is announced to nobody.
   void _announceExit(String paneId, TerminalInstance instance) {
     ref
         .read(paneExitProvider.notifier)

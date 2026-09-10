@@ -15,9 +15,7 @@ import '../domain/terminal_drag.dart';
 import 'session_status.dart';
 
 /// The header one region of a split draws for the panes stacked in it.
-/// **Deliberately not the tab strip**: it was, and two identical rows stacked
-/// read as one row drawn twice, so it differs by shape and never by colour.
-/// Skipped where the workbench strip is already the pane's header.
+/// **Deliberately not the tab strip**: it differs by shape and never by colour.
 class PaneGroupStrip extends ConsumerWidget {
   const PaneGroupStrip({
     required this.group,
@@ -305,10 +303,8 @@ class PaneDragFeedback extends StatelessWidget {
   }
 }
 
-/// Where the pane [paneId] could go, as [TabPicker] lists it: every other
-/// region of its tab, and a tab of its own — the keyboard's way to do what
-/// dragging a chip out of a header does. "A new tab" is in the *same* list
-/// because it answers the same question, where should this pane live.
+/// Where the pane [paneId] could go: every other region of its tab, and a tab
+/// of its own — the keyboard's way to do what dragging a chip out does.
 List<TabEntry> regionsMovableTo(WidgetRef ref, String paneId) {
   // Watched, not read: a move changes what is left to move to.
   ref.watch(terminalSessionsControllerProvider);
