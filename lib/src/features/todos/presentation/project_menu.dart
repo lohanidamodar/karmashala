@@ -8,14 +8,8 @@ import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../domain/project_scope.dart';
 
-/// The name of one project, **read rather than watched**.
-///
-/// For the rows of a list. A card that watched the project list would be
-/// repainted by every project rescan — the exact cost the notes list was just
-/// freed of — and a project's name is not something a row needs to follow
-/// live. The header's [projectScopeLabel] does watch, because there is one of
-/// it. Null when the id no longer resolves, so a row says nothing rather than
-/// naming a project that has been deleted out from under it.
+/// The name of one project, **read rather than watched** — a row must not be
+/// repainted by every project rescan. Null when the id no longer resolves.
 String? projectNameById(WidgetRef ref, String id) =>
     ref.read(projectDaoProvider).getById(id)?.name;
 
@@ -33,15 +27,8 @@ String projectScopeLabel(ProjectScope scope, WidgetRef ref) {
   return 'Deleted project';
 }
 
-/// The header control that picks which project's writing a panel shows.
-///
-/// One control, two surfaces: Todos and Notes ask the same question of two
-/// tables, and a second menu invented per feature is exactly the drift the
-/// design system was consolidated to stop.
-///
-/// **"No project" is a row in the menu, not the remainder.** An unfiled todo
-/// has to be as findable as a filed one, and a filter that can only name
-/// projects makes filing compulsory by accident.
+/// The header control that picks which project's writing a panel shows. One
+/// control for Todos and Notes, and "No project" is a row, not the remainder.
 class ProjectScopeButton extends ConsumerWidget {
   const ProjectScopeButton({
     required this.scope,
@@ -96,10 +83,8 @@ class ProjectScopeButton extends ConsumerWidget {
   }
 }
 
-/// The rows of a scope menu: everything, nothing, then the projects.
-///
-/// Pinned projects come first because [sortedProjectsProvider] puts them
-/// there, which is what makes a thirty-project menu usable at all.
+/// The rows of a scope menu: everything, nothing, then the projects. Pinned
+/// ones come first, which is what makes a thirty-project menu usable.
 List<PopupMenuEntry<ProjectScope>> projectScopeMenuItems(
   WidgetRef ref, {
   required ProjectScope selected,
@@ -126,13 +111,8 @@ List<PopupMenuEntry<ProjectScope>> projectScopeMenuItems(
     ),
 ];
 
-/// The rows of a "file this under…" menu: nothing, then the projects.
-///
-/// Deliberately not the scope menu — "all projects" is somewhere to look, not
-/// somewhere to put a todo, and offering it here would offer to file one thing
-/// in thirty places. The value is still a [ProjectScope] because a menu row
-/// whose value is `null` is a row `PopupMenuButton` reports as *cancelled*, and
-/// "no project" has to be a choice the caller hears about.
+/// The rows of a "file this under…" menu. Not the scope menu — "all projects"
+/// is somewhere to look, not somewhere to put a todo. The value is never null.
 List<PopupMenuEntry<ProjectScope>> projectPickerMenuItems(
   WidgetRef ref, {
   required String? selected,
@@ -153,12 +133,8 @@ List<PopupMenuEntry<ProjectScope>> projectPickerMenuItems(
     ),
 ];
 
-/// The `Project · <name> ⌄` line a composer dialog carries.
-///
-/// One widget for the two dialogs that write the user's own text — a note and
-/// a todo — for [projectPickerMenuItems]'s reason: they ask the same question
-/// of two tables, and a second control invented per feature is the drift the
-/// design system was consolidated to stop.
+/// The `Project · <name> ⌄` line a composer dialog carries. One widget for the
+/// note and the todo dialogs, which ask the same question of two tables.
 class ProjectField extends ConsumerWidget {
   const ProjectField({
     required this.projectId,

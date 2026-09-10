@@ -21,59 +21,12 @@ import '../../../core/widgets/linkable_text.dart';
 /// is how the panel has always looked when there is nothing in it.
 const _minLines = 1;
 
-/// The most the composer grows to before it scrolls inside itself instead.
-///
-/// Four rather than unbounded because this field is *pinned* above the list:
-/// every line it takes is a line of todos it hides, and a paste of something
-/// enormous must not swallow the panel. The row editor has no such cap — see
-/// there for why.
+/// The most the composer grows to before it scrolls inside itself. This field
+/// is *pinned* above the list, so every line it takes hides a todo.
 const _composerMaxLines = 4;
 
 /// The Todos surface: a line of text, done or not, in the order you put it in.
-///
-/// ## What Enter does, and why there is no line break
-///
-/// **A todo is a single paragraph.** Enter files a new one and commits an edit;
-/// nothing here inserts a newline, and both fields declare
-/// `TextInputType.text` so that no platform inserts one behind our back.
-///
-/// The alternative was `MessageComposer`'s contract — Enter sends, Shift+Enter
-/// breaks the line — and it is the wrong one here. That field writes a
-/// *prompt*, which really is multi-paragraph, and it buys the break with a
-/// `FocusNode.onKeyEvent` that swallows Return before the engine sees it. A
-/// todo wants none of that: the row draws it as one run of text, the list gives
-/// it one position, `todo_add` takes one `body`, and a second paragraph would
-/// have nowhere to be read. Buying a break we do not want would also cost the
-/// thing we do: on the companion's soft keyboard the return key would become a
-/// newline and there would be no way left to save at all.
-///
-/// What the fields *are* is wrapping. A single-line `TextField` scrolls
-/// `AxisDirection.right`, so a 200-character todo — an ordinary one here — had
-/// to be dragged sideways to be re-read while typing it. Both fields now grow
-/// downwards instead.
-///
-/// ## How this differs from the attention inbox
-///
-/// The inbox and this panel both list things that want doing, and only one of
-/// them is a list *you* wrote. The inbox is **observed**: the app notices an
-/// agent waiting on approval, a turn that failed, a build that went red, and it
-/// files and un-files those rows itself as the conditions change. Nothing a
-/// person types can put a row there, and a row leaves when the app decides it
-/// has. A todo is the opposite in every one of those respects — it is written,
-/// by a person or by an agent through `todo_add`, it never appears on its own,
-/// and nothing but a tick or a delete takes it away. That is also why this
-/// rail glyph carries **no badge**: a count here would make a hand-written list
-/// look like an alert queue, which is the inbox's job and not this panel's.
-///
-/// ## Why a surface of its own rather than a section of Notes
-///
-/// They are the same *kind* of thing — the user's own writing, filed to a
-/// project or to nothing — and sharing one panel was the obvious move. What
-/// rules it out is `Settings → Notes`: that switch really does hide the Notes
-/// surface, and a todo list that vanishes because somebody turned off a
-/// different feature is a broken todo list. The two also want opposite verbs (a
-/// note is *sent back* to an agent, a todo is *ticked off*) and opposite
-/// orders, so a shared panel would have shared nothing but the frame.
+/// A todo is one paragraph, so Enter files it and no field inserts a newline.
 class TodosView extends ConsumerStatefulWidget {
   const TodosView({super.key});
 
@@ -88,10 +41,8 @@ class _TodosViewState extends ConsumerState<TodosView> {
   @override
   void initState() {
     super.initState();
-    // The panel has just turned to Todos, so the list is about to be read.
-    // After the frame, because this may replace the state the build below is
-    // already using — see [TodosController.refresh] for why anything has to
-    // ask at all.
+    // The panel has just turned to Todos, so the list is about to be read. After
+    // the frame, because this may replace the state the build is already using.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(todosProvider.notifier).refresh();
     });
@@ -106,24 +57,15 @@ class _TodosViewState extends ConsumerState<TodosView> {
 
   @override
   Widget build(BuildContext context) {
-    // "New todo" in the palette opens this surface and asks for the cursor, so
-    // somebody who could not find the panel can keep typing the todo they came
-    // to write. Only on a *change*, so merely showing the panel never takes
-    // the keyboard away from the terminal.
+    // "New todo" in the palette opens this surface and asks for the cursor. Only
+    // on a *change*, so merely showing the panel never takes the keyboard.
     ref.listen(todoComposerFocusProvider, (_, _) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _composerFocus.requestFocus();
       });
     });
-    // The other moment the list is about to be read: the user has come back to
-    // the window, over a panel that never went away. `initState` above cannot
-    // see that, and it is the case the owner actually hit.
-    //
-    // The listener lives here rather than in the controller so that it exists
-    // only while this surface does: a closed panel costs nothing, and neither
-    // does a focus regain over a list that has not changed. Only a *genuine*
-    // regain counts — the window must have been seen to lose focus first, which
-    // is the guard `FileListingRefreshController` uses for the same signal.
+    // The other moment the list is about to be read. Only a *genuine* regain
+    // counts — the window must have been seen to lose focus first.
     ref.listen(windowFocusedProvider, (previous, next) {
       if (!next || previous != false) return;
       ref.read(todosProvider.notifier).refresh();
@@ -185,10 +127,8 @@ class _TodosViewState extends ConsumerState<TodosView> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         if (startsDone) const _DoneDivider(),
-                        // The project is named under the line only while the
-                        // panel is showing more than one, where it is the
-                        // answer to "why is this in my list"; under a filter
-                        // it would repeat the header on every row.
+                        // The project is named under the line only while the panel shows more than
+                        // one; under a filter it would repeat the header on every row.
                         _TodoRow(todo: todo, showProject: scope.isAll),
                       ],
                     );
@@ -256,20 +196,12 @@ class _Composer extends ConsumerWidget {
       child: TextField(
         controller: controller,
         focusNode: focusNode,
-        // Grows down instead of scrolling sideways. A single-line field
-        // scrolls `AxisDirection.right`, and a real todo is a sentence: the
-        // owner's longest runs to 200 characters, so the *normal* case was a
-        // box you had to drag horizontally to re-read what you had typed.
-        // Capped at four lines because the composer is pinned above the list
-        // and must not grow until it has eaten it; past that it scrolls.
+        // Grows down instead of scrolling sideways: a single-line field scrolls
+        // right, and the owner's longest todo runs to 200 characters.
         minLines: _minLines,
         maxLines: _composerMaxLines,
-        // A todo is one paragraph, so Enter files it rather than breaking the
-        // line — see [TodosView]. `TextInputType.text` is the
-        // half of that contract the *platform* reads: left to itself a
-        // multi-line field asks for `TextInputType.multiline`, and both the
-        // Windows key handler and a soft keyboard would then turn Return into
-        // a newline and never deliver the action.
+        // `TextInputType.text` is the half of the one-paragraph contract the
+        // *platform* reads: multiline turns Return into a newline and never acts.
         keyboardType: TextInputType.text,
         textInputAction: TextInputAction.done,
         onSubmitted: onSubmit,
@@ -307,12 +239,7 @@ class _DoneDivider extends StatelessWidget {
 }
 
 /// One todo: a tick, the line, and the menu that moves, files or removes it.
-///
-/// The menu is reached the four ways [RowContextMenu] defines — right-click,
-/// `Shift+F10`, the Menu key, a screen reader's action — and the `⋮` that
-/// duplicates them is drawn only while a pointer or the keyboard is on the
-/// row. The tick is the row's focus stop, which is what makes `Shift+F10`
-/// reachable here with no mouse at all.
+/// The tick is the row's focus stop, which is what makes `Shift+F10` work.
 class _TodoRow extends ConsumerStatefulWidget {
   const _TodoRow({required this.todo, required this.showProject});
 
@@ -350,25 +277,12 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
     ref.read(todosProvider.notifier).edit(widget.todo.id, text);
   }
 
-  /// The session this row would send to, captured when the menu was built.
-  ///
-  /// Captured rather than re-read on activation, for the reason
-  /// `resolveSnippetTarget` gives: the answer the row was *labelled* with is
-  /// the one the user chose, and a fresh read could send the line to a session
-  /// that came to the front while the menu was open.
+  /// The session this row would send to, captured when the menu was built: the
+  /// answer the row was *labelled* with is the one the user chose.
   ({String id, String title})? _sendTo;
 
-  /// Where "send this to the session" goes.
-  ///
-  /// [focusedSessionIdProvider] and nothing else — the Explorer's selection,
-  /// and failing that the session running in the focused group's active tab.
-  /// That is already the app's one answer to "which session is this window
-  /// about", and a side panel that invented a second would describe a
-  /// different session from the status bar two inches away.
-  ///
-  /// **Read, never watched.** A menu is built as it opens, so reading here
-  /// costs one lookup per menu; watching would put every row of the list on
-  /// the focused-session signal and repaint the panel on every tab click.
+  /// Where "send this to the session" goes: [focusedSessionIdProvider] and
+  /// nothing else. **Read, never watched** — a menu is built as it opens.
   ({String id, String title})? _resolveTarget() {
     final id = ref.read(focusedSessionIdProvider);
     if (id == null) return null;
@@ -378,10 +292,8 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
     );
   }
 
-  /// The row's actions, in the one vocabulary every path to them shares.
-  ///
-  /// Built fresh per call: the same entries cannot be mounted by the `⋮` and
-  /// by a right-click at once, and a menu is only ever built as it opens.
+  /// The row's actions, built fresh per call: the same entries cannot be mounted
+  /// by the `⋮` and by a right-click at once.
   List<PopupMenuEntry<String>> _menuItems() {
     final target = _sendTo = _resolveTarget();
     return [
@@ -436,13 +348,8 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
     }
   }
 
-  /// Offers the line to the session, in whichever face it is showing.
-  ///
-  /// **Offered, not sent** — the contract [ComposerDrafts] already gives a
-  /// note, and the reason is the same one twice over: a todo is a deferred
-  /// instruction the user wrote for themselves, and dispatching one would be
-  /// Karmashala deciding it was still worded right. Nothing here ticks it off
-  /// either; a line handed to an agent is not a line that is done.
+  /// Offers the line to the session, in whichever face it is showing. **Offered,
+  /// not sent**, and nothing here ticks it off: handed to an agent is not done.
   void _send() {
     final target = _sendTo;
     if (target == null) return;
@@ -461,12 +368,8 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
     );
   }
 
-  /// The "file under…" picker, opened where the row is rather than as a
-  /// dialog: moving a todo between projects is a menu choice, not a form.
-  ///
-  /// Anchored on the row rather than on the button that used to own this menu,
-  /// because the button is no longer the only way here — a right-click and
-  /// `Shift+F10` reach the same choice and neither has a button to sit under.
+  /// The "file under…" picker, anchored on the row rather than on a button: a
+  /// right-click and `Shift+F10` reach it too and have no button to sit under.
   Future<void> _file() async {
     final box = context.findRenderObject() as RenderBox?;
     final overlay =
@@ -527,11 +430,8 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
                       TextField(
                         controller: editor,
                         autofocus: true,
-                        // Unbounded, unlike the composer: the row this replaces
-                        // already draws the whole body wrapped, so a field that
-                        // grows to exactly the same height means tapping to edit
-                        // never makes the line you were reading jump or shrink.
-                        // A tall row is only a tall row — the list scrolls.
+                        // Unbounded, unlike the composer: the row it replaces already draws the body
+                        // wrapped, so tapping to edit never makes the line you were reading jump.
                         minLines: _minLines,
                         maxLines: null,
                         // Same contract as the composer, for the same reason.
@@ -550,11 +450,8 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
                         onTapOutside: (_) => _commitEditing(),
                       )
                     else
-                      // A tap edits. There is nowhere else for a tap on a todo
-                      // to go, and a one-line thing whose typo you cannot fix is
-                      // a thing you delete and retype.
-                      // A URL opens; a tap anywhere else still edits, which is
-                      // the only thing a tap on a todo has ever meant.
+                      // A tap edits — there is nowhere else for a tap on a todo to go. A URL opens;
+                      // a tap anywhere else still edits.
                       LinkableText(
                         todo.body,
                         onTapText: _startEditing,
@@ -578,12 +475,8 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
                 ),
               ),
             ),
-            // Kept, and revealed rather than removed. Right-click is
-            // invisible until it is tried; a button that appears when the
-            // pointer is on the row costs nothing at rest and is how the menu
-            // is discovered in the first place. On a touch surface — the
-            // companion runs this pane — it is always drawn, because there is
-            // no right-click and no hover there to reveal it with.
+            // Kept, and revealed rather than removed: right-click is invisible until it
+            // is tried. Always drawn on a touch surface, which has no hover.
             RowMenuButton(
               tooltip: menuLabel,
               itemBuilder: _menuItems,
@@ -596,11 +489,8 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
   }
 }
 
-/// What an empty Todos panel says.
-///
-/// Two different emptinesses, because they need two different answers: an empty
-/// *filter* is not an empty list, and saying "no todos yet" while eleven of
-/// them sit under another project is a lie the panel can easily avoid.
+/// What an empty Todos panel says. Two emptinesses, because "no todos yet"
+/// while eleven sit under another project is a lie easily avoided.
 class _EmptyTodos extends StatelessWidget {
   const _EmptyTodos({required this.scope, required this.hasAny});
 

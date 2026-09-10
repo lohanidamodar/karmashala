@@ -1,19 +1,5 @@
-/// One line of text, done or not, in an order the user chose.
-///
-/// ## What it deliberately is not
-///
-/// There is no due date, no priority, no label and no assignee. The ask was for
-/// *simple* todos that an agent and a person can both reach, and every field
-/// beyond these is a decision to make before the list is usable. A todo that
-/// takes five seconds to write is a todo that gets written.
-///
-/// ## The three states of [projectId]
-///
-/// A todo is filed under a project or under nothing, and **nothing is a place,
-/// not a hole**. An unfiled todo is an ordinary todo: it is what you get by
-/// typing into the panel without choosing anything, it is listed by default,
-/// and it is reachable on its own ("No project") rather than only as the
-/// remainder of a filter. `Note.projectId` says the same thing about notes.
+/// One line of text, done or not, in an order the user chose. No due date,
+/// priority, label or assignee — and "filed under nothing" is a place, not a hole.
 class Todo {
   const Todo({
     required this.id,

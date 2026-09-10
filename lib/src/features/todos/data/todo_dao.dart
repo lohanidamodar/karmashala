@@ -34,22 +34,15 @@ class TodoDao {
     [doneAt == null ? null : isoFromDate(doneAt), id],
   );
 
-  /// Files [id] under [projectId], or unfiles it when that is null.
-  ///
-  /// Its own statement rather than a read-modify-write, for `ProjectDao`'s
-  /// reason: moving a todo between projects must not be able to rewrite its
-  /// text on the way.
+  /// Files [id] under [projectId], or unfiles it when null. Its own statement,
+  /// so moving a todo cannot rewrite its text on the way.
   void setProject(String id, String? projectId) => _db.execute(
     'UPDATE todos SET project_id = ? WHERE id = ?;',
     [projectId, id],
   );
 
-  /// Writes [ids] as positions `0..n-1`, in the order given.
-  ///
-  /// The whole ordered list rather than the two rows a move touches: it is one
-  /// transaction over tens of rows, and it makes the stored order equal to the
-  /// order on screen by construction instead of by arithmetic that has to stay
-  /// right after every future edit.
+  /// Writes [ids] as positions `0..n-1`. The whole list rather than the two rows
+  /// a move touches, so the stored order equals the screen's by construction.
   void reposition(List<String> ids) {
     _db.transaction(() {
       for (var i = 0; i < ids.length; i++) {
@@ -67,11 +60,8 @@ class TodoDao {
     return done.length;
   }
 
-  /// Open todos first, in the user's order; then the done ones, most recently
-  /// finished at the top of their half.
-  ///
-  /// One ordering for every reader — the panel, the MCP tool and the tests —
-  /// so "what is at the top of my list" has a single answer.
+  /// Open todos first in the user's order, then the done ones most recently
+  /// finished first. One ordering for the panel, the MCP tool and the tests.
   List<Todo> list() => _db
       .query(
         'SELECT * FROM todos '
@@ -87,11 +77,8 @@ class TodoDao {
     return rows.isEmpty ? null : _fromRow(rows.first);
   }
 
-  /// The position a new todo goes to: after everything already in the list.
-  ///
-  /// A new todo lands at the bottom, where you would write it on paper. The
-  /// top of a todo list is the thing you decided matters most, and nothing an
-  /// agent or a passing thought adds has earned that place.
+  /// The position a new todo goes to: the bottom, where you would write it on
+  /// paper. The top is what you decided matters most.
   int nextPosition() {
     final rows = _db.query('SELECT MAX(position) AS top FROM todos;');
     final top = rows.isEmpty ? null : rows.first['top'];

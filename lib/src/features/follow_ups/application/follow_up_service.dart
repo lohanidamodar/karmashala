@@ -13,26 +13,8 @@ import '../domain/follow_up_policy.dart';
 import '../domain/session_ending.dart';
 import 'follow_up_providers.dart';
 
-/// The only thing that raises and retires follow-ups.
-///
-/// ## What it is allowed to do
-///
-/// Read the workspace, and write to its own table. That is the entire list, and
-/// the restriction is the feature rather than an oversight: an environment that
-/// runs many agents is one wrong line away from being an environment that
-/// *starts* agents on its own, and this class is where that line would go.
-///
-/// So it holds no launcher, no engine and no session-actions reference — there
-/// is deliberately no path from here to anything that can start a process —
-/// and `follow_up_service_test.dart` asserts that a sweep leaves every session
-/// row exactly as it found it. What it produces is an offer; the user takes it.
-///
-/// ## Why it is a sweep rather than a callback
-///
-/// A session's row is the durable half of the signal. A row that says `failed`
-/// still says so tomorrow, so a follow-up can be noticed after a restart rather
-/// than only in the instant the session died — which is the case that matters,
-/// because the instant a session dies is exactly when nobody is looking.
+/// The only thing that raises and retires follow-ups. It may read the workspace
+/// and write its own table — **it holds no path to anything that starts a process**.
 class FollowUpService {
   FollowUpService(this._ref);
 
@@ -40,32 +22,13 @@ class FollowUpService {
   final _log = AppLogger.named('followups');
 
   /// `'<sessionId>/<ending>'` for every ending that has **ever** produced a
-  /// follow-up, whether it is still open or long dismissed.
-  ///
-  /// Seeded once from the table and kept in memory, and both halves matter.
-  /// Kept, because the sweep runs on every session-revision bump and the
-  /// alternative is a query per ended session per bump — hundreds, on a
-  /// synchronous database, on the UI thread. Including *resolved* rows, because
-  /// the row that raised the notice still says `failed` forever: a guard that
-  /// only looked for an open follow-up would re-raise a dismissed one a second
-  /// later, which is the app overruling its user.
+  /// follow-up. Resolved rows included, or a dismissed one is re-raised at once.
   late final Set<String> _considered = _dao.raisedEndings();
 
   FollowUpDao get _dao => _ref.read(followUpDaoProvider);
 
-  /// One pass over the workspace the caller has already read.
-  ///
-  /// Takes the session list rather than fetching it so the caller's own read is
-  /// reused, and so the two things this does — raise, and retire — see exactly
-  /// the same workspace.
-  ///
-  /// Cost: one query for the open list, plus one insert per genuinely new
-  /// ending and one update per follow-up that has moved on. Whether a session
-  /// was handed on is answered from the list itself, in one pass, rather than
-  /// with a `childrenOf` query per session.
-  ///
-  /// Returns whether anything actually changed, so a caller can leave the list
-  /// alone when a pass said the same thing again — which is nearly every pass.
+  /// One pass over the workspace the caller has already read, so raise and retire
+  /// see the same list. Returns whether anything actually changed.
   bool sweep(List<Session> sessions) {
     final carriedForward = _carriedForward(sessions);
     var changed = false;
@@ -85,14 +48,8 @@ class FollowUpService {
     return _retireWhatMovedOn(sessions, carriedForward) || changed;
   }
 
-  /// A session ended. Raise a follow-up if the rule says one is owed.
-  ///
-  /// Returns null in the ordinary case — most endings owe nothing, and saying
-  /// so cheaply is what lets this be called from a poll.
-  ///
-  /// [carriedForward] is passed in rather than looked up because [sweep]
-  /// already knows it for the whole workspace; a caller that does not know
-  /// leaves it false and the next sweep retires the follow-up instead.
+  /// A session ended. Raise a follow-up if the rule says one is owed; null in
+  /// the ordinary case. [carriedForward] is passed in because [sweep] knows it.
   FollowUp? notice({
     required String sessionId,
     required SessionEnding ending,
@@ -105,10 +62,8 @@ class FollowUpService {
       // that no longer resolves. Never an exception, and never a launch.
       if (row == null) return null;
 
-      // A handoff *is* the follow-up, already taken. Applied here rather than
-      // inside the rule because it outranks whatever the row's own status says:
-      // a session that crashed and was then handed to another agent has had its
-      // work carried forward, and the crash is that session's problem now.
+      // A handoff *is* the follow-up, already taken, and it outranks the row's own
+      // status: a crash that was then handed on is the other session's problem.
       final actual = carriedForward ? SessionEnding.handedOff : ending;
 
       final mark = '$sessionId/${actual.name}';
@@ -155,23 +110,16 @@ class FollowUpService {
     FollowUpResolution.dismissed,
   );
 
-  /// The user dismissed the follow-up stored at [rowId].
-  ///
-  /// The inbox knows an id, not a record. Resolving straight from the id keeps
-  /// the read off the dismissal path, which runs while the list is being
-  /// rebuilt under the user's cursor.
+  /// The user dismissed the follow-up stored at [rowId]. Resolving straight from
+  /// the id keeps the read off the path that runs under the user's cursor.
   void dismissRow(int rowId) => _dao.resolve(
     rowId,
     resolution: FollowUpResolution.dismissed,
     at: _ref.read(clockProvider).nowUtc(),
   );
 
-  /// Sessions whose work has moved to another session.
-  ///
-  /// Derived from the list in one pass — no query per session. Only
-  /// [SessionLink.handoff] and [SessionLink.fork] count:
-  /// [SessionLink.spawn] is an agent *delegating* a piece of work, which leaves
-  /// the parent's own work exactly where it was.
+  /// Sessions whose work has moved to another session, in one pass. Only handoff
+  /// and fork count: a spawn leaves the parent's own work where it was.
   Set<String> _carriedForward(List<Session> sessions) => {
     for (final session in sessions)
       if (session.parentSessionId case final parent?)
@@ -180,10 +128,7 @@ class FollowUpService {
           parent,
   };
 
-  /// Closes follow-ups whose session has since been handed on or deleted.
-  ///
-  /// The second half of "never nag about something already handled": a session
-  /// can acquire a handoff minutes after its follow-up was raised, and the
+  /// Closes follow-ups whose session has since been handed on or deleted — the
   /// notice has to leave when the work does.
   bool _retireWhatMovedOn(
     List<Session> sessions,
@@ -218,17 +163,8 @@ class FollowUpService {
   List<VerificationRun> _runsFor(String sessionId) =>
       _ref.read(verificationDaoProvider).listRuns(sessionId: sessionId);
 
-  /// The source's **own words** for what was left, or null.
-  ///
-  /// Null is "not recorded" and is rendered as that. Nothing here composes a
-  /// sentence about what the app thinks happened: a paraphrase's errors are
-  /// invisible to the reader who most needs them, which is the argument
-  /// `handoff_packet.dart` makes at length and it applies unchanged here.
-  ///
-  /// The framing around a quote *is* ours — "Last recorded decision:" — because
-  /// an unlabelled sentence under "Ended in error" would read as a diagnosis of
-  /// the failure, which it is not. `DecisionRecorder` frames its quotes the
-  /// same way.
+  /// The source's **own words** for what was left, or null, which renders as
+  /// "not recorded". The framing around a quote is ours; the sentence never is.
   String? _wordsFor(String sessionId, FollowUpReason reason) =>
       switch (reason) {
         FollowUpReason.endedInFailure => _lastDecision(sessionId),
@@ -241,20 +177,14 @@ class FollowUpService {
           sessionId,
           wanted: (run) => run.isOpen,
         ),
-        // Neither is ever raised: one is a mark the v25 migration wrote for a
-        // session that had already ended, and the other is a row from a build
-        // that knew more than this one. Both are read-only, and inventing words
-        // for either would be inventing words.
+        // Neither is ever raised: one is the v25 migration's mark, the other a row
+        // from a build that knew more. Inventing words for either invents words.
         FollowUpReason.predatesTheFeature ||
         FollowUpReason.unrecognised => null,
       };
 
-  /// The last thing the session wrote down before it stopped — the residue a
-  /// crash leaves that is worth anything to the next reader.
-  ///
-  /// `forSession` returns the chain oldest first, so the last entry is the most
-  /// recent. An empty record yields null rather than a sentence: nobody wrote
-  /// anything down, and that is not evidence about the session.
+  /// The last thing the session wrote down before it stopped. An empty record
+  /// yields null: nobody wrote anything, which is not evidence about the session.
   String? _lastDecision(String sessionId) {
     final record = _ref.read(decisionRecordDaoProvider).forSession(sessionId);
     if (record.isEmpty) return null;
@@ -262,16 +192,8 @@ class FollowUpService {
     return 'Last recorded decision — ${last.kind.label}: ${last.summary}';
   }
 
-  /// The verification run's own title, and its own stated reason when it gave
-  /// one.
-  ///
-  /// [wanted] is the same test the reason was chosen by, so the words and the
-  /// heading above them always describe the *same run*. A session with both an
-  /// abandoned run and a failed verdict is headed by the verdict, and quoting
-  /// the abandoned one underneath would read as a contradiction.
-  ///
-  /// Newest first out of the DAO, so the first match is the one the reader
-  /// last saw.
+  /// The verification run's own title and stated reason. [wanted] is the same
+  /// test the reason was chosen by, so words and heading describe one run.
   String? _verificationWords(
     String sessionId, {
     required bool Function(VerificationRun run) wanted,

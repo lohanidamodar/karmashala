@@ -12,27 +12,15 @@ final todoDaoProvider = Provider<TodoDao>(
 );
 
 /// Every todo, in list order, kept in memory so the panel rebuilds on a write.
-///
-/// The list is the state rather than a revision counter over the DAO, for
-/// `NotesController`'s reason: todos are few and small, and a panel that
-/// re-reads the table on every frame of a resize is a panel that reads the
-/// table for no reason.
-///
-/// **The cost of holding it in memory is [refresh].** In-memory state is only
-/// right while this controller is the only writer, and the `todos` table has
-/// one writer it cannot see: whatever else has the database file open. See
-/// [refresh] for who asks, and when.
+/// The cost of that is [refresh]: another process can write this table too.
 class TodosController extends Notifier<List<Todo>> {
   @override
   List<Todo> build() => ref.watch(todoDaoProvider).list();
 
   TodoDao get _dao => ref.read(todoDaoProvider);
 
-  /// Writes a todo at the bottom of the list.
-  ///
-  /// [body] is kept as given beyond a trim; a todo is one line the user (or an
-  /// agent) chose, and nothing here rewrites it. [projectId] null means filed
-  /// under nothing, which is an ordinary todo and the default.
+  /// Writes a todo at the bottom of the list. [body] is kept as given beyond a
+  /// trim; [projectId] null means filed under nothing, which is ordinary.
   Todo add({required String body, String? projectId}) {
     final now = ref.read(clockProvider).nowUtc();
     final todo = Todo(
@@ -69,12 +57,8 @@ class TodosController extends Notifier<List<Todo>> {
     _reload();
   }
 
-  /// Moves [id] one place up or down among the **open** todos.
-  ///
-  /// Menu items rather than a drag: the panel is 240px at its narrowest, a
-  /// drag there is a fiddle, and "move up" is the one thing a keyboard and a
-  /// screen reader can both do. Done todos have no order to move within — they
-  /// are listed by when they were finished.
+  /// Moves [id] one place up or down among the **open** todos. Menu items rather
+  /// than a drag: at 240px a drag is a fiddle, and a keyboard can do this.
   void move(String id, {required bool up}) {
     final open = [
       for (final todo in state)
@@ -103,46 +87,19 @@ class TodosController extends Notifier<List<Todo>> {
     return removed;
   }
 
-  /// Re-reads the list rather than patching it in place.
-  ///
-  /// Every write here can change the *order* — a tick moves a row into the
-  /// done half, a move swaps two positions — so the SQL that defines that
-  /// order is the one thing allowed to decide it. Patching in memory would be
-  /// a second implementation of the `ORDER BY`, drifting.
+  /// Re-reads the list rather than patching it in place: every write here can
+  /// change the *order*, so the SQL that defines it is what decides it.
   void _reload() => state = _dao.list();
 
-  /// Re-reads the table for a change **this controller did not make**.
-  ///
-  /// Every method above ends in [_reload], so the panel is never behind its own
-  /// writes — and `todo_add`, `todo_done` and `todo_delete` all come through
-  /// those methods, so an agent's writes are not the problem either. What is
-  /// invisible is a write to `karmashala.sqlite` from outside this process.
-  /// The owner hit it exactly: two todos ticked off by writing to the file
-  /// while the app's MCP server was unreachable, and the panel went on drawing
-  /// them open — *"you said marked done but i don't see the change"* — until
-  /// the app was restarted.
-  ///
-  /// **Nothing polls for it, and nothing can.** SQLite has no cross-process
-  /// change notification a reader can subscribe to; the only way to ask is to
-  /// ask, and a surface that asks on a timer is the thing the class comment
-  /// above rules out. So [TodosView] asks at the two moments somebody is about
-  /// to *read* the list — when the panel turns to Todos, and when the window
-  /// regains focus while it is already showing them. That is the same signal
-  /// and the same reasoning as `FileListingRefreshController`, which re-lists a
-  /// directory on focus because the change that prompted it was made from a
-  /// shell outside the app, where no in-app signal was ever going to report it.
-  ///
-  /// Publishes only a difference, so coming back to a window over a list that
-  /// has not moved costs one small `SELECT` and no rebuild at all.
+  /// Re-reads the table for a change **this controller did not make** — a write
+  /// to the file from outside this process. Asked on panel open and on focus.
   void refresh() {
     final rows = _dao.list();
     if (!listEquals(rows, state)) state = rows;
   }
 
-  /// Unique within a run and sortable, like `NotesController._newId`: a
-  /// counter rides along with the clock because two adds in the same
-  /// millisecond is a fast typist, and a fixed clock in a test makes it
-  /// a certainty.
+  /// Unique within a run and sortable: a counter rides along with the clock,
+  /// because two adds in one millisecond is a fast typist or a fixed clock.
   String _newId(DateTime now) =>
       'todo-${now.microsecondsSinceEpoch}-${_sequence++}';
 
@@ -167,18 +124,8 @@ final todoScopeProvider = NotifierProvider<TodoScopeController, ProjectScope>(
   TodoScopeController.new,
 );
 
-/// A ticket for "put the cursor in the todo composer".
-///
-/// The palette's **New todo** has to be a verb, not a place: somebody who
-/// cannot find the panel types "todo", presses Enter, and must be able to keep
-/// typing the todo. So the command opens the surface and bumps this counter,
-/// and the panel focuses its field when the number changes.
-///
-/// A counter rather than a flag because two invocations in a row are two
-/// requests, and a flag that is already `true` would silently swallow the
-/// second. Nothing here focuses anything when the panel opens by itself — a
-/// panel that steals the keyboard from the terminal every time it is shown is
-/// worse than one you have to click into.
+/// A ticket for "put the cursor in the todo composer", so the palette's **New
+/// todo** is a verb. A counter, because two requests are two requests.
 class TodoComposerFocus extends Notifier<int> {
   @override
   int build() => 0;
