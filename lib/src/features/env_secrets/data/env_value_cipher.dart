@@ -1,14 +1,7 @@
 import 'dart:convert';
 
-/// Wraps and unwraps one stored value.
-///
-/// The seam exists so the vault does not care *how* a value is protected, only
-/// that it round-trips. Phase 1 ships [PlaintextEnvValueCipher]; the encrypting
-/// implementation slots in behind the same two methods.
-///
-/// [id] is written into the vault file and is what the settings page reports.
-/// A vault whose `enc` names a cipher this build does not have is not guessed
-/// at — see `EnvVault.load`.
+/// Wraps and unwraps one stored value. [id] is written into the vault file: a
+/// vault naming a cipher this build lacks is refused, never guessed at.
 abstract class EnvValueCipher {
   const EnvValueCipher();
 
@@ -22,13 +15,8 @@ abstract class EnvValueCipher {
   Future<String?> unwrap(String stored);
 }
 
-/// No encryption: the value is stored as written, and the file permissions are
-/// the whole boundary.
-///
-/// Base64 rather than raw so the JSON is byte-identical in shape to an
-/// encrypted vault — a value containing a quote, a newline or a non-BMP
-/// character takes the same path either way, so the encrypted implementation
-/// cannot be the one that discovers an escaping bug.
+/// No encryption: the file permissions are the whole boundary. Base64 so the
+/// JSON is byte-identical in shape to an encrypted vault's.
 class PlaintextEnvValueCipher extends EnvValueCipher {
   const PlaintextEnvValueCipher();
 

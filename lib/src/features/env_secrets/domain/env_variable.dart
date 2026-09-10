@@ -1,18 +1,9 @@
 /// One user-declared environment variable, and the vault that holds them.
-///
-/// Named `env_secrets` rather than `environment_secrets` on purpose: the app
-/// already has an `environments` feature meaning *execution* environments
-/// (Windows / WSL / SSH), and two directories a letter apart would be read
-/// wrong for the life of the project.
+/// Named `env_secrets` so it is never misread as the `environments` feature.
 library;
 
-/// How widely a variable applies.
-///
-/// Only [all] is offered in the UI today — the request was "loaded for all the
-/// terminals inside karmashala" and that is what ships. The other two exist in
-/// the model from day one so narrowing later is a picker and a filter clause
-/// rather than a data move; the vault is JSON, so an unknown scope in a file
-/// written by a newer build degrades to being ignored rather than throwing.
+/// How widely a variable applies. Only [all] is offered today; the others are
+/// in the model so narrowing later is a picker, not a data move.
 enum EnvVarScope {
   /// Every terminal Karmashala launches.
   all,
@@ -31,34 +22,12 @@ enum EnvVarScope {
   }
 }
 
-/// Longest value accepted, in UTF-16 code units.
-///
-/// Windows caps a single environment variable at 32,767 characters and the
-/// whole block well below what 8 KiB of variables would reach. The limit is
-/// here to keep a paste accident from producing a launch that fails with an
-/// error nobody can read, not because 8 KiB is a meaningful cryptographic
-/// boundary.
+/// Longest value accepted, in UTF-16 code units. Here to keep a paste accident
+/// from producing a launch that fails unreadably, not as a security boundary.
 const int kMaxEnvValueLength = 8192;
 
-/// Names Karmashala refuses, because setting them breaks the launch itself.
-///
-/// Three groups, and each is a launch that would otherwise fail in a way the
-/// user could not diagnose:
-///
-///  * `WSLENV` is the mechanism that carries every other variable into a WSL
-///    distribution (`pty_launch.dart` builds it from the overlay's own keys).
-///    A user value here would overwrite the list and silently deliver nothing.
-///  * `KARMASHALA_*` is the session plumbing — `KARMASHALA_SESSION_ID` reaches
-///    the MCP bridge the agent spawns, and `KARMASHALA_PORT_BASE` is what stops
-///    two worktree sessions binding the same port.
-///  * The rest are what `cmd.exe`, `powershell.exe` and `wsl.exe` need in order
-///    to start at all. `_ptyEnvironment` rebuilds `Path` and `SystemRoot`
-///    precisely because a POSIX-shaped value there stops the shells launching.
-///
-/// `PATH` is refused rather than merged deliberately. Prepending to a search
-/// path is a genuinely different feature — it wants append/prepend semantics
-/// and a separator that differs per platform — and a blunt override would
-/// replace the user's whole path with whatever they typed.
+/// Names Karmashala refuses, because setting them breaks the launch itself:
+/// `WSLENV`, the `KARMASHALA_*` plumbing, and what the shells need to start.
 const Set<String> kReservedEnvNames = {
   'WSLENV',
   'PATH',
@@ -76,10 +45,8 @@ const String kReservedEnvPrefix = 'KARMASHALA_';
 
 final RegExp _namePattern = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
 
-/// Why [name] cannot be used, or `null` when it can.
-///
-/// Returns a whole sentence, because it is rendered verbatim under the field —
-/// "invalid" tells the user nothing they did not already suspect.
+/// Why [name] cannot be used, or `null` when it can. A whole sentence, because
+/// it is rendered verbatim under the field.
 String? envNameRefusal(String name) {
   final trimmed = name.trim();
   if (trimmed.isEmpty) return 'Enter a name.';
@@ -112,13 +79,8 @@ String? envValueRefusal(String value) {
   return null;
 }
 
-/// One variable, as stored and as injected.
-///
-/// [value] is the plaintext. It is in memory for the life of the process and
-/// is written to the vault file (encrypted where the platform allows it) —
-/// see `EnvVault`, which is the only thing that reads or writes it. Nothing
-/// here has a `toString` that could put it in a log line, and that is
-/// deliberate: the default `Instance of 'EnvVariable'` is the safe one.
+/// One variable, as stored and as injected. [value] is the plaintext; nothing
+/// here has a `toString` that could put it in a log line, deliberately.
 class EnvVariable {
   const EnvVariable({
     required this.id,
@@ -138,11 +100,8 @@ class EnvVariable {
   /// settings surface shows "Set" and an updated date, and offers Replace.
   final String value;
 
-  /// Whether the value is hidden in the UI and fed to the log redactor.
-  ///
-  /// It does **not** change how the value is stored or injected: a secret and
-  /// a plain variable get the same vault and the same place in the child's
-  /// environment. The flag is about what the app is willing to show you.
+  /// Whether the value is hidden in the UI and fed to the log redactor. It does
+  /// **not** change how the value is stored or injected.
   final bool secret;
 
   /// Off means "keep the definition, stop injecting it" — the alternative to
@@ -189,11 +148,8 @@ class EnvVariable {
     'updatedAt': updatedAt.toUtc().toIso8601String(),
   };
 
-  /// Rebuilds a record from [json] and an already-decrypted [value].
-  ///
-  /// Tolerant on purpose: a vault written by a newer build, or one a user has
-  /// hand-edited, must degrade to "this row is odd" rather than take the whole
-  /// list down and leave every terminal without its variables.
+  /// Rebuilds a record from [json] and an already-decrypted [value]. Tolerant on
+  /// purpose: one odd row must not leave every terminal without its variables.
   static EnvVariable? fromJson(Map<String, dynamic> json, String value) {
     final id = json['id'];
     final name = json['name'];
@@ -215,12 +171,8 @@ class EnvVariable {
   }
 }
 
-/// How the values in a vault are protected at rest, as the settings page
-/// reports it.
-///
-/// This is a fact about the file on disk, not a preference. It is recorded per
-/// vault so the UI can state what is actually in force rather than what the
-/// build hoped for.
+/// How the values in a vault are protected at rest. A fact about the file on
+/// disk, recorded per vault, not a preference the build hoped for.
 enum EnvProtection {
   /// File permissions only: an ACL restricted to this account on Windows,
   /// `0600` on POSIX. The values themselves are plaintext in the file.
@@ -244,11 +196,8 @@ enum EnvProtection {
   };
 }
 
-/// Everything the vault file holds: the master switch and the variables.
-///
-/// The master switch lives here rather than in `Settings` so this feature has
-/// exactly one store. A vault that cannot be read is
-/// [EnvVaultData.unavailable], which injects nothing and says why.
+/// Everything the vault file holds: the master switch and the variables. The
+/// switch lives here so the feature has exactly one store.
 class EnvVaultData {
   const EnvVaultData({
     this.enabled = true,
@@ -274,12 +223,8 @@ class EnvVaultData {
 
   final EnvProtection protection;
 
-  /// Whether a **secret** variable can be saved at all.
-  ///
-  /// False when the directory ACL could not be applied. Plain variables still
-  /// save; a secret does not, because writing one under permissions that were
-  /// not applied is the silent downgrade the MCP handshake path refuses for the
-  /// same reason.
+  /// Whether a **secret** variable can be saved at all — false when the
+  /// directory ACL could not be applied. Plain variables still save.
   final bool canStoreSecrets;
 
   /// What went wrong, for the banner. Null when nothing did.

@@ -12,13 +12,8 @@ import '../application/env_secrets_controller.dart';
 import '../domain/env_variable.dart';
 import 'env_variable_dialog.dart';
 
-/// The environment-variables settings page.
-///
-/// The honesty copy at the top is the feature's safety story and is deliberately
-/// the first thing on the page rather than a tooltip: this app hands 50-odd MCP
-/// tools to agents, one of which types into a live terminal, so "an agent can
-/// print these" is a fact the user has to meet before they save their first
-/// token — not one they discover afterwards.
+/// The environment-variables settings page. The honesty copy is the first
+/// thing on it: "an agent can print these" must be met before the first token.
 class EnvSecretsPage extends ConsumerWidget {
   const EnvSecretsPage({super.key});
 
@@ -210,14 +205,8 @@ class _Fact extends StatelessWidget {
   }
 }
 
-/// One saved variable.
-///
-/// The buttons stay drawn and stay worded. This is a settings form, not a
-/// dense list: "Edit" and "Remove" in words are the interface here, and the
-/// clutter the row menu exists to remove — an icon-only glyph on every line of
-/// a hundred-row pane — is not what this page has. What it gains is the other
-/// half of the rule: the same actions on a right-click, `Shift+F10` and the
-/// Menu key, so a habit learned in the Todos pane is not disappointed here.
+/// One saved variable. The buttons stay drawn and worded — this is a settings
+/// form — plus the same actions on right-click, `Shift+F10` and the Menu key.
 class _VariableCard extends ConsumerWidget {
   const _VariableCard({required this.variable});
 

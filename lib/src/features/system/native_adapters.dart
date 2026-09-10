@@ -1,15 +1,5 @@
-/// The desktop plugins `SystemIntegrationService` drives, behind seams.
-///
-/// Every one of these packages exposes a **singleton** bound to a platform
-/// channel: `windowManager`, `trayManager`, `hotKeyManager`, `launchAtStartup`,
-/// `WakelockPlus`. A test cannot substitute a singleton, cannot make one fail,
-/// and cannot even call one without a binding — which is why, before Loop 61,
-/// `SystemIntegrationService` had no tests at all and its `catch (_) {}` blocks
-/// were never exercised. The interfaces below are deliberately narrow: exactly
-/// the operations the service performs, in the shape it performs them.
-///
-/// The real implementations are one-line forwards. They hold no logic, so there
-/// is nothing in them a test would have wanted to cover.
+/// The desktop plugins `SystemIntegrationService` drives, behind seams: every
+/// one is a channel-bound **singleton** a test cannot substitute or fail.
 library;
 
 import 'dart:ui' show Size;

@@ -8,12 +8,8 @@ import '../application/env_secrets_controller.dart';
 import '../data/env_vault.dart';
 import '../domain/env_variable.dart';
 
-/// Adds a variable, or edits one that exists.
-///
-/// **A secret's value is never shown here.** Editing one offers to *replace*
-/// the value, with the field starting empty and a line saying the current value
-/// stays if it is left that way. There is no reveal, because the app does not
-/// read a stored secret back out for display — not once it is saved.
+/// Adds a variable, or edits one that exists. **A secret's value is never
+/// shown**: editing offers to replace it, and there is no reveal.
 class EnvVariableDialog extends ConsumerStatefulWidget {
   const EnvVariableDialog({this.existing, super.key});
 

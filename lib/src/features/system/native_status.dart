@@ -1,12 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// One OS-level thing a user setting asks for.
-///
-/// Each of these is a separate platform call that can fail on its own, so each
-/// gets its own answer. "Launch at login is on" and "the registry write
-/// succeeded" are different facts, and the settings screen was showing the
-/// first while meaning the second.
+/// One OS-level thing a user setting asks for. Each is a separate platform
+/// call that can fail on its own, so each gets its own answer.
 enum NativeSetting {
   keepAwake,
   closeToTray,
@@ -56,12 +52,7 @@ class NativeSettingStatus {
   final bool exhausted;
 
   /// The line a settings row shows beside its toggle, or `null` when the OS
-  /// agreed.
-  ///
-  /// [enabled] is the toggle's current position, because turning a setting
-  /// *off* is a platform call that can fail too, and "enabled — close to tray
-  /// failed" beside a switch that is off would be a second wrong answer on top
-  /// of the first.
+  /// agreed. [enabled] matters: turning a setting *off* can fail too.
   String? messageFor(NativeSetting setting, {bool enabled = true}) => ok
       ? null
       : '${enabled ? 'enabled' : 'disabled'} — ${setting.label} '
@@ -85,11 +76,8 @@ class NativeSettingStatus {
       : 'failed after $attempts (exhausted: $exhausted): $reason';
 }
 
-/// Per-setting native state, written by `SystemIntegrationService`.
-///
-/// Only failures and recoveries are recorded, so a settings screen watching
-/// this does not rebuild every time a tray menu is refreshed with the same
-/// result.
+/// Per-setting native state. Only failures and recoveries are recorded, so a
+/// settings screen does not rebuild every tray refresh.
 class NativeIntegrationStatusController
     extends Notifier<Map<NativeSetting, NativeSettingStatus>> {
   @override

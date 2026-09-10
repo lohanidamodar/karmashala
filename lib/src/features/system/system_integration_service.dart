@@ -47,12 +47,8 @@ void registerOsQuitOverChannel(Future<void> Function() quit) {
 /// [SystemIntegrationService._pending].
 const _kMenuAttentionPrefix = 'attention:';
 
-/// The tray icons, in the format the host platform's tray can actually decode.
-///
-/// Windows wants a multi-size `.ico`; macOS hands the path to `NSImage` and
-/// Linux to the icon theme, and neither reads ICO — an `.ico` there is not an
-/// error, just a status item that draws nothing. Both are produced from the
-/// same source by `dart run tool/icon/write_ico.dart`.
+/// The tray icons, in the format the host tray can decode: Windows wants a
+/// multi-size `.ico`, and macOS and Linux draw nothing at all from one.
 final String _kIdleTrayIcon = Platform.isWindows
     ? 'assets/tray_icon.ico'
     : 'assets/tray_icon.png';
@@ -65,39 +61,13 @@ final String _kAttentionTrayIcon = Platform.isWindows
 const _kMaxAttentionItems = 5;
 
 /// How many times one desired native value is attempted before the service
-/// stops retrying it on its own.
-///
-/// Bounded because the common failure — another application already owns the
-/// chord — does not resolve on its own, and a service that kept asking would
-/// spend a platform call on every window focus for the rest of the session.
-/// Changing the setting resets the budget, which is the case that *does*
-/// resolve: the user picks a chord nobody else holds.
+/// stops. The common failure — another app owns the chord — never resolves.
 const _kMaxNativeAttempts = 4;
 
 Future<void> _noShutdown() async {}
 
-/// Wires the desktop OS integrations to the user [Settings]: a system tray icon
-/// and menu, close-to-tray, keep-the-system-awake, and launch-at-login.
-///
-/// Lives outside the widget tree and is created only from the app lifecycle
-/// owner on desktop. Every platform call goes through [NativeAdapters], so a
-/// test can make any of them fail; before Loop 61 they were direct singleton
-/// calls wrapped in `catch (_) {}`, which meant a failed hotkey registration
-/// was indistinguishable from a successful one — to the user *and* to the
-/// suite.
-///
-/// ## Desired versus applied
-///
-/// Settings say what the user wants; the OS says what it did. The two are kept
-/// apart deliberately. An applied marker is written **only after the platform
-/// call returns**, so a transient failure leaves the desired value outstanding
-/// and it is tried again — on the next settings change, and on the next window
-/// focus, up to [_kMaxNativeAttempts]. The bug this replaces set the applied
-/// marker *before* registering, so one failure disabled the launcher hotkey for
-/// the lifetime of the process.
-/// Holds the running integration so the menu bar's Quit can take the same
-/// graceful path the tray's does. Null until the desktop integration starts,
-/// and for the whole life of companion mode.
+/// Wires the desktop OS integrations to the user [Settings]. **Desired versus
+/// applied**: an applied marker is written only after the platform call returns.
 class SystemIntegrationHolder extends Notifier<SystemIntegrationService?> {
   @override
   SystemIntegrationService? build() => null;
@@ -131,11 +101,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// runner down with it.
   final void Function() _endProcess;
 
-  /// How the OS's own Quit reaches this service.
-  ///
-  /// A seam rather than a channel because a `MethodChannel` cannot even be
-  /// *handed a handler* without a Flutter binding, and these are unit tests
-  /// with no binding — the same reason every other native here is injected.
+  /// How the OS's own Quit reaches this service. A seam, because a
+  /// `MethodChannel` cannot even be handed a handler without a Flutter binding.
   final OsQuitRegistrar _registerOsQuit;
 
   final ProviderContainer _container;
@@ -146,31 +113,17 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// rest of the app down in order. A no-op outside the app (tests, tools).
   final Future<void> Function() _onQuitRequested;
 
-  /// Whether closing the window hides to the tray instead of quitting.
-  ///
-  /// Read by [onWindowClose] and nothing else. Prevent-close is deliberately
-  /// *not* derived from it — see [apply].
+  /// Whether closing the window hides to the tray instead of quitting. Read by
+  /// [onWindowClose] and nothing else; prevent-close is *not* derived from it.
   bool _closeToTray = false;
 
-  /// Whether the tray icon actually went up.
-  ///
-  /// Hiding to a tray that is not there is a window the user cannot get back:
-  /// on stock GNOME there is no StatusNotifier host unless an AppIndicator
-  /// extension is installed, so `setIcon` fails and nothing appears — and with
-  /// the global hotkey needing X11 (keybinder has no Wayland support), a
-  /// Wayland session has no second way in either. [onWindowClose] falls back to
-  /// an ordered quit when this is false.
+  /// Whether the tray icon actually went up. Hiding to a tray that is not there
+  /// is a window the user cannot get back — stock GNOME, or Wayland.
   bool _trayIconApplied = false;
   bool _disposed = false;
 
-  /// Set the moment quitting begins, and never cleared.
-  ///
-  /// Quitting is re-entrant on macOS: destroying the last window makes
-  /// AppKit ask `applicationShouldTerminate` again, which asks Dart to quit
-  /// again. Without this the two bounce off each other forever — the
-  /// container is disposed on the first pass, so every later pass throws its
-  /// way through the same steps, ~1400 times a second, and the app stays up
-  /// with a dead container behind a live window. Quitting happens once.
+  /// Set the moment quitting begins, and never cleared. Quitting is re-entrant
+  /// on macOS, and the two passes bounce off each other forever without this.
   bool _quitting = false;
 
   /// What the user asked for, kept separately from what the OS confirmed.
@@ -189,13 +142,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// Attempts spent on the current desired value, per setting.
   final Map<NativeSetting, int> _attempts = {};
 
-  /// What the attention inbox has that the user has not seen, as the tray
-  /// shows it.
-  ///
-  /// Deliberately the *inbox* and not the raw attention set. Loop 42 badged the
-  /// set of sessions currently in a waiting status, which meant a finished turn
-  /// never reached the tray at all and a session whose status report went stale
-  /// silently un-badged itself. One list, one count, three surfaces.
+  /// What the attention inbox has that the user has not seen, as the tray shows
+  /// it. The *inbox*, not the raw attention set: one list, one count.
   List<InboxItem> _pending = const [];
 
   /// How many were showing last time the icon and tooltip were set, so the
@@ -210,12 +158,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
   SettingsController get _controller =>
       _container.read(settingsControllerProvider.notifier);
 
-  /// Initializes the tray and window integration, applies the current settings,
-  /// and starts listening for setting changes.
-  ///
-  /// Each step is independent: a tray that will not accept an icon must not
-  /// stop the hotkey from registering, and neither must stop the listeners
-  /// being attached. What failed is recorded rather than swallowed.
+  /// Initializes the tray and window integration, applies the current settings
+  /// and listens. Each step is independent, and what failed is recorded.
   Future<void> init() async {
     if (!isSupported) return;
 
@@ -248,10 +192,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
 
     // macOS routes Cmd+Q here rather than terminating, so the same ordered
-    // shutdown runs for it as for the tray's Quit. Without this the app menu's
-    // Quit was swallowed: `window_manager`'s prevent-close answers
-    // `applicationShouldTerminate` with a *window close*, and with
-    // close-to-tray on that hid the window instead of quitting.
+    // shutdown runs for it. Without this the app menu's Quit was swallowed.
     if (Platform.isMacOS) {
       _registerOsQuit(() => _quit());
     }
@@ -288,20 +229,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
     _container.read(agentStatusWatcherProvider).start();
   }
 
-  /// Applies [settings] to the OS: keep-awake, close-to-tray, launch-at-login,
-  /// and refreshes the tray menu.
-  ///
-  /// Prevent-close is the one value here that is **not** a setting. It is
-  /// applied unconditionally, because it is what makes `WM_CLOSE` reach Dart at
-  /// all: `window_manager` posts `close` over a method channel and then, unless
-  /// prevent-close is on, falls straight through to `DefWindowProc` — the
-  /// window is destroyed before [onWindowClose] is dispatched. Deriving it from
-  /// `closeToTray` (off by default) therefore meant the ordered shutdown ran on
-  /// the tray's Quit and on nothing else: closing with the X skipped the
-  /// handshake deletion, the hook rewrite, the hotkey release and the PTY reap.
-  /// [_closeToTray] keeps its job — [onWindowClose] decides hide versus quit —
-  /// and clearing prevent-close is already part of destroying the window
-  /// (`PluginWindowAdapter.setPreventCloseAndDestroy`).
+  /// Applies [settings] to the OS. Prevent-close is the one value here that is
+  /// **not** a setting: without it `WM_CLOSE` never reaches Dart at all.
   Future<void> apply(Settings settings) async {
     if (_disposed) return;
     _closeToTray = settings.closeToTray;
@@ -366,13 +295,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
   }
 
-  /// Retries whatever the OS has not confirmed yet.
-  ///
-  /// Window focus is the cheap, well-timed signal for this: the user has just
-  /// come back to the app, and the conditions that make these calls fail —
-  /// another application holding the chord, a machine still waking up, a tray
-  /// that was not ready — are exactly the ones that change while it is in the
-  /// background.
+  /// Retries whatever the OS has not confirmed yet. Window focus is the cheap,
+  /// well-timed signal: the conditions that fail these change in the background.
   Future<void> retryOutstanding() async {
     if (_disposed || !isSupported) return;
     await _reconcile(_settings);
@@ -413,11 +337,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
   }
 
-  /// Publishes one setting's native state.
-  ///
-  /// A platform call that was still in flight when the app started shutting
-  /// down would otherwise land on a disposed container — a crash on the way
-  /// out, in the code whose whole job is to make failures visible.
+  /// Publishes one setting's native state. A call still in flight at shutdown
+  /// would otherwise land on a disposed container.
   void _record(NativeSetting setting, NativeSettingStatus status) {
     if (_disposed) return;
     try {
@@ -429,11 +350,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
   }
 
-  /// Registers (or clears) the global launcher hotkey to match [settings].
-  ///
-  /// [_appliedHotkeySignature] is written **after** the registration returns,
-  /// so a chord another application is holding is retried rather than recorded
-  /// as done.
+  /// Registers (or clears) the global launcher hotkey. The signature is written
+  /// **after** registration returns, so a held chord is retried, not recorded.
   Future<void> _applyLauncherHotkey(Settings settings) async {
     final signature = _desiredHotkeySignature;
     final ok = await _run(NativeSetting.launcherHotkey, () async {
@@ -447,14 +365,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
     if (ok) _appliedHotkeySignature = signature;
   }
 
-  /// Global-hotkey handler: a summon/dismiss toggle for the whole app.
-  ///
-  /// Karmashala used to answer this with a second window — a borderless
-  /// always-on-top mini launcher with its own list of projects and sessions,
-  /// its own size and position, and its own chat. Quick open does that job
-  /// inside the window the user already has, over more than projects and
-  /// sessions, so the hotkey now brings *the app* forward with the palette up
-  /// and puts it away again when it is already in front.
+  /// Global-hotkey handler: a summon/dismiss toggle for the whole app. Quick
+  /// open replaced the second mini-launcher window this used to raise.
   Future<void> _summonLauncher() async {
     try {
       if (await _native.window.isVisible() &&
@@ -627,12 +539,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
   }
 
-  /// Quits the application.
-  ///
-  /// The layout snapshot goes first and synchronously, then the lifecycle
-  /// owner gets its ordered shutdown, then the window is destroyed, and the
-  /// process ends. The one graceful exit, shared by the tray's Quit, the menu
-  /// bar's, and Cmd+Q. Runs at most once per launch.
+  /// Quits the application: layout snapshot, ordered shutdown, window destroyed,
+  /// process ended. The one graceful exit, and it runs at most once per launch.
   Future<void> quit() => _quit();
 
   Future<void> _quit() async {
@@ -646,10 +554,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
       // will not close.
       _logger.warning('system: shutdown before quit failed.', error, stack);
     }
-    // Bracketed, and the two lines are the whole diagnosis for a quit that
-    // never finishes: on stdout they are unbuffered, so `destroying the
-    // window` with no `window destroyed` after it says the isolate stopped
-    // *here*, and neither line says it stopped earlier.
+    // Bracketed, and the two lines are the whole diagnosis for a quit that never
+    // finishes: on stdout they are unbuffered, so a missing second line locates it.
     _logger.info('system: shutdown done; destroying the window.');
     try {
       await _native.window.setPreventCloseAndDestroy();
@@ -657,25 +563,16 @@ class SystemIntegrationService with TrayListener, WindowListener {
     } on Object catch (error) {
       _logger.warning('system: window destroy failed reason=$error');
     }
-    // Last before the process ends, and the reason it is here rather than only
-    // inside `shutdown()`: everything above logged after that flush, and the
-    // sink batches on a 400 ms timer that is a task for an isolate about to
-    // stop. Whatever went wrong on the way out is on disk before the exit that
-    // would have swallowed it.
+    // Last before the process ends: everything above logged after `shutdown()`'s
+    // own flush, and the sink's 400 ms timer is a task for an isolate about to stop.
     await _flushLog();
     // Destroying the window does not end the process: `applicationShouldTerminate`
-    // cancels AppKit's own termination so this ordered shutdown can run at all,
-    // and that cancellation applies just as much to the close that `destroy()`
-    // causes. Ending it here is the only thing that actually does.
+    // cancels AppKit's termination so this shutdown can run at all.
     _endProcess();
   }
 
-  /// Writes the queued log lines to disk, bounded, before the process ends.
-  ///
-  /// `LogFileSink.add` arms a 400 ms timer and that timer is a task for *this*
-  /// isolate, so every line logged in the last stretch of a quit dies with it
-  /// unless something asks. The soak counted what that costs: 20 quits, 8
-  /// `shutdown in N ms` lines.
+  /// Writes the queued log lines to disk, bounded, before the process ends —
+  /// `LogFileSink`'s 400 ms timer is a task for the isolate that is stopping.
   Future<void> _flushLog() async {
     try {
       await Diagnostics.instance.flushFile().timeout(kLogFlushBudget);
@@ -685,19 +582,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
   }
 
-  /// Snapshots the terminal layout on the way out.
-  ///
-  /// First, and synchronously, before anything else in the quit sequence gets a
-  /// chance to fail or time out. Loop 38 and Loop 53 both landed here: without
-  /// this call the last thing the user did before quitting is the one thing
-  /// that does not come back. The lifecycle owner does now dispose the
-  /// container, which would run the controller's own teardown — but that
-  /// happens inside a bounded budget, several steps later, and the layout is
-  /// not something to leave to a step that is allowed to be abandoned.
-  ///
-  /// Guarded by [ProviderContainer.exists] so quitting never *creates* the
-  /// terminal controller: building it would restore a layout only to write
-  /// it straight back.
+  /// Snapshots the terminal layout on the way out: first, synchronously, before
+  /// anything can fail. Guarded so quitting never *creates* the controller.
   void _saveTerminalLayout() {
     try {
       if (!_container.exists(terminalSessionsControllerProvider)) return;
@@ -713,11 +599,8 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
   }
 
-  /// Detaches from the OS: listeners off, hotkeys released, tray icon removed.
-  ///
-  /// Ordered so the app stops *receiving* events before it stops being able to
-  /// answer them. Idempotent, and every step is independent — one platform call
-  /// that hangs or throws must not leave the rest attached.
+  /// Detaches from the OS. Ordered so the app stops *receiving* events before it
+  /// stops being able to answer them; every step is independent.
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
@@ -795,23 +678,13 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   // --- WindowListener ---
 
-  /// The window's X.
-  ///
-  /// Reached only because prevent-close is on (see [apply]); without it the
-  /// window is already gone by the time this runs. The quit branch is the same
-  /// ordered teardown the tray's Quit uses.
-  ///
-  /// Close-to-tray is honoured only when there **is** a tray. The setting says
-  /// where the user wants the window to go; [_trayIconApplied] says whether
-  /// that place exists. Hiding without it is not close-to-tray, it is a window
-  /// that cannot be reopened.
+  /// The window's X, reached only because prevent-close is on. Close-to-tray is
+  /// honoured only when there **is** a tray — otherwise it cannot be reopened.
   @override
   void onWindowClose() {
     final hide = _closeToTray && _trayIconApplied;
-    // Logged because the two ways this can go look identical from the outside
-    // until one of them is wrong: a close that quits when the user expected the
-    // tray is either the setting being off or the icon never having gone up,
-    // and nothing else in the log distinguishes them.
+    // Logged because the two ways this can go look identical from outside: a
+    // close that quits is either the setting off or the icon never having gone up.
     _logger.info(
       'system: window close → ${hide ? 'hide to tray' : 'quit'} '
       '(closeToTray=$_closeToTray trayIcon=$_trayIconApplied)',

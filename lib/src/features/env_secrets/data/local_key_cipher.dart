@@ -37,61 +37,9 @@ const int _macBytes = 16;
 /// replayed into another sealed field elsewhere in the app.
 const String _aad = 'karmashala:env-vault:v1';
 
-/// Encrypts vault values with a key kept **outside the vault**, in the
-/// platform's local (non-roaming) per-user directory.
-///
-/// ## Why this, and not a per-platform keystore
-///
-/// The obvious answer was DPAPI on Windows, Keychain on macOS, libsecret on
-/// Linux. Three native integrations, three failure modes, and on Linux a
-/// dependency that is simply absent on a headless or minimal box. This repo
-/// already has the scar: `flutter_secure_storage` — the one cross-platform
-/// secure store it tried — is **stubbed out to throw on Windows**
-/// (`packages/flutter_secure_storage_windows_stub`), because every published
-/// 4.x Windows implementation needs ATL and the VS 2026 toolchain has none.
-/// The primary platform is the one that lost.
-///
-/// So: recall what DPAPI was actually buying. Not protection from a process
-/// running as this user — there is none, and there cannot be, because the app
-/// must read these values with no prompt in order to start a terminal. What it
-/// bought was that **a copy of the vault taken off the machine is inert**,
-/// which matters here specifically because `getApplicationSupportDirectory()`
-/// on Windows is `%APPDATA%` — *Roaming* — and roaming profiles, folder
-/// redirection and backup tools sweep that up.
-///
-/// A random key in a non-roaming directory delivers exactly that property, with
-/// one implementation and no FFI:
-///
-///  * Windows — `%LOCALAPPDATA%\…`, which by definition does not roam.
-///  * macOS — `~/Library/Caches/…`, which Time Machine excludes by default.
-///  * Linux — `$XDG_CACHE_HOME` (`~/.cache`), conventionally excluded from
-///    dotfile sync and most backup profiles.
-///
-/// `getApplicationCacheDirectory()` is all three, so there is no platform
-/// branch here at all. The key file gets the same ACL / `0600` treatment as the
-/// vault, so it is not readable by another account either.
-///
-/// ## What it does not protect against, plainly
-///
-///  * **Anything running as you.** The key is readable without a prompt,
-///    because the app reads it without a prompt. This is unchanged from
-///    phase 1 and is inherent to the feature.
-///  * **A local administrator**, who can take ownership of both files.
-///  * **A whole-home backup**, which takes the vault and the key together. That
-///    is outside what any of this can defend — such a backup has the user's SSH
-///    keys in it too.
-///
-/// What it *does* defend is the realistic accident: the vault file, or the
-/// application-support subtree holding it, ending up somewhere else — a bug
-/// report, a synced folder, a roaming profile, another machine.
-///
-/// ## Losing the key
-///
-/// A cleared cache directory means the values cannot be decrypted. That is
-/// handled loudly rather than silently: [unwrap] returns null, `EnvVault`
-/// reports a problem and **does not overwrite** the vault, so the user is told
-/// to re-enter the values rather than discovering later that they were
-/// replaced with nonsense. Phase 1's ACL stands on its own underneath this.
+/// Encrypts vault values with a random key kept **outside the vault**, in the
+/// platform's non-roaming per-user directory — see docs/SETTLED.md for why
+/// that, and not a per-platform keystore, and for what it does not protect.
 class LocalKeyEnvValueCipher extends EnvValueCipher {
   LocalKeyEnvValueCipher({required SecretKeyData key}) : _key = key;
 
@@ -106,11 +54,8 @@ class LocalKeyEnvValueCipher extends EnvValueCipher {
   /// The directory the key lives in, under the local (cache) root.
   static const String directoryName = 'secrets';
 
-  /// Loads the key, creating one on first use.
-  ///
-  /// Throws [EnvKeyUnavailable] when the key cannot be created or read, which
-  /// `EnvVault` turns into "fall back to file permissions only" rather than
-  /// into a failed launch.
+  /// Loads the key, creating one on first use. Throws [EnvKeyUnavailable] when
+  /// it cannot, which `EnvVault` turns into file permissions only.
   static Future<LocalKeyEnvValueCipher> open({
     Directory? directory,
     HandshakePermissions permissions = const SystemHandshakePermissions(),
@@ -135,10 +80,8 @@ class LocalKeyEnvValueCipher extends EnvValueCipher {
       return LocalKeyEnvValueCipher(key: SecretKeyData(bytes));
     }
 
-    // Created and restricted before the bytes go in it — the same order
-    // `LauncherControlServer` writes its handshake, and for the same reason:
-    // a key must never exist, even for an instant, under permissions that were
-    // not applied.
+    // Created and restricted before the bytes go in it: a key must never exist,
+    // even for an instant, under permissions that were not applied.
     final generator = random ?? Random.secure();
     final bytes = Uint8List.fromList([
       for (var i = 0; i < kEnvKeyBytes; i++) generator.nextInt(256),
