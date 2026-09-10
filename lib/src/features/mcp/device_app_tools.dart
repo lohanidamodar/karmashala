@@ -1,11 +1,9 @@
 import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
-/// An app on a device: put it there, start it, stop it.
-///
-/// The three verbs an agent needs between building something and looking at
-/// it. Each one changes the device, so each takes the claim — see
-/// [DeviceToolFamily.driverToDrive].
+/// An app on a device: put it there, start it, stop it. The three verbs an
+/// agent needs between building something and looking at it, and each one
+/// changes the device, so each takes the claim.
 class DeviceAppTools extends DeviceToolFamily {
   DeviceAppTools(super.container, {super.callerSessionId});
 

@@ -18,28 +18,21 @@ import '../terminal/application/system_terminal_providers.dart';
 import '../terminal/data/system_terminal_service.dart';
 import 'agent_lookup.dart';
 
-/// Starting a session, and continuing one somewhere else.
-///
-/// The other half of the session family — talking to a session that already
-/// runs, and ending it — is [SessionControlTools] in `session_tools.dart`.
-/// These stayed in `LauncherControlServer` longest because they were there
-/// first; they are here for the reason every other family moved out, which is
-/// that the server's job is the transport and the boundary, and a family's only
-/// tie to it is the container it reads providers from. They did not go into
-/// `session_tools.dart` because that file is already 800 lines of a different
-/// question.
+/// Starting a session, and continuing one somewhere else. The other half of
+/// the family — talking to a session that already runs, and ending it — is
+/// [SessionControlTools] in `session_tools.dart`.
 ///
 /// `get_usage` is here rather than with the inventory reads: it is not a read
-/// of what Karmashala knows but a live fetch from the agent, and its caller is
-/// somebody deciding whether that agent has the budget to be handed the work.
+/// of what Karmashala knows but a live fetch from the agent, for somebody
+/// deciding whether that agent has the budget to be handed the work.
 class SessionLaunchTools {
   SessionLaunchTools(this._container, {this.callerSessionId});
 
   final ProviderContainer _container;
 
   /// Which session is calling, when one is. It is what a session started here
-  /// is recorded as a child of, so the spawn-depth cap counts a real chain —
-  /// and it comes from the transport, never from an argument.
+  /// is recorded as a child of, and it comes from the transport, never an
+  /// argument.
   final String? callerSessionId;
 
   static const Set<String> _names = <String>{
@@ -92,16 +85,10 @@ class SessionLaunchTools {
 
   /// The permission named by a caller, or null to let the setting decide.
   ///
-  /// This is the one **agent-agnostic** permission surface left: an MCP tool's
-  /// schema is fixed when the server starts and cannot name one agent's
-  /// vocabulary. So it takes a [PermissionRisk] rung — the cross-agent scale —
-  /// and the caller's chosen agent decides what that means, through the same
-  /// carry rule a handoff uses. A caller that knows the exact mode may name it
-  /// instead, and gets it verbatim.
-  ///
-  /// Refuses an unknown name rather than falling back to a default: a typo
-  /// silently becoming "ask" would look like the tool worked, and a typo
-  /// silently becoming anything else would be worse.
+  /// The one **agent-agnostic** permission surface left: an MCP schema is fixed
+  /// when the server starts and cannot name one agent's vocabulary, so this
+  /// takes a [PermissionRisk] rung and the chosen agent decides what it means.
+  /// An unknown name is refused rather than defaulted.
   PermissionSelection? _parsePermissionMode(String? raw, String agentId) {
     if (raw == null || raw.trim().isEmpty) return null;
     final wanted = raw.trim();
@@ -195,14 +182,11 @@ class SessionLaunchTools {
           installs.first;
     }
 
-    // Through the one launcher, exactly as the New-session dialog is. A session
-    // an agent starts is not a second kind of session: same row, same PTY, same
-    // permission resolution, same worktree option — and, because it has a row,
-    // it is visible to `list_sessions` and reattachable, which a spawned
-    // external terminal never was.
-    //
-    // This is also where the spawn-depth cap applies. `callerSessionId` comes
-    // from the bridge's environment, not from the model.
+    // Through the one launcher, exactly as the New-session dialog is: same row,
+    // same PTY, same permission resolution, same worktree option — and, having
+    // a row, visible to `list_sessions` and reattachable. This is also where
+    // the spawn-depth cap applies, on a `callerSessionId` that comes from the
+    // bridge's environment rather than from the model.
     final launcher = _container.read(sessionLauncherProvider);
     try {
       final launched = await launcher.launch(
@@ -242,12 +226,10 @@ class SessionLaunchTools {
 
   /// Continues [sessionId] in another agent.
   ///
-  /// The tool is deliberately thin: every decision — which targets exist,
-  /// whether one can be told anything, what the permission mode becomes, what
-  /// the packet says — belongs to `SessionHandoffService`, so an agent asking
-  /// for a handoff and a user clicking one get the same answer. What is added
-  /// here is `preview`, because a model that cannot see the dialog needs some
-  /// way to read the packet before spending another agent's first turn on it.
+  /// Deliberately thin: every decision belongs to `SessionHandoffService`, so
+  /// an agent asking for a handoff and a user clicking one get the same answer.
+  /// `preview` is added here because a model that cannot see the dialog needs
+  /// some way to read the packet first.
   Future<Object?> _sessionHandoff({
     String? sessionId,
     String? cli,
@@ -394,9 +376,7 @@ class SessionLaunchTools {
     // **A window with no reading omits `percent` entirely.** Antigravity's
     // `loadCodeAssist` names the account's tiers and measures nothing, and this
     // used to answer `"percent": 0` for each of them — a number a caller would
-    // reasonably act on, about a quota nobody had read. Omitted rather than
-    // null so the field means one thing when it is there, and so the shape
-    // stays the one `resetsAt` already had.
+    // reasonably act on, about a quota nobody had read.
     return {
       'environmentId': install.environmentId,
       'windows': [
@@ -416,10 +396,9 @@ class SessionLaunchTools {
   Future<Object?> _openSession(String? id) async {
     if (id == null) throw ArgumentError('Missing session id.');
 
-    // A native session is reattached, not relaunched: it may still be running in
-    // a pane, in which case "open" means bring its tab back — the same thing the
-    // background-sessions list does. Only if nothing is live is it restarted,
-    // through the one launcher, as a resume.
+    // A native session is reattached, not relaunched: it may still be running
+    // in a pane, in which case "open" means bring its tab back. Only if nothing
+    // is live is it restarted, through the one launcher, as a resume.
     final native = _container.read(sessionDaoProvider).getById(id);
     if (native != null) return _openNativeSession(native);
 
@@ -446,9 +425,9 @@ class SessionLaunchTools {
     if (repo == null || env == null || install == null) {
       throw StateError('Session repository, environment, or agent is missing.');
     }
-    // Before the terminal is even resolved: this surface had no guard at all,
-    // so an agent the resume builder could not express opened a terminal
-    // running a *new* conversation and the tool reported success.
+    // Before the terminal is even resolved: with no guard here, an agent the
+    // resume builder could not express opened a terminal running a *new*
+    // conversation and the tool reported success.
     final refusal = resumeRefusalFor(
       _container.read(agentRegistryProvider),
       session.cli,
@@ -477,9 +456,9 @@ class SessionLaunchTools {
           command: command,
           workingDirectory: env.wslDistribution == null ? repo.path.path : null,
         );
-    // Named in the answer, because the caller cannot see the desktop: this
-    // branch is the one that opened a window, and it is the one an automated
-    // caller has no way to undo.
+    // Named in the answer, because the caller cannot see the desktop: this is
+    // the branch that opened a window, and the one an automated caller has no
+    // way to undo.
     return {
       'opened': session.displayTitle,
       'environmentId': env.id,
@@ -490,8 +469,8 @@ class SessionLaunchTools {
 
   Future<Object?> _openNativeSession(Session session) async {
     // The launcher owns "is it already running, and where" for every surface —
-    // this used to be the only place that asked, which is why every other resume
-    // path relaunched a session that had never stopped.
+    // this used to be the only place that asked, which is why every other
+    // resume path relaunched a session that had never stopped.
     if (_container.read(sessionLauncherProvider).reveal(session.id)) {
       return {
         'opened': session.title,
@@ -526,18 +505,16 @@ class SessionLaunchTools {
       'reattached': false,
       // A directory that has gone means the agent is resumed at the repository
       // root instead, and its store is keyed by directory — so the caller is
-      // told, rather than being left to wonder why the conversation is empty.
+      // told rather than left wondering why the conversation is empty.
       'note': ?launched.workingDirectoryNotice,
     };
   }
 }
 
 /// The schemas for the tools in [SessionLaunchTools] that start or reopen a
-/// session, and the usage check that precedes one.
-///
-/// Two lists rather than one because the served order is a contract the
-/// golden test holds: the fan-out schemas sit between these and
-/// [sessionHandoffToolSchemas], and always have.
+/// session, and the usage check that precedes one. Two lists rather than one
+/// because the served order is a contract the golden test holds: the fan-out
+/// schemas sit between these and [sessionHandoffToolSchemas].
 const List<Map<String, dynamic>> sessionLaunchToolSchemas = [
   {
     'name': 'open_new_session',

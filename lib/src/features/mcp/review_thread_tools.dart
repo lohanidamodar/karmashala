@@ -4,36 +4,15 @@ import '../git/application/review_threads.dart';
 import 'package:karmashala_git/git.dart';
 import '../sessions/application/session_providers.dart';
 
-/// Review comments as an agent can read, raise, answer and be answered in.
+/// Review comments as an agent can read, raise, answer and be answered in: a row
+/// with an anchor a human can click, where prose in a transcript is the failure
+/// `ReviewBrief` names — what nobody can find later did not happen.
 ///
-/// ## Why an agent gets a thread and not a message
-///
-/// A reviewer agent that reports its findings in prose has reported them into a
-/// transcript, which is the failure `ReviewBrief` already names about verdicts:
-/// what nobody can find later did not happen. A finding filed here is a row
-/// with an anchor a human can click, a status a human can move, and a place for
-/// the author's answer to sit next to the question. The same tools serve the
-/// author on the other side — an agent handed "fix these three" can reply on
-/// each thread saying what it did, and the reply lands where the request was
-/// rather than scrolling past in a different conversation.
-///
-/// ## Why an agent cannot mark its own finding "should fix"
-///
-/// [ReviewThreadService.open] gives an agent's thread
-/// [ReviewThreadStatus.open], and this file offers no way to override that on
-/// creation. `should-fix` is the pending set — the threads the Changes panel
-/// hands back to an agent — so an agent that could file straight into it would
-/// be writing its own instructions and having them read as the user's. The
-/// judgement "this must change" is the one thing a human review is for, and
-/// `review_thread_status` exists so a human's client can make it, not so a
-/// reviewer can skip it. The same argument `decision_tools.dart` makes about
-/// `approvalGranted`.
-///
-/// ## Why there is no `review_thread_delete`
-///
-/// Dismissing is the answer to a comment that should not have been made, and it
-/// keeps the record that somebody looked. A delete would let the reviewed party
-/// remove the review, which is not triage.
+/// An agent's thread always opens as [ReviewThreadStatus.open] and cannot be
+/// filed straight into `should-fix`, the pending set handed back to agents,
+/// because that would be an agent writing its own instructions. There is no
+/// `review_thread_delete` either: dismissing keeps the record that somebody
+/// looked.
 class ReviewThreadTools {
   ReviewThreadTools(this._container, {this.callerSessionId});
 
@@ -100,9 +79,8 @@ class ReviewThreadTools {
         'path is required: the repository-relative file this comment is about.',
       );
     }
-    // Emptiness is checked once, in `ReviewThreadService.open`, and before it
-    // asks git for anything. A second copy here would be one more place for
-    // the two to drift apart on what counts as empty.
+    // Emptiness is checked once, in `ReviewThreadService.open`, before it asks
+    // git for anything; a second copy here would be one more place to drift.
     final comment = args['comment'] as String? ?? '';
     final startLine = (args['startLine'] as num?)?.round();
     final endLine = (args['endLine'] as num?)?.round();
@@ -134,8 +112,7 @@ class ReviewThreadTools {
     );
     // Freshly anchored against the bytes just hashed, so this is `attached` by
     // construction — reported anyway, because a client that has to remember
-    // which calls return the field will eventually forget on the one that
-    // matters.
+    // which calls carry the field will forget on the one that matters.
     return _threadJson(
       AnchoredReviewThread(thread, ReviewThreadAttachment.attached),
     );
@@ -193,11 +170,10 @@ class ReviewThreadTools {
     return session.repositoryId;
   }
 
-  /// Who a comment written through these tools is attributed to.
-  ///
-  /// Words, not an id, for the reason `DecisionRecord.decidedBy` gives: the
-  /// person reading the thread in the Changes panel has no way to resolve a
-  /// key. The session id is inside the phrase for the reader who does.
+  /// Who a comment written through these tools is attributed to. Words, not an
+  /// id, for the reason `DecisionRecord.decidedBy` gives: the person reading the
+  /// thread in the Changes panel has no way to resolve a key. The session id is
+  /// inside the phrase for the reader who does.
   String get _author => callerSessionId == null
       ? 'an agent'
       : 'an agent in session $callerSessionId';
@@ -219,16 +195,16 @@ class ReviewThreadTools {
       'id': thread.id,
       'repositoryId': thread.repositoryId,
       'path': anchor.path,
-      // Emitted even when null — an omitted key reads as a gap in the tool
-      // rather than as a comment about the whole file, which is a real and
-      // different thing.
+      // Emitted even when null: an omitted key reads as a gap in the tool
+      // rather than as a comment about the whole file, which is a different
+      // and real thing.
       'startLine': anchor.startLine,
       'endLine': anchor.endLine,
       'excerpt': anchor.excerpt,
       'status': thread.status.name,
       // The whole reason this feature exists. `detached` means the file has
       // changed since the comment was written, so the line numbers above locate
-      // nothing; nothing here has guessed at where they moved to.
+      // nothing, and nothing here has guessed at where they moved to.
       'attachment': entry.attachment.name,
       'blobSha': anchor.blobSha,
       'sessionId': thread.sessionId,

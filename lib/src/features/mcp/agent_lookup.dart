@@ -6,14 +6,6 @@ import 'package:agent_cli/discovery.dart';
 import '../sessions/application/session_launcher.dart';
 import '../sessions/domain/session_launch.dart';
 
-/// The lookups the tool families share now that they no longer sit in one
-/// class together: which agent a caller meant, which installation that is, and
-/// what permission a resume runs under.
-///
-/// Here rather than in one of the families because each has two callers —
-/// [parseCli] the inventory and launch tools, the other two the launch and tmux
-/// tools — and a copy apiece would be a chance for the answers to diverge.
-
 /// The registry's id for a CLI name a caller wrote, or null when nothing
 /// matches it.
 String? parseCli(ProviderContainer container, String? cli) {

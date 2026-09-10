@@ -8,11 +8,9 @@ import '../sessions/application/session_providers.dart';
 import 'agent_lookup.dart';
 
 /// What exists: the projects Karmashala knows, the sessions in them, and the
-/// agents installed to run one.
-///
-/// The three reads an agent starts from, and the only tools here that answer
-/// before anything has been started. None of them needs the caller's identity —
-/// they describe the machine, not the conversation.
+/// agents installed to run one. The three reads an agent starts from, and the
+/// only tools here that answer before anything has been started. None needs the
+/// caller's identity — they describe the machine, not the conversation.
 class InventoryTools {
   InventoryTools(this._container);
 
@@ -65,10 +63,8 @@ class InventoryTools {
     for (final project in projects) {
       for (final repo in repositoryDao.getByProject(project.id)) {
         // Sessions started **in the app**. These were invisible here: every
-        // session tool read only `imported_sessions`, so a session the user (or
-        // another agent) started in Karmashala could not be listed, opened or
-        // grouped — the launcher agent saw a different world from the one on
-        // screen (Loop 33 §6.9).
+        // session tool read only `imported_sessions`, so the launcher agent saw
+        // a different world from the one on screen.
         for (final session in sessionDao.getByRepository(repo.id)) {
           final agentId =
               installDao.getById(session.agentInstallationId)?.agentId ?? '';

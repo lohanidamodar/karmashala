@@ -7,19 +7,12 @@ import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/domain/terminal_profile.dart';
 
 /// The commands the user keeps, as an agent can read and use them.
+/// `terminal_run` runs a command and waits; this is "here is the line, press
+/// Enter when you are ready", a different act with a different consent.
 ///
-/// Two things an agent could not do before this. It could not **read** what the
-/// person it works beside considers the right way to run their tests, build
-/// their app or tail their logs — that knowledge lived in a picker only a human
-/// could open — and it could not **put a command in front of them** without
-/// running it. `terminal_run` is the tool for running something and waiting;
-/// this is the tool for "here is the line, press Enter when you are ready",
-/// which is a different act with a different consent.
-///
-/// There is deliberately no `snippet_delete`. Every other verb here either
-/// reads or appends, and a tool that lets an agent quietly remove the
-/// commands somebody has curated buys nothing an agent needs and risks
-/// something no undo covers.
+/// There is deliberately no `snippet_delete`: every other verb here reads or
+/// appends, and quietly removing commands somebody curated risks something no
+/// undo covers.
 class SnippetControlTools {
   SnippetControlTools(this._container);
 
@@ -56,12 +49,9 @@ class SnippetControlTools {
       _container.read(terminalSessionsControllerProvider);
 
   /// Every snippet, and — when a pane is named or one is active — which of them
-  /// that pane would actually be offered.
-  ///
-  /// `fitsPane` is reported per row rather than the list being filtered, so a
-  /// caller can see that a WSL snippet exists and is simply not for the pane it
-  /// asked about. Filtering silently would look like the snippet was never
-  /// saved.
+  /// that pane would actually be offered. `fitsPane` is per row rather than the
+  /// list being filtered, because filtering silently would look like the snippet
+  /// was never saved.
   Object? _list(String? paneId) {
     final snippets = _container.read(commandSnippetsProvider);
     final target = paneId == null || paneId.isEmpty
@@ -97,12 +87,9 @@ class SnippetControlTools {
   }
 
   /// Saves a snippet, keeping [command] as given apart from being flattened to
-  /// one line.
-  ///
-  /// [submit] defaults to false and an agent has to ask for it explicitly, the
-  /// same way the dialog makes a person tick a box. A saved command that runs
-  /// itself is a decision about somebody else's machine, and the default answer
-  /// to it is no.
+  /// one line. [submit] defaults to false and has to be asked for explicitly,
+  /// as the dialog makes a person tick a box: a saved command that runs itself
+  /// is a decision about somebody else's machine.
   Object? _add({
     String? label,
     required String command,
@@ -143,12 +130,10 @@ class SnippetControlTools {
   /// Types a snippet into a pane, and — unless the snippet itself says
   /// otherwise — stops there.
   ///
-  /// The caller cannot override [CommandSnippet.submit]. That flag belongs to
-  /// whoever saved the snippet: an argument that could turn a typed command
-  /// into a run one would make every snippet a potential `terminal_run` with
-  /// none of that tool's waiting, reporting or refusal to touch an agent pane.
-  /// An agent that means to run something has `terminal_run`, which says what
-  /// happened.
+  /// The caller cannot override [CommandSnippet.submit]: that flag belongs to
+  /// whoever saved the snippet, and an argument for it would make every snippet
+  /// a potential `terminal_run` with none of that tool's waiting, reporting or
+  /// refusal to touch an agent pane.
   Object? _insert({String? id, String? paneId}) {
     if (id == null || id.isEmpty) {
       throw ArgumentError('id is required. snippets_list has the ids.');

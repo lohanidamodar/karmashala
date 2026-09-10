@@ -7,20 +7,10 @@ import '../todos/domain/todo.dart';
 
 /// The list a person and an agent both write to.
 ///
-/// Notes are what somebody kept out of a conversation; todos are what somebody
-/// decided still has to happen. Both were the owner's ask in the same sentence
-/// — *"i want simple todo's, notes, feature in the app that both agent and i
-/// can access easily"* — and the second half of that is this file: without it,
-/// an agent can read a plan and cannot record what is left of it anywhere the
-/// person will see.
-///
-/// **`'none'` is a real value here.** `projectId` is a string, so it cannot
-/// carry the difference between "not given" and "explicitly nothing", and both
-/// of those are answers a caller means. The convention is one word, used the
-/// same way by every tool in this file: `projectId: 'none'` means *filed under
-/// no project* — as a filter, only the unfiled ones; as an argument to
-/// `todo_add`, do not file this anywhere. Omitting it means "whatever is
-/// natural": everything, or the calling session's own project.
+/// **`'none'` is a real value here.** `projectId` is a string and cannot carry
+/// the difference between "not given" and "explicitly nothing", so every tool in
+/// this file reads `'none'` as *filed under no project*. Omitting it means
+/// everything, or the calling session's own project.
 class TodoControlTools {
   TodoControlTools(this._container, {this.callerSessionId});
 
@@ -76,11 +66,8 @@ class TodoControlTools {
     return todo.projectId == projectId;
   }
 
-  /// Writes a todo at the bottom of the list.
-  ///
-  /// The bottom, never the top: the top of a todo list is where the person
-  /// using it put the thing that matters most, and nothing an agent adds mid
-  /// task has earned that place.
+  /// Writes a todo at the bottom of the list, never the top: the top is where
+  /// the person using it put the thing that matters most.
   Object? _add({required String body, String? projectId}) {
     if (body.trim().isEmpty) {
       throw ArgumentError('body is required and cannot be blank.');
@@ -91,14 +78,10 @@ class TodoControlTools {
     return _describe(todo);
   }
 
-  /// Which project a new todo lands in.
-  ///
-  /// An explicit id wins; `'none'` means file it nowhere; and an omitted
-  /// argument follows the **calling session's** project, which is the same
-  /// rule `note_add` uses for attribution and the same rule the v33 backfill
-  /// used for existing notes. An agent working in a checkout is working in
-  /// exactly one project, and making it look that up to say what it already
-  /// knows would mostly get todos filed nowhere.
+  /// Which project a new todo lands in: an explicit id wins, `'none'` files it
+  /// nowhere, and an omitted argument follows the **calling session's** project,
+  /// the same rule `note_add` uses. An agent working in a checkout is working in
+  /// exactly one project, and making it say so would mostly file todos nowhere.
   String? _fileUnder(String? projectId) {
     if (projectId == unfiled) return null;
     if (projectId != null && projectId.isNotEmpty) return projectId;
@@ -112,11 +95,9 @@ class TodoControlTools {
         ?.projectId;
   }
 
-  /// Ticks a todo off, or reopens it with `done: false`.
-  ///
-  /// Not destructive and idempotent: the row is still there afterwards, and
-  /// one more call puts it back the way it was — which is precisely the undo
-  /// a destructive annotation says does not exist.
+  /// Ticks a todo off, or reopens it with `done: false`. Not destructive and
+  /// idempotent: the row is still there afterwards, and one more call puts it
+  /// back — precisely the undo a destructive annotation says does not exist.
   Object? _done(String? id, {required bool done}) {
     final todo = _todo(id);
     _container.read(todosProvider.notifier).setDone(todo.id, done);

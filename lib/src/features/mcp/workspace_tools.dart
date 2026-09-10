@@ -10,11 +10,9 @@ import '../sessions/application/session_providers.dart';
 import '../sessions/domain/session_checkouts.dart';
 
 /// Where the work is: the checkouts under a project, and what one of them owes.
-///
-/// `list_projects` already existed and stops at the project. A project here is
-/// a family of checkouts — the main clone plus every worktree — and every
-/// session runs in one of them, so an agent that can only see projects cannot
-/// say where anything is happening.
+/// A project here is a family of checkouts — the main clone plus every worktree
+/// — and every session runs in one of them, so an agent that can only see
+/// projects cannot say where anything is happening.
 class WorkspaceControlTools {
   WorkspaceControlTools(this._container, {this.callerSessionId});
 
@@ -63,21 +61,17 @@ class WorkspaceControlTools {
         'project_rescan.',
       );
     }
-    // One `git worktree list` per family, and it may simply fail — a checkout
-    // whose git could not answer is absent from the map rather than wrong in
-    // it, which is why an absent label reads as "not recorded" below.
+    // One `git worktree list` per family, and it may simply fail: a checkout
+    // whose git could not answer is absent from the map rather than wrong in it.
     final labels = await _container.read(
       checkoutLabelsProvider(projectId).future,
     );
     final selected = _container.read(selectedRepositoryIdProvider);
-    // Who else is standing here. This tool is where an agent learns the paths
-    // it can `cd` into and hand to `terminal_open`, and until now it handed
-    // them over without a word about occupancy — so N fan-out candidates, each
-    // isolated in its own worktree of the primary repository, were told about
-    // one shared checkout of every other repository and given no way to notice
-    // each other in it. `SessionLauncher` worktrees the primary repository and
-    // nothing else, deliberately (see `SessionRepositoriesService
-    // .checkoutsFor`), which makes naming the occupants the honest half.
+    // Who else is standing here. This is where an agent learns the paths it can
+    // hand to `terminal_open`, and it used to hand them over without a word
+    // about occupancy — so N fan-out candidates, each isolated in its own
+    // worktree of the primary repository, shared every other repository with no
+    // way to notice each other in it.
     final rows = _container.read(sessionDaoProvider).getAll();
     return <String, Object?>{
       'projectId': projectId,
@@ -94,9 +88,7 @@ class WorkspaceControlTools {
             // Sessions the workspace records as working in this exact
             // directory. An empty list is **not** a promise that nobody is
             // here — a plain shell, an agent started outside Karmashala and a
-            // row that recorded no directory are all invisible to it — which is
-            // why the key names what was found rather than claiming the
-            // checkout is free.
+            // row that recorded no directory are all invisible to it.
             'sessionsWorkingHere': <Object?>[
               for (final session in sessionsWorkingIn(
                 repository.path,
@@ -114,11 +106,9 @@ class WorkspaceControlTools {
     };
   }
 
-  /// Re-reads a project's directory for checkouts it does not know about.
-  ///
-  /// Returns what is there afterwards, not what changed: the controller reports
-  /// the full set and a diff would be this tool inventing a fact nobody
-  /// measured.
+  /// Re-reads a project's directory for checkouts it does not know about, and
+  /// returns what is there afterwards rather than what changed: a diff would be
+  /// this tool inventing a fact nobody measured.
   Future<Object?> _rescan(String? projectId) async {
     if (projectId == null || projectId.isEmpty) {
       throw ArgumentError('projectId is required. list_projects has the ids.');
@@ -140,12 +130,9 @@ class WorkspaceControlTools {
     };
   }
 
-  /// Points Explorer, the diff view and the side panel at one checkout.
-  ///
-  /// Through `CheckoutPicker`, which is also what the picker in the side panel
-  /// calls — so it selects the owning project first when that differs, and the
-  /// choice is remembered against the followed session exactly as a user's own
-  /// pick would be.
+  /// Points Explorer, the diff view and the side panel at one checkout, through
+  /// the same `CheckoutPicker` the side panel's own picker calls — so the owning
+  /// project is selected first when it differs, and the choice is remembered.
   Object? _select(String? repositoryId) {
     if (repositoryId == null || repositoryId.isEmpty) {
       throw ArgumentError(
@@ -170,12 +157,9 @@ class WorkspaceControlTools {
 
   /// What a session's checkout still owes, and what the app offers to do next.
   ///
-  /// Every count here is nullable at the source, and the null means **"could
-  /// not tell"** — `_orNull` in `delivery_providers.dart` turns a failed git or
-  /// `gh` into one. Rendering that as `0` would be the difference between "this
-  /// branch has nothing unpushed" and "we could not ask", which is exactly the
-  /// kind of invented status the handoff packet already refuses to produce. So
-  /// each unknown reads "not recorded".
+  /// Every count is nullable at the source and the null means **"could not
+  /// tell"**; rendering it as `0` would confuse "nothing unpushed" with "we
+  /// could not ask", so each unknown reads "not recorded".
   Future<Object?> _delivery(String sessionId) async {
     final session = _container.read(sessionDaoProvider).getById(sessionId);
     if (session == null) {

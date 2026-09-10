@@ -10,11 +10,9 @@ import '../terminal/application/terminal_profiles.dart';
 /// The terminal layout, as an agent can drive it.
 ///
 /// These go through `TerminalSessionsController` — the same object the tab bar
-/// calls — rather than spawning anything of their own. A pane an agent opened
-/// and a pane the user opened are the same pane: it appears in the tab bar, it
-/// persists across a restart, and closing it detaches or ends it under the same
-/// rules. An agent that shelled out to its own subprocess would get none of
-/// that, and the user would have no way to see what it was running.
+/// calls — rather than spawning anything of their own, so a pane an agent opened
+/// is a pane the user can see, that persists across a restart and closes under
+/// the same rules.
 class TerminalControlTools {
   TerminalControlTools(this._container);
 
@@ -72,9 +70,8 @@ class TerminalControlTools {
             ],
           },
       ],
-      // Panes still running with no tab showing them. An agent looking for
-      // "what is running" that only read the tabs would miss exactly the work
-      // someone closed a tab on and left going.
+      // Panes still running with no tab showing them: an agent that read only
+      // the tabs would miss the work someone closed a tab on and left going.
       'detached': <Object?>[
         for (final detached in state.detached)
           <String, Object?>{
@@ -104,8 +101,7 @@ class TerminalControlTools {
       'title': instance?.title ?? 'not recorded',
       'profileId': instance?.profileId,
       // Null rather than the empty string: a pane started with no explicit
-      // directory inherited one we did not record, and saying "" would read as
-      // the root.
+      // directory inherited one we did not record, and "" would read as root.
       'workingDirectory': instance?.workingDirectory,
       'live': state.livenessOf(paneId).isLive,
     };
@@ -120,9 +116,9 @@ class TerminalControlTools {
       final known = profiles.any((profile) => profile.id == profileId);
       if (!known) {
         // `resolveTerminalProfile` falls back to the first profile, which is
-        // right when restoring a layout and wrong here: an agent that asked
-        // for a WSL shell and silently got PowerShell would run its commands
-        // against the wrong filesystem.
+        // right when restoring a layout and wrong here: an agent that asked for
+        // a WSL shell and silently got PowerShell runs against the wrong
+        // filesystem.
         throw ArgumentError(
           'No terminal profile "$profileId". Available: '
           '${profiles.map((p) => p.id).join(', ')}.',
@@ -150,17 +146,11 @@ class TerminalControlTools {
 
   /// Runs [command] in a pane and waits for **that** command to finish.
   ///
-  /// The problem this exists to close: an agent's own shell tool runs a
-  /// process, waits, and returns output and an exit code in one round trip,
-  /// while a PTY is a byte stream with no notion of a command ending. So an
-  /// agent using a pane had to type, poll `terminal_output`, and guess — and
-  /// guessing is worse than spawning its own console, which is what agents did
-  /// instead, and why the user saw work happening outside the app.
-  ///
-  /// OSC 133 is the missing notion, and [CommandRunWatch] is where it is
-  /// waited on. Three things this must never do, because each of them makes a
-  /// caller act on something untrue: satisfy a call with an *earlier* command's
-  /// end marker, hand back the whole screen as if it were this command's
+  /// A PTY has no notion of a command ending, so an agent had to type, poll and
+  /// guess — and guessing is worse than spawning its own console, which is what
+  /// agents did instead. OSC 133 is the missing notion, waited on in
+  /// [CommandRunWatch]. Three things it must never do: satisfy a call with an
+  /// earlier command's end marker, hand back the whole screen as this command's
   /// output, or report an exit code it did not receive.
   Future<Object?> _run(
     String? paneId,
@@ -177,10 +167,9 @@ class TerminalControlTools {
     if (instance == null) {
       throw StateError('No terminal pane with id $paneId.');
     }
-    // An agent pane is not a shell: it is somebody's live Claude Code (or
-    // Codex, or…) session, and text typed into it is a *turn*, indistinguishable
-    // from one the user took. Refusing in words is the only honest answer —
-    // there is no shell there to run a command, and no exit code to report.
+    // An agent pane is not a shell: it is somebody's live agent session, and
+    // text typed into it is a *turn*, indistinguishable from one the user took.
+    // There is no shell to run a command in and no exit code to report.
     final agent = instance.agentLaunch;
     if (agent != null) {
       throw StateError(
@@ -200,8 +189,7 @@ class TerminalControlTools {
     }
 
     // Begun *before* the keystroke: a fast command can finish inside the same
-    // turn the write happened in, and a watch started afterwards would have
-    // missed its own end marker.
+    // turn, and a watch started afterwards would miss its own end marker.
     final watch = CommandRunWatch.begin(instance);
     _type(instance, command);
     if (watch == null) return _unwatched(instance, command);
@@ -214,12 +202,9 @@ class TerminalControlTools {
       'finished': outcome.finished,
       // Never invented. `null` is "we were not told", which is not zero.
       'exitCode': outcome.exitCode,
-      // The code, not the shape of the ending. It used to require
-      // `finished` because only an OSC 133 `D` could carry one; a pane whose
-      // process died now carries the host's own code, and reporting it beside
-      // a note denying one existed would be worse than either alone. The
-      // `paneExited` note below is the other half of this line — change them
-      // together or not at all.
+      // The code, not the shape of the ending: a pane whose process died carries
+      // the host's own code. The `paneExited` note below is the other half of
+      // this line — change them together or not at all.
       'exitCodeKnown': outcome.exitCode != null,
       'durationMs': outcome.duration?.inMilliseconds,
       'output': outcome.output.lines,
@@ -227,9 +212,8 @@ class TerminalControlTools {
     };
   }
 
-  /// A carriage return, for the same reason `SessionLauncher.sendTo` uses one:
-  /// a PTY line discipline reads CR as submit and leaves a bare LF sitting on
-  /// the line.
+  /// A carriage return, as `SessionLauncher.sendTo` uses: a PTY line discipline
+  /// reads CR as submit and leaves a bare LF sitting on the line.
   void _type(TerminalInstance instance, String command) => instance.terminal
     ..textInput(command)
     ..textInput('\r');
@@ -240,11 +224,10 @@ class TerminalControlTools {
     return Duration(milliseconds: ms);
   }
 
-  /// The answer for a pane whose shell cannot say when a command ended.
-  ///
-  /// It behaves as the tool always did — type and return — but it says so.
-  /// A caller that cannot tell "finished, exit 0" from "we cannot tell" makes
-  /// wrong decisions, so the one thing not on offer here is a fabricated zero.
+  /// The answer for a pane whose shell cannot say when a command ended: it types
+  /// and returns, as the tool always did, but says so. A caller that cannot tell
+  /// "finished, exit 0" from "we cannot tell" makes wrong decisions, so the one
+  /// thing not on offer is a fabricated zero.
   Map<String, Object?> _unwatched(TerminalInstance instance, String command) {
     final shell = _profiles()
         .where((profile) => profile.id == instance.profileId)
@@ -356,17 +339,13 @@ class TerminalControlTools {
     };
   }
 
-  /// Closes a tab. Whether its panes survive is the app's decision, not this
-  /// tool's, and the answer is measured rather than claimed.
+  /// Closes a tab. Whether its panes survive is `shouldDetachOnClose`'s decision
+  /// — an agent session or a running command is kept, an idle shell released —
+  /// so what comes back is which actually happened to each pane, read back
+  /// afterwards rather than claimed.
   ///
-  /// `shouldDetachOnClose` keeps an agent session or a running command and
-  /// releases an idle shell that has printed nothing anyone would come back
-  /// for. So "close detaches" is true of the panes that matter and false of the
-  /// ones that do not — which means the honest thing to return is which
-  /// actually happened to each pane, read back afterwards.
-  ///
-  /// `kill` is the other thing entirely: it skips the policy and ends every
-  /// pane. That is why it is a separate argument and not the meaning of close.
+  /// `kill` skips the policy and ends every pane, which is why it is a separate
+  /// argument and not the meaning of close.
   Object? _close(String? tabId, {required bool kill}) {
     if (tabId == null || tabId.isEmpty) {
       throw ArgumentError('tabId is required. terminal_list has the ids.');

@@ -15,12 +15,9 @@ import 'agent_lookup.dart';
 import 'tmux_orchestration.dart';
 
 /// Opening several imported sessions together as tmux windows in one terminal
-/// tab.
-///
-/// Beside `tmux_orchestration.dart` rather than in it: that file builds the
+/// tab. Beside `tmux_orchestration.dart` rather than in it: that file builds the
 /// script and knows nothing about this app, which is what lets it be tested
-/// without one. This is the half that reads sessions, resolves each agent's
-/// resume command, and asks the terminal service to run the result.
+/// without one.
 class TmuxControlTools {
   TmuxControlTools(this._container);
 
@@ -74,11 +71,9 @@ class TmuxControlTools {
       if (repo == null || install == null) {
         throw StateError('Repository or agent missing for "$id".');
       }
-      // The same registry read as every other resume surface. This switch was
-      // the worst of the family: its `_` arm handed `--resume <id>` to *any*
-      // agent, so an agent that spells it differently was given a flag it does
-      // not have and the tmux window died on an unknown option — or, worse,
-      // took `--resume` as something else entirely.
+      // The same registry read as every other resume surface. This switch used
+      // to hand `--resume <id>` to *any* agent, so one that spells it
+      // differently got a flag it does not have and the window died on it.
       final registry = _container.read(agentRegistryProvider);
       final refusal = resumeRefusalFor(
         registry,

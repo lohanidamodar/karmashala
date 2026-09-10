@@ -7,18 +7,16 @@ import 'launcher_mcp.dart';
 
 /// What a probe of the stdio bridge found.
 ///
-/// Four outcomes, because they need four different responses from the user —
-/// and because the panel that used to report this had only two, "the file is
-/// there" and "the file is not there", which is why it spent an hour on
-/// 2026-09-03 saying *Tools available* while every agent session on the machine
-/// had lost every Karmashala tool.
+/// Four outcomes, because they need four different responses from the user. The
+/// panel that used to report this had two — the file is there, or it is not —
+/// which is why it spent an hour on 2026-09-03 saying *Tools available* while
+/// every agent session on the machine had lost every Karmashala tool.
 enum McpBridgeVerdict {
   /// Spawned, and completed an MCP `initialize` handshake.
   answering,
 
-  /// On disk, but the process would not start. Today's failure: WSL's interop
-  /// handler had gone, so `posix_spawn` of any Windows executable returned
-  /// `ENOEXEC` — the file was never the problem.
+  /// On disk, but the process would not start — WSL's interop handler had gone,
+  /// so `posix_spawn` of any Windows executable returned `ENOEXEC`.
   unspawnable,
 
   /// Nothing beside the app to spawn.
@@ -56,26 +54,12 @@ class McpBridgeProbeResult {
 
 /// Spawns `karmashala_mcp` and speaks one `initialize` handshake to it.
 ///
-/// **Why a handshake and not `existsSync`.** The question a user has is "can an
-/// agent get tools from this app", and a file's presence answers a different,
-/// weaker one. The four things that must hold — the file is there, the OS will
-/// start it, the process speaks MCP, and it does so promptly — are exactly the
-/// four this probe separates, and only the first was ever being checked.
-///
-/// **Why `initialize` and not `tools/list`.** The bridge answers `initialize`
-/// out of its own code, with no reference to the app; `tools/list` is forwarded
-/// over the owner-only socket and so also measures whether the app is willing
-/// to answer. That second half is already reported, without spawning anything,
-/// by [ControlServerStatus] — which knows *which* hardening step failed, a
-/// thing a failed forward could only guess at. Probing it here would be a
-/// second opinion that can disagree with the first. So the split is: this says
-/// the bridge runs, `ControlServerStatus` says the app answers it, and the two
-/// together are the whole path.
-///
-/// **What it does not say.** This spawns the bridge the way *this host* would.
-/// A session inside WSL spawns the same file over WSL interop, which is a
-/// different mechanism that can be broken while this one is fine — see the
-/// interop check, which is what speaks for those sessions.
+/// Not `existsSync`: the four things that must hold — the file is there, the OS
+/// will start it, it speaks MCP, and it does so promptly — are the four this
+/// separates. `initialize` and not `tools/list`, because whether the *app*
+/// answers is [ControlServerStatus]'s to report and it knows which step failed.
+/// This spawns the bridge the way *this host* would; a WSL session spawns it
+/// over interop, which the interop check speaks for.
 class McpBridgeProbe {
   McpBridgeProbe({
     required this.runner,
@@ -93,18 +77,13 @@ class McpBridgeProbe {
   ///
   /// **Measured 2026-09-03 against the compiled bridge on the owner's Windows
   /// machine: 121 ms median, 111-125 ms warm, 875 ms on the first spawn of a
-  /// freshly written executable.** Almost all of it is process start; the
-  /// bridge answers `initialize` out of its own code without touching the app.
-  /// Five seconds is therefore forty times the worst warm case and six times a
-  /// cold one, so a timeout here is a real fault rather than a slow disk — and
-  /// it is still short enough that a wedged bridge does not hold the panel.
+  /// freshly written executable.** Five seconds is forty times the worst warm
+  /// case, so a timeout here is a real fault rather than a slow disk.
   final Duration timeout;
 
-  /// The `initialize` request, as a client would send it.
-  ///
-  /// `2025-06-18` rather than the newest revision on purpose: it is one of the
-  /// versions `kMcpAdvertisedVersions` recommends, so this probe exercises the
-  /// path a real client actually takes rather than one nothing uses.
+  /// The `initialize` request, as a client would send it. `2025-06-18` rather
+  /// than the newest revision: it is one of the versions `kMcpAdvertisedVersions`
+  /// recommends, so this probe exercises the path a real client takes.
   static const String initializeRequest =
       '{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
       '{"protocolVersion":"2025-06-18","capabilities":{},'
@@ -126,8 +105,8 @@ class McpBridgeProbe {
       handle = await runner.start(CommandRequest(executable: path));
     } on Object catch (error) {
       // Every start failure, not just [CommandException]: the interop failure
-      // this exists for arrives as a raw OS error on some hosts, and a probe
-      // that let it through would crash the panel instead of reporting it.
+      // this exists for arrives as a raw OS error on some hosts, and letting it
+      // through would crash the panel instead of reporting it.
       return McpBridgeProbeResult(
         verdict: McpBridgeVerdict.unspawnable,
         took: stopwatch.elapsed,

@@ -1,47 +1,20 @@
 /// The Model Context Protocol, as this app speaks it: JSON-RPC 2.0 in, one
-/// JSON-RPC message out, with no connection state of any kind between calls.
+/// JSON-RPC message out, with no connection state between calls.
 ///
-/// ## Why there is no session
+/// It never mints an `Mcp-Session-Id`: agent processes here come and go
+/// constantly, and statelessness makes a reconnect a non-event. The app it
+/// drives is the state; what is absent is protocol state.
 ///
-/// Revisions `2025-03-26` through `2025-11-25` let a server mint an
-/// `Mcp-Session-Id` at `initialize` and require it on every later request.
-/// Revision `2026-07-28` removed the mechanism outright: every request declares
-/// its own protocol version in `_meta`, and the server answers each one on its
-/// own terms.
-///
-/// This server never mints one, on either side of that line, and that is a
-/// decision about *this* app rather than a shortcut. Agent processes here come
-/// and go constantly — a session ends mid-turn, a pane is killed, a CLI
-/// restarts and reconnects — and a server holding per-connection state would
-/// have to answer "who were you again?" for every one of those. Statelessness
-/// makes the reconnect a non-event: the second request is indistinguishable
-/// from the first, because there is nothing to have lost.
-///
-/// It does *not* mean the server is without state. The app it drives is the
-/// state; what is absent is protocol state.
-///
-/// ## Dual-era
-///
-/// The spec's word for a server that serves both shapes. Which one a request
-/// gets is decided by the protocol version it declares, not by guessing:
-///
-/// * `2026-07-28` — "modern". Per-request `_meta`, mirrored into
-///   `MCP-Protocol-Version` / `Mcp-Method` / `Mcp-Name` headers that must agree
-///   with the body, `server/discover`, and `resultType` on every result.
-/// * `2025-11-25`, `2025-06-18`, `2025-03-26` — "legacy". An `initialize`
-///   handshake, no header mirroring, no `resultType`.
-/// * Nothing declared at all — legacy at `2025-03-26`, which is the fallback
-///   the spec names for clients predating the version header.
-///
-/// Both are served because both are real: the CLIs that will call this today
-/// open with `initialize`, and the revision they will move to does not.
+/// Dual-era, decided by the version a request declares: `2026-07-28` is modern
+/// (per-request `_meta` mirrored into headers, `server/discover`, `resultType`),
+/// the 2025 revisions are legacy (an `initialize` handshake and none of that),
+/// and a request declaring nothing is legacy at `2025-03-26`.
 library;
 
 import 'dart:convert';
 
-/// Revisions this server implements, newest first. A request declaring any of
-/// them is served; anything else gets `UnsupportedProtocolVersionError`, which
-/// lists these.
+/// Revisions this server implements, newest first. Anything else gets
+/// `UnsupportedProtocolVersionError`, which lists these.
 const List<String> kMcpSupportedVersions = <String>[
   '2026-07-28',
   '2025-11-25',
@@ -49,30 +22,15 @@ const List<String> kMcpSupportedVersions = <String>[
   '2025-03-26',
 ];
 
-/// Revisions `server/discover` **offers**, newest first, so a client picking
-/// the first it recognises picks the best one it will actually work on.
+/// Revisions `server/discover` **offers**, newest first, so a client picking the
+/// first it recognises picks one it will actually work on.
 ///
-/// **This is deliberately not [kMcpSupportedVersions], and the difference is
-/// one client's bug rather than a gap in this server.** Measured 2026-08-31
-/// against Claude Code 2.1.251, which is the CLI most of this app's sessions
-/// run: it probes `server/discover`, reads this field, selects `2026-07-28`,
-/// sends a modern `tools/list`, receives all 62 tools — and then registers
-/// **none of them**. The session reports the server as connected and the agent
-/// has an empty tool surface, which is a worse outcome than no server at all,
-/// because nothing about it looks broken.
-///
-/// It is the client's modern path and not this catalogue. The same run against
-/// a hand-written server serving one trivial tool registers nothing either;
-/// the same hand-written server, with `server/discover` answered `-32601` *or*
-/// advertising only the revisions below, registers `mcp__…__ping_it` at once.
-///
-/// So the narrowest fix is here: `server/discover` stays implemented and
-/// correct in shape, and offers the revisions a real client has been observed
-/// to finish a session on. `2026-07-28` is still served to any request that
-/// declares it — see [kMcpSupportedVersions] — it is simply not recommended to
-/// a client that asks what to pick. **Delete this constant and point
-/// `_discoverResult` back at [kMcpSupportedVersions] once a released client
-/// registers tools over the modern path.**
+/// Deliberately narrower than [kMcpSupportedVersions], because of one client's
+/// bug: measured 2026-08-31, Claude Code 2.1.251 selects `2026-07-28`, receives
+/// all 62 tools and registers **none** of them — a connected server with an
+/// empty tool surface. **Delete this constant and point `_discoverResult` back
+/// at [kMcpSupportedVersions] once a released client registers tools over the
+/// modern path.**
 const List<String> kMcpAdvertisedVersions = <String>[
   '2025-11-25',
   '2025-06-18',
@@ -82,14 +40,12 @@ const List<String> kMcpAdvertisedVersions = <String>[
 /// The revision that carries its metadata per request rather than per session.
 const String kMcpModernVersion = '2026-07-28';
 
-/// The newest revision a client opening with `initialize` can be answered
-/// with. `2026-07-28` has no `initialize`, so offering it to such a client
-/// would be offering something it cannot use.
+/// The newest revision a client opening with `initialize` can be answered with;
+/// `2026-07-28` has no `initialize` for it to use.
 const String kMcpNewestLegacyVersion = '2025-11-25';
 
 /// What a request that declares no version at all is taken to be, per the
-/// transport spec's backwards-compatibility rule for clients older than the
-/// `MCP-Protocol-Version` header.
+/// transport spec's rule for clients older than the version header.
 const String kMcpUndeclaredVersion = '2025-03-26';
 
 const String _protocolVersionMetaKey =
@@ -111,10 +67,8 @@ abstract final class McpErrorCode {
   static const int unsupportedProtocolVersion = -32022;
 }
 
-/// One answer, ready for whatever transport carried the request in.
-///
-/// [body] is null for a notification, which by JSON-RPC has no reply and by the
-/// transport spec is a bare `202`.
+/// One answer, ready for whatever transport carried the request in. [body] is
+/// null for a notification, which the transport spec answers with a bare `202`.
 class McpReply {
   const McpReply(this.statusCode, [this.body]);
 
@@ -125,9 +79,8 @@ class McpReply {
   String encode() => body == null ? '' : jsonEncode(body);
 }
 
-/// Runs one tool. Throws to fail it; the thrown object's message becomes the
-/// text of an `isError` result, because a model can act on that and cannot act
-/// on a JSON-RPC error.
+/// Runs one tool. Throws to fail it: the thrown message becomes the text of an
+/// `isError` result, which a model can act on where a JSON-RPC error is not.
 typedef McpToolInvoker =
     Future<Object?> Function(
       String name,
@@ -139,11 +92,9 @@ typedef McpToolInvoker =
 /// depend on app state never serves a stale list.
 typedef McpToolCatalogue = List<Map<String, dynamic>> Function();
 
-/// A transport-free MCP server.
-///
-/// Everything that varies by HTTP — auth, `Origin`, method, path — belongs to
-/// the endpoint that wraps this. What is here is the protocol and nothing else,
-/// which is what makes the era rules testable without a socket.
+/// A transport-free MCP server. Everything that varies by HTTP — auth,
+/// `Origin`, method, path — belongs to the endpoint that wraps this, which is
+/// what makes the era rules testable without a socket.
 class McpServer {
   McpServer({
     required this.name,
@@ -162,12 +113,9 @@ class McpServer {
   final McpToolCatalogue catalogue;
   final McpToolInvoker invoke;
 
-  /// Answers one JSON-RPC message.
-  ///
-  /// [headers] must already be lower-cased; HTTP field names are
-  /// case-insensitive and every comparison below assumes that has been done.
-  /// [callerSessionId] is the session the transport authenticated as the
-  /// caller — never anything the message said about itself.
+  /// Answers one JSON-RPC message. [headers] must already be lower-cased, as
+  /// every comparison below assumes; [callerSessionId] is the session the
+  /// transport authenticated, never anything the message said about itself.
   Future<McpReply> handle(
     Object? message, {
     Map<String, String> headers = const <String, String>{},
@@ -199,8 +147,7 @@ class McpServer {
     switch (method) {
       case 'initialize':
         // The modern revision has no handshake, so a client that reached here
-        // declaring it is contradicting itself. 404 with -32601 is the answer
-        // the transport spec defines for a method a server does not implement.
+        // declaring it is contradicting itself.
         if (modern) {
           return _error(
             id,
@@ -237,12 +184,9 @@ class McpServer {
   }
 
   /// Which revision this request is speaking, or the error that says why it
-  /// cannot be served.
-  ///
-  /// The body is the source of truth and the header mirrors it, so a
-  /// disagreement between them is rejected rather than resolved: a proxy
-  /// routing on the header and a server executing on the body must never be
-  /// looking at different requests.
+  /// cannot be served. The body is the source of truth and the header mirrors
+  /// it, so a disagreement is rejected rather than resolved: a proxy routing on
+  /// the header and a server executing on the body must not diverge.
   _Resolved _resolveVersion(
     Map<String, Object?> params,
     Map<String, String> headers,
@@ -270,9 +214,8 @@ class McpServer {
       return _supported(fromBody);
     }
     if (fromHeader != null && fromHeader.isNotEmpty) return _supported(fromHeader);
-    // Nothing declared. A handshake is self-describing — its own params say
-    // which revision it wants — so it is left to negotiate; anything else falls
-    // back to the pre-header revision.
+    // Nothing declared. A handshake is self-describing, so it is left to
+    // negotiate; anything else falls back to the pre-header revision.
     return _Resolved(method == 'initialize' ? null : kMcpUndeclaredVersion);
   }
 
@@ -292,12 +235,9 @@ class McpServer {
     );
   }
 
-  /// The header/body agreement the modern revision requires.
-  ///
-  /// Missing counts as mismatched: the spec lists "a required standard header
-  /// is missing" among the conditions for `-32020`, and a server that quietly
-  /// accepted the body alone would be the exact split-source-of-truth the rule
-  /// exists to prevent.
+  /// The header/body agreement the modern revision requires. Missing counts as
+  /// mismatched: the spec lists a missing required header among the conditions
+  /// for `-32020`.
   McpReply? _validateModernHeaders(
     Object? id,
     String method,
@@ -361,9 +301,8 @@ class McpServer {
 
   Map<String, Object?> _initializeResult(Map<String, Object?> params) {
     final asked = params['protocolVersion'];
-    // Echo what was asked for when we speak it; otherwise name the newest
-    // revision that still has a handshake. Answering a legacy client with
-    // 2026-07-28 would be answering it with something it cannot use.
+    // Echo what was asked for when we speak it; otherwise the newest revision
+    // that still has a handshake, which is all a legacy client can use.
     final agreed = asked is String && kMcpSupportedVersions.contains(asked)
         ? asked
         : kMcpNewestLegacyVersion;
@@ -420,8 +359,8 @@ class McpServer {
       );
     } on Object catch (error) {
       // Tool failures come back as results, so the model reads them and can
-      // correct itself. An empty success would be the one unacceptable answer:
-      // it reads as "done" for something that did not happen.
+      // correct itself. An empty success would read as "done" for something
+      // that did not happen.
       return _result(
         id,
         <String, Object?>{
@@ -435,12 +374,9 @@ class McpServer {
     }
   }
 
-  /// Shapes one tool's return value as a `CallToolResult`.
-  ///
-  /// A tool that declared an `outputSchema` **must** return structured results,
-  /// so `structuredContent` is emitted for exactly those and the JSON goes in a
-  /// text block beside it — which is also what a client that ignores structured
-  /// content needs in order to see anything at all.
+  /// Shapes one tool's return value as a `CallToolResult`. A tool that declared
+  /// an `outputSchema` **must** return structured results, so `structuredContent`
+  /// is emitted for exactly those, with the JSON in a text block beside it.
   Map<String, Object?> _toolResult(String toolName, Object? result) {
     // A tool returning content blocks of its own — an image, say — hands them
     // back under `_mcpContent` to be passed through untouched.

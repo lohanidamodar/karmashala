@@ -6,11 +6,8 @@ import 'package:karmashala_devices/devices.dart';
 import 'device_tool_support.dart';
 
 /// Files on a device: which places it can reach, what is in one, and a copy in
-/// either direction.
-///
-/// One listing tool rather than a roots tool and a directory tool, because the
-/// roots are not a directory — and no delete tool at all, for the reason given
-/// at the foot of the class.
+/// either direction. One listing tool rather than a roots tool and a directory
+/// tool, because the roots are not a directory — and no delete tool at all.
 class DeviceFileTools extends DeviceToolFamily {
   DeviceFileTools(super.container, {super.callerSessionId});
 
@@ -42,13 +39,10 @@ class DeviceFileTools extends DeviceToolFamily {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  /// **Roots when no path is given, a listing when one is.**
-  ///
-  /// One tool rather than two because the roots are not a directory: the driver
-  /// says which places it can reach and they are not branches of one tree —
-  /// see `domain/device_files.dart`. An agent that had to guess `/` first would
-  /// be wrong on an iOS device, where the only reachable places are the
-  /// containers of development-signed apps.
+  /// **Roots when no path is given, a listing when one is.** One tool rather
+  /// than two because the roots are not branches of one tree: an agent that had
+  /// to guess `/` first would be wrong on an iOS device, where the only
+  /// reachable places are the containers of development-signed apps.
   Future<Object?> _filesList(String? id, String? path) async {
     final driver = await driverThatCan(
       id,
@@ -90,9 +84,9 @@ class DeviceFileTools extends DeviceToolFamily {
             'link_target': ?entry.linkTarget,
           },
       ],
-      // Never dropped. `ls -l` differs by device and Android version, so a line
-      // this build cannot parse is a known unknown — omitting it silently would
-      // tell the agent the directory is shorter than it is.
+      // Never dropped. `ls -l` differs by device and Android version, and
+      // omitting an unparsable line would tell the agent the directory is
+      // shorter than it is.
       if (listing.skipped.isNotEmpty)
         'unparsed': [
           for (final skipped in listing.skipped)
@@ -102,11 +96,9 @@ class DeviceFileTools extends DeviceToolFamily {
     };
   }
 
-  /// Copies a file off the device to somewhere this agent can then read.
-  ///
-  /// Defaults to the system temp directory under the device's own name, the
-  /// same place and shape `device_screenshot` uses, so the reply's `host_path`
-  /// can be handed straight to a file read.
+  /// Copies a file off the device to somewhere this agent can then read —
+  /// by default the system temp directory under the device's own name, so the
+  /// reply's `host_path` can be handed straight to a file read.
   Future<Object?> _filePull(
     String? id,
     String? devicePath,
@@ -141,11 +133,9 @@ class DeviceFileTools extends DeviceToolFamily {
     };
   }
 
-  /// Copies a file from this computer onto the device.
-  ///
-  /// [overwrite] is off unless asked for, and the driver refuses rather than
-  /// replacing: there is no undo on the far side, and a push that silently
-  /// replaced somebody's file would be indistinguishable from one that worked.
+  /// Copies a file from this computer onto the device. [overwrite] is off unless
+  /// asked for and the driver refuses rather than replacing: there is no undo on
+  /// the far side, and a silent replacement would look like a plain success.
   Future<Object?> _filePush(
     String? id,
     String? hostPath,
@@ -180,14 +170,11 @@ class DeviceFileTools extends DeviceToolFamily {
     };
   }
 
-  // **No delete tool, deliberately.** `deletePath` exists on the driver and the
-  // pane offers it behind a confirmation, which is the only thing standing
-  // between a path typed one character wrong and an unrecoverable `rm -rf` on
-  // somebody's phone. A tool has no such affordance: the model would be both
-  // the one that typed the path and the one that confirmed it. The driver's own
-  // comment calls this "the single most expensive mistake this surface can
-  // make", and an agent that genuinely needs it can ask the user, who has a
-  // button for it.
+  // **No delete tool, deliberately.** `deletePath` exists on the driver, and the
+  // pane offers it behind a confirmation — the only thing between a path typed
+  // one character wrong and an unrecoverable `rm -rf` on somebody's phone. A
+  // tool has no such affordance: the model would be both the one that typed the
+  // path and the one that confirmed it.
 }
 
 /// The schemas for [DeviceFileTools].

@@ -6,34 +6,14 @@ import '../verification/domain/verification_run.dart';
 
 /// `decision_record`: an agent writing down a decision, deliberately.
 ///
-/// The fourth of the four explicit acts that can put a row in a session's
-/// decision record — the other three are answering an approval prompt,
-/// finishing a verification run, and labelling a checkpoint, and each of those
-/// is recorded where it happens. This one exists because the decision the
-/// handoff packet loses first has no other act attached to it: "the isolate
-/// pool deadlocked on Windows" is something an agent *concluded*, forty turns
-/// before anybody hands the work over, and nothing else in the app will ever
-/// see it again.
+/// The fourth of the four explicit acts that write to a session's decision
+/// record, and the one for a decision with no other act attached to it. It is
+/// called rather than inferred because a paraphrase is either right or wrong
+/// and the next agent cannot tell which.
 ///
-/// ## Why an agent must call this rather than have it inferred
-///
-/// Because the alternative is reading the conversation and deciding what it
-/// must have meant, and there is no model in the packet path to do that with.
-/// `handoff_packet.dart` makes the argument at length: a paraphrase is either
-/// right or wrong and the reader cannot tell which, and the reader here is a
-/// second agent with no memory of the work. An explicit call is a claim
-/// somebody made on the record; an inference is a claim nobody made.
-///
-/// ## Why an agent cannot write every kind
-///
-/// [DecisionKind.approvalGranted] would let an agent record that the user
-/// allowed something the user never allowed, and the next agent reads that as
-/// settled permission. [DecisionKind.verificationVerdict] and
-/// [DecisionKind.checkpointMarked] would be a verdict with no run behind it and
-/// a marked state with no checkpoint — both of which point at a record that
-/// does not exist. The two kinds left are the two an agent is entitled to
-/// assert about its own reasoning, and they are the two the gap analysis says
-/// go missing.
+/// An agent may write only two of the kinds: [DecisionKind.approvalGranted]
+/// would record permission the user never gave, and a verdict or a marked state
+/// would point at a run or a checkpoint that does not exist.
 class DecisionControlTools {
   DecisionControlTools(this._container, {this.callerSessionId});
 
@@ -184,22 +164,10 @@ const List<Map<String, dynamic>> decisionControlToolSchemas =
     ];
 
 /// Writes a finished run's verdict to the decision record of the session whose
-/// work it was about.
-///
-/// The second of the four explicit acts, and the one that belongs to a feature
-/// this file is only allowed to read. Called from the control server's dispatch
-/// the moment `verification_finish` returns, so the verification feature does
-/// not have to know the decision record exists.
-///
-/// Attached to the **subject** session, not the verifier's. The handoff being
-/// protected is the subject's: whoever takes that work over is the one who
-/// would otherwise re-run a check that passed, or skip one that did not. The
-/// row carries G3's derived attribution phrase with it, in the same words the
-/// verification pane says them, so a pass the author gave itself can be told
-/// from one somebody else gave it.
-///
-/// An unfinished or unattached run writes nothing — there is no verdict to
-/// record, or nobody's record to put it in.
+/// work it was about — the **subject**, not the verifier: whoever takes that
+/// work over is the one who would otherwise re-run a check that passed. Called
+/// from the control server's dispatch, so the verification feature need not know
+/// the record exists. An unfinished or unattached run writes nothing.
 void recordFinishedVerdict(ProviderContainer container, VerificationRun? run) {
   if (run == null) return;
   final subject = run.sessionId;

@@ -11,9 +11,7 @@ import 'todo_tools.dart';
 ///
 /// Notes are the app's own scratchpad; the inbox is every session that needs
 /// somebody. Both were readable only by a person looking at the panel, which
-/// made "an agent finished and is waiting" a fact only a human could act on —
-/// the failure the orchestration-gaps note calls the human being
-/// the message bus.
+/// made "an agent finished and is waiting" a fact only a human could act on.
 class AttentionControlTools {
   AttentionControlTools(this._container, {this.callerSessionId});
 
@@ -52,11 +50,10 @@ class AttentionControlTools {
 
   /// The notes, optionally narrowed to one session and one project.
   ///
-  /// `projectId` follows the same convention as the todo tools: an id filters
-  /// to that project, the literal `'none'` filters to the notes filed under no
-  /// project, and omitting it means all of them. A string argument cannot
-  /// otherwise carry the difference between "not given" and "explicitly
-  /// nothing", and both are things a caller means.
+  /// `projectId` follows the todo tools' convention: an id filters to that
+  /// project, the literal `'none'` filters to notes filed under no project, and
+  /// omitting it means all of them — a string argument cannot otherwise carry
+  /// the difference between "not given" and "explicitly nothing".
   Object? _notesList(String? sessionId, {String? projectId}) {
     final notes = <Note>[
       for (final note in _container
@@ -88,11 +85,9 @@ class AttentionControlTools {
     };
   }
 
-  /// Writes a note, keeping [body] **exactly as given**.
-  ///
-  /// `NotesController.capture` says so in its own doc and this adds nothing:
-  /// no trimming to a gist, no summarising. A note is evidence, and a
-  /// paraphrase's errors are invisible to whoever reads it next.
+  /// Writes a note, keeping [body] **exactly as given**: no trimming to a gist,
+  /// no summarising. A note is evidence, and a paraphrase's errors are invisible
+  /// to whoever reads it next.
   Object? _noteAdd({
     required String body,
     String? title,
@@ -103,9 +98,8 @@ class AttentionControlTools {
       throw ArgumentError('body is required and cannot be blank.');
     }
     // Which project it lands under: an explicit id wins, `'none'` files it
-    // nowhere, and an omitted argument lets `NotesController.capture` follow
-    // the session's own repository — the rule the v33 backfill used for every
-    // note taken before the column existed.
+    // nowhere, and an omitted argument lets `NotesController.capture` follow the
+    // session's own repository.
     final repositoryId = sessionId == null
         ? null
         : _container.read(sessionDaoProvider).getById(sessionId)?.repositoryId;
@@ -140,12 +134,9 @@ class AttentionControlTools {
     return <String, Object?>{'id': id, 'deleted': true};
   }
 
-  /// Everything waiting on somebody, newest first.
-  ///
-  /// `kind` is the fact that matters: `needsApproval` and `failed` are sessions
-  /// that have stopped and will not restart themselves, and `finished` is work
-  /// nobody has read. An agent orchestrating others reads this to find out what
-  /// to do next, which is what the inbox was already doing for a person.
+  /// Everything waiting on somebody, newest first. `kind` is the fact that
+  /// matters: `needsApproval` and `failed` are sessions that have stopped and
+  /// will not restart themselves, and `finished` is work nobody has read.
   Object? _inboxList({required bool includeSeen}) {
     final inbox = _container.read(attentionInboxProvider);
     final items = includeSeen ? inbox.items : inbox.pending;
@@ -176,10 +167,9 @@ class AttentionControlTools {
 
   /// Brings an item's session to the front, which also marks it seen.
   ///
-  /// What "seen" then does to the item depends on which kind it is, and the
-  /// inbox already decides that: an **event** you have looked at is done with
-  /// and leaves, while a **condition** stays listed because looking at a
-  /// question does not answer it. Both outcomes are reported, read back from
+  /// What "seen" does to the item depends on its kind: an **event** you have
+  /// looked at is done with and leaves, while a **condition** stays, because
+  /// looking at a question does not answer it. Both outcomes are read back from
   /// the inbox afterwards rather than predicted.
   Object? _inboxOpen(String? id) {
     final item = _item(id);
@@ -203,10 +193,9 @@ class AttentionControlTools {
 
   /// Takes an item off the list without opening anything.
   ///
-  /// Destructive in the sense that matters here: the item is gone, and for an
-  /// *event* kind — a turn that ended, a build that went red — nothing will put
-  /// it back, because the thing it recorded has already happened. A condition
-  /// that is still true will be re-filed by the next poll.
+  /// For an *event* kind — a turn that ended, a build that went red — nothing
+  /// will put it back, because the thing it recorded has already happened. A
+  /// condition that is still true is re-filed by the next poll.
   Object? _inboxDismiss(String? id) {
     final item = _item(id);
     _container.read(attentionInboxProvider.notifier).dismiss(item.id);

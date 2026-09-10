@@ -4,47 +4,17 @@ import 'package:karmashala_core/logging.dart';
 
 /// Restricts [file] so no other user on the machine can read it.
 ///
-/// `mcp_bridge.json` holds two bearer tokens in cleartext. Loopback TCP is
-/// reachable by **every** local process (see `LauncherControlServer`'s threat
-/// model), so those tokens are the whole access-control boundary — which makes
-/// the permissions on the file that publishes them the boundary behind the
-/// boundary. dray gets this for free by putting a unix socket in a `0700`
-/// directory; on Windows there is no equivalent default to lean on, so we assert
-/// it.
+/// `mcp_bridge.json` holds two bearer tokens in cleartext and every local
+/// process can reach loopback, so this file's permissions are the boundary
+/// behind the boundary. On a stock Windows 11 profile the inherited DACL is
+/// already user-only — but *inherited* (`AreAccessRulesProtected: False`): a
+/// broader ACE on any ancestor propagates down, and `writeAsString` preserves
+/// whatever DACL a file already carries. So this grants an explicit ACE and
+/// **strips inheritance**, keeping SYSTEM and Administrators, since an admin can
+/// take ownership anyway and excluding them only breaks backup tooling.
 ///
-/// ## What was already true, and why this is still worth doing
-///
-/// Audited on a stock Windows 11 profile, the file's DACL is inherited from
-/// `%APPDATA%` and grants exactly `SYSTEM`, `BUILTIN\Administrators` and the
-/// owning user — no `Users`, `Authenticated Users` or `Everyone` ACE. So on a
-/// default profile another non-admin user already could not read it.
-///
-/// The problem is that this was *inherited*, never asserted: `Get-Acl` reported
-/// `AreAccessRulesProtected: False`. A broader ACE added to `%APPDATA%` or any
-/// ancestor — by a domain policy, a roaming-profile setup, a folder-redirection
-/// GPO, or a user who once loosened a parent folder — propagates straight down
-/// to the token file, silently. And `writeAsString` over an existing file
-/// preserves whatever DACL that file already carries, so a file created under a
-/// loose parent stays loose forever after.
-///
-/// This function removes that dependency: it grants an explicit ACE to the
-/// current user (plus SYSTEM and Administrators) and then **strips inheritance**,
-/// so the file's permissions no longer track its ancestors.
-///
-/// SYSTEM and Administrators are kept deliberately. An administrator can take
-/// ownership of any file on the machine, so excluding them buys nothing against
-/// the actual threat — another *non-admin* local user — while breaking backup,
-/// anti-malware and management tooling. The boundary this establishes is "no
-/// unprivileged account other than the owner", which is exactly what a `0700`
-/// directory gives dray.
-///
-/// Returns whether the restriction was applied. **A `false` is not tolerated.**
-/// Until Loop 61 it was — the file kept its inherited ACL, which on a default
-/// profile is still user-only, and the tokens went in anyway. That reasoning
-/// held only for the *default* profile, which is precisely the case where the
-/// call succeeds; the returned `false` describes the profiles where it does
-/// not. `LauncherControlServer` now treats it as a refusal: the privileged
-/// token is never written, and the transport it authenticates comes down.
+/// Returns whether it was applied. A `false` is a refusal: the privileged token
+/// is never written, and the transport it authenticates comes down.
 Future<bool> restrictHandshakeFileToCurrentUser(
   File file, {
   AppLogger? logger,
@@ -64,22 +34,12 @@ Future<bool> restrictHandshakeFileToCurrentUser(
   }
 }
 
-/// Restricts the directory [dir] so no other user on the machine can enter it.
-///
-/// This is the boundary for the local RPC **socket**, which carries no
-/// permissions of its own: a unix domain socket is reachable by anyone who can
-/// traverse to it, so "who may call the app's privileged RPC" is decided here
-/// and nowhere else. It is the same `0700` model dray uses, asserted rather
-/// than inherited for exactly the reasons [restrictHandshakeFileToCurrentUser]
-/// documents.
-///
-/// The Windows grant is `(OI)(CI)` — object- and container-inherit — so the
-/// socket node created inside the directory is covered too, rather than
-/// depending on whatever the socket file is born with.
-///
-/// Returns whether the restriction was applied. A `false` means the boundary is
-/// simply absent, not weakened, so `LauncherControlServer` does not create the
-/// socket at all.
+/// Restricts the directory [dir] so no other user on the machine can enter it —
+/// the boundary for the RPC **socket**, which carries none of its own, since
+/// anyone who can traverse to a unix socket can reach it. The Windows grant is
+/// `(OI)(CI)` so the socket node created inside is covered. Returns whether it
+/// was applied; a `false` means the boundary is absent, not weakened, so no
+/// socket is created at all.
 Future<bool> restrictDirectoryToCurrentUser(
   Directory dir, {
   AppLogger? logger,
@@ -113,7 +73,7 @@ Future<bool> _restrictWindows(
     return false;
   }
 
-  // `(OI)(CI)` makes the ACE apply to what is created inside a directory. On a
+  // `(OI)(CI)` makes the ACE apply to what is created inside a directory; on a
   // file the flags are meaningless, so they are only added where they mean
   // something.
   final flags = inheritToChildren ? '(OI)(CI)(F)' : '(F)';
@@ -159,12 +119,9 @@ String? _currentWindowsPrincipal() {
 }
 
 /// The two permission operations [restrictHandshakeFileToCurrentUser] and
-/// [restrictDirectoryToCurrentUser] provide, behind a seam.
-///
-/// `icacls` and `chmod` cannot be made to fail on demand, and "what happens
-/// when hardening fails" is the entire security contract of the privileged RPC
-/// transport — the real-ACL success tests above cannot reach it. Injecting this
-/// is what makes the fail-closed path testable.
+/// [restrictDirectoryToCurrentUser] provide, behind a seam. `icacls` and
+/// `chmod` cannot be made to fail on demand, and "what happens when hardening
+/// fails" is the entire security contract of the privileged RPC transport.
 abstract class HandshakePermissions {
   const HandshakePermissions();
 
