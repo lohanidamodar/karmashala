@@ -92,12 +92,12 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
     super.dispose();
   }
 
-  /// Browse is the convenience; the field is the way out. On Windows
-  /// `file_selector` blocks the Dart isolate's own thread, so a busy isolate
-  /// never shows the dialog — see `core/util/file_picking.dart`.
+  /// Browse is the convenience; the field is the way out — a WSL or SSH path
+  /// is spelled for *that* machine, and the dialog only opens local folders.
   Future<void> _browse() async {
     final file = await pickOneFile(
       what: 'an agent executable',
+      startNear: _path.text,
       acceptedTypeGroups: const [
         XTypeGroup(label: 'Executables', extensions: ['exe']),
       ],
