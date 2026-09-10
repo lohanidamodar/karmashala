@@ -10,12 +10,9 @@ enum FileChangeType {
   /// An unmerged path: a merge, rebase, cherry-pick or stash-apply stopped on
   /// this file and both sides are still in the index.
   ///
-  /// Its own value rather than [unknown] because it is the one status that is
-  /// **not** a change the user made — it is work git could not finish, and it
-  /// is the only one with something to do about it. `--porcelain=v2` gives it
-  /// its own record type (`u`); v1 spelled it `UU` and friends, which is how it
-  /// came to be rendered as *"changed (unrecognised git status)"* for as long
-  /// as this enum had no word for it.
+  /// Its own value rather than [unknown] because it is the one status that is not
+  /// a change the user made. v1 spelled it `UU` and friends, which rendered as
+  /// *"changed (unrecognised git status)"* until this enum had a word for it.
   conflicted,
 
   unknown,
@@ -24,10 +21,8 @@ enum FileChangeType {
 /// Which way a merge conflicted, from the `<XY>` of a `--porcelain=v2` `u`
 /// record.
 ///
-/// The seven pairs are git's own, documented in `git-status(1)` under
-/// *Unmerged entries*. They are kept apart because they need different actions:
-/// a file both sides modified is edited, a file one side deleted is a decision
-/// about whether it should exist at all.
+/// The seven pairs are git's own (`git-status(1)`, *Unmerged entries*), kept
+/// apart because they need different actions.
 enum MergeConflict {
   /// `DD` — both deleted.
   bothDeleted('both deleted'),
@@ -51,8 +46,7 @@ enum MergeConflict {
   bothModified('both modified'),
 
   /// A pair git writes that is not one of the seven above. Named rather than
-  /// guessed: the record already says the path is unmerged, and inventing a
-  /// side for it would be a claim about whose work is at stake.
+  /// guessed: inventing a side would be a claim about whose work is at stake.
   unrecorded('unmerged');
 
   const MergeConflict(this.words);

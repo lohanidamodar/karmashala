@@ -4,12 +4,9 @@ import 'git_files.dart';
 
 /// How to join onto [host].
 ///
-/// Read off the *host* path's own shape rather than off the environment kind,
-/// because the two disagree exactly where it matters: paths inside WSL are
-/// POSIX, but the host spelling of one is the `\\wsl.localhost\…` UNC form,
-/// which is a Windows path. Joining that with the POSIX context would build
-/// something no `File` can open — the same trap `storePathContextFor`
-/// documents for a store home.
+/// Read off the *host* path's own shape, not the environment kind: paths inside
+/// WSL are POSIX but the host spelling of one is a `\\wsl.localhost\…` UNC, and
+/// joining that with the POSIX context builds something no `File` can open.
 p.Context gitPathContextFor(String host) =>
     RegExp(r'^[A-Za-z]:').hasMatch(host) || host.startsWith(r'\\')
     ? p.windows
@@ -18,16 +15,10 @@ p.Context gitPathContextFor(String host) =>
 /// The `gitdir:` a worktree's or submodule's `.git` file names, in **host**
 /// spelling, or null when [text] is not such a file.
 ///
-/// The path inside it is written the way the repository's own environment
-/// spells it, so it is translated on the way out — a WSL worktree names
-/// `/home/me/repo/.git/worktrees/wt-1`, which this process opens as a
-/// `\\wsl.localhost\…` share. Git also accepts a *relative* gitdir (what
-/// `--relative-paths` writes since 2.48), which is relative to the working
-/// tree.
-///
-/// One rule, shared: `GitOriginReader` walks this to find `.git/config` and
-/// `GitMergeStateReader` walks it to find `MERGE_HEAD`, and a worktree the two
-/// resolved differently would be a repository they described differently.
+/// The path inside is written the way the repository's own environment spells it,
+/// so it is translated on the way out; git also accepts a *relative* gitdir since
+/// 2.48, relative to the working tree. `GitOriginReader` and `GitMergeStateReader`
+/// share this one rule so they cannot describe a worktree differently.
 String? gitDirNamedIn(
   String? text, {
   required String host,

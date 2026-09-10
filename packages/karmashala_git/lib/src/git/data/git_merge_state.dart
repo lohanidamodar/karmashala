@@ -4,16 +4,11 @@ import 'git_files.dart';
 /// **Whether a merge is half-done in the working tree**, read off `.git`
 /// instead of asked of git.
 ///
-/// `.git/MERGE_HEAD` is the file `git merge` writes when it stops without
-/// committing and deletes when the merge finishes or is aborted — it is what
-/// `git merge --abort` itself looks for. Reading it costs no `CreateProcessW`,
-/// which is the whole reason this exists: the Abort-merge button's own doc
-/// refused to ask the question because asking it meant a process on every poll.
+/// `.git/MERGE_HEAD` is what `git merge --abort` itself looks for, and reading it
+/// costs no `CreateProcessW` — which is why the Abort-merge button can ask at all.
 ///
-/// **Null is "could not tell", never false.** A repository on an SSH host has
-/// no path this process can open and a dead `\\wsl.localhost` share answers a
-/// stat exactly like an empty folder, so the reading admits the gap and the
-/// caller falls back to what the listing already says (§19).
+/// **Null is "could not tell", never false**: an SSH checkout has no path this
+/// process can open, and a dead `\\wsl.localhost` share stats like an empty folder.
 class GitMergeStateReader {
   GitMergeStateReader({required this.files, required this.hostPathOf});
 
@@ -25,10 +20,8 @@ class GitMergeStateReader {
 
   /// Whether the working tree at [checkout] has a merge in progress.
   ///
-  /// One `stat` for a checkout in a merge, two for an ordinary clean one, and
-  /// four for a worktree — whose `.git` is a *file* naming the real git
-  /// directory, and whose `MERGE_HEAD` lives in that directory rather than in
-  /// the one its siblings share.
+  /// One `stat` for a checkout in a merge, two for a clean one, four for a
+  /// worktree — whose `MERGE_HEAD` is in its own git directory, not the shared one.
   Future<bool?> read(String checkout) async {
     final host = hostPathOf(checkout);
     if (host == null) return null;
@@ -39,10 +32,8 @@ class GitMergeStateReader {
         PathEntry.file) {
       return true;
     }
-    // Nothing there, and now the question is *why*: an ordinary `.git`
-    // directory with no merge in it is a real `false`, and anything else is a
-    // gap. `PathEntry.none` cannot tell an absent `.git` from a share that
-    // stopped answering, which is exactly the pair this must not collapse.
+    // Nothing there, and now the question is *why*: `PathEntry.none` cannot tell
+    // an absent `.git` from a share that stopped answering.
     final entry = await files.typeOf(dotGit);
     if (entry == PathEntry.directory) return false;
     if (entry == PathEntry.none) return null;

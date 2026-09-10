@@ -1,9 +1,7 @@
 /// A repository on a remote host, derived from an `origin` URL.
 ///
-/// Exists so a commit sha or a PR number in the app can become a link the
-/// browser can open. The web URLs are GitHub-shaped (`/commit/<sha>`,
-/// `/pull/<n>`), which matches the one forge the app integrates with; a second
-/// forge would add a flavour here rather than a second parser.
+/// The web URLs are GitHub-shaped (`/commit/<sha>`, `/pull/<n>`); a second forge
+/// would add a flavour here rather than a second parser.
 class RemoteRepo {
   const RemoteRepo({required this.host, required this.slug});
 

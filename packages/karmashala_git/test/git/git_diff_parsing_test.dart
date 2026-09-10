@@ -133,18 +133,10 @@ void main() {
 
   /// **`--porcelain=v2 --branch`**, which is what `statusWithBranch` asks for.
   ///
-  /// v2 for its header lines: the branch, its upstream and the distance between
-  /// them each get one, where v1 squeezed all three into `##
-  /// work...origin/work [ahead 2, behind 1]` and said nothing at all when the
-  /// branch was level. So the distance from the **upstream** comes free from a
-  /// call the app already makes — a different comparison from `rev-list
-  /// --count` against the base branch, which `parseAheadBehind` above owns and
-  /// which is unchanged.
-  ///
-  /// The two record types v1 has no equivalent of are the ones worth writing
-  /// tests for, because both are **silent** when missed: a rename puts two
-  /// paths on one line separated by a tab, and an unmerged path stops being a
-  /// `UU` entry and becomes its own `u` record.
+  /// v2 for its header lines, so the distance from the **upstream** comes free
+  /// from a call the app already makes. The two record types v1 has no
+  /// equivalent of are what is worth testing, because both are silent when
+  /// missed: a tab-separated rename, and a `u` record where v1 wrote `UU`.
   group('parseGitStatusV2', () {
     test('reads branch, upstream and divergence from the headers', () {
       final status = parseGitStatusV2(
@@ -255,11 +247,9 @@ void main() {
     });
 
     test('an unmerged path is a conflict, named as one', () {
-      // The second trap: v1 reported a conflict as an ordinary `UU` entry, so
-      // a parse that handles only `1`, `2` and `?` drops conflicted files out
-      // of the listing and a row mid-merge reports itself clean. It is no
-      // longer `FileChangeType.unknown` either — *"changed (unrecognised git
-      // status)"* was this parse shrugging at a status it could name exactly.
+      // The second trap: v1 reported a conflict as an ordinary `UU` entry, so a
+      // parse that handles only `1`, `2` and `?` drops conflicted files and a row
+      // mid-merge reports itself clean.
       final status = parseGitStatusV2(porcelainV2(unmerged: ['lib/a.dart']));
       expect(status.changes.single.path, 'lib/a.dart');
       expect(status.changes.single.type, FileChangeType.conflicted);
@@ -307,21 +297,11 @@ void main() {
 
   /// **`u` records, written from `git status`'s own documentation.**
   ///
-  /// `git-status(1)` gives an unmerged entry its own record:
-  ///
-  /// ```txt
-  /// u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
-  /// ```
-  ///
-  /// — three stage modes and three stage object names, because a conflict is a
-  /// file that exists in up to three versions at once. A stage the merge has no
-  /// version for is written `000000` with the null object name, which is how
-  /// *both added* and *deleted by us* differ on the wire.
-  ///
-  /// `<XY>` is the same page's conflict table, and it is **not** a pair of
-  /// index/work-tree letters: read one letter at a time, `AA` came out *added*
-  /// and `DD` came out *deleted* — two confident wrong verbs about a file the
-  /// merge has not finished with.
+  /// `git-status(1)` gives an unmerged entry its own record with three stage
+  /// modes and three stage object names, because a conflict is a file in up to
+  /// three versions at once. `<XY>` is that page's conflict table and **not** a
+  /// pair of index/work-tree letters: read one letter at a time, `AA` came out
+  /// *added* and `DD` *deleted*.
   group('an unmerged record is read as a conflict, and says which kind', () {
     const h1 = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391';
     const h2 = '5c0d1b0e1a3e5f7a9b1c3d5e7f9a1b3c5d7e9f11';
@@ -380,10 +360,9 @@ void main() {
 
     test('v1 reads the same seven pairs, because v1 is what the panel asks',
         () {
-      // `ChangesService.changes` runs `--porcelain=v1`, so this is the parse
-      // the Changes panel and the abort-merge reading actually see. v1 has no
-      // separate record, and `AA`/`DD` are the two that a letter-at-a-time
-      // read turns into a plain add and a plain delete.
+      // `ChangesService.changes` runs `--porcelain=v1`, which has no separate
+      // record: `AA`/`DD` are the two a letter-at-a-time read turns into a plain
+      // add and a plain delete.
       final changes = parseGitStatus(
         'UU lib/a.dart\n'
         'AA docs/notes.md\n'

@@ -59,11 +59,9 @@ void main() {
   });
 
   group('the setting cannot ask for a symlink', () {
-    // Not a preference: two live worktrees sharing one `.dart_tool` through a
-    // junction corrupt each other under concurrent builds, and this app runs
-    // agents concurrently by design. The enforcement is that there is nothing
-    // to set — asserted here rather than left to a comment, so a "share this
-    // one instead" field cannot be added without this failing.
+    // Two live worktrees sharing one `.dart_tool` through a junction corrupt each
+    // other under concurrent builds. Asserted here so a "share this one instead"
+    // field cannot be added without this failing.
     test('a copy path is a bare string, with no mode beside it', () {
       const setup = WorktreeSetup(copyPaths: ['.dart_tool']);
       expect(setup.copyPathsJson, '[".dart_tool"]');
@@ -155,8 +153,7 @@ void main() {
 
     test('a process that stopped with no code is not "succeeded"', () {
       // There is deliberately no route from a null exit code to a healthy
-      // verdict. `PaneExit.exitCode` is nullable for a real reason — "we never
-      // learned" — and reading a missing number as a zero is the §19 mistake.
+      // verdict: reading a missing number as a zero is the §19 mistake.
       const started = WorktreeCommandVerdict(
         result: WorktreeCommandResult.running,
         reason: 'Running in a pane.',

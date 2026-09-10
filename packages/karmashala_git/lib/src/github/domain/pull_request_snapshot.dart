@@ -33,32 +33,14 @@ enum ReviewDecision {
 /// GitHub's own one-word answer to "why can this not be merged right now?",
 /// from `gh pr view --json mergeStateStatus`.
 ///
-/// **This is the forge's opinion, and it is worth more than ours.** Everything
-/// else the delivery pipeline knows about a branch is assembled from local git
-/// refs that may be hours stale, or inferred from [ReviewDecision] plus a check
-/// rollup — neither of which knows about branch protection, required
-/// conversations, or a "require branches to be up to date" setting. This field
-/// is computed by the same code that greys out GitHub's own merge button, so
-/// when it says [behind] the branch really is behind the *remote's* base, not
-/// behind whatever `origin/main` this clone last fetched.
+/// **The forge's opinion, and worth more than ours**: the same computation that
+/// greys out GitHub's own merge button, so [behind] means behind the *remote's*
+/// base rather than behind whatever `origin/main` this clone last fetched.
 ///
-/// Two properties of it are load-bearing and were confirmed against real pull
-/// requests on `cli/cli` (2026-09-02) rather than read off the schema:
-///
-/// * **It is a single value with a priority, so it masks.** GitHub resolves in
-///   the order dirty → blocked → behind → unstable → clean, and returns only
-///   the winner. `cli/cli#14315` came back `BLOCKED` (a required review) with
-///   no way to tell from this field alone whether it was *also* behind. So
-///   `!= behind` is never evidence that a branch is up to date — only `==
-///   behind` is evidence of anything. Every read of this enum in the delivery
-///   pipeline is written as a positive test for that reason.
-/// * **[blocked] is the common case, not an alarm.** Both open draft PRs on
-///   `cli/cli` and the non-draft one all reported `BLOCKED`, because the
-///   repository requires a review nobody had given yet. Treating `BLOCKED` as
-///   "something is wrong, go investigate" would put a red herring on the strip
-///   of every correctly-behaving pull request in a protected repository, which
-///   is why `DeliveryAction.investigateBlocker` is offered only once the
-///   ordinary explanations have been ruled out.
+/// It is one value with a priority — dirty → blocked → behind → unstable → clean
+/// — so it **masks**: `!= behind` is never evidence a branch is up to date, and
+/// every read of it is written as a positive test. [blocked] is the common case
+/// in a protected repository, not an alarm.
 enum MergeStateStatus {
   /// Nothing is in the way; GitHub would merge this now.
   clean,
@@ -72,9 +54,8 @@ enum MergeStateStatus {
   /// that has not reported. It does not say which.
   blocked,
 
-  /// The merge would conflict. The same fact as `mergeable: CONFLICTING`, and
-  /// GitHub sets both; kept as a separate reading because either one arriving
-  /// alone still establishes the conflict.
+  /// The merge would conflict — the same fact as `mergeable: CONFLICTING`, kept
+  /// separately because either one arriving alone establishes it.
   dirty,
 
   /// It is a draft. Rarely seen in practice — a protected repository answers
@@ -90,12 +71,8 @@ enum MergeStateStatus {
 
   /// GitHub's `UNKNOWN` becomes **null**, not a value of this enum.
   ///
-  /// It means "the mergeability computation has not finished", which is the
-  /// same thing `mergeable: UNKNOWN` means and is already handled the same way
-  /// two fields down: null is "could not tell" everywhere in this pipeline,
-  /// and giving "not computed yet" its own enum case would let a caller
-  /// `switch` on it as though it were a state of the pull request rather than
-  /// a state of GitHub's queue.
+  /// It means "the mergeability computation has not finished", and null is
+  /// "could not tell" everywhere in this pipeline.
   static MergeStateStatus? parse(String? value) =>
       switch (value?.toUpperCase()) {
         'CLEAN' => MergeStateStatus.clean,
@@ -184,9 +161,8 @@ class ChecksSummary {
 
 /// Everything one `gh pr view` call knows about the pull request for a branch.
 ///
-/// Deliberately one object from one process: the PR and its checks are drawn
-/// side by side and asked for together, so splitting them would double the
-/// `gh` invocations for a surface that shows them in the same row.
+/// One object from one process: the PR and its checks are drawn side by side, so
+/// splitting them would double the `gh` invocations.
 class PullRequestSnapshot {
   const PullRequestSnapshot({
     required this.number,
@@ -221,16 +197,10 @@ class PullRequestSnapshot {
 
   /// How many review conversations are still open on this pull request.
   ///
-  /// **Null is "we did not ask", and that is the normal case.** It is the one
-  /// field here that does not come out of the `gh pr view` call: review threads
-  /// and their resolved flags are not in `gh`'s JSON field set at all (checked
-  /// against `gh pr view --json` on 2026-09-02 — the closest entries,
-  /// `comments` and `reviews`, carry bodies but no resolution), so it takes a
-  /// second process running a GraphQL query. Only the session strip pays for
-  /// that; the Explorer's rows leave this null rather than start a second `gh`
-  /// per visible row. Zero therefore means "asked, and every conversation is
-  /// resolved", which is a fact worth having — and null means nothing at all,
-  /// the same as everywhere else in this pipeline.
+  /// **Null is "we did not ask", and that is the normal case**: review threads
+  /// and their resolved flags are not in `gh pr view`'s JSON field set, so this
+  /// costs a second GraphQL process only the session strip pays for. Zero means
+  /// asked, and every conversation resolved.
   final int? unresolvedReviewThreads;
 
   final ChecksSummary checks;
@@ -244,21 +214,17 @@ class PullRequestSnapshot {
 
   /// Whether something established says this branch and its base disagree.
   ///
-  /// Either reading alone is enough. GitHub sets `mergeable: CONFLICTING` and
-  /// `mergeStateStatus: DIRTY` from the same computation, but they arrive
-  /// through two JSON fields and a repository that answers only one of them —
-  /// or a `gh` old enough not to request the second — should still stop the
-  /// merge. Null on both is "not computed yet", which stays not-a-conflict:
-  /// claiming a conflict that is not there sends an agent to fix nothing.
+  /// Either reading alone is enough: `mergeable: CONFLICTING` and
+  /// `mergeStateStatus: DIRTY` come from one computation but two fields. Null on
+  /// both stays not-a-conflict — a claimed conflict sends an agent to fix nothing.
   bool get hasConflict =>
       mergeable == false || mergeStateStatus == MergeStateStatus.dirty;
 
   /// Whether GitHub itself says the base has moved on under this branch.
   ///
-  /// Deliberately *only* the positive reading, and deliberately not the whole
-  /// answer: see `SessionDelivery.isBehindBase`, which pairs this with the
-  /// local commit count because this field is masked whenever a higher-priority
-  /// blocker also applies.
+  /// Only the positive reading, and not the whole answer: this field is masked
+  /// whenever a higher-priority blocker also applies. See
+  /// `SessionDelivery.isBehindBase`.
   bool get isBehindBase => mergeStateStatus == MergeStateStatus.behind;
 
   /// Whether a human is waiting on a change to this branch.
@@ -278,11 +244,9 @@ class PullRequestSnapshot {
 
   /// This snapshot with its review-thread count filled in.
   ///
-  /// A single-field copier rather than a general `copyWith` because this is the
-  /// only field that arrives from a different process than the rest, and it is
-  /// the only edit anything makes to a snapshot after it is parsed. A general
-  /// copier would invite the pipeline to start synthesising pull request state
-  /// that no `gh` call reported.
+  /// A single-field copier rather than a general `copyWith`: this is the only
+  /// field that arrives from a different process, and a general one would invite
+  /// synthesising pull request state no `gh` call reported.
   PullRequestSnapshot withUnresolvedReviewThreads(int? count) =>
       PullRequestSnapshot(
         number: number,

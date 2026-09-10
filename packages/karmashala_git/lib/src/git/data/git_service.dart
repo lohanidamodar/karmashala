@@ -9,8 +9,7 @@ import '../domain/working_tree_status.dart';
 import 'git_diff_parsing.dart';
 import 'git_files.dart';
 
-/// Raised when a `git` invocation fails (non-zero exit). Carries git's stderr
-/// for an actionable diagnostic.
+/// Raised when a `git` invocation fails (non-zero exit), carrying git's stderr.
 class GitException implements Exception {
   GitException(this.message);
   final String message;
@@ -18,11 +17,7 @@ class GitException implements Exception {
   String toString() => 'GitException: $message';
 }
 
-/// Parses `git worktree list --porcelain` output into [GitWorktree]s.
-///
-/// Pure and testable. Records are separated by blank lines; each starts with a
-/// `worktree <path>` line and may carry `HEAD <sha>`, `branch refs/heads/<name>`,
-/// `bare`, or `detached` lines. Paths are bound to [environmentId].
+/// Parses `git worktree list --porcelain` into [GitWorktree]s bound to [environmentId].
 List<GitWorktree> parseWorktreeList(String porcelain, String environmentId) {
   final worktrees = <GitWorktree>[];
   String? path;
@@ -68,11 +63,8 @@ List<GitWorktree> parseWorktreeList(String porcelain, String environmentId) {
   return worktrees;
 }
 
-/// Computes the directory for a session worktree of [repo].
-///
-/// Worktrees are placed in a sibling `.karmashala-worktrees/` folder so they
-/// never nest inside the repository. Path joining is **environment-aware**
-/// (Windows vs POSIX separators) so Windows and WSL paths stay valid.
+/// The directory for a session worktree of [repo]: a sibling
+/// `.karmashala-worktrees/` so it never nests, joined with [kind]'s separators.
 EnvironmentPath worktreePathFor(
   EnvironmentKind kind,
   EnvironmentPath repo,
@@ -85,11 +77,8 @@ EnvironmentPath worktreePathFor(
   return EnvironmentPath(environmentId: repo.environmentId, path: dir);
 }
 
-/// Git operations for a single environment, executed through a [CommandRunner].
-///
-/// Git is the authoritative source of repository changes (ADR 0004); this service
-/// only invokes `git` and parses its output — it never tracks changes itself. The
-/// [runner] must target the same environment as the paths passed in.
+/// Git operations for one environment, executed through a [CommandRunner] that
+/// must target the same environment as the paths passed in (ADR 0004).
 class GitService {
   GitService(
     this.runner, {
@@ -148,10 +137,8 @@ class GitService {
     return url.isEmpty ? null : url;
   }
 
-  /// How many commits the current branch has that [base] does not, or `null`
-  /// when git could not answer — typically because [base] (e.g.
-  /// `origin/main`) is not fetched locally. `null` means "could not tell", not
-  /// "zero"; callers must not collapse the two.
+  /// How many commits the current branch has that [base] does not. Null is
+  /// "could not tell" — usually [base] is not fetched — and must not read as zero.
   Future<int?> commitsAhead(
     EnvironmentPath repo, {
     required String base,
@@ -165,15 +152,8 @@ class GitService {
     }
   }
 
-  /// Lines added and removed in [repo] — one `git diff --numstat`.
-  ///
-  /// With [base], the comparison runs from that ref to the working tree, so a
-  /// session's committed *and* uncommitted work land in one number from one
-  /// process. Without it, the working tree is compared to `HEAD`.
-  ///
-  /// Untracked files are in neither, because no `git diff` sees them. That is
-  /// why the changed-file count beside this still comes from `git status`, and
-  /// why the two can legitimately disagree. Null is "could not tell".
+  /// Lines added and removed in [repo], from [base] to the working tree when
+  /// given. No `git diff` sees untracked files, so this and `git status` can differ.
   Future<DiffStat?> diffStat(EnvironmentPath repo, {String? base}) async {
     try {
       final result = await _git(repo, ['diff', '--numstat', base ?? 'HEAD']);
@@ -185,10 +165,6 @@ class GitService {
   }
 
   /// How [repo]'s `HEAD` stands against [base], both directions in one call.
-  ///
-  /// [commitsAhead] answers half of this and is kept because the Explorer's
-  /// per-row path only needs the half; anything deciding a delivery stage needs
-  /// both, and paying for two `rev-list` runs to learn them would be silly.
   Future<AheadBehind?> aheadBehind(
     EnvironmentPath repo, {
     required String base,
@@ -209,9 +185,8 @@ class GitService {
 
   /// The upstream branch of [branch] (`origin/work`), or null when it has none.
   ///
-  /// `for-each-ref` rather than `rev-parse @{upstream}`: a branch with no
-  /// upstream is an ordinary empty answer here instead of an error, and the
-  /// format string carries no braces for a remote shell to interpret.
+  /// `for-each-ref`, not `rev-parse @{upstream}`: no upstream is an empty answer
+  /// rather than an error, and the format carries no braces for a remote shell.
   Future<String?> upstreamOf(EnvironmentPath repo, String branch) async {
     try {
       final result = await _git(repo, [
@@ -239,19 +214,8 @@ class GitService {
   /// The branch, its upstream, their divergence and the changed files, from
   /// **one** `git status --porcelain=v2 --branch`.
   ///
-  /// This is what a delivery row wants and it costs one process. [status] is
-  /// kept for callers that only need the files, and stays on v1 because the
-  /// files are all it reads.
-  ///
-  /// **v2 for its header lines.** `# branch.head`, `# branch.upstream` and
-  /// `# branch.ab +N -M` state on their own lines what v1 squeezed into one
-  /// `## work...origin/work [ahead 2, behind 1]` — so how far the branch stands
-  /// from its **upstream** comes free from a call already being made, stated
-  /// rather than inferred from the presence of a bracket. That is a different
-  /// comparison from [aheadBehind]'s `rev-list --count` against the **base**
-  /// branch, which measures against `origin/HEAD` and stays exactly where it
-  /// is. See `parseGitStatusV2` for the two record types v1 has no equivalent
-  /// of, both of which are silent when missed.
+  /// v2 for its header lines: divergence from the *upstream* comes free from a
+  /// call already made, unlike [aheadBehind]'s comparison against the base branch.
   Future<WorkingTreeStatus> statusWithBranch(EnvironmentPath repo) async {
     final result = await _git(repo, ['status', '--porcelain=v2', '--branch']);
     if (!result.ok) {
@@ -262,8 +226,7 @@ class GitService {
 
   /// The remote's default branch as this clone recorded it (`origin/main`).
   ///
-  /// Local and free, unlike `gh repo view`. Null when `origin/HEAD` is not set,
-  /// which a single-branch clone and an older `git remote add` both produce.
+  /// Null when `origin/HEAD` is not set, which a single-branch clone produces.
   Future<String?> originHead(EnvironmentPath repo) async {
     try {
       final result = await _git(repo, [
@@ -297,27 +260,13 @@ class GitService {
     return result.stdout;
   }
 
-  /// The blob sha each of [paths] would have for its **current bytes on
-  /// disk** — `git hash-object`, which hashes without writing anything.
+  /// The blob sha each of [paths] would have for its **current bytes on disk**;
+  /// `git hash-object` writes nothing, and the sha is only a fingerprint. A path
+  /// missing from the result is one git would not hash — "cannot tell", never
+  /// unchanged.
   ///
-  /// This is what anchors a review thread (schema v30). It is used purely as a
-  /// content fingerprint: the sha is never looked up in the object store and
-  /// never compared against the `index` line of a diff, because the only
-  /// question ever asked of it is "are these still the same bytes". That is why
-  /// hashing the working-tree file is right even though the blob may never have
-  /// been written — the comparison is against another sha computed exactly the
-  /// same way.
-  ///
-  /// **One process for the whole batch**, because the caller is the diff panel
-  /// asking about every file that carries a comment, on every refresh. A path
-  /// missing from the result is a path git would not hash — deleted, unreadable
-  /// — and the caller must render that as "cannot tell", never as unchanged.
-  ///
-  /// `git hash-object` aborts the whole invocation on the first path it cannot
-  /// read, which would turn one deleted file into "cannot tell" for every other
-  /// thread in the repository. So a failed batch is retried one path at a time:
-  /// slower, but only in the case that is already unusual, and bounded by the
-  /// number of *files* with comments rather than by the number of comments.
+  /// The batch aborts on the first unreadable path, so a failure is retried one
+  /// path at a time.
   Future<Map<String, String>> hashObjects(
     EnvironmentPath repo,
     List<String> paths,
@@ -329,8 +278,7 @@ class GitService {
           .split(RegExp(r'[\r\n]+'))
           .where((line) => line.trim().isNotEmpty)
           .toList();
-      // A count mismatch means the output is not the row-per-path contract this
-      // parse assumes, so nothing is claimed about any of them.
+      // A count mismatch means the output is not the row-per-path contract assumed here.
       if (shas.length == paths.length) {
         return {
           for (var i = 0; i < paths.length; i++) paths[i]: shas[i].trim(),
@@ -395,15 +343,9 @@ class GitService {
 
   /// Merges [ref] into the checked-out branch, fast-forwarding when it can.
   ///
-  /// Separate from [mergeBranch], which forces a merge commit, because the two
-  /// answer different questions. [mergeBranch] records that a fan-out's winning
-  /// branch was chosen, and the merge commit *is* the record. This one exists to
-  /// bring a branch level with its base, where a fast-forward is the honest
-  /// result: a branch with no commits of its own that took an empty merge commit
-  /// to catch up would show a history event that never happened.
-  ///
-  /// `--no-edit` because there is no terminal attached to this process and git
-  /// would otherwise open an editor for the merge message and hang.
+  /// Unlike [mergeBranch], which forces a merge commit to record a choice. A
+  /// branch with no commits of its own must not show a merge that never happened.
+  /// `--no-edit` because no terminal is attached and git would open an editor.
   Future<void> mergeRef(EnvironmentPath repo, String ref) async {
     final result = await _git(repo, ['merge', '--no-edit', ref]);
     if (!result.ok) {
@@ -413,12 +355,8 @@ class GitService {
 
   /// Undoes a merge that stopped with conflicts (`git merge --abort`).
   ///
-  /// **Not `throw`ing is the point.** This is only ever called on the failure
-  /// path of [mergeRef], where the caller already has a real error to report,
-  /// and a repository with no merge in progress answers `git merge --abort`
-  /// with an error of its own — which would replace the diagnosis with a
-  /// meaningless one. It returns whether the tree came back clean so the caller
-  /// can tell the user which of the two situations they are in.
+  /// It does not throw: a repository with no merge in progress errors here, which
+  /// would replace the caller's real diagnosis. Returns whether the tree came back clean.
   Future<bool> abortMerge(EnvironmentPath repo) async {
     final result = await _git(repo, ['merge', '--abort']);
     return result.ok;
@@ -442,16 +380,9 @@ class GitService {
   /// The remote-tracking branches that contain [rev], or `null` when git could
   /// not answer.
   ///
-  /// This is how "pushed" is asked, and it is deliberately not
-  /// `aheadOfUpstream`. A branch merged into `main` and then pushed with `main`
-  /// never had an upstream of its own, so the divergence question has no answer
-  /// for it — while this one does: its tip is an ancestor of `origin/main`, so
-  /// something other than this machine holds those commits.
-  ///
-  /// Empty is a real answer and means **not pushed**. It reads remote-tracking
-  /// refs, which are only as fresh as the last fetch, so a stale clone answers
-  /// empty for a branch that really was pushed. That is the safe direction for
-  /// the one caller: it refuses, and says to fetch.
+  /// This is how "pushed" is asked: a branch merged and pushed with `main` never
+  /// had an upstream of its own. Empty means **not pushed**, but these refs are
+  /// only as fresh as the last fetch, so a stale clone answers empty wrongly.
   Future<List<String>?> remoteBranchesContaining(
     EnvironmentPath repo,
     String rev,
@@ -477,14 +408,9 @@ class GitService {
   /// Which of [paths] git ignores in [repo] — or **null when git could not be
   /// asked**, which is not the same as "none of them".
   ///
-  /// `check-ignore` consults the index on purpose (no `--no-index`): a path
-  /// that a pattern matches but that is nonetheless *tracked* is reported as
-  /// not ignored, which is exactly the answer the worktree setup needs. Copying
-  /// a tracked path into a fresh worktree would write another branch's version
-  /// of it over the one `git worktree add` just checked out.
-  ///
-  /// One process for the whole list. Exit 1 means none matched and is an
-  /// answer; anything above it is git refusing the question and is not.
+  /// No `--no-index`, on purpose: a path a pattern matches but that is *tracked*
+  /// reads as not ignored, which is what worktree setup needs. Exit 1 means none
+  /// matched and is an answer; anything above it is git refusing the question.
   Future<Set<String>?> ignoredPaths(
     EnvironmentPath repo,
     List<String> paths,
@@ -550,8 +476,6 @@ class GitService {
     }
   }
 
-  // --- checkpoints -----------------------------------------------------------
-
   /// Where this repository's private checkpoint index lives.
   Future<CheckpointGitDirs> checkpointDirs(EnvironmentPath repo) async {
     final gitDir = await _out(repo, [
@@ -568,17 +492,9 @@ class GitService {
 
   /// Creates the shadow git directory if it is not there yet.
   ///
-  /// Two files make a directory inside `.git` into something git will accept as
-  /// a repository of its own: `commondir`, pointing at the real one, and `HEAD`.
-  /// Objects, refs and config then come from the real repository — only the
-  /// *index* is separate, which is the whole trick. `git
-  /// --git-dir=$shadow --work-tree=$repo add -A` stages the entire working tree, untracked files
-  /// included, into an index the user does not own, and `git write-tree` turns
-  /// it into a tree object in the repository's own object store.
-  ///
-  /// `HEAD` deliberately names a branch that does not exist. Nothing here reads
-  /// it — `add` and `write-tree` do not need a commit — and pointing it at a
-  /// real branch would risk a stray command in this directory moving one.
+  /// `commondir` plus `HEAD` is all git needs to treat a directory inside `.git`
+  /// as a repository whose *index* alone is separate — that is the whole trick.
+  /// `HEAD` names a branch that never exists so a stray command cannot move a real one.
   Future<void> ensureCheckpointDirs(
     EnvironmentPath repo,
     CheckpointGitDirs dirs,
@@ -596,10 +512,8 @@ class GitService {
   /// Stages the whole working tree into the private index and writes it out as
   /// a tree object. Returns the tree's sha.
   ///
-  /// The user's index, HEAD, working tree and branches are all untouched: the
-  /// only thing that happens to the repository is that some objects appear in
-  /// its object store, and [updateRef] then makes those reachable so `git gc`
-  /// keeps them.
+  /// The user's index, HEAD, working tree and branches are untouched; only new
+  /// objects appear, which [updateRef] then makes reachable so `git gc` keeps them.
   Future<String> writeWorkingTree(
     EnvironmentPath repo,
     CheckpointGitDirs dirs,
@@ -620,10 +534,8 @@ class GitService {
 
   /// Wraps [tree] in a commit so checkpoints form a chain a single ref can hold.
   ///
-  /// The identity is passed per invocation rather than read from the user's
-  /// config, because `commit-tree` fails outright in a repository where no
-  /// identity is set, and a checkpoint must not depend on the user having got
-  /// round to `git config user.email`.
+  /// The identity is passed per invocation because `commit-tree` fails outright
+  /// in a repository where no `user.email` is configured.
   Future<String> commitTree(
     EnvironmentPath repo, {
     required String tree,
@@ -720,14 +632,9 @@ class GitService {
 
   /// Applies [patch] to [repo].
   ///
-  /// [cached] applies to the index only (staging a hunk), [reverse] applies it
-  /// backwards (reverting one), and [check] asks git whether it *would* apply
-  /// without changing anything. Without [cached] the index is not touched, so a
-  /// revert in the working tree leaves whatever the user had staged alone.
-  ///
-  /// The patch goes to a file inside the shadow git directory rather than the
-  /// repository: a stray file in the working tree would show up in the user's
-  /// `git status` and, worse, in the next checkpoint.
+  /// [cached] applies to the index only, [reverse] applies it backwards, [check]
+  /// only asks whether it would apply. The patch is written inside the shadow git
+  /// directory: a scratch file in the working tree would show in `git status`.
   Future<void> applyPatch(
     EnvironmentPath repo,
     CheckpointGitDirs dirs,
@@ -757,13 +664,11 @@ class GitService {
 /// The branch name in the shadow git directory's `HEAD`. It never exists.
 const kCheckpointHeadBranch = 'karmashala-checkpoints';
 
-/// Who checkpoint commits are attributed to. They are never pushed and never
-/// merged, so this is a label, not an identity claim.
+/// Who checkpoint commits are attributed to — a label, since they are never pushed.
 const kCheckpointAuthorName = 'Karmashala';
 const kCheckpointAuthorEmail = 'checkpoints@karmashala.local';
 
-/// Where the private checkpoint index and its scratch patch live for one
-/// repository or worktree.
+/// Where the private checkpoint index and its scratch patch live.
 class CheckpointGitDirs {
   const CheckpointGitDirs({required this.gitDir, required this.commonDir});
 
@@ -771,8 +676,7 @@ class CheckpointGitDirs {
   /// `<repo>/.git/worktrees/<name>`, not `<repo>/.git`.
   final String gitDir;
 
-  /// The git directory the objects and refs actually live in, shared by every
-  /// worktree of the repository.
+  /// The git directory the objects and refs live in, shared by every worktree.
   final String commonDir;
 
   String get shadowGitDir => '$gitDir/karmashala';

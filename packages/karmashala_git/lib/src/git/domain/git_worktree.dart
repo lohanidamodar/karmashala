@@ -45,8 +45,8 @@ class GitWorktree {
 
 /// The last segment of [path], whichever separator it was written with.
 ///
-/// Split by hand rather than with `p.basename`: a Windows path is read on a
-/// POSIX host in tests, and there `p.basename` returns the whole string.
+/// Split by hand rather than with `p.basename`: a Windows path is read on a POSIX
+/// host in tests, where `p.basename` returns the whole string.
 String lastPathSegment(String path) {
   final segments = path
       .replaceAll(r'\', '/')

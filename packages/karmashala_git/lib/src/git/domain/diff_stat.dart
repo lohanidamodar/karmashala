@@ -1,9 +1,7 @@
 /// Lines added and removed in a checkout, as `git diff --numstat` reports them.
 ///
-/// Distinct from the fan-out's `DiffLineCounts`, which counts `+`/`-` lines in
-/// diff text it already had in hand. This one comes from git directly, so it
-/// also knows how many files it covered and how many of those were binary —
-/// numbers a text count cannot produce.
+/// From git directly, so it also knows how many files it covered and how many of
+/// those were binary — numbers a text count of a diff cannot produce.
 class DiffStat {
   const DiffStat({
     required this.added,

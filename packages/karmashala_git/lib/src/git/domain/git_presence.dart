@@ -4,8 +4,7 @@ import 'package:agent_cli/process.dart';
 ///
 /// Deliberately lopsided: a false [notARepository] tells the user their
 /// repository is not one, while a false [repository] only costs a process and
-/// arrives at the right answer anyway. So [notARepository] is claimed only from
-/// positive evidence and everything else is [unknown], which means *ask git*.
+/// arrives at the right answer anyway. So [notARepository] needs positive evidence.
 enum GitPresence {
   /// A `.git` was found, here or in a folder above.
   repository,
@@ -21,9 +20,8 @@ enum GitPresence {
 /// Raised instead of spawning `git` for a directory the filesystem has already
 /// said is not under version control.
 ///
-/// An exception rather than an empty answer because the providers that gate on
-/// it each already have a null with a different meaning — "no remote",
-/// "detached", "no other worktrees", "no changes".
+/// An exception rather than an empty answer: the providers that gate on it each
+/// already have a null with a different meaning.
 class NotAGitRepository implements Exception {
   const NotAGitRepository(this.directory);
 
@@ -35,9 +33,8 @@ class NotAGitRepository implements Exception {
 
 /// Why a surface has no git facts to show.
 ///
-/// §19's rule applied to a pane: two of these are facts about the world and one
-/// is a fault, and drawing all three as a red box made the commonest of them
-/// look like a bug in the app.
+/// Two of these are facts about the world and one is a fault; drawing all three
+/// as a red box made the commonest of them look like a bug in the app.
 enum GitTrouble {
   /// Observed: this folder is not under version control. Ordinary, and calm.
   notARepository,
@@ -89,8 +86,7 @@ const gitUnreachableMessage =
 const gitFailedMessage =
     'Git could not answer for this folder, and reported nothing about why.';
 
-/// The short form, for a value slot rather than a whole surface. It sits where
-/// a flat `unavailable` used to, and that one word covered all three states.
+/// The short form, for a value slot rather than a whole surface.
 String gitTroubleLabel(GitTrouble trouble) => switch (trouble) {
   GitTrouble.notARepository => 'not a git repository',
   GitTrouble.unreachable => 'could not be reached',
