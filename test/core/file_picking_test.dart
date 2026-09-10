@@ -24,6 +24,7 @@ void main() {
     AppLogger.initialize(onRecord: Diagnostics.instance.handle);
     sink = LogFileSink(directory: dir);
     Diagnostics.instance.attachFile(sink);
+    forgetLastPickedDirectory();
   });
 
   tearDown(() async {
@@ -198,6 +199,120 @@ void main() {
       inner();
       outer();
       expect(told, [true, false]);
+    });
+  });
+
+  group('no picker in lib may leave the folder to the shell', () {
+    /// `features/devices/**` was another agent's tree on 2026-09-10 and its
+    /// three calls still omit `startNear:`. Checked as a subset, so an entry
+    /// can simply be deleted once that lands.
+    const pending = {
+      'lib/src/features/devices/presentation/device_app_controls.dart',
+      'lib/src/features/devices/presentation/device_files_dialog.dart',
+    };
+
+    /// [source] with every comment and string literal blanked, so an
+    /// apostrophe in a comment cannot open a string that never closes and a
+    /// bracket in a message cannot unbalance the argument list.
+    String codeOnly(String source) {
+      final out = List<String>.filled(source.length, ' ');
+      var i = 0;
+      while (i < source.length) {
+        final c = source[i];
+        final next = i + 1 < source.length ? source[i + 1] : '';
+        if (c == '/' && next == '/') {
+          while (i < source.length && source[i] != '\n') {
+            i++;
+          }
+          continue;
+        }
+        if (c == '/' && next == '*') {
+          final end = source.indexOf('*/', i + 2);
+          i = end == -1 ? source.length : end + 2;
+          continue;
+        }
+        if (c == "'" || c == '"') {
+          final triple = source.startsWith(c * 3, i);
+          final close = triple ? c * 3 : c;
+          i += close.length;
+          while (i < source.length) {
+            if (!triple && source[i] == r'\') {
+              i += 2;
+              continue;
+            }
+            if (source.startsWith(close, i)) {
+              i += close.length;
+              break;
+            }
+            i++;
+          }
+          continue;
+        }
+        out[i] = c;
+        i++;
+      }
+      return out.join();
+    }
+
+    /// The argument list of every `name(` call in [code].
+    List<String> argumentsOf(String code, String name) {
+      final found = <String>[];
+      final needle = '$name(';
+      var at = code.indexOf(needle);
+      while (at != -1) {
+        var i = at + needle.length;
+        final start = i;
+        var depth = 1;
+        while (i < code.length && depth > 0) {
+          if (code[i] == '(') depth++;
+          if (code[i] == ')') depth--;
+          i++;
+        }
+        found.add(code.substring(start, i > start ? i - 1 : start));
+        at = code.indexOf(needle, i);
+      }
+      return found;
+    }
+
+    test('every call names where it starts', () {
+      final root = Directory('lib');
+      expect(root.existsSync(), isTrue, reason: 'run from the app root');
+
+      final silent = <String>[];
+      for (final file in root.listSync(recursive: true).whereType<File>()) {
+        if (!file.path.endsWith('.dart')) continue;
+        final where = file.path.replaceAll(r'\', '/');
+        if (where.endsWith('core/util/file_picking.dart')) continue;
+        final code = codeOnly(file.readAsStringSync());
+        for (final name in ['pickOneFile', 'pickOneDirectory']) {
+          for (final arguments in argumentsOf(code, name)) {
+            if (!arguments.contains('startNear:')) silent.add('$where — $name');
+          }
+        }
+      }
+
+      expect(
+        silent.where((s) => !pending.any(s.startsWith)),
+        isEmpty,
+        reason:
+            'a picker with no startNear lets the shell restore its own last '
+            'folder, which on the reporting machine cost 30 s',
+      );
+    });
+
+    test('the scanner finds a call it should and reads its arguments', () {
+      const sample = """
+        // pickOneFile( isn't a call, and platforms' apostrophe is not a string
+        final a = await pickOneFile(what: 'x (y)', startNear: dir(1));
+        final b = await pickOneDirectory(what: 'z');
+      """;
+      final code = codeOnly(sample);
+      expect(argumentsOf(code, 'pickOneFile'), hasLength(1));
+      expect(argumentsOf(code, 'pickOneFile').single, contains('startNear:'));
+      expect(
+        argumentsOf(code, 'pickOneDirectory').single,
+        isNot(contains('startNear:')),
+      );
     });
   });
 
