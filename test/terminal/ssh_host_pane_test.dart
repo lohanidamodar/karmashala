@@ -8,6 +8,7 @@ import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_key_verifier.dart';
 import 'package:karmashala/src/features/ssh/domain/host_deployment.dart';
 import 'package:karmashala/src/features/ssh/domain/ssh_host.dart';
+import 'package:karmashala/src/features/terminal/domain/agent_pane_launch.dart';
 import 'package:karmashala/src/features/terminal/data/ssh_terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:xterm2/xterm.dart';
@@ -33,7 +34,14 @@ HostDeployment ready({bool restarted = false}) => readyDeployment(restarted: res
 SshTerminalInstance paneWith({
   HostSessionAccess? access,
   String? restoredScrollback,
-}) => _sized(_paneWith(access: access, restoredScrollback: restoredScrollback));
+  AgentPaneLaunch? agentLaunch,
+}) => _sized(
+  _paneWith(
+    access: access,
+    restoredScrollback: restoredScrollback,
+    agentLaunch: agentLaunch,
+  ),
+);
 
 SshTerminalInstance _sized(SshTerminalInstance pane) {
   pane.terminal.resize(200, 60);
@@ -43,7 +51,9 @@ SshTerminalInstance _sized(SshTerminalInstance pane) {
 SshTerminalInstance _paneWith({
   HostSessionAccess? access,
   String? restoredScrollback,
+  AgentPaneLaunch? agentLaunch,
 }) => SshTerminalInstance(
+  agentLaunch: agentLaunch,
   id: 'p1',
   title: 'box',
   profileId: 'default',
@@ -144,6 +154,65 @@ void main() {
       isEmpty,
       reason: 'a closed pane must leave the session running',
     );
+  });
+
+  group('a session already living in tmux', () {
+    test('keeps attaching through tmux, and nothing is deployed for it', () async {
+      final access = PaneAccess(ready())..tmuxSessions.add('karmashala_h1_p1');
+      final pane = paneWith(access: access);
+      await settle();
+
+      // The whole point: the owner had an agent running in one of these while
+      // this app was deciding to "upgrade" the pane to the session host, which
+      // would have opened a second, empty session under the same name.
+      expect(access.execs, isEmpty);
+      expect(
+        access.deploymentAsks,
+        0,
+        reason: 'a pane staying with tmux does not cost the machine an upload',
+      );
+      final text = screenText(pane.terminal);
+      expect(text, contains('karmashala_h1_p1'));
+      expect(text, contains('already running under tmux'));
+      pane.dispose();
+    });
+
+    test("an agent's session is found under the name tmux knows it by", () async {
+      const launch = AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: 'claude',
+        sessionId: '074b5189-c547-4979-8bb5-790b1343f938',
+      );
+      final access = PaneAccess(ready())
+        ..tmuxSessions.add('karmashala_074b5189-c547-4979-8bb5-790b1343f938');
+      final pane = paneWith(access: access, agentLaunch: launch);
+      await settle();
+
+      expect(access.execs, isEmpty);
+      expect(screenText(pane.terminal), contains('already running under tmux'));
+      pane.dispose();
+    });
+
+    test('a resume whose tmux session is gone takes the host', () async {
+      final access = PaneAccess(ready())..tmuxSessions.add('karmashala_h1_someone_else');
+      final pane = paneWith(access: access);
+      await settle();
+
+      expect(access.tmuxAsks, 1);
+      expect(access.execs.single, contains('attach'));
+      expect(screenText(pane.terminal), contains('session host 0.1.0'));
+      pane.dispose();
+    });
+
+    test('a machine that will not say stays on tmux: unknown is not "no"', () async {
+      final access = PaneAccess(ready())..tmuxUnknown = true;
+      final pane = paneWith(access: access);
+      await settle();
+
+      expect(access.execs, isEmpty);
+      expect(screenText(pane.terminal), contains('did not say whether'));
+      pane.dispose();
+    });
   });
 
   group('falling back', () {

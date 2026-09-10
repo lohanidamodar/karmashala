@@ -160,6 +160,16 @@ mixin _DeviceLiveStream
 
   Timer? _reconnectTimer;
 
+  /// Lets go of this session's registration with [PickerQuiet].
+  ///
+  /// The live view is the one thing on this pane that works on the isolate
+  /// whether or not anybody is touching it, and a host file dialog is built on
+  /// that same thread — see `core/util/file_picking.dart`. Registering the
+  /// *session* rather than the pane is deliberate: the picker the user opens is
+  /// rarely on this surface (Settings, a new project, an SSH key), and the rule
+  /// is about the isolate, not about which pane is in front.
+  VoidCallback? _releaseQuiet;
+
   /// When an unwell stream is worth restarting, and how long to wait first.
   final StreamRestartPolicy _restarts = StreamRestartPolicy();
 
@@ -249,6 +259,10 @@ mixin _DeviceLiveStream
     final video = _video;
     final health = _healthSubscription;
     final clipboard = _clipboard;
+    // Before anything is torn down: a registration outliving its session would
+    // hand the next picker a `setQuiet` for a socket that is already gone.
+    _releaseQuiet?.call();
+    _releaseQuiet = null;
     _healthSubscription = null;
     _session = null;
     _player = null;
@@ -426,6 +440,10 @@ mixin _DeviceLiveStream
         return;
       }
       _healthSubscription = session.health.listen(_onHealth);
+      // From the moment there is a session, not from the moment the pane is
+      // looked at: the stream keeps working while the user is somewhere else in
+      // the app, and that is exactly where the pickers are.
+      _releaseQuiet = PickerQuiet.instance.register(session.setQuiet);
       final sink = _controlSink(session);
       final control = session.control;
       setState(() {

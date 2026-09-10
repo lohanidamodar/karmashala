@@ -16,6 +16,22 @@ installs claim the same version name.
 
 ---
 
+## Unreleased
+
+- **SSH panes reach the session host.** The deploy wrote to a literal `$HOME`
+  over SFTP and every pane fell back to tmux; the home is resolved once now.
+  A session that already lives in tmux keeps attaching there; new sessions
+  take the host, which carries command blocks, links, exit codes, selection
+  and the context menu intact.
+- **Install… in the device pane has a typed-path field**, and the file picker
+  quiets the device stream while it is up. The stream was measured and is not
+  what freezes the window; the field is the way out either way.
+- **The phone can search**, over the snapshot it already holds, and shows
+  running sessions in a group above the projects with the reading's age; each
+  session says when it was last active.
+
+---
+
 ## 1.20.1 — 2026-09-10 (build 37)
 
 **The package split, end to end, and nothing else the user sees.** The build

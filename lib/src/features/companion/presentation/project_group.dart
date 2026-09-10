@@ -17,6 +17,9 @@ class CompanionProjectGroup {
     required this.key,
     required this.sessions,
     this.project,
+    this.fallbackName,
+    this.fallbackPath,
+    this.fallbackEnvironmentBadge,
   });
 
   /// [CompanionSessionSummary.projectKey] — the repository's real identity
@@ -30,14 +33,44 @@ class CompanionProjectGroup {
   /// project has no sessions yet.
   final RemoteWorkspaceProject? project;
 
-  String get name => project?.name ?? sessions.firstOrNull?.projectName ?? 'Project';
+  /// What this project is called, where it lives and which environment it is
+  /// in **when its own rows can no longer say** — carried by [withSessions] so
+  /// a group narrowed to nothing is still the project it was.
+  ///
+  /// Without them, a host too old to send project metadata leaves a filtered
+  /// group deriving its name from `sessions.first`, and a filter that matched
+  /// none of them renames the user's project to "Project".
+  final String? fallbackName;
+  final String? fallbackPath;
+  final String? fallbackEnvironmentBadge;
+
+  /// The same project holding only [sessions] — what a filter returns.
+  CompanionProjectGroup withSessions(List<CompanionSessionSummary> sessions) =>
+      CompanionProjectGroup(
+        key: key,
+        sessions: List.unmodifiable(sessions),
+        project: project,
+        fallbackName: name,
+        fallbackPath: path,
+        fallbackEnvironmentBadge: environmentBadge,
+      );
+
+  String get name =>
+      project?.name ??
+      sessions.firstOrNull?.projectName ??
+      fallbackName ??
+      'Project';
 
   /// The host's own id for this project, when it sent one — what a start
   /// screen opened from here preselects.
   String? get projectId => project?.projectId ?? sessions.firstOrNull?.projectId;
 
   /// The folder on the host, or '' when the host is too old to send one.
-  String get path => project?.path ?? sessions.firstOrNull?.projectPath ?? '';
+  String get path =>
+      project?.path ??
+      sessions.firstOrNull?.projectPath ??
+      fallbackPath ??
+      '';
 
   /// Which execution environment this project lives in, formatted for a badge
   /// or tag (e.g. "WSL · Ubuntu", "SSH · build-box"). Null for local host.
@@ -49,7 +82,8 @@ class CompanionProjectGroup {
               project!.environmentName != 'Linux'
           ? project!.environmentName
           : null) ??
-      sessions.firstOrNull?.environmentBadge;
+      sessions.firstOrNull?.environmentBadge ??
+      fallbackEnvironmentBadge;
 
   /// Sessions the host says are waiting on the user.
   int get attentionCount => sessions.where((s) => s.attention != null).length;

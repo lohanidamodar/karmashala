@@ -20,6 +20,8 @@ Primary goals:
 - Prefer practical solutions over over-engineering.
 - Keep changes small, reviewable, and aligned with the existing structure.
 - Make responsive behavior part of each UI change, not a final polish step.
+- keep comments concise and relevant and only when necessary
+- keep comments focused on why something is done, not what is done
 
 Out of scope unless explicitly requested:
 
@@ -28,6 +30,8 @@ Out of scope unless explicitly requested:
 - New packages that duplicate existing project capabilities
 - Publishing, deploying, signing, or uploading builds
 - Modifying secrets, signing files, API keys, credentials, or production configs
+- writing long verbose comments that are not necessary
+- Avoid adding comments that state the obvious or repeat the code.
 
 ---
 
@@ -599,7 +603,7 @@ things outside this app.
 | Tag | Files | Needs | Skips itself when |
 | --- | --- | --- | --- |
 | `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_wsl_prompt_test.dart`, `test/terminal/live_pane_resize_test.dart`, `test/terminal/live_wsl_detach_test.dart`, `test/terminal/live_wsl_input_boundary_test.dart`, `test/terminal/live_wsl_osc133_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `python3` in it for the input-boundary read, `flutter_pty` for the pane tests | there is no WSL, no `python3` in it, or no `flutter_pty.dll` to spawn a ConPTY with |
-| `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22) | those variables are unset |
+| `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22); the session-host deploy case also needs `KARMASHALA_HOST_BINARIES`, the directory holding `karmashala_host-<version>-linux-*` | those variables are unset |
 
 A WSL distribution running `sshd` on a spare port is a good SSH target.
 

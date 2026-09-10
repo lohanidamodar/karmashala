@@ -10,10 +10,14 @@ import 'host_deploy_target.dart';
 
 /// Puts the session host on a machine and confirms it answers.
 ///
-/// The order is: measure the machine, pick a binary, skip the upload when what
-/// is already there matches, install, ask it `hello`, and start it only if that
-/// fails. Every outcome is a [HostDeployment] carrying the time it was taken —
-/// a host that answered five minutes ago is not a host that is answering.
+/// The order is: measure the machine, pick a binary, resolve the remote home,
+/// skip the upload when what is already there matches, install, ask it `hello`,
+/// and start it only if that fails. Every outcome is a [HostDeployment] carrying
+/// the time it was taken — a host that answered five minutes ago is not a host
+/// that is answering.
+///
+/// The home is *resolved*, never spelled: a deploy is half shell commands and
+/// half SFTP, and only one of those two expands `$HOME`.
 class HostDeployer {
   HostDeployer({
     required this.target,
@@ -33,10 +37,16 @@ class HostDeployer {
   final DateTime Function() _now;
   final AppLogger _logger;
 
-  /// `~/.karmashala/bin`, matching where the host itself falls back to for its
-  /// socket, so everything it owns on a machine is under one directory a person
-  /// can delete.
-  static const String remoteDirectory = r'$HOME/.karmashala/bin';
+  /// What is hung off the remote home: `~/.karmashala`, matching where the host
+  /// itself falls back to for its socket, so everything it owns on a machine is
+  /// under one directory a person can delete.
+  ///
+  /// A *fragment*, never a path. The path is built from the home this deploy
+  /// resolved, because half of what a deploy does never sees a shell: `mkdir`
+  /// and `wc` expand `$HOME`, SFTP does not, and a literal `$HOME/...` handed
+  /// to `sftp.open` is a directory that does not exist. Every deploy went that
+  /// way until 2026-09-10.
+  static const String remoteHomeSubdirectory = '.karmashala';
 
   Future<HostDeployment> deploy() async {
     final platform = await measurePlatform();
@@ -77,9 +87,23 @@ class HostDeployer {
       );
     }
 
+    // One reading, before any path is spelled. Everything below is built from
+    // it, so nothing this deploy writes can depend on who expands what.
+    final home = await resolveHome();
+    if (home == null) {
+      return HostDeployment(
+        status: HostDeploymentStatus.unknown,
+        observedAt: _now(),
+        platform: platform,
+        reason:
+            '${target.address} did not answer `echo "\$HOME"` with an absolute path, so '
+            'there is nowhere here to put the host. Nothing was uploaded.',
+      );
+    }
+    final remoteDirectory = '$home/$remoteHomeSubdirectory/bin';
     final remotePath = '$remoteDirectory/karmashala_host-${binary.version}-${platform.targetKey}';
     try {
-      await _install(remotePath, binary);
+      await _install(remoteDirectory, remotePath, binary);
     } on HostInstallException catch (e) {
       return HostDeployment(
         status: HostDeploymentStatus.cannotInstall,
@@ -96,7 +120,7 @@ class HostDeployer {
     var restarted = false;
     if (greeting == null) {
       restarted = true;
-      final started = await _startServe(remotePath);
+      final started = await _startServe(home, remotePath);
       if (!started.ok) {
         return HostDeployment(
           status: HostDeploymentStatus.cannotStart,
@@ -177,19 +201,47 @@ class HostDeployer {
     );
   }
 
+  /// The remote home as an absolute path, asked of the machine's own shell.
+  ///
+  /// Null when it did not answer with one — which is *unknown*, never a guess
+  /// at `/home/<user>`: a deploy that spells the path itself is how a literal
+  /// `$HOME` reached SFTP in the first place. The last non-empty line is taken
+  /// so a shell rc file that prints something cannot be read as a home.
+  Future<String?> resolveHome() async {
+    final RemoteRun result;
+    try {
+      result = await target.run('echo "\$HOME"');
+    } on Object catch (e) {
+      _logger.debug('${target.address} could not be asked for \$HOME: $e');
+      return null;
+    }
+    final lines = const LineSplitter()
+        .convert(result.stdout)
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty);
+    if (lines.isEmpty) return null;
+    final home = lines.last;
+    // An answer that is not an absolute path is not an answer: `$HOME` unset
+    // echoes an empty line, and a shell that printed a complaint is not a home.
+    if (!home.startsWith('/')) return null;
+    return home.length > 1 && home.endsWith('/') ? home.substring(0, home.length - 1) : home;
+  }
+
   /// Uploads unless the remote file is already exactly this size. Size, not a
   /// checksum: the version is in the filename, so a same-named file of the same
   /// length is the same build, and hashing megabytes over SSH on every pane
   /// open would cost more than it saves.
-  Future<void> _install(String remotePath, HostBinary binary) async {
-    final existing = await target.run('mkdir -p $remoteDirectory && wc -c < $remotePath 2>/dev/null || echo missing');
+  Future<void> _install(String remoteDirectory, String remotePath, HostBinary binary) async {
+    final existing = await target.run(
+      'mkdir -p ${_quote(remoteDirectory)} && wc -c < ${_quote(remotePath)} 2>/dev/null || echo missing',
+    );
     final reported = existing.stdout.trim();
     if (reported == '${binary.bytes.length}') {
       _logger.debug('$remotePath is already ${binary.bytes.length} bytes; skipping the upload.');
       // Still make sure it can run: a file restored from a backup, or copied
       // by something that dropped the mode, is the size it should be and is
       // not executable.
-      await target.run('chmod +x $remotePath');
+      await target.run('chmod +x ${_quote(remotePath)}');
       return;
     }
     if (!existing.ok && reported != 'missing') {
@@ -205,7 +257,9 @@ class HostDeployer {
         'directory or a full disk would look like this.',
       );
     }
-    final chmod = await target.run('chmod +x $remotePath && test -x $remotePath');
+    final chmod = await target.run(
+      'chmod +x ${_quote(remotePath)} && test -x ${_quote(remotePath)}',
+    );
     if (!chmod.ok) {
       throw HostInstallException(
         '$remotePath was uploaded to ${target.address} but cannot be executed '
@@ -222,6 +276,8 @@ class HostDeployer {
   Future<HostGreeting?> _sayHello(String remotePath) async {
     RemoteChannel? channel;
     try {
+      // Unquoted, exactly as the pane spells it: the two must run the same
+      // command, and the pane's is the one a user sees in the notice.
       channel = await target.exec('$remotePath attach');
       final parser = FrameParser();
       final greeting = Completer<HostGreeting?>();
@@ -279,11 +335,19 @@ class HostDeployer {
   /// `setsid nohup … &`, so the daemon is out of this channel's process group
   /// before the channel closes. Output goes to a log next to the socket rather
   /// than into the channel, which would keep it open.
-  Future<RemoteRun> _startServe(String remotePath) => target.run(
-    'mkdir -p \$HOME/.karmashala && '
-    'setsid nohup $remotePath serve >> \$HOME/.karmashala/host.log 2>&1 < /dev/null & '
-    'echo started',
-  );
+  Future<RemoteRun> _startServe(String home, String remotePath) {
+    final directory = '$home/$remoteHomeSubdirectory';
+    return target.run(
+      'mkdir -p ${_quote(directory)} && '
+      'setsid nohup ${_quote(remotePath)} serve >> ${_quote('$directory/host.log')} '
+      '2>&1 < /dev/null & '
+      'echo started',
+    );
+  }
+
+  /// For the shell commands this class builds. The remote home is the machine's
+  /// word, not ours, so it is quoted rather than trusted to be one word.
+  static String _quote(String value) => "'${value.replaceAll("'", r"'\''")}'";
 }
 
 class HostInstallException implements Exception {

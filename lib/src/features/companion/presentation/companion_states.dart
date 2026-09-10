@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
+import '../../sessions/domain/session_resume.dart' show describeAge;
 import 'package:karmashala_remote/companion.dart';
 
 /// Draws [value] through its four states.
@@ -42,6 +43,15 @@ Widget companionAsync<T>(
 String companionErrorText(Object error) => error is GatewayException
     ? error.message
     : 'Something went wrong talking to your desktop.';
+
+/// How old the snapshot a companion screen is drawing is, in the words the
+/// rest of the app uses for an age.
+///
+/// §19, in one function: a reading whose time was never recorded reads
+/// **"age unknown"** and never "just now". The two are not the same claim, and
+/// the second one is the confident false statement the rule exists to delete.
+String companionSnapshotAge(DateTime? receivedAt, DateTime now) =>
+    receivedAt == null ? 'age unknown' : describeAge(now.difference(receivedAt));
 
 /// A block the size and shape of text that has not arrived yet.
 class _Bone extends StatelessWidget {
@@ -129,6 +139,30 @@ class CompanionNotice extends StatelessWidget {
     this.onSecondary,
     super.key,
   });
+
+  /// A search that matched nothing: what was searched, and how old the thing
+  /// it was searched over is.
+  ///
+  /// Both halves are load-bearing. The phone filters the snapshot it already
+  /// holds and sends no frame, so "nothing matches" is a statement about that
+  /// snapshot and about the four fields named in [searched] — never about the
+  /// desktop, which was not asked.
+  factory CompanionNotice.noMatch({
+    required String query,
+    required String searched,
+    required String age,
+    required VoidCallback onClear,
+    Key? key,
+  }) => CompanionNotice(
+    key: key,
+    icon: AppIcons.magnifyingGlass,
+    title: 'No match for "$query"',
+    body:
+        'Searched $searched in the snapshot this phone holds — $age. '
+        'Your desktop was not asked.',
+    actionLabel: 'Clear search',
+    onAction: onClear,
+  );
 
   /// The error flavour: plain words and a retry.
   factory CompanionNotice.failure({
