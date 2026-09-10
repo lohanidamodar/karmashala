@@ -15,8 +15,7 @@ class BootedDevice {
   });
 
   /// The id every other verb wants — an emulator serial, or a simulator udid.
-  /// Not the same string that was passed in: an AVD is booted by name and then
-  /// answers to `emulator-5554`.
+  /// Not what was passed in: an AVD boots by name, then answers to a serial.
   final String id;
   final DevicePlatform platform;
   final String name;
@@ -24,27 +23,8 @@ class BootedDevice {
   final String note;
 }
 
-/// Every device this machine can drive, and the driver for each.
-///
-/// **The one place that knows there are two platforms.** Callers resolve a
-/// [DeviceDriver] from an id here and then speak only [DeviceDriver] — the
-/// point of the seam is that nothing above this file contains an
-/// `if (isSimulator)`.
-///
-/// A fleet is built **per operation** rather than held, and that is load-
-/// bearing rather than tidy. The two listings below are memoised so that one
-/// tool call does not ask adb for the device list four times; a fleet that
-/// outlived the call would go on answering from that memo forever. It did, for
-/// one revision of this file, and the symptom was precise: `device_boot`
-/// started an emulator, reported it booted, and the very next
-/// `device_install_app` said "No Android devices are connected" — because the
-/// fleet had cached the empty list from before the boot and nothing ever
-/// cleared it. A device plugged in, or a simulator booted from Xcode, would
-/// have been invisible for the life of the app the same way.
-///
-/// So the cache lasts exactly as long as a device listing stays true, which is
-/// one operation. See [deviceFleetProvider], which hands out a factory rather
-/// than an instance for this reason.
+/// Every device this machine can drive, and the only place that knows there
+/// are two platforms. Built per operation: its memoised listings go stale.
 class DeviceFleet {
   DeviceFleet({
     required this.adb,
@@ -56,27 +36,19 @@ class DeviceFleet {
     required this.refreshSimulators,
   });
 
-  /// adb, or null when no Android SDK was found. Null is a supported state, not
-  /// a failure: this app runs on Macs with Xcode and no SDK, where "there are
-  /// no Android devices" is the correct answer, and throwing over it would take
-  /// the simulators down with it.
+  /// adb, or null when no Android SDK was found. Null is a supported state: a
+  /// Mac with Xcode and no SDK correctly has no Android devices.
   final AdbService? adb;
 
   /// `simctl`, or null off macOS.
   final SimctlService? simctl;
 
   /// The engine that can touch a simulator's screen, or null when this build
-  /// ships none. Passed down to [SimulatorDeviceDriver], which turns it into a
-  /// capability rather than a crash.
+  /// ships none; [SimulatorDeviceDriver] makes that a capability, not a crash.
   final SimulatorBackend? backend;
 
-  /// Booting a simulator goes back through the app's own transitions notifier
-  /// rather than straight to `simctl`, and that is deliberate: it is what
-  /// applies the user's slimming preference and what moves the device picker
-  /// onto the simulator that was just started, so the device an agent booted is
-  /// the device the person watching is shown. It is *not* on [DeviceDriver],
-  /// because a driver is bound to a device and a device being booted does not
-  /// have one yet.
+  /// Booting goes through the app's transitions notifier, not straight to
+  /// `simctl`: that is what applies slimming and moves the picker onto it.
   final Future<void> Function(String udid) bootSimulator;
 
   /// Whether the app is already starting or stopping this simulator.
@@ -115,10 +87,8 @@ class DeviceFleet {
   /// exists while the thing is stopped.
   Future<List<Avd>> avds() async => await adb?.listAvds() ?? const [];
 
-  /// The AVD called [name], or null. An AVD is not a device: it is a name that
-  /// exists whether or not anything is running, which is exactly why the stop
-  /// verb needs it — see [DeviceControlTools] on why a stopped emulator cannot
-  /// be named by serial.
+  /// The AVD called [name], or null. An AVD is a name that exists whether or
+  /// not anything is running, which is exactly why the stop verb needs it.
   Future<Avd?> avdNamed(String name) async {
     final needle = name.trim();
     for (final avd in await avds()) {
@@ -127,15 +97,8 @@ class DeviceFleet {
     return null;
   }
 
-  /// Every device on this machine, Android first.
-  ///
-  /// The two probes are started together. They are separate tools asking about
-  /// separate id namespaces, and this is the path `driverFor` takes for every
-  /// `device_*` call that does not name a device — which is most of them — so
-  /// serialising it added `adb devices` (41ms here) to `simctl list devices`
-  /// (214ms) on every tap, every keystroke and every screenshot in a driving
-  /// session. The fleet is rebuilt per operation on purpose, so the cost is
-  /// paid every time rather than once.
+  /// Every device on this machine, Android first. The two probes start
+  /// together: this is the path every `device_*` call without an id takes.
   Future<List<DeviceTarget>> all() async {
     final (android, simulators) = await (
       androidTargets(),
@@ -150,16 +113,8 @@ class DeviceFleet {
       if (target.isReady) target,
   ];
 
-  /// The device [id] names, whatever state it is in, or null.
-  ///
-  /// Three ways to name one, in order of how unambiguous they are: an adb
-  /// serial, a simulator udid, and — only when it picks out exactly one
-  /// simulator — a simulator's name. The name is accepted because udids are
-  /// unreadable and unmemorable, so a caller working from a task description
-  /// ("boot an iPhone 17 Pro") has nothing else to go on. It is refused when
-  /// ambiguous rather than guessed: two simulators can share a name across
-  /// runtimes, and booting the iOS 17 one when the task meant iOS 26 is a wrong
-  /// answer that looks like a right one.
+  /// The device [id] names, whatever state it is in, or null: an adb serial, a
+  /// simulator udid, or a simulator name — refused when it picks out two.
   Future<DeviceTarget?> find(String id) async {
     final needle = id.trim();
     if (needle.isEmpty) return null;
@@ -187,12 +142,8 @@ class DeviceFleet {
     return null;
   }
 
-  /// The device to act on, in whatever state — for the verbs whose whole point
-  /// is to act on something that is not ready.
-  ///
-  /// [verb] is the caller's own name and goes into every refusal, so whoever
-  /// reads the error knows which call was turned down rather than only that
-  /// something about devices went wrong.
+  /// The device to act on in whatever state — for the verbs whose point is to
+  /// act on something not ready. [verb] names the caller in every refusal.
   Future<DeviceTarget> requireTarget(String? id, {required String verb}) async {
     if (id != null && id.trim().isNotEmpty) {
       final found = await find(id);
@@ -214,12 +165,8 @@ class DeviceFleet {
     );
   }
 
-  /// The driver for [id], refusing rather than guessing.
-  ///
-  /// With exactly one ready device — of either platform — the id can be
-  /// omitted, which is what a caller will want almost every time.
-  ///
-  /// [requireReady] is false only for the verbs that act on a stopped device.
+  /// The driver for [id], refusing rather than guessing; the id may be omitted
+  /// when exactly one is ready. [requireReady] is false for stopped devices.
   Future<DeviceDriver> driverFor(
     String? id, {
     required String verb,
@@ -251,18 +198,8 @@ class DeviceFleet {
     ),
   };
 
-  /// Starts a virtual device and waits until it can actually be talked to.
-  ///
-  /// Takes a **name or an id**, because the two platforms name the thing you
-  /// boot differently and neither name is the one you drive afterwards. An AVD
-  /// is booted by name and then answers to `emulator-5554`; a simulator is
-  /// booted by udid and keeps it. Accepting an AVD name, a udid, or a
-  /// simulator's own name means a caller can act on a task description ("start
-  /// an iPhone 17 Pro") without a lookup step, and [BootedDevice.id] always
-  /// carries the id every other verb wants.
-  ///
-  /// Not a [DeviceDriver] method: a driver is bound to a device, and the whole
-  /// point of booting is that the device is not there to be bound to yet.
+  /// Starts a virtual device and waits until it can be talked to. Takes a name
+  /// or an id: neither platform boots by the id you drive it with afterwards.
   Future<BootedDevice> boot(String nameOrId) async {
     final wanted = nameOrId.trim();
     if (wanted.isEmpty) {
@@ -342,9 +279,7 @@ class DeviceFleet {
       );
     }
     // The transitions notifier returns silently when a boot is already in
-    // flight for this udid, which for the UI is right — a second click on a
-    // spinning button is nothing — but for a tool it would be a call that
-    // reported success having done nothing at all.
+    // flight, which for a tool would be success having done nothing.
     if (simulatorIsBusy(target.id)) {
       throw DeviceRefusal(
         '${target.label} is already being started or stopped by this app. Wait '
@@ -367,10 +302,7 @@ class DeviceFleet {
   }
 
   /// Shuts a virtual device down, then tells the app its listings are stale.
-  ///
-  /// The work is [DeviceDriver.powerOff]'s — the refusal for a physical phone
-  /// lives with the driver that knows it is one — and what is added here is the
-  /// refresh, which is a fleet-level fact rather than a device-level one.
+  /// The refusal for a physical phone is [DeviceDriver.powerOff]'s, not this.
   Future<String> powerOff(DeviceDriver driver) async {
     if (!driver.can(DeviceCapability.powerOff)) {
       throw DeviceRefusal(driver.missingReason(DeviceCapability.powerOff)!);
@@ -394,13 +326,8 @@ class DeviceFleet {
     return outcome;
   }
 
-  /// What exists right now, kept short.
-  ///
-  /// Deliberately not the whole simulator list: this developer's machine has
-  /// 170 of them, and pasting all 170 into a refusal buries the one line that
-  /// says what went wrong. Booted simulators are named because those are the
-  /// ones a caller could have meant; the rest are counted and pointed at
-  /// `list_devices`.
+  /// What exists right now, kept short: not the whole simulator list — 170 of
+  /// them pasted into a refusal buries the line that says what went wrong.
   Future<String> _whatThereIs() async {
     final parts = <String>[];
     final android = await androidTargets();
@@ -475,34 +402,8 @@ class DeviceFleet {
 /// Builds a fleet for one operation. See [deviceFleetProvider].
 typedef DeviceFleetFactory = Future<DeviceFleet> Function();
 
-/// A **factory**, not a fleet.
-///
-/// Riverpod caches a provider's value, so exposing the fleet directly handed
-/// every tool call the same instance — and therefore the same memoised device
-/// listing, taken whenever the first call happened to run. See [DeviceFleet]'s
-/// class comment for what that actually did. Handing out a factory keeps the
-/// expensive things cached (the services, and the SDK discovery future) while
-/// the cheap, perishable thing — who is plugged in right now — is asked again
-/// for every operation.
-///
-/// **The await is the second half of the same lesson.** `adbServiceProvider`
-/// reads `androidSdkProvider.asData?.value`, which is null in two completely
-/// different situations: discovery finished and found no SDK, and discovery has
-/// not finished yet. Locating the SDK means *running* `adb --version` and
-/// `emulator -version` — process spawns, not a lookup — so on a cold start it
-/// is genuinely in flight for a second or two. For the pane that ambiguity is
-/// harmless; it renders again when the value lands. For a tool it is not:
-/// `list_devices` said "No Android SDK was found" on a machine that has one,
-/// which is a confident false statement rather than a delay, and an agent that
-/// reads it goes away and does not come back. Observed exactly that way — two
-/// consecutive runs against the same machine, one listing the SDK and one
-/// denying it, decided only by how long the app had been up. `.future`
-/// resolves once and is cached, so the first caller pays for the probe and no
-/// one else does.
-///
-/// The callbacks are how a plain class reaches Riverpod without importing it
-/// into its own logic — which is what keeps [DeviceFleet] constructible in a
-/// test with three stubs and no container.
+/// A **factory**, not a fleet: one cached instance would hand every call the
+/// same stale listing. Awaited because a null adb service also means "not yet".
 final deviceFleetProvider = Provider<DeviceFleetFactory>((ref) {
   return () async {
     await ref.read(androidSdkProvider.future);

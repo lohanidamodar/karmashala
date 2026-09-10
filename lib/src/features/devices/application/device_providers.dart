@@ -7,11 +7,8 @@ import 'package:agent_cli/process.dart';
 import '../../settings/application/settings_controller.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// The environment whose Android SDK the pane uses.
-///
-/// Windows-native for now. A WSL SDK is a different adb server with a different
-/// device list, so switching this is a real user-facing choice rather than a
-/// detail — hence a provider rather than a constant.
+/// The environment whose Android SDK the pane uses. A provider, not a
+/// constant: a WSL SDK is a different adb server with a different list.
 final deviceEnvironmentProvider = Provider<ExecutionEnvironment>(
   (ref) => localHostEnvironment(DateTime.now().toUtc()),
 );
@@ -53,13 +50,8 @@ final avdsProvider = FutureProvider<List<Avd>>((ref) async {
   return adb.listAvds();
 });
 
-/// Serial of the device the user has chosen, or `null` for "no explicit
-/// choice".
-///
-/// This is the pane's single source of truth for *which device it is about*.
-/// It changes only when someone picks a device — the derived
-/// [selectedDeviceProvider] supplies the convenience default, and the live view
-/// follows this notifier rather than keeping a second opinion of its own.
+/// Serial of the device the user has chosen, `null` for "no explicit choice" —
+/// the pane's one source of truth; [selectedDeviceProvider] adds the default.
 final selectedDeviceSerialProvider =
     NotifierProvider<SelectedDeviceSerial, String?>(SelectedDeviceSerial.new);
 
@@ -70,17 +62,8 @@ class SelectedDeviceSerial extends Notifier<String?> {
   void select(String? serial) => state = serial;
 }
 
-/// Serial of the device the Android live view is **on**, or `null` when it is
-/// off. Next to the selection on purpose: two answers to "which device is this
-/// pane about" is a fault this feature has already had once.
-///
-/// It is a provider and not a field on the pane because the side panel
-/// unmounts the pane every time it switches surface, and this flag has to
-/// outlive that — same reason the simulator keeps its live view in
-/// `simulatorLiveViewProvider`, and deliberately the same shape. Only the
-/// *intent* is here, though: the session itself is torn down on unmount and
-/// started again on remount, because a scrcpy server on the phone, two sockets
-/// and a decoding player are not worth running for a pane nobody is looking at.
+/// Serial of the device the Android live view is **on**, `null` when off. A
+/// provider so the *intent* survives the side panel unmounting the pane.
 final androidLiveViewProvider = NotifierProvider<AndroidLiveView, String?>(
   AndroidLiveView.new,
 );
@@ -106,18 +89,8 @@ final selectedDeviceProvider = Provider<AndroidDevice?>((ref) {
   return ready.length == 1 ? ready.single : null;
 });
 
-/// Screen size of one device, by serial — the coordinate space its taps use.
-///
-/// Keyed by serial on purpose. It used to be "the screen size of the *selected*
-/// device", which is a different device from the one being streamed the moment
-/// the two disagree; a tap was then mapped through the wrong resolution and
-/// landed in the wrong place on the device you were actually looking at, while
-/// appearing to work. Asking for a named device's size makes that impossible to
-/// express.
-///
-/// Cached per serial rather than auto-disposed because `wm size` reports the
-/// *physical* screen, which does not change while the device is plugged in —
-/// not even on rotation.
+/// Screen size of one device, by serial — the coordinate space its taps use,
+/// cached: `wm size` reports the physical screen, unchanged even by rotation.
 final deviceScreenSizeProvider =
     FutureProvider.family<DeviceScreenSize?, String>((ref, serial) async {
       final adb = ref.watch(adbServiceProvider);
@@ -125,22 +98,8 @@ final deviceScreenSizeProvider =
       return adb.screenSize(serial);
     });
 
-/// Whether a device is started without a window of its own.
-///
-/// Defaults to headless. This pane already shows the device, drives it and
-/// reads its accessibility tree, so a second floating window is in the way
-/// rather than useful — which is exactly how Android Studio's embedded
-/// emulator behaves. It is a toggle rather than a constant because the
-/// emulator's extended controls (rotation, location, simulated calls) only
-/// exist in that window, and some tasks need them.
-///
-/// It governs both platforms, but from opposite directions, and the wording
-/// has to survive that. An AVD's window is the *default* and `-no-window`
-/// takes it away. An iOS simulator booted through `simctl` has no window at
-/// all — Simulator.app is a separate application that attaches to a booted
-/// device — so there the switch does not suppress a window, it opens one.
-/// Same promise to the user either way: on, you get the device here and
-/// nowhere else; off, it also has its own window.
+/// Whether a device starts with no window of its own; headless by default. It
+/// takes the AVD's window away and *opens* the simulator's — same promise.
 final headlessDeviceProvider = NotifierProvider<HeadlessDevice, bool>(
   HeadlessDevice.new,
 );
@@ -163,15 +122,8 @@ final androidSlimmingServiceProvider = Provider<AndroidSlimmingService?>((ref) {
   );
 });
 
-/// What one emulator currently carries from this build, by serial.
-///
-/// Auto-disposed rather than cached: it is read while the slimming dialog is
-/// open, and the answer changes the moment Restore runs. A cached one would go
-/// on offering Restore for something already put back.
-///
-/// Two `adb` calls against a device that may have gone away, so it retries
-/// nothing — a failure stays a failure until the dialog is opened again, which
-/// is cheaper than a background loop polling a device nobody is looking at.
+/// What one emulator carries from this build, by serial. Auto-disposed and
+/// never retried: Restore changes the answer, and a cached one would go stale.
 final androidSlimmingStatusProvider = FutureProvider.autoDispose
     .family<AndroidSlimmingStatus?, String>((ref, serial) async {
       final service = ref.watch(androidSlimmingServiceProvider);
@@ -184,11 +136,8 @@ final androidSlimmingOnStartProvider = Provider<bool>(
   (ref) => ref.watch(settingsControllerProvider.select((s) => s.androidSlimming)),
 );
 
-/// The categories to apply, or empty when slimming is off.
-///
-/// Ids that no longer name a category are dropped rather than erroring: a
-/// category removed in a later release must not make a saved preference
-/// unreadable.
+/// The categories to apply, or empty when slimming is off. Ids that no longer
+/// name a category are dropped: a removal must not break a saved preference.
 final androidSlimmingCategoriesProvider =
     Provider<Set<AndroidSlimmingCategory>>((ref) {
       if (!ref.watch(androidSlimmingOnStartProvider)) return const {};
@@ -206,11 +155,8 @@ final androidEmulatorGpuProvider = Provider<AndroidGpuMode>(
   ),
 );
 
-/// The extra `emulator` argv a Start should use.
-///
-/// The GPU mode is here even when slimming is off: it is a rendering choice
-/// about this pane's preview, not an optimisation, and switching slimming off
-/// must not silently swap the renderer back.
+/// The extra `emulator` argv a Start should use. The GPU mode is here even
+/// when slimming is off: it is a rendering choice, not an optimisation.
 final androidEmulatorArgumentsProvider = Provider<List<String>>(
   (ref) => launchArguments(
     enabled: ref.watch(androidSlimmingCategoriesProvider),
@@ -219,24 +165,15 @@ final androidEmulatorArgumentsProvider = Provider<List<String>>(
 );
 
 /// Runs the two durable layers against a booted emulator, and remembers which
-/// serials are mid-flight so a button can say so.
-///
-/// Both methods swallow failure. Slimming is an optimisation, and refusing to
-/// hand over an emulator because its animations could not be zeroed would turn
-/// a saving into an outage — the rule `ios_device_providers.dart` states for
-/// the iOS side, and the reason it is repeated here rather than inherited.
+/// serials are mid-flight. Failure is swallowed — a saving is not an outage.
 class AndroidSlimming extends Notifier<Set<String>> {
   @override
   Set<String> build() => const {};
 
   bool isBusy(String serial) => state.contains(serial);
 
-  /// Applies the selected categories to a freshly booted [serial].
-  ///
-  /// Called after `bootAvdAndWait`, which already waited for
-  /// `sys.boot_completed` — the service waits again anyway, because a caller
-  /// that used plain `bootAvd` would otherwise be writing settings into a
-  /// half-booted system.
+  /// Applies the selected categories to a freshly booted [serial]. The service
+  /// waits for `sys.boot_completed` again: a plain `bootAvd` caller may not.
   Future<AndroidSlimmingReport?> applyAfterBoot(String serial) =>
       _run(serial, (service) async {
         final enabled = ref.read(androidSlimmingCategoriesProvider);
@@ -244,11 +181,8 @@ class AndroidSlimming extends Notifier<Set<String>> {
         return service.apply(serial, enabled: enabled);
       });
 
-  /// Puts everything this build manages back on [serial].
-  ///
-  /// Deliberately ignores the master switch: an emulator that was slimmed while
-  /// the setting was on still needs restoring after it is turned off, and that
-  /// is precisely the case a user cannot otherwise get out of.
+  /// Puts everything this build manages back on [serial], ignoring the master
+  /// switch: one slimmed before the setting went off still needs restoring.
   Future<AndroidSlimmingReport?> restore(String serial) =>
       _run(serial, (service) => service.restore(serial));
 

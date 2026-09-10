@@ -1,34 +1,9 @@
-// **The row of hardware buttons under the picture** — Back, Home, Recents, a
-// screenshot, a recording, the clipboard, the files browser, a URL and the
-// slimming dialog — and the outcome each of them reports.
-//
-// A part of `device_pane.dart` rather than its own library, for the reason the
-// device list gives: the type names are what the pane's committed widget tree
-// records, so making them public to move them would cost the proof.
+// The row of hardware buttons under the picture, and what each reports back.
+// A part of `device_pane.dart`: the type names are in the committed tree.
 part of 'device_pane.dart';
 
-/// What the pane can do to the Android device it is showing.
-///
-/// The counterpart of the simulator pane's `_SimulatorControls`, and
-/// deliberately the same shape: the hardware keys first, then the three things
-/// that need no button on the device at all — appearance, a screenshot, and a
-/// URL to open. They used to be Back / Home / Recents and nothing else, so the
-/// iOS pane could take a screenshot and follow a deep link while the Android
-/// one could not, on the platform where `adb` makes both trivial.
-///
-/// **Lock is absent, and cannot honestly be added.** `input keyevent
-/// KEYCODE_SLEEP` puts the screen out and `KEYCODE_WAKEUP` brings it back, but
-/// neither touches the keyguard: on any device with a PIN, pattern or password
-/// the wake lands on the lock screen and there is no adb command that gets past
-/// it — that is the point of a keyguard. iOS's button is a real Lock/Unlock
-/// pair because a simulator has no passcode. A button here promising the same
-/// would be a one-way trip on precisely the devices people care about locking.
-///
-/// [device] is the **live** device, and `null` means no live view — in which
-/// case every button is disabled and nothing can reach a phone. The gate is
-/// here as well as in the caller because a control that is merely hidden is one
-/// refactor away from being effective again, and "silently drives a device the
-/// user thinks is disconnected" is the failure this widget must not have.
+/// What the pane can do to the Android device it is showing. A null [device]
+/// means no live view: every button is off, and that gate is here, not above.
 class _AndroidControls extends ConsumerStatefulWidget {
   const _AndroidControls({
     required this.device,
@@ -38,15 +13,12 @@ class _AndroidControls extends ConsumerStatefulWidget {
 
   final AndroidDevice? device;
 
-  /// Whether there is a running live view whose frames a recording could be
-  /// written from. Not derived from [device]: the pane names the device the
-  /// moment the user picks it, and the session takes a second to come up.
+  /// Whether a running live view's frames could be recorded. Not derived from
+  /// [device]: the pane names the device before the session comes up.
   final bool recordable;
 
-  /// The live view's clipboard bridge, or `null` when there is no control
-  /// socket to carry one. Not a capability flag: `null` is the only honest
-  /// value when the transport is absent, because adb has no clipboard verb to
-  /// fall back to.
+  /// The live view's clipboard bridge, `null` when there is no control socket:
+  /// not a capability flag, since adb has no clipboard verb to fall back to.
   final DeviceClipboardBridge? clipboard;
 
   @override
@@ -54,17 +26,8 @@ class _AndroidControls extends ConsumerStatefulWidget {
 }
 
 class _AndroidControlsState extends ConsumerState<_AndroidControls> {
-  /// What the last toggle left the appearance in, for the tooltip alone. Null
-  /// until one has run, which is why the first tooltip is a guess.
-  ///
-  /// A guess is all it can be without spending a process on `cmd uimode night`
-  /// every time this row is built — and it is a harmless one, because the
-  /// *action* does not use it: [_appearance] asks the device what it is
-  /// currently doing and flips that. So a device already in dark mode may be
-  /// offered "Switch to dark appearance" once, and pressing it still turns the
-  /// device light. The simulator row makes the opposite trade for the same
-  /// reason in reverse: nothing outside this app moves a simulator's
-  /// appearance, so remembering it there is always right.
+  /// What the last toggle left the appearance in, for the tooltip alone — a
+  /// guess until one runs; [_appearance] asks the device rather than read it.
   bool? _dark;
 
   AdbService? get _adb => ref.read(adbServiceProvider);
@@ -80,9 +43,8 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
     final target = widget.device;
     final adb = _adb;
     if (target == null || adb == null) return;
-    // A device that will not say — `auto`, or a custom schedule, neither of
-    // which a two-state button can represent — is treated as light, so the
-    // first press has a defined meaning instead of doing nothing.
+    // A device that will not say — `auto`, or a custom schedule — is treated
+    // as light, so the first press means something instead of doing nothing.
     final wanted = !(await adb.isNightMode(target.serial) ?? false);
     await adb.setNightMode(target.serial, dark: wanted);
     if (mounted) setState(() => _dark = wanted);
@@ -173,14 +135,8 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
           onPressed: canReach ? _openUrl : null,
           buttonKey: const Key('android-open-url'),
         ),
-        // Gated on the live view rather than on adb, because a recording is
-        // written from the frames the picture is made of — there is nothing to
-        // record without one.
-        //
-        // Two entries while idle, one while running. The container is the
-        // user's choice because the two are not interchangeable: MP4 is what
-        // every player opens, MPEG-TS is what survives a rotation. See
-        // `DeviceRecordingController.startLiveViewRecording`.
+        // Gated on the live view, not adb: a recording is written from the
+        // picture's frames. MP4 opens anywhere, MPEG-TS survives a rotation.
         DeviceControl(
           name: 'Record',
           tooltip: recording is DeviceRecordingActive
@@ -226,9 +182,8 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
                 : null,
             buttonKey: const Key('android-record-ts'),
           ),
-        // The clipboard is gated on the *control socket*, not on adb, which is
-        // why these two do not use [canReach]: adb can drive every other
-        // button on this row and cannot touch a clipboard at all.
+        // The clipboard is gated on the *control socket*, not adb — which is
+        // why these two do not use [canReach]: adb cannot reach a clipboard.
         ...deviceClipboardControls(bridge: widget.clipboard, say: _say),
       ],
     );

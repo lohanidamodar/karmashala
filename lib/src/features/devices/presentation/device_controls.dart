@@ -14,41 +14,22 @@ class DeviceControl {
     this.buttonKey,
   });
 
-  /// What this control is called when it fails: "Screenshot failed: …".
-  ///
-  /// Separate from [tooltip] because the tooltip names the *next* action —
-  /// "Switch to dark appearance" — and a failure message built from that reads
-  /// as a sentence about something that was never going to happen.
+  /// What this control is called when it fails: "Screenshot failed: …". Not
+  /// the [tooltip], which names the *next* action and reads wrong in one.
   final String name;
 
   final String tooltip;
   final IconData icon;
 
-  /// `null` disables the button rather than removing it.
-  ///
-  /// Deliberately still drawn: a control that vanishes when the device goes
-  /// reads as a fault in the app, while an inert one with a tooltip says what
-  /// is missing. The tooltip is what has to carry the explanation.
+  /// `null` disables the button rather than removing it: one that vanishes
+  /// reads as a fault in the app, while an inert one says what is missing.
   final Future<void> Function()? onPressed;
 
   final Key? buttonKey;
 }
 
-/// The row of controls under a live picture, on either platform.
-///
-/// Shared between the iOS and Android panes because the *behaviour* is shared,
-/// not because the two rows look alike. Every control here spawns a process and
-/// takes a moment to answer, and all of them want the same three things: one
-/// action in flight at a time, a failure that is said out loud rather than
-/// swallowed, and no press accepted while the last one is still running. That
-/// used to live in the simulator pane alone, so the Android row — which had
-/// only key presses, none of which can fail visibly — silently grew a different
-/// set of manners as soon as it gained a screenshot.
-///
-/// The controls themselves stay with their platform. What Android and iOS can
-/// do genuinely differs (there is no Recents on iPhone; adb cannot unlock a
-/// secured device), and a widget that tried to own both lists would have to
-/// carry a platform switch for every button.
+/// The row of controls under a live picture, on either platform. Shared for
+/// the manners — one action at a time, failures out loud — not the buttons.
 class DeviceControlBar extends StatefulWidget {
   const DeviceControlBar({super.key, required this.controls});
 
@@ -68,10 +49,8 @@ class _DeviceControlBarState extends State<DeviceControlBar> {
     try {
       await action();
     } on Object catch (error) {
-      // Named, and out loud. These all reach the device through a process that
-      // can fail for reasons the user can act on — a simulator that went away,
-      // a deep link nothing is registered for — and a caught-and-dropped
-      // failure here is indistinguishable from the device ignoring the tap.
+      // Named, and out loud: these reach the device through a process that
+      // can fail for reasons the user can act on; silence reads as a no-op.
       if (mounted) {
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(content: Text('${control.name} failed: $error')),
@@ -86,11 +65,8 @@ class _DeviceControlBarState extends State<DeviceControlBar> {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-      // A [Wrap], not a [Row]. The row is as wide as the controls its platform
-      // has, the pane is as wide as the user made the side panel, and the two
-      // are unrelated — adding a Record button overflowed a compact pane by 42
-      // pixels. Wrapping keeps every control reachable at every width instead
-      // of clipping the last ones.
+      // A [Wrap], not a [Row]: the pane's width and the platform's control
+      // count are unrelated, and one more button overflowed a compact pane.
       child: Wrap(
         alignment: WrapAlignment.center,
         children: [
@@ -109,13 +85,8 @@ class _DeviceControlBarState extends State<DeviceControlBar> {
   }
 }
 
-/// Where a screenshot goes, or `null` on a host with no home directory.
-///
-/// The Desktop, because that is where the Simulator's own Cmd+S puts them and
-/// it is the one place a person will think to look. Shared so the Android and
-/// iOS controls cannot drift into saving to two different folders under two
-/// different names — [what] is the only part that differs, and it is there so
-/// the file says which kind of device it came from.
+/// Where a screenshot goes, or `null` on a host with no home directory. The
+/// Desktop, and shared so Android and iOS cannot drift into two folders.
 String? desktopScreenshotPath(String what) {
   final home = Platform.environment['HOME'];
   if (home == null) return null;
@@ -127,23 +98,8 @@ String? desktopScreenshotPath(String what) {
   return '$home/Desktop/$what Screen Shot $stamp.png';
 }
 
-/// Asks for a URL to open on the device. Null if the dialog was dismissed.
-///
-/// Extracted so it can be tested on its own — it is the whole of a bug worth a
-/// regression test. It holds **no `TextEditingController`**: the first version
-/// created one and disposed it as soon as `showDialog` returned, which is after
-/// the route pops but *before* its exit animation has finished painting the
-/// field. Every frame of that animation then threw "A TextEditingController was
-/// used after being disposed", and because the error repeats per frame it took
-/// the whole app into an error state rather than failing once.
-///
-/// Reading the text from `onChanged` needs no controller and so cannot outlive
-/// one.
-///
-/// Device-shaped rather than simulator-shaped: `simctl openurl` and
-/// `am start -a android.intent.action.VIEW` take the same thing from the user
-/// and mean the same thing by it, so there is one dialog and one set of keys
-/// for both.
+/// Asks for a URL to open on the device, with **no `TextEditingController`**:
+/// one disposed when `showDialog` returns throws through the exit animation.
 Future<String?> askForDeviceUrl(BuildContext context) {
   var typed = '';
   return showDialog<String>(

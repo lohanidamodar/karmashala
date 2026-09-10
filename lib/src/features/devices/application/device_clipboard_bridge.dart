@@ -1,62 +1,5 @@
-/// Moving text between this computer's clipboard and an Android device's.
-///
-/// ## What makes this possible at all, and what it costs
-///
-/// **There is no adb clipboard verb.** Measured 2026-09-07 on the cabled
-/// OnePlus CPH1989 (Android 11 / API 30):
-///
-/// * `adb shell cmd clipboard` → `No shell command implementation.` The
-///   `clipboard` service is in `service list` and in `cmd -l`, and it answers
-///   neither.
-/// * `adb shell dumpsys clipboard` → **zero lines**. Nothing to read there.
-/// * `adb shell service call clipboard …` cannot be made to work in either
-///   direction: `service`'s own usage lists `i32 i64 f d s16 null fd nfd afd`
-///   as the arguments it can marshal, and `setPrimaryClip` takes a `ClipData`
-///   parcelable — not in that list. `getPrimaryClip` *returns* one, which
-///   `service` prints as a raw parcel hex dump, and its transaction number
-///   moves between Android versions.
-///
-/// So the transport is **scrcpy's control socket**, which this app already
-/// opens for touch and keyboard input, and the reason it can read a clipboard
-/// that adb cannot is a permission:
-///
-/// ```txt
-/// $ adb shell dumpsys package com.android.shell | grep -i clip
-///   android.permission.READ_CLIPBOARD_IN_BACKGROUND: granted=true
-/// ```
-///
-/// scrcpy-server runs as the shell uid and tells the framework it is
-/// `com.android.shell` (`FakeContext.PACKAGE_NAME` in the deployed jar), so its
-/// `getPrimaryClip`/`setPrimaryClip` are exempt from the Android 10+ rule
-/// confining clipboard access to the foreground app or the active IME. That
-/// exemption is a **fact about the device**, not about this app: it is a
-/// signature permission and a vendor build is free not to grant it. Which is
-/// why every answer here is a [DeviceClipboardRead] and never a bare `String?`
-/// — a device that refuses must not be reported as a device with nothing
-/// copied.
-///
-/// ## The two costs, stated plainly
-///
-/// * **It needs the live view running.** The control socket is opened with the
-///   stream; with no stream there is no socket, and this bridge refuses in
-///   words rather than silently doing nothing. A control-only scrcpy server
-///   (`video=false control=true`) would lift that and is the obvious next step;
-///   it is a second server lifecycle to own, so it is written down rather than
-///   built.
-/// * **It spawns nothing.** Not one process per sync, not one per poll — the
-///   socket is already open, so a read is one `send` and a wait, and a write is
-///   the same. `processSpawnsOnThisIsolate` does not move for either.
-///
-/// ## Nothing polls
-///
-/// §19's third rule, and here it costs nothing to keep: the device *pushes*.
-/// scrcpy-server registers an `OnPrimaryClipChangedListener` when
-/// `clipboardAutosync` is on — the jar's `Options` constructor defaults it to
-/// true and this app does not pass the option — so a copy on the phone arrives
-/// as a `TYPE_CLIPBOARD` message with no round trip and no timer. [latest] is
-/// that event, with its age. Writing it onto *this* computer's clipboard still
-/// takes an explicit action: a background process replacing what the user
-/// copied thirty seconds ago is not a sync, it is a theft.
+/// Moving text between this computer's and an Android device's clipboard over
+/// scrcpy's control socket: adb has none, so this needs the live view running.
 library;
 
 import 'dart:async';
@@ -65,19 +8,12 @@ import 'dart:typed_data';
 import '../../../core/clipboard/host_clipboard.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// How long to wait for the device to answer before saying it did not.
-///
-/// Generous on purpose. The round trip is a socket write, a binder call and a
-/// socket read — sub-millisecond when the device is well — so anything near
-/// this bound means the device is busy or the server is wedged, and the answer
-/// then is [DeviceClipboardOutcome.unavailable] rather than a longer wait.
+/// How long the device gets to answer before we say it did not. Generous: the
+/// round trip is sub-millisecond, so anything near this bound means wedged.
 const Duration kDeviceClipboardTimeout = Duration(seconds: 3);
 
-/// One device's clipboard, over one scrcpy control socket.
-///
-/// Created and disposed with the live view, like the gesture and keyboard
-/// sinks next door. Holding one whose socket has closed is safe: every method
-/// checks and refuses.
+/// One device's clipboard, over one scrcpy control socket. Created and
+/// disposed with the live view; one whose socket closed refuses, safely.
 class DeviceClipboardBridge {
   DeviceClipboardBridge({
     required this.channel,
@@ -106,23 +42,17 @@ class DeviceClipboardBridge {
   /// Waiters for an acknowledgement, keyed by the sequence they sent.
   final Map<int, Completer<void>> _ackWaiters = {};
 
-  /// Sequence numbers start at 1: `ControlMessage.SEQUENCE_INVALID` is 0, which
-  /// the server reads as "do not acknowledge", so a write numbered zero could
-  /// never be confirmed.
+  /// Sequence numbers start at 1: 0 is `SEQUENCE_INVALID`, which the server
+  /// reads as "do not acknowledge", so a zero write could never be confirmed.
   int _nextSequence = 1;
 
-  /// Emits whenever the device's clipboard is observed to have changed.
-  ///
-  /// The *event*, for a pane that wants to redraw its label. Never the text —
-  /// a stream of clipboard contents is a stream of user data through every
-  /// listener that ever gets added.
+  /// Emits whenever the device's clipboard is observed to have changed — the
+  /// event only: a stream of clipboard contents is a stream of user data.
   Stream<void> get changes => _changes.stream;
   final StreamController<void> _changes = StreamController<void>.broadcast();
 
-  /// The most recent thing known about the device's clipboard.
-  ///
-  /// [DeviceClipboardRead.unchecked] until something is. Never `null`, so the
-  /// pane cannot accidentally draw "empty" for "not asked".
+  /// The most recent thing known about the device's clipboard, never `null`:
+  /// unchecked until asked, so "not asked" cannot be drawn as "empty".
   DeviceClipboardRead get latest => _latest;
   DeviceClipboardRead _latest = DeviceClipboardRead.unchecked;
 
@@ -142,11 +72,8 @@ class DeviceClipboardBridge {
     return null;
   }
 
-  /// Puts this computer's clipboard onto the device's.
-  ///
-  /// Reads the host clipboard through the seam that survives a Windows
-  /// `OpenClipboard` failure, then sends one `SET_CLIPBOARD` and waits for the
-  /// acknowledgement carrying that sequence.
+  /// Puts this computer's clipboard onto the device's: one `SET_CLIPBOARD`,
+  /// then a wait for the acknowledgement carrying that sequence.
   Future<DeviceClipboardWrite> copyHostToDevice() async {
     if (refusal case final reason?) {
       return DeviceClipboardWrite.refused(reason);
@@ -163,20 +90,15 @@ class DeviceClipboardBridge {
     };
   }
 
-  /// Puts [text] on the device's clipboard.
-  ///
-  /// Three outcomes, and the middle one is the point: a write that was sent and
-  /// not acknowledged is neither a success nor a failure, and
-  /// [DeviceClipboardWriteOutcome.unacknowledged] says so rather than choosing
-  /// a side.
+  /// Puts [text] on the device's clipboard. A write sent and not acknowledged
+  /// is neither a success nor a failure, and the outcome says exactly that.
   Future<DeviceClipboardWrite> writeToDevice(String text) async {
     if (refusal case final reason?) {
       return DeviceClipboardWrite.refused(reason);
     }
     if (text.length > kScrcpyClipboardTextMaxBytes) {
-      // Cheap pre-check on characters; the encoder counts bytes and is the
-      // authority. Both refuse rather than truncate — an over-long message
-      // desynchronises the socket for good.
+      // Cheap pre-check on characters; the encoder counts bytes. Both refuse
+      // rather than truncate — an over-long message desynchronises the socket.
       return const DeviceClipboardWrite.refused(
         'That is too much text for one clipboard message.',
       );
@@ -209,12 +131,8 @@ class DeviceClipboardBridge {
     }
   }
 
-  /// Asks the device for its clipboard.
-  ///
-  /// A device that does not answer produces
-  /// [DeviceClipboardOutcome.unavailable]. It is never reported as empty: the
-  /// whole feature turns on that distinction, because "empty" tells the user to
-  /// copy something again and the thing that is actually wrong is elsewhere.
+  /// Asks the device for its clipboard. One that does not answer is
+  /// [DeviceClipboardOutcome.unavailable] and never empty — that is the point.
   Future<DeviceClipboardRead> readFromDevice() async {
     if (refusal case final reason?) {
       return _record(DeviceClipboardRead.unavailable(reason));
@@ -254,22 +172,16 @@ class DeviceClipboardBridge {
     }
   }
 
-  /// Reads the device's clipboard and puts it on this computer's.
-  ///
-  /// Nothing is written to the host clipboard unless the device actually
-  /// answered with text: an unreadable device must not clear what the user had
-  /// copied here.
+  /// Reads the device's clipboard and puts it on this computer's — nothing is
+  /// written here unless the device actually answered with text.
   Future<DeviceClipboardRead> copyDeviceToHost() async {
     final read = await readFromDevice();
     if (read.hasText) await host.writeText(read.text!);
     return read;
   }
 
-  /// Puts the last clipboard the device *pushed* onto this computer's.
-  ///
-  /// The zero-round-trip path: the device already told us, unprompted, when the
-  /// user copied on the phone. Refuses when nothing has been observed, which is
-  /// the state that must never be drawn as an empty clipboard.
+  /// Puts the last clipboard the device *pushed* onto this computer's: no
+  /// round trip. Refuses when nothing was observed, which is not "empty".
   Future<DeviceClipboardRead> copyLatestToHost() async {
     final read = _latest;
     if (read.hasText) await host.writeText(read.text!);
@@ -314,11 +226,8 @@ class DeviceClipboardBridge {
     }
   }
 
-  /// Stops reading the socket. In-flight reads are **left to time out** rather
-  /// than failed: a `completeError` here would surface as an exception out of
-  /// `readFromDevice`, and its caller's contract is a
-  /// [DeviceClipboardRead] — an honest `unavailable` a moment later beats a
-  /// throw the pane has to guess the wording for.
+  /// Stops reading the socket. In-flight reads are left to time out rather
+  /// than failed: the caller's contract is a [DeviceClipboardRead], not a throw.
   Future<void> dispose() async {
     await _subscription.cancel();
     await _changes.close();

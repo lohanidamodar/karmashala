@@ -13,11 +13,8 @@ import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
 import 'device_touch_surface.dart';
 
-/// The simulator's picture, when there is one.
-///
-/// Returns null from [maybeBuild] when nothing is being mirrored, so the pane
-/// can fall through to the Android live view or the device list without this
-/// having an opinion about either.
+/// The simulator's picture, when there is one. Draws nothing when nothing is
+/// mirrored, so the pane falls through without this having an opinion.
 class SimulatorLivePane extends ConsumerWidget {
   const SimulatorLivePane({super.key});
 
@@ -41,9 +38,8 @@ class SimulatorLivePane extends ConsumerWidget {
             const SizedBox(height: Insets.md),
             Text('Starting the live view', style: theme.textTheme.bodyMedium),
             const SizedBox(height: 4),
-            // Named, because seventeen seconds of spinner with no explanation
-            // reads as a hang. WebDriverAgent is installed into the simulator,
-            // launched, and then has to bootstrap XCTest.
+            // Named, because twenty seconds of spinner reads as a hang: WDA
+            // is installed into the simulator, launched, then bootstraps.
             Text(
               'WebDriverAgent is starting inside the simulator. '
               'This takes about 20 seconds the first time.',
@@ -94,15 +90,8 @@ class _Running extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final screen = view.screen;
     final backend = ref.watch(simulatorBackendProvider);
-    // The pane draws no name and no Stop of its own: the toolbar above carries
-    // both, and showing them twice put two "iPhone 16 Pro · iOS 18.2" rows and
-    // two Stop buttons on screen, one under the other. The device it is a
-    // picture *of* is the toolbar's job, the same way the Android live view
-    // leaves it there.
-    //
-    // The name is still read, because the keyboard surface says whose keyboard
-    // it has taken — "Sending keys to iPhone 16 Pro" is the whole point of that
-    // line, and a udid there would tell the user nothing.
+    // The pane draws no name and no Stop of its own — the toolbar carries
+    // both. The name is read for the keyboard surface, which says whose.
     final name = ref
         .watch(iosSimulatorsProvider)
         .asData
@@ -113,10 +102,8 @@ class _Running extends ConsumerWidget {
     return Column(
       children: [
         Expanded(
-          // The same surface the Android pane uses, given a different sink.
-          // Focus, arming, the escape chord and the wording all live in there,
-          // which is what stops the two platforms drifting apart: the only
-          // thing this side chooses is what a keystroke means on the wire.
+          // The same surface the Android pane uses, given a different sink:
+          // focus, arming and the escape chord stay in one place.
           child: DeviceKeyboardSurface(
             sink: backend == null
                 ? null
@@ -133,12 +120,8 @@ class _Running extends ConsumerWidget {
               child: screen == null
                   ? _video(view)
                   : AspectRatio(
-                      // The touch surface treats its box **as** the picture — it
-                      // maps a widget point to a 0..1 fraction of it — so the box
-                      // has to be exactly the picture and not the letterboxed
-                      // area around it. `BoxFit.fill` inside a correctly-shaped
-                      // box is the same image as `contain` in a loose one, and it
-                      // is the only version a tap can be mapped through.
+                      // The touch surface treats its box **as** the picture,
+                      // so it must be that, not the letterbox around it.
                       aspectRatio: screen.points.width / screen.points.height,
                       child: DeviceTouchSurface(
                         sink: SimulatorGestureSink(
@@ -149,9 +132,8 @@ class _Running extends ConsumerWidget {
                               .read(simulatorInputErrorProvider.notifier)
                               .report('$error'),
                         ),
-                        // iOS has no pinch through this transport: WebDriverAgent
-                        // takes one action sequence per gesture, and the Ctrl-drag
-                        // mirror trick is scrcpy's.
+                        // iOS has no pinch through this transport: WDA takes
+                        // one action sequence per gesture.
                         pinchWithModifier: false,
                         child: _video(view),
                       ),
@@ -165,25 +147,8 @@ class _Running extends ConsumerWidget {
   }
 }
 
-/// The controls the Simulator's own Device and Features menus offer, for a
-/// simulator with no window of its own.
-///
-/// Home and Lock go through WebDriverAgent, which is the only thing here that
-/// can press a physical button. Everything else is `simctl`, which is why the
-/// row can offer appearance and deep links that a real device's buttons cannot.
-///
-/// Rotation is deliberately absent. WebDriverAgent can ask for an orientation,
-/// but the picture's aspect ratio is read once when the view starts and the tap
-/// mapping is derived from it — so rotating would leave every tap landing in
-/// the wrong place until the view was restarted. It needs the view to follow a
-/// size change, which is more than a button.
-///
-/// The busy gate, the failure snackbar and the row itself now live in
-/// [DeviceControlBar], shared with the Android row: those manners are the same
-/// on both platforms, and keeping two copies is how the Android row ended up
-/// without any of them. What is left here is the part that is genuinely iOS —
-/// which commands to send, and the two pieces of state the buttons name
-/// themselves after.
+/// The controls Simulator.app's Device and Features menus offer, for a
+/// simulator with no window. No rotation: tap mapping is fixed at view start.
 class _SimulatorControls extends ConsumerStatefulWidget {
   const _SimulatorControls({required this.udid});
 
@@ -194,10 +159,8 @@ class _SimulatorControls extends ConsumerStatefulWidget {
 }
 
 class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
-  /// What this pane last *set*, not what the device reports.
-  ///
-  /// `simctl ui appearance` can be read back, but only by spawning a process,
-  /// and the answer is only ever wrong if something outside this app changed it.
+  /// What this pane last *set*, not what the device reports: reading
+  /// `simctl ui appearance` back costs a process spawn.
   bool _dark = false;
 
   /// What the last toggle left the device in. Re-read before every toggle, so a
@@ -221,10 +184,8 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
   Future<void> _appearance() async {
     final simctl = ref.read(simctlServiceProvider);
     if (simctl == null) return;
-    // Asked, not remembered — the same way the Android control does it. The
-    // local flag started at light, so a simulator already dark went dark again
-    // on the first press, and a rebuild of this row reset the flag and left the
-    // device stuck in dark with the button offering to darken it further.
+    // Asked, not remembered: a local flag starting at light darkened an
+    // already dark simulator, and a rebuild left the button inverted.
     final wanted = !(await simctl.isDarkAppearance(widget.udid) ?? _dark);
     await simctl.setAppearance(widget.udid, wanted ? 'dark' : 'light');
     if (mounted) setState(() => _dark = wanted);
@@ -313,10 +274,8 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
           onPressed: _openUrl,
           buttonKey: const Key('simulator-open-url'),
         ),
-        // `simctl io … recordVideo`, not a tee of the picture above: that
-        // picture is WebDriverAgent's MJPEG, a feed of screenshots with no
-        // encoded video behind it, while simctl records the display itself and
-        // writes a QuickTime movie.
+        // `simctl io … recordVideo`, not a tee of the picture above: that is
+        // WebDriverAgent's MJPEG, screenshots with no encoded video behind it.
         DeviceControl(
           name: 'Record',
           tooltip: recording is DeviceRecordingActive
@@ -341,19 +300,8 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
   }
 }
 
-/// The picture itself.
-/// Paints the newest decoded frame.
-///
-/// A plain [RawImage] rather than a video widget: the picture is a stream of
-/// JPEGs decoded in [SimulatorFrames], because media_kit's libmpv has no
-/// `mpjpeg` demuxer and cannot read WebDriverAgent's stream at all. Rebuilds
-/// are scoped to the notifier, so a new frame repaints the image and nothing
-/// else in the pane.
-///
-/// `BoxFit.fill`, because every caller sizes the box to the device's aspect
-/// ratio first. The touch surface can only map a tap if its box *is* the
-/// picture rather than the letterboxed area around it, and `fill` inside a
-/// correctly-shaped box is the same image `contain` would draw in a loose one.
+/// Paints the newest decoded frame with a plain [RawImage]: media_kit's libmpv
+/// has no `mpjpeg` demuxer, so WebDriverAgent's stream is decoded in Dart.
 Widget _video(SimulatorLiveView view) => ValueListenableBuilder<ui.Image?>(
   valueListenable: view.frames.image,
   builder: (context, image, _) {
@@ -368,9 +316,8 @@ Widget _video(SimulatorLiveView view) => ValueListenableBuilder<ui.Image?>(
       // The frames are already device pixels. Leaving this at the window's
       // ratio would ask Flutter to shrink them again on a Retina display.
       scale: 1,
-      // Bilinear, not `medium`. `medium` builds mipmaps, and every frame here
-      // is a *new* image — so it was regenerating them thirty times a second
-      // for a picture that is only ever scaled down a little.
+      // Bilinear, not `medium`: `medium` builds mipmaps, and every frame here
+      // is a *new* image — thirty regenerations a second.
       filterQuality: FilterQuality.low,
     );
   },

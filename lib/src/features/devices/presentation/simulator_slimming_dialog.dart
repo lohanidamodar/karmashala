@@ -6,25 +6,8 @@ import '../../settings/application/settings_controller.dart';
 import '../application/ios_device_providers.dart';
 import 'package:karmashala_devices/devices.dart';
 
-/// What an iOS simulator starts with, and what gets switched off inside it.
-///
-/// A dialog on the device pane rather than a Settings page, for the reason
-/// `AndroidSlimmingDialog` gives: it is a decision about the Start button a few
-/// rows below it. It used to live under Settings › Simulators while Android's
-/// equivalent lived on the pane, so the same decision was made in two different
-/// places depending on which phone you were pointing at.
-///
-/// Every category says what stops working when it is switched off, because the
-/// right answer depends on the app being built and only the person building it
-/// knows whether it needs the photo picker or push notifications. A control
-/// that just said "slim: on" would leave them guessing at why the picker came
-/// up empty.
-///
-/// The tick boxes read the opposite way round from the Android dialog: there a
-/// tick *applies* a category, here it *spares* one. iOS slims by default and
-/// Android's risky layer is opt-in, so in both cases the polarity is "ticked
-/// means the thing keeps working", and the feature-loss warnings appear on the
-/// unticked ones.
+/// What an iOS simulator starts with, and what is switched off inside it.
+/// A tick *spares* a category here; on the Android dialog a tick applies one.
 class SimulatorSlimmingDialog extends ConsumerWidget {
   const SimulatorSlimmingDialog({super.key});
 
@@ -157,9 +140,8 @@ class _CategoryTile extends StatelessWidget {
         children: [
           Expanded(child: Text(category.displayName)),
           Text(
-            // A relative weight, never a total: these are medians measured one
-            // category at a time, and the services share dirty pages, so
-            // summing all fifteen overshoots what is actually saved.
+            // A relative weight, never a total: these are medians measured
+            // one category at a time, and the services share dirty pages.
             '~${category.approxSavingMb} MB',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,

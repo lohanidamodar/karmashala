@@ -85,13 +85,8 @@ class StreamStalledOverlay extends StatelessWidget {
   }
 }
 
-/// Says the picture is standing still, without claiming anything is wrong.
-///
-/// A device nobody is touching sends no frames — scrcpy encodes on change — so
-/// this is the ordinary state of a phone on a desk, and it gets a chip rather
-/// than the scrim [StreamStalledOverlay] draws. The counter is there because
-/// "is it live or has it frozen?" is a fair question to have about a still
-/// picture, and this is the answer to it.
+/// Says the picture is standing still without claiming anything is wrong: a
+/// device nobody is touching sends no frames, since scrcpy encodes on change.
 class StreamIdleBadge extends StatelessWidget {
   const StreamIdleBadge({
     super.key,
@@ -106,11 +101,8 @@ class StreamIdleBadge extends StatelessWidget {
   /// How long the picture has stood still, when the stream said.
   final Duration? since;
 
-  /// Reconnects. Present because idleness is the one state the app cannot be
-  /// certain about: a quiet device and a live view that has quietly stopped
-  /// working produce the same still picture, and past [kIdleUncertainAfter]
-  /// the honest thing is to say so and hand the user the way out rather than
-  /// keep insisting nothing is wrong.
+  /// Reconnects. Idleness is the one state the app cannot be certain about:
+  /// a quiet device and a stopped stream make the same still picture.
   final VoidCallback? onRestart;
 
   @override
@@ -175,12 +167,8 @@ class StreamIdleBadge extends StatelessWidget {
 /// admits the app cannot tell a quiet device from a stopped one.
 const Duration kIdleUncertainAfter = Duration(seconds: 45);
 
-/// The last frame of the previous session, with the thing that says so.
-///
-/// One widget rather than two, and that is the point: a held frame and the
-/// overlay explaining it can no longer be separated by an edit, a refactor or a
-/// stray condition. A stale picture that reads as live is the failure this
-/// whole mechanism must never cause.
+/// The last frame of the previous session, with the thing that says so. One
+/// widget, so no edit can part a held frame from the label explaining it.
 class HeldPicture extends StatelessWidget {
   const HeldPicture({super.key, required this.child, this.deviceLabel});
 
@@ -196,12 +184,8 @@ class HeldPicture extends StatelessWidget {
   );
 }
 
-/// Covers the last frame of a stream that is being restarted.
-///
-/// The picture underneath is deliberately kept — a held frame is a far better
-/// thing to look at than the spinner that used to replace it — which is
-/// exactly why this has to be over it. A stale frame with nothing said about
-/// it is indistinguishable from a live one, and it is a picture people tap.
+/// Covers the last frame of a stream being restarted. The picture underneath
+/// is kept on purpose, which is exactly why something must be said over it.
 class StreamReconnectingOverlay extends StatelessWidget {
   const StreamReconnectingOverlay({super.key, required this.deviceLabel});
 
@@ -253,15 +237,8 @@ class StreamReconnectingOverlay extends StatelessWidget {
   }
 }
 
-/// Says which device the live view is showing, and which transport its
-/// gestures are using.
-///
-/// Neither is a debug detail. The transport changes how the pane feels — on the
-/// control socket a drag tracks the finger, on `adb shell input` nothing moves
-/// until release. The device name is here because a picture of a phone is
-/// anonymous: the pane used to be able to show one device while the rest of the
-/// UI named another, and stating it under the picture is what makes that
-/// impossible to miss.
+/// Says which device the live view shows, and which transport its gestures
+/// use: on the control socket a drag tracks the finger, on adb it jumps.
 class TransportBanner extends StatelessWidget {
   const TransportBanner({super.key, required this.transport, this.deviceLabel});
 

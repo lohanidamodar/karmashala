@@ -21,10 +21,8 @@ class SimulatorLiveView {
   final SimulatorFrames frames;
   final SimulatorVideoFeed feed;
 
-  /// The device's size **in points**, which is the space taps are sent in.
-  /// Null when the backend could not say, in which case input is unavailable
-  /// rather than guessed — a tap mapped through the wrong space lands
-  /// somewhere the user did not touch and reports success.
+  /// The device's size **in points**, the space taps are sent in. Null when
+  /// the backend could not say: input is then unavailable, never guessed.
   final SimulatorScreen? screen;
 }
 
@@ -37,10 +35,8 @@ class SimulatorLiveViewIdle extends SimulatorLiveViewState {
   const SimulatorLiveViewIdle();
 }
 
-/// Starting is its own state because it takes a long time and nothing else on
-/// screen changes while it happens. WebDriverAgent has to be installed into the
-/// simulator, launched, and then bootstrap XCTest — measured at 17 seconds on a
-/// warm machine. A spinner with no explanation reads as a hang.
+/// Starting is its own state: WebDriverAgent is installed, launched and
+/// bootstraps XCTest — 17 seconds warm, and a bare spinner reads as a hang.
 class SimulatorLiveViewStarting extends SimulatorLiveViewState {
   const SimulatorLiveViewStarting(this.udid);
   final String udid;
@@ -57,19 +53,11 @@ class SimulatorLiveViewFailed extends SimulatorLiveViewState {
   final String reason;
 }
 
-/// Owns the one simulator live view the pane can show.
-///
-/// One at a time: WebDriverAgent's two servers are on fixed host ports for a
-/// simulator — there is no forwarding to scope them — so a second simulator
-/// would fight the first for `:8100` and `:9100`.
+/// Owns the one simulator live view the pane can show. One at a time: WDA's
+/// two servers sit on fixed host ports, so a second fights for :8100/:9100.
 class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
-  /// Mirrors [state] so [ref.onDispose] has something to tear down.
-  ///
-  /// Reading `state` inside a dispose callback is forbidden — Riverpod asserts
-  /// `Cannot use Ref or modify other providers inside life-cycles` — and the
-  /// player and the WebDriverAgent session both have to be released when the
-  /// container goes, or the runner keeps running inside the simulator holding
-  /// :8100 and :9100 against the next one someone opens.
+  /// Mirrors [state] so `ref.onDispose` has something to tear down: reading
+  /// `state` inside a life-cycle callback is forbidden.
   SimulatorLiveViewState _current = const SimulatorLiveViewIdle();
 
   @override
@@ -92,12 +80,8 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
 
     SimulatorFrames? frames;
     try {
-      // Half resolution, deliberately. WebDriverAgent streams the device's
-      // full backing store — 1206x2622 on an iPhone 17 — and every frame of it
-      // is decoded and uploaded as a new texture thirty times a second. The
-      // pane is a few hundred points wide, so that detail is thrown away by the
-      // scale down; asking for half cuts the decode and the upload to a quarter
-      // and nothing about the picture looks different.
+      // Half resolution, deliberately: WDA streams the full backing store
+      // (1206x2622 on an iPhone 17) and the pane throws that detail away.
       final feed = await backend.startVideo(udid, scale: 0.5);
       // Read once, here: it costs an accessibility round trip, and it cannot
       // change while the picture is up short of a rotation.
@@ -109,17 +93,8 @@ class SimulatorLiveViewController extends Notifier<SimulatorLiveViewState> {
         }
       });
 
-      // Whatever the picture is of is what the picker should name, however the
-      // view was started — the row's own Live view button does not go through
-      // the picker at all.
-      //
       // Both halves, or neither: naming the simulator while an Android serial
-      // stayed selected left the pane with two answers to "which device is
-      // this about", and the toolbar believed the Android one — so the Stop
-      // beside the picker went to a scrcpy stream while the user was looking
-      // at an iPhone. Clearing the serial also takes that stream down, through
-      // the pane's own `_onSelectionChanged`, which is right: this pane shows
-      // one device at a time and the simulator's picture is the one that wins.
+      // stayed selected left the pane with two answers to "which device".
       ref.read(selectedDeviceSerialProvider.notifier).select(null);
       ref.read(selectedSimulatorUdidProvider.notifier).select(udid);
       _set(
@@ -163,11 +138,8 @@ final simulatorLiveViewProvider =
     );
 
 
-/// The last input failure, so a refused tap is visible rather than silent.
-///
-/// A gesture is sent and forgotten — the sink cannot await it without making
-/// the finger lag the picture — so without this a tap that WebDriverAgent
-/// refused looks identical to one that landed on nothing.
+/// The last input failure, so a refused tap is visible rather than silent: a
+/// gesture is sent and forgotten, or the finger would lag the picture.
 class SimulatorInputError extends Notifier<String?> {
   @override
   String? build() => null;

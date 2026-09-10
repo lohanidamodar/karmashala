@@ -1,9 +1,5 @@
-// **What the pane offers when there is no picture** — the message, the devices
-// adb can see, the AVDs that could be booted, and the simulators beside them.
-//
-// A part of `device_pane.dart` rather than its own library: every widget here
-// is private to the pane, and keeping the names exactly as they were is what
-// lets the pane's committed widget tree prove the move changed nothing.
+// What the pane offers when there is no picture: the message, the devices,
+// the AVDs, the simulators. A part, so the committed tree still matches.
 part of 'device_pane.dart';
 
 class _DeviceEmptyState extends ConsumerWidget {
@@ -44,10 +40,8 @@ class _DeviceEmptyState extends ConsumerWidget {
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              // Above both lists, because it governs both. It used to sit
-              // inside the Emulators section, which meant a Mac with Xcode and
-              // no Android SDK — where the only startable devices are iOS
-              // simulators — never saw the switch that decides how they start.
+              // Above both lists, because it governs both: inside Emulators,
+              // a Mac with Xcode and no Android SDK never saw it.
               const _HeadlessDeviceToggle(),
               _DeviceList(
                 stopping: stopping,
@@ -56,10 +50,8 @@ class _DeviceEmptyState extends ConsumerWidget {
                 onStopEmulator: onStopEmulator,
                 onBootAvd: onBootAvd,
               ),
-              // Below the Android sections, and independent of them: a Mac with
-              // Xcode and no Android SDK still has simulators to start, and the
-              // message above — which is about the missing SDK — must not be
-              // the end of the pane there.
+              // Below the Android sections and independent of them: a Mac
+              // with no SDK still has simulators to start.
               const SimulatorList(),
             ],
           ),
@@ -69,16 +61,8 @@ class _DeviceEmptyState extends ConsumerWidget {
   }
 }
 
-/// Everything the pane can be pointed at — the devices adb can see and the AVDs
-/// that could be booted — in one list, each row offering what makes sense for
-/// what it is.
-///
-/// The actions live **here, per row**, and not only on the toolbar. Stop in
-/// particular: seeing an emulator running and having no way to shut it down
-/// without first starting a video stream of it is the bug this list exists to
-/// close. Starting a live view is not a prerequisite for ending a process.
-///
-/// Rows that cannot be used say why instead of being silently inert.
+/// Everything the pane can be pointed at — connected devices and bootable
+/// AVDs — acting per row: stopping an emulator must not need a live view.
 class _DeviceList extends ConsumerWidget {
   const _DeviceList({
     required this.stopping,
@@ -112,9 +96,8 @@ class _DeviceList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final devices =
         ref.watch(devicesProvider).asData?.value ?? const <AndroidDevice>[];
-    // A booted simulator is a connected device. It was listed in its own
-    // section under the *idle* emulators, which put the one thing running
-    // below the things that are not.
+    // A booted simulator is a connected device: in its own section under the
+    // *idle* emulators, the one thing running sat below the ones that are not.
     final simulators = ref.watch(bootedSimulatorsProvider);
     final busySimulators = ref.watch(simulatorTransitionsProvider);
     final canMirror = ref.watch(simulatorBackendProvider) != null;
@@ -129,11 +112,8 @@ class _DeviceList extends ConsumerWidget {
       for (final avd in avds)
         if (!avd.isRunning) avd,
     ];
-    // The Emulators section exists whenever there is an emulator to start *or*
-    // one to put back. Hanging it off the idle list alone hid the Slimming
-    // dialog — and with it Restore, which only works on a *running* emulator —
-    // in exactly the case Restore is for: the one AVD on the machine started,
-    // so nothing was idle and the header that carries the button was gone.
+    // The Emulators section exists whenever there is one to start *or* one to
+    // put back: off the idle list alone, it hid Restore exactly when it was due.
     final anyEmulator = avds.isNotEmpty || devices.any((d) => d.isEmulator);
     if (devices.isEmpty && idle.isEmpty && simulators.isEmpty) {
       return const SizedBox.shrink();
@@ -196,9 +176,7 @@ class _DeviceList extends ConsumerWidget {
                     onPressed: () => onPreview(device),
                   ),
                 // Reading the device's storage, and moving files either way.
-                // Its own dialog because it is a browse rather than a verb —
-                // see `DeviceFilesDialog`, which asks the driver what roots it
-                // can reach rather than starting at `/`.
+                // Its own dialog; it asks the driver which roots it can reach.
                 if (device.isReady)
                   _RowAction(
                     key: Key('files-${device.serial}'),
@@ -317,16 +295,8 @@ class _DeviceRow extends StatelessWidget {
   }
 }
 
-/// The one switch that decides whether a started device gets a window.
-///
-/// Hidden when there is nothing to start: a switch about starting devices is
-/// noise on a machine with none, and the empty state already says why there
-/// are none.
-///
-/// The subtitle names both platforms because the switch means opposite
-/// mechanics on each — `-no-window` for an AVD, and *not* opening
-/// Simulator.app for an iOS device, which `simctl` never opens by itself.
-/// What it promises the user is the same on both, so that is what it says.
+/// The one switch that decides whether a started device gets a window. Hidden
+/// with nothing to start, and worded by promise: the mechanics differ per OS.
 class _HeadlessDeviceToggle extends ConsumerWidget {
   const _HeadlessDeviceToggle();
 

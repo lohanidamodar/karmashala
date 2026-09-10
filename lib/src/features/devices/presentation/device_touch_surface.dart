@@ -3,22 +3,8 @@ import 'package:flutter/widgets.dart';
 
 import 'package:karmashala_devices/devices.dart';
 
-/// The touch target laid over the live view.
-///
-/// It is a raw [Listener], not a `GestureDetector`, and that is the whole point
-/// of Loop 36. A gesture recogniser deliberately *withholds* events: nothing is
-/// reported until the ~18 px touch slop is beaten, and a pan arrives as a
-/// summary. The device is the thing that should be deciding what a gesture
-/// means — it has Android's own slop, timeout and velocity tracker — so every
-/// pointer event is forwarded as it happens and no interpretation is done here.
-///
-/// Positions are reported as `0..1` fractions of the picture rather than device
-/// pixels, because the two transports want different coordinate spaces for the
-/// same touch. See [widgetPointToFraction].
-///
-/// Separated from the pane for one reason: the pane's live view needs a real
-/// video controller to build, so gestures cannot be widget-tested there. This
-/// widget takes any [child], so a test can mount it over a plain box.
+/// The touch target laid over the live view. A raw [Listener], never a
+/// `GestureDetector`: a recogniser withholds events until ~18 px of slop.
 class DeviceTouchSurface extends StatefulWidget {
   const DeviceTouchSurface({
     super.key,
@@ -30,12 +16,8 @@ class DeviceTouchSurface extends StatefulWidget {
   /// Where pointer events go. `null` disables input.
   final DeviceGestureSink? sink;
 
-  /// Whether holding Ctrl turns a drag into a two-finger pinch about the centre
-  /// of the picture, the way scrcpy's own client does it.
-  ///
-  /// A mouse can only ever be one finger, so without this there is no way to
-  /// pinch from a desktop at all. It is ignored by a sink that cannot express a
-  /// second pointer.
+  /// Whether Ctrl turns a drag into a two-finger pinch about the centre, as
+  /// scrcpy's client does: a mouse is one finger, so otherwise there is none.
   final bool pinchWithModifier;
 
   final Widget child;
@@ -52,9 +34,8 @@ class _ActivePointer {
     required this.mirrorId,
   });
 
-  /// The small, dense id sent on the wire. Flutter's own pointer numbers grow
-  /// without bound across the life of the app; scrcpy keys a fixed-size
-  /// `PointersState` on what we send, so it gets the tidy version.
+  /// The small, dense id sent on the wire: Flutter's pointer numbers grow
+  /// without bound, and scrcpy keys a fixed-size `PointersState` on ours.
   final int id;
 
   final Duration startedAt;
@@ -66,9 +47,8 @@ class _ActivePointer {
 class _DeviceTouchSurfaceState extends State<DeviceTouchSurface> {
   final Map<int, _ActivePointer> _active = <int, _ActivePointer>{};
 
-  /// Smallest wire id not in use. scrcpy allows ten simultaneous pointers and
-  /// refuses the eleventh with "Too many pointers for touch event", so ids are
-  /// recycled as fingers lift rather than counted upwards.
+  /// Smallest wire id not in use: scrcpy refuses an eleventh pointer with
+  /// "Too many pointers for touch event", so ids recycle as fingers lift.
   int _allocateId() {
     final taken = <int>{
       for (final pointer in _active.values) ...[
@@ -82,9 +62,8 @@ class _DeviceTouchSurfaceState extends State<DeviceTouchSurface> {
     return -1;
   }
 
-  // `WidgetPoint`/`WidgetBox` are `Offset`/`Size` as plain records: the mapping
-  // is arithmetic on four doubles, so it lives in the package and Flutter's
-  // types stop here.
+  // `WidgetPoint`/`WidgetBox` are `Offset`/`Size` as plain records, so the
+  // mapping lives in the package and Flutter's types stop here.
   ({double x, double y}) _fraction(Offset local, Size box) =>
       widgetPointToFraction(
         local: (dx: local.dx, dy: local.dy),

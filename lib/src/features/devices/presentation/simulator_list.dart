@@ -7,25 +7,8 @@ import 'package:karmashala_devices/devices.dart';
 import 'device_section_header.dart';
 import 'simulator_slimming_dialog.dart';
 
-/// The iOS Simulators section of the device sidebar.
-///
-/// A **picker plus a Start button**, not a list of every simulator. Xcode
-/// accumulates them: this developer's machine holds 170, of which 124 have no
-/// installed runtime and 46 can actually be started. Listing all of them would
-/// bury the Android devices above and give a user 170 rows to read to find the
-/// iPhone they meant.
-///
-/// A booted simulator is **not** listed here: it is a connected device, and it
-/// belongs with the others under Connected rather than beneath the idle ones.
-///
-/// It does stay, though, when every simulator is booted and none is startable:
-/// the Slimming button and the "Slim on start" switch govern the *next* boot,
-/// and that is exactly when a user has just been told to stop and start the
-/// device.
-///
-/// The whole section disappears off macOS rather than showing an empty state.
-/// Windows and Linux cannot have simulators at all, and a permanently empty
-/// "iOS Simulators" heading is a question the user cannot answer.
+/// The iOS Simulators section: a picker plus a Start button, not a list —
+/// Xcode accumulates 170 here. Off macOS the section disappears entirely.
 class SimulatorList extends ConsumerStatefulWidget {
   const SimulatorList({super.key});
 
@@ -46,15 +29,12 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
     final busy = ref.watch(simulatorTransitionsProvider);
     final transitions = ref.read(simulatorTransitionsProvider.notifier);
 
-    // A booted simulator keeps the section alive even when nothing is left to
-    // start: the Slimming button and the switch below govern the *next* boot,
-    // and hiding them the moment the only simulator is running takes away the
-    // controls at the point the user has just been told to stop and start it.
+    // A booted simulator keeps the section alive with nothing left to start:
+    // the Slimming button and the switch below govern the *next* boot.
     if (startable.isEmpty && !anyBooted) return const SizedBox.shrink();
 
-    // A simulator that was picked and has since started is no longer in the
-    // list it was picked from; falling back keeps the picker on something real
-    // rather than showing a blank selection.
+    // A simulator picked and since started is no longer in the list it was
+    // picked from; falling back keeps the picker on something real.
     final picked = startable.any((s) => s.udid == _picked)
         ? _picked
         : (startable.isEmpty ? null : startable.first.udid);
@@ -102,9 +82,8 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
                 ),
                 const SizedBox(width: 8),
                 _StartButton(
-                  // Booting is slow — ten seconds and up — and nothing else on
-                  // screen changes while it happens, so the button has to say
-                  // so itself.
+                  // Booting is slow — ten seconds and up — and nothing else
+                  // on screen changes, so the button has to say so itself.
                   busy: picked != null && busy.contains(picked),
                   onPressed: picked == null
                       ? null
@@ -141,13 +120,8 @@ class _StartButton extends StatelessWidget {
   }
 }
 
-/// The "slim it when it starts" switch, and the one thing about it that
-/// surprises people.
-///
-/// launchd reads `disabled.plist` when the device boots, so this can only ever
-/// apply to a simulator that is *starting*. Turning it on while one is already
-/// running does nothing to that one, and a switch that silently does nothing is
-/// worse than no switch — so when something is booted, it says what to do.
+/// The "slim it when it starts" switch. launchd reads `disabled.plist` at
+/// boot, so it can only apply to one that is *starting*, and it says so.
 class _SlimOnStart extends ConsumerWidget {
   const _SlimOnStart({required this.booted});
 

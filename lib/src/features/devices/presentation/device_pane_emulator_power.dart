@@ -1,10 +1,5 @@
-// **Booting an AVD and shutting an emulator down**, with the two sets of
-// in-flight serials the rows read so a click never looks ignored.
-//
-// `on _DeviceLiveStream` states the dependency rather than assuming it: a boot
-// ends by opening the live view on what booted, and a stop begins by taking
-// the live view down, because killing an emulator underneath one leaves
-// exactly the frozen picture the stream work set out to remove.
+// Booting an AVD and shutting an emulator down, with the in-flight serials
+// the rows read. `on _DeviceLiveStream`: a stop must take the picture down.
 part of 'device_pane.dart';
 
 mixin _DeviceEmulatorPower on _DeviceLiveStream {
@@ -16,11 +11,8 @@ mixin _DeviceEmulatorPower on _DeviceLiveStream {
   /// watch, so the row has to say it is starting or the click looks ignored.
   final Set<String> _booting = <String>{};
 
-  /// Boots an AVD and opens the live view on it.
-  ///
-  /// One flow, not two steps: with `-no-window` the live view is the only way
-  /// to see the thing that was just started, so starting it and showing it are
-  /// the same intent.
+  /// Boots an AVD and opens the live view on it — one flow, since with
+  /// `-no-window` the live view is the only way to see what just started.
   Future<void> _bootAvd(String name) async {
     final adb = ref.read(adbServiceProvider);
     if (adb == null || _booting.contains(name)) return;
@@ -33,9 +25,8 @@ mixin _DeviceEmulatorPower on _DeviceLiveStream {
         headless: ref.read(headlessDeviceProvider),
         extraArguments: ref.read(androidEmulatorArgumentsProvider),
       );
-      // After the wait, never before: `settings put` and `pm disable-user` both
-      // need a running package manager. Failure inside is logged and swallowed
-      // — an emulator that started is worth more than one that was slimmed.
+      // After the wait, never before: `settings put` and `pm disable-user`
+      // need a running package manager. A started emulator beats a slim one.
       await ref.read(androidSlimmingProvider.notifier).applyAfterBoot(serial);
     } catch (error) {
       failure = '$error';
@@ -87,8 +78,7 @@ mixin _DeviceEmulatorPower on _DeviceLiveStream {
     if (confirmed != true || !mounted) return;
     setState(() => _stopping.add(serial));
     // Take the stream down first: killing the emulator underneath a live view
-    // produces exactly the frozen picture Loop 36 set out to fix, and it would
-    // look like a new fault rather than the shutdown the user asked for.
+    // leaves a frozen picture that reads as a new fault.
     if (_liveSerial == serial) await _stopStream();
     String? failure;
     try {
