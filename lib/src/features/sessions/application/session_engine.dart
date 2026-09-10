@@ -20,10 +20,8 @@ import '../domain/session_status.dart';
 /// protocol adapter get theirs; anything else gets the generic one.
 typedef AdapterResolver = AgentAdapter Function(String agentId);
 
-/// Runs agent sessions: persists the normalized, append-only event log, manages
-/// session status, and supports multiple concurrent sessions. Protocol-agnostic
-/// — it talks to [AgentAdapter]/[AgentSession] and serializes their normalized
-/// [AgentEvent]s into [SessionEvent] rows.
+/// Runs agent sessions: the normalized, append-only event log and the session
+/// status. Protocol-agnostic — it speaks only [AgentAdapter]/[AgentSession].
 class SessionEngine {
   SessionEngine({
     required this.sessionDao,
@@ -116,9 +114,8 @@ class SessionEngine {
     return session;
   }
 
-  /// Relaunches the agent for an existing [session] so the user can continue
-  /// it. No-op if it is already active; reuses the same session id and event
-  /// log.
+  /// Relaunches the agent for an existing [session]; a no-op when it is
+  /// already active, and it reuses the same session id and event log.
   Future<void> resume({
     required Session session,
     required EnvironmentPath workingDirectory,
@@ -206,9 +203,8 @@ class SessionEngine {
     String type,
     Map<String, Object?> data,
   ) {
-    // The one field that ever carries a tool's output, bounded at the row — the
-    // same cut the live stream makes. A stored row that kept more could restore
-    // a payload the phone had already been sent trimmed.
+    // The one field that ever carries a tool's output, bounded at the row: a
+    // stored row that kept more could restore what the phone got trimmed.
     final text = data['text'];
     final payload = text is String
         ? {...data, 'text': boundedText(text).$1}
@@ -237,11 +233,8 @@ class SessionEngine {
     if (!runtime.done.isCompleted) runtime.done.complete();
   }
 
-  /// Ends every active run and releases what it holds. Nothing else does:
-  /// [_finish] is driven by the agent's own stream closing, and on quit that
-  /// never happens. Deliberately not [_finish] — this is the app closing, not
-  /// the sessions ending, so no status is written and a run that was `running`
-  /// stays `running`, which is what a resume needs to see. Idempotent.
+  /// Ends every active run and releases what it holds; nothing else does. It
+  /// writes no status: a run that was `running` stays so, which a resume needs.
   Future<void> dispose() => _disposal ??= _stopAll();
 
   Future<void>? _disposal;

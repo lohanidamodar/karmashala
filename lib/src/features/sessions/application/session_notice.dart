@@ -1,11 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Something to tell the user about **one** session. A snackbar is app chrome —
-/// it covers the bottom of the window whichever session it is about — and most
-/// of what these messages report is true of exactly one session and false of
-/// every other one open, so it belongs in that session's own bar, beside the
-/// control the user just used.
+/// Something to tell the user about **one** session — a snackbar is app chrome
+/// and says nothing about which session it is about; this sits in that bar.
 @immutable
 class SessionNotice {
   const SessionNotice({
@@ -34,26 +31,18 @@ class SessionNoticeAction {
 
 enum SessionNoticeTone { neutral, warning }
 
-/// How long a notice stays on screen before clearing itself. Longer than a
-/// snackbar's four seconds because it covers nothing and can be read twice;
-/// short enough that a stale "applies the next time this session is launched"
-/// is not still sitting there minutes later. Counted by the bar, not here: a
-/// clock running against an unwatched notice would throw it away before it was
-/// shown.
+/// How long a notice stays on screen. Counted by the bar, not here: a clock
+/// against an unwatched notice would throw it away before it was read.
 const sessionNoticeLifetime = Duration(seconds: 20);
 
-/// Every session's current notice, keyed by session id. One notifier over a map
-/// rather than a family, because the poster and the reader are not the same
-/// widget and need not overlap in time: the chip posts through `ref.read` and
-/// may be rebuilt for another session immediately, which would dispose an
-/// auto-disposing family entry before its bar ever watched it.
+/// Every session's current notice, keyed by session id. A map, not a family:
+/// the poster may be rebuilt before the reader's bar ever watches its entry.
 class SessionNotices extends Notifier<Map<String, SessionNotice>> {
   @override
   Map<String, SessionNotice> build() => const {};
 
-  /// Shows [notice] for [sessionId], replacing whatever that session was
-  /// showing: these messages describe the session's current state, so the
-  /// newest is the only true one.
+  /// Shows [notice] for [sessionId], replacing what that session was showing:
+  /// these describe current state, so the newest is the only true one.
   void post(String sessionId, SessionNotice notice) =>
       state = {...state, sessionId: notice};
 
@@ -70,9 +59,8 @@ final sessionNoticesProvider =
       SessionNotices.new,
     );
 
-/// What one session has to say, or null. Separate from the map so a bar
-/// rebuilds only when *its* session's notice changes, not when any other
-/// session posts.
+/// What one session has to say, or null — separate from the map so a bar
+/// rebuilds only when *its* session's notice changes.
 final sessionNoticeProvider = Provider.family<SessionNotice?, String>(
   (ref, sessionId) =>
       ref.watch(sessionNoticesProvider.select((all) => all[sessionId])),

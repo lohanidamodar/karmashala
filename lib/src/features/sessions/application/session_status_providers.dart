@@ -9,30 +9,16 @@ import '../domain/session.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 
-/// What one session's agent is doing — a **projection**, and nothing more. It
-/// selects a cached entry from `SessionStatusRegistry` and starts nothing: no
-/// timer, no filesystem access, no store scan, so a hundred badges are a
-/// hundred subscriptions to one broadcast that fires only when a session's
-/// evidence changes. It used to be a per-badge 1.2-second poll, which made
-/// status cost a side effect of layout.
-///
-/// Resolves to [AgentActivityStatus.unknown], immediately, for a session with
-/// no pane and no hook — a first-class answer, not a failure.
+/// What one session's agent is doing — a projection of the one shared registry,
+/// starting nothing. [AgentActivityStatus.unknown] is a first-class answer.
 final agentSessionStatusProvider = StreamProvider.autoDispose
     .family<AgentStatusReport, String>(
       (ref, sessionId) =>
           ref.watch(sessionStatusRegistryProvider).reportsFor(sessionId),
     );
 
-/// **One session's status, read synchronously, for a decision being made now.**
-///
-/// A function behind a provider rather than a `family`: a family caches per
-/// key, so a caller that only ever `read`s it would be handed the first answer
-/// for ever — worse than not asking, for a question whose value is being
-/// current. It exists for [SessionLauncher.setModel], which must never type a
-/// slash command into an agent that is mid-turn. [AgentActivityStatus.unknown]
-/// means the registry has never seen this session, and callers must read that
-/// as "not safe to type into", never as "probably idle".
+/// One session's status, read synchronously for a decision being made now: a
+/// function, not a `family`, so a `read` is never handed a cached first answer.
 final sessionActivityLookupProvider =
     Provider<AgentActivityStatus Function(String sessionId)>(
       (ref) =>
@@ -41,51 +27,34 @@ final sessionActivityLookupProvider =
               AgentActivityStatus.unknown,
     );
 
-/// **One session's whole status report, read synchronously**, for the callers
-/// that need more of it than the status word — the same shape and reasons as
-/// [sessionActivityLookupProvider], and the read that one is now expressed in
-/// terms of. It exists for `session_send`, which must not type into a session
-/// holding an open approval prompt: the keystrokes go into the modal. Null
-/// means the registry has never seen the session — *unknown*, not either state.
+/// One session's whole report, read synchronously, for `session_send`, which
+/// must not type into an open prompt. Null is *unknown*, not either state.
 final sessionStatusLookupProvider =
     Provider<AgentStatusReport? Function(String sessionId)>(
       (ref) => (sessionId) =>
           ref.read(sessionStatusRegistryProvider).reportForOpenId(sessionId),
     );
 
-/// **One session's status now, and every later change to it** — the signal a
-/// wait completes on. A function behind a provider because a wait wants a
-/// subscription it opens and closes, not a shared one it might inherit
-/// mid-flight. Starts nothing: the registry is already cycling for the badges,
-/// which is what lets `session_wait` block without a poll of its own.
+/// One session's status now and every later change — the signal a wait ends on.
+/// A wait wants a subscription it opens and closes, not one it might inherit.
 final sessionStatusStreamProvider =
     Provider<Stream<AgentStatusReport> Function(String sessionId)>(
       (ref) => (sessionId) =>
           ref.read(sessionStatusRegistryProvider).reportsFor(sessionId),
     );
 
-/// paneId → the session standing in it, for the whole workspace. One shared
-/// producer rather than a lookup per chip: a family keyed by pane would run one
-/// indexed query per drawn chip on every placement change.
-///
-/// Watched on **placement alone** — the concern that names where a row lives,
-/// and it is carried by every change that could move this map. A rename, the
-/// most frequent session change in the app, is not on the list and so never
-/// wakes a tab.
+/// paneId → the session standing in it. One shared producer, watched on
+/// **placement alone**, so the app's most frequent change never wakes a tab.
 final placedSessionIdsProvider = Provider<Map<String, String>>((ref) {
   ref.watchSessionKinds(const {SessionChangeKind.placement});
   return ref.read(sessionDaoProvider).paneSessionIds();
 });
 
-/// The panes on screen in the terminal right now. Pane ids, not session ids:
-/// resolving them costs a scan of the sessions table, and the attention inbox —
-/// the only caller — has nothing to retire while it holds no items. Selected as
-/// a joined string rather than a `Set`, which compares by identity and would
-/// rebuild on every publish the controller makes.
+/// The panes on screen right now. Pane ids, not session ids: resolving them
+/// costs a table scan the inbox does not need while it holds no items.
 final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
-  // Asked through `exists`, never built: building the terminal controller
-  // starts the scrollback autosave timer, which every container that merely
-  // reads the inbox would then inherit as a pending timer.
+  // Asked through `exists`, never built: building the controller starts the
+  // scrollback autosave timer, which every reader would inherit as a pending.
   if (!ref.exists(terminalSessionsControllerProvider)) return const [];
   // **Every group showing its terminal**, not just the focused one: a pane the
   // user can see is a pane the inbox must not badge.
@@ -106,16 +75,8 @@ final foregroundTerminalPaneIdsProvider = Provider<List<String>>((ref) {
   return joined.isEmpty ? const [] : joined.split('\u0000');
 });
 
-/// **What the agent in pane [paneId] is doing**, or null when that is not a
-/// question about this pane: no process, a plain shell, or a pane whose row has
-/// gone — a tab chip draws [TabLivenessDot] instead, so the two never appear at
-/// once. [AgentActivityStatus.unknown] is a real answer here and is drawn as
-/// one.
-///
-/// The session id comes from the **row**, not from the pane's `agentLaunch`: a
-/// hand-started `claude` in an ordinary shell pane has no `AgentPaneLaunch` at
-/// all, and `SessionAdoptionService` binds it by writing the pane id onto a
-/// row.
+/// What the agent in pane [paneId] is doing, or null when it has no agent.
+/// The session id comes from the **row**, so an adopted shell pane is included.
 final paneAgentActivityProvider = Provider.autoDispose
     .family<AgentActivityStatus?, String>((ref, paneId) {
       if (!ref.watch(terminalPaneLivenessProvider(paneId)).isLive) return null;
@@ -132,9 +93,7 @@ final paneAgentActivityProvider = Provider.autoDispose
     });
 
 /// The one status a chip standing for several panes shows, ordered by **what
-/// the user has to do about it** — not `AgentGridRules`' order, which answers
-/// "which matcher describes this agent". A session holding the user up outranks
-/// one that has already stopped. Null when no pane in the group has an agent.
+/// the user must do about it**. Null when no pane in the group has an agent.
 AgentActivityStatus? mostUrgentAgentActivity(
   Iterable<AgentActivityStatus?> statuses,
 ) {
@@ -156,19 +115,14 @@ int _urgency(AgentActivityStatus status) => switch (status) {
   AgentActivityStatus.unknown => 0,
 };
 
-/// The bottom rows of the pane [session] runs in, or nothing. Empty — rather
-/// than absent — for a session with no live pane, so the status service is not
-/// handed a stale screen from a process that has exited. [agentId] chooses the
-/// depth from `AgentGridRules.scanLines`: these rows are also what is quoted
-/// back to the user as "what is being approved", and too few cuts the question
-/// off mid-sentence.
+/// The bottom rows of the pane [session] runs in, empty rather than absent for
+/// a dead one. [agentId] picks the depth; these rows are quoted as the prompt.
 List<String> sessionTerminalTail(Ref ref, Session session, {String? agentId}) {
   return sessionTerminalTailForPane(ref, session.paneId, agentId: agentId);
 }
 
-/// The bottom rows of [paneId], or nothing when it is absent or no longer live.
-/// The row-free form the status registry uses: its loader already carries the
-/// pane id, so querying the row again on every cycle is duplicate work.
+/// The bottom rows of [paneId], or nothing when it is absent or dead — the
+/// row-free form, so the registry's loader need not re-query the row.
 List<String> sessionTerminalTailForPane(
   Ref ref,
   String? paneId, {

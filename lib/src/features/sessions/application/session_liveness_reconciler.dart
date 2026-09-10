@@ -8,26 +8,8 @@ import 'session_launch_refusal.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';
 
-/// **Takes a row out of `running` when nothing we can see is running it.**
-///
-/// Nothing else ever did: the writers only ever move a pane-hosted session
-/// *into* `running`, so a conversation that ended three days ago still drew a
-/// play glyph in the Explorer. It was never only a wrong icon — four things
-/// filter on `== running`, and a stale row keeps
-/// `SessionTitleSyncService.wantsStoreSweep` true, buying a CLI-store scan on
-/// every slow slot for the rest of the app's run.
-///
-/// The rule: a row that claims to be live and does not name a **live pane of
-/// ours** is not running — an observation, not an inference. Applied at exactly
-/// two moments and never polled: on launch, when there are no live panes at all
-/// (restore never brings an agent pane back with a process in it), and when a
-/// pane stops being live, read off the terminal's own liveness map because
-/// `paneExitProvider` covers only the agent exiting by itself.
-///
-/// It never writes `completed`, `failed` or `cancelled`: losing sight of a
-/// session says nothing about how it ended, and [SessionStatus.unknown] is the
-/// whole answer. Nor does it touch a row that has already reached a terminal
-/// status — a user's `cancelled` must not be overwritten with a vaguer word.
+/// **Takes a row out of `running` when nothing we can see is running it**: a
+/// live pane of ours, observed not inferred, and only ever moved to `unknown`.
 class SessionLivenessReconciler {
   SessionLivenessReconciler({required this.sessionDao, this.onChanged});
 
@@ -53,10 +35,8 @@ class SessionLivenessReconciler {
     return moved;
   }
 
-  /// Sweeps only the rows hosted by [paneIds] — panes that have just stopped.
-  /// Keyed on the panes rather than on the session table, so a process exiting
-  /// costs one indexed lookup and not a scan; a row that has since moved to
-  /// another pane is not returned by that lookup and so is not touched.
+  /// Sweeps only the rows hosted by [paneIds]. Keyed on the panes, so a
+  /// process exiting costs one lookup and a row that moved is not touched.
   int panesStopped(Iterable<String> paneIds) {
     var moved = 0;
     for (final session in sessionDao.getByPaneIds(paneIds)) {
@@ -74,16 +54,13 @@ class SessionLivenessReconciler {
   }
 }
 
-/// The launch pass: every row that survived a restart still claiming to be live
-/// is one we have lost sight of. Called from `main` before any pane exists,
-/// which is what makes the empty set below a fact rather than an assumption.
+/// The launch pass: a row that survived a restart still claiming to be live is
+/// one we lost sight of. Called before any pane exists, which is the point.
 int markSessionsLostOnLaunch(SessionDao dao) =>
     SessionLivenessReconciler(sessionDao: dao).sweep(const {});
 
-/// Pane ids that were running in [previous] and are not running in [next]. A
-/// pure function over the two published maps, so the listener below touches the
-/// database only when something actually stopped. A pane the map has dropped
-/// entirely counts — closing a tab removes its entry rather than marking it.
+/// Pane ids that were running in [previous] and are not in [next] — a pure
+/// function, so the listener touches the database only when one stopped.
 Set<String> panesThatStoppedRunning(
   Map<String, PaneLiveness>? previous,
   Map<String, PaneLiveness> next,
@@ -98,13 +75,8 @@ Set<String> panesThatStoppedRunning(
   return stopped;
 }
 
-/// Watches the terminal's published liveness and reconciles what it says.
-///
-/// **It has to be watched, not read.** Riverpod 3 pauses a provider's own
-/// subscriptions while nothing listens to that provider, so a reconciler nobody
-/// watches would see no pane ever stop — silently. It listens to the whole
-/// `TerminalSessionsState` rather than a per-pane family because it is the one
-/// subscriber that has to hear about a pane it does not already know.
+/// Watches the terminal's published liveness and reconciles it. **Watched, not
+/// read**: Riverpod 3 pauses a provider nobody listens to, silently.
 final sessionLivenessReconcilerProvider = Provider<void>((ref) {
   final reconciler = SessionLivenessReconciler(
     sessionDao: ref.read(sessionDaoProvider),

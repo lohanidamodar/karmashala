@@ -23,14 +23,11 @@ AgentDescriptor? sessionDescriptor(Ref ref, String agentInstallationId) {
 }
 
 /// What we can honestly say about where session [sessionId]'s process is.
-/// Recomputed rather than polled: both things it reads change on events we
-/// already publish, and a poll would cost a screen read per session per tick to
-/// learn nothing new.
+/// Recomputed, not polled — a poll reads a screen per session to learn nothing.
 final sessionWhereaboutsProvider = Provider.autoDispose
     .family<SessionWhereabouts, String>((ref, sessionId) {
-      // Only this session's own row. The Explorer builds one of these per card,
-      // so watching the whole revision meant a `getById` per visible row on
-      // every rename — 100 reads at a hundred sessions.
+      // Only this session's own row: the Explorer builds one per card, so the
+      // whole revision meant a `getById` per visible row on every rename.
       ref.watchSession(sessionId);
 
       final session = ref.read(sessionDaoProvider).getById(sessionId);
@@ -38,9 +35,8 @@ final sessionWhereaboutsProvider = Provider.autoDispose
 
       final external = session.surface == SessionSurface.external;
       final paneId = session.paneId;
-      // When the newest real evidence was *written*, not when we last polled:
-      // the poll is always fresh, and showing its age beside a status would
-      // make a week-old transcript look live.
+      // When the evidence was *written*, not when we last polled: the poll is
+      // always fresh, and its age would make a week-old transcript look live.
       final lastSeen = agentEvidenceAt(
         ref.watch(agentSessionStatusProvider(sessionId)).asData?.value,
       );
@@ -49,9 +45,8 @@ final sessionWhereaboutsProvider = Provider.autoDispose
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
       }
 
-      // A session card needs only its own pane: watching the whole layout made
-      // every visible card recompute when a tab was activated or an unrelated
-      // process exited.
+      // A session card needs only its own pane: watching the layout made every
+      // card recompute when a tab was activated or another process exited.
       final liveness = ref.watch(terminalPaneLivenessProvider(paneId));
 
       final instance = ref
@@ -61,23 +56,19 @@ final sessionWhereaboutsProvider = Provider.autoDispose
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
       }
       if (liveness.isLive) {
-        // The reading is kept, not dropped: "running here" still wins the
-        // subtitle, but a live session is what every list orders by and must
-        // not fall back to its own birthday for want of a timestamp we hold.
+        // The reading is kept: a live session is what every list orders by,
+        // and it must not fall back to its birthday for want of a timestamp.
         return SessionWhereabouts(hostedLive: true, lastSeen: lastSeen);
       }
 
-      // A pane restored from disk has run nothing this launch, so its buffer
-      // holds the *previous* run's output — and reading it would build the very
-      // buffer `DormantTerminalInstance` keeps unparsed, on every Explorer tap.
+      // A restored pane's buffer holds the *previous* run's output, and
+      // reading it builds the buffer `DormantTerminalInstance` keeps unparsed.
       if (liveness == PaneLiveness.restored) {
         return SessionWhereabouts(external: external, lastSeen: lastSeen);
       }
 
-      // The pane is dead, and its last words may be the agent explaining that
-      // somebody else holds the conversation, that there is none, or that this
-      // installation has no mode we asked it for. All three are read from one
-      // tail, scanned at whichever window is largest.
+      // The pane is dead, and its last words may name a holder, no conversation
+      // or a rejected flag. All three come from one tail, at the widest window.
       final descriptor = sessionDescriptor(ref, session.agentInstallationId);
       final conflict =
           descriptor?.launch.resumeConflict ?? const AgentResumeConflictRules();
@@ -104,10 +95,8 @@ final sessionWhereaboutsProvider = Provider.autoDispose
       );
     });
 
-/// Whether the pane [paneId] is showing an agent's refusal to resume a
-/// conversation another process holds. Separate from
-/// [sessionWhereaboutsProvider] because the terminal panel draws panes, not
-/// sessions: a pane knows its own launch and needs no session row.
+/// Whether the pane [paneId] shows an agent refusing to resume a conversation
+/// another process holds — a pane knows its own launch and needs no row.
 bool paneShowsResumeConflict(Ref ref, String paneId) {
   final instance = ref
       .read(terminalSessionsControllerProvider.notifier)
@@ -128,10 +117,8 @@ bool paneShowsResumeConflict(Ref ref, String paneId) {
   );
 }
 
-/// The command-line value the pane [paneId] shows its agent refusing, or null —
-/// the pane-level twin of [paneShowsResumeConflict], carrying the same two
-/// guards. Read by [reportRefusedLaunches] the moment a pane stops, which is
-/// the only occasion it is asked.
+/// The command-line value the pane [paneId] shows its agent refusing, or null.
+/// Read by [reportRefusedLaunches] the moment a pane stops, and nowhere else.
 RejectedValue? paneRejectedValue(Ref ref, String paneId) {
   final instance = ref
       .read(terminalSessionsControllerProvider.notifier)

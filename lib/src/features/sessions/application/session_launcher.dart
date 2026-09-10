@@ -54,15 +54,8 @@ export 'session_launch_exceptions.dart';
 // descriptor and a set of choices, reached through the launcher.
 export 'session_launch_arguments.dart';
 
-// The launcher's own body, split into one file per concern. They are `part`s
-// because privacy in Dart is per library: every verb below reads `_ref`, logs
-// through `_log`, and calls the private starters. What stays here is the class.
-//
-//   start         the row: what a launch reuses, writes and publishes
-//   resume_guards is it running, may a second process have it, was it written
-//   policy        permission mode and model, resolved here and nowhere else
-//   surfaces      the pane and the external terminal, and what they are handed
-//   input         text and keystrokes going into a session already running
+// The launcher's body, one `part` per concern — start, resume_guards, policy,
+// surfaces, input — because privacy in Dart is per library.
 part 'session_launcher_start.dart';
 part 'session_launcher_resume_guards.dart';
 part 'session_launcher_policy.dart';
@@ -82,29 +75,17 @@ class SessionLaunchResult {
   final String? paneId;
   final String? tabId;
 
-  /// Plain words for the user when the session could not start where it was
-  /// recorded as running and started somewhere else instead. Null in the
-  /// ordinary case; non-null is not a failure — the session is up — but the
-  /// agent is now looking at a different tree from the one its transcript
-  /// describes.
+  /// Plain words for the user when the session started somewhere other than
+  /// where it was recorded. Not a failure; the tree is not the one it knew.
   final String? workingDirectoryNotice;
 }
 
-/// Every launch says what it decided. This path had no logging at all, and four
-/// of the bugs found in it were silent by construction: each produced a
-/// plausible-looking session that was wrong in a way only the command line
-/// showed. A library-private top-level rather than a `static` on
-/// [SessionLauncher], because an extension cannot name a static of the type it
-/// extends unqualified.
+/// Every launch says what it decided: four bugs here were silent by
+/// construction, each a plausible session wrong only on its command line.
 final _log = AppLogger.named('sessions.launch');
 
-/// **The** way a session comes into existence: nine entry points reaching four
-/// mechanisms, only two of which wrote a `sessions` row, were moved here. Three
-/// things follow, and each was a divergence — **every in-app session runs in a
-/// PTY** (a protocol adapter is a second *view* over the same runtime, never
-/// load-bearing for whether the session is alive), **every started session gets
-/// a row**, including one launched into an external terminal, and **permission
-/// mode is resolved here and nowhere else**.
+/// **The** way a session comes into existence. Every in-app session runs in a
+/// PTY, every started session gets a row, and permission mode resolves here.
 class SessionLauncher {
   SessionLauncher(this._ref);
 
@@ -127,9 +108,7 @@ class SessionLauncher {
   }
 
   /// Creates the session row and starts it on the requested surface. The body
-  /// is `_launch` in `session_launcher_start.dart`, and this line is why it is
-  /// not named `launch` there: an extension member cannot be overridden, and
-  /// two test doubles replace this method by subclassing the launcher.
+  /// is `_launch`, because two test doubles override this by subclassing.
   Future<SessionLaunchResult> launch(SessionLaunchRequest request) =>
       _launch(request);
 

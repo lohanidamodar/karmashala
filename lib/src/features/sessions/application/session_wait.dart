@@ -14,15 +14,7 @@ import 'session_providers.dart';
 import 'session_status_providers.dart';
 
 /// **Block until a session settles**, so one agent can hand work to another and
-/// know when it is done — with no way to block, a delegating agent's only
-/// option was to re-read the transcript on a loop, which costs a turn per look
-/// and still cannot tell "finished something" from "never started".
-///
-/// Nothing polls: a wait completes on events the app already emits
-/// ([SessionStatusRegistry.reportsFor], [paneExitProvider]), so a session that
-/// never changes costs one subscription and nothing else. The bound is the one
-/// exception, and it is the *caller's* — one delayed future, cancelled the
-/// moment anything else answers first.
+/// know when it is done. Nothing polls; only the caller's bound sets a timer.
 class SessionWaitService {
   SessionWaitService(this._ref);
 
@@ -31,17 +23,12 @@ class SessionWaitService {
   /// The bound a caller that names none gets.
   static const Duration defaultBound = Duration(seconds: 30);
 
-  /// The most a caller may ask for, and the number is somebody else's: two
-  /// independent 60-second walls stand between a tool call and its answer —
-  /// `kLocalRpcTimeout` gives up on a socket that has sent no byte for 60 s,
-  /// and Claude Code abandons an MCP call at ~60 s *and re-sends it*. The cap
-  /// is well under both, and a caller that wants longer re-calls, which is
-  /// honest: between the two calls it can read the session.
+  /// The most a caller may ask for. Two 60-second walls sit between a tool call
+  /// and its answer — the local RPC timeout, and an MCP client that re-sends.
   static const Duration maxBound = Duration(seconds: 45);
 
   /// The bound for a caller's `timeoutSeconds`, clamped rather than refused:
-  /// the caller asked for "as long as you can", and `timeout` with the session
-  /// still running is true whichever bound produced it.
+  /// `timeout` with the session still running is true whichever bound applied.
   static Duration boundFor(num? seconds) {
     if (seconds == null) return defaultBound;
     final rounded = seconds.round();
@@ -50,12 +37,8 @@ class SessionWaitService {
     return asked > maxBound ? maxBound : asked;
   }
 
-  /// **What [sessionId] is blocked on right now**, or null when it is not.
-  /// Synchronous and cheap because it is asked *before* a send: sending into a
-  /// blocked agent is the failure this answers, and it has to be answered while
-  /// there is still time not to send. Two sources — an open approval prompt,
-  /// then the attention inbox — and only [InboxItemKind.needsApproval] blocks:
-  /// a `finished` or `failed` item is a session waiting to be *read*.
+  /// **What [sessionId] is blocked on right now**, or null. Asked *before* a
+  /// send; only [InboxItemKind.needsApproval] blocks, not a finished item.
   SessionBlock? blockedOn(String sessionId) {
     final report = _ref.read(sessionStatusLookupProvider)(sessionId);
     if (report != null && report.hasOpenPrompt) {
@@ -73,10 +56,7 @@ class SessionWaitService {
   }
 
   /// Blocks until [sessionId] settles, or until [bound] elapses. [inputSent] is
-  /// what the caller did before waiting, carried through untouched: on a
-  /// timeout a caller that retries the send submits the work twice, so the
-  /// answer has to say whether the first one went in. Null means this call sent
-  /// nothing.
+  /// carried through so a timed-out caller knows whether its send went in.
   Future<SessionWaitOutcome> wait(
     String sessionId, {
     Duration? bound,
@@ -99,9 +79,8 @@ class SessionWaitService {
       if (before == null) {
         opening = report;
       } else {
-        // The registry publishes only when evidence moved, but *which* evidence
-        // matters: a hook ageing out flips `source` without the agent having
-        // done anything.
+        // The registry publishes when evidence moved, but *which* matters: a
+        // hook ageing out flips `source` with the agent having done nothing.
         if (report.status != before.status ||
             !_sameLines(report.evidence, before.evidence)) {
           changed = true;
@@ -133,9 +112,8 @@ class SessionWaitService {
         );
         return;
       }
-      // `awaitingApproval` with no open prompt is an agent sitting at its own
-      // input — ready for input, not blocked. `working` and `unknown` are the
-      // two that keep waiting: an unknown is never reported as settled.
+      // `awaitingApproval` with no open prompt is an agent at its own input —
+      // ready, not blocked. `working` and `unknown` are the two that wait.
       final ready =
           report.status == AgentActivityStatus.idle ||
           report.status == AgentActivityStatus.failed ||
@@ -155,9 +133,8 @@ class SessionWaitService {
     final statuses = _ref.read(sessionStatusStreamProvider)(sessionId).listen(
       consider,
     );
-    // Only a process that stopped *by itself* reaches here — closing a pane and
-    // `session_end` both drop the listener before disposing — so the
-    // `livePaneFor` check above is what covers the rest.
+    // Only a process that stopped *by itself* reaches here; closing a pane and
+    // `session_end` both drop the listener before disposing.
     final exits = _ref.listen(paneExitProvider, (_, exit) {
       if (exit == null || exit.sessionId != sessionId) return;
       settle(
@@ -196,9 +173,8 @@ class SessionWaitService {
     }
   }
 
-  /// The answer for a session with nothing running in it. The exit code comes
-  /// from the last pane exit, and only when it names this session — attributing
-  /// another pane's here would be inventing a code.
+  /// The answer for a session with nothing running in it. The exit code is the
+  /// last pane exit's, and only when it names this session.
   SessionWaitOutcome _ended(
     String sessionId,
     AgentStatusReport? report, {
@@ -247,10 +223,8 @@ class SessionWaitService {
     );
   }
 
-  /// Whether the conversation itself moved — `null` when no source could tell.
-  /// A hook callback carries no transcript position and a PTY session keeps no
-  /// event log, and reporting that as `false` would read as "the agent said
-  /// nothing".
+  /// Whether the conversation itself moved — `null` when no source could tell,
+  /// because `false` would read as "the agent said nothing".
   bool? _transcriptChanged(AgentStatusReport? report, bool moved) {
     if (moved) return true;
     return report?.sourceModifiedAt == null ? null : false;
@@ -278,10 +252,8 @@ class SessionWaitService {
   }
 }
 
-/// What a wait ended on. [idle] and [done] both mean *ready for input*, and
-/// they are two states because [done] is idle-and-seen-changed — it says the
-/// session finished something, where [idle] is equally true of one that never
-/// started.
+/// What a wait ended on. [done] is idle-and-seen-changed; [idle] is equally
+/// true of a session that never started, which is why they are two states.
 enum SessionWaitState {
   /// Ready for input, and nothing moved while we watched.
   idle,

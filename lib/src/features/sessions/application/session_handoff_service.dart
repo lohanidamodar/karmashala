@@ -25,10 +25,8 @@ import 'session_signals.dart';
 import 'session_wait.dart';
 import 'session_working_directory.dart';
 
-/// One agent this session could be continued in — built for every installation
-/// in the session's environment, **including the agent already running it**:
-/// "continue this in a fresh Claude session" is a real answer to a full context
-/// window.
+/// One agent this session could be continued in — including the one already
+/// running it: a fresh session is a real answer to a full context window.
 class HandoffTarget {
   const HandoffTarget({
     required this.installation,
@@ -60,18 +58,15 @@ class HandoffTarget {
   bool get canReceive => refusal == null;
 }
 
-/// Builds handoff packets and starts the sessions that receive them. Everything
-/// here ends at [SessionLauncher.launch]: a handed-off or forked session is not
-/// a new kind of session, only a packet in `firstMessage` and a link on the
-/// row.
+/// Builds handoff packets and starts the sessions that receive them. A handoff
+/// is not a new kind of session — a packet in `firstMessage` and a link.
 class SessionHandoffService {
   SessionHandoffService(this._ref);
 
   final Ref _ref;
 
-  /// Every continuation says what it handed over, and how big it was: the
-  /// packet is typed into the pane, and Claude Code collapses any paste over
-  /// 800 characters into `[Pasted text #N]`.
+  /// Every continuation says what it handed over, and how big: Claude Code
+  /// collapses any paste over 800 characters into `[Pasted text #N]`.
   static final _log = AppLogger.named('sessions.handoff');
 
   // --- what can be offered ---------------------------------------------------
@@ -117,10 +112,8 @@ class SessionHandoffService {
     return targets;
   }
 
-  /// Why [descriptor] cannot be handed a packet, or null. One requirement, and
-  /// it is not obvious: the packet is delivered as the agent's **opening prompt
-  /// argument**, and typing it into the PTY instead races the agent's own
-  /// startup, which shows no reliable ready marker.
+  /// Why [descriptor] cannot be handed a packet, or null: the packet is the
+  /// agent's **opening prompt argument**, and typing it races the CLI startup.
   String? _refusalFor(AgentDescriptor? descriptor, String name) {
     if (descriptor == null) {
       return 'Karmashala has no descriptor for this agent, so it cannot be '
@@ -155,10 +148,8 @@ class SessionHandoffService {
 
   // --- the packet ------------------------------------------------------------
 
-  /// Assembles the packet [sessionId] would be handed over with, separately
-  /// from the launch so the user can *read it before it is sent* — a handoff is
-  /// a one-way door. Every input is gathered best-effort; nothing here throws
-  /// for a git that would not answer.
+  /// Assembles the packet [sessionId] would be handed over with, apart from the
+  /// launch so a user can read it first. Best-effort; nothing here throws.
   Future<HandoffPacket> buildPacket({
     required String sessionId,
     required String targetAgentName,
@@ -181,9 +172,8 @@ class SessionHandoffService {
         : registry.displayNameFor(agentId);
 
     final directory = sessionWorkingDirectory(_ref, sessionId);
-    // Charged *before* the recap: if something has to give it must be the
-    // quoted tail, which is still in the transcript the new agent can read,
-    // while a dropped decision is the thing nobody wrote down twice.
+    // Charged *before* the recap: the quoted tail is still in the transcript
+    // the new agent can read, while a dropped decision is written nowhere else.
     final recorded = _decisionsFor(sessionId, decisionBudget);
     final recap = await _recapFor(
       session,
@@ -221,12 +211,8 @@ class SessionHandoffService {
     );
   }
 
-  /// What this session decided, as recorded at the time — a straight read of
-  /// the append-only record, with no deduplication and no folding of a
-  /// reversal. **Null** when the database will not answer, which the packet
-  /// renders as "could not be read": a different admission from an empty
-  /// record, and an agent taking over must not read either as "nothing was
-  /// decided".
+  /// What this session decided, as recorded — no deduplication, and no folding
+  /// of a reversal. **Null** is "could not be read", not an empty record.
   ({
     List<HandoffDecision>? decisions,
     List<HandoffClaim>? deadEnds,
@@ -251,9 +237,8 @@ class SessionHandoffService {
             recordedAt: row.recordedAt,
           ),
       ], budget);
-      // Partitioned *after* the trim, so the budget is charged once over the
-      // whole record and the split cannot change what survives it. The label
-      // comes from the enum so the heading and the split cannot drift apart.
+      // Partitioned *after* the trim, so the budget is charged once and the
+      // split cannot change what survives it. The label comes from the enum.
       final ruledOut = DecisionKind.approachRejected.label;
       return (
         decisions: [
@@ -272,9 +257,8 @@ class SessionHandoffService {
     }
   }
 
-  /// A rejected approach as the claim it is: what was ruled out, who said so,
-  /// and what backs it — or **"not checked yet"**, which the claim itself
-  /// renders.
+  /// A rejected approach as the claim it is — or **"not checked yet"**, which
+  /// the claim itself renders rather than dropping the qualifier.
   static HandoffClaim _deadEnd(HandoffDecision decision) {
     final detail = decision.detail?.trim();
     final origin = decision.origin;
@@ -292,10 +276,8 @@ class SessionHandoffService {
     );
   }
 
-  /// The tail of the conversation, read from the **agent's own transcript** —
-  /// the same file the chat view renders, not a second copy. `tool` records are
-  /// dropped: they are mostly file contents the receiving agent can read for
-  /// itself, and they exhaust the budget before reaching anything either said.
+  /// The tail of the conversation, from the **agent's own transcript**. `tool`
+  /// records are dropped: they exhaust the budget before anyone's words.
   Future<({List<HandoffTurn> turns, int omitted})> _recapFor(
     Session session,
     String? agentId,
@@ -362,9 +344,8 @@ class SessionHandoffService {
       // edit: a merge stopped here and both sides are still in the index.
       FileChangeType.conflicted =>
         'conflicted (${(change.conflict ?? MergeConflict.unrecorded).words})',
-      // `unknown` is git's own shrug at a status code we do not model: a wrong
-      // verb about a file the next agent is about to edit is worse than an
-      // honest one.
+      // `unknown` is git's own shrug: a wrong verb about a file the next agent
+      // is about to edit is worse than an honest one.
       FileChangeType.unknown => 'changed (unrecognised git status)',
     };
     // A conflict is never described as staged: both sides sit in the index
@@ -375,13 +356,8 @@ class SessionHandoffService {
     return kind;
   }
 
-  /// Asks [sessionId] to write its own handoff summary, and waits for it.
-  ///
-  /// **Offered, never automatic**: it spends a turn of the source agent's
-  /// quota, and running out of that quota is one of the reasons people hand off
-  /// at all. A handoff is never blocked on an agent that does not answer —
-  /// every way this can fail comes back as a [HandoffSourceBrief.notWritten]
-  /// the packet prints, including a source that answered nothing.
+  /// Asks [sessionId] to write its own handoff summary and waits for it —
+  /// offered, never automatic, and every failure is a printable "not written".
   Future<HandoffSourceBrief> requestSourceBrief({
     required String sessionId,
     num? timeoutSeconds,
@@ -393,9 +369,8 @@ class SessionHandoffService {
         .getById(session.agentInstallationId)
         ?.agentId;
 
-    // Before the send, exactly as `session_send` asks it: a message into a
-    // session that has stopped for a person sits behind that prompt, and this
-    // would then spend its whole bound learning nothing.
+    // Before the send: a message into a session stopped for a person waits
+    // behind that prompt, so this would spend its bound learning nothing.
     if (_ref.read(sessionWaitProvider).blockedOn(sessionId) case final block?) {
       return HandoffSourceBrief.notWritten(
         'it is stopped waiting for a person (${block.kind}), so nothing was '
@@ -426,9 +401,8 @@ class SessionHandoffService {
         );
 
     final after = await _agentTurnsIn(session, agentId);
-    // Counted, not timed, and against what was there before the request: the
-    // newest turn in an unchanged transcript is something the agent said
-    // earlier, and printing that as its brief would invent an answer.
+    // Counted against what was there before the request: the newest turn in an
+    // unchanged transcript is something the agent said earlier.
     if (after.length <= before) {
       return HandoffSourceBrief.notWritten(
         switch (outcome.state) {
@@ -450,10 +424,8 @@ class SessionHandoffService {
     return HandoffSourceBrief.written(after.last);
   }
 
-  /// Everything the source agent has said, oldest first, from its own
-  /// transcript. Empty when the transcript cannot be found or read — the same
-  /// answer as one that has said nothing, and the caller only ever compares two
-  /// readings.
+  /// Everything the source agent has said, oldest first. Empty when unreadable
+  /// — the same answer as nothing said, and the caller compares two readings.
   Future<List<String>> _agentTurnsIn(Session session, String? agentId) async {
     final externalId = session.externalSessionId;
     if (agentId == null || externalId == null || externalId.isEmpty) {
@@ -476,11 +448,8 @@ class SessionHandoffService {
 
   // --- starting the new session ----------------------------------------------
 
-  /// Continues [sessionId] in another agent. The old session is **not
-  /// touched**: not ended, not detached, not marked, so the handoff stays
-  /// reversible until the user ends it. [permissionMode] is the mode picked for
-  /// *this* target and is resolved against it, so a pick it cannot express is
-  /// downgraded rather than dropped; null carries the session's own mode.
+  /// Continues [sessionId] in another agent, leaving the old session untouched,
+  /// so the handoff stays reversible until the user ends it themselves.
   Future<SessionLaunchResult> handoffTo({
     required String sessionId,
     required String targetInstallationId,
@@ -500,10 +469,8 @@ class SessionHandoffService {
     sourceBrief: sourceBrief,
   );
 
-  /// Branches [sessionId] into a new session that shares its history, in the
-  /// **same agent** — a fork is a branch of one conversation, not a change of
-  /// provider. Native when [forkPlanFor] says the CLI can do it, a packet when
-  /// it cannot.
+  /// Branches [sessionId] into a session sharing its history, in the **same
+  /// agent** — native where [forkPlanFor] says the CLI can, a packet otherwise.
   Future<SessionLaunchResult> forkSession({
     required String sessionId,
     String instruction = '',
@@ -548,13 +515,11 @@ class SessionHandoffService {
             parentLink: SessionLink.fork,
             useWorktree: intoNewWorktree,
             existingWorktree: intoNewWorktree ? null : session.worktree,
-            // The work is where it is: a session with no worktree can still be
-            // running in a subdirectory, which `existingWorktree` cannot say
-            // without also claiming a worktree the session does not have.
+            // The work is where it is: a session with no worktree may still run
+            // in a subdirectory, which `existingWorktree` cannot say alone.
             workingDirectory: intoNewWorktree ? null : session.workingDirectory,
-            // The session's own mode unless the user picked another. Still
-            // resolved rather than passed through: that is where "the same
-            // agent can express it" stops being an assumption.
+            // The session's own mode unless the user picked another — resolved,
+            // not passed through, so "this agent can express it" is checked.
             permissionOverride: _resolvePermission(
               sessionId: sessionId,
               descriptor: context.descriptor,
@@ -633,31 +598,24 @@ class SessionHandoffService {
                 ? _forkTitle(sessionId, session.title)
                 : '${session.title} · $targetName',
             purpose: SessionPurpose.newSession,
-            // The whole packet when it has to be typed, the instruction alone
-            // when the rest travels as a file: the packet's last section is
-            // that instruction, so repeating it would spend a turn reading it
-            // twice.
+            // The whole packet when it must be typed, the instruction alone
+            // when the rest travels as a file: the packet already ends with it.
             firstMessage: support.isSupported ? instruction.trim() : rendered,
             systemPromptFile: support.isSupported ? rendered : null,
             parentSessionId: sessionId,
             parentLink: link,
             useWorktree: intoNewWorktree,
             existingWorktree: intoNewWorktree ? null : session.worktree,
-            // The work is where it is: a session with no worktree can still be
-            // running in a subdirectory, which `existingWorktree` cannot say
-            // without also claiming a worktree the session does not have.
+            // The work is where it is: a session with no worktree may still run
+            // in a subdirectory, which `existingWorktree` cannot say alone.
             workingDirectory: intoNewWorktree ? null : session.workingDirectory,
             permissionOverride: carried.override,
           ),
         );
   }
 
-  /// What a continuation of [sessionId] into [targetAgentId] starts from, and
-  /// whether that was the source session's own decision. A source that chose
-  /// hands its mode down; one that never chose is following the Settings
-  /// default, so the honest starting point is the **target's** new-session
-  /// default — the source's existing-session default is a mode the launch would
-  /// never use.
+  /// What a continuation into [targetAgentId] starts from, and whether the
+  /// source chose it: one that never chose starts at the *target's* default.
   ({PermissionRisk risk, bool chosen}) _startingMode(
     String sessionId,
     String targetAgentId,
@@ -665,9 +623,8 @@ class SessionHandoffService {
     final launcher = _ref.read(sessionLauncherProvider);
     final source = launcher.effectivePermissionFor(sessionId);
     if (source != null && !source.inherited) {
-      // Measured on the one scale the target also understands: the *vocabulary*
-      // cannot cross — `mode=acceptEdits` means nothing to Codex — but how
-      // permissive it is can.
+      // Measured on the one scale the target also understands:
+      // `mode=acceptEdits` means nothing to Codex, but its permissiveness does.
       final risk = source.descriptor?.launch.permission.riskOf(
         source.selection,
       );
@@ -681,16 +638,8 @@ class SessionHandoffService {
     return (risk: fallback ?? reviewPermissionCeiling, chosen: false);
   }
 
-  /// The mode a continuation of [sessionId] into [descriptor] will run under,
-  /// and what to record on the new session's row — resolved here, once, and
-  /// passed as an override, so the command line and the sentence the user read
-  /// come from the same call.
-  ///
-  /// [override] is null when there is nothing to record: a continuation
-  /// inherits the source's **state**, not a snapshot, so a branch of a session
-  /// that never chose goes on following the Settings default. A carry rule that
-  /// had to change the mode is recorded, or the reduction would climb back on
-  /// the branch's next resume.
+  /// The mode a continuation will run under, resolved once and passed as an
+  /// override. [override] is null while the branch still follows the default.
   ({ContinuationPermission permission, PermissionSelection? override})
   _resolvePermission({
     required String sessionId,
@@ -763,9 +712,7 @@ final sessionHandoffServiceProvider = Provider<SessionHandoffService>(
 );
 
 /// Everything the composer needs to decide whether — and how — a session can be
-/// continued elsewhere. A read model rather than two calls from the widget:
-/// both answers come from the same three rows, and a widget that asked twice
-/// would read them twice on every rebuild.
+/// continued elsewhere, out of one read of the same three rows.
 class SessionContinuation {
   const SessionContinuation({required this.targets, required this.plan});
 
@@ -777,15 +724,12 @@ class SessionContinuation {
       targets.any((target) => target.canReceive) || !plan.isRefused;
 }
 
-/// The continuation options for one session. A provider rather than a service
-/// call in `build`, so a widget test can override it instead of standing up a
-/// database to answer a yes/no question.
+/// The continuation options for one session. A provider, so a widget test can
+/// override it instead of standing up a database for a yes/no question.
 final sessionContinuationProvider = Provider.autoDispose
     .family<SessionContinuation, String>((ref, sessionId) {
-      // The session's own row and the installed agents both move under this. An
-      // agent being installed publishes no session change of its own, so it
-      // arrives as an untargeted bump, which [SessionSignals.forSession]
-      // counts.
+      // Installing an agent publishes no session change of its own, so it
+      // arrives as an untargeted bump, which [SessionSignals.forSession] sees.
       ref.watchSession(sessionId);
       final service = ref.watch(sessionHandoffServiceProvider);
       return SessionContinuation(

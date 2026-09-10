@@ -1,17 +1,12 @@
 part of 'session_launcher.dart';
 
-/// The three questions asked before a conversation is handed to a second
-/// process: is it already running, may a second process have it (the agent's
-/// own answer, never a guess), and was the conversation ever written. Every
-/// surface that resumes comes through here, so the refusal a user reads and the
-/// moment it is given cannot drift apart per call site.
+/// Is it already running, may a second process have it, was it ever written —
+/// asked here for every surface, so a refusal cannot drift apart per call site.
 extension SessionResumeGuards on SessionLauncher {
   // --- is it already running? ------------------------------------------------
 
-  /// The pane [sessionId] is running in **right now**, or `null`. Three things
-  /// have to be true and each has been wrong on its own: the row exists, it
-  /// names a pane, and that pane's instance is live. A detached pane is live; a
-  /// pane restored from disk is not, whatever its buffer shows.
+  /// The pane [sessionId] is running in **right now**, or `null`. A detached
+  /// pane is live; one restored from disk is not, whatever its buffer shows.
   String? livePaneFor(String? sessionId) {
     if (sessionId == null) return null;
     final paneId = _ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
@@ -22,14 +17,8 @@ extension SessionResumeGuards on SessionLauncher {
     return instance != null && instance.liveness.value.isLive ? paneId : null;
   }
 
-  /// The pane [sessionId] was **restored** into and has never run, or `null`.
-  ///
-  /// A second question rather than a loosening of [livePaneFor]: a dormant pane
-  /// is replayed history with nothing behind it, so it must never be reattached
-  /// and presented as a running session — but it does hold this session's own
-  /// scrollback, so resuming into it leaves one terminal per session. A pane
-  /// whose process ran and exited is not dormant; [PaneLiveness.restored] is
-  /// the only state that says "rebuilt from disk, never started".
+  /// The pane [sessionId] was **restored** into and has never run, or `null`:
+  /// it holds this session's own scrollback but nothing running behind it.
   String? dormantPaneFor(String? sessionId) {
     if (sessionId == null) return null;
     final paneId = _ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
@@ -40,14 +29,8 @@ extension SessionResumeGuards on SessionLauncher {
     return instance?.liveness.value == PaneLiveness.restored ? paneId : null;
   }
 
-  /// The session we are already running the CLI conversation
-  /// [externalSessionId] in, or `null` — the external id is the join between an
-  /// imported CLI entry and one of our own rows.
-  ///
-  /// **Every** row with that id is examined: `external_session_id` has no
-  /// `UNIQUE` constraint, and a dead duplicate would answer "nothing is running
-  /// this" while a pane is still writing to it. Newest-first, so where an agent
-  /// permits two live processes the one just started is the one named.
+  /// The session we are already running conversation [externalSessionId] in.
+  /// **Every** row with that id: `external_session_id` has no `UNIQUE` index.
   Session? runningSessionWithExternalId(String? externalSessionId) {
     if (externalSessionId == null || externalSessionId.isEmpty) return null;
     for (final candidate
@@ -59,9 +42,8 @@ extension SessionResumeGuards on SessionLauncher {
     return null;
   }
 
-  /// Brings the pane [sessionId] is already running in back into view and
-  /// selects it; false when nothing of ours is running it. This is what
-  /// "resume" should do for a session that never stopped — nothing is created.
+  /// Brings the pane [sessionId] is running in back into view and selects it;
+  /// false when nothing of ours is running it. Nothing is created.
   bool reveal(String sessionId) {
     final paneId = livePaneFor(sessionId);
     if (paneId == null) return false;
@@ -78,11 +60,8 @@ extension SessionResumeGuards on SessionLauncher {
 
   // --- may a second process have it? -----------------------------------------
 
-  /// Whether [agentId] permits a second process on a conversation another one
-  /// is already holding — the single read of
-  /// [AgentLaunchSpec.allowsConcurrentResume] in the app, so "Claude can, Codex
-  /// cannot" is answered from the registry. An unrecognised agent answers
-  /// `false`.
+  /// Whether [agentId] permits a second process on a held conversation — the
+  /// one read of [AgentLaunchSpec.allowsConcurrentResume]; unknown means false.
   bool allowsConcurrentResume(String agentId) =>
       _ref
           .read(agentRegistryProvider)
@@ -95,13 +74,8 @@ extension SessionResumeGuards on SessionLauncher {
   String agentDisplayName(String agentId) =>
       _ref.read(agentRegistryProvider).byId(agentId)?.displayName ?? agentId;
 
-  /// **The** resume decision, for every surface.
-  ///
-  /// [canReattach] is the caller saying whether reopening our own pane would
-  /// satisfy the request — false for a handoff to a terminal window we do not
-  /// own, where only the agent's capability decides. [heldByAnotherProcess] is
-  /// for callers with *certain* knowledge of a holder we do not own; it is
-  /// never inferred here.
+  /// **The** resume decision, for every surface. [canReattach] is false where
+  /// reopening our own pane would not satisfy the request; nothing is inferred.
   ResumeAction resumeActionForConversation({
     required String agentId,
     String? sessionId,
@@ -118,17 +92,14 @@ extension SessionResumeGuards on SessionLauncher {
     canReattach: canReattach,
   );
 
-  /// Whether **we** are running this conversation right now, by either name it
-  /// has: one of our rows, or the CLI's own id. Both are needed — an imported
-  /// entry only knows the CLI id, and a native Codex row often has none at all,
-  /// so a check on the external id alone silently passed every Codex session.
+  /// Whether **we** are running this conversation, by either name it has. Both
+  /// are needed: a native Codex row often carries no CLI id at all.
   bool hostedLive({String? sessionId, String? externalSessionId}) =>
       livePaneFor(sessionId) != null ||
       runningSessionWithExternalId(externalSessionId) != null;
 
-  /// Throws the plain-words refusal for a handoff the agent forbids, or returns
-  /// normally. Shared by the paths that cannot reattach, so their message and
-  /// the moment they give up cannot drift apart.
+  /// Throws the plain-words refusal for a handoff the agent forbids. Shared, so
+  /// the paths that cannot reattach cannot drift apart.
   void refuseIfForbidden({
     required String agentId,
     String? sessionId,
@@ -157,13 +128,8 @@ extension SessionResumeGuards on SessionLauncher {
 
   // --- was the conversation ever written? ------------------------------------
 
-  /// The row that **minted** [externalSessionId], or `null` when that id was
-  /// read back from the agent rather than handed to it: `launch` gives a new
-  /// session its own row id as the CLI's session id, so `sessions.id ==
-  /// external_session_id` is the signature of an id we promised. An observed id
-  /// is deliberately left alone — the store is its only witness, and asking the
-  /// store about a conversation it already told us about would let a
-  /// misconfigured `CLAUDE_CONFIG_DIR` retract a fact we had.
+  /// The row that **minted** [externalSessionId], or `null` when the id came
+  /// back from the agent: `sessions.id == external_session_id` is our promise.
   Session? rowThatMinted(String? externalSessionId) {
     if (externalSessionId == null || externalSessionId.isEmpty) return null;
     final row = _ref.read(sessionDaoProvider).getById(externalSessionId);
@@ -172,11 +138,8 @@ extension SessionResumeGuards on SessionLauncher {
         : null;
   }
 
-  /// Throws [SessionConversationMissing] when [request] would resume a
-  /// conversation the agent's store has read to the end without finding, and
-  /// returns normally in every other case — including "we could not tell".
-  /// Corrects the row on the way out: it has claimed `running` since it was
-  /// written, and this is the first moment the app knows better.
+  /// Throws [SessionConversationMissing] when the agent's store has read to the
+  /// end without finding the conversation; "could not tell" returns normally.
   Future<void> refuseIfConversationMissing(SessionLaunchRequest request) async {
     final externalId = request.resumeExternalSessionId;
     if (externalId == null || externalId.isEmpty) return;
@@ -213,16 +176,8 @@ extension SessionResumeGuards on SessionLauncher {
     );
   }
 
-  /// What to tell the user when [request] continues or forks a conversation
-  /// from a directory it was not recorded in, or `null` when there is nothing
-  /// to say.
-  ///
-  /// This app moves sessions between directories on purpose — an archived
-  /// worktree resumes from the repository root, and a fork into a new worktree
-  /// launches `--resume … --fork-session` where the source never ran. A
-  /// sentence and not a refusal: the launch is still the best thing to do. It
-  /// is also unreachable for the three agents shipped today, all of which
-  /// declare [AgentResumeLocality.anyDirectory] against evidence.
+  /// What to tell the user when [request] continues a conversation from another
+  /// directory — unreachable while every agent declares [AgentResumeLocality].
   String? conversationElsewhereCaveat(
     SessionLaunchRequest request,
     EnvironmentPath launchDirectory,
@@ -237,8 +192,7 @@ extension SessionResumeGuards on SessionLauncher {
         .getByExternalSessionId(conversationId);
     final recorded = holder?.workingDirectory ?? holder?.worktree;
     // A row that never recorded a directory (before schema v22) says nothing
-    // about where the conversation was written, and an unknown earns no
-    // sentence.
+    // about where the conversation was written, and an unknown earns no words.
     if (recorded == null) return null;
     return resumeDirectoryCaveatFor(
       _ref.read(agentRegistryProvider),

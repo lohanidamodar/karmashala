@@ -7,31 +7,16 @@ import '../domain/decision_record.dart';
 import 'session_decision_providers.dart';
 import 'session_providers.dart';
 
-/// The only way anything writes to a session's decision record.
-///
-/// One method per **explicit act**, named after the act, so reading this class
-/// is reading the complete list of things that can put a row in the record: an
-/// agent reading a handoff packet has no way to check a decision, so every row
-/// has to be traceable to somebody actually deciding something rather than to a
-/// heuristic that ran over a conversation.
-///
-/// **Nothing here reads prose** — no method takes a transcript, a message or a
-/// terminal buffer. A record that is sometimes invented is worse than none,
-/// because the reader cannot tell which row is which. Every write is
-/// best-effort and returns `null` rather than throwing: a decision that could
-/// not be recorded must never break the act it was describing.
+/// The only way anything writes to a session's decision record. **Nothing here
+/// reads prose**, and every write is best-effort rather than throwing.
 class DecisionRecorder {
   DecisionRecorder(this._ref);
 
   final Ref _ref;
   final _log = AppLogger.named('decisions');
 
-  /// The user (or an agent acting through `session_answer`) answered an agent's
-  /// on-screen approval prompt. [effect] is the agent's **own words** for what
-  /// the key does, never our description of it. A denial is recorded as
-  /// [DecisionKind.approachRejected]: what was refused is as load-bearing as
-  /// what was allowed, and filing it under "approval granted" would make the
-  /// record say the opposite of what happened.
+  /// The user (or an agent through `session_answer`) answered an approval
+  /// prompt. [effect] is the agent's own words; a denial files as a rejection.
   DecisionRecord? recordApproval({
     required String sessionId,
     required bool granted,
@@ -56,9 +41,7 @@ class DecisionRecorder {
   );
 
   /// A verification run reached a verdict — `verification_finish`, and nothing
-  /// else. [attribution] carries G3's phrase verbatim so the packet says
-  /// whether the verifier was the author: a pass nobody independently checked
-  /// and one somebody did are worth different amounts.
+  /// else. [attribution] says whether the verifier was also the author.
   DecisionRecord? recordVerificationVerdict({
     required String sessionId,
     required String runId,
@@ -82,9 +65,8 @@ class DecisionRecorder {
     originId: runId,
   );
 
-  /// Somebody asked for a checkpoint **and said what it was for**. The label is
-  /// the whole reason this is a decision: a turn checkpoint records that time
-  /// passed, one asked for with a reason records that a tree state was chosen.
+  /// Somebody asked for a checkpoint **and said what it was for**: the label
+  /// is what makes it a decision rather than a record that time passed.
   DecisionRecord? recordCheckpoint({
     required String sessionId,
     required String checkpointId,
@@ -102,8 +84,7 @@ class DecisionRecorder {
   );
 
   /// An agent recorded a decision deliberately, through the `decision_record`
-  /// tool. The caller has already restricted [kind] to what an agent is
-  /// entitled to assert about its own reasoning — see `DecisionControlTools`.
+  /// tool; the caller has already restricted [kind] to what it may assert.
   DecisionRecord? recordFromAgent({
     required String sessionId,
     required DecisionKind kind,
@@ -122,12 +103,8 @@ class DecisionRecorder {
     origin: DecisionOrigin.decisionTool,
   );
 
-  /// The user wrote one down by hand, in the Decisions panel — the only act
-  /// whose author is a person typing. [kind] is restricted by the panel to what
-  /// the writer may assert with nothing behind it, including an approval,
-  /// because the user granting one is their own statement rather than an
-  /// agent's claim about them. A verdict and a marked checkpoint stay out: both
-  /// would point at a run or a checkpoint that does not exist.
+  /// The user wrote one down by hand — the only act whose author is a person
+  /// typing, so the panel restricts [kind] to what they can assert alone.
   DecisionRecord? recordByHand({
     required String sessionId,
     required DecisionKind kind,
@@ -146,8 +123,7 @@ class DecisionRecorder {
   );
 
   /// Stamps the decision with the clock and appends it. A blank summary is
-  /// refused rather than stored: a row with nothing in it would count towards
-  /// "this session recorded 4 decisions" while telling the reader nothing.
+  /// refused: it would count towards a total while telling the reader nothing.
   DecisionRecord? _append({
     required String sessionId,
     required DecisionKind kind,
@@ -189,10 +165,8 @@ class DecisionRecorder {
     }
   }
 
-  /// The display name of the agent running [sessionId], for the attribution
-  /// line, or null when it cannot be resolved — a name rather than an id
-  /// because the packet's reader has no way to look an id up, and null rather
-  /// than a guess.
+  /// The display name of the agent running [sessionId], or null — a name, not
+  /// an id the packet's reader could not look up, and never a guess.
   String? _agentNameFor(String sessionId) {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) return null;

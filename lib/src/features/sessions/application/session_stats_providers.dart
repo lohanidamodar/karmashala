@@ -13,8 +13,7 @@ import '../domain/session.dart';
 import 'session_signals.dart';
 
 /// Why a session has no stats to show. Named rather than collapsed into an
-/// empty result: the three say very different things to the user, and only one
-/// of them is worth waiting on.
+/// empty result: only one of the three is worth waiting on.
 enum SessionStatsUnavailable {
   /// No such session row — it was archived or deleted while the dialog opened.
   unknownSession,
@@ -23,9 +22,8 @@ enum SessionStatsUnavailable {
   /// Antigravity's, whose payloads are protobuf in an unpublished schema.
   agentRecordsNoCounts,
 
-  /// The agent's store is readable, but this session has no file in it yet: a
-  /// CLI writes its session file when it starts a turn, not when it launches,
-  /// so a session nobody has spoken to yet is legitimately here.
+  /// The store is readable but this session has no file in it yet: a CLI
+  /// writes its session file when it starts a turn, not when it launches.
   transcriptNotFound,
 }
 
@@ -49,9 +47,8 @@ class SessionStatsView {
   final SessionStats? stats;
   final SessionStatsUnavailable? unavailable;
 
-  /// The agent's own lifetime totals. **Independent of [stats]**: a session
-  /// that has not written a transcript yet still runs on an agent with a
-  /// history, and one section going quiet must not take the other with it.
+  /// The agent's own lifetime totals, **independent of [stats]**: one section
+  /// going quiet must not take the other with it.
   final LifetimeStats? lifetime;
 
   /// Why [lifetime] is absent. Null exactly when [lifetime] is present.
@@ -61,10 +58,8 @@ class SessionStatsView {
   final String agentName;
 }
 
-/// Reads a session's own counts out of whichever store its agent keeps. Both
-/// agents that write transcripts record them — Claude Code `usage` on every
-/// assistant record, Codex a cumulative `token_count` — so nothing here has to
-/// type into the user's live session.
+/// Reads a session's own counts out of whichever store its agent keeps — both
+/// transcript-writing agents record them, so nothing types into the session.
 class SessionStatsService {
   const SessionStatsService(this._ref);
 
@@ -146,9 +141,8 @@ class SessionStatsService {
     );
   }
 
-  /// The agent's own books, or why there are none. Read from the store home the
-  /// rest of detection already resolves, so a WSL or SSH environment gets its
-  /// own agent's totals rather than the host's.
+  /// The agent's own books, or why there are none. Read from the store home
+  /// detection already resolved, so WSL and SSH get their own totals.
   Future<(LifetimeStats?, LifetimeStatsUnavailable?)> _lifetimeFor(
     String? agentId,
     AgentDescriptor? descriptor,
@@ -174,9 +168,8 @@ class SessionStatsService {
         : (stats, null);
   }
 
-  /// This agent's store home in the environment the session runs in, falling
-  /// back to any environment that has one — a session whose environment row has
-  /// gone is still running against some agent's books.
+  /// This agent's store home in the session's environment, falling back to any
+  /// that has one — a session whose environment row went still has books.
   Future<String?> _storeHome(String agentId, Session session) async {
     try {
       final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
@@ -198,10 +191,8 @@ class SessionStatsService {
   }
 }
 
-/// Whether an agent's own store records anything countable — a capability query
-/// over what the registry already declares rather than a second flag to keep in
-/// step. An agent whose format is unknown answers "no", so the affordance is
-/// simply absent rather than showing zeros.
+/// Whether an agent's own store records anything countable — a query over what
+/// the registry declares, so an unknown format answers "no", not zeros.
 bool agentStoreRecordsStats(AgentDescriptor? descriptor) {
   final format = descriptor?.store?.format;
   return format == AgentStoreFormat.claudeJsonl ||
@@ -230,10 +221,8 @@ final sessionStatsServiceProvider = Provider<SessionStatsService>(
   (ref) => SessionStatsService(ref),
 );
 
-/// A session's stats, computed once per dialog opening. `autoDispose` and
-/// watched by nothing else: an on-demand question, not a poll. It subscribes to
-/// **this row only**, because a rename or a launch anywhere else must not
-/// re-run a read that walks the store.
+/// A session's stats, computed once per dialog opening: an on-demand question,
+/// not a poll, and subscribed to **this row only**.
 final sessionStatsProvider = FutureProvider.autoDispose
     .family<SessionStatsView, String>((ref, sessionId) {
       ref.watchSession(sessionId);

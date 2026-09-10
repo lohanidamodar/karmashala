@@ -12,16 +12,7 @@ import 'session_resume_providers.dart';
 final _log = AppLogger.named('sessions.launch');
 
 /// Tells the person whose session it was that the CLI refused their command
-/// line, the moment the pane running it stops.
-///
-/// **The refusal was already parsed and already unread**: the only surface
-/// watching `RejectedValue` was the Explorer card's subtitle, so a user looking
-/// at the pane that just flashed and died saw "Session ended" and nothing else.
-///
-/// Posted as a [SessionNotice] rather than raised — the launch itself
-/// succeeded, and the process exited while reading its own arguments. Costs one
-/// grid read per pane that actually died, and none for an agent whose refusal
-/// nobody has read; nothing polls.
+/// line, the moment its pane stops — a notice, because the launch itself ran.
 void reportRefusedLaunches(Ref ref, Iterable<String> stoppedPaneIds) {
   final refusals = <String, ({String pane, RejectedValue value})>{};
   for (final paneId in stoppedPaneIds) {

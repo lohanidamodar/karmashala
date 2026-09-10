@@ -37,21 +37,7 @@ class SessionRepositoriesService {
   }
 
   /// The same list, with **where each one is actually worked in** and whether
-  /// that directory belongs to this session alone.
-  ///
-  /// `SessionLauncher` worktrees the primary repository and nothing else, so
-  /// two concurrent worktree sessions on a multi-repo project share every other
-  /// checkout. Worktreeing them all was considered and rejected: nothing
-  /// populates `additionalRepositories` at launch, the lifecycle is
-  /// single-worktree all the way down (one column, one archive, one delivery
-  /// reading), no agent would ever stand in the extra directories, and a
-  /// secondary repository is usually only read. What is real is the *silence* —
-  /// so the sharing stays and stops being invisible, which is what the chip
-  /// bar's tooltip and `list_checkouts` both read.
-  ///
-  /// The primary checkout is included and answered by the same rule: a session
-  /// running *in the repository* rather than a worktree of it shares that
-  /// checkout with every other session that does.
+  /// that directory is this session's alone. Only the primary is worktreed.
   List<SessionCheckout> checkoutsFor(String sessionId) {
     final session = sessionDao.getById(sessionId);
     if (session == null) return const [];
@@ -69,10 +55,8 @@ class SessionRepositoriesService {
     Repository repository,
     List<Session> others,
   ) {
-    // Only the primary can be anywhere but its repository root: the launcher's
-    // worktree and `Session.workingDirectory` are both about the repository the
-    // session was launched against, and an additional link carries no directory
-    // of its own — which is the whole finding.
+    // Only the primary can be anywhere but its repository root: an additional
+    // link carries no directory of its own, which is the whole finding.
     final worktree = link.isPrimary ? session.worktree : null;
     final directory = link.isPrimary
         ? (session.workingDirectory ?? session.worktree ?? repository.path)

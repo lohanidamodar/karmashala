@@ -72,20 +72,15 @@ class ArchiveOutcome {
   };
 }
 
-/// Removes a session's worktree directory and **nothing else**: it refuses
-/// while an agent is live in it, refuses uncommitted work unless the caller has
-/// confirmed *that specific session*, and leaves the branch alone — a branch is
-/// cheap and recoverable, a directory is what accumulates. The row, its
-/// transcript, its review notes and its checkpoints all survive; the only
-/// database write is the archive timestamp.
+/// Removes a session's worktree directory and **nothing else**: the row, its
+/// transcript and its checkpoints survive, and the branch is left alone.
 class SessionArchiveService {
   SessionArchiveService(this._ref);
 
   final Ref _ref;
 
-  /// **One line per archive, saying what it decided.** This path removes a
-  /// directory and every one of its six outcomes is invisible afterwards, so a
-  /// user who says "it did nothing" has something to hand over.
+  /// **One line per archive, saying what it decided**: all six outcomes are
+  /// invisible afterwards, so "it did nothing" has something to hand over.
   static final _log = AppLogger.named('sessions.archive');
 
   Future<ArchiveOutcome> archive(
@@ -150,9 +145,8 @@ class SessionArchiveService {
           .remove(
             repository.path,
             worktree,
-            // Git refuses to remove a dirty worktree without this, which is
-            // exactly the check above — so it is only ever set for a removal
-            // the user confirmed.
+            // Git refuses to remove a dirty worktree without this — the same
+            // check as above, so it is only set for a confirmed removal.
             force: changes.isNotEmpty,
           );
     } catch (error) {

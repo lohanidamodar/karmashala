@@ -9,12 +9,8 @@ import '../../repositories/application/repository_providers.dart';
 import '../domain/session.dart';
 import 'session_providers.dart';
 
-/// The directory a session's agent actually runs in: the one it recorded, then
-/// its worktree, then the repository itself — the order of decreasing
-/// certainty, where the root is a guess rather than a record. `null` when the
-/// session or its repository is gone. Deliberately *not*
-/// `selectedRepositoryIdProvider`, which for a worktree session points
-/// somewhere the agent is not.
+/// The directory a session's agent actually runs in: what it recorded, then its
+/// worktree, then the repository root — decreasing certainty, `null` if gone.
 EnvironmentPath? sessionWorkingDirectory(Ref ref, String sessionId) {
   final session = ref.read(sessionDaoProvider).getById(sessionId);
   if (session == null) return null;
@@ -28,10 +24,8 @@ EnvironmentPath? sessionWorkingDirectoryOf(Ref ref, Session session) {
   return ref.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
 }
 
-/// Whether a directory a session recorded is still there. A seam: production
-/// touches the filesystem, tests stub it. **True also means "could not tell"**
-/// — refusing a directory we merely failed to check would break every SSH
-/// session to close a much smaller hole.
+/// Whether a directory a session recorded is still there — a seam tests stub.
+/// **True also means "could not tell"**, so an SSH session is never refused.
 final sessionDirectoryPresentProvider =
     Provider<bool Function(EnvironmentPath directory)>((ref) {
       return (directory) {
@@ -41,9 +35,7 @@ final sessionDirectoryPresentProvider =
           if (env == null) return true;
           var resolved = directory.path;
           // A path on this machine is already the name this process opens it
-          // by. Asking only about `windowsNative` meant a Mac fell into the
-          // translation branch, found nothing to translate to, and answered
-          // "could not tell" for every session it owns.
+          // by; asking only about `windowsNative` made a Mac answer "unknown".
           if (!isLocalHost(env.kind)) {
             ExecutionEnvironment? windows;
             for (final candidate in environments.getAll()) {
@@ -65,10 +57,8 @@ final sessionDirectoryPresentProvider =
       };
     });
 
-/// [directory] when it is still there, otherwise [fallback] and the plain words
-/// explaining the substitution — the one place that is decided, so a resume
-/// into a pane, a resume into an external terminal and a handoff all behave the
-/// same way. A `null` [directory] is not a substitution and earns no notice.
+/// [directory] when it is still there, otherwise [fallback] and the words for
+/// the substitution — decided here, so every resume behaves the same way.
 ({EnvironmentPath directory, String? notice}) directoryOrFallback(
   Ref ref, {
   required EnvironmentPath? directory,

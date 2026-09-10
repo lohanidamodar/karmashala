@@ -1,16 +1,7 @@
 part of 'session_launcher.dart';
 
 /// Putting the process somewhere: a PTY pane inside the app, or a terminal
-/// window we do not own — and the two things a launch hands it that only exist
-/// once a directory is known.
-///
-/// The two starters are deliberately the same launch twice: one resolver, one
-/// way of asking for MCP access, one `agentPaneArguments`, because "open this
-/// in Windows Terminal instead" must produce the same agent, in the same mode,
-/// on the same conversation. Only the wrapper differs, and the environment
-/// decides that. The handoff packet's file is written here because it is named
-/// by the session and spelled in the agent's own path namespace, both known
-/// only this late; every "no" falls back to the opening prompt.
+/// window we do not own. The same launch twice, differing only in the wrapper.
 extension SessionSurfaceStarters on SessionLauncher {
   SessionLaunchResult _startInPane(
     Session session,
@@ -34,9 +25,8 @@ extension SessionSurfaceStarters on SessionLauncher {
     final launch = AgentPaneLaunch(
       agentId: request.installation.agentId,
       executable: request.installation.executable.path,
-      // Kept apart on the record rather than joined into one list: this is the
-      // launch the pane is *stored* as, and the MCP flags are dead the moment
-      // this app process is.
+      // Kept apart rather than joined into one list: this is the launch the
+      // pane is *stored* as, and the MCP flags die with this app process.
       arguments: agentPaneArguments(
         descriptor,
         permissionMode,
@@ -59,11 +49,8 @@ extension SessionSurfaceStarters on SessionLauncher {
       title: session.title,
     );
     final terminals = _ref.read(terminalSessionsControllerProvider.notifier);
-    // A session whose pane was restored but never started already has the
-    // terminal holding everything it printed before the app was last closed;
-    // resuming *in* it continues that record instead of leaving the user two
-    // terminals for one session. Only a dormant pane: `reveal` has already
-    // brought back a live one, and an exited pane is this run's own record.
+    // A pane restored but never started already holds this session's
+    // scrollback, so resuming *in* it avoids two terminals for one session.
     final dormant = dormantPaneFor(session.id);
     final resumedTab = dormant == null
         ? null
@@ -76,9 +63,8 @@ extension SessionSurfaceStarters on SessionLauncher {
         : slotted ?? terminals.openAgentTab(launch);
     _ref.read(sessionDaoProvider).updatePaneId(session.id, opened.paneId);
     _ref.read(terminalSessionsControllerProvider.notifier).showTerminalForPane(opened.paneId);
-    // After the pane is claimed, so it reports what happened rather than what
-    // was intended. `resumed` false for a session that has a restored pane
-    // means the user is about to be looking at two terminals for one session.
+    // After the pane is claimed, so it reports what happened. `resumed` false
+    // on a restored pane means the user is about to have two terminals.
     _log.info(
       'Started ${session.id} in a pane: agent=${request.installation.agentId} '
       'mode=${permissionMode.canonical} model=${modelId ?? 'agent default'} '
@@ -162,11 +148,7 @@ extension SessionSurfaceStarters on SessionLauncher {
   }
 
   /// The system-prompt file this launch hands its agent, spelled as **that
-  /// agent** names it, or `null` when there is none to hand. Four honest nulls,
-  /// each reported rather than silently taken: no packet, no declared option
-  /// (or nobody checked, which is a different sentence), no name for the path
-  /// in this environment, or the write failed. The caller's text is still the
-  /// opening prompt.
+  /// agent** names it, or `null` — every null falls back to the opening prompt.
   Future<String?> _systemPromptFileFor({
     required String sessionId,
     required SessionLaunchRequest request,
@@ -225,13 +207,8 @@ extension SessionSurfaceStarters on SessionLauncher {
     }
   }
 
-  /// How this session will reach Karmashala's own tools, or `null` when it will
-  /// not. Both surfaces call this and hand the result to [agentPaneArguments],
-  /// so an external terminal gets the same agent on the same endpoint speaking
-  /// as the same session. `null` is the ordinary answer and never an error —
-  /// the launch is then byte-identical to the one that happened before any of
-  /// this existed, because a session that opens without its tools is a smaller
-  /// loss than a session that does not open.
+  /// How this session will reach Karmashala's own tools, or `null` — the
+  /// ordinary answer, and the launch is then what it was before this existed.
   SessionMcpAccess? _mcpAccessFor(
     Session session,
     AgentDescriptor? descriptor,

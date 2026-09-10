@@ -10,10 +10,8 @@ import '../../git/application/git_providers.dart';
 import 'session_engine.dart';
 import 'session_providers.dart';
 
-/// Resolves the [AgentAdapter] for an agent id. The three agents with a
-/// hand-written protocol adapter are selected through their descriptor's
-/// `AgentKind`, which is what that enum now means; everything else, including
-/// an id no descriptor claims any more, falls to [GenericAgentAdapter].
+/// Resolves the [AgentAdapter] for an agent id: the three with a hand-written
+/// adapter come off `AgentKind`, and anything else gets the generic one.
 final agentAdapterResolverProvider = Provider<AdapterResolver>((ref) {
   final runnerFor = ref.watch(runnerResolverProvider);
   final registry = ref.watch(agentRegistryProvider);
@@ -43,10 +41,8 @@ final sessionEngineProvider = Provider<SessionEngine>((ref) {
     clock: ref.watch(clockProvider),
     ids: ref.watch(idGeneratorProvider),
   );
-  // The engine holds an agent child process and a stream subscription per
-  // active run, and nothing else ends them: container disposal tore down
-  // neither, so quitting left the agent CLIs running. `onDispose` takes a
-  // callback rather than a future, so the lifecycle owner awaits it itself.
+  // The engine holds a child process and a subscription per active run, and
+  // nothing else ends them — container disposal tore down neither.
   ref.onDispose(engine.dispose);
   return engine;
 });

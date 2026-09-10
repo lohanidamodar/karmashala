@@ -58,9 +58,7 @@ class SessionActions {
   }
 
   /// Carries a native row's new title out to the CLI store. Codex needs only
-  /// the thread id the row already carries; every other CLI is renamed by
-  /// editing its transcript, which costs one pass over the stores. Never
-  /// throws; answers which route the rename took.
+  /// the thread id; every other costs one pass over the stores. Never throws.
   Future<String> _propagateNativeRename(String id, String title) async {
     final session = _ref.read(sessionDaoProvider).getById(id);
     final externalId = session?.externalSessionId;
@@ -137,10 +135,8 @@ class SessionActions {
     _publish(SessionChange.removed(id));
   }
 
-  /// Takes one native row out of the workspace and nothing else. [fromCliStore]
-  /// records what the *caller* already did to the agent's transcript; this
-  /// never touches it. Publishes nothing — the caller does, so a batch
-  /// publishes once.
+  /// Takes one native row out of the workspace and nothing else. Publishes
+  /// nothing — the caller does, so a batch can publish once.
   void _removeNativeRow(Session session, {required bool fromCliStore}) {
     _ref.read(sessionDaoProvider).delete(session.id);
     if (_ref.read(selectedSessionIdProvider) == session.id) {
@@ -161,10 +157,8 @@ class SessionActions {
     }
   }
 
-  /// Removes a whole selection of rows from the workspace as **one act**,
-  /// publishing exactly once: three bare listeners on
-  /// `sessionsRevisionProvider` each do real work per bump. The CLI store is
-  /// left alone — that half runs behind this, see [purgeSessionsFromCliStore].
+  /// Removes a whole selection from the workspace as **one act**, publishing
+  /// once: three bare listeners do real work per bump. The CLI store is left.
   void deleteSessionsFromWorkspace({
     List<Session> natives = const [],
     List<ImportedSession> imported = const [],
@@ -205,16 +199,13 @@ class SessionActions {
     _publish(SessionChange.renamed(session.id));
   }
 
-  /// Removes [sessions] from their agents' own stores as one batch, leaving
-  /// workspace rows alone. Never throws — what could not be removed comes back
-  /// in the report rather than being swallowed.
+  /// Removes [sessions] from their agents' own stores as one batch. Never
+  /// throws — what could not be removed comes back in the report.
   Future<CliDeleteReport> purgeFromCliStore(List<ImportedSession> sessions) =>
       purgeSessionsFromCliStore(imported: sessions);
 
-  /// The same batch for a selection holding **both** kinds of row: every native
-  /// row is looked up in one pass over the stores rather than one pass each.
-  /// Never throws; a row whose conversation cannot be identified comes back as
-  /// a failure, because its transcript is still on disk.
+  /// The same batch for a selection of both kinds: native rows are looked up in
+  /// one pass. One we cannot identify comes back as a failure, honestly.
   Future<CliDeleteReport> purgeSessionsFromCliStore({
     List<Session> natives = const [],
     List<ImportedSession> imported = const [],
@@ -288,11 +279,8 @@ class SessionActions {
     _publish(SessionChange.removed(session.id));
   }
 
-  /// Resumes an imported CLI session in place as a live native session (seeded
-  /// with its prior transcript) and returns its id; throws if the repository or
-  /// a matching installation is gone. Reattaches instead of launching when that
-  /// conversation is already running — a second writer on one transcript is
-  /// something Codex refuses outright.
+  /// Resumes an imported CLI session in place as a live native session and
+  /// returns its id; reattaches instead when that conversation is already live.
   Future<String> resumeImported(ImportedSession session) async {
     final launcher = _ref.read(sessionLauncherProvider);
     final action = launcher.resumeActionForConversation(
@@ -363,9 +351,8 @@ class SessionActions {
     _publish(SessionChange.removed(session.id));
   }
 
-  /// Resumes [session] and sends [text] through [continueSession] rather than
-  /// the engine, so the text goes into the PTY the resume just produced — the
-  /// one write path into the agent.
+  /// Resumes [session] and sends [text] through [continueSession], not the
+  /// engine, so it lands in the PTY the resume produced — the one write path.
   Future<void> resumeAndSend(ImportedSession session, String text) async {
     final id = await resumeImported(session);
     await continueSession(id, text);
@@ -437,8 +424,7 @@ class SessionActions {
   }
 
   /// Copies the imported session's prior transcript into the resumed session's
-  /// event log so resuming continues rather than starts blank. Capped to the
-  /// most recent messages; best-effort.
+  /// event log, so a resume continues rather than starts blank. Best-effort.
   Future<void> _seedHistory(String sessionId, ImportedSession session) async {
     try {
       final messages = await readCliTranscript(session.filePath, session.cli);
@@ -613,11 +599,8 @@ class SessionActions {
     );
   }
 
-  /// Opens [session] in an external [terminal], starting in its repository and
-  /// running the agent's resume command. Throws if the repository or
-  /// environment is gone, and refuses when we are already running that
-  /// conversation and the agent will not share it — where it will (Claude
-  /// Code), that is the point.
+  /// Opens [session] in an external [terminal], starting in its repository, and
+  /// refuses when we run that conversation and the agent will not share it.
   Future<void> openInSystemTerminal(
     ImportedSession session,
     SystemTerminal terminal,
@@ -666,10 +649,8 @@ class SessionActions {
         .launch(terminal, command: command, workingDirectory: cwd);
   }
 
-  /// Opens native [sessionId] in an external [terminal], starting in its
-  /// repository. Throws if the repo or agent installation is gone; refuses a
-  /// live pane whose agent forbids a second process, as [openInSystemTerminal]
-  /// does.
+  /// Opens native [sessionId] in an external [terminal]. Refuses a live pane
+  /// whose agent forbids a second process, as [openInSystemTerminal] does.
   Future<void> openSessionInSystemTerminal(
     String sessionId,
     SystemTerminal terminal,
@@ -727,9 +708,8 @@ class SessionActions {
     // After the id is resolved: the two recovery paths above can supply one the
     // row did not carry, and it is that id the command has to continue.
     _refuseWhatCannotResume(installation.agentId, externalId);
-    // A notice, not a throw: this surface is where the substitution happens (an
-    // archived worktree opens the repository root) and the terminal opens
-    // anyway.
+    // A notice, not a throw: this surface is where the substitution happens,
+    // and the terminal opens either way.
     final caveat = resumeDirectoryCaveatFor(
       _ref.read(agentRegistryProvider),
       installation.agentId,
@@ -769,9 +749,8 @@ class SessionActions {
         .launch(terminal, command: command, workingDirectory: cwd);
   }
 
-  /// Refuses to build anything claiming to continue [externalId] for an agent
-  /// the registry calls hopeless — [AgentResumeStyle.unsupported], or an agent
-  /// it has never heard of. A null or empty [externalId] refuses nothing.
+  /// Refuses to claim to continue [externalId] for an agent the registry calls
+  /// hopeless — [AgentResumeStyle.unsupported], or one it never heard of.
   void _refuseWhatCannotResume(String agentId, String? externalId) {
     final refusal = resumeRefusalFor(
       _ref.read(agentRegistryProvider),
@@ -781,10 +760,8 @@ class SessionActions {
     if (refusal != null) throw StateError(refusal);
   }
 
-  /// The conversation the agent's own store says this session's directory last
-  /// used, recorded on the row — the last resort for an agent like `agy`, which
-  /// mints an id and never tells us. Throws the store's own refusal in its own
-  /// words; null means only that this agent has no such notion.
+  /// The conversation the agent's own store says this directory last used —
+  /// the last resort for `agy`, which mints an id and never tells us.
   Future<String?> _continuableConversationFor(Session session) async {
     final plan = await _ref.read(antigravityResumePlannerProvider)(session);
     if (plan == null) return null;
@@ -799,8 +776,7 @@ class SessionActions {
     return conversationId;
   }
 
-  /// Recovers the CLI id for sessions created before schema v5. Matching is
-  /// intentionally conservative: the agent kind and repository must match and
+  /// Recovers the CLI id for sessions created before schema v5, conservatively:
   /// the first user message must identify exactly one CLI transcript.
   Future<String?> _recoverExternalSessionId(
     Session session,
@@ -887,9 +863,8 @@ class SessionActions {
   ) async =>
       (await _detectedByKey({(agentId, externalId)}))[(agentId, externalId)];
 
-  /// The store files behind `(agentId, conversationId)` pairs, in **one** walk
-  /// of the CLI stores however many are asked for; single and bulk deletes
-  /// share it.
+  /// The store files behind `(agentId, conversationId)` pairs in **one** walk,
+  /// however many are asked for; single and bulk deletes share it.
   Future<Map<(String, String), DetectedSession>> _detectedByKey(
     Set<(String, String)> wanted,
   ) async {

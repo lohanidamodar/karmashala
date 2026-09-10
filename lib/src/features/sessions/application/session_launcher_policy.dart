@@ -33,10 +33,8 @@ extension SessionPolicyVerbs on SessionLauncher {
     );
   }
 
-  /// The mode [sessionId] will run under on its next launch or resume, and the
-  /// agent it will be handed to — the read behind the composer control, so the
-  /// chip and the launcher cannot disagree. `inherited` means the session made
-  /// no choice and is tracking the setting live.
+  /// The mode [sessionId] will run under next, behind the composer control, so
+  /// chip and launcher cannot disagree. `inherited` means it made no choice.
   ({
     PermissionSelection selection,
     AgentDescriptor? descriptor,
@@ -61,10 +59,8 @@ extension SessionPolicyVerbs on SessionLauncher {
         .read(agentRegistryProvider)
         .byId(installation.agentId);
     final support = descriptor?.launch.permission;
-    // A row written by a newer build can name a value this one has never heard
-    // of. `resolveStored` substitutes the agent's default, which is all it can
-    // do — but doing that silently would be the claim this area exists to
-    // remove.
+    // A row written by a newer build can name a value this one never heard of;
+    // `resolveStored` substitutes the default, and saying so is the point.
     final stored = PermissionSelection.parse(resolved.stored);
     return (
       selection:
@@ -75,15 +71,8 @@ extension SessionPolicyVerbs on SessionLauncher {
     );
   }
 
-  /// Records the mode [sessionId] should run under from its next launch on, or
-  /// with a null [selection] that it should follow the per-agent default again.
-  ///
-  /// Deliberately **does not touch the running process**: every agent here
-  /// takes its permission policy from its command line at startup, and none has
-  /// a documented way to be told a new one mid-session. [restartSession] is the
-  /// one thing that can move a running session onto a new policy, and it stays
-  /// a separate call because ending an agent that may be mid-turn must never be
-  /// a side effect of recording a choice.
+  /// Records the mode [sessionId] runs under from its next launch on; a null
+  /// [selection] follows the per-agent default. Never touches a live process.
   void setPermissionMode(String sessionId, PermissionSelection? selection) {
     _ref
         .read(sessionDaoProvider)
@@ -92,20 +81,13 @@ extension SessionPolicyVerbs on SessionLauncher {
     _publish(SessionChange.reconfigured(sessionId));
   }
 
-  /// The default model for [agentId], for a session that has not chosen one —
-  /// the Settings preference read **live**, so a session that never chose moves
-  /// when the setting moves. Null is still an answer, and the shipped one: "let
-  /// the agent choose" passes no model flag, and inventing a name would claim a
-  /// session runs on a model nothing was ever passed to select.
+  /// The default model for [agentId], read **live**, so a session that never
+  /// chose moves with the setting. Null passes no flag, which is an answer.
   String? defaultModelFor(String agentId) =>
       _ref.read(settingsControllerProvider).defaultModelFor(agentId);
 
-  /// The model [sessionId] will run on at its next launch or resume, and the
-  /// agent it will be handed to — [effectivePermissionFor]'s twin, for the same
-  /// reason. `inherited` means the session made no choice. A null `modelId` is
-  /// an answer, not a gap: no model flag is passed. `defaultModelId` comes out
-  /// of this same call because the menu has to name what "follow the default"
-  /// resolves to, and a second read of the setting could disagree with it.
+  /// The model [sessionId] will run on next, plus what "follow the default"
+  /// resolves to today — one call, so a second read cannot disagree with it.
   ({
     String? modelId,
     String? defaultModelId,
@@ -133,11 +115,7 @@ extension SessionPolicyVerbs on SessionLauncher {
   }
 
   /// Why a model change would **not** reach the session running now, or null
-  /// when it would. Asked twice — the menu badges each row `now` or `next
-  /// launch`, and [setModel] says what actually happened — and answered once,
-  /// so a control's promise and its outcome cannot disagree. It says nothing
-  /// about *which* model; that answer belongs to [setModel], which knows what
-  /// was picked.
+  /// when it would. Answered once, so badge and [setModel] cannot disagree.
   ModelDeferral? liveModelSwitchBlockerFor(String sessionId) {
     final support = effectiveModelFor(sessionId)?.descriptor?.launch.model;
     if (support == null || !support.switchesLive) {
@@ -150,20 +128,8 @@ extension SessionPolicyVerbs on SessionLauncher {
         : ModelDeferral.busy;
   }
 
-  /// Records the model [sessionId] should run on — or with a null [modelId]
-  /// that it follows the per-agent default again — and, **where and only where
-  /// that is safe**, moves the session running now as well.
-  ///
-  /// The order of the gates is the design: the row is written first, always, so
-  /// a live switch cannot be undone by the next restart; the target is resolved
-  /// after the write, so "follow the default" switches to what the default
-  /// names (one that names nothing is [ModelDeferral.noModel], not a failure);
-  /// the agent must have an in-session command taking a model name, read off
-  /// its descriptor and never its name (Codex's `/model` is a picker); and the
-  /// session must be running and idle, because a line typed into a pane that is
-  /// mid-turn lands in the user's own conversation — `unknown` counts as busy.
-  ///
-  /// Returns which of the two happened so the caller can *say so*.
+  /// Records the model [sessionId] should run on and, **only where that is
+  /// safe**, moves the running session too; says which of the two happened.
   ({bool switchedNow, String? command, ModelDeferral? deferral}) setModel(
     String sessionId,
     String? modelId,
@@ -186,9 +152,8 @@ extension SessionPolicyVerbs on SessionLauncher {
       return (switchedNow: false, command: null, deferral: blocker);
     }
     final command = effective?.descriptor?.launch.model.commandFor(target);
-    // Through [sendTo] rather than a second write path: a slash command must be
-    // submitted exactly the way a message is — `\r`, because a PTY line
-    // discipline reads a bare newline as text and leaves it in the composer.
+    // Through [sendTo] rather than a second write path: a slash command needs
+    // the same `\r` a message does, or it sits in the composer.
     if (command == null || !sendTo(sessionId, command)) {
       return (
         switchedNow: false,
@@ -201,11 +166,8 @@ extension SessionPolicyVerbs on SessionLauncher {
   }
 }
 
-/// Why a model change could not reach the session running now. Four reasons
-/// rather than a bool, because the chip has to say which one: "the agent is
-/// mid-turn" is a *wait a moment*, "this CLI takes its model from the command
-/// line" is a *never*, and the wrong one sends a user looking for a setting
-/// that does not exist.
+/// Why a model change could not reach the session running now — four reasons
+/// and not a bool, because "mid-turn" is a wait and "no such flag" is a never.
 enum ModelDeferral {
   /// Nothing of ours is running this session.
   notRunning,

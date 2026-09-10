@@ -1,9 +1,5 @@
-/// The four ways a launch says no, and the words each one says it in.
-///
-/// A library of its own rather than a `part`, because none of them touches the
-/// launcher's state: each is a value carrying a sentence, and the sentence is
-/// the contract. Separate types so the MCP surface and fan-out can fail the
-/// caller's *turn* with the explanation rather than report a generic error.
+/// The four ways a launch says no, and the words each one says it in —
+/// separate types so a caller can fail its own *turn* with the explanation.
 library;
 
 import '../domain/session_depth.dart';
@@ -20,9 +16,7 @@ class SessionDepthRefused implements Exception {
 }
 
 /// Raised when a launch was asked to carry an opening message the agent's
-/// command line cannot take — its own type so the MCP surface and fan-out fail
-/// the caller rather than starting an agent that never hears the instruction
-/// and reporting success.
+/// command line cannot take, so no agent starts having been told nothing.
 class SessionLaunchRefused implements Exception {
   const SessionLaunchRefused(this.reason);
   final String reason;
@@ -31,16 +25,8 @@ class SessionLaunchRefused implements Exception {
   String toString() => reason;
 }
 
-/// Raised when a resume would start a **second** agent on a conversation whose
-/// first one is still running, **and that agent will not share it**. Codex
-/// answers `thread/resume failed: … already has an active writer (-32600)`,
-/// which would otherwise reach the user as raw JSON-RPC during TUI bootstrap;
-/// [toString] is the plain-words version.
-///
-/// **Only thrown for an agent that forbids it** — firing for every agent
-/// refused the case Claude Code supports, a second terminal listening to one
-/// conversation. Surfaces that can reopen the running view do so instead and
-/// never get here.
+/// Raised when a resume would be a **second** agent on a live conversation and
+/// the agent will not share it — Codex answers "already has an active writer".
 class SessionAlreadyRunning implements Exception {
   const SessionAlreadyRunning({
     required this.agentName,
@@ -49,8 +35,7 @@ class SessionAlreadyRunning implements Exception {
   });
 
   /// The session already running it — the one to reveal. Null when the holder
-  /// is a process we do not own, which we only ever learn from the agent's own
-  /// refusal.
+  /// is a process we do not own, learned only from the agent's own refusal.
   final String? sessionId;
 
   /// That session's title, when it is one of ours.
@@ -69,16 +54,8 @@ class SessionAlreadyRunning implements Exception {
   }
 }
 
-/// Raised when a resume names a conversation the agent's own store has never
-/// held — the other side of `sessionIdAssignment`. Passing Claude Code our id
-/// as `--session-id` records it on the row **before** the CLI has written a
-/// byte, so a launch that failed leaves a row claiming a conversation that does
-/// not exist; resuming it printed `No conversation found with session ID: …` on
-/// the user's screen while the app said nothing.
-///
-/// **Only thrown on certain knowledge**: the store must have been read to the
-/// end without the conversation in it, and a store we could not reach answers
-/// `unknown` so the resume proceeds exactly as it did before.
+/// Raised when a resume names a conversation the agent's store has never held:
+/// our `--session-id` is on the row before the CLI has written a byte.
 class SessionConversationMissing implements Exception {
   const SessionConversationMissing({
     required this.agentName,

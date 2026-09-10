@@ -1,16 +1,10 @@
 part of 'session_launcher.dart';
 
-/// **The** way a session comes into existence, and the way one is re-created on
-/// the same conversation. A `part` rather than its own library because privacy
-/// in Dart is per library and every verb here reads the launcher's own `_ref`.
+/// **The** way a session comes into existence, and how one is re-created on
+/// the same conversation. A `part` because privacy in Dart is per library.
 extension SessionStartVerbs on SessionLauncher {
   /// Ends the agent [sessionId] is running and starts a new one on the same
-  /// conversation — the only way a mode written by [setPermissionMode] reaches
-  /// a live session. Every refusal happens before anything is killed, and a
-  /// session the CLI has not yet named a conversation for is one of them: the
-  /// relaunch would come up on a *new* conversation wearing this row. Passes no
-  /// override to [launch] — an override is also written back, which would
-  /// freeze a session that is deliberately following the Settings default.
+  /// conversation. Every refusal happens before anything is killed.
   Future<SessionLaunchResult> restartSession(String sessionId) async {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) {
@@ -61,23 +55,18 @@ extension SessionStartVerbs on SessionLauncher {
         title: session.title,
         purpose: SessionPurpose.existingSession,
         resumeExternalSessionId: externalId,
-        // So [_reusableRowForResume] continues *this* row instead of minting a
-        // second one: it compares the request's surface against the
-        // candidate's.
+        // So [_reusableRowForResume] continues *this* row rather than minting
+        // a second: it compares the request's surface against the candidate's.
         surface: session.surface,
       ),
     );
   }
 
-  /// The body of [SessionLauncher.launch], which stays on the class: `launch`
-  /// is the seam two test doubles replace by subclassing, and an extension
-  /// member cannot be overridden — a subclass declaring one is ignored,
-  /// silently.
+  /// The body of [SessionLauncher.launch], which stays on the class: two test
+  /// doubles subclass it, and an extension member cannot be overridden.
   Future<SessionLaunchResult> _launch(SessionLaunchRequest request) async {
-    // Refused on the shape of the request alone, before any store read: a
-    // restart says there is no conversation to continue, and the reuse below
-    // silently prefers the resume, so falling through would hand the user the
-    // other thing.
+    // Refused on the shape of the request alone: the reuse below silently
+    // prefers the resume, so falling through hands the user the other thing.
     if (request.restartSessionId != null &&
         (request.resumeExternalSessionId != null ||
             request.forkExternalSessionId != null)) {
@@ -87,10 +76,8 @@ extension SessionStartVerbs on SessionLauncher {
       );
     }
 
-    // Before anything is written: a resume of a conversation we are still
-    // running would be a second agent on it. It asks the agent rather than
-    // refusing outright — for one that permits concurrent resume (Claude Code)
-    // a second process is exactly what was asked for.
+    // A resume of a conversation we are still running would be a second agent
+    // on it — but for one that permits that, it is what was asked for.
     refuseIfForbidden(
       agentId: request.installation.agentId,
       externalSessionId: request.resumeExternalSessionId,
@@ -116,8 +103,7 @@ extension SessionStartVerbs on SessionLauncher {
         .read(agentRegistryProvider)
         .byId(request.installation.agentId);
     // A first message an agent cannot be handed is a refusal, not a launch:
-    // `agentPaneArguments` drops the prompt when the CLI takes none, and
-    // fan-out and MCP then both report success on an agent that came up bare.
+    // fan-out and MCP would both report success on an agent that came up bare.
     final message = request.firstMessage?.trim();
     if (message != null &&
         message.isNotEmpty &&
@@ -129,12 +115,8 @@ extension SessionStartVerbs on SessionLauncher {
       );
     }
 
-    // A resume continues a conversation we may already have a row for; minting
-    // a second left the dead row and the new one both answering to the same CLI
-    // id. Resolved *before* the permission mode, because resolving the mode
-    // first wrote the setting over the row it was about to reuse and discarded
-    // the mode chosen on the composer chip. The `??` is not a precedence
-    // decision — restart and resume are mutually exclusive by the guard above.
+    // Resolved *before* the permission mode: the other order wrote the setting
+    // over the row it was about to reuse, discarding the chip's own choice.
     final reused =
         _reusableRowForResume(request) ?? _reusableRowForRestart(request);
 
@@ -198,27 +180,21 @@ extension SessionStartVerbs on SessionLauncher {
       );
       workingDirectory = resolved.directory;
       // Falling back rather than failing, but the record is kept: a missing
-      // folder is often temporary — an unmounted drive, a WSL distro that is
-      // not running — and forgetting it would make that permanent data loss.
+      // folder is often temporary, and forgetting it is permanent data loss.
       workingDirectoryNotice = resolved.notice;
       recordDirectory = resolved.notice == null;
     }
 
-    // Asked last, because it is the first thing that needs the directory: is
-    // this continuing a conversation from somewhere other than where it was
-    // recorded? Joined onto the fallback's sentence — the user reads one line.
+    // Asked last, because it needs the directory. Joined onto the fallback's
+    // sentence — one substitution, one line for the user to read.
     workingDirectoryNotice = [
       ?workingDirectoryNotice,
       ?conversationElsewhereCaveat(request, workingDirectory),
     ].join(' ');
     if (workingDirectoryNotice.isEmpty) workingDirectoryNotice = null;
 
-    // A resumed session already has a CLI id; a new one gets *ours* when the
-    // agent will accept it (our ids are RFC-4122 v4, which is what
-    // `--session-id` wants), so the transcript behind the chat view is
-    // locatable at launch. A fork is a create — the CLI mints its own id, and
-    // passing `--session-id` alongside `--fork-session` would name the one it
-    // must not reuse.
+    // A new session gets *our* id where the agent accepts one (RFC-4122 v4,
+    // what `--session-id` wants); a fork is a create and mints its own.
     final assignsOwnId =
         request.resumeExternalSessionId == null &&
         request.forkExternalSessionId == null &&
@@ -227,22 +203,19 @@ extension SessionStartVerbs on SessionLauncher {
         request.resumeExternalSessionId ?? (assignsOwnId ? id : null);
 
     // A spawned session names its parent in the prompt, the only channel it
-    // has. Stripped again by rebuilding the same string, never by
-    // pattern-matching.
+    // has; stripped by rebuilding the string, never by pattern-matching.
     final attribution = attributionFor(request.parentSessionId);
     final firstMessage = attribution == null || request.firstMessage == null
         ? request.firstMessage
         : attribution.render(request.firstMessage!);
 
-    // Reusing keeps the row's own identity — title, creation time, lineage,
-    // worktree — so "continue this session" cannot quietly rename or re-date
-    // it.
+    // Reusing keeps the row's own identity, so "continue this session" cannot
+    // quietly rename or re-date it.
     final session =
         reused?.copyWith(
           status: SessionStatus.running,
           // `copyWith` keeps the row's own mode when this is null: a resume
-          // must not overwrite a choice, nor freeze a session that never made
-          // one.
+          // must neither overwrite a choice nor freeze one never made.
           permissionMode: request.permissionOverride?.canonical,
           modelId: request.modelOverride,
           workingDirectory: recordDirectory ? workingDirectory : null,
@@ -273,9 +246,7 @@ extension SessionStartVerbs on SessionLauncher {
           surface: request.surface,
           view: request.view ?? defaultViewFor(descriptor),
           // Only what was **chosen**: stamping the resolved default here froze
-          // every session at whatever Settings said the day it started. The
-          // effective mode is [resolveSessionPermission] of this row and the
-          // live setting, which is what the chip and the next launch compute.
+          // every session at whatever Settings said the day it started.
           permissionMode: request.permissionOverride?.canonical,
           // Only what was chosen, for the reason above.
           modelId: request.modelOverride,
@@ -349,11 +320,8 @@ extension SessionStartVerbs on SessionLauncher {
     }
   }
 
-  /// What a launch actually moved, named rather than shouted. A bare `bump()`
-  /// raises `SessionSignals.broadcasts`, the floor under **every** per-row
-  /// watcher, so creating one session re-read every row and re-scanned every
-  /// dead pane synchronously inside the frame — see
-  /// `session_start_cost_test.dart` for the measurement.
+  /// What a launch actually moved, named rather than shouted: a bare `bump()`
+  /// wakes every per-row watcher — see `session_start_cost_test.dart`.
   SessionChange _whatALaunchMoved(
     SessionLaunchRequest request,
     String id, {
@@ -378,10 +346,7 @@ extension SessionStartVerbs on SessionLauncher {
   );
 
   /// The row [request] should continue rather than duplicate, or `null` when
-  /// this launch genuinely creates a session. Narrow on purpose: a create or a
-  /// fork, a new worktree, a stated parent, a live candidate, a different
-  /// repository/installation/surface, or an archived row each mean two rows is
-  /// the honest answer.
+  /// this launch genuinely creates a session. Narrow on purpose.
   Session? _reusableRowForResume(SessionLaunchRequest request) {
     final externalId = request.resumeExternalSessionId;
     if (externalId == null || externalId.isEmpty) return null;
@@ -401,9 +366,7 @@ extension SessionStartVerbs on SessionLauncher {
   }
 
   /// The row a [SessionLaunchRequest.restartSessionId] launch continues *as* —
-  /// the same guards as [_reusableRowForResume], but the row is named directly,
-  /// because a restart's premise is that no conversation exists to look it up
-  /// by. `assignsOwnId` stays true, so the row's own id is stamped again.
+  /// named directly, because a restart has no conversation to look it up by.
   Session? _reusableRowForRestart(SessionLaunchRequest request) {
     final rowId = request.restartSessionId;
     if (rowId == null || rowId.isEmpty) return null;
