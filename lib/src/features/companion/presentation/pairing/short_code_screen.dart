@@ -79,8 +79,7 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
                 "Type the code shown under the desktop's QR "
                 '(like K7QM-3X2W-…), or paste its full pairing payload. '
                 'Codes expire after five minutes.',
-                // Body, not caption: this is a paragraph someone reads before
-                // typing, and 12px prose is the ramp's metadata step.
+                // Body, not caption: a paragraph someone reads before typing.
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -92,9 +91,8 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
                 enabled: !_busy,
                 textInputAction: TextInputAction.done,
                 onSubmitted: (_) => _pair(),
-                // The one string on this screen that is read character by
-                // character, so it takes the ramp's largest body step rather
-                // than its smallest.
+                // Read character by character, so it takes the ramp's largest
+                // body step.
                 style: theme.textTheme.bodyLarge?.copyWith(
                   fontFamily: kMonoFamily,
                 ),

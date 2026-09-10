@@ -4,40 +4,21 @@ import 'package:karmashala_git/git.dart';
 
 /// Data access for review threads and their comments (schema v30).
 ///
-/// ## What is and is not mutable here
+/// The anchor is immutable and comments are append-only: there is no method to
+/// change either, because a rewritten anchor is fuzzy re-anchoring wearing a
+/// DAO's name. Only [setStatus] mutates — triage is a judgement, not a record.
 ///
-/// The **anchor is immutable** and there is no method to change it. That is the
-/// whole discipline of this feature expressed as a missing API: an anchor is a
-/// statement about the content somebody was looking at, and a method that
-/// rewrote it would be the fuzzy re-anchoring `review_thread.dart` argues
-/// against, wearing a DAO's name. When the content moves the thread detaches;
-/// the way to comment on the new content is a new thread.
-///
-/// Comments are **append-only** for the reason `DecisionRecordDao` gives about
-/// decisions: a review conversation that can be edited afterwards is not
-/// evidence of what was asked. What *is* mutable is [setStatus], and only that
-/// — triage is a judgement people revise, and a thread that could never move
-/// from `open` to `dismissed` and back would push every reader to delete rather
-/// than to decide.
-///
-/// ## Why the reads are counted
-///
-/// [forRepository] is what the diff view calls on every render, and it is
-/// deliberately **two statements regardless of how many threads there are** —
-/// one for the threads, one for every comment belonging to them, joined in
-/// Dart. The obvious shape (read the threads, then a comment query per thread)
-/// is a query per review comment on every frame of a panel that redraws on a
-/// git poll. See `review_thread_cost_test`.
+/// [forRepository] is two statements whatever the thread count; the obvious
+/// shape is a query per comment on every frame of a panel that redraws on a git
+/// poll. See `review_thread_cost_test`.
 class ReviewThreadDao {
   ReviewThreadDao(this._db);
 
   final AppDatabase _db;
 
-  /// Opens a thread with its first comment, in one transaction.
-  ///
-  /// One transaction because a thread with no comments is not a review comment
-  /// — it is an anchor pointing at nothing, and it would render as a marker on
-  /// a line with no text behind it. There is no way to create the empty shell.
+  /// Opens a thread with its first comment, in one transaction — a thread with
+  /// no comments would render as a marker with no text behind it, and there is
+  /// no way to create that empty shell.
   ReviewThread open({
     required String id,
     required String repositoryId,
@@ -88,13 +69,9 @@ class ReviewThreadDao {
     });
   }
 
-  /// Appends a reply and returns the thread as it now stands, or null when the
-  /// thread is gone.
-  ///
-  /// The reply and the `updated_at` bump are one transaction: a thread whose
-  /// newest comment is newer than its own timestamp would sort behind threads
-  /// nothing has happened to, which is the one thing the ordering exists to
-  /// prevent.
+  /// Appends a reply and returns the thread as it now stands, or null when it
+  /// is gone. The reply and the `updated_at` bump are one transaction, or the
+  /// thread sorts behind threads nothing has happened to.
   ReviewThread? reply({
     required String threadId,
     required String author,
@@ -119,11 +96,8 @@ class ReviewThreadDao {
     });
   }
 
-  /// Moves a thread's status. Returns the thread, or null when it is gone.
-  ///
-  /// The only mutation in this file, and it changes nothing anybody wrote — the
-  /// comments and the anchor are exactly as they were. Triage is revisable
-  /// precisely because it is a judgement rather than a record.
+  /// Moves a thread's status. Returns the thread, or null when it is gone. The
+  /// only mutation here, and it changes nothing anybody wrote.
   ReviewThread? setStatus(
     String threadId,
     ReviewThreadStatus status, {
@@ -145,9 +119,8 @@ class ReviewThreadDao {
     return _fromRow(rows.first, _commentsForThreads([id])[id] ?? const []);
   }
 
-  /// Every thread on [repositoryId], newest activity first.
-  ///
-  /// Two statements, always. See the class doc.
+  /// Every thread on [repositoryId], newest activity first, in two statements
+  /// whatever the count.
   List<ReviewThread> forRepository(
     String repositoryId, {
     String? path,

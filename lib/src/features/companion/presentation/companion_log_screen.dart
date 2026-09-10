@@ -9,18 +9,11 @@ import 'package:karmashala_core/logging.dart';
 import '../../../core/logging/diagnostics_providers.dart';
 import 'companion_chrome.dart';
 
-/// The companion's own log, on the phone that produced it.
+/// The companion's own log, on the phone that produced it. The log file lives
+/// in app-support, which on Android nobody can reach, so Copy is the real
+/// feature: a bug report needs the text in a message.
 ///
-/// The desktop has had `LogsPanel` all along; the phone had nothing. Its log
-/// file exists but lives in the app-support directory, which on Android is not
-/// somewhere a person can reach — so the evidence for "it just says connecting"
-/// was on the device and unreachable, which is the same as not existing. Copy
-/// is therefore the real feature here: what a bug report needs is the text, in
-/// a message, from the phone that saw the problem.
-///
-/// Deliberately not a live tail. A phone that cannot connect is not producing
-/// lines quickly, and a screen that repaints itself while being read is worse
-/// than a Refresh button — so this snapshots on open and on pull-to-refresh.
+/// Not a live tail — this snapshots on open and on pull-to-refresh.
 class CompanionLogScreen extends ConsumerStatefulWidget {
   const CompanionLogScreen({super.key});
 
@@ -34,12 +27,11 @@ class CompanionLogScreen extends ConsumerStatefulWidget {
 
 class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
   /// Held rather than read in `build`, so scrolling and copying act on the
-  /// same lines the reader is looking at rather than on a ring that has moved.
+  /// lines the reader is looking at and not on a ring that has moved.
   late List<LogEntry> _entries = _read();
 
-  /// Warnings and errors only. The default, because a phone's whole log is
-  /// mostly link chatter and the lines that explain a failure are the ones
-  /// nobody should have to scroll for.
+  /// Warnings and errors only — the default, because a phone's whole log is
+  /// mostly link chatter.
   bool _problemsOnly = true;
 
   List<LogEntry> _read() => ref.read(diagnosticsProvider).buffer.snapshot();
@@ -56,9 +48,8 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
   Future<void> _copy() async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final lines = _visible;
-    // The identity line first, and always — a pasted log whose version is
-    // unknown cannot answer the first question anyone asks of it, and the one
-    // in the buffer may already have been evicted by a long session.
+    // The identity line always: the one in the buffer may already have been
+    // evicted, and a pasted log with no version answers nothing.
     final text = [
       buildIdentity(),
       for (final entry in lines) entry.format(withDate: true),
@@ -120,17 +111,15 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
                       : 'Nothing logged yet.',
                   textAlign: TextAlign.center,
                   // Prose, not a caption: this is the sentence that stops the
-                  // screen looking broken, and it was set at the size the log
-                  // lines beside it use for metadata.
+                  // screen looking broken.
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
               )
             else
-              // Selectable as one block rather than per row: the useful
-              // gesture on a phone is "take all of this", and the Copy button
-              // above is the shortcut for exactly that.
+              // Selectable as one block: the useful gesture on a phone is "take
+              // all of this".
               SelectableText(
                 [for (final entry in visible) entry.format()].join('\n'),
                 style: MonoStyles.label,

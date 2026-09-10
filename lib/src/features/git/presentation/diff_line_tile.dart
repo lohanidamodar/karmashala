@@ -3,22 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../app/theme/design_tokens.dart';
 import 'package:karmashala_git/git.dart';
 
-/// One row of a unified diff.
+/// One row of a unified diff — the only place a diff line is drawn, so the
+/// Changes panel and an agent's file edit cannot look different.
 ///
-/// The **only** place a diff line is drawn. It was inlined in the Changes
-/// panel; an agent's file edit needs the same picture, and two diffs that look
-/// different in one app is a defect on its own — so the drawing moved here and
-/// the panel kept the annotation button it wraps around it, via [trailing].
-///
-/// ## Colour is never the only signal
-///
-/// Three channels carry the same fact, so removing any one of them still leaves
-/// the row readable (CLAUDE.md §5):
-///
-/// * the `+` / `-` / ` ` the diff format puts at the head of the text, kept
-///   verbatim in a monospaced column where it lines up;
-/// * a semantics label, so a screen reader announces the kind before the code;
-/// * the tint and the gutter bar, for everyone reading at a glance.
+/// Colour is never the only signal (CLAUDE.md §5): the verbatim `+`/`-`/` `,
+/// a semantics label, and the tint all carry the same fact.
 class DiffLineTile extends StatelessWidget {
   const DiffLineTile({
     required this.line,
@@ -74,16 +63,15 @@ class DiffLineTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // The label rides on the gutter rather than on the text: merging it
-          // into the code would have a screen reader read "added line" glued to
-          // the source, and an empty extra node would be one more stop to swipe
-          // past on every unchanged line.
+          // On the gutter rather than the text: merged into the code a screen
+          // reader reads "added line" glued to the source, and an extra node
+          // is one more swipe stop on every unchanged line.
           label == null ? gutter : Semantics(label: label, child: gutter),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              // An empty row still needs a height, and ' ' is also what the
-              // diff format writes for an empty context line.
+              // An empty row still needs a height, and ' ' is what the diff
+              // format writes for an empty context line.
               line.text.isEmpty ? ' ' : line.text,
               softWrap: wrap,
               overflow: wrap ? TextOverflow.clip : TextOverflow.visible,

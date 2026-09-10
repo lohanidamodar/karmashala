@@ -5,13 +5,8 @@ import '../../../app/theme/app_icons.dart';
 import '../application/remote_links.dart';
 
 /// A piece of text that opens a page on the forge — a commit sha, a pull
-/// request number, a branch name.
-///
-/// One widget for all of them because the decision is the same everywhere: the
-/// URL comes from `RemoteRepo`, which derived it from the repository's own
-/// `origin`, and a click hands it to the browser rather than to anything in the
-/// app. When there is no URL the text is still drawn, plainly — a commit
-/// without a remote is still a commit.
+/// request number, a branch name. With no URL the text is still drawn, plainly:
+/// a commit without a remote is still a commit.
 class RemoteLink extends ConsumerWidget {
   const RemoteLink({
     required this.text,
@@ -29,8 +24,7 @@ class RemoteLink extends ConsumerWidget {
 
   final TextStyle? style;
 
-  /// What the link promises before it is clicked. Defaults to the URL itself,
-  /// which is the most honest label a link can carry.
+  /// What the link promises before it is clicked; defaults to the URL itself.
   final String? tooltip;
 
   /// Whether to draw the "opens outside the app" mark after the text.
@@ -60,8 +54,8 @@ class RemoteLink extends ConsumerWidget {
             ),
             if (icon) ...[
               const SizedBox(width: 2),
-              // Subordinate to the link it follows: at Chrome.iconSmall this
-              // mark competes with the text instead of qualifying it.
+              // Subordinate to the link: at Chrome.iconSmall this mark competes
+              // with the text instead of qualifying it.
               Icon(
                 AppIcons.arrowSquareOut,
                 size: 11,

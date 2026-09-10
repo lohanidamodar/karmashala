@@ -1,9 +1,6 @@
 /// The companion's receive path for an opaque push: unseal with the paired
-/// device key, map through the attention-notification wording, render.
-///
-/// Deliberately ignorant of how the payload arrived — an FCM `onMessage`
-/// handler, a background isolate, or a test hands the bytes in. Everything is
-/// best-effort: a payload that will not open shows nothing and never crashes.
+/// device key, map through the attention-notification wording, render. Ignorant
+/// of how the bytes arrived; one that will not open shows nothing.
 library;
 
 import 'dart:convert';
@@ -26,8 +23,7 @@ class CompanionPushReceiver {
   /// Where the pairing record lives — `SecureCompanionStore` on a phone.
   final stored.CompanionStore store;
 
-  /// Renders one notification — the `CompanionNotifier` wrapper in
-  /// production, a recorder in tests.
+  /// Renders one notification; a recorder in tests.
   final Future<void> Function(AttentionNotification notification) show;
 
   final DateTime Function() _now;
@@ -35,8 +31,8 @@ class CompanionPushReceiver {
   /// Lifecycle only — never called with decrypted content.
   final void Function(String message)? onLog;
 
-  /// The shape an FCM message handler holds: `message.data`. Looks for the
-  /// relay's `payload` key and unseals it.
+  /// The shape an FCM message handler holds: `message.data`, whose `payload`
+  /// key is unsealed.
   Future<void> handleData(Map<Object?, Object?> data) async {
     final payload = data['payload'];
     if (payload is! String || payload.isEmpty) {

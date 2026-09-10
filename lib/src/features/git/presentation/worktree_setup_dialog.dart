@@ -7,16 +7,10 @@ import 'package:karmashala_git/git.dart';
 /// Writes one checkout's worktree setup: the command, and the gitignored paths
 /// to copy in.
 ///
-/// **What will run is shown before it is saved.** The field takes a line and
-/// [splitCommandLine] turns it into argv once, here, with the result drawn
-/// underneath as separate tokens — because argv is what is stored and what the
-/// pane is handed, and a user who cannot see the split cannot tell that
-/// `--message=two words` became two arguments.
-///
-/// The paths are validated by [worktreeCopyPathRefusal], the *same* function
-/// the setup runs, so a path this dialog accepted cannot be refused later for
-/// its spelling. There is no "share instead of copy" control, and there is
-/// nothing in [WorktreeSetup] for one to write to.
+/// The split argv is drawn under the field, because argv is what is stored and
+/// a user who cannot see the split cannot tell that `--message=two words`
+/// became two arguments. Paths are validated by the same
+/// [worktreeCopyPathRefusal] the setup runs.
 class WorktreeSetupDialog extends ConsumerStatefulWidget {
   const WorktreeSetupDialog({
     required this.checkoutName,
@@ -126,8 +120,8 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
                 onSubmitted: (_) => _save(),
               ),
               const SizedBox(height: Insets.xs),
-              // What is stored, drawn as what it is. Nothing re-parses this
-              // line later: the shell the pane opens is handed these tokens.
+              // Nothing re-parses this line later: the pane is handed these
+              // tokens.
               Text(
                 argv.isEmpty
                     ? 'Nothing will be run.'

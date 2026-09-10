@@ -11,27 +11,13 @@ import 'companion_chrome.dart';
 import 'companion_states.dart';
 import 'pairing/pairing_screen.dart';
 
-/// The saved desktops, on the settings screen: which one this phone is
-/// talking to, when it last reached each, and the two verbs — switch, forget.
+/// The saved desktops, on the settings screen: which one this phone is talking
+/// to, when it last reached each, and the two verbs — switch, forget.
 ///
-/// It lives in Settings because that is where "which machine am I paired
-/// with" already lived; the Sessions tab gets the compact switcher instead,
-/// so choosing a desktop never costs a trip through a tab.
-///
-/// **The section's frame is drawn in every state**, and only the list slot
-/// answers. It used to collapse to nothing until the list arrived, which
-/// conflated two different situations — "this phone has no desktops" and
-/// "this phone has not looked yet" — and took "Add a desktop" away with it,
-/// so a read that never answered left the settings screen with no way to pair
-/// and nothing saying why.
-///
-/// No skeleton, and no spinner. The gateway contract seeds
-/// `connectionsStates` with the value it already holds and emits it on
-/// listen, so the unknown window is one microtask on both implementations: a
-/// skeleton would render for a frame at most and inform nobody, and a delayed
-/// indicator would be machinery for a latency the contract does not allow.
-/// What the state costs instead is a sentence — the empty one is only said
-/// once the phone knows it is true.
+/// The section's frame is drawn in every state and only the list slot answers,
+/// so a read that never returns still leaves a way to pair. No skeleton: the
+/// gateway seeds `connectionsStates` on listen, so the unknown window is one
+/// microtask.
 class ConnectionsSection extends ConsumerWidget {
   const ConnectionsSection({super.key});
 
@@ -47,16 +33,15 @@ class ConnectionsSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CompanionSectionHeader(
-          // The plural until the count is known: a heading is not the place
-          // to guess how many desktops this phone has.
+          // The plural until the count is known.
           (saved?.length ?? 2) > 1 ? 'DESKTOPS' : 'PAIRED DESKTOP',
         ),
         companionAsync(
           connections,
           // Silence, not a placeholder. See the class comment.
           loading: () => const SizedBox.shrink(),
-          // The stream carries no errors today, but a section that answers
-          // "nothing" to one would be the same lie the loading state was.
+          // The stream carries no errors today, but answering "nothing" to one
+          // would be the same lie the loading state was.
           error: (error) => Text(
             companionErrorText(error),
             style: density
@@ -130,8 +115,8 @@ class _Saved extends StatelessWidget {
   }
 }
 
-/// One saved desktop: name, its state, and — when it is not the active one —
-/// a whole-row tap that switches to it.
+/// One saved desktop: name, state, and a whole-row tap that switches to it when
+/// it is not already active.
 class _ConnectionRow extends ConsumerWidget {
   const _ConnectionRow({
     required this.connection,
@@ -187,8 +172,7 @@ class _ConnectionRow extends ConsumerWidget {
     final now = ref.read(clockProvider).nowUtc();
     final at = connection.lastConnectedAt;
 
-    // The badge already says "Active", so the line under it says something
-    // else: how long ago this desktop was last reached.
+    // The badge already says "Active", so this line says something else.
     final subtitle = switch ((busy, connection.active, at)) {
       (true, _, _) => 'Connecting…',
       (_, true, _) => 'In use now',
@@ -210,9 +194,8 @@ class _ConnectionRow extends ConsumerWidget {
           constraints: density.isTouch
               ? const BoxConstraints(minHeight: Touch.target)
               : null,
-          // Less on the right than the left because the trailing icon button
-          // brings its own 48dp box; a full gutter on both sides would push
-          // the glyph a finger's width in from the edge it belongs on.
+          // Less on the right: the trailing icon button brings its own 48dp
+          // box, and a full gutter would push the glyph in from the edge.
           padding: EdgeInsets.fromLTRB(
             density.padX,
             density.padY,

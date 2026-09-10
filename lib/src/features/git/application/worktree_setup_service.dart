@@ -4,13 +4,9 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_git/git.dart';
 
-/// The checkout a worktree is being made of, and what it wants done.
-///
-/// A callback rather than a DAO, for the reason `CheckoutMoved` gives above it:
-/// `git/` has no business resolving a path to a `repositories` row, and a
-/// service composed for a test that only asserts git arguments must not need a
-/// database. Null means the path is not a recorded checkout — which is not an
-/// error, only nothing to do.
+/// The checkout a worktree is being made of, and what it wants done. A callback
+/// and not a DAO, so `git/` never resolves a path to a `repositories` row. Null
+/// means the path is not a recorded checkout — nothing to do, not an error.
 typedef WorktreeSetupLookup =
     ({String repositoryId, WorktreeSetup setup})? Function(
       EnvironmentPath repo,
@@ -30,17 +26,14 @@ class WorktreeSetupCommand {
   final EnvironmentPath worktree;
   final ExecutionEnvironment environment;
 
-  /// What to label the pane. The worktree's folder name, so a fan-out of four
+  /// What to label the pane — the worktree's folder name, so a fan-out of four
   /// setups is four distinguishable tabs.
   final String title;
 }
 
-/// Opens a **visible pane** on [command] and returns its pane id.
-///
-/// Null means there was nowhere visible to run it, and the command is then not
-/// run at all: a setup script whose output nobody can see is the failure this
-/// feature exists to remove, so it is refused rather than done quietly. The
-/// callback may throw; the reason is carried into the verdict.
+/// Opens a **visible pane** on [command] and returns its pane id. Null means
+/// there was nowhere visible, and the command is then not run at all: a setup
+/// script whose output nobody can see is what this feature exists to remove.
 typedef WorktreeSetupPaneOpener =
     String? Function(WorktreeSetupCommand command);
 
@@ -48,19 +41,11 @@ typedef WorktreeSetupPaneOpener =
 typedef WorktreeSetupRecorder = void Function(WorktreeSetupReport report);
 
 /// Does to a new worktree what its repository asked for: copies the gitignored
-/// paths git will not put there, then opens a pane on the setup command.
+/// paths git will not put there, then opens a pane on the setup command, both
+/// in the repository's own environment.
 ///
-/// **Everything runs in the repository's own environment**, through the
-/// `CommandRunner` the factory hands out for it — see `worktreeCopierFor` and
-/// `GitService`. That was the question the backlog said this feature lives or
-/// dies on, and the answer is that the existing runner already covers all four
-/// environment kinds for both halves.
-///
-/// **The worktree is created whether or not any of this works.** Nothing here
-/// throws: every failure becomes a sentence on a recorded report. Rolling a
-/// checkout back because a setup script exited non-zero would destroy the
-/// expensive thing to punish the cheap one, and it would do it at the moment a
-/// session was being launched into it.
+/// The worktree is created whether or not any of this works. Nothing here
+/// throws: every failure becomes a sentence on a recorded report.
 class WorktreeSetupService {
   WorktreeSetupService({
     required this.runnerFactory,
@@ -74,32 +59,22 @@ class WorktreeSetupService {
   final WorktreeSetupLookup lookup;
   final WorktreeSetupRecorder record;
 
-  /// Null in a container with no terminal — a test, or the companion's
-  /// headless surface. A configured command is then refused in words rather
-  /// than run where nobody can see it.
+  /// Null in a container with no terminal; a configured command is then refused
+  /// in words rather than run where nobody can see it.
   final WorktreeSetupPaneOpener? openPane;
 
   final Clock clock;
 
   /// The reports whose command is still expected to be running, by pane id.
   ///
-  /// **In memory, and complete for every case that can happen.** The only
-  /// consumer is [noteExit], and the only exits it can be handed are of panes
-  /// this process opened: closing the app kills every pane, and a *restored*
-  /// setup pane never re-runs its command — `shouldRestartOnActivate` excludes
-  /// agent panes for exactly that reason. So a column on
-  /// `worktree_setup_runs` would be a durable index for a lookup that cannot
-  /// outlive the process. An entry is dropped the moment its exit is recorded;
-  /// what is left over is one small record per worktree whose setup pane the
-  /// user closed by hand, which the terminal deliberately does not announce.
+  /// In memory and not a column: the only exits [noteExit] can be handed are of
+  /// panes this process opened, since closing the app kills every pane and a
+  /// restored setup pane never re-runs its command.
   final Map<String, WorktreeSetupReport> _pending = {};
 
-  /// Sets [worktree] up for [repo]. Returns the report, or **null when there
-  /// was nothing to do** — no recorded checkout, or a checkout with no setting.
-  ///
-  /// A checkout nobody configured costs nothing at all here: no process, no
-  /// stat, and no row. That matters because this is on the path of every
-  /// worktree the app makes, including a fan-out of four at once.
+  /// Sets [worktree] up for [repo]. Returns the report, or null when there was
+  /// nothing to do — a checkout nobody configured costs no process, stat or
+  /// row, and this is on the path of every worktree the app makes.
   Future<WorktreeSetupReport?> run({
     required ExecutionEnvironment environment,
     required EnvironmentPath repo,
@@ -140,8 +115,8 @@ class WorktreeSetupService {
   }
 
   /// The pane a setup command was running in has stopped. Returns the corrected
-  /// report, or **null when no setup was waiting on that pane** — which is
-  /// nearly every pane exit in the app, so this has to be cheap and silent.
+  /// report, or null when no setup was waiting on that pane — which is nearly
+  /// every pane exit in the app, so this stays cheap and silent.
   WorktreeSetupReport? noteExit(String paneId, int? exitCode) {
     final pending = _pending.remove(paneId);
     if (pending == null) return null;
@@ -152,12 +127,9 @@ class WorktreeSetupService {
     return corrected;
   }
 
-  /// The copy half: one `git check-ignore` for the whole list, then one copy
-  /// per surviving path.
-  ///
-  /// Ordered before the command on purpose. The command is usually the thing
-  /// that *uses* what was copied — `flutter pub get` against a copied
-  /// `.dart_tool` is the whole point — so a pane opened first would race it.
+  /// The copy half: one `git check-ignore` for the whole list, then one copy per
+  /// surviving path. Before the command, which usually *uses* what was copied,
+  /// so a pane opened first would race it.
   Future<List<WorktreeCopyVerdict>> _copy({
     required WorktreeSetup setup,
     required GitService git,
@@ -186,9 +158,8 @@ class WorktreeSetupService {
 
     final ignored = await git.ignoredPaths(repo, candidates);
     for (final path in candidates) {
-      // Null is git refusing the question, and it is never read as "tracked"
-      // *or* as "ignored": copying on a reading we could not take is how a
-      // branch's own files get overwritten silently.
+      // Null is git refusing the question, read as neither "tracked" nor
+      // "ignored": copying on that is how a branch's files get overwritten.
       if (ignored == null) {
         verdicts.add(
           WorktreeCopyVerdict(
@@ -215,9 +186,8 @@ class WorktreeSetupService {
       verdicts.add(
         await copier.copy(
           path: path,
-          // Joined with the environment's own separator, never the host's:
-          // `.karmashala-worktrees/app-s1/.dart_tool` for a distribution and
-          // a backslash path for Windows. The setting is always `/`-separated.
+          // Joined with the environment's own separator, never the host's; the
+          // setting itself is always `/`-separated.
           source: context.joinAll([repo.path, ...path.split('/')]),
           destination: context.joinAll([worktree.path, ...path.split('/')]),
         ),
@@ -228,13 +198,9 @@ class WorktreeSetupService {
 
   /// The command half: a pane, or a refusal saying why there is not one.
   ///
-  /// **It is started and not awaited.** A setup script has no bound — the one
-  /// this exists for downloads a package cache — and the caller is inside
-  /// `createForSession`, which a session launch is waiting on. Holding that on
-  /// an arbitrary script would let a hung `pub get` hang the window. What the
-  /// user gets instead is the pane itself, from the moment it opens; the exit
-  /// code arrives later through `PaneExitSignal`, or is honestly never
-  /// recorded.
+  /// Started and not awaited. A setup script has no bound and the caller is
+  /// inside `createForSession`, which a session launch waits on, so a hung
+  /// `pub get` would hang the window; the exit code arrives via `PaneExitSignal`.
   WorktreeCommandVerdict _startCommand({
     required WorktreeSetup setup,
     required ExecutionEnvironment environment,

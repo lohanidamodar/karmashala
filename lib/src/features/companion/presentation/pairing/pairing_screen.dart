@@ -7,21 +7,15 @@ import 'scan_qr_screen.dart';
 import 'short_code_screen.dart';
 
 /// What an unpaired companion shows: why there is nothing here, and the two
-/// ways in (scan the desktop's QR code, or type its short code).
-///
-/// Drawn as a [CompanionNotice] rather than as its own arrangement of an icon,
-/// a heading and two buttons. It is the same shape as every other "there is
-/// nothing here yet, and here is what to do about it" screen in the app, and
-/// it is the *first* one anybody sees — so it is the last place that should
-/// have its own hand-picked glyph size and its own body step.
+/// ways in. A [CompanionNotice], the same shape as every other "nothing here
+/// yet" screen, rather than its own hand-picked glyph size and body step.
 class PairingScreen extends StatelessWidget {
   const PairingScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Shown as the root of an unpaired phone, and pushed from Settings' "Add a
-    // desktop". The pushed one needs the way back a root does not have: the
-    // system gesture worked, but nothing on screen said so.
+    // Also pushed from Settings' "Add a desktop", where it needs the way back a
+    // root does not have.
     final pushed = Navigator.of(context).canPop();
     return Scaffold(
       appBar: pushed

@@ -13,10 +13,8 @@ import 'companion_states.dart';
 import 'session_view_screen.dart';
 
 /// The attention inbox on the phone: sessions the host says are waiting,
-/// newest first, each one tap from its transcript.
-///
-/// This is the tab that answers "what needs me" **across** projects, which is
-/// why the Projects tab does not have to: one screen per question.
+/// newest first. The tab that answers "what needs me" across projects, which
+/// is why the Projects tab does not have to.
 class InboxScreen extends ConsumerWidget {
   const InboxScreen({super.key});
 
@@ -110,8 +108,8 @@ class _InboxRow extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              // Half a line gap: an optical nudge so the glyph sits on the
-              // title's first line rather than on the top of its box.
+              // An optical nudge, so the glyph sits on the title's first line
+              // rather than on the top of its box.
               padding: EdgeInsets.only(top: density.lineGap / 2),
               child: Icon(icon, size: density.icon, color: colour),
             ),

@@ -12,10 +12,8 @@ class WorktreeSetupDao {
 
   // --- the setting ----------------------------------------------------------
 
-  /// The setup for [repositoryId] — **empty when there is no row**, which is
-  /// the same answer as a row that asks for nothing. A caller that wants to
-  /// know whether the user has ever configured this checkout asks
-  /// [WorktreeSetup.isEmpty], not whether this returned null.
+  /// The setup for [repositoryId] — empty when there is no row, which is the
+  /// same answer as a row that asks for nothing.
   WorktreeSetup get(String repositoryId) {
     final rows = _db.query(
       'SELECT command, copy_paths FROM worktree_setup WHERE repository_id = ?;',
@@ -28,10 +26,8 @@ class WorktreeSetupDao {
     );
   }
 
-  /// Every checkout with something configured, by repository id.
-  ///
-  /// One query rather than one per checkout: the settings surface lists a whole
-  /// workspace, and a row is three short strings.
+  /// Every checkout with something configured, by repository id — one query,
+  /// because the settings surface lists a whole workspace.
   Map<String, WorktreeSetup> getAll() {
     final rows = _db.query(
       'SELECT repository_id, command, copy_paths FROM worktree_setup;',
@@ -45,12 +41,8 @@ class WorktreeSetupDao {
     };
   }
 
-  /// Stores [setup] for [repositoryId], or **deletes the row** when it asks for
-  /// nothing.
-  ///
-  /// Emptying the fields and clearing the setting are the same intent, so they
-  /// are the same write. Keeping an all-empty row would leave the settings list
-  /// showing a configured checkout that does nothing.
+  /// Stores [setup] for [repositoryId], or deletes the row when it asks for
+  /// nothing: emptying the fields and clearing the setting are one intent.
   void save(String repositoryId, WorktreeSetup setup, DateTime now) {
     if (setup.isEmpty) {
       clear(repositoryId);
@@ -78,12 +70,8 @@ class WorktreeSetupDao {
 
   // --- what happened --------------------------------------------------------
 
-  /// Records [report], replacing any earlier one for the same worktree.
-  ///
-  /// One row per worktree rather than a history: a worktree is set up once, and
-  /// what a surface needs is the verdict for the directory in front of it. A
-  /// re-run of the same setup is a correction of the same fact, not a second
-  /// fact.
+  /// Records [report], replacing any earlier one for the same worktree — one
+  /// row per worktree, because a re-run corrects the same fact.
   void record(WorktreeSetupReport report) => _db.execute(
     'INSERT INTO worktree_setup_runs '
     '(repository_id, worktree_path, environment_id, ran_at, verdict, detail) '
@@ -101,12 +89,8 @@ class WorktreeSetupDao {
     ],
   );
 
-  /// The last setup of [worktree], or null when none was ever recorded.
-  ///
-  /// Null means **not recorded**, and a surface must say that rather than
-  /// "fine": a worktree made before this feature existed, one whose repository
-  /// has no setting, and one whose setup was never attempted are all this
-  /// answer.
+  /// The last setup of [worktree], or null when none was recorded — which a
+  /// surface must say rather than "fine".
   WorktreeSetupReport? lastRun(String repositoryId, EnvironmentPath worktree) {
     final rows = _db.query(
       'SELECT * FROM worktree_setup_runs '

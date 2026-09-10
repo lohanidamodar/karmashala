@@ -1,8 +1,5 @@
-/// Loading, empty and error — the three states a screen is unfinished without.
-///
-/// Companion scaffolding rather than a second widget vocabulary: the shapes
-/// here frame the shared Explorer cards, and every colour, radius and spacing
-/// comes from the app's own tokens.
+/// Loading, empty and error — the three states a screen is unfinished without,
+/// framing the shared Explorer cards with the app's own tokens.
 library;
 
 import 'package:flutter/material.dart';
@@ -15,14 +12,9 @@ import 'package:karmashala_remote/companion.dart';
 
 /// Draws [value] through its four states.
 ///
-/// **Not `AsyncValue.when`**, and that is the point. Riverpod 3 retries a
-/// provider that failed, and while it retries the state is `AsyncLoading`
-/// *carrying* the error — so `when` takes its loading branch and the screen
-/// sits on a skeleton for ever instead of ever saying what went wrong. This
-/// asks the three questions in the order a user cares about: is there
-/// anything to show, did the first attempt fail, or has it simply not
-/// answered yet. A retry that fails while data is already on screen leaves the
-/// data up, which is also the right answer.
+/// Not `AsyncValue.when`: a provider Riverpod is retrying is `AsyncLoading`
+/// *carrying* its error, so `when` takes the loading branch and the screen sits
+/// on a skeleton for ever. Asked here in the order a user cares about.
 Widget companionAsync<T>(
   AsyncValue<T> value, {
   required Widget Function(T data) data,
@@ -35,21 +27,14 @@ Widget companionAsync<T>(
   return loading();
 }
 
-/// The sentence to show for a thrown [error].
-///
-/// A [GatewayException] already carries a user-fit sentence written by the
-/// layer that knew what went wrong. Anything else is a bug, and printing a
-/// Dart type at someone holding a phone tells them nothing they can act on.
+/// The sentence to show for a thrown [error]. A [GatewayException] carries one
+/// already; anything else is a bug, and a Dart type helps nobody.
 String companionErrorText(Object error) => error is GatewayException
     ? error.message
     : 'Something went wrong talking to your desktop.';
 
-/// How old the snapshot a companion screen is drawing is, in the words the
-/// rest of the app uses for an age.
-///
-/// §19, in one function: a reading whose time was never recorded reads
-/// **"age unknown"** and never "just now". The two are not the same claim, and
-/// the second one is the confident false statement the rule exists to delete.
+/// How old the snapshot a companion screen is drawing is. A reading whose time
+/// was never recorded says "age unknown" and never "just now" (§19).
 String companionSnapshotAge(DateTime? receivedAt, DateTime now) =>
     receivedAt == null ? 'age unknown' : describeAge(now.difference(receivedAt));
 
@@ -75,18 +60,15 @@ class _Bone extends StatelessWidget {
   );
 }
 
-/// Rows the shape of the list that is loading.
-///
-/// Deliberately still. A repeating shimmer never settles, which hangs every
-/// `pumpAndSettle` in the suite, and the silhouette alone already says "cards
-/// are coming" — which a spinner never does.
+/// Rows the shape of the list that is loading. Deliberately still: a repeating
+/// shimmer never settles, which hangs every `pumpAndSettle` in the suite.
 class CompanionSkeletonList extends StatelessWidget {
   const CompanionSkeletonList({this.rows = 4, this.lines = 3, super.key});
 
   final int rows;
 
-  /// How many lines a row of the real list has — three for a session card,
-  /// two for a project row — so the two lists do not load into one silhouette.
+  /// How many lines a row of the real list has, so two different lists do not
+  /// load into the same silhouette.
   final int lines;
 
   @override
@@ -122,11 +104,7 @@ class CompanionSkeletonList extends StatelessWidget {
 }
 
 /// A screen with nothing on it yet, or one that failed — the same shape for
-/// both, so the app never has two ways of saying "not right now".
-///
-/// [title] names the situation, [body] explains it in a sentence or two, and
-/// the buttons are what to do about it. Never a raw exception, never a blank
-/// page, and never a state with no way forward.
+/// both. Never a raw exception, a blank page, or a state with no way forward.
 class CompanionNotice extends StatelessWidget {
   const CompanionNotice({
     required this.icon,
@@ -140,13 +118,9 @@ class CompanionNotice extends StatelessWidget {
     super.key,
   });
 
-  /// A search that matched nothing: what was searched, and how old the thing
-  /// it was searched over is.
-  ///
-  /// Both halves are load-bearing. The phone filters the snapshot it already
-  /// holds and sends no frame, so "nothing matches" is a statement about that
-  /// snapshot and about the four fields named in [searched] — never about the
-  /// desktop, which was not asked.
+  /// A search that matched nothing. The phone filters the snapshot it holds and
+  /// sends no frame, so this is a statement about that snapshot and the fields
+  /// named in [searched] — never about the desktop, which was not asked.
   factory CompanionNotice.noMatch({
     required String query,
     required String searched,
@@ -183,8 +157,7 @@ class CompanionNotice extends StatelessWidget {
   final String title;
   final String body;
 
-  /// Picks the icon's colour out of [SemanticColors]. Null is the muted
-  /// default — most empty states are not a problem.
+  /// Picks the icon's colour out of [SemanticColors]; null is the muted default.
   final NoticeTone? tone;
 
   final String? actionLabel;
@@ -219,8 +192,7 @@ class CompanionNotice extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: colour.withValues(alpha: 0.12),
                 ),
-                // The one picture on a screen with nothing else on it, so it
-                // is sized as an illustration rather than as chrome.
+                // Sized as an illustration rather than as chrome.
                 child: Icon(
                   icon,
                   size: density.isTouch ? Touch.iconHero : Chrome.iconHero,
@@ -231,9 +203,8 @@ class CompanionNotice extends StatelessWidget {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                // A phone's empty state is the whole screen and its title is
-                // the only display line on it; a pane's shares the pane with
-                // whatever is beside it, and stays at the smaller step.
+                // A phone's empty state is the whole screen; a pane's shares it
+                // with whatever is beside it and stays at the smaller step.
                 style: density.isTouch
                     ? theme.textTheme.titleLarge
                     : theme.textTheme.titleMedium,
@@ -266,6 +237,5 @@ class CompanionNotice extends StatelessWidget {
   }
 }
 
-/// Which semantic colour a notice's glyph borrows. Null — the common case —
-/// is the muted default: most empty states are not a problem.
+/// Which semantic colour a notice's glyph borrows; null is the muted default.
 enum NoticeTone { attention, failure, idle }

@@ -17,17 +17,15 @@ import 'diff_line_tile.dart';
 import 'remote_link.dart';
 import 'worktree_browse.dart';
 
-/// Read-only Git change review, desktop-style: a vertical list of changed files,
-/// each expandable to reveal its unified diff inline, and openable full-screen
-/// for a wide, scrollable read. Git is the source of truth; there is no editor.
+/// Read-only Git change review: changed files, each expandable to its unified
+/// diff inline and openable full-screen. There is no editor.
 class ChangesView extends ConsumerStatefulWidget {
   const ChangesView({required this.repositoryName, super.key});
 
   final String repositoryName;
 
-  /// Builds of the file rows, counted so a cost test can prove that a commit,
-  /// a delivery, a review thread or a session selection repaints the header
-  /// action that draws it and leaves the list alone.
+  /// Builds of the file rows, counted so a cost test can prove a header action
+  /// repaints without the list.
   @visibleForTesting
   static int debugFileRowBuildCount = 0;
 
@@ -40,11 +38,8 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
 
   @override
   Widget build(BuildContext context) {
-    // Nothing here watches a provider. Six of them used to be read in this one
-    // build — the changes, the selected repository and session, the review
-    // threads, the delivery and the commit log — so a commit landing or a
-    // review thread arriving repainted every file row in the panel. Each
-    // header action now subscribes to the one thing it draws.
+    // Nothing here watches a provider: each header action subscribes to the one
+    // thing it draws, so a commit does not repaint every file row.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -52,16 +47,11 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
           icon: AppIcons.gitDiff,
           title: 'Changes',
           actions: [
-            // Which worktree is being read, and the only control that changes
-            // it. A view state: the session's checkout is moved from the
-            // Repository pane, deliberately and by another verb.
-            //
-            // Flexible for the same reason as the links beside it — a worktree
-            // branch is as long as an agent's name, and this header is 226px.
+            // Which worktree is being *read*; the session's checkout is moved
+            // from the Repository pane, by another verb.
             const Flexible(child: WorktreeBrowsePicker()),
-            // Flexible, so a long branch name in a narrow panel ellipsises
-            // rather than overflowing — this header sits in a side panel that
-            // can be dragged down to 240px.
+            // Flexible so a long branch ellipsises: this side panel can be
+            // dragged down to 240px.
             const Flexible(child: _DeliveryLinks()),
             const _ChangedFileCount(),
             const _AbortMergeButton(),
@@ -102,11 +92,8 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
   }
 }
 
-/// What this repository's work is called on the forge, so a branch, a commit or
-/// a pull request in view is one click from the page that owns it.
-///
-/// Its own widget because it is the only thing in the header that cares about
-/// the delivery or the commit log, and both of those move on a git poll.
+/// Forge links for the branch, head commit and pull request in view. Its own
+/// widget because only it watches the delivery and commit log, which poll.
 class _DeliveryLinks extends ConsumerWidget {
   const _DeliveryLinks();
 
@@ -114,10 +101,8 @@ class _DeliveryLinks extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final repositoryId = ref.watch(selectedRepositoryIdProvider);
-    // The branch and the pull request are the *selected checkout's*, and while
-    // another worktree is being read they would label it with somebody else's
-    // work. The picker beside this names the worktree instead; the head commit
-    // stays, because the commit log follows the tree being read.
+    // The branch and pull request are the *selected checkout's*, so they would
+    // mislabel a browsed worktree; the head commit follows the tree being read.
     final browsing = ref.watch(
       browsedWorktreeProvider.select((browse) => browse != null),
     );
@@ -196,27 +181,9 @@ class _ChangedFileCount extends ConsumerWidget {
   }
 }
 
-/// `git merge --abort` on the working tree being read, behind a confirm.
-///
-/// **The only lever in the strip that is ours and undoes rather than does.**
-/// `ChangesService.abortMerge` had exactly one caller — the delivery
-/// pipeline's failure path — so a merge an agent left half-done could be
-/// undone only by asking a model to type the command. Merge and push stay
-/// prompts, because what a merge should say is a decision; aborting one has
-/// nothing in it to decide, which is the test `DeliveryAction` sets for an
-/// action the app owns.
-///
-/// **It appears only when there is something to abort**, which is now a
-/// reading the panel already holds rather than a process. It used to sit in the
-/// header unconditionally, on the argument that asking would cost a
-/// `CreateProcessW` on every poll — true of `git rev-parse MERGE_HEAD`, and not
-/// true of [mergeInProgressProvider], which is the listing plus at most one
-/// `stat` of `.git`. A permanent undo button beside a clean tree is an offer to
-/// discard work that is not there.
-///
-/// The outcome still states which of the two happened rather than predicting
-/// it: [ChangesService.abortMerge] reports whether a tree came back, and a
-/// reading taken a moment ago is not a promise about what git will find.
+/// `git merge --abort` on the working tree being read, behind a confirm. Shown
+/// only when there is something to abort: an undo button beside a clean tree
+/// offers to discard work that is not there.
 class _AbortMergeButton extends ConsumerWidget {
   const _AbortMergeButton();
 
@@ -224,9 +191,8 @@ class _AbortMergeButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final checkout = ref.watch(viewedCheckoutProvider);
     if (checkout == null) return const SizedBox.shrink();
-    // Hidden while the reading is pending or errored, for the same reason it is
-    // hidden when there is no merge: this button destroys work, so it appears
-    // on evidence and never on a guess.
+    // Hidden while the reading is pending or errored too: this button destroys
+    // work, so it appears on evidence and never on a guess.
     if (ref.watch(mergeInProgressProvider).asData?.value != true) {
       return const SizedBox.shrink();
     }
@@ -270,9 +236,8 @@ class _AbortMergeButton extends ConsumerWidget {
     if (confirmed != true) return;
 
     final restored = await ref.read(changesServiceProvider).abortMerge(checkout);
-    // Only on the half that rewrote files. An abort that found nothing to undo
-    // changed no file, so re-reading would be a git process spent on a listing
-    // that cannot have moved.
+    // Only on the half that rewrote files; an abort that found nothing to undo
+    // changed no file.
     if (restored) ref.invalidate(repositoryChangesProvider);
     messenger.showSnackBar(
       SnackBar(
@@ -286,11 +251,8 @@ class _AbortMergeButton extends ConsumerWidget {
   }
 }
 
-/// Sends the should-fix review threads to the session on screen.
-///
-/// The review index and the selected session are read here rather than in the
-/// panel: a reply arriving over MCP bumps the index, and that must cost one
-/// badge rather than the whole file list.
+/// Sends the should-fix review threads to the session on screen. Watches the
+/// index here so a reply over MCP repaints one badge, not the file list.
 class _SendReviewThreadsButton extends ConsumerWidget {
   const _SendReviewThreadsButton();
 
@@ -318,10 +280,8 @@ class _SendReviewThreadsButton extends ConsumerWidget {
       onPressed: sessionId == null || repositoryId == null
           ? null
           : () async {
-              // Nothing is cleared, marked or resolved by sending. The thread
-              // stays should-fix until somebody looks at the code and decides
-              // it is done — which is the whole reason these are rows now. See
-              // `buildReviewThreadPrompt`.
+              // Sending clears nothing: the thread stays should-fix until
+              // somebody looks at the code and decides it is done.
               await ref
                   .read(sessionActionsProvider)
                   .continueSession(
@@ -362,9 +322,8 @@ class _ChangedFiles extends ConsumerWidget {
         );
   }
 
-  /// The same list, in the order it is read in. **Tiered, never filtered** —
-  /// see `review_order.dart`; git's own order is alphabetical, which opens
-  /// every review on `pubspec.lock`.
+  /// The same list, in review order — tiered, never filtered; git's own
+  /// alphabetical order opens every review on `pubspec.lock`.
   Widget _ordered(List<FileChange> files) {
     final ordered = orderedForReview(files, (file) => file.path);
     return ListView.builder(
@@ -493,9 +452,7 @@ class _InlineDiff extends ConsumerWidget {
           );
         }
         // The one translation that makes a comment anchorable: a row of this
-        // rendering becomes a line of the file. The row index itself is what
-        // the old `DiffAnnotation.diffIndex` stored, and it is exactly as
-        // durable as the rendering — which is to say not at all.
+        // rendering becomes a line of the file. A row index would not survive.
         final numbers = newFileLineNumbers(lines);
         final threads =
             ref.watch(repositoryReviewThreadsProvider).asData?.value ??
@@ -594,14 +551,9 @@ class _DiffFullscreenDialog extends StatelessWidget {
   }
 }
 
-/// One row of the diff, with whatever review threads land on it.
-///
-/// [lineNumber] is the row's line **in the file**, or null for a header, a hunk
-/// marker or a removed line — see [newFileLineNumbers]. It is what an anchor is
-/// built from, and its nullability is the reason a comment on a removed line
-/// becomes a file-level thread: there is no line of the current file that
-/// removed text sits on, and inventing one is the mis-anchoring this whole
-/// change exists to remove.
+/// One row of the diff, with whatever review threads land on it. [lineNumber]
+/// is null for a header, hunk marker or removed line — which is why a comment
+/// on a removed line becomes a file-level thread rather than a guessed anchor.
 class _DiffLineTile extends ConsumerWidget {
   const _DiffLineTile({
     required this.path,
@@ -622,15 +574,13 @@ class _DiffLineTile extends ConsumerWidget {
     final index =
         ref.watch(repositoryReviewThreadsProvider).asData?.value ??
         ReviewThreadIndex.empty;
-    // Attached threads only, by construction: `atLine` will not return one
-    // whose file has moved on, because its line number no longer locates
-    // anything. Those are drawn above the diff instead.
+    // Attached threads only: `atLine` will not return one whose file has moved
+    // on. Those are drawn above the diff instead.
     final here = lineNumber == null
         ? const <AnchoredReviewThread>[]
         : index.atLine(path, lineNumber!);
-    // The drawing lives in `DiffLineTile`, shared with the agent-edit diff in
-    // the transcript; what stays here is the one thing only this panel has, the
-    // review comment hung off the end of the row.
+    // The drawing lives in the shared `DiffLineTile`; only the review comment
+    // hung off the row's end is this panel's.
     final commentable =
         line.kind == DiffLineKind.added ||
         line.kind == DiffLineKind.removed ||
@@ -669,12 +619,8 @@ class _DiffLineTile extends ConsumerWidget {
   }
 }
 
-/// A thread that no line of this diff can carry: a file-level comment, or one
-/// whose file has changed since it was written.
-///
-/// It gets a row of its own above the diff rather than a marker on a line,
-/// because the honest thing to say about a detached thread is a sentence, and
-/// there is nowhere on a code line to say it.
+/// A thread no line of this diff can carry — file-level, or detached by an
+/// edit — given a row above the diff because saying so takes a sentence.
 class _UnplacedThreadTile extends ConsumerWidget {
   const _UnplacedThreadTile({required this.entry});
 
@@ -734,11 +680,8 @@ class _UnplacedThreadTile extends ConsumerWidget {
   }
 }
 
-/// The sentence a thread wears above the diff, in the panel and in the dialog.
-///
-/// Spelled out rather than reduced to an icon, and it names the *file*, not the
-/// line, when the line is no longer meaningful. "Was at lib/a.dart:42" is the
-/// truth; "lib/a.dart:42" alone would be read as where it is now.
+/// The sentence a thread wears above the diff. A detached thread says "was at
+/// …": the bare location would be read as where it is now.
 String detachedThreadHeadline(AnchoredReviewThread entry) {
   final status = entry.thread.status.label;
   return switch (entry.attachment) {
@@ -795,9 +738,8 @@ class _ReviewThreadDialog extends ConsumerStatefulWidget {
 class _ReviewThreadDialogState extends ConsumerState<_ReviewThreadDialog> {
   final _composer = TextEditingController();
 
-  /// Which thread the composer is answering, or null when it is opening a new
-  /// one. A reply and a new comment on the same line are different acts and the
-  /// dialog never guesses between them.
+  /// Which thread the composer is answering, or null for a new one — a reply
+  /// and a new comment on the same line are different acts.
   String? _replyingTo;
 
   String? _error;
@@ -887,12 +829,8 @@ class _ReviewThreadDialogState extends ConsumerState<_ReviewThreadDialog> {
     );
   }
 
-  /// What the composer will actually do, said before it is pressed.
-  ///
-  /// The removed-line case is spelled out because it is the one place the
-  /// dialog cannot give the user what the click implied: they clicked a line,
-  /// and what they get is a comment on the file. Saying so is the alternative
-  /// to quietly anchoring onto whichever line happens to follow the deletion.
+  /// What the composer will actually do. The removed-line case is spelled out
+  /// because that click cannot get what it implied: a comment on the line.
   String _composerHelp() {
     if (_replyingTo != null) return 'Added to the thread above.';
     if (widget.lineNumber != null) {
@@ -1020,14 +958,9 @@ class _ThreadCard extends StatelessWidget {
   }
 }
 
-/// **What this pane says when there is no diff to draw — three things, not
-/// one.**
-///
-/// It used to be `GitException: git status failed: fatal: not a git repository
-/// …` in a red box: an internal type name standing in for an ordinary fact, and
-/// the same red box for a folder that is fine as for a git that is broken.
-/// [gitTroubleOf] is the single place the three are told apart, so this pane and
-/// the Repository pane cannot word the same failure two ways.
+/// What this pane says when there is no diff to draw — three things, not one.
+/// [gitTroubleOf] is the single place they are told apart, so this pane and the
+/// Repository pane cannot word the same failure two ways.
 class _NoChangesToRead extends StatelessWidget {
   const _NoChangesToRead({required this.error});
 
@@ -1080,18 +1013,15 @@ Color _colorFor(FileChangeType type, BuildContext context) {
   return switch (type) {
     FileChangeType.added => semantic.diffAdded,
     FileChangeType.deleted => semantic.diffRemoved,
-    // `attention` is the token for "the user is being asked for something",
-    // which is exactly what an unmerged path is; `failure` would say the merge
-    // broke, and it did not — it stopped and is waiting.
+    // `attention`, not `failure`: an unmerged path is the user being asked for
+    // something, not a merge that broke.
     FileChangeType.conflicted => semantic.attention,
     _ => scheme.primary,
   };
 }
 
-/// What the type glyph means, in words, for the tooltip beside it.
-///
-/// A conflict says **which** one it is: "both modified" and "deleted by them"
-/// are two different pieces of work, and the icon alone cannot carry that.
+/// What the type glyph means, in words, for the tooltip — a conflict names
+/// which kind, since one icon cannot carry all of them.
 String changeWords(FileChange change) => switch (change.type) {
   FileChangeType.added => 'added',
   FileChangeType.modified => 'modified',

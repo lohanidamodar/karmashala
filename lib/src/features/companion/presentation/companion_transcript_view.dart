@@ -9,14 +9,9 @@ import 'package:karmashala_remote/companion.dart';
 /// The phone's transcript: a conversation drawn from its newest message
 /// upwards.
 ///
-/// The desktop's [ChatTranscriptView] is a forward list that jumps to
-/// `maxScrollExtent` once, after the first frame. On a lazy list that extent is
-/// an *estimate* from the children laid out so far, and a real session's newest
-/// turns are its longest — measured on a 300-message window, opening one landed
-/// 4391px short of the end with the newest message never built. That is the
-/// "I cannot find the edge of the session" report. A reversed list has no
-/// estimate to be wrong about: offset zero **is** the newest message, on the
-/// first frame and on every frame after it.
+/// Reversed, so offset zero *is* the newest message. A forward list jumping to
+/// `maxScrollExtent` lands short, because on a lazy list that extent is an
+/// estimate from the children laid out so far.
 class CompanionTranscriptView extends StatefulWidget {
   const CompanionTranscriptView({
     required this.messages,
@@ -84,9 +79,8 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
   Future<void> _toLatest() =>
       _scroll.animateTo(0, duration: Motion.base, curve: Curves.easeOut);
 
-  /// The gateway's account of an empty transcript, pulled out of the list: it
-  /// is not a turn, and a session with a reason has an *explanation* rather
-  /// than a welcome.
+  /// The gateway's account of an empty transcript: not a turn, and a session
+  /// with a reason gets an explanation rather than a welcome.
   String? _absence() {
     for (final message in widget.messages) {
       if (message.role == kCompanionAbsenceRole) return message.text;
@@ -107,11 +101,8 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
       children: [
         Expanded(
           child: total == 0
-              // Which nothing this is decides which screen it gets. A welcome
-              // offering starter prompts, on a session the user can see
-              // running, was the "shows running but no transcript" report:
-              // the desktop knew the agent keeps no readable record and the
-              // phone drew onboarding over the top of the answer.
+              // Which kind of nothing this is decides the screen: a welcome
+              // over a session the user can see running reads as broken.
               ? absence != null
                     ? _TranscriptUnavailable(reason: absence)
                     : _CompanionEmptyState(
@@ -126,10 +117,9 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
                     vertical: Insets.sm,
                   ),
                   itemCount: total,
-                  // Keyed by position in the whole window so a message that
-                  // only moved because a newer one arrived keeps its element
-                  // — the sliver then corrects its own offsets instead of
-                  // redrawing different text under a reader.
+                  // Keyed by position in the whole window, so a message shifted
+                  // by a newer arrival keeps its element and the sliver
+                  // corrects offsets instead of redrawing under the reader.
                   findChildIndexCallback: (key) {
                     if (key is! ValueKey<int>) return null;
                     final index = total - 1 - key.value;
@@ -150,15 +140,9 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
                   },
                 ),
         ),
-        // Above the composer, not floating in the list. Centred over the
-        // viewport it sat on the newest turn — the text the reader is
-        // scrolling back *towards* — and reserving list padding instead would
-        // mean hard-coding the pill's height, which moves with the text scale.
-        // Out here it cannot overlap anything at any scale.
-        //
-        // Appearing and vanishing costs the list one relayout each, at the
-        // single frame `_atLatest` flips; deliberately not animated, because a
-        // sized transition would relayout the viewport on every frame of it.
+        // Above the composer rather than floating in the list, so it cannot
+        // overlap the newest turn at any text scale. Not animated: a sized
+        // transition would relayout the viewport on every frame.
         if (total > 0 && !_atLatest)
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -189,11 +173,8 @@ class _JumpToLatest extends StatelessWidget {
   );
 }
 
-/// The top of what the phone was sent: the history the host kept back.
-///
-/// Drawn as a boundary rather than as a message on purpose — the same words in
-/// a `tool` row read as something the agent said, and a reader looking for the
-/// end of a conversation can mistake any message for the last one.
+/// The top of what the phone was sent: the history the host kept back. A
+/// boundary and not a message — the same words in a row read as the agent's.
 class _WindowTopNotice extends StatelessWidget {
   const _WindowTopNotice({required this.text, super.key});
 
@@ -231,26 +212,16 @@ class _WindowTopNotice extends StatelessWidget {
 
 /// One turn, in the desktop chat's shapes at a thumb's sizes.
 ///
-/// **Copying is a long press, not a button in every gutter.** Measured on a
-/// 390x844 phone: an `IconButton` at the touch floor made every tile's gutter
-/// 48px tall to carry an 11px label, so a one-line message spent 72px of the
-/// list on 20px of text and three of them took a fifth of the transcript
-/// viewport on chrome. A long press is already what a phone's chat means by
-/// "do something with this message"; it cannot compete with the tap that opens
-/// a link inside the text, because a tap and a long press are different
-/// gestures with no arena to lose; and the target becomes the whole tile
-/// rather than a 48px square. The snackbar is the confirmation the vanishing
-/// tick used to be.
+/// Copying is a long press: a copy `IconButton` at the touch floor made every
+/// gutter 48px tall for an 11px label, and a long press cannot compete with
+/// the tap that opens a link inside the text.
 class _MessageTile extends StatelessWidget {
   const _MessageTile({required this.message, super.key});
 
   final CompanionChatMessage message;
 
-  /// The gutter: who is speaking, in one compact row.
-  ///
-  /// Sized by the label rather than by a control, which is the whole of the
-  /// space this view got back. [leading] lets the agent keep the redesign's
-  /// avatar mark without every other role paying for a `Stack`.
+  /// The gutter: who is speaking, in one compact row, sized by the label rather
+  /// than by a control. [leading] is the agent's avatar mark.
   Widget _gutter(
     ThemeData theme, {
     required Widget leading,
@@ -276,9 +247,8 @@ class _MessageTile extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
-    // A phone reads at arm's length: message text takes the step up the ramp
-    // that `UiDensity.muted` already takes for supporting lines, so a tool row
-    // is not the app's smallest type on its most-read screen.
+    // A phone reads at arm's length, so message text takes the same step up
+    // the ramp that `UiDensity.muted` takes for supporting lines.
     final mono = theme.textTheme.bodyMedium?.copyWith(fontFamily: kMonoFamily);
 
     Widget tile({required Widget child, Color? fill, Color? edge}) => Padding(
@@ -375,7 +345,6 @@ class _MessageTile extends StatelessWidget {
       );
     }
 
-    // Agent message
     final text = message.text;
     final thinkingMatch = RegExp(
       r'<thinking>([\s\S]*?)</thinking>',
@@ -423,13 +392,9 @@ class _MessageTile extends StatelessWidget {
   }
 }
 
-/// Why this session has no chat view — the host's fact, worded by the gateway,
-/// drawn as an answer rather than as onboarding.
-///
-/// Deliberately **not** the welcome state: no heading that invites a first
-/// message, and no starter chips. The session is already running; what the
-/// reader needs is the reason the list is empty, and an offer to type
-/// something is the one thing that reads as "this screen is broken".
+/// Why this session has no chat view — the host's fact, worded by the gateway.
+/// Deliberately not the welcome state: the session is already running, and an
+/// offer to type something reads as "this screen is broken".
 class _TranscriptUnavailable extends StatelessWidget {
   const _TranscriptUnavailable({required this.reason});
 
@@ -461,8 +426,8 @@ class _TranscriptUnavailable extends StatelessWidget {
               ),
             ),
             const SizedBox(height: Insets.sm),
-            // Left-aligned: three lines of prose centred reads as a slogan,
-            // and this is an explanation the reader has to actually follow.
+            // Left-aligned: centred prose reads as a slogan, and this has to
+            // be followed.
             Text(
               reason,
               style: theme.textTheme.bodyMedium?.copyWith(
@@ -516,9 +481,8 @@ class _CompanionEmptyState extends StatelessWidget {
               child: Text(
                 emptyHint,
                 textAlign: TextAlign.center,
-                // `bodySmall` is the ramp's 12 and this is a paragraph, not a
-                // caption: the one screen with nothing else on it was setting
-                // its only text in the app's smallest size.
+                // A paragraph, not a caption: `bodySmall` would set the only
+                // text on this screen in the app's smallest size.
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -562,8 +526,7 @@ class _CompanionEmptyState extends StatelessWidget {
   }
 }
 
-/// The one picture on a screen with nothing else on it, at the touch size the
-/// theme names for exactly that.
+/// The one picture on a screen with nothing else on it.
 class _HeroGlyph extends StatelessWidget {
   const _HeroGlyph({
     required this.icon,
@@ -579,8 +542,7 @@ class _HeroGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    // The glyph plus a ring of its own size around it, so the mark scales
-    // with the token rather than with a hand-picked diameter.
+    // A ring the glyph's own size, so the mark scales with the token.
     width: Touch.iconHero + Insets.xl,
     height: Touch.iconHero + Insets.xl,
     decoration: BoxDecoration(

@@ -18,12 +18,8 @@ import 'worktree_setup_dialog.dart';
 /// Settings → Worktrees: what each checkout wants done to a worktree the moment
 /// git makes one, and what happened the last time it was done.
 ///
-/// **The setting and its verdict are on the same card**, which is the whole
-/// reason this page exists rather than a dialog buried in a menu. A setup runs
-/// unattended, in a pane the user may never look at, for a worktree they asked
-/// for while thinking about something else — so the place they configure it is
-/// the place that has to say whether it worked, with the reading's age beside
-/// it (§19). Nothing here polls: every write bumps
+/// The setting and its verdict share a card, because a setup runs unattended in
+/// a pane nobody watches. Nothing polls: every write bumps
 /// `worktreeSetupRevisionProvider` and this rebuilds.
 class WorktreeSetupPage extends ConsumerWidget {
   const WorktreeSetupPage({super.key});
@@ -33,8 +29,8 @@ class WorktreeSetupPage extends ConsumerWidget {
     final theme = Theme.of(context);
     final settings = ref.watch(worktreeSetupsProvider);
     final repositories = ref.watch(repositoryDaoProvider).getAll();
-    // Watched so a project added or rescanned while this is open reaches the
-    // "add a checkout" list without the page being reopened.
+    // Watched so a project added while this is open reaches the "add a
+    // checkout" list without a reopen.
     ref.watch(projectsControllerProvider);
 
     final configured = [
@@ -96,11 +92,8 @@ class WorktreeSetupPage extends ConsumerWidget {
   }
 }
 
-/// Adds a setup to a checkout that has none.
-///
-/// A menu rather than a second picker screen: the list is the checkouts this
-/// workspace already knows about, which is the only set a setting can be
-/// written for — the setting is keyed by the `repositories` row.
+/// Adds a setup to a checkout that has none. A menu of the checkouts this
+/// workspace knows about, which is the only set a setting can be written for.
 class _AddButton extends ConsumerWidget {
   const _AddButton({required this.candidates, required this.settings});
 
@@ -197,8 +190,8 @@ class _CheckoutCard extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              // The environment, because it is what decides where the command
-              // runs and where the copy happens.
+              // The environment decides where the command runs and where the
+              // copy happens.
               Text(
                 _environmentLabel(environment?.kind, environment?.name),
                 style: theme.textTheme.bodySmall,
@@ -288,11 +281,9 @@ class _Line extends StatelessWidget {
   }
 }
 
-/// One worktree's verdict, with its age and the sentences behind it.
-///
-/// A verdict that needs attention is expanded by default and coloured; a clean
-/// one is a single quiet line. Neither is ever "fine" by default — a worktree
-/// with no recorded run is simply not listed, rather than listed as healthy.
+/// One worktree's verdict, with its age and the sentences behind it. One
+/// needing attention is expanded and coloured; a worktree with no recorded run
+/// is not listed at all, rather than listed as healthy.
 class _RunLine extends StatelessWidget {
   const _RunLine({required this.run, required this.now, super.key});
 

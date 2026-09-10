@@ -16,21 +16,13 @@ import 'session_view_screen.dart';
 
 /// Starting a session on the desktop, from the phone.
 ///
-/// The choice is made from what the desktop **reports** — its projects, the
-/// checkouts inside them, and the agents actually installed where each
-/// checkout lives — so nothing here is inferred from the sessions that happen
-/// to exist. Every label, and every sentence about what a permission mode
-/// does to an agent, is the desktop's own wording.
-///
-/// The permission mode is picked, never assumed: the row starts on the mode
-/// the desktop's own settings would use for a new session with that agent,
-/// and a mode the agent cannot be put into is shown, disabled, and explained
-/// rather than quietly missing.
+/// Every choice and every label comes from what the desktop reports; nothing is
+/// inferred here. A permission mode the agent cannot be put into is shown,
+/// disabled and explained rather than quietly missing.
 class StartSessionScreen extends ConsumerStatefulWidget {
   const StartSessionScreen({this.projectId, super.key});
 
-  /// Preselect this project — set when the screen is opened from inside one,
-  /// so the user does not re-answer a question they already answered.
+  /// Preselect this project, when the screen is opened from inside one.
   final String? projectId;
 
   @override
@@ -46,13 +38,9 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
   String? _installationId;
   String? _mode;
 
-  /// The idempotency key for the request as it currently stands.
-  ///
-  /// Minted once and **kept across retries**, which is what makes tapping
-  /// Start again after "the desktop did not answer" cost one session rather
-  /// than two. Re-minted the moment any field changes, because a different
-  /// request is a different intention and must not be answered with the
-  /// session the last one produced.
+  /// The idempotency key for the request as it stands: kept across retries, so
+  /// Start after "the desktop did not answer" costs one session; re-minted the
+  /// moment any field changes, because that is a different intention.
   late String _key = _newKey();
 
   bool _starting = false;
@@ -73,9 +61,8 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
   RemoteWorkspaceProject? _project(List<RemoteWorkspaceProject> projects) {
     if (projects.isEmpty) return null;
     final requested = _projectId ?? widget.projectId;
-    // A project supplied by the caller is an answer the user has already
-    // given. Never silently replace it with the first project if the host's
-    // workspace changed while this screen was open.
+    // A project supplied by the caller is an answer already given; a workspace
+    // refresh must not replace it with the first project.
     if (requested != null) {
       for (final project in projects) {
         if (project.projectId == requested) return project;
@@ -91,8 +78,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
       for (final checkout in project.checkouts) {
         if (checkout.repositoryId == _repositoryId) return checkout;
       }
-      // Do not start in another checkout after a workspace refresh removed
-      // the selected one.
+      // Never start in another checkout because a refresh removed this one.
       return null;
     }
     return project.checkouts.first;
@@ -126,10 +112,8 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
           ListTile(
             leading: const Icon(AppIcons.folder),
             title: Text(project.name, maxLines: 1),
-            // Two projects of the same name — the same repository set up once
-            // per environment — are told apart here and nowhere else, so the
-            // environment is named in the picker even though the settled row
-            // leaves it to the checkout beneath it.
+            // Two projects of the same name — one repository set up once per
+            // environment — are told apart here and nowhere else.
             subtitle: _beneath(
               environment: project.environmentName,
               detail: project.path,
@@ -145,7 +129,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
     setState(() {
       _projectId = picked;
       // A project's checkouts and agents are its own; a pick made under the
-      // last one cannot survive into this one.
+      // last one cannot survive.
       _repositoryId = null;
       _installationId = null;
       _formChanged();
@@ -202,9 +186,8 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
     if (picked == null || !mounted) return;
     setState(() {
       _installationId = picked;
-      // Modes belong to an agent. Dropping the pick sends the row back to the
-      // new agent's own default rather than carrying a choice made for
-      // another CLI.
+      // Modes belong to an agent, so the pick drops back to the new agent's
+      // default rather than carrying a choice made for another CLI.
       _mode = null;
       _formChanged();
     });
@@ -219,8 +202,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
           ListTile(
             enabled: option.selectable,
             leading: Icon(
-              // The desktop's own permission vocabulary: a warning for the
-              // dangerous mode, a tick for one the agent honours.
+              // The desktop's own permission vocabulary.
               option.dangerous ? AppIcons.warning : AppIcons.check,
               color: option.dangerous && option.selectable
                   ? SemanticColors.of(context).attention
@@ -281,8 +263,8 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
             'Try again.');
         return;
       }
-      // Replace rather than push: coming back to a filled-in form for a
-      // session that now exists would invite starting it twice.
+      // Replace rather than push: coming back to a filled-in form for a session
+      // that now exists would invite starting it twice.
       Navigator.of(context).pushReplacement(
         companionRoute<void>(
           context,
@@ -291,8 +273,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
       );
     } on Object catch (error) {
       if (!mounted) return;
-      // The desktop's own sentence. It refused, or could not do it, and only
-      // it knows why — "something went wrong" is nothing anyone can act on.
+      // The desktop's own sentence: only it knows why it refused.
       setState(() => _failure = companionErrorText(error));
     } finally {
       if (mounted) setState(() => _starting = false);
@@ -403,9 +384,8 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
     final muted = UiDensity.of(context).muted(theme);
 
     return ListView(
-      // Capped at a phone's measure past the compact breakpoint: these rows
-      // are a form, and a form set across a tablet is a form nobody can read
-      // in one glance (CLAUDE.md §6).
+      // Capped at a phone's measure past the compact breakpoint: a form set
+      // across a tablet cannot be read in one glance (CLAUDE.md §6).
       padding: companionListInsets(
         context,
         const EdgeInsets.only(bottom: Insets.xl),
@@ -422,10 +402,9 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
           icon: AppIcons.folderOpen,
           label: 'Checkout',
           value: checkout.name,
-          // Named here and not on the project row above: the environment a
-          // session runs in is the checkout's, and a project root that lives
-          // somewhere else would put two rows in disagreement about "the
-          // environment" — worse than one row that answers.
+          // Named here and not on the project row: the environment a session
+          // runs in is the checkout's, and a project root elsewhere would put
+          // the two rows in disagreement.
           environment: checkout.environmentName,
           detail: _checkoutLine(checkout),
           alert: checkout.folderMissing,
@@ -498,9 +477,8 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
               maxLines: 5,
               decoration: InputDecoration(
                 labelText: 'First message',
-                // Said before it is typed, not refused afterwards: the launch
-                // itself would decline an opening message this CLI cannot be
-                // handed, and finding that out after writing one is worse.
+                // Said before it is typed: the launch would decline an opening
+                // message this CLI cannot be handed.
                 helperText: agent.acceptsOpeningMessage
                     ? 'Optional — sent as soon as the session is up.'
                     : '${agent.name} takes no opening message on its command '
@@ -566,13 +544,8 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
 }
 
 /// Which execution environment something lives in, in the desktop's own words
-/// — "Windows", "WSL · Ubuntu", "SSH · build-box".
-///
-/// A line of its own rather than one more clause in a dot-joined run: this is
-/// the answer people were reading the path to work out, and a fact buried
-/// mid-sentence is a fact still being decoded. The kind prefix labels it for
-/// the eye; the [Semantics] label does the same for a reader that never sees
-/// the line break, and speaks the separator as the pause it looks like.
+/// — "Windows", "WSL · Ubuntu", "SSH · build-box". A line of its own, because
+/// this is the answer people were reading the path to work out.
 class _Environment extends StatelessWidget {
   const _Environment(this.name);
 
@@ -582,15 +555,13 @@ class _Environment extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Semantics(
-      // A node of its own, not an annotation folded into the tile's: the point
-      // is that "which environment" is asked and answered separately from the
-      // checkout's name, for a listener as much as for a reader.
+      // A node of its own, so "which environment" is answered separately from
+      // the checkout's name for a listener too.
       container: true,
       label: 'Environment: ${spokenEnvironmentLabel(name)}',
       excludeSemantics: true,
-      // Two lines, not one: an ellipsised distribution name is exactly the
-      // guess this row exists to remove, and a 200% text scale reaches the
-      // edge of a phone in about eight characters.
+      // Two lines: an ellipsised distribution name is the guess this row exists
+      // to remove, and 200% text reaches a phone's edge in eight characters.
       child: Text(
         name,
         maxLines: 2,
@@ -606,9 +577,8 @@ class _Environment extends StatelessWidget {
   }
 }
 
-/// A picker row's supporting lines: where it lives, then what else is known
-/// about it. **Null when neither says anything**, so a tile with nothing to
-/// add keeps a single-line height rather than an empty subtitle slot.
+/// A picker row's supporting lines. Null when neither says anything, so a tile
+/// with nothing to add keeps its single-line height.
 Widget? _beneath({String? environment, String? detail}) {
   final lines = [
     if (environment != null) _Environment(environment),
@@ -623,8 +593,8 @@ Widget? _beneath({String? environment, String? detail}) {
   );
 }
 
-/// One answered question: what it is, what it says, and — when there is more
-/// than one answer to give — that tapping it opens the rest.
+/// One answered question, which opens the rest when there is more than one
+/// answer to give.
 class _Row extends StatelessWidget {
   const _Row({
     required this.icon,
@@ -640,18 +610,16 @@ class _Row extends StatelessWidget {
   final String label;
   final String value;
 
-  /// Where this lives, in the desktop's own words. Null when the desktop had
-  /// nothing worth saying — [detail] still carries the path.
+  /// Where this lives, in the desktop's own words; null when it said nothing.
   final String? environment;
 
   final String? detail;
 
-  /// Draw it in the error colour — a folder the desktop cannot see, or a mode
-  /// the desktop marks dangerous.
+  /// Draw it in the error colour: an unreachable folder, or a dangerous mode.
   final bool alert;
 
-  /// Null when there is nothing to choose between, which is drawn as a plain
-  /// statement rather than a control that does nothing.
+  /// Null when there is nothing to choose between, drawn as a plain statement
+  /// rather than a control that does nothing.
   final VoidCallback? onTap;
 
   @override

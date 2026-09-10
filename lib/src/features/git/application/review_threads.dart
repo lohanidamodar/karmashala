@@ -11,20 +11,9 @@ import 'changes_providers.dart';
 /// Opening, answering and triaging review threads, and holding every anchor
 /// against the file it points at.
 ///
-/// ## Why the caller never supplies the blob sha
-///
-/// Every write path here computes the anchor's sha itself, from the file on
-/// disk, at the moment the thread is opened. No argument accepts one. That is
-/// deliberate and it is the load-bearing rule of the feature: a sha handed in
-/// by a caller is a claim about content that caller may not have been looking
-/// at — an agent that read the file three turns ago, a stale MCP argument, a
-/// retry — and an anchor built from it would attach cleanly to bytes nobody
-/// reviewed. The sha is not decoration on the anchor; it *is* the anchor's
-/// truth condition, so it comes from the same place the truth does.
-///
-/// A file git will not hash has no anchor, so no thread is opened and the
-/// caller is told why. That is better than an anchor with a placeholder sha,
-/// which would be permanently detached from everything including itself.
+/// No argument accepts a blob sha: every write computes it from the file on
+/// disk, because a caller-supplied sha is a claim about content that caller may
+/// not have been looking at. A file git will not hash gets no thread at all.
 class ReviewThreadService {
   ReviewThreadService(this._ref);
 
@@ -32,18 +21,13 @@ class ReviewThreadService {
 
   ReviewThreadDao get _dao => _ref.read(reviewThreadDaoProvider);
 
-  /// Opens a thread against [path] in [repositoryId].
+  /// Opens a thread against [path] in [repositoryId]. [startLine]/[endLine] are
+  /// line numbers in the file as it is right now; omit them for a file-level
+  /// thread.
   ///
-  /// [startLine]/[endLine] are line numbers in the file **as it is right now**
-  /// — which is the same content the sha is taken from, so the two agree by
-  /// construction. Omit them for a file-level thread.
-  ///
-  /// [status] defaults by author: a person writing on a diff has already
-  /// triaged what they wrote and gets [ReviewThreadStatus.shouldFix]; an agent
-  /// gets [ReviewThreadStatus.open], because "this should be fixed" is the
-  /// judgement a human review exists to make and an agent asserting it would be
-  /// filing its own findings straight into the queue that gets sent back to an
-  /// agent.
+  /// [status] defaults by author: a person gets [ReviewThreadStatus.shouldFix],
+  /// an agent [ReviewThreadStatus.open] — an agent asserting "should be fixed"
+  /// would file its own findings into the queue that is sent back to an agent.
   Future<ReviewThread> open({
     required String repositoryId,
     required String path,
@@ -77,8 +61,8 @@ class ReviewThreadService {
         path: path,
         blobSha: sha,
         startLine: startLine,
-        // A single-line anchor stores the same number twice rather than a null
-        // end, so a range is always read the same way.
+        // A single-line anchor stores the same number twice, so a range is
+        // always read the same way.
         endLine: startLine == null ? null : (endLine ?? startLine),
         excerpt: excerpt,
       ),
@@ -143,14 +127,9 @@ class ReviewThreadService {
     );
   }
 
-  /// Every thread on [repositoryId], each one already held against the file it
-  /// points at.
-  ///
-  /// **Two database statements and one git process, whatever the thread
-  /// count.** This is what the diff panel calls, and the panel redraws whenever
-  /// the working tree does; a per-thread query or a per-thread `hash-object`
-  /// would put the whole review history of a repository between a git poll and
-  /// the next frame. Guarded by `review_thread_cost_test`.
+  /// Every thread on [repositoryId], each already held against the file it
+  /// points at, in two database statements and one git process whatever the
+  /// thread count — the diff panel calls this on every working-tree change.
   Future<ReviewThreadIndex> indexFor(String repositoryId) async {
     final threads = _dao.forRepository(repositoryId);
     if (threads.isEmpty) return ReviewThreadIndex.empty;
@@ -166,14 +145,12 @@ class ReviewThreadService {
   }
 
   /// The current content fingerprint of [path], or null when git could not be
-  /// asked. Public because opening a thread and checking one are the same
-  /// question asked at two moments.
+  /// asked.
   Future<String?> currentBlobSha(String repositoryId, String path) async =>
       (await _shasFor(repositoryId, [path]))[path];
 
-  /// Best-effort: a repository that is gone, or a git that will not answer,
-  /// yields an empty map and therefore [ReviewThreadAttachment.unknown] — never
-  /// a silent "attached".
+  /// Best-effort: a git that will not answer yields an empty map and therefore
+  /// [ReviewThreadAttachment.unknown], never a silent "attached".
   Future<Map<String, String>> _shasFor(
     String repositoryId,
     List<String> paths,
@@ -189,12 +166,9 @@ class ReviewThreadService {
     }
   }
 
-  /// Tells the read providers that something changed.
-  ///
-  /// A revision counter rather than an invalidation of a named provider,
-  /// because the writers are not all in this process's UI: an agent calling
-  /// `review_thread_reply` over MCP goes through this same service, and the
-  /// panel a human is looking at has to notice.
+  /// Tells the read providers that something changed. A revision counter, not
+  /// an invalidation, because an agent writing over MCP goes through this same
+  /// service and the panel a human is looking at has to notice.
   void _bump() => _ref.read(reviewThreadRevisionProvider.notifier).bump();
 }
 
@@ -217,13 +191,9 @@ class ReviewThreadRevision extends Notifier<int> {
 final reviewThreadRevisionProvider =
     NotifierProvider<ReviewThreadRevision, int>(ReviewThreadRevision.new);
 
-/// Every review thread on the selected repository, anchors already checked.
-///
-/// One provider for the whole panel rather than one lookup per rendered line:
-/// each `_DiffLineTile` reads its threads out of this index by line number. The
-/// implementation it replaces had every tile filter the full annotation list on
-/// every build, which was survivable only because the list lived in memory and
-/// was cleared constantly.
+/// Every review thread on the selected repository, anchors already checked. One
+/// provider for the whole panel: each `_DiffLineTile` reads its threads out of
+/// this index by line number rather than filtering the whole list per build.
 final repositoryReviewThreadsProvider =
     FutureProvider.autoDispose<ReviewThreadIndex>((ref) async {
       final repositoryId = ref.watch(selectedRepositoryIdProvider);
