@@ -12,6 +12,7 @@ import '../../../app/theme/app_icons.dart';
 import '../../../app/theme/design_tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/presentation/session_card.dart';
+import '../../sessions/domain/session_resume.dart' show describeAge;
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_route.dart';
@@ -64,6 +65,30 @@ class CompanionSessionList extends ConsumerWidget {
   }
 }
 
+/// **When the host last heard from [session]**, or null when it sent no time.
+///
+/// One function on purpose. The reading currently comes from
+/// `lastActivityAt`, the only instant a session row carries; the host is
+/// gaining a dedicated last-active field, and this is the single line that has
+/// to move when it lands.
+DateTime? companionLastActiveAt(CompanionSessionSummary session) =>
+    session.lastActivityAt;
+
+/// That reading in the words the rest of the app uses — "active 3m ago" — or
+/// null when there is no reading.
+///
+/// Null rather than "active just now": a session whose age the host never sent
+/// has an unknown age, and unknown is not zero (CLAUDE.md §19). [describeAge]
+/// rather than [compactAge] because a phone's card runs the full width of the
+/// screen and has room for the word that says what the number means.
+String? companionLastActiveLabel(
+  CompanionSessionSummary session,
+  DateTime now,
+) {
+  final at = companionLastActiveAt(session);
+  return at == null ? null : 'active ${describeAge(now.difference(at))}';
+}
+
 /// One session as the Explorer draws it, fed by the gateway.
 class CompanionSessionRow extends StatelessWidget {
   const CompanionSessionRow({
@@ -83,7 +108,6 @@ class CompanionSessionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final at = session.lastActivityAt;
     // The desktop's own clauses, appended to line three rather than replacing
     // it: an archived or folder-less session is still listed, and says why.
     final notes = [
@@ -101,7 +125,7 @@ class CompanionSessionRow extends StatelessWidget {
       // to be read in sunlight, at arm's length, by someone who does not see
       // amber and green as different colours.
       badge: CompanionStatusBadge(status: session.status, showLabel: true),
-      age: at == null ? null : compactAge(now.difference(at)),
+      age: companionLastActiveLabel(session, now),
       title: session.title,
       branch: session.branch,
       subPath: session.subPath,
