@@ -110,6 +110,28 @@ void main() {
       },
     );
 
+    test('every probe discovery runs carries a bound', () async {
+      final runner = FakeCommandRunner(
+        responder: (req) => req.executable == 'where'
+            ? _ok('C:\\bin\\${req.arguments.first}.exe\r\n')
+            : _ok('1.0.0'),
+      );
+      await AgentDiscoveryService(
+        runner: runner,
+        environment: windowsEnv(),
+        ids: SequentialIdGenerator(),
+        clock: FixedClock(testTime),
+        hostEnvironment: const {},
+      ).discover();
+
+      expect(runner.requests, isNotEmpty);
+      expect(
+        runner.requests.map((r) => r.timeout).toSet(),
+        {kProbeTimeout},
+        reason: 'a wedged where or --version must not hang discovery forever',
+      );
+    });
+
     test('returns nothing when the environment is unavailable', () async {
       final runner = FakeCommandRunner(
         throwError: CommandException('environment offline'),

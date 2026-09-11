@@ -40,7 +40,11 @@ CommandRequest locateRequest(
   String? loginShell,
 }) {
   if (!isPosixShell(kind)) {
-    return CommandRequest(executable: 'where', arguments: [executableName]);
+    return CommandRequest(
+      executable: 'where',
+      arguments: [executableName],
+      timeout: kProbeTimeout,
+    );
   }
   final shell = kind == EnvironmentKind.localPosix
       ? (loginShell ?? localLoginShell())
@@ -48,6 +52,7 @@ CommandRequest locateRequest(
   return CommandRequest(
     executable: shell,
     arguments: ['-lc', 'command -v $executableName'],
+    timeout: kProbeTimeout,
   );
 }
 
@@ -85,6 +90,7 @@ CommandRequest interactiveLocateRequest(
     'p=\$(command -v $executableName 2>/dev/null) && '
         "printf '%s\\n' \"$kAgentPathMarker\$p\"",
   ],
+  timeout: kProbeTimeout,
 );
 
 /// The path an [interactiveLocateRequest] reported, or `null` if it reported
@@ -128,7 +134,11 @@ String localLoginShell() {
 /// question worth asking.
 CommandRequest? reachabilityRequest(EnvironmentKind kind) =>
     isPosixShell(kind) && !isLocalHost(kind)
-    ? const CommandRequest(executable: 'bash', arguments: ['-lc', 'exit 0'])
+    ? const CommandRequest(
+        executable: 'bash',
+        arguments: ['-lc', 'exit 0'],
+        timeout: kProbeTimeout,
+      )
     : null;
 
 /// Expands `%VAR%` placeholders in a Windows path template, or returns `null`
@@ -309,6 +319,7 @@ class AgentDiscoveryService {
           CommandRequest(
             executable: path,
             arguments: descriptor.discovery.versionArguments,
+            timeout: kProbeTimeout,
           ),
         );
         if (versionResult.ok) version = parseAgentVersion(versionResult.stdout);
@@ -396,6 +407,7 @@ class AgentDiscoveryService {
             CommandRequest(
               executable: path,
               arguments: descriptor.discovery.versionArguments,
+              timeout: kProbeTimeout,
             ),
           );
           // It started, so the file is there — even if it exited non-zero.

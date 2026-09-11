@@ -47,6 +47,7 @@ class EnvironmentDiscoveryService {
         const CommandRequest(
           executable: 'wsl.exe',
           arguments: ['--list', '--quiet'],
+          timeout: kProbeTimeout,
         ),
       );
       if (result.ok) {

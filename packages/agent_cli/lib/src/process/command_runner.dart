@@ -12,11 +12,16 @@ class CommandRequest {
     this.workingDirectory,
     this.runInShell = false,
     this.stdinText,
+    this.timeout,
   });
 
   final String executable;
   final List<String> arguments;
   final EnvironmentPath? workingDirectory;
+
+  /// How long `run` waits for the exit before killing the child and throwing a
+  /// [CommandException]. Null — the default — waits forever, as `Process.run` does.
+  final Duration? timeout;
 
   /// Text to hand the process on **stdin**, which is then closed.
   ///
@@ -44,8 +49,14 @@ class CommandRequest {
   String toString() =>
       'CommandRequest($executable ${arguments.join(' ')}'
       '${workingDirectory == null ? '' : ' @${workingDirectory!.path}'}'
-      '${stdinText == null ? '' : ' <${stdinText!.length} chars'})';
+      '${stdinText == null ? '' : ' <${stdinText!.length} chars'}'
+      '${timeout == null ? '' : ' within ${timeout!.inSeconds}s'})';
 }
+
+/// The bound on a probe that only discovers — `where`, `command -v`,
+/// `--version`, `wsl.exe --list`. Generous, because it is a ceiling for a
+/// wedged tool, not a budget; without one a stuck `wsl.exe` hangs discovery forever.
+const Duration kProbeTimeout = Duration(seconds: 60);
 
 /// The result of running a [CommandRequest] to completion.
 class CommandResult {

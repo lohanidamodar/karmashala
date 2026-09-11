@@ -49,7 +49,7 @@ int _spawnsHere = 0;
 /// business knowing.
 Future<CommandResult> spawnToCompletion(CommandRequest request) async {
   _spawnsHere++;
-  if (request.stdinText case final input?) return _spawnWithInput(request, input);
+  if (request.stdinText != null || request.timeout != null) return _spawnAttended(request);
   final result = await Process.run(
     request.executable,
     request.arguments,
@@ -73,14 +73,13 @@ Future<CommandResult> spawnToCompletion(CommandRequest request) async {
   );
 }
 
-/// [spawnToCompletion] for a request that hands the process something on stdin.
+/// [spawnToCompletion] for a request that hands the process something on stdin,
+/// or that must be over within a bound. `Process.run` can do neither.
 ///
-/// `Process.run` cannot do this: it closes stdin before the child has read a
-/// byte. So the process is started, and the three pipes are attended to in the
-/// order that cannot deadlock — **the output futures are subscribed before the
-/// input is written**. A child that fills its stdout pipe while we are still
-/// filling its stdin blocks forever otherwise, and a transcript is exactly the
-/// size that makes it happen.
+/// The three pipes are attended to in the order that cannot deadlock — **the
+/// output futures are subscribed before the input is written**. A child that
+/// fills its stdout pipe while we are still filling its stdin blocks forever
+/// otherwise, and a transcript is exactly the size that makes it happen.
 ///
 /// The close is deliberately not awaited. A CLI that answers before reading all
 /// of its input leaves a pipe nobody will drain, and awaiting that close would
@@ -88,27 +87,46 @@ Future<CommandResult> spawnToCompletion(CommandRequest request) async {
 /// thing worth waiting for. `stdin.done` is caught for the same reason — the
 /// broken-pipe error it raises then is the normal end of that story, not a
 /// failure to report.
-Future<CommandResult> _spawnWithInput(
-  CommandRequest request,
-  String input,
-) async {
+Future<CommandResult> _spawnAttended(CommandRequest request) async {
   final process = await Process.start(
     request.executable,
     request.arguments,
     workingDirectory: request.workingDirectory?.path,
     runInShell: request.runInShell,
   );
-  final out = process.stdout.transform(utf8.decoder).join();
-  final err = process.stderr.transform(utf8.decoder).join();
+  // A payload this app composed comes back as UTF-8, leniently: a stray byte
+  // is one wrong character, not a lost answer. Anything else decodes the way
+  // `Process.run` decodes it.
+  final Converter<List<int>, String> decoder = request.stdinText != null
+      ? const Utf8Decoder(allowMalformed: true)
+      : systemEncoding.decoder;
+  final out = process.stdout.transform(decoder).join();
+  final err = process.stderr.transform(decoder).join();
   process.stdin.done.catchError((Object _) => process.stdin);
-  process.stdin.add(utf8.encode(input));
+  if (request.stdinText case final input?) process.stdin.add(utf8.encode(input));
   unawaited(process.stdin.close().catchError((Object _) {}));
-  final exitCode = await process.exitCode;
+  final exitCode = await _exitWithin(process, request);
   return CommandResult(
     exitCode: exitCode,
     stdout: await out,
     stderr: await err,
   );
+}
+
+/// The exit code, or a [CommandException] once [CommandRequest.timeout] has
+/// passed — thrown before the output is awaited, because a grandchild holding
+/// the pipes would otherwise keep the wait going after the kill.
+Future<int> _exitWithin(Process process, CommandRequest request) async {
+  final bound = request.timeout;
+  if (bound == null) return process.exitCode;
+  try {
+    return await process.exitCode.timeout(bound);
+  } on TimeoutException {
+    process.kill(ProcessSignal.sigkill);
+    throw CommandException(
+      '"${request.executable}" did not finish within ${bound.inSeconds}s and was killed',
+    );
+  }
 }
 
 /// Creates the process for [request] and hands back the live [Process].

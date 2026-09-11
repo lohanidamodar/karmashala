@@ -117,6 +117,17 @@ void main() {
       expect(asked, isFalse, reason: 'wsl.exe must not be run off Windows');
     });
 
+    test('the wsl.exe probe is bounded, so a wedged one cannot hang discovery', () async {
+      final runner = FakeCommandRunner();
+      await EnvironmentDiscoveryService(
+        host: runner,
+        clock: FixedClock(testTime),
+        hostIsWindows: true,
+      ).discover();
+
+      expect(runner.requests.single.timeout, kProbeTimeout);
+    });
+
     test('adds a wsl: environment per discovered distribution', () async {
       final runner = FakeCommandRunner(
         responder: (req) {

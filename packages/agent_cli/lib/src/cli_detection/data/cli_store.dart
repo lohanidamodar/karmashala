@@ -183,6 +183,7 @@ class CliStoreLocator {
         const CommandRequest(
           executable: 'bash',
           arguments: ['-lc', r'printf %s "$HOME"'],
+          timeout: kProbeTimeout,
         ),
       );
       final home = result.stdout.trim();
