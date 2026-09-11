@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
+import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
@@ -41,8 +43,33 @@ class SessionTranscriptLocator {
     required String externalSessionId,
   }) async {
     if (externalSessionId.isEmpty) return null;
-    return (await index())['$agentId/$externalSessionId'];
+    final found = (await index())['$agentId/$externalSessionId'];
+    if (found != null || agentId != AgentIds.antigravity) return found;
+    return _antigravityRecordFor(externalSessionId);
   }
+
+  /// The scan leaves out an Antigravity conversation its store places in no
+  /// directory (`AntigravityStoreSessions`) — 38 of the 44 with a transcript
+  /// here. Its record is looked for by id instead, in every store located.
+  Future<String?> _antigravityRecordFor(String id) async {
+    try {
+      for (final store in await _stores()) {
+        final home = store.antigravityHome;
+        if (home == null) continue;
+        for (final extension in const ['.db', '.pb']) {
+          final record = p.join(home, 'conversations', '$id$extension');
+          if (await File(record).exists()) return record;
+        }
+      }
+    } catch (_) {
+      // A store we cannot read is the same answer as one with nothing in it.
+    }
+    return null;
+  }
+
+  Future<List<CliStore>> _stores() => _ref
+      .read(cliStoreLocatorProvider)
+      .locate(_ref.read(executionEnvironmentDaoProvider).getAll());
 
   /// Every transcript one scan can find, keyed `'<agentId>/<sessionId>'`. The
   /// scan costs the same for one session or five hundred; empty is unreadable.
@@ -50,9 +77,7 @@ class SessionTranscriptLocator {
     final found = <String, String>{};
     try {
       final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
-      final stores = await _ref
-          .read(cliStoreLocatorProvider)
-          .locate(environments);
+      final stores = await _stores();
       final projects = await _ref.read(cliDetectionServiceProvider).detect(
         stores,
         {for (final environment in environments) environment.id: environment},
