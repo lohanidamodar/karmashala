@@ -22,6 +22,11 @@ import 'uiautomator_parsing.dart';
 /// the filesystem.
 typedef HostFileReader = Future<Uint8List> Function(String path);
 
+/// Whether a host path exists, and how to remove one: the pair that lets a
+/// failed `adb pull` take its partial file away without touching a pre-existing one.
+typedef HostFileProbe = Future<bool> Function(String path);
+typedef HostFileRemover = Future<void> Function(String path);
+
 /// Escapes text for `adb shell input text`: the device's shell re-parses the
 /// argument, so a literal space would split it and `%s` is the escape.
 String encodeInputText(String text) {
@@ -49,13 +54,19 @@ class AdbService {
     required this.runner,
     required this.sdk,
     HostFileReader? readHostFile,
+    HostFileProbe? hostFileExists,
+    HostFileRemover? removeHostFile,
     this.deviceTempDirectory = '/data/local/tmp',
     this.uiDumpRetryDelay = const Duration(milliseconds: 400),
-  }) : _readHostFile = readHostFile ?? _defaultReadHostFile;
+  }) : _readHostFile = readHostFile ?? _defaultReadHostFile,
+       _hostFileExists = hostFileExists ?? _defaultHostFileExists,
+       _removeHostFile = removeHostFile ?? _defaultRemoveHostFile;
 
   final CommandRunner runner;
   final AndroidSdk sdk;
   final HostFileReader _readHostFile;
+  final HostFileProbe _hostFileExists;
+  final HostFileRemover _removeHostFile;
 
   /// Who is recording what this service does to devices, or null for nobody.
   /// Plumbing reads — listing devices, asking a screen size — are not reported.
@@ -71,6 +82,16 @@ class AdbService {
 
   static Future<Uint8List> _defaultReadHostFile(String path) =>
       File(path).readAsBytes();
+
+  // Synchronous on purpose: async `dart:io` never completes under a widget
+  // test's FakeAsync, and the files dialog runs this path inside one.
+  static Future<bool> _defaultHostFileExists(String path) async =>
+      File(path).existsSync();
+
+  static Future<void> _defaultRemoveHostFile(String path) async {
+    final file = File(path);
+    if (file.existsSync()) file.deleteSync();
+  }
 
   CommandRequest _adb(List<String> arguments) =>
       CommandRequest(executable: sdk.adb.path, arguments: arguments);
@@ -944,13 +965,22 @@ class AdbService {
     required String devicePath,
     required String hostPath,
   }) async {
-    final result = await runner.run(
-      _forDevice(serial, ['pull', devicePath, hostPath]),
-    );
+    // Only a file this pull created is ours to take away again.
+    final existedBefore = await _hostFileExists(hostPath);
+    final CommandResult result;
+    try {
+      result = await runner.run(
+        _forDevice(serial, ['pull', devicePath, hostPath]),
+      );
+    } on Object {
+      if (!existedBefore) await _discardPartial(hostPath);
+      rethrow;
+    }
     // The summary lands on **stderr with exit code 0**, so neither stream alone
     // is the answer.
     final combined = '${result.stdout}\n${result.stderr}';
     if (!result.ok || !transferSucceeded(combined)) {
+      if (!existedBefore) await _discardPartial(hostPath);
       final error = DeviceRefusal(
         'Could not copy $devicePath off $serial: ${cleanAdbError(combined)}',
       );
@@ -978,6 +1008,14 @@ class AdbService {
       hostPath: hostPath,
       bytes: bytes,
     );
+  }
+
+  Future<void> _discardPartial(String hostPath) async {
+    try {
+      await _removeHostFile(hostPath);
+    } on Object {
+      // The pull's own failure is the one to report.
+    }
   }
 
   /// Copies a file onto the device, overwriting [devicePath]. The decision not

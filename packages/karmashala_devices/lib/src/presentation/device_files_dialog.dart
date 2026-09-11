@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:agent_cli/process.dart' show CommandException;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/picking.dart';
@@ -88,14 +89,29 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
         return;
       }
       await _go(roots.first, roots.first.path);
-    } on DeviceRefusal catch (refusal) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _busy = null;
-        _refusal = refusal.toString();
+        _refusal = _worded(error);
       });
     }
   }
+
+  /// How long one copy may take before the dialog stops waiting on it. The
+  /// adb process is not killed; the dialog just becomes usable again.
+  static const Duration transferTimeout = Duration(minutes: 10);
+
+  /// A refusal is already worded; anything else is said in the device's terms
+  /// too, because `_busy` is cleared in the same breath and must never wedge.
+  static String _worded(Object error) => switch (error) {
+    DeviceRefusal() => error.toString(),
+    CommandException(:final message) => 'adb could not be run: $message',
+    TimeoutException() =>
+      'Gave up after ${transferTimeout.inMinutes} minutes; adb may still be '
+          'copying.',
+    _ => '$error',
+  };
 
   /// Lists [path], recording a refusal as a refusal rather than as emptiness.
   Future<void> _go(DeviceFileRoot root, String path) async {
@@ -114,12 +130,12 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
         _busy = null;
         _listing = listing;
       });
-    } on DeviceRefusal catch (refusal) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() {
         _busy = null;
         _listing = null;
-        _refusal = refusal.toString();
+        _refusal = _worded(error);
       });
     }
   }
@@ -139,17 +155,19 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     if (directory == null || !mounted) return;
     setState(() => _busy = 'Copying ${entry.name} to this computer…');
     try {
-      final moved = await driver.pullFile(
-        devicePath: entry.path,
-        hostPath: p.join(directory, entry.name),
-      );
+      final moved = await driver
+          .pullFile(
+            devicePath: entry.path,
+            hostPath: p.join(directory, entry.name),
+          )
+          .timeout(transferTimeout);
       if (!mounted) return;
       setState(() => _busy = null);
       _say('Saved to ${moved.hostPath}${moved.note == null ? '' : ' · ${moved.note}'}');
-    } on DeviceRefusal catch (refusal) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _busy = null);
-      _say('$refusal');
+      _say(_worded(error));
     }
   }
 
@@ -164,19 +182,21 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     if (file == null || !mounted) return;
     setState(() => _busy = 'Copying ${file.name} to the device…');
     try {
-      final moved = await driver.pushFile(
-        hostPath: file.path,
-        devicePath: p.posix.join(path, file.name),
-      );
+      final moved = await driver
+          .pushFile(
+            hostPath: file.path,
+            devicePath: p.posix.join(path, file.name),
+          )
+          .timeout(transferTimeout);
       if (!mounted) return;
       setState(() => _busy = null);
       _say(moved.note ?? 'Copied to ${moved.devicePath}');
       await _go(_root!, path);
-    } on DeviceRefusal catch (refusal) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _busy = null);
       // The refusal a push is *meant* to give: an existing file, not replaced.
-      _say('$refusal');
+      _say(_worded(error));
     }
   }
 
@@ -199,10 +219,8 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     final clip = _clip;
     if (driver == null || clip == null) return;
     setState(() => _busy = '${clip.summary} into $directory…');
-    final report = await pasteOnDevice(
-      driver: driver,
-      clip: clip,
-      directory: directory,
+    final report = await _guarded(
+      () => pasteOnDevice(driver: driver, clip: clip, directory: directory),
     );
     if (!mounted) return;
     setState(() {
@@ -215,18 +233,32 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     if (report.deviceChanged) await _refresh();
   }
 
+  /// The action helpers word a refusal themselves; this words everything else,
+  /// so an adb that cannot run clears `_busy` like any other outcome.
+  Future<DeviceFileActionReport> _guarded(
+    Future<DeviceFileActionReport> Function() action,
+  ) async {
+    try {
+      return await action().timeout(transferTimeout);
+    } on Object catch (error) {
+      return DeviceFileActionReport(_worded(error));
+    }
+  }
+
   /// Copies [entry] off the device and onto **this computer's** clipboard, so
   /// it can be pasted into Explorer or Finder.
   Future<void> _copyForHost(DeviceFileEntry entry) async {
     final driver = _driver;
     if (driver == null) return;
     setState(() => _busy = 'Copying ${entry.name} to this computer…');
-    final report = await copyToHostClipboard(
-      driver: driver,
-      host: widget.host,
-      temporaryDirectory: _temporaryDirectory,
-      entries: [entry],
-      makeDirectory: widget.makeDirectory,
+    final report = await _guarded(
+      () => copyToHostClipboard(
+        driver: driver,
+        host: widget.host,
+        temporaryDirectory: _temporaryDirectory,
+        entries: [entry],
+        makeDirectory: widget.makeDirectory,
+      ),
     );
     if (!mounted) return;
     setState(() => _busy = null);
@@ -240,10 +272,12 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     final path = _path;
     if (driver == null || path == null) return;
     setState(() => _busy = 'Copying this computer\'s clipboard to the device…');
-    final report = await pasteFromHostClipboard(
-      driver: driver,
-      host: widget.host,
-      directory: path,
+    final report = await _guarded(
+      () => pasteFromHostClipboard(
+        driver: driver,
+        host: widget.host,
+        directory: path,
+      ),
     );
     if (!mounted) return;
     setState(() => _busy = null);
@@ -262,10 +296,8 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
       mode: DeviceFileClipboardMode.cut,
     );
     setState(() => _busy = 'Moving ${entry.name} into $directory…');
-    final report = await pasteOnDevice(
-      driver: driver,
-      clip: clip,
-      directory: directory,
+    final report = await _guarded(
+      () => pasteOnDevice(driver: driver, clip: clip, directory: directory),
     );
     if (!mounted) return;
     setState(() => _busy = null);
@@ -316,10 +348,10 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
       if (!mounted) return;
       setState(() => _busy = null);
       await _go(_root!, path);
-    } on DeviceRefusal catch (refusal) {
+    } on Object catch (error) {
       if (!mounted) return;
       setState(() => _busy = null);
-      _say('$refusal');
+      _say(_worded(error));
     }
   }
 

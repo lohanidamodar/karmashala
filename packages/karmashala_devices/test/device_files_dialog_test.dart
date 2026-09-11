@@ -330,6 +330,49 @@ void main() {
     expect(find.textContaining('Copied shot.png'), findsOneWidget);
   });
 
+  testWidgets('an adb that cannot run clears the busy state and says so', (
+    tester,
+  ) async {
+    // Only DeviceRefusal used to be caught; a CommandException left `_busy`
+    // set and every control disabled until the dialog was closed.
+    final runner = _runner();
+    await _pump(tester, runner: runner, host: FakeHostClipboard());
+    runner.throwError = CommandException('adb.exe vanished');
+
+    await tester.tap(find.text('Download'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.textContaining('adb could not be run'), findsOneWidget);
+    expect(find.text('Not permitted'), findsOneWidget);
+    // The Up button is live again: the dialog is not wedged.
+    runner.throwError = null;
+    await tester.tap(find.byKey(const Key('device-files-up')));
+    await tester.pumpAndSettle();
+    expect(find.text('a.txt'), findsOneWidget);
+  });
+
+  testWidgets('an adb that cannot run mid-paste clears the busy state', (
+    tester,
+  ) async {
+    final runner = _runner();
+    await _pump(tester, runner: runner, host: FakeHostClipboard());
+    await tester.tap(find.byKey(const Key('device-file-menu-a.txt')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cut on the device'));
+    await tester.pumpAndSettle();
+    await _nextMessage(tester);
+    await tester.tap(find.text('Download'));
+    await tester.pumpAndSettle();
+    runner.throwError = CommandException('adb.exe vanished');
+
+    await tester.tap(find.byKey(const Key('device-files-paste')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.textContaining('adb could not be run'), findsOneWidget);
+  });
+
   testWidgets('an empty file clipboard says so rather than failing', (
     tester,
   ) async {

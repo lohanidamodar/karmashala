@@ -115,6 +115,37 @@ void main() {
     expect(cancelled, isTrue);
   });
 
+  test('drops chunks rather than queue without bound for a viewer that has '
+      'stopped reading', () async {
+    var dropped = 0;
+    final controller = StreamController<List<int>>();
+    addTearDown(controller.close);
+    final server = await LoopbackMediaServer.serve(
+      openStream: () => controller.stream,
+      maxQueuedBytes: 1,
+      onChunkDropped: () => dropped++,
+    );
+    addTearDown(server.close);
+
+    final socket = await Socket.connect(server.url.host, server.url.port);
+    addTearDown(socket.destroy);
+    socket.write('GET ${server.url.path} HTTP/1.1\r\n');
+    socket.write('Host: ${server.url.host}\r\n\r\n');
+    await socket.flush();
+    socket.listen((_) {}, onError: (Object _) {});
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    // Three in one tick: the first is in flight, so the other two are over
+    // the bound before its flush can complete.
+    controller
+      ..add(utf8.encode('one'))
+      ..add(utf8.encode('two'))
+      ..add(utf8.encode('three'));
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(dropped, 2);
+  });
+
   test('reports each chunk that reached the socket', () async {
     var written = 0;
     final server = await LoopbackMediaServer.serve(

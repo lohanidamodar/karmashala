@@ -894,12 +894,7 @@ class DeviceStreamService {
       }
     }
 
-    final http = await LoopbackMediaServer.serve(
-      openStream: muxedForOneViewer,
-      onChunkWritten: () =>
-          mark.writtenUs = DateTime.now().microsecondsSinceEpoch,
-    );
-
+    LoopbackMediaServer? http;
     Future<void> stop() async {
       if (stopped) return;
       stopped = true;
@@ -910,13 +905,26 @@ class DeviceStreamService {
       if (!frames.isClosed) await frames.close();
       if (!sizes.isClosed) await sizes.close();
       if (!healthController.isClosed) await healthController.close();
-      await http.close();
+      await http?.close();
       // Killing the host-side `adb shell` leaves the `app_process` it started
       // running on the device, and the forward outlives both.
       await server.kill();
       await _killDeviceServers(serial, scid);
       await adb.removeForward(serial, localPort);
       _logger.info('Device $serial stream stopped.');
+    }
+
+    // Everything above is already live; a bind that fails must take it down
+    // rather than leave a server, a forward and a watchdog with no session.
+    try {
+      http = await LoopbackMediaServer.serve(
+        openStream: muxedForOneViewer,
+        onChunkWritten: () =>
+            mark.writtenUs = DateTime.now().microsecondsSinceEpoch,
+      );
+    } on Object {
+      await stop();
+      rethrow;
     }
 
     final session = DeviceStreamSession._(

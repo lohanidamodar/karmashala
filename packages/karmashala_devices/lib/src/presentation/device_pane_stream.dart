@@ -62,6 +62,24 @@ enum LiveViewSelectionAction {
   return (action: LiveViewSelectionAction.moveTo, device: device);
 }
 
+/// Runs [open] over something already started; when it throws, [release] runs
+/// first so a failed start does not leak what was built before the failure.
+Future<T> openOrRelease<T>({
+  required Future<T> Function() open,
+  required Future<void> Function() release,
+}) async {
+  try {
+    return await open();
+  } catch (_) {
+    try {
+      await release();
+    } on Object {
+      // The failure that started this is the one to report.
+    }
+    rethrow;
+  }
+}
+
 mixin _DeviceLiveStream
     on ConsumerState<DevicePane>, WidgetsBindingObserver {
   Player? _player;
@@ -341,7 +359,12 @@ mixin _DeviceLiveStream
         await session.stop();
         return;
       }
-      final opened = await _openPlayer(session.url);
+      // A player that fails to open leaves the session to be stopped here, or
+      // every retry leaks an `app_process`, a forward and a loopback server.
+      final opened = await openOrRelease(
+        open: () => _openPlayer(session.url),
+        release: session.stop,
+      );
       final player = opened.player;
       final controller = opened.controller;
       if (!mounted || token != _startToken) {
@@ -413,13 +436,24 @@ mixin _DeviceLiveStream
         protocolWhitelist: ['file', 'tcp', 'http'],
       ),
     );
-    final native = player.platform as NativePlayer;
-    // libmpv buffers for smoothness; these make it a monitor. `setProperty`
-    // swallows libmpv's return code — verify a change by reading it back.
-    await configureDeviceLivePlayer(native.setProperty);
-    final controller = VideoController(player);
-    await player.open(Media(url.toString()));
-    return (player: player, controller: controller);
+    return openOrRelease(
+      open: () async {
+        final native = player.platform as NativePlayer;
+        // libmpv buffers for smoothness; these make it a monitor. `setProperty`
+        // swallows libmpv's return code — verify a change by reading it back.
+        await configureDeviceLivePlayer(native.setProperty);
+        final controller = VideoController(player);
+        await player.open(Media(url.toString()));
+        return (player: player, controller: controller);
+      },
+      release: player.dispose,
+    );
+  }
+
+  /// A failed `adb shell input` is a fact about the device, said once here
+  /// rather than discarded — the gesture already went nowhere.
+  void _onAdbInputError(Object error) {
+    _log.warning('adb input on $_liveSerial failed: $error');
   }
 
   /// Rebuilds the player against the stream it is already reading: the middle
@@ -503,7 +537,11 @@ mixin _DeviceLiveStream
     if (adb == null) return null;
     return _observedKeys(
       session,
-      AdbKeyboardSink(adb: adb, serial: session.serial),
+      AdbKeyboardSink(
+        adb: adb,
+        serial: session.serial,
+        onError: _onAdbInputError,
+      ),
     );
   }
 
@@ -526,7 +564,12 @@ mixin _DeviceLiveStream
     setState(
       () => _sink = _observed(
         session!,
-        AdbGestureSink(adb: adb, serial: serial, screen: screen),
+        AdbGestureSink(
+          adb: adb,
+          serial: serial,
+          screen: screen,
+          onError: _onAdbInputError,
+        ),
       ),
     );
   }
@@ -551,7 +594,11 @@ mixin _DeviceLiveStream
       setState(
         () => _keyboardSink = _observedKeys(
           session,
-          AdbKeyboardSink(adb: adb, serial: serial),
+          AdbKeyboardSink(
+            adb: adb,
+            serial: serial,
+            onError: _onAdbInputError,
+          ),
         ),
       );
     }

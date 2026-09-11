@@ -113,6 +113,41 @@ void main() {
       expect(frames.single, frame);
     });
 
+    test('a negative Content-Length falls back to the end marker instead of '
+        'crashing', () async {
+      final frame = jpeg(48, fill: 0x45);
+      server = await serve([
+        [
+          ...'--BoundaryString\r\n'.codeUnits,
+          ...'Content-Length: -7\r\n\r\n'.codeUnits,
+          ...frame,
+          ...'\r\n\r\n'.codeUnits,
+        ],
+      ]);
+
+      final frames = await MjpegStream.connect(urlOf(server)).take(1).toList();
+
+      expect(frames.single, frame);
+    });
+
+    test('a Content-Length past the frame cap is not believed', () async {
+      // Believing it would buffer the whole body waiting for bytes that never
+      // come; the end marker is what actually delimits the frame.
+      final frame = jpeg(48, fill: 0x46);
+      server = await serve([
+        [
+          ...'--BoundaryString\r\n'.codeUnits,
+          ...'Content-Length: ${1 << 40}\r\n\r\n'.codeUnits,
+          ...frame,
+          ...'\r\n\r\n'.codeUnits,
+        ],
+      ]);
+
+      final frames = await MjpegStream.connect(urlOf(server)).take(1).toList();
+
+      expect(frames.single, frame);
+    });
+
     test('reports a refusal rather than waiting for frames', () async {
       server = await serve([], status: 500);
 

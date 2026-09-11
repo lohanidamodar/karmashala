@@ -930,6 +930,42 @@ void main() {
     });
   });
 
+  group('openOrRelease', () {
+    test('a player that fails to open stops the session it was for', () async {
+      // Each retry used to leak the session — app_process, forward, loopback
+      // server, watchdog — because only the player's error was handled.
+      var released = 0;
+      await expectLater(
+        openOrRelease<void>(
+          open: () async => throw StateError('libmpv refused'),
+          release: () async => released++,
+        ),
+        throwsStateError,
+      );
+      expect(released, 1);
+    });
+
+    test('a start that succeeds releases nothing', () async {
+      var released = 0;
+      final value = await openOrRelease<int>(
+        open: () async => 7,
+        release: () async => released++,
+      );
+      expect(value, 7);
+      expect(released, 0);
+    });
+
+    test('a release that itself fails does not hide the first failure', () {
+      expect(
+        openOrRelease<void>(
+          open: () async => throw StateError('first'),
+          release: () async => throw StateError('second'),
+        ),
+        throwsA(isA<StateError>().having((e) => e.message, 'message', 'first')),
+      );
+    });
+  });
+
   // Bug 2: "on live view when i switch to another device, live view still
   // showing old device". `_streamingSerial` won once streaming started and
   // nothing watched the selection, so the picture stayed put.

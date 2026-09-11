@@ -78,6 +78,10 @@ class _MultipartJpegParser {
   /// something other than multipart. A real part header is under 200 bytes.
   static const int _maxHeaderBytes = 8 * 1024;
 
+  /// The most one frame may run to. A declared length past it, or a body that
+  /// never finds its end marker, is dropped rather than buffered without bound.
+  static const int maxFrameBytes = 32 * 1024 * 1024;
+
   static final List<int> _headerEnd = [13, 10, 13, 10]; // CRLF CRLF
   static const int _jpegSoi = 0xD8;
   static const int _jpegEoi = 0xD9;
@@ -109,7 +113,11 @@ class _MultipartJpegParser {
       }
       final headers = String.fromCharCodes(bytes.sublist(0, headerEnd));
       final start = headerEnd + _headerEnd.length;
-      final length = _contentLength(headers);
+      final declared = _contentLength(headers);
+      // A negative or absurd length is not one; fall back to the end marker.
+      final length = declared == null || declared < 0 || declared > maxFrameBytes
+          ? null
+          : declared;
 
       final int end;
       if (length != null) {
@@ -117,7 +125,10 @@ class _MultipartJpegParser {
         if (bytes.length < end) break;
       } else {
         final marker = _indexOfEoi(bytes, start);
-        if (marker < 0) break;
+        if (marker < 0) {
+          if (bytes.length - start > maxFrameBytes) bytes = Uint8List(0);
+          break;
+        }
         end = marker;
       }
       frames.add(Uint8List.sublistView(bytes, start, end));

@@ -329,6 +329,59 @@ void main() {
       );
     });
 
+    test('a failed pull takes its partial file away', () async {
+      // adb writes the destination as it goes, so a refused pull would leave a
+      // truncated file looking like the real one.
+      final removed = <String>[];
+      final service = AdbService(
+        runner: _runner((_) => _err('adb: error: failed to copy')),
+        sdk: _sdk(),
+        hostFileExists: (_) async => false,
+        removeHostFile: (path) async => removed.add(path),
+      );
+
+      await expectLater(
+        service.pullFile(_serial, devicePath: '/data/x', hostPath: r'C:\tmp\x'),
+        throwsA(isA<DeviceRefusal>()),
+      );
+      expect(removed, [r'C:\tmp\x']);
+    });
+
+    test('a failed pull leaves a file that was already there alone', () async {
+      final removed = <String>[];
+      final service = AdbService(
+        runner: _runner((_) => _err('adb: error: failed to copy')),
+        sdk: _sdk(),
+        hostFileExists: (_) async => true,
+        removeHostFile: (path) async => removed.add(path),
+      );
+
+      await expectLater(
+        service.pullFile(_serial, devicePath: '/data/x', hostPath: r'C:\tmp\x'),
+        throwsA(isA<DeviceRefusal>()),
+      );
+      expect(removed, isEmpty);
+    });
+
+    test('an adb that cannot run also takes the partial file away', () async {
+      final removed = <String>[];
+      final runner = FakeCommandRunner(
+        throwError: CommandException('adb.exe is not there'),
+      );
+      final service = AdbService(
+        runner: runner,
+        sdk: _sdk(),
+        hostFileExists: (_) async => false,
+        removeHostFile: (path) async => removed.add(path),
+      );
+
+      await expectLater(
+        service.pullFile(_serial, devicePath: '/data/x', hostPath: r'C:\tmp\x'),
+        throwsA(isA<CommandException>()),
+      );
+      expect(removed, [r'C:\tmp\x']);
+    });
+
     test('is reported to whoever is recording what happens to devices',
         () async {
       final runner = _runner(

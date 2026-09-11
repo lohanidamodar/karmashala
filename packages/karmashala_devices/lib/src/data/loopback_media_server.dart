@@ -26,6 +26,8 @@ class LoopbackMediaServer {
     ContentType? contentType,
     String path = 'live.ts',
     void Function()? onChunkWritten,
+    int maxQueuedBytes = defaultMaxQueuedBytes,
+    void Function()? onChunkDropped,
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final url = Uri.parse('http://127.0.0.1:${server.port}/$path');
@@ -41,6 +43,7 @@ class LoopbackMediaServer {
       // chunked body that never gets its last chunk. The close waits for the
       // last flush, or it truncates bytes still on their way to the socket.
       var pending = Future<void>.value();
+      var queuedBytes = 0;
       var finished = false;
       Future<void> finish() async {
         if (finished) return;
@@ -59,6 +62,13 @@ class LoopbackMediaServer {
           // raised while the first is in flight throws, silently dropping that
           // frame and every one behind it. The chain is not awaited by the
           // listener, so a slow socket cannot stall a live picture's producer.
+          // A viewer that stopped taking bytes gets frames dropped, not queued
+          // without bound.
+          if (queuedBytes >= maxQueuedBytes) {
+            onChunkDropped?.call();
+            return;
+          }
+          queuedBytes += chunk.length;
           pending = pending
               .then((_) async {
                 response.add(chunk);
@@ -71,7 +81,8 @@ class LoopbackMediaServer {
               .catchError((Object _) {
                 // The viewer went away mid-write. `response.done` below is what
                 // actually ends this subscription.
-              });
+              })
+              .whenComplete(() => queuedBytes -= chunk.length);
         },
         onDone: () => unawaited(finish()),
         // The producer failing ends this viewer's stream, not the server: the
@@ -85,6 +96,10 @@ class LoopbackMediaServer {
     }, onError: (Object _) {});
     return LoopbackMediaServer._(server, url, viewers);
   }
+
+  /// How much may wait on one viewer's socket before frames are dropped: a few
+  /// seconds of picture, and far less than libmpv holds before it stalls.
+  static const int defaultMaxQueuedBytes = 8 * 1024 * 1024;
 
   final HttpServer _server;
 
