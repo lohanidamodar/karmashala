@@ -31,17 +31,28 @@ class HostSession {
        columns = request.columns,
        rows = request.rows,
        _lifecycle = const SessionRunning() {
-    _pty.output.listen(_onOutput, onError: (Object _) {}, onDone: _onOutputDone);
+    _pty.output.listen(
+      _onOutput,
+      onError: (Object error) => _readFault ??= '$error',
+      onDone: _onOutputDone,
+    );
     unawaited(
       _pty.exitCode.then(
         (code) => _finish(
           code < 0
-              ? SessionEndedWithoutCode(DateTime.now(), 'the child could not be reaped')
+              ? SessionEndedWithoutCode(
+                  DateTime.now(),
+                  'the child could not be reaped${_readFault == null ? '' : '; $_readFault'}',
+                )
               : SessionExited(code, DateTime.now()),
         ),
       ),
     );
   }
+
+  /// The first fault the pty reader reported, kept for the end reason: a
+  /// session that ends without a code should say why if the pty knows.
+  String? _readFault;
 
   /// A session read back from disk: no process, and [lifecycle] is whatever the
   /// record said. Nothing is invented, so a lost session keeps no exit code.

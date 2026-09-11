@@ -371,6 +371,30 @@ void main() {
       expect(launcher.started, isEmpty, reason: 'a child with no session is unreachable');
     });
 
+    test('a pty read fault is kept, and named when the code is unknown', () async {
+      final env = build();
+      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final pty = env.launcher.handles.single;
+      pty.emitError(const PtyException('read(pty) failed with errno 5'));
+      await Future<void>.delayed(Duration.zero);
+      pty.finish(-1);
+      final end = await session.ended;
+
+      expect(end, isA<SessionEndedWithoutCode>());
+      expect((end as SessionEndedWithoutCode).reason, contains('could not be reaped'));
+      expect(end.reason, contains('errno 5'));
+    });
+
+    test('a read fault does not unseat a real exit code', () async {
+      final env = build();
+      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final pty = env.launcher.handles.single;
+      pty.emitError(const PtyException('read(pty) failed with errno 5'));
+      pty.finish(0);
+
+      expect((await session.ended).exitCode, 0);
+    });
+
     test('shutdown signals every session at once and waits for them together', () async {
       final env = build();
       env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));

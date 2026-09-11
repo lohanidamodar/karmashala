@@ -138,7 +138,15 @@ class PosixPtyLauncher implements PtyLauncher {
 
 class _PosixPtyHandle implements PtyHandle {
   _PosixPtyHandle(this._libc, this._masterFd, this.pid) {
-    _startReader();
+    unawaited(_startReader().catchError(_readerLost));
+  }
+
+  /// A reader isolate that could not start ends this session, with the reason,
+  /// rather than the host: an unread pty is one session lost, not every one.
+  void _readerLost(Object error) {
+    if (!_output.isClosed) _output.addError(PtyException('the pty reader could not start: $error'));
+    if (!_exit.isCompleted) _exit.complete(-1);
+    if (!_output.isClosed) _output.close();
   }
 
   final Libc _libc;

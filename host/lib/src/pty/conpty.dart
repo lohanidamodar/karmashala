@@ -243,8 +243,18 @@ class _ConPtyHandle implements PtyHandle {
        _pseudoConsole = pseudoConsole,
        _inputWrite = inputWrite,
        _job = job {
-    _startReader(outputRead);
-    _startExitWatch(processHandle);
+    unawaited(_startReader(outputRead).catchError((Object e) => _watchLost('reader', e)));
+    unawaited(_startExitWatch(processHandle).catchError((Object e) => _watchLost('exit watch', e)));
+  }
+
+  /// An isolate that could not start ends this session, with the reason,
+  /// rather than the host: one session lost, not every one.
+  void _watchLost(String which, Object error) {
+    if (!_output.isClosed) _output.addError(PtyException('the conpty $which could not start: $error'));
+    _outputDone = true;
+    _observedExitCode ??= -1;
+    if (!_output.isClosed) _output.close();
+    _settle();
   }
 
   final Kernel32 _k;

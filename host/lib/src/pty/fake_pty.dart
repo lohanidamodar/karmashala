@@ -69,6 +69,11 @@ class FakePtyHandle implements PtyHandle {
     if (!_output.isClosed) _output.add(Uint8List.fromList(bytes));
   }
 
+  /// What the reader reports when the pty itself fails, before any exit.
+  void emitError(Object error) {
+    if (!_output.isClosed) _output.addError(error);
+  }
+
   void finish(int code) {
     if (!_exit.isCompleted) _exit.complete(code);
     if (!_output.isClosed) _output.close();
