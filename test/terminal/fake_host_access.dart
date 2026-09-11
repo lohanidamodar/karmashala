@@ -25,6 +25,9 @@ class PaneAccess implements HostSessionAccess {
   var tmuxUnknown = false;
   var tmuxAsks = 0;
 
+  /// What the host answers an attach with instead of looking the session up.
+  ProtocolErrorCode? attachRefusal;
+
   /// What a *reattach* says the session has produced so far. Zero unless a test
   /// is about what a pane does with a session that already has history.
   int resumedTotalBytes = 0;
@@ -54,7 +57,11 @@ class PaneAccess implements HostSessionAccess {
   @override
   Future<RemoteChannel> exec(String command) async {
     execs.add(command);
-    final channel = ScriptedHostChannel(liveSessions, resumedTotalBytes: resumedTotalBytes);
+    final channel = ScriptedHostChannel(
+      liveSessions,
+      resumedTotalBytes: resumedTotalBytes,
+      attachRefusal: attachRefusal,
+    );
     channels.add(channel);
     return channel;
   }
@@ -69,7 +76,9 @@ class PaneAccess implements HostSessionAccess {
 }
 
 class ScriptedHostChannel implements RemoteChannel {
-  ScriptedHostChannel(this.liveSessions, {this.resumedTotalBytes = 0});
+  ScriptedHostChannel(this.liveSessions, {this.resumedTotalBytes = 0, this.attachRefusal});
+
+  final ProtocolErrorCode? attachRefusal;
 
   /// What a reattach reports as this session's absolute total.
   final int resumedTotalBytes;
@@ -110,6 +119,10 @@ class ScriptedHostChannel implements RemoteChannel {
             ),
           );
         case AttachMessage(:final requestId, :final sessionId):
+          if (attachRefusal != null) {
+            push(ErrorMessage(requestId, attachRefusal!, 'refused: ${attachRefusal!.name}'));
+            break;
+          }
           if (!liveSessions.contains(sessionId)) {
             // The pane must fall through to `open` on its first run.
             push(
@@ -173,6 +186,7 @@ class ScriptedHostChannel implements RemoteChannel {
   }
 
   T only<T extends HostMessage>() => received.whereType<T>().single;
+  Iterable<T> all<T extends HostMessage>() => received.whereType<T>();
 }
 
 

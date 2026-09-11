@@ -15,6 +15,7 @@ import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'cast_recorder.dart';
 import 'cold_screen.dart';
 import 'command_block_recorder.dart';
+import 'package:karmashala_host/protocol.dart' show ProtocolErrorCode;
 import 'host_pane_link.dart';
 import 'pty_output_coalescer.dart';
 import 'pty_launch.dart';
@@ -307,8 +308,10 @@ class HostTerminalInstance
       );
       _resumed = true;
       return attachment;
-    } on HostLinkException {
-      // No such session: this pane's first run.
+    } on HostLinkException catch (e) {
+      // Only the host saying there is no such session earns an open. A timeout
+      // or any other refusal may mean the session is there and alive.
+      if (e.code != ProtocolErrorCode.unknownSession) rethrow;
       return link.openSession(
         sessionId: sessionId,
         argv: [launch.executable, ...launch.arguments],

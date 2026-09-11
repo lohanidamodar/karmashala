@@ -234,7 +234,7 @@ class HostPaneLink {
         case ErrorMessage():
           final waiting = _pending.remove(message.requestId);
           if (waiting != null && !waiting.isCompleted) {
-            waiting.completeError(HostLinkException(message.message));
+            waiting.completeError(HostLinkException(message.message, code: message.code));
           } else if (!_notices.isClosed) {
             // Unsolicited: a refused write, most often.
             _notices.add(message.message);
@@ -307,8 +307,11 @@ class HostSessionEnd {
 }
 
 class HostLinkException implements Exception {
-  const HostLinkException(this.message, {this.timedOut = false});
+  const HostLinkException(this.message, {this.timedOut = false, this.code});
   final String message;
+
+  /// The host's refusal code, when the host said something at all.
+  final ProtocolErrorCode? code;
 
   /// Whether the bound expired rather than the host saying something.
   final bool timedOut;

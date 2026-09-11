@@ -188,6 +188,11 @@ class SshConnection {
       );
       try {
         final client = await _connectOnce();
+        if (_closed) {
+          // Closed while the dial was in flight: nothing may keep this client.
+          client.close();
+          throw SshConnectionException('Connection closed while connecting', retryable: false);
+        }
         _client = client;
         _emit(const SshConnectionState(status: SshConnectionStatus.connected));
         _logger.info('Connected to ${host.address}.');

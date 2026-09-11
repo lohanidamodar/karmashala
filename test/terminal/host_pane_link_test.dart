@@ -169,6 +169,27 @@ void main() {
     });
   });
 
+  group('refusals', () {
+    test('a refusal carries the host\'s code, so callers can tell them apart', () async {
+      final channel = ScriptedChannel()
+        ..answer = ((request) => switch (request) {
+          HelloMessage() => _welcome,
+          AttachMessage(:final requestId) =>
+            ErrorMessage(requestId, ProtocolErrorCode.unknownSession, 'no session'),
+          _ => null,
+        });
+      final link = await HostPaneLink.open(channel, clientId: 'pane-p1');
+      await expectLater(
+        link.attachSession(sessionId: 's1', sinceOffset: 0),
+        throwsA(
+          isA<HostLinkException>()
+              .having((e) => e.code, 'code', ProtocolErrorCode.unknownSession)
+              .having((e) => e.timedOut, 'timedOut', isFalse),
+        ),
+      );
+    });
+  });
+
   group('unreadable messages', () {
     test('a frame that cannot be decoded fails the link with words, not a stall', () async {
       final channel = ScriptedChannel()

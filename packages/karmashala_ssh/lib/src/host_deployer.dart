@@ -261,8 +261,21 @@ class HostDeployer {
       final greeting = Completer<HostGreeting?>();
       final subscription = channel.stdout.listen((chunk) {
         if (greeting.isCompleted) return;
-        for (final frame in parser.add(chunk)) {
-          final message = decodeMessage(frame);
+        final List<Frame> frames;
+        try {
+          frames = parser.add(chunk);
+        } on Object catch (e) {
+          greeting.completeError(e); // Answered now, not after the hello bound.
+          return;
+        }
+        for (final frame in frames) {
+          final HostMessage message;
+          try {
+            message = decodeMessage(frame);
+          } on Object catch (e) {
+            greeting.completeError(e);
+            return;
+          }
           if (message is WelcomeMessage) {
             greeting.complete(
               HostGreeting(

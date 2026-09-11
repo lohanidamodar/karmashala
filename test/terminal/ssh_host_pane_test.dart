@@ -109,6 +109,21 @@ void main() {
     pane.dispose();
   });
 
+  test('a refusal that is not "no such session" never opens a second one', () async {
+    final access = PaneAccess(ready())..attachRefusal = ProtocolErrorCode.internal;
+    final pane = paneWith(access: access);
+    await settle();
+
+    final channel = access.channels.single;
+    expect(channel.all<AttachMessage>(), hasLength(1));
+    expect(channel.all<OpenMessage>(), isEmpty);
+    expect(screenText(pane.terminal), contains('could not start this pane'));
+    // The channel it opened is not left holding the session's write token.
+    expect(channel.closed, isTrue);
+
+    pane.dispose();
+  });
+
   test("the child's bytes reach the terminal, sequences and all", () async {
     final access = PaneAccess(ready());
     final pane = paneWith(access: access);
