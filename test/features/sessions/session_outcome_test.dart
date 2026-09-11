@@ -62,22 +62,29 @@ void main() {
         )
         .ending;
 
-    test('Claude Code: SessionEnd finishes, StopFailure fails', () {
+    AgentActivityStatus statusOf(String agentId, String event) => receiver
+        .handle(
+          agentId: agentId,
+          event: event,
+          body: jsonEncode({'session_id': 'cli-1', 'conversationId': 'cli-1'}),
+        )
+        .status;
+
+    test('Claude Code: only the CLI leaving finishes the session', () {
       expect(
         endingOf(AgentIds.claudeCode, 'SessionEnd'),
         AgentSessionEnding.completed,
-      );
-      expect(
-        endingOf(AgentIds.claudeCode, 'StopFailure'),
-        AgentSessionEnding.failed,
       );
     });
 
     test('Claude Code: a turn ending is not a session ending', () {
       // `Stop` fires once per turn and many times a session; the tool events
-      // and `Notification` are mid-turn by construction.
+      // and `Notification` are mid-turn by construction. `StopFailure` fires
+      // *instead of* `Stop` when an API error broke the turn — same cadence,
+      // and the session carries on, so it may not end the row either.
       for (final event in [
         'Stop',
+        'StopFailure',
         'UserPromptSubmit',
         'PreToolUse',
         'PostToolUse',
@@ -85,6 +92,15 @@ void main() {
       ]) {
         expect(endingOf(AgentIds.claudeCode, event), isNull, reason: event);
       }
+    });
+
+    test('Claude Code: a broken turn is still shown as a failure', () {
+      // The row keeps its word; the *live* status says the turn broke, which
+      // is what raises attention. Losing that would trade one bug for another.
+      expect(
+        statusOf(AgentIds.claudeCode, 'StopFailure'),
+        AgentActivityStatus.failed,
+      );
     });
 
     test('Codex: SessionEnd finishes, and nothing can say failed', () {
@@ -236,8 +252,8 @@ void main() {
     });
 
     test('a failure is not smoothed away by the exit that follows it', () {
-      // Claude Code fires `StopFailure` for the broken turn and `SessionEnd`
-      // when the CLI leaves. The second must not turn the first into "finished".
+      // Whoever stated the failure stated it about the session; the CLI's
+      // later "I am leaving" must not turn it into "finished".
       live('s1');
       writer.record(
         agentSessionId: 'cli-s1',

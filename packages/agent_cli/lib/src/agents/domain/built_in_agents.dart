@@ -546,15 +546,14 @@ const _claudeCode = AgentDescriptor(
       // know the event simply never fires it.
       'StopFailure': AgentActivityStatus.failed,
     },
-    // **The two events that speak for the session rather than the turn.**
-    // `SessionEnd` is the CLI on its way out, and `StopFailure` is the CLI
-    // naming an API error as the reason a turn stopped — the only failure word
-    // Claude Code ever gives us that we did not infer. `Stop` is deliberately
-    // absent: it fires once per turn, many times a session.
-    eventEnding: {
-      'SessionEnd': AgentSessionEnding.completed,
-      'StopFailure': AgentSessionEnding.failed,
-    },
+    // **The one event that speaks for the session rather than the turn**: the
+    // CLI on its way out. `Stop` is absent because it fires once per turn, and
+    // `StopFailure` for the same reason — it fires *instead of* `Stop` when an
+    // API error broke a turn, and the session goes on. Recording it as an
+    // ending marked a live session `failed` for the rest of its life: the row
+    // is then `isEnded`, so nothing later can correct it, and a rate limit at
+    // hour one filed an eight-hour session under "ended in failure".
+    eventEnding: {'SessionEnd': AgentSessionEnding.completed},
     // **What is left out, and why — checked against 2.1.260's own hook-event
     // table, which lists 33 events.** Each installed event is a process the
     // user's agent spawns on every firing, so the bar is a question this app
