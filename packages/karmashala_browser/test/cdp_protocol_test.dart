@@ -46,6 +46,16 @@ void main() {
       expect(message.sessionId, isNull);
     });
 
+    test('a sessionId that is not a string is a protocol error, not a '
+        'TypeError', () {
+      // A TypeError escapes the connection's protocol-error handler and takes
+      // the whole frame loop down with it.
+      expect(
+        () => decodeCdpMessage('{"id":3,"sessionId":7,"result":{}}'),
+        throwsA(isA<CdpProtocolException>()),
+      );
+    });
+
     test('treats a result-less reply as an empty result', () {
       final message = decodeCdpMessage('{"id":4}') as CdpResult;
       expect(message.result, isEmpty);

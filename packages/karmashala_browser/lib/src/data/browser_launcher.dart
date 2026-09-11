@@ -45,6 +45,39 @@ class BrowserEndpoint {
       'Launched ${executable ?? 'a browser'} on port $port with an isolated '
           'profile',
   };
+
+  /// Ends a spawned browser and removes its throwaway profile. Nothing to do
+  /// for an attached one: that browser and profile are the user's.
+  Future<void> shutDown({
+    Duration exitTimeout = const Duration(seconds: 5),
+  }) async {
+    if (mode != BrowserConnectionMode.spawned) return;
+    await killAndDiscardProfile(process, userDataDir, exitTimeout: exitTimeout);
+  }
+}
+
+/// Kills [process] and, once it has exited (Chrome holds the profile lock until
+/// then), deletes [userDataDir]. Either half missing is skipped, not an error.
+Future<void> killAndDiscardProfile(
+  BrowserProcess? process,
+  String? userDataDir, {
+  Duration exitTimeout = const Duration(seconds: 5),
+}) async {
+  if (process != null) {
+    try {
+      await process.kill();
+      await process.exitCode.timeout(exitTimeout);
+    } on Object {
+      // Already gone, or not going: the profile is still ours to try.
+    }
+  }
+  if (userDataDir == null) return;
+  try {
+    final directory = Directory(userDataDir);
+    if (await directory.exists()) await directory.delete(recursive: true);
+  } on Object {
+    // A locked profile is left for the next sweep rather than failing the caller.
+  }
 }
 
 /// Finds a debuggable browser: attach first, spawn only as a fallback.
@@ -133,6 +166,7 @@ class BrowserLauncher {
       // Anything the starter throws means the browser never ran, which is one
       // failure with one remedy; its own text is the useful half.
       http.close();
+      await killAndDiscardProfile(null, userDataDir);
       throw BrowserException(
         BrowserFailure.startupFailed,
         describeBrowserFailure(
@@ -167,10 +201,12 @@ class BrowserLauncher {
     );
 
     final deadline = DateTime.now().add(startupTimeout);
+    var succeeded = false;
     try {
       while (DateTime.now().isBefore(deadline)) {
         await Future<void>.delayed(pollInterval);
         if (await http.probe() == DevToolsEndpointState.available) {
+          succeeded = true;
           return BrowserEndpoint(
             port: port,
             mode: BrowserConnectionMode.spawned,
@@ -202,6 +238,12 @@ class BrowserLauncher {
     } finally {
       for (final drain in drains) {
         unawaited(drain.cancel());
+      }
+      // A browser that never opened its port is still running, on a profile
+      // nobody will ever open again.
+      if (!succeeded) {
+        http.close();
+        await killAndDiscardProfile(process, userDataDir);
       }
     }
   }

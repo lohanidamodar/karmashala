@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:karmashala_browser/browser.dart';
 import 'package:test/test.dart';
@@ -204,6 +205,91 @@ void main() {
         );
       },
     );
+
+    test('a browser that never opens the port is killed and its profile '
+        'removed', () async {
+      final profile = Directory.systemTemp.createTempSync('cdp-profile-');
+      final handle = FakeBrowserProcess();
+      starter.processFactory = (_) => handle;
+      final endpoint = ScriptedEndpoint([
+        DevToolsEndpointState.notListening,
+      ], port: 9333);
+      final launcher = BrowserLauncher(
+        startProcess: starter.call,
+        locateExecutable: () => r'C:\chrome.exe',
+        endpointFactory: (_) => endpoint,
+        createUserDataDir: () async => profile.path,
+        pollInterval: const Duration(milliseconds: 5),
+      );
+
+      await expectLater(
+        launcher.connect(startupTimeout: const Duration(milliseconds: 40)),
+        failsWith(BrowserFailure.startupFailed),
+      );
+
+      // Without this, every failed start left a Chrome running on a profile
+      // nobody would ever open again.
+      expect(handle.killed, isTrue);
+      expect(profile.existsSync(), isFalse);
+      expect(endpoint.wasClosed, isTrue);
+    });
+
+    test('a browser that exits at once still has its profile removed',
+        () async {
+      final profile = Directory.systemTemp.createTempSync('cdp-profile-');
+      final handle = FakeBrowserProcess();
+      starter.processFactory = (_) => handle;
+      final endpoint = ScriptedEndpoint([
+        DevToolsEndpointState.notListening,
+      ], port: 9333);
+      scheduleMicrotask(() => handle.complete(21));
+      final launcher = BrowserLauncher(
+        startProcess: starter.call,
+        locateExecutable: () => r'C:\chrome.exe',
+        endpointFactory: (_) => endpoint,
+        createUserDataDir: () async => profile.path,
+        pollInterval: const Duration(milliseconds: 5),
+      );
+
+      await expectLater(
+        launcher.connect(),
+        failsWith(BrowserFailure.startupFailed),
+      );
+      expect(profile.existsSync(), isFalse);
+    });
+
+    test('shutDown kills a spawned browser and removes its profile', () async {
+      final profile = Directory.systemTemp.createTempSync('cdp-profile-');
+      final handle = FakeBrowserProcess();
+      starter.processFactory = (_) => handle;
+      final endpoint = ScriptedEndpoint([
+        DevToolsEndpointState.notListening,
+        DevToolsEndpointState.available,
+      ], port: 9333);
+      final launcher = BrowserLauncher(
+        startProcess: starter.call,
+        locateExecutable: () => r'C:\chrome.exe',
+        endpointFactory: (_) => endpoint,
+        createUserDataDir: () async => profile.path,
+        pollInterval: const Duration(milliseconds: 5),
+      );
+      final spawned = await launcher.connect();
+      expect(profile.existsSync(), isTrue);
+
+      await spawned.shutDown();
+
+      expect(handle.killed, isTrue);
+      expect(profile.existsSync(), isFalse);
+    });
+
+    test('shutDown leaves an attached browser alone', () async {
+      final endpoint = ScriptedEndpoint([
+        DevToolsEndpointState.available,
+      ], port: 9222);
+      final attached = await buildLauncher(endpoint).connect();
+      await expectLater(attached.shutDown(), completes);
+      expect(starter.starts, isEmpty);
+    });
 
     test('a browser that cannot be started at all is reported', () async {
       starter.throwError = BrowserProcessException(

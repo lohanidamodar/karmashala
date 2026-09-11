@@ -146,13 +146,15 @@ class BrowserService {
       );
     }
 
-    final CdpPage page;
+    CdpPage? page;
     try {
       final socket = await _connectSocket(webSocketUrl);
       page = CdpPage(connection: CdpConnection(socket), target: target);
       await page.enableDomains();
     } on Object {
       endpoint.http.close();
+      // A socket opened and then refused is still a debugger the page counts.
+      await page?.close();
       rethrow;
     }
 

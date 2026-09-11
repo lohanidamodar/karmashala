@@ -230,6 +230,40 @@ void main() {
       );
     });
 
+    test('a page that refuses to enable its domains has its socket closed',
+        () async {
+      // The socket was left open on this path: to the browser the page stayed
+      // "being debugged", and the next connect was refused for it.
+      final endpoint = FakeEndpoint(targets: [page('A')]);
+      late FakeCdpSocket socket;
+      final service = BrowserService(
+        startProcess: FakeProcessStarter().call,
+        launcher: BrowserLauncher(
+          startProcess: FakeProcessStarter().call,
+          locateExecutable: () => r'C:\chrome.exe',
+          endpointFactory: (_) => endpoint,
+          createUserDataDir: () async => r'C:\Temp\profile',
+        ),
+        connectSocket: (_) async {
+          socket = FakeCdpSocket(
+            responder: (method, _) {
+              if (method == 'Page.enable') throw CdpFault(-32601, 'no Page');
+              return <String, Object?>{};
+            },
+          );
+          return socket;
+        },
+      );
+
+      await expectLater(
+        service.connect(),
+        failsWith(BrowserFailure.protocolError),
+      );
+      expect(socket.closed, isTrue);
+      expect(endpoint.wasClosed, isTrue);
+      expect(service.session, isNull);
+    });
+
     test('connecting again replaces the previous session', () async {
       final fixture = build(targets: [page('A')]);
       final first = await fixture.service.connect();

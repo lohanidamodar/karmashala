@@ -30,7 +30,10 @@ CdpMessage decodeCdpMessage(String raw) {
     throw CdpProtocolException('frame is not a JSON object', frame: raw);
   }
 
-  final sessionId = decoded['sessionId'] as String?;
+  final sessionId = decoded['sessionId'];
+  if (sessionId is! String?) {
+    throw CdpProtocolException('frame sessionId is not a string', frame: raw);
+  }
   final id = decoded['id'];
 
   if (id != null) {
