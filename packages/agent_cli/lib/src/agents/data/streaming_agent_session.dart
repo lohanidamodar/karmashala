@@ -108,7 +108,9 @@ abstract class StreamingAgentSession implements AgentSession {
   }
 
   Future<void> _close() async {
-    if (!_events.isClosed) await _events.close();
+    // Not awaited: closing a single-subscription controller nobody has
+    // listened to never completes, and a session stopped early is that case.
+    if (!_events.isClosed) unawaited(_events.close());
   }
 
   void _write(ProcessHandle handle, String message) {
