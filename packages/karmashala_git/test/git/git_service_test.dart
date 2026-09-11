@@ -184,6 +184,30 @@ bare
       expect(captured.arguments, ['-C', r'C:\app', 'commit', '-m', 'msg']);
     });
 
+    test('a push is bounded, a read is not', () async {
+      // A credential prompt nobody can see, or a stalled remote, used to hold
+      // the caller forever: no request carried a timeout.
+      final requests = <CommandRequest>[];
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          requests.add(req);
+          return const CommandResult(exitCode: 0, stdout: 'main', stderr: '');
+        },
+      );
+      final service = GitService(
+        runner,
+        networkTimeout: const Duration(seconds: 7),
+        mutationTimeout: const Duration(seconds: 3),
+      );
+      await service.push(repo(r'C:\app'));
+      await service.currentBranch(repo(r'C:\app'));
+      await service.commit(repo(r'C:\app'), 'm');
+
+      expect(requests[0].timeout, const Duration(seconds: 7));
+      expect(requests[1].timeout, isNull);
+      expect(requests[2].timeout, const Duration(seconds: 3));
+    });
+
     test('push sets upstream when remote and branch are given', () async {
       late CommandRequest captured;
       final runner = FakeCommandRunner(

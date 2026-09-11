@@ -84,6 +84,8 @@ class GitService {
     this.runner, {
     this.files = const HostGitFiles(),
     this.hostPathOf = sameEnvironmentPath,
+    this.networkTimeout = const Duration(minutes: 5),
+    this.mutationTimeout = const Duration(minutes: 2),
   });
 
   final CommandRunner runner;
@@ -92,9 +94,44 @@ class GitService {
   final GitFiles files;
   final HostPathOf hostPathOf;
 
+  /// How long a command that talks to a remote may take: a credential prompt
+  /// nobody can see, or a stalled fetch, ends here instead of never.
+  final Duration networkTimeout;
+
+  /// How long a command that changes the repository may take. Reads get none.
+  final Duration mutationTimeout;
+
+  static const Set<String> _networkVerbs = {
+    'push',
+    'fetch',
+    'pull',
+    'clone',
+    'ls-remote',
+  };
+  static const Set<String> _mutatingVerbs = {
+    'add',
+    'checkout',
+    'commit',
+    'merge',
+    'update-ref',
+    'worktree',
+    'hash-object',
+  };
+
+  Duration? _timeoutFor(List<String> args) {
+    final verb = args.firstOrNull;
+    if (_networkVerbs.contains(verb)) return networkTimeout;
+    if (_mutatingVerbs.contains(verb)) return mutationTimeout;
+    return null;
+  }
+
   Future<CommandResult> _git(EnvironmentPath repo, List<String> args) async {
     final result = await runner.run(
-      CommandRequest(executable: 'git', arguments: ['-C', repo.path, ...args]),
+      CommandRequest(
+        executable: 'git',
+        arguments: ['-C', repo.path, ...args],
+        timeout: _timeoutFor(args),
+      ),
     );
     return result;
   }
