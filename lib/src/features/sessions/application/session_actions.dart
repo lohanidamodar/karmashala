@@ -100,9 +100,14 @@ class SessionActions {
     }
   }
 
-  Future<void> deleteNative(String id, {bool deleteFromCli = true}) async {
+  /// Removes the app's record of [id], and the CLI transcript behind it when
+  /// asked. Returns what the user should be told beyond "it is gone", or null.
+  /// Throws when nothing was deleted at all.
+  Future<String?> deleteNative(String id, {bool deleteFromCli = true}) async {
     final session = _ref.read(sessionDaoProvider).getById(id);
-    if (session == null) return;
+    if (session == null) return null;
+    var fromCliStore = deleteFromCli;
+    String? notice;
     if (deleteFromCli) {
       final repo = _ref
           .read(repositoryDaoProvider)
@@ -113,27 +118,49 @@ class SessionActions {
       if (repo == null || installation == null) {
         throw StateError('The session repository or agent is unavailable.');
       }
-      final externalId =
-          session.externalSessionId ??
-          await _recoverExternalSessionId(session, repo, installation);
-      if (externalId == null) {
-        throw StateError(
-          'The CLI session could not be identified. Uncheck "Delete from CLI '
-          'store" to remove only the app record.',
+      final environment = _environmentOf(session, repo);
+      // A store on another machine is not ours to delete from. Refusing the
+      // whole delete over it left the row on screen with no way to remove it.
+      if (environment != null && !cliStoreIsReachable(environment.kind)) {
+        fromCliStore = false;
+        notice =
+            'Removed from Karmashala. The transcript on ${environment.name} '
+            'was left: a CLI store on another machine cannot be deleted from '
+            'here.';
+      } else {
+        final externalId =
+            session.externalSessionId ??
+            await _recoverExternalSessionId(session, repo, installation);
+        if (externalId == null) {
+          throw StateError(
+            'The CLI session could not be identified. Uncheck "Delete from CLI '
+            'store" to remove only the app record.',
+          );
+        }
+        final detected = await _detectedSessionById(
+          installation.agentId,
+          externalId,
         );
+        if (detected == null) {
+          throw StateError('The CLI session file could not be found.');
+        }
+        await _ref.read(cliSessionMutatorProvider).delete(detected);
       }
-      final detected = await _detectedSessionById(
-        installation.agentId,
-        externalId,
-      );
-      if (detected == null) {
-        throw StateError('The CLI session file could not be found.');
-      }
-      await _ref.read(cliSessionMutatorProvider).delete(detected);
     }
-    _removeNativeRow(session, fromCliStore: deleteFromCli);
+    _removeNativeRow(session, fromCliStore: fromCliStore);
     _publish(SessionChange.removed(id));
+    return notice;
   }
+
+  /// Where this session's CLI store would live: the directory it runs in, or
+  /// failing that its repository's.
+  ExecutionEnvironment? _environmentOf(Session session, Repository repo) =>
+      _ref
+          .read(executionEnvironmentDaoProvider)
+          .getById(
+            session.workingDirectory?.environmentId ??
+                repo.path.environmentId,
+          );
 
   /// Takes one native row out of the workspace and nothing else. Publishes
   /// nothing — the caller does, so a batch can publish once.

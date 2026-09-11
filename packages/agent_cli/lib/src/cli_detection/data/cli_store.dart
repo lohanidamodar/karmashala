@@ -85,6 +85,8 @@ class CliStoreLocator {
     // a different question and only ever has one answer on Windows.
     ExecutionEnvironment? windows;
     for (final env in environments) {
+      // What this loop and the WSL pass below cover is what
+      // `cliStoreIsReachable` promises; the two must not drift.
       if (local == null && isLocalHost(env.kind)) local = env;
       if (windows == null && env.kind == EnvironmentKind.windowsNative) {
         windows = env;

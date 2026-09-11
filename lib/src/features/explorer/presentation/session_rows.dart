@@ -79,7 +79,15 @@ class NativeSessionRow extends ConsumerWidget {
       final deleteFromCli = await _confirmDelete(context, session.title);
       if (deleteFromCli == null) return;
       try {
-        await actions.deleteNative(session.id, deleteFromCli: deleteFromCli);
+        final notice = await actions.deleteNative(
+          session.id,
+          deleteFromCli: deleteFromCli,
+        );
+        if (notice != null && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(notice)),
+          );
+        }
       } catch (error) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

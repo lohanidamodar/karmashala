@@ -59,6 +59,16 @@ bool usesWindowsPaths(EnvironmentKind kind) =>
     kind == EnvironmentKind.windowsNative;
 
 
+/// Whether a CLI store in [kind] can be read and written from this machine.
+///
+/// What `CliStoreLocator.locate` actually walks: the local host, and the WSL
+/// distributions reachable over `\\wsl.localhost`. An [EnvironmentKind.ssh]
+/// store is on somebody else's disk, so a lookup there comes back empty —
+/// which reads exactly like a transcript that was deleted, and callers that
+/// cannot tell the two apart refuse work they could have done.
+bool cliStoreIsReachable(EnvironmentKind kind) =>
+    isLocalHost(kind) || kind == EnvironmentKind.wsl;
+
 /// The path context for a **store home this host can reach** in [kind].
 ///
 /// Deliberately not [usesWindowsPaths], which answers a different question.
