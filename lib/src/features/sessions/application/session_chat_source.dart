@@ -177,12 +177,18 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
         } catch (_) {
           modified = null;
         }
+        var spent = Duration.zero;
         if (first || modified != lastModified) {
           first = false;
           lastModified = modified;
+          final parse = Stopwatch()..start();
           // Off the UI isolate: this parse is seconds on a long conversation.
           yield await readCliTranscriptOffThread(path, agentId);
+          spent = parse.elapsed;
         }
-        await Future<void>.delayed(interval());
+        // Rest at least as long as the last read took, so a transcript slower
+        // to parse than the interval cannot hold a core for the whole session.
+        final rest = interval();
+        await Future<void>.delayed(spent > rest ? spent : rest);
       }
     });
