@@ -39,8 +39,13 @@ class _Bridge {
   _BridgeConfig? _config;
 
   Future<void> handle(Map<String, dynamic> message) async {
-    final method = message['method'] as String?;
     final id = message['id'];
+    final method = message['method'];
+    // Checked, not cast: a throw here leaves main's `await for` and ends the bridge.
+    if (method is! String) {
+      if (id != null) _error(id, -32600, 'Invalid request: method must be a string');
+      return;
+    }
     // Notifications (no id) never get a response.
     switch (method) {
       case 'initialize':
@@ -78,14 +83,19 @@ class _Bridge {
       _error(id, -32602, 'Invalid params');
       return;
     }
-    final name = params['name'] as String?;
-    final arguments =
-        (params['arguments'] as Map?)?.cast<String, dynamic>() ??
-        const <String, dynamic>{};
-    if (name == null) {
+    final name = params['name'];
+    if (name is! String || name.isEmpty) {
       _error(id, -32602, 'Missing tool name');
       return;
     }
+    final rawArguments = params['arguments'];
+    if (rawArguments != null && rawArguments is! Map) {
+      _error(id, -32602, 'Invalid params: arguments must be an object');
+      return;
+    }
+    final arguments =
+        (rawArguments as Map?)?.cast<String, dynamic>() ??
+        const <String, dynamic>{};
     try {
       final result = await _call(name, arguments);
       // A tool that needs to return something other than text (an image, say)
