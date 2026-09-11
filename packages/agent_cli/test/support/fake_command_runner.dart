@@ -85,6 +85,11 @@ class FakeProcessHandle implements ProcessHandle {
     if (!_stderr.isClosed) _stderr.add(line);
   }
 
+  /// What a decoder or a broken pipe raises on the stdout stream itself.
+  void emitStdoutError(Object error) {
+    if (!_stdout.isClosed) _stdout.addError(error);
+  }
+
   /// Completes the process with [code] and closes its streams.
   void complete([int code = 0]) {
     if (!_exit.isCompleted) _exit.complete(code);

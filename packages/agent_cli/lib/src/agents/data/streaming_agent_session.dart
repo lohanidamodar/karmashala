@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import '../../process/process_handle.dart';
 import '../../sessions/session_event_types.dart';
@@ -8,14 +9,20 @@ import '../domain/agent_adapter.dart';
 /// messages over a [ProcessHandle].
 ///
 /// This base owns the *transport* concerns only — process readiness, queuing
-/// sends until the process is up, draining stdout, and teardown. Each concrete
-/// adapter supplies its own **protocol** mapping via [parseLine] and
-/// [encodeUserMessage], so raw protocol handling stays inside the relevant
+/// sends until the process is up, draining stdout and stderr, and teardown.
+/// Each concrete adapter supplies its own **protocol** mapping via [parseLine]
+/// and [encodeUserMessage], so raw protocol handling stays inside the relevant
 /// adapter (architecture rule).
 abstract class StreamingAgentSession implements AgentSession {
   StreamingAgentSession(Future<ProcessHandle> handle) {
     _attach(handle);
   }
+
+  /// How many stderr lines are kept for the error a failed exit reports.
+  static const int stderrTailLines = 40;
+
+  /// How long the stderr pipe may lag the exit before the tail is taken as is.
+  static const Duration stderrSettle = Duration(seconds: 2);
 
   final StreamController<AgentEvent> _events = StreamController<AgentEvent>();
   final List<String> _pending = [];
@@ -36,10 +43,8 @@ abstract class StreamingAgentSession implements AgentSession {
     try {
       handle = await handleFuture;
     } catch (error) {
-      if (!_events.isClosed) {
-        _events.add(AgentEvent(SessionEventTypes.error, {'message': '$error'}));
-        await _events.close();
-      }
+      _fail('$error');
+      await _close();
       return;
     }
     if (_stopped) {
@@ -48,22 +53,70 @@ abstract class StreamingAgentSession implements AgentSession {
     }
     _handle = handle;
 
-    // Close on stdout EOF (not exitCode) so buffered output drains first.
+    // stderr is drained whether or not anyone reads it: a full pipe blocks a
+    // verbose child forever, and its tail is the only account of a failed exit.
+    final stderrTail = ListQueue<String>();
+    final stderrDone = Completer<void>();
+    handle.stderrLines.listen(
+      (line) {
+        stderrTail.addLast(line);
+        if (stderrTail.length > stderrTailLines) stderrTail.removeFirst();
+      },
+      onError: (Object _) {},
+      onDone: stderrDone.complete,
+      cancelOnError: true,
+    );
+
+    final stdoutDone = Completer<void>();
     handle.stdoutLines.listen(
       (line) {
         for (final event in parseLine(line)) {
           if (!_events.isClosed) _events.add(event);
         }
       },
-      onDone: () {
-        if (!_events.isClosed) _events.close();
+      onError: (Object error) {
+        _fail('The agent\'s output could not be read: $error');
+        stdoutDone.complete(); // cancelled on error, so no done follows
       },
+      onDone: stdoutDone.complete,
+      cancelOnError: true,
     );
 
     for (final message in _pending) {
-      handle.writeLine(encodeUserMessage(message));
+      _write(handle, message);
     }
     _pending.clear();
+
+    // Closed on exit, not on stdout EOF: a CLI that refuses to start says so on
+    // stderr and exits non-zero after writing nothing at all to stdout.
+    await stdoutDone.future;
+    final code = await handle.exitCode;
+    await stderrDone.future.timeout(stderrSettle, onTimeout: () {});
+    if (code != 0 && !_stopped) {
+      final tail = stderrTail.join('\n').trim();
+      _fail(
+        'The agent exited with code $code${tail.isEmpty ? '.' : ':\n$tail'}',
+        {'exitCode': code, if (tail.isNotEmpty) 'stderr': tail},
+      );
+    }
+    await _close();
+  }
+
+  void _fail(String message, [Map<String, Object?> more = const {}]) {
+    if (_events.isClosed) return;
+    _events.add(AgentEvent(SessionEventTypes.error, {'message': message, ...more}));
+  }
+
+  Future<void> _close() async {
+    if (!_events.isClosed) await _events.close();
+  }
+
+  void _write(ProcessHandle handle, String message) {
+    try {
+      handle.writeLine(encodeUserMessage(message));
+    } on Object catch (error) {
+      _fail('The message could not be delivered to the agent: $error');
+    }
   }
 
   @override
@@ -73,13 +126,13 @@ abstract class StreamingAgentSession implements AgentSession {
       _pending.add(message); // queued until the process is ready
       return;
     }
-    handle.writeLine(encodeUserMessage(message));
+    _write(handle, message);
   }
 
   @override
   Future<void> stop() async {
     _stopped = true;
     await _handle?.kill();
-    if (!_events.isClosed) await _events.close();
+    await _close();
   }
 }
