@@ -120,7 +120,7 @@ RemoteSessionActivity _activityOf(
 Future<RemoteTranscriptPage> _importedTranscript(
   ImportedSession session,
 ) async {
-  final messages = await readCliTranscript(session.filePath, session.cli);
+  final messages = await readCliTranscriptOffThread(session.filePath, session.cli);
   final mapped = [
     for (final message in messages)
       if (message.role != 'tool')
@@ -182,7 +182,7 @@ Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
   );
   if (chatView.keepsNoRecord) return _structuralNothing(chatView);
   if (path == null || !chatView.hasChatView) return _nothingKnown;
-  final messages = await readCliTranscript(path, agentId);
+  final messages = await readCliTranscriptOffThread(path, agentId);
   return (
     messages: [
       for (final message in messages)

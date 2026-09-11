@@ -180,7 +180,8 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
         if (first || modified != lastModified) {
           first = false;
           lastModified = modified;
-          yield await readCliTranscript(path, agentId);
+          // Off the UI isolate: this parse is seconds on a long conversation.
+          yield await readCliTranscriptOffThread(path, agentId);
         }
         await Future<void>.delayed(interval());
       }

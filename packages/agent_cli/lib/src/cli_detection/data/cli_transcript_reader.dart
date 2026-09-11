@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
@@ -151,6 +152,22 @@ String? transcriptFileFor(String filePath, String cli) =>
     cli == AgentIds.antigravity
     ? antigravityTranscriptPathFor(filePath)
     : filePath;
+
+/// [readCliTranscript] on a worker isolate, for a caller that must not stall
+/// the one it is on. Measured 2026-09-11: a 136 MB Claude transcript — this
+/// machine's largest, one working day — takes 2.5-3.1 s to parse, and the chat
+/// view re-reads on every change.
+Future<List<TranscriptMessage>> readCliTranscriptOffThread(
+  String filePath,
+  String cli, {
+  String? subagentsDirectory,
+}) => Isolate.run(
+  () => readCliTranscript(
+    filePath,
+    cli,
+    subagentsDirectory: subagentsDirectory,
+  ),
+);
 
 Future<List<TranscriptMessage>> readCliTranscript(
   String filePath,
