@@ -60,9 +60,14 @@ class RemoteAccessController {
   /// Brings the service in line with the settings: started when enabled (and
   /// restarted when the relay URL moved), stopped when disabled.
   Future<void> sync() {
-    _chain = _chain.then((_) => _sync()).catchError((Object _) {});
+    _chain = _chain.then((_) => _sync()).catchError((Object error, StackTrace stack) {
+      // The chain must survive; the failure must not vanish with it.
+      _log.error('Remote access could not be brought in line with settings.', error, stack);
+    });
     return _chain;
   }
+
+  static final _log = AppLogger.named('remote.access');
 
   Future<void> _sync() async {
     final settings = _ref.read(settingsControllerProvider);

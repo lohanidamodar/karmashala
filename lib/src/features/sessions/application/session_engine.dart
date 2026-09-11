@@ -142,6 +142,23 @@ class SessionEngine {
     required ResolvedPermission permission,
     String? resumeSessionId,
   }) {
+    // Spawn before anything is registered: a runtime with no agent would take
+    // every later message as sent and deliver none of them.
+    final AgentSession agent;
+    try {
+      agent = resolveAdapter(installation.agentId).start(
+        AgentLaunch(
+          workingDirectory: workingDirectory,
+          installation: installation,
+          permission: permission,
+          resumeSessionId: resumeSessionId,
+        ),
+      );
+    } on Object {
+      sessionDao.updateStatus(sessionId, SessionStatus.failed);
+      rethrow;
+    }
+
     final controller = StreamController<SessionEvent>.broadcast();
     final runtime = _Runtime(controller: controller);
     _runtimes[sessionId] = runtime;
@@ -149,15 +166,6 @@ class SessionEngine {
     _emit(runtime, sessionId, SessionEventTypes.sessionStarted, {
       'title': title,
     });
-
-    final agent = resolveAdapter(installation.agentId).start(
-      AgentLaunch(
-        workingDirectory: workingDirectory,
-        installation: installation,
-        permission: permission,
-        resumeSessionId: resumeSessionId,
-      ),
-    );
     runtime.agent = agent;
     runtime.subscription = agent.events.listen(
       (event) {

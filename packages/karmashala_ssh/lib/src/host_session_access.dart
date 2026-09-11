@@ -69,11 +69,12 @@ class SshHostSessionAccess implements HostSessionAccess {
     final quoted = "'${name.replaceAll("'", r"'\''")}'";
     final RemoteRun result;
     try {
+      // Bounded: a login shell that hangs must not hold the pane forever.
       result = await SshHostDeployTarget(_connection).run(
         'if ! command -v tmux >/dev/null 2>&1; then echo karmashala-tmux-none; '
         'elif tmux has-session -t $quoted 2>/dev/null; then echo karmashala-tmux-present; '
         'else echo karmashala-tmux-absent; fi',
-      );
+      ).timeout(const Duration(seconds: 20));
     } on Object catch (e) {
       _logger.debug('${host.address} could not be asked about tmux session $name: $e');
       return null;
@@ -97,12 +98,22 @@ class SshHostSessionAccess implements HostSessionAccess {
     final deployer =
         deployerFactory?.call(target) ?? HostDeployer(target: target, binaries: binaries);
     // Memoised on the future, not on the result: two panes opening at once must
-    // share one deploy rather than racing two uploads onto the same path.
-    return _reading ??= deployer.deploy().then((reading) {
-      _logger.debug('${host.address}: ${reading.status.name} — ${reading.reason}');
-      return reading;
-    });
+    // share one deploy rather than racing two uploads onto the same path. A
+    // failure is not memoised, or every later pane would inherit it.
+    return _reading ??= deployer.deploy().timeout(deployTimeout).then(
+      (reading) {
+        _logger.debug('${host.address}: ${reading.status.name} — ${reading.reason}');
+        return reading;
+      },
+      onError: (Object error, StackTrace stack) {
+        _reading = null;
+        Error.throwWithStackTrace(error, stack);
+      },
+    );
   }
+
+  /// Bounds the whole deploy — the upload of the host binary included.
+  static const deployTimeout = Duration(minutes: 3);
 
   void _onConnectionState(SshConnectionState state) {
     switch (state.status) {

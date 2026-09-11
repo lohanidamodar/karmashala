@@ -82,6 +82,26 @@ void main() {
     expect(engine.isActive(session.id), isTrue);
   });
 
+  test('a spawn that throws leaves no runtime and marks the row failed', () async {
+    final engine = buildEngine(
+      resolver: (_) => _RefusingAdapter(),
+    );
+    await expectLater(
+      engine.start(
+        repository: repository(),
+        installation: agentInstallation(),
+        title: 'Work',
+        permission: ResolvedPermission.none,
+      ),
+      throwsA(isA<StateError>()),
+    );
+    final row = sessionDao.getAll().single;
+    expect(row.status, SessionStatus.failed);
+    expect(engine.isActive(row.id), isFalse);
+    // Nothing was registered, so a message is refused rather than "sent".
+    await expectLater(engine.sendMessage(row.id, 'hi'), throwsA(isA<StateError>()));
+  });
+
   test('sendMessage records the user message and the agent reply', () async {
     final engine = buildEngine();
     final session = await engine.start(
@@ -212,4 +232,13 @@ class _CapturingAdapter implements AgentAdapter {
     captured = launch;
     return FakeAgentSession('hi');
   }
+}
+
+/// A spawn that fails synchronously: a rotted executable path, a refused exec.
+class _RefusingAdapter implements AgentAdapter {
+  @override
+  String get agentId => AgentIds.claudeCode;
+
+  @override
+  AgentSession start(AgentLaunch launch) => throw StateError('no such executable');
 }

@@ -105,6 +105,11 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
       if (mounted && serial == _beginSerial && _paired == null) {
         setState(() => _error = error.message);
       }
+    } on Object catch (error) {
+      // Anything else would leave the spinner up for good.
+      if (mounted && serial == _beginSerial && _paired == null) {
+        setState(() => _error = 'Pairing could not start: $error');
+      }
     }
   }
 

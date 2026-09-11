@@ -33,6 +33,9 @@ class AppDatabase {
   /// `synchronous = NORMAL` only once WAL is in effect — see docs/SETTLED.md.
   void _configure() {
     _db.execute('PRAGMA foreign_keys = ON;');
+    // A second writer (a debug build beside the installed app) waits instead
+    // of throwing SQLITE_BUSY out of whatever menu handler it lands in.
+    _db.execute('PRAGMA busy_timeout = 5000;');
     try {
       _db.execute('PRAGMA journal_mode = WAL;');
     } on SqliteException {

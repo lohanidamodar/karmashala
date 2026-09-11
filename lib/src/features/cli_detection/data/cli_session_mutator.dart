@@ -167,13 +167,16 @@ class CliSessionMutator {
     await for (final entity in indexDir.list()) {
       if (entity is! File || !entity.path.endsWith('.json')) continue;
       indexEntriesRead++;
+      final Object? decoded;
       try {
-        final decoded = jsonDecode(await entity.readAsString());
-        if (decoded is Map<String, dynamic> && match(decoded)) {
-          await entity.delete();
-          indexWrites++;
-        }
-      } catch (_) {}
+        decoded = jsonDecode(await entity.readAsString());
+      } on Object {
+        continue; // Not an entry this app can judge; a delete that fails is reported.
+      }
+      if (decoded is Map<String, dynamic> && match(decoded)) {
+        await entity.delete();
+        indexWrites++;
+      }
     }
   }
 
@@ -275,7 +278,6 @@ class CliSessionMutator {
           [title, session.sessionId],
         );
         indexWrites++;
-      } catch (_) {
       } finally {
         db?.close();
       }
@@ -297,20 +299,16 @@ class CliSessionMutator {
   ) async {
     storeScans++;
     for (final id in sessionIds) {
-      try {
-        final annotation = File(p.join(storeHome, 'annotations', '$id.pbtxt'));
-        if (await annotation.exists()) {
-          await annotation.delete();
+      for (final path in [
+        p.join(storeHome, 'annotations', '$id.pbtxt'),
+        p.join(storeHome, 'presence', '$id.lock'),
+      ]) {
+        final file = File(path);
+        if (await file.exists()) {
+          await file.delete();
           indexWrites++;
         }
-      } catch (_) {}
-      try {
-        final presence = File(p.join(storeHome, 'presence', '$id.lock'));
-        if (await presence.exists()) {
-          await presence.delete();
-          indexWrites++;
-        }
-      } catch (_) {}
+      }
     }
 
     final summariesPath = p.join(storeHome, 'conversation_summaries.db');
@@ -325,7 +323,6 @@ class CliSessionMutator {
           );
         }
         indexWrites++;
-      } catch (_) {
       } finally {
         db?.close();
       }
@@ -334,24 +331,26 @@ class CliSessionMutator {
     final lastConvPath = p.join(storeHome, 'cache', 'last_conversations.json');
     final lastConvFile = File(lastConvPath);
     if (await lastConvFile.exists()) {
+      final Object? map;
       try {
-        final raw = await lastConvFile.readAsString();
-        final map = jsonDecode(raw);
-        if (map is Map<String, dynamic>) {
-          var modified = false;
-          final updated = Map<String, dynamic>.from(map);
-          for (final entry in map.entries) {
-            if (sessionIds.contains(entry.value.toString())) {
-              updated.remove(entry.key);
-              modified = true;
-            }
-          }
-          if (modified) {
-            await lastConvFile.writeAsString(jsonEncode(updated));
-            indexWrites++;
+        map = jsonDecode(await lastConvFile.readAsString());
+      } on Object {
+        return; // Antigravity's own cache; unreadable is theirs to rebuild.
+      }
+      if (map is Map<String, dynamic>) {
+        var modified = false;
+        final updated = Map<String, dynamic>.from(map);
+        for (final entry in map.entries) {
+          if (sessionIds.contains(entry.value.toString())) {
+            updated.remove(entry.key);
+            modified = true;
           }
         }
-      } catch (_) {}
+        if (modified) {
+          await lastConvFile.writeAsString(jsonEncode(updated));
+          indexWrites++;
+        }
+      }
     }
   }
 }

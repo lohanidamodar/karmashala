@@ -41,6 +41,10 @@ class ScriptedChannel implements RemoteChannel {
     if (!_toApp.isClosed) _toApp.add(message.toFrame().encode());
   }
 
+  void pushRaw(Uint8List bytes) {
+    if (!_toApp.isClosed) _toApp.add(bytes);
+  }
+
   Future<void> drop() async {
     if (!_toApp.isClosed) await _toApp.close();
   }
@@ -160,6 +164,25 @@ void main() {
         ),
         throwsA(
           isA<HostLinkException>().having((e) => e.message, 'message', contains('did not answer')),
+        ),
+      );
+    });
+  });
+
+  group('unreadable messages', () {
+    test('a frame that cannot be decoded fails the link with words, not a stall', () async {
+      final channel = ScriptedChannel()
+        ..answer = ((request) => request is HelloMessage ? _welcome : null);
+      final link = await HostPaneLink.open(channel, clientId: 'pane-p1');
+      // In flight when the bad frame lands: it must be answered, not left to its bound.
+      final attaching = link.attachSession(sessionId: 's1', sinceOffset: 0);
+      channel.pushRaw(
+        Frame(MessageType.welcome, 0, Uint8List.fromList([0x7b, 0x01, 0x02])).encode(),
+      );
+      await expectLater(
+        attaching,
+        throwsA(
+          isA<HostLinkException>().having((e) => e.message, 'message', contains('unreadable')),
         ),
       );
     });

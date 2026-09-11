@@ -255,8 +255,9 @@ class HostTerminalInstance
     final width = terminal.viewWidth > 0 ? terminal.viewWidth : 80;
     final height = terminal.viewHeight > 0 ? terminal.viewHeight : 24;
     final resumeFrom = _lastOffset;
+    HostPaneLink? link;
     try {
-      final link = await HostPaneLink.open(
+      link = await HostPaneLink.open(
         await access.exec('${deployment.remotePath} attach'),
         clientId: 'pane-$id',
       );
@@ -284,6 +285,7 @@ class HostTerminalInstance
       unawaited(link.ended.then(_onSessionEnded));
     } on Object catch (e) {
       _link = null;
+      if (link != null) unawaited(link.close().catchError((Object _) {}));
       _logger.error('The local session host refused pane $id: $e');
       _fail('The session host could not start this pane: $e');
     }

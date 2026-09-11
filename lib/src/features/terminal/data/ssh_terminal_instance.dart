@@ -413,8 +413,9 @@ class SshTerminalInstance
     // Read before the new link exists: a fresh link's own offset is zero, and
     // asking it where to resume from would replay the session from the start.
     final resumeFrom = _lastHostOffset;
+    HostPaneLink? link;
     try {
-      final link = await HostPaneLink.open(
+      link = await HostPaneLink.open(
         await access.exec('$remotePath attach'),
         clientId: 'pane-$id',
       );
@@ -448,7 +449,21 @@ class SshTerminalInstance
       return true;
     } on Object catch (e) {
       _link = null;
+      // Left open, the channel would hold the write token of a session that
+      // may well be running.
+      if (link != null) unawaited(link.close().catchError((Object _) {}));
       _logger.error('Session host on ${host.address} refused a pane: $e');
+      // No answer is not a refusal: the host may have started the agent, and
+      // the tmux fallback would start a second one under the same name.
+      if (e is HostLinkException && e.timedOut) {
+        _exited = true;
+        _emit(
+          '\r\n\x1b[31m[the session host on ${host.address} did not answer '
+          '($e). Reopen this pane to try again.]\x1b[0m\r\n',
+        );
+        _liveness.value = PaneLiveness.exited;
+        return true;
+      }
       _emit(
         '\x1b[33m[the session host on ${host.address} could not start this pane '
         '($e). Falling back to tmux.]\x1b[0m\r\n',

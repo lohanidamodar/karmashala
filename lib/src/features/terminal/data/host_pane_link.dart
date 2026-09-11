@@ -214,7 +214,13 @@ class HostPaneLink {
       return;
     }
     for (final frame in frames) {
-      final message = decodeMessage(frame);
+      final HostMessage message;
+      try {
+        message = decodeMessage(frame);
+      } on Object catch (e) {
+        _fail(HostLinkException('The host sent something unreadable: $e'));
+        return;
+      }
       switch (message) {
         case OutputMessage():
           // Bytes straight through, and the offset recorded so a reconnect
