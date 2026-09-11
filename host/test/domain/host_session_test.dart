@@ -5,6 +5,41 @@ import 'package:test/test.dart';
 
 Uint8List ascii(String s) => Uint8List.fromList(s.codeUnits);
 
+/// A store that only remembers what it was asked; [refuse] makes `open` throw
+/// the way a disk that will not take a file does.
+class _RecordingStore implements SessionBacklogStore {
+  _RecordingStore({this.refuse = false});
+  final bool refuse;
+  final opened = <String>[];
+  final forgotten = <String>[];
+  final records = <_Record>[];
+
+  @override
+  SessionRecorder open(String id, PtySpawnRequest request, DateTime startedAt) {
+    if (refuse) throw StateError('no room for a record');
+    opened.add(id);
+    final record = _Record();
+    records.add(record);
+    return record;
+  }
+
+  @override
+  List<RestoredSession> restore() => const [];
+
+  @override
+  void forget(String id) => forgotten.add(id);
+}
+
+class _Record implements SessionRecorder {
+  var closed = false;
+  @override
+  void record(Uint8List bytes) {}
+  @override
+  void ended(SessionLifecycle lifecycle) {}
+  @override
+  void close() => closed = true;
+}
+
 ({SessionRegistry registry, FakePtyLauncher launcher}) build({int capacity = 64}) {
   final launcher = FakePtyLauncher();
   return (
@@ -280,6 +315,34 @@ void main() {
 
       expect(registry.sessions, hasLength(6));
       expect(registry.endedCount, 1);
+    });
+
+    test('the record opens before the child is spawned, so a failed spawn leaves no orphan',
+        () {
+      final launcher = FakePtyLauncher()
+        ..failWith = const PtyException('posix_spawn failed', errno: 2);
+      final store = _RecordingStore();
+      final registry = SessionRegistry(launcher: launcher, store: store);
+
+      expect(
+        () => registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh'])),
+        throwsA(isA<PtyException>()),
+      );
+      expect(store.opened, ['pane-1']);
+      expect(store.forgotten, ['pane-1'], reason: 'the record of a session that never ran goes');
+      expect(store.records.single.closed, isTrue);
+      expect(registry.find('pane-1'), isNull);
+    });
+
+    test('a store that refuses the record spawns nothing', () {
+      final launcher = FakePtyLauncher();
+      final registry = SessionRegistry(launcher: launcher, store: _RecordingStore(refuse: true));
+
+      expect(
+        () => registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh'])),
+        throwsA(isA<StateError>()),
+      );
+      expect(launcher.started, isEmpty, reason: 'a child with no session is unreachable');
     });
 
     test('close ends the session and drops it', () async {

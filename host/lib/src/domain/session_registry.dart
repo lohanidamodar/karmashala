@@ -125,13 +125,24 @@ class SessionRegistry {
       store?.forget(id);
     }
     final startedAt = _now();
+    // The record first: a spawn that fails after it is undone here, while a
+    // child spawned before a record that fails would run on with no owner.
+    final recorder = store?.open(id, request, startedAt);
+    final PtyHandle pty;
+    try {
+      pty = _launcher.start(request);
+    } on Object {
+      recorder?.close();
+      store?.forget(id);
+      rethrow;
+    }
     final session = HostSession(
       id: id,
       request: request,
-      pty: _launcher.start(request),
+      pty: pty,
       startedAt: startedAt,
       backlogCapacityBytes: backlogCapacityBytes,
-      recorder: store?.open(id, request, startedAt),
+      recorder: recorder,
     );
     _sessions[id] = session;
     // Pruning happens on the end the host already observes, not on a timer.

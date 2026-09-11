@@ -442,6 +442,49 @@ void main() {
     expect(client.only<ErrorMessage>().code, ProtocolErrorCode.badRequest);
   });
 
+  test('a string that is not UTF-8 is a bad request, and costs only that client', () async {
+    final env = build();
+    final client = PipeConnection();
+    final serving = env.server.serveConnection(client);
+    final payload = (WireWriter()
+          ..u32(1)
+          ..u32(kProtocolVersion)
+          ..u32(2))
+        .take();
+    client._toServer.add(
+      Frame(MessageType.hello, 0, Uint8List.fromList([...payload, 0xff, 0xfe])).encode(),
+    );
+    await client.pump();
+    await client.hangUp();
+    await serving;
+
+    expect(client.only<ErrorMessage>().code, ProtocolErrorCode.badRequest);
+
+    final other = PipeConnection('other');
+    unawaited(env.server.serveConnection(other));
+    await other.send(const HelloMessage(requestId: 1, clientId: 'pane-2'));
+    expect(other.only<WelcomeMessage>().protocolVersion, kProtocolVersion);
+  });
+
+  test('a fault while handling a frame answers that client and hangs it up', () async {
+    final launcher = FakePtyLauncher(onStart: (_) => throw StateError('the launcher fell over'));
+    final server = HostServer(
+      registry: SessionRegistry(launcher: launcher),
+      ptyLibrary: 'libc.so.6',
+    );
+    final client = PipeConnection();
+    final serving = server.serveConnection(client);
+    await client.send(const HelloMessage(requestId: 1, clientId: 'pane-1'));
+    await client.send(_open);
+    await client.hangUp();
+    await serving;
+
+    final error = client.only<ErrorMessage>();
+    expect(error.code, ProtocolErrorCode.internal);
+    expect(error.message, contains('the launcher fell over'));
+    expect(server.clientCount, 0);
+  });
+
   test('output is flushed in counted batches, never on a timer', () async {
     final env = build();
     final client = PipeConnection();

@@ -34,6 +34,20 @@ void main() {
   );
   final startedAt = DateTime.utc(2026, 9, 9, 12);
 
+  test('a record that cannot be opened is a no-op, never a throw', () {
+    // A file where the sessions directory should be: every create under it fails.
+    File('${root.path}/blocked').writeAsStringSync('');
+    final store = SessionStore(Directory('${root.path}/blocked'));
+
+    final record = store.open('pane-a', request, startedAt);
+    expect(record.isRecording, isFalse);
+    record
+      ..record(_bytes('lost'))
+      ..ended(SessionExited(0, startedAt))
+      ..close();
+    expect(store.restore(), isEmpty);
+  });
+
   test('a session that ended is answered for exactly, code and all', () {
     final store = storeOf();
     store.open('pane-a', request, startedAt)

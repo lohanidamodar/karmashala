@@ -49,20 +49,29 @@ class SessionStore implements SessionBacklogStore {
     return '$trimmed-${hash.toRadixString(16).padLeft(8, '0')}';
   }
 
+  /// Never throws: a record that cannot be opened costs the record, not the
+  /// session it was about to describe.
   @override
   SessionRecord open(String id, PtySpawnRequest request, DateTime startedAt) {
     final dir = _directoryFor(id);
-    // Not deleted first: the open truncates `out.bin` anyway, and Windows
-    // refuses to delete a directory a killed host still holds a handle in.
-    if (!dir.existsSync()) dir.createSync(recursive: true);
+    RandomAccessFile? out;
+    try {
+      // Not deleted first: the open truncates `out.bin` anyway, and Windows
+      // refuses to delete a directory a killed host still holds a handle in.
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      out = File('${dir.path}/out.bin').openSync(mode: FileMode.writeOnly);
+    } on FileSystemException {
+      out = null;
+    }
     final record = SessionRecord._(
       store: this,
       id: id,
       directory: dir,
       request: request,
       startedAt: startedAt,
+      out: out,
     );
-    record._writeMeta();
+    if (out != null) record._writeMeta();
     return record;
   }
 
@@ -213,18 +222,20 @@ class SessionRecord implements SessionRecorder {
     required Directory directory,
     required PtySpawnRequest request,
     required DateTime startedAt,
+    required RandomAccessFile? out,
   }) : _store = store,
        _directory = directory,
        _request = request,
        _startedAt = startedAt,
-       _out = File('${directory.path}/out.bin').openSync(mode: FileMode.writeOnly);
+       _out = out,
+       _broken = out == null;
 
   final SessionStore _store;
   final String id;
   final Directory _directory;
   final PtySpawnRequest _request;
   final DateTime _startedAt;
-  RandomAccessFile _out;
+  RandomAccessFile? _out;
 
   /// The absolute offset of the first byte still in `out.bin`; what `attach
   /// since N` reports as discarded.
@@ -237,13 +248,17 @@ class SessionRecord implements SessionRecorder {
 
   /// Something on disk refused us; everything after is a no-op, because losing
   /// the record is survivable and losing the session is not.
-  var _broken = false;
+  bool _broken;
+
+  /// Whether anything reaches disk. False from the start when the open failed.
+  bool get isRecording => !_broken;
 
   @override
   void record(Uint8List bytes) {
-    if (_broken || _handleClosed || bytes.isEmpty) return;
+    final out = _out;
+    if (_broken || _handleClosed || out == null || bytes.isEmpty) return;
     try {
-      _out.writeFromSync(bytes);
+      out.writeFromSync(bytes);
       _onDisk += bytes.length;
       if (_onDisk > _store.rotateAboveBytes) _rotate();
     } on FileSystemException {
@@ -264,7 +279,7 @@ class SessionRecord implements SessionRecorder {
     } finally {
       reader.closeSync();
     }
-    _out.closeSync();
+    _out?.closeSync();
     _out = File('${_directory.path}/out.bin').openSync(mode: FileMode.writeOnly)
       ..truncateSync(0)
       ..writeFromSync(tail);
@@ -287,7 +302,7 @@ class SessionRecord implements SessionRecorder {
     if (_handleClosed) return;
     _handleClosed = true;
     try {
-      _out.closeSync();
+      _out?.closeSync();
     } on FileSystemException {
       // Already gone.
     }

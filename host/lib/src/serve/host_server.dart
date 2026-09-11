@@ -166,7 +166,22 @@ class _ClientSession {
     _heldWhileFlushing.clear();
   }
 
+  /// Whatever one frame does to this client, it does to this client only: an
+  /// escape here would reach `unawaited(serveConnection)` and end the host.
   Future<void> _handle(Frame frame) async {
+    try {
+      await _dispatch(frame);
+    } on FormatException catch (e) {
+      // WireReader.str decodes UTF-8 strictly, and that is a bad request too.
+      _send(ErrorMessage(0, ProtocolErrorCode.badRequest, e.message));
+      _hungUp = true;
+    } on Object catch (e) {
+      _send(ErrorMessage(0, ProtocolErrorCode.internal, '${frame.type.name} failed: $e'));
+      _hungUp = true;
+    }
+  }
+
+  Future<void> _dispatch(Frame frame) async {
     final HostMessage message;
     try {
       message = decodeMessage(frame);
