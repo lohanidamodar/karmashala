@@ -8,3 +8,6 @@ analyzer:
     # host application (a DAO, a provider); the reference is documentation of
     # where a thing came from, not a broken link this package can fix.
     comment_references: ignore
+linter:
+  rules:
+    unawaited_futures: true

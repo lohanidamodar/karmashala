@@ -190,7 +190,7 @@ class SshConnection {
         final client = await _connectOnce();
         if (_closed) {
           // Closed while the dial was in flight: nothing may keep this client.
-          client.close();
+          unawaited(client.close());
           throw SshConnectionException('Connection closed while connecting', retryable: false);
         }
         _client = client;
@@ -258,7 +258,7 @@ class SshConnection {
     try {
       await client.authenticated;
     } on Object catch (e) {
-      client.close();
+      unawaited(client.close());
       // A refused host key surfaces from dartssh2 as a handshake/auth abort, so
       // the verifier's own verdict is the accurate story to tell.
       final presentation = verifier.lastPresentation;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
@@ -129,7 +130,7 @@ void main() {
         await container.pump();
 
         db.reset();
-        container.read(sessionActionsProvider).renameNative('s0', 'Renamed');
+        unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
         await container.pump();
 
         reads[count] = db.sessionReads;
@@ -187,7 +188,7 @@ void main() {
       subscribe();
       await container.pump();
       db.reset();
-      container.read(sessionActionsProvider).renameNative('s0', 'Renamed');
+      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
       await container.pump();
     }
 
@@ -234,7 +235,7 @@ void main() {
       container.listen(sessionsForSelectedRepositoryProvider, (_, _) {});
       await container.pump();
 
-      container.read(sessionActionsProvider).renameNative('s0', 'Renamed');
+      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
       await container.pump();
 
       expect(
@@ -251,7 +252,7 @@ void main() {
       await container.pump();
       expect(container.read(openFollowUpsProvider).single.label, 'Session 0');
 
-      container.read(sessionActionsProvider).renameNative('s0', 'Renamed');
+      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
       await container.pump();
 
       expect(container.read(openFollowUpsProvider).single.label, 'Renamed');
@@ -262,7 +263,7 @@ void main() {
       await container.pump();
       db.reset();
 
-      container.read(sessionActionsProvider).renameNative('s0', 'Renamed');
+      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
       await container.pump();
 
       expect(
@@ -379,7 +380,7 @@ void main() {
       await container.pump();
 
       git.requests.clear();
-      container.read(sessionActionsProvider).renameNative('s0', 'Renamed');
+      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
       await container.pump();
 
       // ignore: avoid_print

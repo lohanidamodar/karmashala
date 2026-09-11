@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:karmashala/src/core/database/app_database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -191,7 +192,7 @@ void main() {
         );
     final id = h.container.read(sessionDaoProvider).getAll().single.id;
 
-    h.container.read(sessionActionsProvider).renameNative(id, 'The parser bug');
+    unawaited(h.container.read(sessionActionsProvider).renameNative(id, 'The parser bug'));
     final opened = await h.container.read(explorerActionsProvider).openNative(id);
 
     expect(

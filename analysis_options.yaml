@@ -8,3 +8,7 @@ analyzer:
     - macos/**
     - linux/**
 include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    unawaited_futures: true

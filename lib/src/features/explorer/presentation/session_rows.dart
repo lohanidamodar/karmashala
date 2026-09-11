@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -256,14 +257,14 @@ class NativeSessionRow extends ConsumerWidget {
           case 'changed-files':
             await SessionChangedFilesDialog.show(context, session.id);
           case 'copy-cmd':
-            copyCommandToClipboard(
+            unawaited(copyCommandToClipboard(
               context,
               () => actions.nativeResumeShellCommand(session.id),
-            );
+            ));
           case 'rename':
-            rename();
+            unawaited(rename());
           case 'delete':
-            delete();
+            unawaited(delete());
         }
       },
     );
@@ -341,10 +342,10 @@ class ImportedSessionRow extends ConsumerWidget {
         case 'resume':
           await _open(context, ref, session);
         case 'copy-cmd':
-          copyCommandToClipboard(
+          unawaited(copyCommandToClipboard(
             context,
             () => actions.resumeShellCommand(session),
-          );
+          ));
         case 'rename':
           final name = await _promptRename(context, session.displayTitle);
           if (name != null) await actions.renameImported(session, name);

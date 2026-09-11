@@ -312,13 +312,13 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
 
       // Filed from readings the row already paid for. Deferred, because
       // Riverpod forbids writing to another provider while one is building.
-      Future<void>.microtask(() {
+      unawaited(Future<void>.microtask(() {
         try {
           ref
               .read(deliveryAttentionProvider.notifier)
               .observe(sessionId, delivery);
         } catch (_) {}
-      });
+      }));
       return delivery;
     });
 

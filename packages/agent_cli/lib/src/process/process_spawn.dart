@@ -102,7 +102,7 @@ Future<CommandResult> _spawnAttended(CommandRequest request) async {
       : systemEncoding.decoder;
   final out = process.stdout.transform(decoder).join();
   final err = process.stderr.transform(decoder).join();
-  process.stdin.done.catchError((Object _) => process.stdin);
+  unawaited(process.stdin.done.catchError((Object _) => process.stdin));
   if (request.stdinText case final input?) process.stdin.add(utf8.encode(input));
   unawaited(process.stdin.close().catchError((Object _) {}));
   final exitCode = await _exitWithin(process, request);

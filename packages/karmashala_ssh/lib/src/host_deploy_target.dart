@@ -99,7 +99,7 @@ class SshHostDeployTarget implements HostDeployTarget {
             ),
           );
         } finally {
-          sftp.close();
+          unawaited(sftp.close());
         }
       });
 

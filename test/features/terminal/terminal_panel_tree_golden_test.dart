@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart';
@@ -396,7 +397,7 @@ void main() {
     capture(tester, 'a pane being recorded', stack);
     // Released before the container is, so the cast is written from a pane
     // that still has a place to write to.
-    scope.read(terminalRecordingProvider.notifier).stop(focusedPaneOf(scope));
+    unawaited(scope.read(terminalRecordingProvider.notifier).stop(focusedPaneOf(scope)));
   });
 
   testWidgets('a pane dragged over the pane beside it', (tester) async {

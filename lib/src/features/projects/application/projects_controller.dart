@@ -89,7 +89,7 @@ class ProjectsController extends Notifier<List<Project>> {
               .stampProject(projectId),
         );
       } finally {
-        _syncs.remove(projectId);
+        unawaited(_syncs.remove(projectId));
       }
     });
   }

@@ -2,6 +2,7 @@
 /// SAME provider the desktop UI reads, so the two can never disagree.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
@@ -145,7 +146,7 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
         return await future;
       } finally {
         if (identical(projectAdds[key], future)) {
-          projectAdds.remove(key);
+          unawaited(projectAdds.remove(key));
         }
       }
     },

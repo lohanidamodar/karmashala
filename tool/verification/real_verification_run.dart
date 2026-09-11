@@ -18,6 +18,7 @@
 // Nothing here touches the app's real database: the run rows go to an in-memory
 // database and the artifacts to a temp directory that is listed, reported on,
 // and then deleted.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -109,9 +110,9 @@ void main() {
       await browser.click(text: 'Save');
       await browser.capture('#panel');
       await browser.screenshot();
-      tools.call('verification_note', const {
+      unawaited(tools.call('verification_note', const {
         'text': 'The panel is teal after Save, as the change intended.',
-      });
+      }));
 
       banner('now break it on purpose');
       // The button throws and fetches a URL that cannot resolve. Neither is
@@ -219,7 +220,7 @@ void main() {
       );
     } finally {
       await browser.disconnect();
-      chrome?.kill();
+      unawaited(chrome?.kill());
       await _deleteWithRetries(pageDir);
       if (profileDir != null) {
         await _deleteWithRetries(Directory(profileDir));
@@ -283,9 +284,9 @@ void main() {
         await Future<void>.delayed(const Duration(seconds: 2));
       }
       await adb.screenshot(device.serial);
-      tools.call('verification_note', const {
+      unawaited(tools.call('verification_note', const {
         'text': 'Settings came to the front and the search field opened.',
-      });
+      }));
 
       banner('verification_finish');
       stdout.writeln(
