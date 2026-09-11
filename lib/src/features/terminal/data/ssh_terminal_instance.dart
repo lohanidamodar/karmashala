@@ -296,6 +296,11 @@ class SshTerminalInstance
           _exitCode = session.exitCode;
           _emit(remoteExitNotice(session.exitCode));
           _liveness.value = PaneLiveness.exited;
+        }, onError: (Object error) {
+          _exited = true;
+          if (_disposed) return;
+          _emit(remoteExitNotice(null, reason: '$error'));
+          _liveness.value = PaneLiveness.exited;
         }),
       );
     } on Object catch (e) {
@@ -629,9 +634,11 @@ class SshTerminalInstance
       try {
         session.close();
       } catch (_) {}
-      session.done.whenComplete(() {
-        if (!reap.isCompleted) reap.complete();
-      });
+      unawaited(
+        session.done.whenComplete(() {
+          if (!reap.isCompleted) reap.complete();
+        }).catchError((Object _) {}),
+      );
     }
   }
 }

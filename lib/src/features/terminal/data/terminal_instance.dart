@@ -276,15 +276,26 @@ class PtyTerminalInstance
     // Captured while the process is certainly alive: the OS can recycle a pid.
     _pid = _pty.pid;
 
-    _pty.exitCode.then((code) {
-      _exited = true;
-      _exitCode = code;
-      if (_disposed) return;
-      _emit('\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n');
-      // The buffer stays, but the pane is no longer a terminal you can type
-      // into — say so, so the UI can stop drawing it as one.
-      _liveness.value = PaneLiveness.exited;
-    });
+    unawaited(
+      _pty.exitCode.then(
+        (code) {
+          _exited = true;
+          _exitCode = code;
+          if (_disposed) return;
+          _emit('\r\n\x1b[90m[process exited with code $code]\x1b[0m\r\n');
+          // The buffer stays, but the pane is no longer a terminal you can type
+          // into — say so, so the UI can stop drawing it as one.
+          _liveness.value = PaneLiveness.exited;
+        },
+        // A wait that failed is still an ending; the code is genuinely unknown.
+        onError: (Object error) {
+          _exited = true;
+          if (_disposed) return;
+          _emit('\r\n\x1b[90m[process ended; exit code unknown ($error)]\x1b[0m\r\n');
+          _liveness.value = PaneLiveness.exited;
+        },
+      ),
+    );
 
     terminal.onOutput = (data) {
       if (_disposed) return;
