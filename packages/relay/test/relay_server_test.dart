@@ -56,12 +56,15 @@ Future<String> _rawUpgrade(String rendezvous) async {
   return response.toString().split('\r\n').first;
 }
 
-Future<String> _get(String path) async {
+Future<String> _get(String path) => _getWith(path, const {});
+
+Future<String> _getWith(String path, Map<String, String> headers) async {
   final client = HttpClient();
   try {
     final request = await client.getUrl(
       Uri.parse('http://127.0.0.1:${relay.port}$path'),
     );
+    headers.forEach(request.headers.set);
     final response = await request.close();
     return '${response.statusCode} ${await response.transform(utf8.decoder).join()}';
   } finally {
@@ -277,6 +280,53 @@ void main() {
       expect(await _get('/v1/$_rendezvous'), startsWith('404'));
       expect(await _get('/v1/$_other'), startsWith('404'));
       expect(await _get('/v1/$_rendezvous'), startsWith('429'));
+    });
+
+    test('a client-supplied x-forwarded-for does not pick its own bucket',
+        () async {
+      await _start(options: const RelayOptions(connectionsPerMinute: 2));
+
+      expect(
+        await _getWith('/v1/$_rendezvous', {'x-forwarded-for': '10.0.0.1'}),
+        startsWith('404'),
+      );
+      expect(
+        await _getWith('/v1/$_rendezvous', {'x-forwarded-for': '10.0.0.2'}),
+        startsWith('404'),
+      );
+      // Third request from the same connection address: limited, whatever the
+      // header claims.
+      expect(
+        await _getWith('/v1/$_rendezvous', {'x-forwarded-for': '10.0.0.3'}),
+        startsWith('429'),
+      );
+    });
+
+    test('behind a trusted proxy the right-most hop is the client', () async {
+      await _start(
+        options: const RelayOptions(connectionsPerMinute: 1, trustedProxy: true),
+      );
+
+      // The left-most value is the client's own claim; the proxy appended the
+      // last one, so two different last hops are two clients.
+      expect(
+        await _getWith('/v1/$_rendezvous', {
+          'x-forwarded-for': '1.1.1.1, 10.0.0.1',
+        }),
+        startsWith('404'),
+      );
+      expect(
+        await _getWith('/v1/$_rendezvous', {
+          'x-forwarded-for': '1.1.1.1, 10.0.0.2',
+        }),
+        startsWith('404'),
+      );
+      expect(
+        await _getWith('/v1/$_rendezvous', {
+          'x-forwarded-for': '2.2.2.2, 10.0.0.2',
+        }),
+        startsWith('429'),
+      );
     });
 
     test('the rate limit can be turned off', () async {

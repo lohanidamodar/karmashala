@@ -70,8 +70,14 @@ class RelayOptions {
     this.delivery,
     this.maxPushTokens = kDefaultMaxPushTokens,
     this.maxPushPayloadBytes = kDefaultMaxPushPayloadBytes,
+    this.trustedProxy = false,
     this.onLog,
   });
+
+  /// Whether a reverse proxy in front of the relay is trusted to say who the
+  /// client is (`fly-client-ip`, or the last `x-forwarded-for` hop it added).
+  /// Off, a client that writes the header itself would pick its own bucket.
+  final bool trustedProxy;
 
   /// Zero or less turns the lone-socket eviction off — see
   /// [kDefaultLoneTimeout] for when that is the right answer.
@@ -154,7 +160,8 @@ class RelayServer {
     if (match == null) return Response.notFound('not found\n');
     final id = match.group(1)!;
 
-    if (!_limiter.allow(_clientIp(request), options.connectionsPerMinute)) {
+    final client = _clientIp(request, trustedProxy: options.trustedProxy);
+    if (!_limiter.allow(client, options.connectionsPerMinute)) {
       _log('rate limited a client');
       return Response(429, body: 'slow down\n');
     }
@@ -266,7 +273,8 @@ class RelayServer {
     if (request.method != 'POST') {
       return Response(405, body: 'method not allowed\n');
     }
-    if (!_limiter.allow(_clientIp(request), options.connectionsPerMinute)) {
+    final client = _clientIp(request, trustedProxy: options.trustedProxy);
+    if (!_limiter.allow(client, options.connectionsPerMinute)) {
       _log('rate limited a client');
       return Response(429, body: 'slow down\n');
     }
@@ -431,11 +439,16 @@ class _Bucket {
   DateTime updatedAt;
 }
 
-String _clientIp(Request request) {
-  final forwarded =
-      request.headers['fly-client-ip'] ?? request.headers['x-forwarded-for'];
-  if (forwarded != null && forwarded.isNotEmpty) {
-    return forwarded.split(',').first.trim();
+String _clientIp(Request request, {required bool trustedProxy}) {
+  if (trustedProxy) {
+    final direct = request.headers['fly-client-ip'];
+    if (direct != null && direct.trim().isNotEmpty) return direct.trim();
+    final forwarded = request.headers['x-forwarded-for'];
+    if (forwarded != null && forwarded.trim().isNotEmpty) {
+      // Right-most: the hop the proxy itself appended. Anything left of it
+      // is whatever the client chose to send.
+      return forwarded.split(',').last.trim();
+    }
   }
   final info = request.context['shelf.io.connection_info'];
   if (info is HttpConnectionInfo) return info.remoteAddress.address;

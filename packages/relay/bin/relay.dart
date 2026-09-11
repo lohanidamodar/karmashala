@@ -72,6 +72,9 @@ Future<void> main(List<String> arguments) async {
           _intArg(arguments, '--max-rendezvous', 'RELAY_MAX_RENDEZVOUS') ??
           kDefaultMaxRendezvous,
       delivery: delivery,
+      trustedProxy:
+          arguments.contains('--trusted-proxy') ||
+          Platform.environment['RELAY_TRUSTED_PROXY'] == '1',
       onLog: quiet ? null : (message) => stdout.writeln('relay: $message'),
     ),
   );
