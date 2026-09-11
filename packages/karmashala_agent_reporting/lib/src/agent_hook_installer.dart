@@ -28,7 +28,7 @@ class AgentHookInstaller {
     this.restrict = restrictToOwner,
     this.beforeCommit,
     this.onWarning,
-    this.checkForConcurrentSaves = false,
+    this.checkForConcurrentSaves = true,
   });
 
   /// Whether a config rewrite stats the file before its read and again before

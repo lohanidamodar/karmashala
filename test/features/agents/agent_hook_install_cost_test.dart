@@ -89,8 +89,10 @@ void main() {
       // the config entry — and each one clears any staging file a killed quit
       // left, is staged, is renamed, has its own staging file removed and is
       // read back. 22 before that first clear, which the 2026-09-09 soak added
-      // after finding `.karmashala-tmp` files accumulating in the store homes.
-      expect(io.async, hasLength(25));
+      // after finding `.karmashala-tmp` files accumulating in the store homes;
+      // 25 before the config rewrite began stat-ing before its read and its
+      // rename so a CLI save in between is re-spliced instead of overwritten.
+      expect(io.async, hasLength(27));
       expect(
         io.async.where((op) => op.startsWith('File.readAsString')).length,
         3,
@@ -121,7 +123,9 @@ void main() {
         reason: 'a rewrite that changes nothing is still a write to somebody '
             'else\'s config',
       );
-      expect(io.async, hasLength(9));
+      // Nine, plus the one stat the config rewrite takes before its read; a
+      // splice that changes nothing never reaches the stat before the rename.
+      expect(io.async, hasLength(10));
     });
 
     test('uninstall and endpoint retirement are asynchronous too', () async {
@@ -412,6 +416,12 @@ class _CountingFile implements File {
   bool existsSync() {
     _io.record('File.existsSync');
     return _inner.existsSync();
+  }
+
+  @override
+  Future<FileStat> stat() {
+    _io.record('File.stat');
+    return _inner.stat();
   }
 
   @override
