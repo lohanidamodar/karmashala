@@ -88,6 +88,10 @@ class SshPromptController extends Notifier<List<SshPromptRequest>> {
   /// left hanging on a dialog that no longer exists.
   void detach() {
     if (_mounted > 0) _mounted--;
+    // The host widget's `dispose` can run after this provider was torn down —
+    // the window closing takes both, in that order. Reading `state` then
+    // throws, and there is no longer anyone to refuse a prompt to.
+    if (!ref.mounted) return;
     if (_mounted == 0 && state.isNotEmpty) {
       for (final request in state) {
         _refuse(request);

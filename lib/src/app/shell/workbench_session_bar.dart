@@ -69,7 +69,19 @@ class _SessionBar extends ConsumerWidget {
                 // Full width and above everything, so the facts read as a caption
                 // over the row rather than as the first item in it.
                 if (sessionId != null) ...[
-                  Row(
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      // The bar's own width. A `LayoutBuilder` *inside* the row
+                      // would read infinity: a non-flexible child of a `Row` is
+                      // measured unbounded along the main axis.
+                      final scale =
+                          MediaQuery.textScalerOf(context).scale(14) / 14;
+                      // The same width the action row buys its third control
+                      // at — a group too narrow for the model chip is too
+                      // narrow for this, and the usage chip beside it overflows
+                      // by 11px before it yields.
+                      final roomForStats = constraints.maxWidth >= 820 * scale;
+                      return Row(
                     children: [
                       Expanded(
                         // Scrolled rather than squeezed: under 240px, sharing
@@ -89,9 +101,18 @@ class _SessionBar extends ConsumerWidget {
                         ),
                       ),
                       // In the facts line and not the action row: a quota is not
-                      // a control and must not compete for those pixels.
+                      // a control and must not compete for those pixels. What
+                      // this session cost is the same kind of thing, and the
+                      // action row has none to give — a fixed child there takes
+                      // them from the model chip, which then overflows.
+                      if (roomForStats) ...[
+                        SessionStatsButton(sessionId: sessionId),
+                        const SizedBox(width: Insets.xs),
+                      ],
                       Flexible(child: UsageChip(sessionId: sessionId)),
                     ],
+                      );
+                    },
                   ),
                   // Whatever this session has just been told, over the chips
                   // that post it.
