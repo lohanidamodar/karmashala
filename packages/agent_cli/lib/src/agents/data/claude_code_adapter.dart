@@ -62,7 +62,11 @@ List<AgentEvent> parseClaudeMessage(String line) {
         }),
       ];
     case 'assistant':
-      final content = (message['message']?['content'] as List?) ?? const [];
+      // Checked, not cast: a `message` that is a string, or a `content` that
+      // is one, would throw here, outside the FormatException guard above.
+      final body = message['message'];
+      final rawContent = body is Map ? body['content'] : null;
+      final content = rawContent is List ? rawContent : const <Object?>[];
       final events = <AgentEvent>[];
       for (final block in content) {
         if (block is! Map) continue;

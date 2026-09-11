@@ -173,6 +173,12 @@ void main() {
       expect(parseClaudeMessage('Loading...'), isEmpty);
       expect(parseClaudeMessage(''), isEmpty);
     });
+
+    test('an assistant message whose body is the wrong shape is skipped, not thrown', () {
+      expect(parseClaudeMessage('{"type":"assistant","message":"oops"}'), isEmpty);
+      expect(parseClaudeMessage('{"type":"assistant","message":{"content":"text"}}'), isEmpty);
+      expect(parseClaudeMessage('{"type":"assistant"}'), isEmpty);
+    });
   });
 
   group('oneShotInvocation', () {
