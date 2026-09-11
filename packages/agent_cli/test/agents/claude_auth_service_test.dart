@@ -103,6 +103,34 @@ void main() {
       expect(account.oauthAccount!['organizationName'], 'Org A');
     });
 
+    test('a credentials file that is not JSON is named, not read as signed out', () async {
+      File(paths.credentialsFile).writeAsStringSync('{"claudeAiOauth": ');
+      writeConfig(jsonEncode({'oauthAccount': {'emailAddress': 'a@x.com'}}));
+
+      final snapshot = await service.readSnapshot(paths);
+      expect(snapshot.isSignedIn, isFalse);
+      expect(snapshot.readFailure, contains('is not valid JSON'));
+      expect(snapshot.readFailure, contains('.credentials.json'));
+
+      await expectLater(
+        service.capture(paths),
+        throwsA(
+          isA<ClaudeAuthException>().having(
+            (e) => e.message,
+            'message',
+            contains('is not valid JSON'),
+          ),
+        ),
+      );
+    });
+
+    test('an absent credentials file is still simply signed out', () async {
+      writeConfig(jsonEncode({'projects': {}}));
+      final snapshot = await service.readSnapshot(paths);
+      expect(snapshot.isSignedIn, isFalse);
+      expect(snapshot.readFailure, isNull);
+    });
+
     test('capture fails clearly when no email is present', () async {
       writeCreds({
         'claudeAiOauth': {'accessToken': 'tok'},

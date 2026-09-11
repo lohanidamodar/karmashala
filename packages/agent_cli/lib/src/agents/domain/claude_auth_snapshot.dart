@@ -9,6 +9,7 @@ class ClaudeAuthSnapshot {
     required this.environmentId,
     this.email,
     this.keychainRefusal,
+    this.readFailure,
     this.organizationName,
     this.organizationUuid,
     this.subscriptionType,
@@ -23,15 +24,22 @@ class ClaudeAuthSnapshot {
   /// sentence, with the age of the reading in it, because "not signed in" is
   /// the wrong thing to tell someone whose credential is sitting there behind
   /// a *Deny* they clicked.
-  const ClaudeAuthSnapshot.signedOut(this.environmentId, {this.keychainRefusal})
-    : email = null,
-      organizationName = null,
-      organizationUuid = null,
-      subscriptionType = null,
-      rateLimitTier = null,
-      accessTokenExpiresAt = null;
+  const ClaudeAuthSnapshot.signedOut(
+    this.environmentId, {
+    this.keychainRefusal,
+    this.readFailure,
+  }) : email = null,
+       organizationName = null,
+       organizationUuid = null,
+       subscriptionType = null,
+       rateLimitTier = null,
+       accessTokenExpiresAt = null;
 
   final String environmentId;
+
+  /// Why there is no account when a file was there and could not be used —
+  /// unreadable, or not JSON. Null for a signed-out installation.
+  final String? readFailure;
   final String? email;
   final String? organizationName;
   final String? organizationUuid;

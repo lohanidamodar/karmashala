@@ -8,6 +8,7 @@ import '../../util/clock.dart';
 import '../../util/json_object_splice.dart';
 import '../../util/describe_age.dart';
 import '../../util/id_generator.dart';
+import '../../util/json_file.dart';
 import '../../cli_detection/data/cli_store.dart';
 import '../../environments/environment_kind.dart';
 import '../../environments/execution_environment.dart';
@@ -159,14 +160,20 @@ class ClaudeAuthService {
         ),
       );
     }
-    final credentials = read != null
-        ? _decodeKeychain(read.secret)
-        : await _readJsonFile(paths.credentialsFile);
-    final config = await _readJsonFile(paths.configFile);
+    final credentialsRead = read == null
+        ? await readJsonObjectFile(paths.credentialsFile)
+        : null;
+    final configRead = await readJsonObjectFile(paths.configFile);
+    // A file that is there and cannot be used is not a signed-out account.
+    final failure = credentialsRead?.failure ?? configRead.failure;
+    if (failure != null) {
+      _logger.warning(failure);
+      return ClaudeAuthSnapshot.signedOut(paths.environmentId, readFailure: failure);
+    }
     return parseClaudeSnapshot(
       environmentId: paths.environmentId,
-      credentials: credentials,
-      config: config,
+      credentials: read != null ? _decodeKeychain(read.secret) : credentialsRead!.object,
+      config: configRead.object,
     );
   }
 
@@ -201,10 +208,16 @@ class ClaudeAuthService {
         claudeKeychainRefusalMessage(read, now: clock.nowUtc()),
       );
     }
-    final credentials = read != null
-        ? _decodeKeychain(read.secret)
-        : await _readJsonFile(paths.credentialsFile);
-    final config = await _readJsonFile(paths.configFile);
+    final credentialsRead = read == null
+        ? await readJsonObjectFile(paths.credentialsFile)
+        : null;
+    if (credentialsRead?.failure case final failure?) {
+      throw ClaudeAuthException(failure);
+    }
+    final configRead = await readJsonObjectFile(paths.configFile);
+    if (configRead.failure case final failure?) throw ClaudeAuthException(failure);
+    final credentials = read != null ? _decodeKeychain(read.secret) : credentialsRead!.object;
+    final config = configRead.object;
 
     final oauth = credentials?['claudeAiOauth'];
     if (oauth is! Map<String, dynamic>) {
@@ -324,17 +337,6 @@ class ClaudeAuthService {
   }
 
   // --- IO helpers ------------------------------------------------------------
-
-  Future<Map<String, dynamic>?> _readJsonFile(String path) async {
-    try {
-      final file = File(path);
-      if (!await file.exists()) return null;
-      final decoded = jsonDecode(await file.readAsString());
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } catch (_) {
-      return null;
-    }
-  }
 
   Future<void> _backupOnce(String path) async {
     final backup = File('$path$_backupSuffix');

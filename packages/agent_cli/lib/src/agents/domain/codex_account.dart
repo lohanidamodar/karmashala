@@ -41,15 +41,20 @@ class CodexAuthSnapshot {
     this.email,
     this.planType,
     this.accessTokenExpiresAt,
+    this.readFailure,
   });
 
-  const CodexAuthSnapshot.signedOut(this.environmentId)
+  const CodexAuthSnapshot.signedOut(this.environmentId, {this.readFailure})
     : accountId = null,
       email = null,
       planType = null,
       accessTokenExpiresAt = null;
 
   final String environmentId;
+
+  /// Why there is no account when `auth.json` was there and could not be used —
+  /// unreadable, or not JSON. Null for a signed-out installation.
+  final String? readFailure;
   final String? accountId;
   final String? email;
   final String? planType;

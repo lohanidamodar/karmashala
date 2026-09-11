@@ -3,6 +3,7 @@ import 'dart:io';
 
 import '../../util/clock.dart';
 import '../../util/id_generator.dart';
+import '../../util/json_file.dart';
 import '../../cli_detection/data/cli_store.dart';
 import '../../environments/environment_kind.dart';
 import '../../environments/execution_environment.dart';
@@ -56,7 +57,11 @@ class CodexAuthService {
     String path,
     String environmentId,
   ) async {
-    final auth = await _read(path);
+    final read = await readJsonObjectFile(path);
+    if (read.failure case final failure?) {
+      return CodexAuthSnapshot.signedOut(environmentId, readFailure: failure);
+    }
+    final auth = read.object;
     if (auth == null) return CodexAuthSnapshot.signedOut(environmentId);
     final identity = _identity(auth);
     if (identity.accountId == null) {
@@ -72,7 +77,9 @@ class CodexAuthService {
   }
 
   Future<CodexAccount> capture(String path, String environmentId) async {
-    final auth = await _read(path);
+    final read = await readJsonObjectFile(path);
+    if (read.failure case final failure?) throw CodexAuthException(failure);
+    final auth = read.object;
     if (auth == null) {
       throw CodexAuthException('No Codex credentials found at $path.');
     }
@@ -140,16 +147,6 @@ class CodexAuthService {
     );
   }
 
-  Future<Map<String, dynamic>?> _read(String path) async {
-    try {
-      final file = File(path);
-      if (!await file.exists()) return null;
-      final decoded = jsonDecode(await file.readAsString());
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } on Object {
-      return null;
-    }
-  }
 }
 
 ({String? accountId, String? email, String? planType, DateTime? expiresAt})

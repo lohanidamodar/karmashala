@@ -5,6 +5,7 @@ import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
 import '../../util/clock.dart';
+import '../../util/json_file.dart';
 import '../../cli_detection/data/cli_store.dart';
 import '../../environments/environment_kind.dart';
 import '../../environments/execution_environment.dart';
@@ -286,7 +287,8 @@ class AgentUsageService {
     // Read email from .claude.json if available
     String? email;
     final configFile = ctx.join(ctx.dirname(home), '.claude.json');
-    final config = await _readJson(configFile);
+    // Only the email comes from here; a broken config costs the label, not the reading.
+    final config = (await readJsonObjectFile(configFile)).object;
     final oauthAccount = config?['oauthAccount'];
     if (oauthAccount is Map<String, dynamic>) {
       email = oauthAccount['emailAddress'] as String?;
@@ -294,7 +296,7 @@ class AgentUsageService {
     // On macOS there is no credentials file: Claude Code keeps `claudeAiOauth`
     // in the login Keychain. Same object, different cupboard.
     if (!keychain) {
-      final creds = await _readJson(ctx.join(home, '.credentials.json'));
+      final creds = await _readCredential(ctx.join(home, '.credentials.json'));
       return _claudeUsage(_tokenIn(creds), email: email);
     }
 
@@ -355,7 +357,7 @@ class AgentUsageService {
         kind: UsageFailureKind.notAsked,
       );
     }
-    final auth = await _readJson(ctx.join(home, 'auth.json'));
+    final auth = await _readCredential(ctx.join(home, 'auth.json'));
     final tokens = auth?['tokens'];
     final token = tokens is Map<String, dynamic>
         ? tokens['access_token'] as String?
@@ -387,7 +389,7 @@ class AgentUsageService {
       throw UsageException('No Antigravity store for this install.');
     }
     final tokenFile = ctx.join(home, 'antigravity-oauth-token');
-    final auth = await _readJson(tokenFile);
+    final auth = await _readCredential(tokenFile);
     final tokenObj = auth?['token'];
     final token = tokenObj is Map<String, dynamic>
         ? tokenObj['access_token'] as String?
@@ -467,15 +469,14 @@ class AgentUsageService {
     }
   }
 
-  Future<Map<String, dynamic>?> _readJson(String path) async {
-    try {
-      final file = File(path);
-      if (!await file.exists()) return null;
-      final decoded = jsonDecode(await file.readAsString());
-      return decoded is Map<String, dynamic> ? decoded : null;
-    } catch (_) {
-      return null;
+  /// The credential file's object, or null when it is absent. One that is there
+  /// and unusable is said so, not reported as "not signed in".
+  Future<Map<String, dynamic>?> _readCredential(String path) async {
+    final read = await readJsonObjectFile(path);
+    if (read.failure case final failure?) {
+      throw UsageException(failure, kind: UsageFailureKind.auth);
     }
+    return read.object;
   }
 
   Future<Map<String, dynamic>> _getJson(
