@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala_host/karmashala_host.dart';
@@ -18,14 +19,34 @@ class PipeConnection implements HostConnection {
   final _closed = Completer<void>();
   var flushes = 0;
 
+  /// Flushes wait for [releaseFlush], and `add` refuses meanwhile exactly as
+  /// dart:io's sink does while it is bound to a flush.
+  var holdFlushes = false;
+  var failFlushes = false;
+  Completer<void>? _flush;
+
   @override
   Stream<Uint8List> get incoming => _toServer.stream;
 
   @override
-  void add(Uint8List bytes) => _fromServer.addAll(_parser.add(bytes));
+  void add(Uint8List bytes) {
+    if (_flush != null) throw StateError('StreamSink is bound to a stream');
+    _fromServer.addAll(_parser.add(bytes));
+  }
 
   @override
-  Future<void> flush() async => flushes++;
+  Future<void> flush() {
+    flushes++;
+    if (failFlushes) return Future.error(const SocketException('write failed'));
+    if (!holdFlushes) return Future.value();
+    return (_flush ??= Completer<void>()).future;
+  }
+
+  void releaseFlush() {
+    final pending = _flush;
+    _flush = null;
+    pending?.complete();
+  }
 
   @override
   Future<void> close() async {
@@ -436,5 +457,58 @@ void main() {
 
     expect(client.flushes - before, 3, reason: '24 chunks, eight to a batch');
     expect(client.all<OutputMessage>().length, 24, reason: 'and none dropped by the pause');
+  });
+
+  test('a message sent while a flush is in flight is held, not dropped', () async {
+    final env = build();
+    final client = PipeConnection()..holdFlushes = true;
+    unawaited(env.server.serveConnection(client));
+    await client.send(const HelloMessage(requestId: 1, clientId: 'pane-1'));
+    await client.send(_open);
+    client.clear();
+
+    for (var i = 0; i < 8; i++) {
+      env.launcher.handles.single.emit(ascii('x'));
+    }
+    await client.pump();
+    expect(client.flushes, 1, reason: 'the eighth chunk opens the window');
+
+    // Both land in the window: an exit and a request, the two shapes that were
+    // being dropped and flagged as a hang-up.
+    env.launcher.handles.single.finish(9);
+    await client.send(const ListMessage(5));
+    expect(client.all<ExitedMessage>(), isEmpty);
+    expect(client.all<SessionsMessage>(), isEmpty);
+
+    client.releaseFlush();
+    await client.pump();
+
+    expect(client.only<ExitedMessage>().exitCode, 9);
+    expect(client.only<SessionsMessage>().requestId, 5);
+    expect(env.server.clientCount, 1, reason: 'the client was never flagged as gone');
+  });
+
+  test('a flush that fails ends that client only; the host and its sessions go on', () async {
+    final env = build();
+    final client = PipeConnection()..failFlushes = true;
+    final serving = env.server.serveConnection(client);
+    await client.send(const HelloMessage(requestId: 1, clientId: 'pane-1'));
+    await client.send(_open);
+
+    for (var i = 0; i < 8; i++) {
+      env.launcher.handles.single.emit(ascii('x'));
+    }
+    await client.pump();
+    await client.hangUp();
+    await serving;
+
+    final other = PipeConnection('other');
+    unawaited(env.server.serveConnection(other));
+    await other.send(const HelloMessage(requestId: 1, clientId: 'pane-2'));
+    await other.send(const ListMessage(2));
+
+    expect(other.only<SessionsMessage>().summaries.single.id, 'pane-a');
+    expect(env.launcher.handles.single.signals, isEmpty);
+    expect(env.registry.require('pane-a').lifecycle, isA<SessionRunning>());
   });
 }

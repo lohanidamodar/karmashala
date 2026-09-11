@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
@@ -108,12 +109,61 @@ class _ClientSession {
     await _connection.close();
   }
 
-  void _send(HostMessage message) {
+  /// Held back while a flush is in flight: dart:io refuses `add` then with the
+  /// same StateError a closed sink throws, and dropping the frame lost exits.
+  final _heldWhileFlushing = <Uint8List>[];
+  final _pausedForFlush = <StreamSubscription<OutputChunk>>{};
+  var _flushing = false;
+  var _sentSinceFlush = 0;
+
+  void _send(HostMessage message) => _sendBytes(message.toFrame().encode());
+
+  void _sendBytes(Uint8List bytes) {
+    if (_hungUp) return;
+    if (_flushing) {
+      _heldWhileFlushing.add(bytes);
+      return;
+    }
     try {
-      _connection.add(message.toFrame().encode());
+      _connection.add(bytes);
     } on StateError {
       _hungUp = true; // the sink is closed under us
     }
+  }
+
+  /// Counted, not timed: a slow link stalls its own pumps rather than growing
+  /// an unbounded queue in this process.
+  void _paceOutput(StreamSubscription<OutputChunk> subscription) {
+    if (++_sentSinceFlush < 8 || _hungUp) return;
+    subscription.pause();
+    _pausedForFlush.add(subscription);
+    if (_flushing) return;
+    _flushing = true;
+    _connection.flush().then((_) => _flushed(), onError: (Object _) => _peerGone());
+  }
+
+  void _flushed() {
+    _flushing = false;
+    _sentSinceFlush = 0;
+    final held = List.of(_heldWhileFlushing);
+    _heldWhileFlushing.clear();
+    for (final bytes in held) {
+      _sendBytes(bytes);
+    }
+    final paused = List.of(_pausedForFlush);
+    _pausedForFlush.clear();
+    if (_hungUp) return;
+    for (final subscription in paused) {
+      if (subscription.isPaused) subscription.resume();
+    }
+  }
+
+  /// A flush that fails is the peer gone, not a fault of this process; the
+  /// pumps stay paused until [_cleanUp] cancels them.
+  void _peerGone() {
+    _flushing = false;
+    _hungUp = true;
+    _heldWhileFlushing.clear();
   }
 
   Future<void> _handle(Frame frame) async {
@@ -265,20 +315,10 @@ class _ClientSession {
       ),
     );
 
-    var inFlight = 0;
     late final StreamSubscription<OutputChunk> subscription;
     subscription = session.readFrom(message.sinceOffset).listen((chunk) {
       _send(OutputMessage(ref, chunk.offset, chunk.bytes));
-      // Counted, not timed: a slow link stalls its own pump rather than growing
-      // an unbounded queue in this process.
-      if (++inFlight >= 8) {
-        subscription.pause();
-        _connection.flush().whenComplete(() {
-          inFlight = 0;
-          if (!subscription.isPaused) return;
-          subscription.resume();
-        });
-      }
+      _paceOutput(subscription);
     });
     _subscriptions[ref] = subscription;
 
