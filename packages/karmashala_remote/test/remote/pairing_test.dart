@@ -3,6 +3,8 @@
 /// gates persistence, the secret is single-use and the code expires.
 library;
 
+import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:karmashala_remote/client.dart';
@@ -45,6 +47,76 @@ void main() {
         throwsA(isA<ProtocolException>()),
       );
     });
+
+    test('a relay that is not a URL is refused, not a FormatException', () {
+      final json = jsonDecode(payload().encode()) as Map<String, Object?>;
+      json['relay'] = 'http://[::1';
+      expect(
+        () => PairingPayload.decode(jsonEncode(json)),
+        throwsA(isA<ProtocolException>()),
+      );
+    });
+  });
+
+  group('the host session on its own', () {
+    test('expires on its own clock, with no frame to prompt it', () async {
+      final session = HostPairingSession(
+        payload: payload(),
+        hostName: 'Desk',
+        persist: (_) async {},
+        ttl: const Duration(milliseconds: 50),
+      )..attach(_DeadTransport());
+      await expectLater(
+        session.done.timeout(const Duration(seconds: 5)),
+        throwsA(isA<PairingException>()),
+      );
+    });
+
+    test('a link whose send throws does not poison the frame chain', () async {
+      // The first throw used to leave every later frame, from either leg,
+      // unanswered. Here the dead leg is handed a hello, then the same phone
+      // pairs over a live one.
+      final server = await LanTransportServer.bind(
+        address: '127.0.0.1',
+        port: 0,
+      );
+      addTearDown(server.close);
+      final shown = payload();
+      final persisted = <PairedDevice>[];
+      final session = HostPairingSession(
+        payload: shown,
+        hostName: 'Desk',
+        persist: (device) async => persisted.add(device),
+      );
+      final client = CompanionPairingClient(
+        store: InMemoryCompanionStore(),
+        deviceName: 'OPPO',
+      );
+      final dead = _DeadTransport();
+      session.handleFrame(
+        dead,
+        PairHello(deviceId: client.deviceId, name: 'OPPO').encode(),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(dead.sends, 1);
+
+      final links = ItemQueue<LanLink>(server.connections);
+      final phone = LanTransport(
+        host: '127.0.0.1',
+        port: server.port,
+        backoff: fastBackoff(),
+      )..start();
+      addTearDown(phone.close);
+      session.attach(await links.next);
+      await links.cancel();
+
+      await client.pair(
+        shown,
+        transport: phone,
+        timeout: const Duration(seconds: 10),
+      );
+      expect(persisted, hasLength(1));
+    });
   });
 
   group('host and phone over a loopback link', () {
@@ -61,12 +133,16 @@ void main() {
     });
 
     Future<(HostPairingSession, CompanionPairingClient, List<PairedDevice>)>
-    fixture(PairingPayload shown, {DateTime Function()? now}) async {
+    fixture(
+      PairingPayload shown, {
+      DateTime Function()? now,
+      Future<void> Function(PairedDevice device)? persist,
+    }) async {
       final persisted = <PairedDevice>[];
       final session = HostPairingSession(
         payload: shown,
         hostName: 'Desk',
-        persist: (device) async => persisted.add(device),
+        persist: persist ?? (device) async => persisted.add(device),
         now: now,
       );
       final links = ItemQueue<LanLink>(server.connections);
@@ -154,6 +230,37 @@ void main() {
       await expectLater(session.done, throwsA(isA<PairingException>()));
     });
 
+    test('a store that refuses the device fails the session out loud',
+        () async {
+      // A throw from persist used to poison the frame chain and leave the
+      // dialog waiting for a device that would never be reported.
+      final shown = payload();
+      final (session, client, persisted) = await fixture(
+        shown,
+        persist: (_) async => throw StateError('disk full'),
+      );
+
+      await expectLater(
+        client.pair(
+          shown,
+          transport: phoneTransport,
+          timeout: const Duration(milliseconds: 800),
+        ),
+        throwsA(isA<CompanionPairingException>()),
+      );
+      await expectLater(
+        session.done,
+        throwsA(
+          isA<PairingException>().having(
+            (e) => e.message,
+            'message',
+            contains('disk full'),
+          ),
+        ),
+      );
+      expect(persisted, isEmpty);
+    });
+
     test('a wrong secret cannot complete the round-trip', () async {
       final shown = payload();
       final (session, client, persisted) = await fixture(shown);
@@ -231,4 +338,28 @@ void main() {
       expect(LinkHello.tryDecode(List.filled(5000, 0x20)), isNull);
     });
   });
+}
+
+/// A link whose far end is already gone: every send throws.
+class _DeadTransport extends RemoteTransport {
+  int sends = 0;
+
+  @override
+  Stream<Uint8List> get frames => const Stream<Uint8List>.empty();
+
+  @override
+  Stream<TransportState> get states =>
+      Stream<TransportState>.value(TransportState.closed);
+
+  @override
+  TransportState get state => TransportState.closed;
+
+  @override
+  void send(List<int> frame) {
+    sends++;
+    throw const TransportException('transport is closed');
+  }
+
+  @override
+  Future<void> close() async {}
 }

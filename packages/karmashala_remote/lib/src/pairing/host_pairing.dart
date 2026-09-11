@@ -35,10 +35,28 @@ class HostPairingSession {
     required this.persist,
     DateTime Function()? now,
     Duration ttl = kPairingTtl,
+    this.onLog,
   }) : _now = now ?? DateTime.now,
        _deadline = (now ?? DateTime.now)().add(ttl);
 
+  /// Expiry is observed on its own clock, not only when a frame happens by.
+  /// Armed by the first transport, so a session nobody wires up holds no timer.
+  void _armExpiry() {
+    if (_expiry != null || _spent || _done.isCompleted) return;
+    final left = _deadline.difference(_now());
+    _expiry = Timer(left.isNegative ? Duration.zero : left, () {
+      _fail(_expired);
+    });
+  }
+
+  static const PairingException _expired = PairingException(
+    'the pairing code has expired',
+  );
+
   final PairingPayload payload;
+
+  /// Lifecycle only; never a key or a frame.
+  final void Function(String message)? onLog;
 
   /// What the confirm message calls this desktop.
   final String hostName;
@@ -49,6 +67,7 @@ class HostPairingSession {
 
   final DateTime Function() _now;
   final DateTime _deadline;
+  Timer? _expiry;
 
   final Completer<PairedDevice> _done = Completer<PairedDevice>();
   final List<StreamSubscription<Uint8List>> _subscriptions = [];
@@ -71,6 +90,7 @@ class HostPairingSession {
   /// Listens for pairing frames on [transport] and answers on it.
   void attach(RemoteTransport transport) {
     if (_spent) return;
+    _armExpiry();
     _transports.add(transport);
     _subscriptions.add(
       transport.frames.listen((frame) {
@@ -82,14 +102,31 @@ class HostPairingSession {
   /// Routes a frame that arrived on a link something else is reading —
   /// the LAN server hands frames over this way.
   void handleFrame(RemoteTransport transport, Uint8List frame) {
+    _armExpiry();
     if (!_transports.contains(transport)) _transports.add(transport);
     _chain = _chain.then((_) => _handle(transport, frame));
   }
 
+  /// Never throws: a throw would poison [_chain] and leave every later frame,
+  /// from either leg, unanswered.
   Future<void> _handle(RemoteTransport transport, Uint8List frame) async {
+    try {
+      await _handleOrThrow(transport, frame);
+    } on TransportException catch (error) {
+      // This leg is gone; the phone redials, or the other leg answers.
+      onLog?.call('could not answer on a link: ${error.message}');
+    } on Object catch (error) {
+      _fail(PairingException('pairing failed: $error'));
+    }
+  }
+
+  Future<void> _handleOrThrow(
+    RemoteTransport transport,
+    Uint8List frame,
+  ) async {
     if (_spent || _done.isCompleted) return;
     if (isExpired) {
-      _fail(const PairingException('the pairing code has expired'));
+      _fail(_expired);
       return;
     }
 
@@ -161,12 +198,17 @@ class HostPairingSession {
       createdAt: _now().toUtc(),
     );
     await persist(device);
-    transport.send(await channel.seal(PairingMessage.encodeDone()));
+    final done = await channel.seal(PairingMessage.encodeDone());
+    // Persisted and proven: the device is paired whether or not the last
+    // frame reaches the phone, which redials and hears it then.
     _spent = true;
+    _expiry?.cancel();
     if (!_done.isCompleted) _done.complete(device);
+    transport.send(done);
   }
 
   void _fail(Object error) {
+    _expiry?.cancel();
     if (_done.isCompleted) return;
     _done.completeError(error);
     // The dialog may not be awaiting yet; a late listener still gets the

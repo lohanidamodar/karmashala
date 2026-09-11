@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:karmashala_remote/remote.dart';
@@ -41,6 +42,8 @@ void main() {
     closers.add(transport.close);
     return transport;
   }
+
+  _lateSockets();
 
   test('both ends use the same class and meet at the rendezvous', () async {
     final host = connect(_rendezvous);
@@ -246,3 +249,40 @@ void main() {
     expect(relay.rendezvousCount, 0);
   });
 }
+
+void _lateSockets() {
+  test('a socket that opens after the connect timeout is closed, not left '
+      'holding the rendezvous', () async {
+    var closedOnServer = 0;
+    final slow = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => slow.close(force: true));
+    slow.listen((request) async {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen(
+        (_) {},
+        onDone: () => closedOnServer++,
+        onError: (Object _) {},
+      );
+    });
+
+    final transport = RelayTransport(
+      endpoint: Uri.parse('ws://127.0.0.1:${slow.port}/v1/$_rendezvousHex'),
+      connectTimeout: const Duration(milliseconds: 20),
+      backoff: Backoff(
+        initial: const Duration(seconds: 5),
+        maximum: const Duration(seconds: 5),
+        jitter: 0,
+      ),
+    )..start();
+    addTearDown(transport.close);
+
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (closedOnServer == 0 && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    expect(closedOnServer, 1);
+  });
+}
+
+const _rendezvousHex = '0123456789abcdef0123456789abcdef';

@@ -82,9 +82,21 @@ class RelayTransport extends ReconnectingTransport {
 
   @override
   Future<void> connectOnce() async {
-    final socket = await WebSocket.connect(
-      endpoint.toString(),
-    ).timeout(connectTimeout);
+    // `.timeout()` cancels nothing: a socket that opens after it fired would
+    // hold the rendezvous generation for a transport that has moved on.
+    final pending = WebSocket.connect(endpoint.toString());
+    final WebSocket socket;
+    try {
+      socket = await pending.timeout(connectTimeout);
+    } on TimeoutException {
+      unawaited(
+        pending.then<void>(
+          (late) => late.close(WebSocketStatus.goingAway, 'timed out'),
+          onError: (Object _) {},
+        ),
+      );
+      rethrow;
+    }
     socket.pingInterval = heartbeat;
     // Closed while this dial was in flight: `abort()` had no socket to close,
     // so the connection would come up after the transport was gone and hold the

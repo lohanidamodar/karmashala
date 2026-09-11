@@ -52,7 +52,13 @@ class LanTransport extends ReconnectingTransport {
 
   @override
   Future<void> connectOnce() async {
+    // `Socket.connect`'s own timeout aborts the attempt, unlike `.timeout()`.
     final socket = await Socket.connect(host, port, timeout: connectTimeout);
+    // Closed while the dial was in flight: `abort()` had nothing to destroy.
+    if (state == TransportState.closed) {
+      socket.destroy();
+      return;
+    }
     _socket = socket;
     await _pump(socket, this);
     _socket = null;
@@ -104,25 +110,32 @@ class LanLink extends ReconnectingTransport {
 /// The host's end of the direct path: a TCP listener handing out one [LanLink]
 /// per phone that dials in.
 class LanTransportServer {
-  LanTransportServer._(this._server, this._onLog) {
+  LanTransportServer._(this._server, this._onLog, this.maxLinks) {
     _subscription = _server.listen(
       _accept,
       onError: (Object error) => _onLog?.call('listener failed: $error'),
     );
   }
 
+  /// Links one host will hold at once. A phone redials, so a refused dial
+  /// costs it a backoff; an unbounded list costs the host its memory.
+  static const int kDefaultMaxLinks = 32;
+
   /// Binds a listener. Port 0 asks the OS for a free one.
   static Future<LanTransportServer> bind({
     Object address = '0.0.0.0',
     int port = kDefaultLanPort,
+    int maxLinks = kDefaultMaxLinks,
     void Function(String message)? onLog,
   }) async => LanTransportServer._(
     await ServerSocket.bind(address, port, shared: false),
     onLog,
+    maxLinks,
   );
 
   final ServerSocket _server;
   final void Function(String message)? _onLog;
+  final int maxLinks;
 
   /// Single-subscription for the same reason [RemoteTransport.frames] is: a
   /// phone that dials in before the host listens must not be dropped.
@@ -137,9 +150,20 @@ class LanTransportServer {
   /// A link per phone that dials in, already started. Listen once.
   Stream<LanLink> get connections => _connections.stream;
 
+  /// Links still open. Dropped links leave this list as they close.
+  int get linkCount => _links.length;
+
   void _accept(Socket socket) {
+    if (_links.length >= maxLinks) {
+      _onLog?.call('refused a link: $maxLinks already held');
+      socket.destroy();
+      return;
+    }
     final link = LanLink(socket, onLog: _onLog)..start();
     _links.add(link);
+    link.states
+        .firstWhere((state) => state == TransportState.closed)
+        .then((_) => _links.remove(link), onError: (Object _) {});
     _onLog?.call('accepted a link');
     if (!_connections.isClosed) _connections.add(link);
   }

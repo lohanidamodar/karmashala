@@ -41,6 +41,8 @@ void main() {
     return transport;
   }
 
+  _linkBookkeeping();
+
   test('a phone dials in and frames go both ways', () async {
     final links = ItemQueue<LanLink>(server.connections);
     final phone = dial();
@@ -273,5 +275,62 @@ void main() {
     expect(await fromB.next, [0xbb]);
     expect(await toA.next, [1]);
     expect(await toB.next, [2]);
+  });
+}
+
+void _linkBookkeeping() {
+  test('a link the phone drops leaves the host\'s list', () async {
+    final server = await LanTransportServer.bind(address: '127.0.0.1', port: 0);
+    addTearDown(server.close);
+    final links = ItemQueue<LanLink>(server.connections);
+    final phone = LanTransport(
+      host: '127.0.0.1',
+      port: server.port,
+      backoff: fastBackoff(),
+    )..start();
+    await links.next;
+    expect(server.linkCount, 1);
+
+    await phone.close();
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (server.linkCount > 0 && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+    // Every dropped link used to stay in the list until the server closed.
+    expect(server.linkCount, 0);
+    await links.cancel();
+  });
+
+  test('links are capped; a dial past the cap is refused', () async {
+    final server = await LanTransportServer.bind(
+      address: '127.0.0.1',
+      port: 0,
+      maxLinks: 1,
+    );
+    addTearDown(server.close);
+    final links = ItemQueue<LanLink>(server.connections);
+    final first = LanTransport(
+      host: '127.0.0.1',
+      port: server.port,
+      backoff: fastBackoff(),
+    )..start();
+    addTearDown(first.close);
+    await links.next;
+
+    final second = LanTransport(
+      host: '127.0.0.1',
+      port: server.port,
+      backoff: Backoff(
+        initial: const Duration(seconds: 5),
+        maximum: const Duration(seconds: 5),
+        jitter: 0,
+      ),
+    )..start();
+    addTearDown(second.close);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    expect(server.linkCount, 1);
+    expect(links.isEmpty, isTrue);
+    await links.cancel();
   });
 }

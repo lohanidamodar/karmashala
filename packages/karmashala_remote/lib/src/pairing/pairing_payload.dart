@@ -168,8 +168,14 @@ class PairingPayload {
     } on FormatException {
       throw const ProtocolException('pairing secret is not base64url');
     }
+    final Uri relayUri;
+    try {
+      relayUri = Uri.parse(relay);
+    } on FormatException {
+      throw const ProtocolException('pairing relay is not a URL');
+    }
     return PairingPayload(
-      relay: Uri.parse(relay),
+      relay: relayUri,
       rendezvous: RendezvousId.parse(rendezvous),
       version: version,
       secret: secretBytes,

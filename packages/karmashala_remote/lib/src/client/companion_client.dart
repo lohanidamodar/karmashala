@@ -565,7 +565,7 @@ class CompanionClient {
     final id = 'q${_nextRequestId++}';
     final completer = Completer<Map<String, Object?>>();
     _pending[id] = completer;
-    _sendChain = _sendChain.then((_) async {
+    final sent = _sendChain.then((_) async {
       final envelope = Envelope.of(
         type,
         seq: channel.nextSendSequence,
@@ -574,7 +574,14 @@ class CompanionClient {
       );
       transport.send(await channel.seal(envelope.toBytes()));
     });
-    await _sendChain;
+    // The chain carries on past a failed send; only this request fails.
+    _sendChain = sent.catchError((Object _) {});
+    try {
+      await sent;
+    } on Object {
+      _pending.remove(id);
+      rethrow;
+    }
     try {
       return await completer.future.timeout(requestTimeout);
     } on TimeoutException {
