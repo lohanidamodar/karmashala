@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../core/lifecycle/uncaught_errors.dart';
 import '../../core/logging/diagnostics_bootstrap.dart';
 import 'package:karmashala_remote/companion.dart';
 import '../../features/companion/client/secure_companion_store.dart';
@@ -28,6 +29,7 @@ Future<void> runCompanionApp() async {
   // `debugPrint` — visible only on a cable, in the build that most needs evidence.
   AppLogger.initialize();
   final logger = AppLogger.named('companion.bootstrap');
+  UncaughtErrorHandlers(logger).install();
   logger.info(buildIdentity());
   // Not awaited before the identity line above: a backfill replays that line
   // into the file first, so the log opens by saying which build wrote it.

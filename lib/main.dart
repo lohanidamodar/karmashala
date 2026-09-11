@@ -6,12 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'src/app/bootstrap_failure_app.dart';
 import 'src/app/karmashala_app.dart';
 import 'src/app/companion/companion_bootstrap.dart';
 import 'src/app/companion/companion_mode.dart';
 import 'src/core/database/app_database.dart';
 import 'src/core/database/database_providers.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
+import 'src/core/lifecycle/uncaught_errors.dart';
 import 'package:karmashala_core/logging.dart';
 import 'src/core/logging/diagnostics_bootstrap.dart';
 import 'src/core/paths/app_support_directory.dart';
@@ -32,8 +34,8 @@ import 'src/features/settings/application/settings_controller.dart';
 import 'src/features/system/system_integration_service.dart';
 import 'src/features/verification/application/verification_providers.dart';
 
-/// Application entry point. Bootstraps logging and the database, then injects
-/// the opened database into the provider graph via a `ProviderScope` override.
+/// Application entry point. Logging and the uncaught-error handlers first, so
+/// whatever the bootstrap does next is on record if it fails.
 Future<void> main() async {
   // A companion build boots its own shell and nothing below this line — no
   // PTYs, no discovery, no control server, no tray, no window chrome.
@@ -48,10 +50,36 @@ Future<void> main() async {
       '--dart-define=KARMASHALA_MODE=companion.',
     );
   }
-  // Loads libmpv, which decodes the device pane's H.264 live view.
-  MediaKit.ensureInitialized();
   AppLogger.initialize();
   final logger = AppLogger.named('bootstrap');
+  UncaughtErrorHandlers(logger).install();
+
+  try {
+    await _bootstrap(logger);
+  } catch (error, stack) {
+    logger.error('Bootstrap failed.', error, stack);
+    await Diagnostics.instance.flushFile();
+    runApp(
+      BootstrapFailureApp(
+        error: error,
+        stack: stack,
+        logDirectory: await _logDirectoryOrNull(),
+      ),
+    );
+  }
+}
+
+Future<Directory?> _logDirectoryOrNull() async {
+  try {
+    return await defaultLogDirectory();
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<void> _bootstrap(AppLogger logger) async {
+  // Loads libmpv, which decodes the device pane's H.264 live view.
+  MediaKit.ensureInitialized();
 
   // Which build, on what OS — first line of the buffer, so it is the first line
   // of anything copied out. A log that cannot say its version answers nothing.
