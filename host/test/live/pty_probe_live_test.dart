@@ -23,7 +23,7 @@ void main() {
     // constant: glibc < 2.34 keeps openpty in libutil.
     expect(output, matches(RegExp(r'pty-lib\s+lib(c\.so\.6|util\.so\.1)')));
     expect(output, contains('ok   echo round-trip'));
-    expect(output, contains('ok   resize -> stty size'));
+    expect(output, contains('ok   resize -> reported size'));
     expect(output, contains('ok   exit code  got 7'));
   }, skip: unavailable, timeout: const Timeout(Duration(minutes: 3)));
 }
