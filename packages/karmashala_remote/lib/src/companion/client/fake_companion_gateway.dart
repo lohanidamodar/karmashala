@@ -199,6 +199,13 @@ class FakeCompanionGateway implements CompanionGateway {
   /// The file each prompt carried, in step with [sentPrompts].
   final sentAttachments = <CompanionOutgoingAttachment?>[];
 
+  /// Every send the UI *attempted*, with its idempotency key — recorded before
+  /// the link check, so a refused attempt is on the list too.
+  final promptAttempts = <({String? requestId, String text})>[];
+
+  /// When set, a prompt is refused with it after being recorded.
+  GatewayException? promptFailure;
+
   /// Every approval answer the UI sent, in order.
   final answeredApprovals =
       <
@@ -672,8 +679,12 @@ class FakeCompanionGateway implements CompanionGateway {
     String text, {
     CompanionOutgoingAttachment? attachment,
     void Function(int sent, int total)? onProgress,
+    String? requestId,
   }) async {
+    promptAttempts.add((requestId: requestId, text: text));
     _requireLink();
+    final failure = promptFailure;
+    if (failure != null) throw failure;
     sentPrompts.add((sessionId: sessionId, text: text));
     sentAttachments.add(attachment);
     if (attachment != null) {

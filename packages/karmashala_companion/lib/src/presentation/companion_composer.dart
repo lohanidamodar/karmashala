@@ -17,18 +17,24 @@ class CompanionComposer extends StatefulWidget {
     this.controller,
     this.attachments,
     this.pickFile,
+    this.newRequestId,
     super.key,
   });
 
   /// Sends the prompt and whatever is attached; awaited so the box can show a
   /// busy state and keep both for retry when the host refuses. [onProgress]
-  /// carries the slice count — a photo is dozens of round trips.
+  /// carries the slice count — a photo is dozens of round trips. [requestId]
+  /// is the same value for every retry of an unchanged message.
   final Future<void> Function(
     String text, {
     CompanionOutgoingAttachment? attachment,
     void Function(int sent, int total)? onProgress,
+    String? requestId,
   })
   onSend;
+
+  /// Mints the idempotency key a send carries. Null uses a local nonce.
+  final String Function()? newRequestId;
 
   final String hintText;
   final bool enabled;
@@ -60,6 +66,12 @@ class _CompanionComposerState extends State<CompanionComposer> {
   /// Slices acknowledged and slices in total, while an upload is in flight.
   (int, int)? _progress;
 
+  /// The key of the message in the box. Kept across a failed send so the retry
+  /// is the same request to the host; dropped the moment the message changes.
+  String? _sendKey;
+  String _keyedText = '';
+  static int _nonce = 0;
+
   @override
   void initState() {
     super.initState();
@@ -68,8 +80,14 @@ class _CompanionComposerState extends State<CompanionComposer> {
   }
 
   void _onInputChange() {
+    if (_input.text != _keyedText) _sendKey = null;
     if (mounted) setState(() {});
   }
+
+  String _mintKey() =>
+      widget.newRequestId?.call() ??
+      'p${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}'
+          '-${_nonce++}';
 
   @override
   void didUpdateWidget(CompanionComposer oldWidget) {
@@ -148,6 +166,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
     }
     if (!mounted) return;
     setState(() {
+      _sendKey = null;
       _attachment = CompanionOutgoingAttachment(
         name: name,
         mediaType: mediaType,
@@ -165,6 +184,8 @@ class _CompanionComposerState extends State<CompanionComposer> {
     final attachment = _attachment;
     if (text.isEmpty && attachment == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final key = _sendKey ??= _mintKey();
+    _keyedText = _input.text;
     setState(() => _busy = true);
     try {
       await widget.onSend(
@@ -173,7 +194,9 @@ class _CompanionComposerState extends State<CompanionComposer> {
         onProgress: (sent, total) {
           if (mounted) setState(() => _progress = (sent, total));
         },
+        requestId: key,
       );
+      _sendKey = null;
       if (mounted) {
         _input.clear();
         setState(() {
@@ -218,7 +241,12 @@ class _CompanionComposerState extends State<CompanionComposer> {
                 ? _megabytes(attachment.bytes.length)
                 // Counted slices the host acknowledged, not a guessed percent.
                 : 'Sending ${progress.$1} of ${progress.$2}…',
-            onRemove: canType ? () => setState(() => _attachment = null) : null,
+            onRemove: canType
+                ? () => setState(() {
+                    _attachment = null;
+                    _sendKey = null;
+                  })
+                : null,
           ),
         Padding(
           padding: EdgeInsets.fromLTRB(

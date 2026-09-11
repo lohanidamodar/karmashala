@@ -195,12 +195,14 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                 // Straight off the row, so the picker appears only where the
                 // host has said what it would take.
                 attachments: canAttach ? session?.attachments : null,
-                onSend: (text, {attachment, onProgress}) async {
+                newRequestId: _newRequestId,
+                onSend: (text, {attachment, onProgress, requestId}) async {
                   final delivery = await gateway.sendPrompt(
                     sessionId,
                     text,
                     attachment: attachment,
                     onProgress: onProgress,
+                    requestId: requestId,
                   );
                   if (delivery == RemotePromptDelivery.offered &&
                       context.mounted) {

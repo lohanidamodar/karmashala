@@ -662,11 +662,14 @@ abstract interface class CompanionGateway {
   /// uploaded and acknowledged first, so a file that did not arrive whole takes
   /// the prompt with it. Answers what became of it — a prompt carrying a file is
   /// **offered** to the desktop's message box rather than typed into the agent.
+  /// [requestId] is the phone's idempotency key: the SAME value when retrying a
+  /// send that went unanswered, a fresh one once the user changes the message.
   Future<RemotePromptDelivery> sendPrompt(
     String sessionId,
     String text, {
     CompanionOutgoingAttachment? attachment,
     void Function(int sent, int total)? onProgress,
+    String? requestId,
   });
 
   /// `approval.answer`.

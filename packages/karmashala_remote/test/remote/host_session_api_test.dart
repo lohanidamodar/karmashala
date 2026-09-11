@@ -268,6 +268,89 @@ void main() {
       expect(harness.last.type, FrameType.result);
     });
 
+    test('a repeated prompt.send with one key is typed once', () async {
+      final harness = Harness();
+      const payload = {
+        'sessionId': 's1',
+        'text': 'run the tests',
+        'requestId': 'p-1',
+      };
+
+      await harness.request(FrameType.promptSend, payload: payload);
+      await harness.request(FrameType.promptSend, payload: payload);
+
+      // The phone could not tell whether the first answer was lost, so it
+      // asked again with the same key; the agent must not be typed at twice.
+      expect(harness.fake.prompts, [(sessionId: 's1', text: 'run the tests')]);
+      expect(harness.last.type, FrameType.result);
+      expect(harness.last.payload['replayed'], isTrue);
+    });
+
+    test('a different key is a different message', () async {
+      final harness = Harness();
+
+      await harness.request(
+        FrameType.promptSend,
+        payload: const {'sessionId': 's1', 'text': 'again', 'requestId': 'p-1'},
+      );
+      await harness.request(
+        FrameType.promptSend,
+        payload: const {'sessionId': 's1', 'text': 'again', 'requestId': 'p-2'},
+      );
+
+      expect(harness.fake.prompts, hasLength(2));
+      expect(harness.last.payload['replayed'], isNull);
+    });
+
+    test('a send that failed leaves its key free to try again', () async {
+      final harness = Harness();
+      harness.fake.promptError = const RemoteApiRefusal(
+        ErrorCode.badRequest,
+        'no',
+      );
+
+      await harness.request(
+        FrameType.promptSend,
+        payload: const {'sessionId': 's1', 'text': 'hi', 'requestId': 'p-1'},
+      );
+      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+
+      harness.fake.promptError = null;
+      await harness.request(
+        FrameType.promptSend,
+        payload: const {'sessionId': 's1', 'text': 'hi', 'requestId': 'p-1'},
+      );
+
+      expect(harness.fake.prompts, [(sessionId: 's1', text: 'hi')]);
+      expect(harness.last.type, FrameType.result);
+    });
+
+    test('a key longer than the bound is refused', () async {
+      final harness = Harness();
+
+      await harness.request(
+        FrameType.promptSend,
+        payload: {
+          'sessionId': 's1',
+          'text': 'hi',
+          'requestId': 'k' * (kMaxSessionStartKeyLength + 1),
+        },
+      );
+
+      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+      expect(harness.fake.prompts, isEmpty);
+    });
+
+    test('a phone that sends no key is typed for every time', () async {
+      final harness = Harness();
+      const payload = {'sessionId': 's1', 'text': 'twice'};
+
+      await harness.request(FrameType.promptSend, payload: payload);
+      await harness.request(FrameType.promptSend, payload: payload);
+
+      expect(harness.fake.prompts, hasLength(2));
+    });
+
     test('approval.answer reports the key that was pressed', () async {
       final harness = Harness();
       harness.fake.setAwaitingApproval('s1');

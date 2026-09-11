@@ -674,11 +674,14 @@ class RemoteCompanionGateway implements CompanionGateway {
     String text, {
     CompanionOutgoingAttachment? attachment,
     void Function(int sent, int total)? onProgress,
+    String? requestId,
   }) async {
     await _ready;
     final client = _requireClient();
     if (attachment == null) {
-      return _mapRefusals(() => client.sendPrompt(sessionId, text));
+      return _mapRefusals(
+        () => client.sendPrompt(sessionId, text, requestId: requestId),
+      );
     }
     final uploadId = await _uploadAttachment(
       client,
@@ -689,7 +692,12 @@ class RemoteCompanionGateway implements CompanionGateway {
     // The prompt is the commit: the host checks the length here, so a short
     // upload takes the prompt with it rather than becoming a truncated file.
     return _mapRefusals(
-      () => client.sendPrompt(sessionId, text, attachmentId: uploadId),
+      () => client.sendPrompt(
+        sessionId,
+        text,
+        attachmentId: uploadId,
+        requestId: requestId,
+      ),
     );
   }
 

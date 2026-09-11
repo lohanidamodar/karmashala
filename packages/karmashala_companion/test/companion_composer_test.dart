@@ -172,6 +172,90 @@ void main() {
         'send when back online',
       );
     });
+
+    // A retry the host cannot tell from a first attempt is a message typed
+    // into the agent twice. The key is the phone's half of that contract.
+    testWidgets('a retry of an unchanged message carries its first key', (
+      tester,
+    ) async {
+      final fake = gateway();
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+
+      await tester.enterText(find.byType(TextField), 'run the tests');
+      fake.promptFailure = const GatewayException('the link dropped');
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pumpAndSettle();
+
+      // The refusal's snackbar sits over the send button until it expires.
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      fake.promptFailure = null;
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pumpAndSettle();
+
+      expect(fake.promptAttempts, hasLength(2));
+      expect(fake.promptAttempts.first.requestId, isNotNull);
+      expect(
+        fake.promptAttempts[1].requestId,
+        fake.promptAttempts.first.requestId,
+      );
+      expect(fake.sentPrompts, hasLength(1));
+    });
+
+    testWidgets('editing the message earns a new key', (tester) async {
+      final fake = gateway();
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+
+      await tester.enterText(find.byType(TextField), 'run the tests');
+      fake.promptFailure = const GatewayException('the link dropped');
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pumpAndSettle();
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'run the tests again');
+      fake.promptFailure = null;
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pumpAndSettle();
+
+      expect(fake.promptAttempts, hasLength(2));
+      expect(
+        fake.promptAttempts[1].requestId,
+        isNot(fake.promptAttempts.first.requestId),
+      );
+    });
+
+    testWidgets('the next message is a new key', (tester) async {
+      final fake = gateway();
+      await pumpPhone(
+        tester,
+        gateway: fake,
+        home: const SessionViewScreen(sessionId: 's1'),
+      );
+
+      await tester.enterText(find.byType(TextField), 'first');
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'second');
+      await tester.tap(find.byTooltip('Send'));
+      await tester.pumpAndSettle();
+
+      expect(fake.promptAttempts, hasLength(2));
+      expect(
+        fake.promptAttempts[1].requestId,
+        isNot(fake.promptAttempts.first.requestId),
+      );
+    });
   });
 
   // --- The box a thumb writes in --------------------------------------------

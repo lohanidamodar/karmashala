@@ -130,7 +130,7 @@ void main() {
                 CompanionComposer(
                   attachments: support,
                   pickFile: picking(chosen),
-                  onSend: (text, {attachment, onProgress}) async {
+                  onSend: (text, {attachment, onProgress, requestId}) async {
                     // The slice count the real gateway reports, so the
                     // progress line is exercised rather than assumed.
                     onProgress?.call(0, 1);

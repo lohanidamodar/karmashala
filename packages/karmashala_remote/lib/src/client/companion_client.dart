@@ -416,16 +416,19 @@ class CompanionClient {
 
   /// Sends a prompt, optionally quoting an upload this link completed, and
   /// answers what became of it. An older host answers neither, which reads as
-  /// [RemotePromptDelivery.sent].
+  /// [RemotePromptDelivery.sent]. [requestId] is the idempotency key: the SAME
+  /// value for a retry of a send nobody answered, so a newer host types it once.
   Future<RemotePromptDelivery> sendPrompt(
     String sessionId,
     String text, {
     String? attachmentId,
+    String? requestId,
   }) async {
     final payload = await _request(FrameType.promptSend, {
       'sessionId': sessionId,
       'text': text,
       'attachment': ?attachmentId,
+      'requestId': ?requestId,
     });
     return RemotePromptDelivery.parse(payload['delivery']);
   }

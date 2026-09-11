@@ -500,6 +500,7 @@ class _DeviceRuntime {
   final SessionStartLedger<RemoteSessionStarted> _starts = SessionStartLedger<RemoteSessionStarted>();
   final SessionStartLedger<RemoteSessionStarted> _resumes = SessionStartLedger<RemoteSessionStarted>();
   final SessionStartLedger<RemoteWorkspaceProject> _projects = SessionStartLedger<RemoteWorkspaceProject>();
+  final SessionStartLedger<RemotePromptDelivery> _prompts = SessionStartLedger<RemotePromptDelivery>();
 
   bool _sweeping = false;
 
@@ -752,6 +753,7 @@ class _DeviceRuntime {
         startLedger: _starts,
         resumeLedger: _resumes,
         projectLedger: _projects,
+        promptLedger: _prompts,
         // Read at announcement time, never captured: a relay toggled while this
         // link is up must be in the very next `host.status`.
         relays: () => service.announcedRelaysFor(device),

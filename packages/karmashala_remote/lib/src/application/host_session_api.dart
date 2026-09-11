@@ -35,11 +35,13 @@ class HostSessionApi {
     SessionStartLedger<RemoteSessionStarted>? startLedger,
     SessionStartLedger<RemoteSessionStarted>? resumeLedger,
     SessionStartLedger<RemoteWorkspaceProject>? projectLedger,
+    SessionStartLedger<RemotePromptDelivery>? promptLedger,
     // ignore: prefer_initializing_formals — named `send` for callers.
   }) : _send = send,
        _starts = startLedger ?? SessionStartLedger<RemoteSessionStarted>(),
        _resumes = resumeLedger ?? SessionStartLedger<RemoteSessionStarted>(),
-       _projects = projectLedger ?? SessionStartLedger<RemoteWorkspaceProject>();
+       _projects = projectLedger ?? SessionStartLedger<RemoteWorkspaceProject>(),
+       _prompts = promptLedger ?? SessionStartLedger<RemotePromptDelivery>();
 
   final PairedDevice device;
   final RemoteHostBindings bindings;
@@ -50,6 +52,10 @@ class HostSessionApi {
   final SessionStartLedger<RemoteSessionStarted> _starts;
   final SessionStartLedger<RemoteSessionStarted> _resumes;
   final SessionStartLedger<RemoteWorkspaceProject> _projects;
+
+  /// What each keyed `prompt.send` did, so a retry of an unanswered send is
+  /// answered from here rather than typed into the agent a second time.
+  final SessionStartLedger<RemotePromptDelivery> _prompts;
 
   /// Where this host can be met right now, read fresh at every announcement so
   /// a relay switched on mid-session reaches the phone at once.
@@ -222,18 +228,32 @@ class HostSessionApi {
               'this device was not granted send_attachment',
             );
           }
-          final delivery = await bindings.sendPrompt(
+          // Optional: a phone that predates the key is typed for on every
+          // frame, exactly as before.
+          final key = _optionalString(envelope, 'requestId');
+          if (key != null && key.length > kMaxSessionStartKeyLength) {
+            throw const RemoteApiRefusal(
+              ErrorCode.badRequest,
+              'requestId is too long',
+            );
+          }
+          Future<RemotePromptDelivery> send() => bindings.sendPrompt(
             sessionId,
             text,
             attachment: attachmentId == null
                 ? null
                 : (deviceId: device.id, uploadId: attachmentId),
           );
+          final replayed = key != null && _prompts.holds(key);
+          final delivery = key == null
+              ? await send()
+              : await _prompts.once(key, send);
           await _result(envelope.id, {
             // Only when it is not what every build before this one meant, so
             // an ordinary prompt's result keeps its old shape on the wire.
             if (delivery == RemotePromptDelivery.offered)
               'delivery': delivery.wire,
+            if (replayed) 'replayed': true,
           });
         case FrameType.attachmentBegin:
           // Re-read here rather than trusted from the row the phone last saw:
