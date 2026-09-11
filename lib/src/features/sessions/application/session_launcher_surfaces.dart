@@ -142,8 +142,11 @@ extension SessionSurfaceStarters on SessionLauncher {
           command: command,
           workingDirectory: distro == null ? workingDirectory.path : null,
         );
+    // Launched into a window this app cannot see: `running` would be a claim
+    // nothing observes. The agent's own hooks move the row from here.
+    _ref.read(sessionDaoProvider).updateStatus(session.id, SessionStatus.unknown);
     return SessionLaunchResult(
-      session: session,
+      session: session.copyWith(status: SessionStatus.unknown),
       workingDirectoryNotice: workingDirectoryNotice,
     );
   }

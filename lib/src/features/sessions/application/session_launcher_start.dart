@@ -265,25 +265,29 @@ extension SessionStartVerbs on SessionLauncher {
           modelId: request.modelOverride,
         );
     final dao = _ref.read(sessionDaoProvider);
-    if (reused == null) {
-      dao.insert(session);
-    } else {
-      dao.updateStatus(id, SessionStatus.running);
-      // Written only when this launch carries a decision: writing the resolved
-      // mode unconditionally destroyed the chip's choice on the next resume.
-      if (request.permissionOverride != null) {
-        dao.updatePermissionMode(id, request.permissionOverride!.canonical);
+    // One transaction: a row with no repository link is a session no list can
+    // place, and a link that failed must not leave one behind.
+    _ref.read(databaseProvider).transaction(() {
+      if (reused == null) {
+        dao.insert(session);
+      } else {
+        dao.updateStatus(id, SessionStatus.running);
+        // Written only when this launch carries a decision: writing the resolved
+        // mode unconditionally destroyed the chip's choice on the next resume.
+        if (request.permissionOverride != null) {
+          dao.updatePermissionMode(id, request.permissionOverride!.canonical);
+        }
+        if (request.modelOverride != null) {
+          dao.updateModel(id, request.modelOverride);
+        }
+        if (recordDirectory) dao.updateWorkingDirectory(id, workingDirectory);
       }
-      if (request.modelOverride != null) {
-        dao.updateModel(id, request.modelOverride);
+      final repositoryDao = _ref.read(sessionRepositoryDaoProvider)
+        ..link(id, request.repository.id, role: SessionRepositoryRole.primary);
+      for (final extra in request.additionalRepositories) {
+        repositoryDao.link(id, extra.id);
       }
-      if (recordDirectory) dao.updateWorkingDirectory(id, workingDirectory);
-    }
-    final repositoryDao = _ref.read(sessionRepositoryDaoProvider)
-      ..link(id, request.repository.id, role: SessionRepositoryRole.primary);
-    for (final extra in request.additionalRepositories) {
-      repositoryDao.link(id, extra.id);
-    }
+    });
 
     // The packet's way in that is not a paste, resolved here because the file
     // is named by [id]. Every "no" falls back to the opening prompt.

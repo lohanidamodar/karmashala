@@ -3,6 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../../core/database/database_providers.dart';
 import '../../../core/util/agent_cli_bridge.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';

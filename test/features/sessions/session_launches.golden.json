@@ -5022,7 +5022,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "chat",
         "externalSessionId": "<ownId>",
@@ -5059,7 +5059,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-claudeCode-windows",
@@ -5096,7 +5096,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "chat",
         "externalSessionId": "<ownId>",
@@ -5133,7 +5133,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-claudeCode-wsl:Ubuntu",
@@ -5170,7 +5170,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "chat",
         "externalSessionId": "<ownId>",
@@ -5207,7 +5207,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-claudeCode-ssh:h1",
@@ -5244,7 +5244,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "chat",
         "externalSessionId": "<ownId>",
@@ -5281,7 +5281,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-claudeCode-posix",
@@ -5319,7 +5319,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "chat",
         "externalSessionId": null,
@@ -5359,7 +5359,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-codex-windows",
@@ -5396,7 +5396,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "chat",
         "externalSessionId": null,
@@ -5433,7 +5433,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-codex-wsl:Ubuntu",
@@ -5471,7 +5471,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "chat",
         "externalSessionId": null,
@@ -5511,7 +5511,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-codex-ssh:h1",
@@ -5549,7 +5549,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "chat",
         "externalSessionId": null,
@@ -5589,7 +5589,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-codex-posix",
@@ -5621,7 +5621,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": null,
@@ -5655,7 +5655,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-antigravity-windows",
@@ -5692,7 +5692,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": null,
@@ -5729,7 +5729,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-antigravity-wsl:Ubuntu",
@@ -5761,7 +5761,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": null,
@@ -5795,7 +5795,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-antigravity-ssh:h1",
@@ -5827,7 +5827,7 @@
       "notice": null,
       "row": {
         "title": "Elsewhere",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": null,
@@ -5861,7 +5861,7 @@
       "notice": null,
       "row": {
         "title": "Earlier work",
-        "status": "running",
+        "status": "unknown",
         "surface": "external",
         "view": "terminal",
         "externalSessionId": "ext-antigravity-posix",
