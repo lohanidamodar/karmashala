@@ -513,6 +513,118 @@ void main() {
     });
   });
 
+  group('the endpoint file is refused when it cannot be closed to others', () {
+    test('a restrict that fails leaves no token file and reports not '
+        'installed', () async {
+      // `harden` used to discard the bool: the file landed with inherited ACLs
+      // and `install` said true. The MCP side withholds its token on the same
+      // verdict; this side now withholds the file.
+      configFile().writeAsStringSync('{"model": "opus"}');
+      final warnings = <String>[];
+      final refusing = AgentHookInstaller(
+        restrict: (_, _) async => false,
+        onWarning: warnings.add,
+      );
+
+      final installed = await refusing.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      );
+
+      expect(installed, isFalse);
+      expect(endpointFile().existsSync(), isFalse);
+      expect(
+        home.listSync().where((e) => e.path.endsWith('.karmashala-tmp')),
+        isEmpty,
+        reason: 'the staged file never holds the token past the refusal',
+      );
+      expect(warnings, hasLength(2), reason: 'the ACL, then the refusal');
+      expect(configFile().readAsStringSync(), '{"model": "opus"}');
+    }, skip: !Platform.isWindows);
+
+    test('where this platform cannot harden the store, it warns and writes',
+        () async {
+      // A localPosix store seen from Windows (or the reverse) has no ACL this
+      // machine can apply; refusing there would refuse every WSL-adjacent test
+      // and install for a reason that is not a leak.
+      configFile().writeAsStringSync('{"model": "opus"}');
+      final warnings = <String>[];
+      final foreign = AgentHookInstaller(
+        restrict: (_, _) async => false,
+        onWarning: warnings.add,
+      );
+
+      final installed = await foreign.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: Platform.isWindows
+            ? EnvironmentKind.localPosix
+            : EnvironmentKind.windowsNative,
+      );
+
+      expect(installed, isTrue);
+      expect(endpointFile().existsSync(), isTrue);
+      expect(warnings, hasLength(1));
+    });
+  });
+
+  group('a config the CLI saves mid-splice', () {
+    test('is re-read and spliced again rather than overwritten', () async {
+      configFile().writeAsStringSync('{"model": "opus"}');
+      var landed = false;
+      final warnings = <String>[];
+      final racing = AgentHookInstaller(
+        checkForConcurrentSaves: true,
+        beforeCommit: (config) async {
+          if (landed) return;
+          landed = true;
+          // The CLI's own save, between our read and our rename.
+          config.writeAsStringSync('{"model": "opus", "theme": "dark"}');
+        },
+        onWarning: warnings.add,
+      );
+
+      final installed = await racing.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      );
+
+      expect(installed, isTrue);
+      final json = jsonDecode(configFile().readAsStringSync()) as Map;
+      expect(json['theme'], 'dark', reason: 'the concurrent save survives');
+      expect(json['hooks'], isA<Map>());
+      expect(warnings, hasLength(1));
+    });
+
+    test('a config that keeps changing is given up on, not fought over',
+        () async {
+      configFile().writeAsStringSync('{"model": "opus"}');
+      var saves = 0;
+      final restless = AgentHookInstaller(
+        checkForConcurrentSaves: true,
+        beforeCommit: (config) async {
+          saves++;
+          config.writeAsStringSync('{"model": "opus", "n": $saves}');
+        },
+      );
+
+      final installed = await restless.install(
+        descriptor: claude,
+        storeHome: home.path,
+        endpoint: endpoint,
+        environment: EnvironmentKind.windowsNative,
+      );
+
+      expect(installed, isFalse);
+      expect(saves, AgentHookInstaller.maxRewriteAttempts);
+    });
+  });
+
   group('the reported result is read back off the disk', () {
     test('a replace that lands nothing is not reported as installed', () async {
       // The bug this whole group exists for: `install` used to `return true`

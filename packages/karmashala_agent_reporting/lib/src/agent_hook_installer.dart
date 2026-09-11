@@ -26,7 +26,15 @@ class AgentHookInstaller {
   const AgentHookInstaller({
     this.replace = _replaceFile,
     this.restrict = restrictToOwner,
+    this.beforeCommit,
+    this.onWarning,
+    this.checkForConcurrentSaves = false,
   });
+
+  /// Whether a config rewrite stats the file before its read and again before
+  /// its rename, retrying from a fresh read when the CLI saved in between. Off
+  /// by default: the app's install-cost suite pins the exact I/O call count.
+  final bool checkForConcurrentSaves;
 
   /// How staged content is moved onto the real config. Injectable because a
   /// rename cannot be made to fail on demand, and the guarantee needs a test.
@@ -35,6 +43,16 @@ class AgentHookInstaller {
   /// How the endpoint file is closed to other accounts, applied **before** the
   /// token is written into it. Injectable so a test need not spawn `icacls`.
   final Future<bool> Function(File file, EnvironmentKind environment) restrict;
+
+  /// Runs after a config was read and spliced, before it is renamed over: the
+  /// moment a concurrent save by the CLI can land. A test's seam, else null.
+  final Future<void> Function(File config)? beforeCommit;
+
+  /// Where a refusal that is not a fault is said — an ACL that did not apply.
+  final void Function(String message)? onWarning;
+
+  /// Splice attempts before a config that keeps changing under us is given up.
+  static const int maxRewriteAttempts = 3;
 
   /// Whether this agent's store exists in [storeHome] at all — the one reason
   /// [install] can answer `false` that is not a fault.
@@ -323,7 +341,7 @@ class AgentHookInstaller {
                 ? '\r\n'
                 : '\n',
           ),
-          harden: (staged) => restrict(staged, environment),
+          harden: (staged) => _harden(staged, environment),
         );
       case AgentHookSpoolTransport():
         // Made **before** the endpoint file that names it: the script exits
@@ -347,13 +365,28 @@ class AgentHookInstaller {
     }
   }
 
+  /// The ACL verdict, carried rather than discarded. Where this platform can
+  /// harden the store's environment, a refusal withholds the token file — the
+  /// MCP side withholds its token on the same verdict; elsewhere it is a warning.
+  Future<bool> _harden(File staged, EnvironmentKind environment) async {
+    if (await restrict(staged, environment)) return true;
+    final hardenable = Platform.isWindows
+        ? environment == EnvironmentKind.windowsNative
+        : environment == EnvironmentKind.localPosix;
+    onWarning?.call(
+      '${staged.path} could not be closed to other accounts'
+      '${hardenable ? '' : ' (not this platform\'s to close)'}',
+    );
+    return !hardenable;
+  }
+
   /// Writes [contents] to [file] unless it already holds exactly that, and
   /// reports whether the bytes on disk are now [contents].
   Future<bool> _writeIfChanged(
     File file,
     String storeHome,
     String contents, {
-    Future<void> Function(File staged)? harden,
+    Future<bool> Function(File staged)? harden,
   }) async {
     if (await file.exists()) {
       try {
@@ -373,7 +406,15 @@ class AgentHookInstaller {
       // beside `~/.gemini/antigravity-cli` — so its directory can be missing.
       await parent.create(recursive: true);
     }
-    await _writeAtomically(file, contents, harden: harden);
+    if (!await _writeAtomically(file, contents, harden: harden)) {
+      // Refused: the file would have held a token under an ACL that did not
+      // apply. Nothing is on disk; the install is reported as not done.
+      onWarning?.call(
+        '${file.path} was not written: it could not be closed to other '
+        'accounts',
+      );
+      return false;
+    }
     try {
       return await file.readAsString() == contents;
     } on FileSystemException {
@@ -582,67 +623,92 @@ class AgentHookInstaller {
   ) async {
     final spec = descriptor.hooks!;
     final file = configFileFor(descriptor, storeHome)!;
-    final (trimmed, decoded) = await _readConfigObject(
-      descriptor,
-      storeHome,
-    );
-    final current = decoded[spec.configKey];
-    final hooks = current is Map<String, Object?>
-        ? Map<String, Object?>.from(current)
-        : <String, Object?>{};
+    // Read-splice-rename, retried from a fresh read when the CLI saved the
+    // file in between: renaming over its save would throw that save away.
+    final attempts = checkForConcurrentSaves ? maxRewriteAttempts : 1;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      final before = checkForConcurrentSaves ? await file.stat() : null;
+      final (trimmed, decoded) = await _readConfigObject(
+        descriptor,
+        storeHome,
+      );
+      final current = decoded[spec.configKey];
+      final hooks = current is Map<String, Object?>
+          ? Map<String, Object?>.from(current)
+          : <String, Object?>{};
 
-    // A block we left behind under an older name of this app. Dropped whether
-    // or not [edit] changes anything; nothing else will ever recognise it.
-    final abandoned = legacyAgentHookConfigKeys
-        .where((key) => key != spec.configKey && decoded.containsKey(key))
-        .toList();
+      // A block we left behind under an older name of this app. Dropped whether
+      // or not [edit] changes anything; nothing else will ever recognise it.
+      final abandoned = legacyAgentHookConfigKeys
+          .where((key) => key != spec.configKey && decoded.containsKey(key))
+          .toList();
 
-    if (!edit(hooks) && abandoned.isEmpty) return false;
+      if (!edit(hooks) && abandoned.isEmpty) return false;
 
-    // The config's directory can be one the CLI has not created yet. Made only
-    // when the **store** is really there, so a stranger's `~` stays clean.
-    final parent = file.parent;
-    if (!await parent.exists() && await Directory(storeHome).exists()) {
-      await parent.create(recursive: true);
+      // The config's directory can be one the CLI has not created yet. Made
+      // only when the **store** is really there, so a stranger's `~` stays clean.
+      final parent = file.parent;
+      if (!await parent.exists() && await Directory(storeHome).exists()) {
+        await parent.create(recursive: true);
+      }
+
+      var updated = replaceTopLevelJsonValue(
+        trimmed,
+        spec.configKey,
+        jsonEncode(hooks),
+      );
+      for (final key in abandoned) {
+        updated = removeTopLevelJsonKey(updated, key);
+      }
+      await beforeCommit?.call(file);
+      if (await _writeAtomically(file, updated, unlessChangedSince: before)) {
+        return true;
+      }
+      onWarning?.call(
+        '${file.path} changed while it was being edited; retrying',
+      );
     }
-
-    var updated = replaceTopLevelJsonValue(
-      trimmed,
-      spec.configKey,
-      jsonEncode(hooks),
-    );
-    for (final key in abandoned) {
-      updated = removeTopLevelJsonKey(updated, key);
-    }
-    await _writeAtomically(file, updated);
-    return true;
+    return false;
   }
 
   /// Stages [contents] beside [file] and renames it over: a plain write
   /// truncates first, so a kill mid-write leaves an agent that will not start.
-  Future<void> _writeAtomically(
+  /// False when [harden] refused, or [file] no longer matches
+  /// [unlessChangedSince]; nothing is written in either case.
+  Future<bool> _writeAtomically(
     File file,
     String contents, {
-    Future<void> Function(File staged)? harden,
+    Future<bool> Function(File staged)? harden,
+    FileStat? unlessChangedSince,
   }) async {
     final staged = File('${file.path}.karmashala-tmp');
     // A previous run's litter. Removed rather than written over, so `harden`
     // applies its ACL to a file this run created.
     await _removeStaged(staged);
-    if (harden != null) {
-      // The permission goes on the **empty** file, before the token is in it: a
-      // credential is never written under an ACL that was not applied.
-      await staged.create(recursive: false);
-      await harden(staged);
-    }
-    await staged.writeAsString(contents, flush: true);
     try {
+      if (harden != null) {
+        // The permission goes on the **empty** file, before the token is in
+        // it: a credential is never written under an ACL that was not applied.
+        await staged.create(recursive: false);
+        if (!await harden(staged)) return false;
+      }
+      await staged.writeAsString(contents, flush: true);
+      if (unlessChangedSince != null &&
+          _changedSince(unlessChangedSince, await file.stat())) {
+        return false;
+      }
       await replace(staged, file);
+      return true;
     } finally {
-      // Never left behind, whichever way the move went.
+      // Never left behind, whichever way the move went — the token included.
       await _removeStaged(staged);
     }
   }
+
+  static bool _changedSince(FileStat before, FileStat now) =>
+      before.type != now.type ||
+      before.size != now.size ||
+      before.modified != now.modified;
 
   /// Removes a staging file. Never throws, and one call rather than
   /// exists-then-delete — two file operations on a possible UNC share.
