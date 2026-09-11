@@ -222,14 +222,40 @@ void main() {
       expect(pty.closeCount, 1);
     });
 
-    test('a child that will not be reaped ends with a stated reason', () async {
+    test('a child that will not be reaped is killed, then ends with a stated reason', () async {
       final env = build();
       final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
       final end = await session.terminate(reapWithin: const Duration(milliseconds: 20));
 
+      expect(env.launcher.handles.single.signals, [15, 9]);
       expect(end, isA<SessionEndedWithoutCode>());
-      expect((end as SessionEndedWithoutCode).reason, contains('signalled 15'));
+      expect((end as SessionEndedWithoutCode).reason, contains('signalled 15, then 9'));
       expect(end.exitCode, isNull);
+    });
+
+    test('a shell that ignores SIGTERM gets SIGKILL, and its real code is kept', () async {
+      final env = build();
+      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh', '-l']));
+      final pty = env.launcher.handles.single;
+      final terminating = session.terminate(reapWithin: const Duration(milliseconds: 20));
+      expect(pty.signals, [15]);
+
+      while (pty.signals.length < 2) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(pty.signals, [15, 9]);
+      pty.finish(137);
+
+      expect((await terminating).exitCode, 137);
+    });
+
+    test('asked for SIGKILL outright, there is nothing to escalate to', () async {
+      final env = build();
+      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final end = await session.terminate(signal: 9, reapWithin: const Duration(milliseconds: 20));
+
+      expect(env.launcher.handles.single.signals, [9]);
+      expect((end as SessionEndedWithoutCode).reason, contains('signalled 9 and'));
     });
   });
 
@@ -343,6 +369,21 @@ void main() {
         throwsA(isA<StateError>()),
       );
       expect(launcher.started, isEmpty, reason: 'a child with no session is unreachable');
+    });
+
+    test('shutdown signals every session at once and waits for them together', () async {
+      final env = build();
+      env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      env.registry.open('pane-2', const PtySpawnRequest(argv: ['/bin/sh']));
+
+      final stopping = env.registry.shutdown();
+      expect(env.launcher.handles.map((h) => h.signals.single), [15, 15]);
+      for (final handle in env.launcher.handles) {
+        handle.finish(0);
+      }
+      await stopping;
+
+      expect(env.registry.sessions.every((s) => s.lifecycle.hasEnded), isTrue);
     });
 
     test('close ends the session and drops it', () async {

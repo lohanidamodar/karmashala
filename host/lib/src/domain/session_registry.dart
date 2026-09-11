@@ -216,8 +216,9 @@ class SessionRegistry {
   /// Ends every session because this host is stopping. Not [close] for each:
   /// closing forgets the record, and the record is what survives a shutdown.
   Future<void> shutdown() async {
-    for (final session in _sessions.values.toList()) {
-      await session.terminate(signal: 15);
-    }
+    // Together, or sixteen stubborn shells cost sixteen reap bounds in a row.
+    await Future.wait([
+      for (final session in _sessions.values.toList()) session.terminate(signal: 15),
+    ]);
   }
 }

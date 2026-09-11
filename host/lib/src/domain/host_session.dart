@@ -182,8 +182,11 @@ class HostSession {
 
   void signal(int number) => _pty.kill(number);
 
+  static const int _sigkill = 9;
+
   /// Ends the session for good; a client disconnect must never call this. The
-  /// real exit code wins over "terminated" — [reapWithin] is a bound, not a poll.
+  /// real exit code wins over "terminated" — [reapWithin] is a bound, not a poll,
+  /// and a child still there when it expires gets SIGKILL and the bound again.
   Future<SessionLifecycle> terminate({
     int signal = 15,
     Duration reapWithin = const Duration(seconds: 5),
@@ -193,20 +196,30 @@ class HostSession {
       return _lifecycle;
     }
     _pty.kill(signal);
-    final end = await ended.timeout(reapWithin, onTimeout: () {
+    var end = await _reapedWithin(reapWithin);
+    if (end == null && signal != _sigkill) {
+      // An interactive shell ignores SIGTERM; this is the one nothing ignores.
+      _pty.kill(_sigkill);
+      end = await _reapedWithin(reapWithin);
+    }
+    if (end == null) {
       _finish(
         SessionEndedWithoutCode(
           DateTime.now(),
-          'signalled $signal and not reaped within ${reapWithin.inSeconds}s',
+          'signalled $signal${signal == _sigkill ? '' : ', then $_sigkill,'} and not '
+          'reaped within ${reapWithin.inMilliseconds}ms of each',
         ),
       );
-      return _lifecycle;
-    });
+      end = _lifecycle;
+    }
     await _closePty();
     recorder?.close();
     if (!_live.isClosed) await _live.close();
     return end;
   }
+
+  Future<SessionLifecycle?> _reapedWithin(Duration bound) =>
+      ended.then<SessionLifecycle?>((end) => end).timeout(bound, onTimeout: () => null);
 }
 
 /// The absence of a process, so no reader of [HostSession] needs a nullable pty.

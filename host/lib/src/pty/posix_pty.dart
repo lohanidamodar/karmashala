@@ -209,10 +209,15 @@ class _PosixPtyHandle implements PtyHandle {
     }
   }
 
+  /// The whole session, not the leader: spawned with setsid, the child leads a
+  /// group of its own pid, and a shell moves each job into a group of its own.
   @override
   void kill([int signal = 15]) {
     if (_closed) return;
-    _libc.kill(pid, signal);
+    _libc.kill(-pid, signal);
+    for (final member in sessionMembers(pid)) {
+      _libc.kill(member, signal);
+    }
   }
 
   @override
@@ -224,6 +229,32 @@ class _PosixPtyHandle implements PtyHandle {
     _libc.close(_masterFd);
     if (!_output.isClosed) await _output.close();
   }
+}
+
+/// Every process whose session id is [sid], read from `/proc`; empty where
+/// there is none (macOS), which leaves the process group as the reach.
+List<int> sessionMembers(int sid, {Directory? proc}) {
+  final root = proc ?? Directory('/proc');
+  if (!root.existsSync()) return const [];
+  final members = <int>[];
+  for (final entry in root.listSync(followLinks: false)) {
+    final pid = int.tryParse(entry.uri.pathSegments.lastWhere((s) => s.isNotEmpty));
+    if (pid == null || pid == sid) continue;
+    try {
+      final stat = File('${entry.path}/stat').readAsStringSync();
+      if (sessionIdOf(stat) == sid) members.add(pid);
+    } on FileSystemException {
+      // Gone between the listing and the read.
+    }
+  }
+  return members;
+}
+
+/// Field 6 of `/proc/<pid>/stat`, counted from after the `(comm)`, which may
+/// itself hold spaces and parentheses.
+int? sessionIdOf(String stat) {
+  final fields = stat.substring(stat.lastIndexOf(')') + 1).trim().split(RegExp(r'\s+'));
+  return fields.length > 3 ? int.tryParse(fields[3]) : null;
 }
 
 /// Blocking `read` until the child's side is gone, then `waitpid` — no poll.
