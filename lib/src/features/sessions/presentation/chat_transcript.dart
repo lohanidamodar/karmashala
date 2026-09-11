@@ -39,6 +39,75 @@ class ChatMessage {
   final DateTime? at;
 }
 
+/// How many finished, uneventful tool calls in a row become one line. Three,
+/// because two read as a pair and twenty read as a wall.
+const int kToolBatchMinimum = 3;
+
+/// Whether this message may disappear into a batch. A failure, a call with no
+/// result yet, and a call the model reasoned its way to are each the row a
+/// reader is looking for — those never collapse.
+bool batchableToolMessage(ChatMessage message) {
+  final tool = message.tool;
+  return message.role == 'tool' &&
+      tool != null &&
+      !tool.isError &&
+      tool.output != null &&
+      (message.thinking == null || message.thinking!.trim().isEmpty);
+}
+
+/// One row of the transcript: a message at [from], or the run of batchable tool
+/// calls `[from, to)` when that run is at least [kToolBatchMinimum] long.
+class TranscriptRow {
+  const TranscriptRow(this.from, this.to);
+
+  final int from;
+  final int to;
+
+  bool get isBatch => to - from > 1;
+  int get length => to - from;
+}
+
+/// Groups runs of batchable tool calls, leaving every other message its own
+/// row. Pure, and indexed into whatever list it was given.
+List<TranscriptRow> transcriptRows(List<ChatMessage> messages) {
+  final rows = <TranscriptRow>[];
+  var i = 0;
+  while (i < messages.length) {
+    if (!batchableToolMessage(messages[i])) {
+      rows.add(TranscriptRow(i, i + 1));
+      i++;
+      continue;
+    }
+    var end = i;
+    while (end < messages.length && batchableToolMessage(messages[end])) {
+      end++;
+    }
+    if (end - i >= kToolBatchMinimum) {
+      rows.add(TranscriptRow(i, end));
+    } else {
+      for (var single = i; single < end; single++) {
+        rows.add(TranscriptRow(single, single + 1));
+      }
+    }
+    i = end;
+  }
+  return rows;
+}
+
+/// `Read ×9 · Bash ×3` — what the calls in a batch were, in the order
+/// they first appeared, so the line says what happened and not just how much.
+String describeToolBatch(Iterable<ChatMessage> messages) {
+  final counts = <String, int>{};
+  for (final message in messages) {
+    final name = message.tool?.name ?? 'Tool';
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  return [
+    for (final entry in counts.entries)
+      entry.value == 1 ? entry.key : '${entry.key} ×${entry.value}',
+  ].join(' · ');
+}
+
 /// Called when the user keeps a message as a note: the message, and its index
 /// in the whole transcript — not the visible window — which the note records.
 typedef SaveNoteCallback = void Function(ChatMessage message, int ordinal);
@@ -137,6 +206,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     final total = widget.messages.length;
     final start = math.max(0, total - _shown);
     final visible = widget.messages.sublist(start);
+    final rows = transcriptRows(visible);
 
     return Column(
       children: [
@@ -158,7 +228,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                           horizontal: Insets.md,
                           vertical: Insets.sm,
                         ),
-                        itemCount: visible.length + (start > 0 ? 1 : 0),
+                        itemCount: rows.length + (start > 0 ? 1 : 0),
                         itemBuilder: (context, index) {
                           if (start > 0 && index == 0) {
                             return Center(
@@ -174,19 +244,30 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                               ),
                             );
                           }
-                          final offset = index - (start > 0 ? 1 : 0);
-                          final message = visible[offset];
-                          return _ChatMessageTile(
-                            message: message,
-                            resolveHostPath: widget.resolveHostPath,
-                            onPathTap: widget.onPathTap,
-                            detail: widget.detailBuilder?.call(
-                              message,
-                              start + offset,
-                            ),
-                            onSaveNote: widget.onSaveNote == null
-                                ? null
-                                : () => widget.onSaveNote!(message, start + offset),
+                          final row = rows[index - (start > 0 ? 1 : 0)];
+                          Widget tileAt(int offset) {
+                            final message = visible[offset];
+                            return _ChatMessageTile(
+                              message: message,
+                              resolveHostPath: widget.resolveHostPath,
+                              onPathTap: widget.onPathTap,
+                              detail: widget.detailBuilder?.call(
+                                message,
+                                start + offset,
+                              ),
+                              onSaveNote: widget.onSaveNote == null
+                                  ? null
+                                  : () =>
+                                        widget.onSaveNote!(message, start + offset),
+                            );
+                          }
+
+                          if (!row.isBatch) return tileAt(row.from);
+                          return _ToolBatchTile(
+                            // The run itself, so the line can name the calls.
+                            messages: visible.sublist(row.from, row.to),
+                            tileAt: tileAt,
+                            from: row.from,
                           );
                         },
                       ),
@@ -621,6 +702,91 @@ class _ChatMessageTile extends StatelessWidget {
 
 /// Keeps this message as a note, in one tap: its own words, nothing summarised
 /// and no dialog — you were mid-thought. Titling lives in the Notes panel.
+/// A run of finished tool calls as one line, opening into the rows it stands
+/// for. Collapsed by default: between two of the model's sentences, twenty file
+/// reads are one step.
+class _ToolBatchTile extends StatefulWidget {
+  const _ToolBatchTile({
+    required this.messages,
+    required this.tileAt,
+    required this.from,
+  });
+
+  final List<ChatMessage> messages;
+  final Widget Function(int offset) tileAt;
+  final int from;
+
+  @override
+  State<_ToolBatchTile> createState() => _ToolBatchTileState();
+}
+
+class _ToolBatchTileState extends State<_ToolBatchTile> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final count = widget.messages.length;
+    final summary = describeToolBatch(widget.messages);
+    final label = '$count tool calls';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            button: true,
+            expanded: _open,
+            label: '$label. $summary',
+            child: InkWell(
+              onTap: () => setState(() => _open = !_open),
+              borderRadius: BorderRadius.circular(Radii.sm),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Insets.sm,
+                  vertical: Insets.xs,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _open ? AppIcons.caretDown : AppIcons.caretRight,
+                      size: 14,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Text(
+                      label,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: Insets.xs),
+                    Expanded(
+                      child: Text(
+                        summary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_open)
+            for (var i = 0; i < count; i++) widget.tileAt(widget.from + i),
+        ],
+      ),
+    );
+  }
+}
+
 class _SaveNoteButton extends StatefulWidget {
   const _SaveNoteButton({required this.onSave});
   final VoidCallback onSave;
