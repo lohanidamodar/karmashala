@@ -122,17 +122,26 @@ class IsolateFrameSink implements FrameSink {
   /// Carried across to the worker, because a spawned isolate inherits nothing.
   final bool hardwareTransforms;
 
+  /// Frames the worker may hold before [addFrame] waits: one encoding, one
+  /// queued behind it. Peak memory stays at a couple of frames either way.
+  static const int frameWindow = 2;
+
   Isolate? _worker;
   SendPort? _commands;
   final _ready = Completer<void>();
   final _done = Completer<FrameSinkResult>();
   final _aborted = Completer<void>();
+  final _waiters = <Completer<void>>[];
   int _frames = 0;
+  int _inFlight = 0;
   bool _closed = false;
+  Object? _failure;
 
   Future<void> _start() async {
     if (_worker != null) return _ready.future;
     final receive = ReceivePort();
+    final errors = ReceivePort();
+    final exit = ReceivePort();
     _worker = await Isolate.spawn(
       _encodeWorker,
       _EncodeRequest(
@@ -144,12 +153,17 @@ class IsolateFrameSink implements FrameSink {
       ),
       debugName: kFrameEncoderIsolateName,
       errorsAreFatal: true,
+      onError: errors.sendPort,
+      onExit: exit.sendPort,
     );
     receive.listen((message) {
       switch (message) {
         case SendPort():
           _commands = message;
           if (!_ready.isCompleted) _ready.complete();
+        case _EncodeFrameDone():
+          _inFlight--;
+          _releaseWaiters(all: false);
         case FrameSinkResult():
           if (!_done.isCompleted) _done.complete(message);
           receive.close();
@@ -157,24 +171,68 @@ class IsolateFrameSink implements FrameSink {
           if (!_aborted.isCompleted) _aborted.complete();
           receive.close();
         case _EncodeFailure():
-          final error = StateError(message.message);
-          if (!_ready.isCompleted) _ready.completeError(error);
-          if (!_done.isCompleted) _done.completeError(error);
-          // A worker that failed will never acknowledge an abort.
-          if (!_aborted.isCompleted) _aborted.complete();
+          _fail(StateError(message.message));
           receive.close();
       }
     }, onDone: () {
       if (!_aborted.isCompleted) _aborted.complete();
     });
+    errors.listen((message) {
+      final detail = message is List && message.isNotEmpty ? message.first : message;
+      _fail(StateError('frame encoder crashed: $detail'));
+    });
+    exit.listen((_) {
+      errors.close();
+      exit.close();
+      receive.close();
+      // A worker that finished has already answered; one that has not, never will.
+      _fail(StateError('frame encoder exited before finishing'));
+    });
     return _ready.future;
   }
 
+  /// Records the first failure and wakes everyone waiting on the worker.
+  void _fail(Object error) {
+    _failure ??= error;
+    if (!_ready.isCompleted) {
+      _ready.completeError(error);
+      _ready.future.ignore();
+    }
+    if (!_done.isCompleted) {
+      _done.completeError(error);
+      _done.future.ignore();
+    }
+    if (!_aborted.isCompleted) _aborted.complete();
+    _releaseWaiters(all: true);
+  }
+
+  void _releaseWaiters({required bool all}) {
+    if (_waiters.isEmpty) return;
+    if (all) {
+      for (final waiter in _waiters) {
+        waiter.complete();
+      }
+      _waiters.clear();
+    } else {
+      _waiters.removeAt(0).complete();
+    }
+  }
+
+  /// Blocks while the worker holds [frameWindow] frames, and throws the
+  /// worker's failure rather than sending more frames after it.
   @override
   Future<void> addFrame(RgbaFrame frame) async {
     if (_closed) return;
     await _start();
+    while (_inFlight >= frameWindow && !_closed && _failure == null) {
+      final credit = Completer<void>();
+      _waiters.add(credit);
+      await credit.future;
+    }
+    if (_failure case final failure?) throw failure;
+    if (_closed) return;
     _frames++;
+    _inFlight++;
     _commands!.send(
       _EncodeFrame(
         bytes: TransferableTypedData.fromList([frame.rgba]),
@@ -187,7 +245,7 @@ class IsolateFrameSink implements FrameSink {
 
   @override
   Future<FrameSinkResult> close() async {
-    if (_closed) return _done.future;
+    if (_closed || _failure != null) return _done.future;
     _closed = true;
     if (_worker == null) {
       // Nothing was ever rendered. An empty file would be the dishonest answer.
@@ -205,6 +263,7 @@ class IsolateFrameSink implements FrameSink {
   Future<void> abort() async {
     if (_closed) return;
     _closed = true;
+    _releaseWaiters(all: true);
     final worker = _worker;
     _worker = null;
     if (worker != null) {
@@ -266,6 +325,10 @@ class _EncodeFrame {
   final int holdMicros;
 }
 
+class _EncodeFrameDone {
+  const _EncodeFrameDone();
+}
+
 class _EncodeFinish {
   const _EncodeFinish();
 }
@@ -306,6 +369,7 @@ Future<void> _encodeWorker(_EncodeRequest request) async {
               hold: Duration(microseconds: message.holdMicros),
             ),
           );
+          request.reply.send(const _EncodeFrameDone());
         case _EncodeFinish():
           request.reply.send(await encoder.finish());
           commands.close();
@@ -315,6 +379,12 @@ Future<void> _encodeWorker(_EncodeRequest request) async {
           commands.close();
       }
     } catch (error) {
+      // Before reporting: a half-written MP4 must not be left looking finished.
+      try {
+        encoder.abort();
+      } on Object {
+        // The failure being reported is the one worth hearing.
+      }
       request.reply.send(_EncodeFailure('$error'));
       commands.close();
     }

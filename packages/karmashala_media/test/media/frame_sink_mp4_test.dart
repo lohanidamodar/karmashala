@@ -159,5 +159,72 @@ void main() {
       await sink.abort();
       expect(File(path).existsSync(), isFalse);
     }, skip: !Platform.isWindows);
+
+    test('an encoder failure mid-recording removes the file and fails the '
+        'next frame', () async {
+      final path = p.join(temp.path, 'broken.mp4');
+      final sink = IsolateFrameSink(
+        format: RecordingFormat.mp4,
+        outputPath: path,
+      );
+      await sink.addFrame(_frame(size: 64));
+      // Smaller than the first frame: the encoder refuses it.
+      await sink.addFrame(_frame(size: 32));
+      Object? failure;
+      for (var i = 0; i < 10 && failure == null; i++) {
+        try {
+          await sink.addFrame(_frame(size: 64));
+        } on StateError catch (error) {
+          failure = error;
+        }
+      }
+      expect(failure, isA<StateError>());
+      expect(sink.close(), throwsStateError);
+      expect(File(path).existsSync(), isFalse);
+    }, skip: !Platform.isWindows);
+  });
+
+  group('IsolateFrameSink, back-pressure', () {
+    late Directory temp;
+    setUp(() => temp = Directory.systemTemp.createTempSync('fs-window'));
+    tearDown(() => removeTempDirectory(temp));
+
+    test('addFrame waits until the worker has landed the frame before it',
+        () async {
+      final dir = p.join(temp.path, 'seq');
+      final sink = IsolateFrameSink(
+        format: RecordingFormat.pngSequence,
+        outputPath: dir,
+      );
+      for (var i = 0; i <= IsolateFrameSink.frameWindow; i++) {
+        await sink.addFrame(_frame(size: 256));
+      }
+      // The window is full only once frame 0 was acknowledged, and the worker
+      // acknowledges after the write.
+      expect(File(p.join(dir, 'frame_00000.png')).existsSync(), isTrue);
+      final result = await sink.close();
+      expect(result.frames, IsolateFrameSink.frameWindow + 1);
+    });
+
+    test('a worker that cannot write fails addFrame instead of taking more '
+        'frames', () async {
+      // A regular file where the sequence directory should be.
+      final blocker = File(p.join(temp.path, 'seq'))..writeAsStringSync('x');
+      final sink = IsolateFrameSink(
+        format: RecordingFormat.pngSequence,
+        outputPath: blocker.path,
+      );
+      Object? failure;
+      for (var i = 0; i < 10 && failure == null; i++) {
+        try {
+          await sink.addFrame(_frame());
+        } on StateError catch (error) {
+          failure = error;
+        }
+      }
+      expect(failure, isA<StateError>());
+      expect(sink.close(), throwsStateError);
+      await sink.abort();
+    });
   });
 }
