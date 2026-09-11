@@ -173,6 +173,11 @@ class SessionEngine {
         if (externalId is String && externalId.isNotEmpty) {
           sessionDao.updateExternalSessionId(sessionId, externalId);
         }
+        // A CLI that exited non-zero reports it as an event before its stream
+        // closes; the close alone would read as completed.
+        if (event.type == SessionEventTypes.error && event.data['exitCode'] is int) {
+          runtime.finalStatus ??= SessionStatus.failed;
+        }
         _emit(runtime, sessionId, event.type, event.data);
       },
       onError: (Object error, StackTrace _) {

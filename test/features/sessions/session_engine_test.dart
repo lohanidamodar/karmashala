@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:karmashala/src/core/database/app_database.dart';
@@ -100,6 +101,21 @@ void main() {
     expect(engine.isActive(row.id), isFalse);
     // Nothing was registered, so a message is refused rather than "sent".
     await expectLater(engine.sendMessage(row.id, 'hi'), throwsA(isA<StateError>()));
+  });
+
+  test('a CLI that exits non-zero ends the session failed, not completed', () async {
+    final engine = buildEngine(resolver: (_) => _ExitingAdapter());
+    final session = await engine.start(
+      repository: repository(),
+      installation: agentInstallation(),
+      title: 'Work',
+      permission: ResolvedPermission.none,
+    );
+    await engine.whenDone(session.id);
+
+    expect(sessionDao.getById(session.id)!.status, SessionStatus.failed);
+    expect(typesOf(session.id), contains(SessionEventTypes.error));
+    expect(typesOf(session.id).last, isNot(SessionEventTypes.sessionCompleted));
   });
 
   test('sendMessage records the user message and the agent reply', () async {
@@ -241,4 +257,38 @@ class _RefusingAdapter implements AgentAdapter {
 
   @override
   AgentSession start(AgentLaunch launch) => throw StateError('no such executable');
+}
+
+/// A CLI that starts, says why it is leaving, and exits 1 — a `--resume` of a
+/// session the CLI no longer has.
+class _ExitingAdapter implements AgentAdapter {
+  @override
+  String get agentId => AgentIds.claudeCode;
+
+  @override
+  AgentSession start(AgentLaunch launch) => _ExitingSession();
+}
+
+class _ExitingSession implements AgentSession {
+  final _controller = StreamController<AgentEvent>();
+
+  _ExitingSession() {
+    _controller.add(
+      AgentEvent(SessionEventTypes.error, {
+        'message': 'claude exited with code 1',
+        'exitCode': 1,
+        'stderr': ['No conversation found with session ID'],
+      }),
+    );
+    _controller.close();
+  }
+
+  @override
+  Stream<AgentEvent> get events => _controller.stream;
+
+  @override
+  Future<void> send(String message) async {}
+
+  @override
+  Future<void> stop() async {}
 }
