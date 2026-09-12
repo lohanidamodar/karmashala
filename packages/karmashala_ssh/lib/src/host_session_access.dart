@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:karmashala_core/logging.dart';
@@ -20,6 +21,11 @@ abstract class HostSessionAccess {
 
   /// A channel to speak the host protocol over.
   Future<RemoteChannel> exec(String command);
+
+  /// This machine's login shell for this user, or null when it could not be
+  /// asked. The session host spawns exactly the argv it is given, so a pane
+  /// that does not ask gets whatever the caller hardcoded.
+  Future<String?> loginShell();
 
   /// Whether a tmux session of this name is running. **Null is not "no"**:
   /// moving a live tmux agent would open a second, empty session under its id.
@@ -115,6 +121,33 @@ class SshHostSessionAccess implements HostSessionAccess {
   /// Bounds the whole deploy — the upload of the host binary included.
   static const deployTimeout = Duration(minutes: 3);
 
+  Future<String?>? _shell;
+
+  @override
+  Future<String?> loginShell() => _shell ??= _readLoginShell();
+
+  /// `$SHELL`, which sshd sets from the passwd entry — the same value the tmux
+  /// path has always run (`exec "${SHELL:-bash}" -l`). Marked output, so a
+  /// login banner on stdout cannot be mistaken for the answer.
+  Future<String?> _readLoginShell() async {
+    try {
+      final result = await SshHostDeployTarget(_connection)
+          .run('printf "karmashala-shell:%s\\n" "\${SHELL:-}"')
+          .timeout(const Duration(seconds: 20));
+      for (final line in const LineSplitter().convert(result.stdout)) {
+        const marker = 'karmashala-shell:';
+        if (!line.startsWith(marker)) continue;
+        final shell = line.substring(marker.length).trim();
+        if (shell.isNotEmpty) return shell;
+      }
+    } on Object catch (e) {
+      _logger.debug('${host.address} could not be asked for its shell: $e');
+    }
+    // Asked and unanswered is not a shell; the caller keeps its own default.
+    _shell = null;
+    return null;
+  }
+
   void _onConnectionState(SshConnectionState state) {
     switch (state.status) {
       case SshConnectionStatus.disconnected:
@@ -123,6 +156,7 @@ class SshHostSessionAccess implements HostSessionAccess {
         // The machine may come back rebooted with nothing running on it, so
         // the reading is discarded rather than reused.
         _reading = null;
+        _shell = null;
       case SshConnectionStatus.connected:
         if (!_wasDown) return;
         _wasDown = false;

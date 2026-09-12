@@ -104,7 +104,41 @@ void main() {
     // Attach before open: on a reconnect the session is already there.
     expect(channel.only<AttachMessage>().sessionId, 'karmashala_h1_p1');
     expect(channel.only<OpenMessage>().sessionId, 'karmashala_h1_p1');
-    expect(channel.only<OpenMessage>().argv, ['/bin/sh', '-l']);
+    // The machine's own login shell, not `/bin/sh`: the host spawns exactly
+    // this argv, and tmux never made the user ask for their own shell.
+    expect(channel.only<OpenMessage>().argv, ['/usr/bin/zsh', '-l']);
+
+    pane.dispose();
+  });
+
+  test('a machine that will not name its shell still gets one', () async {
+    final access = PaneAccess(ready())..shell = null;
+    final pane = paneWith(access: access);
+    await settle();
+
+    expect(access.channels.single.only<OpenMessage>().argv, ['/bin/sh', '-l']);
+
+    pane.dispose();
+  });
+
+  test('an agent pane runs the agent, and never asks for a shell', () async {
+    final access = PaneAccess(ready());
+    final pane = paneWith(
+      access: access,
+      agentLaunch: const AgentPaneLaunch(
+        agentId: 'claudeCode',
+        executable: '/usr/bin/claude',
+        arguments: ['--resume'],
+        sessionId: 'a1',
+      ),
+    );
+    await settle();
+
+    expect(access.channels.single.only<OpenMessage>().argv, [
+      '/usr/bin/claude',
+      '--resume',
+    ]);
+    expect(access.shellAsks, 0);
 
     pane.dispose();
   });

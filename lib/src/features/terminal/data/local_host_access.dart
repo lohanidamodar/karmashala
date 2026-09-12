@@ -128,6 +128,11 @@ class LocalHostSessionAccess implements HostSessionAccess {
   @override
   Future<bool?> hasTmuxSession(String name) async => false;
 
+  /// Null, and never asked: a local host pane is handed a `PtyLaunch` built
+  /// from the terminal profile, so it never falls back to a default shell.
+  @override
+  Future<String?> loginShell() async => null;
+
   Future<Socket> _connect() => Socket.connect(
     InternetAddress(_paths.socketPath, type: InternetAddressType.unix),
     0,

@@ -48,6 +48,17 @@ class PaneAccess implements HostSessionAccess {
     return _deployment;
   }
 
+  /// What this machine answers when asked for its login shell. Null is a real
+  /// answer — the machine that would not say.
+  String? shell = '/usr/bin/zsh';
+  var shellAsks = 0;
+
+  @override
+  Future<String?> loginShell() async {
+    shellAsks++;
+    return shell;
+  }
+
   @override
   Future<bool?> hasTmuxSession(String name) async {
     tmuxAsks++;

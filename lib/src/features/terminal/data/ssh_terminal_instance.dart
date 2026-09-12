@@ -534,10 +534,13 @@ class SshTerminalInstance
       // or any other refusal may mean the session is there and alive.
       if (e.code != ProtocolErrorCode.unknownSession) rethrow;
       final launch = agentLaunch;
+      // The host spawns exactly this argv, so a shell pane has to name the
+      // user's own shell: `/bin/sh` is what tmux never gave them.
+      final shell = launch == null ? await hostAccess?.loginShell() : null;
       return link.openSession(
         sessionId: sessionId,
         argv: launch == null
-            ? const ['/bin/sh', '-l']
+            ? [shell ?? '/bin/sh', '-l']
             : [launch.executable, ...launch.commandArguments],
         workingDirectory: workingDirectory,
         environment: const {'TERM': 'xterm-256color'},
