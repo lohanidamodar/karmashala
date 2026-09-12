@@ -102,8 +102,11 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     TerminalProfile profile, {
     String? workingDirectory,
     String? restoredScrollback,
+    String? adoptPaneId,
   }) {
-    final paneId = _newId();
+    // A host session is named after the pane that opened it, so reattaching to
+    // one means opening a pane under that same id — see `sshTmuxSessionName`.
+    final paneId = adoptPaneId ?? _newId();
     _adopt(
       paneId,
       ref.read(terminalInstanceFactoryProvider)(

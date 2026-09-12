@@ -12,6 +12,7 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/ssh_hosts_controller.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'ssh_connection_status_chip.dart';
+import 'host_sessions_dialog.dart';
 import 'ssh_host_dialog.dart';
 import 'remote_file_browser_dialog.dart';
 
@@ -78,6 +79,11 @@ class _HostCard extends ConsumerWidget {
           icon: AppIcons.terminal,
         ),
         DesktopMenuItem(
+          value: 'sessions',
+          label: 'Sessions on this host…',
+          icon: AppIcons.terminal,
+        ),
+        DesktopMenuItem(
           value: 'new_project',
           label: 'New project…',
           icon: AppIcons.folderPlus,
@@ -102,6 +108,7 @@ class _HostCard extends ConsumerWidget {
       ],
       onSelected: (value) => switch (value) {
         'terminal' => openTerminal(),
+        'sessions' => HostSessionsDialog.show(context, host: host),
         'new_project' => NewProjectDialog.show(
             context,
             initialEnvironmentId: host.environmentId,

@@ -8,9 +8,17 @@ part of 'terminal_sessions_controller.dart';
 /// `terminal_sessions_groups.dart` for the tree these tabs hang in.
 extension TerminalTabVerbs on TerminalSessionsController {
   /// Opens a new tab running [profile] and makes it active. Returns its id.
-  String openTab(TerminalProfile profile, {String? workingDirectory}) {
+  String openTab(
+    TerminalProfile profile, {
+    String? workingDirectory,
+    String? adoptPaneId,
+  }) {
     final tabId = _newId();
-    final paneId = _createPane(profile, workingDirectory: workingDirectory);
+    final paneId = _createPane(
+      profile,
+      workingDirectory: workingDirectory,
+      adoptPaneId: adoptPaneId,
+    );
     _tabs.add(
       TerminalTab(
         id: tabId,

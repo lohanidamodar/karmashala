@@ -152,6 +152,17 @@ class HostPaneLink {
     );
   }
 
+  /// Every session this host holds, ended ones included — the host keeps a
+  /// record of what happened, and a list that hid them would answer a
+  /// different question from the one a person asks.
+  Future<List<SessionSummary>> listSessions() async {
+    final answer = await _request<SessionsMessage>(
+      ListMessage.new,
+      const Duration(seconds: 20),
+    );
+    return answer.summaries;
+  }
+
   /// Ends a session on the host for good. Never called by a pane closing —
   /// that is a *disconnect*, and surviving one is the whole point.
   Future<void> closeSession(String sessionId) async {
