@@ -149,13 +149,17 @@ class HostDeployer {
         restartedByUs: restarted,
       );
     }
-    // A `serve` already running answers `hello` whatever version started it,
-    // and the protocol check above passes while the protocol holds — so a
-    // machine keeps the first host it was ever given until something replaces
-    // it. Replacing one costs every session it holds, so it is replaced only
+    // A `serve` already running answers `hello` whatever binary started it, and
+    // the protocol check above passes while the protocol holds — so a machine
+    // keeps the first host it was ever given until something replaces it.
+    // **Not** a version comparison: `hostVersion` is the host package's own
+    // constant and is the same string in every build, while the app's version
+    // is only in the filename. What identifies a build is the path it runs
+    // from. Replacing one costs every session it holds, so it is replaced only
     // when it holds none.
     var stale = '';
-    if (!restarted && greeting.hostVersion != binary.version) {
+    final runningPath = restarted ? null : await _runningServePath(home);
+    if (runningPath != null && runningPath != remotePath) {
       final held = await _sessionsHeld(remotePath);
       if (held == 0 && await _stopServe(home)) {
         final started = await _startServe(home, remotePath);
@@ -165,16 +169,17 @@ class HostDeployer {
           restarted = true;
         }
       }
-      if (greeting.hostVersion != binary.version) {
+      if (!restarted) {
+        final was = runningPath.split('/').last;
         stale = held == null
-            ? ' It is version ${greeting.hostVersion} and would not say what it '
-                  'is running, so ${binary.version} was left uninstalled on it.'
+            ? ' It is running $was and would not say what it holds, so '
+                  '${binary.version} was left installed beside it.'
             : held == 0
-            ? ' It is version ${greeting.hostVersion} and could not be replaced '
-                  'with ${binary.version}.'
-            : ' It is version ${greeting.hostVersion}; ${binary.version} is '
-                  'installed beside it, and $held session(s) are running on the '
-                  'old one, so it was left alone.';
+            ? ' It is running $was and could not be replaced with '
+                  '${binary.version}.'
+            : ' It is running $was; ${binary.version} is installed beside it, '
+                  'and $held session(s) are on the old one, so it was left '
+                  'alone.';
       }
     }
     return HostDeployment(
@@ -390,6 +395,24 @@ class HostDeployer {
     } finally {
       await channel?.close();
     }
+  }
+
+  /// The executable the running `serve` was started from, or null when the
+  /// machine would not say. The filename carries the app version, so this is
+  /// what tells one build from another — `kHostVersion` does not.
+  Future<String?> _runningServePath(String home) async {
+    final result = await target.run(
+      'd="\${XDG_RUNTIME_DIR:+\$XDG_RUNTIME_DIR/karmashala}"; '
+      '[ -n "\$d" ] || d=${_quote('$home/$remoteHomeSubdirectory')}; '
+      'p=\$(cat "\$d/host.lock" 2>/dev/null); '
+      'case "\$p" in ""|*[!0-9]*) exit 0;; esac; '
+      'ps -o args= -p "\$p" 2>/dev/null | head -1',
+    );
+    final line = result.stdout.trim();
+    if (line.isEmpty) return null;
+    // `<path> serve` — the path is everything before the subcommand.
+    final serve = line.lastIndexOf(' serve');
+    return serve <= 0 ? null : line.substring(0, serve);
   }
 
   /// Stops the running `serve` by the pid in its own lock file. The directory

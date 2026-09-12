@@ -56,11 +56,19 @@ class FakeTarget implements HostDeployTarget {
   /// took the signal and went.
   String stopOutput = 'karmashala-stopped\n';
 
+  /// The executable the running `serve` was started from. Null is a machine
+  /// that would not say; the default is the build this deploy installs.
+  String? runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.1.0-linux-x64';
+
   @override
   Future<RemoteRun> run(String command) async {
     commands.add(command);
     for (final entry in scripted.entries) {
       if (command.contains(entry.key)) return entry.value;
+    }
+    if (command.contains('ps -o args=')) {
+      final running = runningServe;
+      return RemoteRun(0, running == null ? '' : '$running serve\n', '');
     }
     if (command.contains('host.lock')) return RemoteRun(0, stopOutput, '');
     if (command.startsWith('uname')) return RemoteRun(0, uname, '');
@@ -420,71 +428,75 @@ void main() {
       expect(start, contains('host.log'));
     }, timeout: const Timeout(Duration(seconds: 40)));
 
-    test('an older host holding nothing is replaced with this build', () async {
-      final target = FakeTarget();
-      var asked = 0;
-      target.greet = (hello) {
-        asked++;
-        // The first answer is the stale `serve`; after the kill and restart
-        // the machine answers with what was installed on it.
-        return welcomeSaying(asked == 1 ? '0.0.9' : '0.1.0');
-      };
+    test('a serve from an older binary, holding nothing, is replaced', () async {
+      // Every build reports the same `hostVersion`, so the *path* is what says
+      // which one is running.
+      final target = FakeTarget()
+        ..runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
 
       final deployment = await deployerFor(target).deploy();
 
       expect(deployment.isReady, isTrue);
-      expect(deployment.hostVersion, '0.1.0');
       expect(deployment.restartedByUs, isTrue);
-      expect(target.commands.any((c) => c.contains('host.lock')), isTrue);
+      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isTrue);
       expect(target.commands.any((c) => c.contains('setsid nohup')), isTrue);
     }, timeout: const Timeout(Duration(seconds: 40)));
 
-    test('an older host with work on it is left alone, and says so', () async {
-      final target = FakeTarget()..heldSessions = 2;
-      target.greet = (hello) => welcomeSaying('0.0.9');
+    test('an older serve with work on it is left alone, and says so', () async {
+      final target = FakeTarget()
+        ..heldSessions = 2
+        ..runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
 
       final deployment = await deployerFor(target).deploy();
 
       // Ready, because it answers and speaks the protocol — replacing it would
       // cost the two sessions, which is never this method's call to make.
       expect(deployment.isReady, isTrue);
-      expect(deployment.hostVersion, '0.0.9');
       expect(deployment.restartedByUs, isFalse);
+      expect(deployment.reason, contains('karmashala_host-0.0.9-linux-x64'));
       expect(deployment.reason, contains('2 session(s)'));
       expect(deployment.reason, contains('left alone'));
-      expect(target.commands.any((c) => c.contains('host.lock')), isFalse);
+      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isFalse);
     }, timeout: const Timeout(Duration(seconds: 40)));
 
-    test('an older host that will not say what it holds is not touched', () async {
-      final target = FakeTarget()..heldSessions = null;
-      target.greet = (hello) => welcomeSaying('0.0.9');
+    test('an older serve that will not say what it holds is not touched', () async {
+      final target = FakeTarget()
+        ..heldSessions = null
+        ..runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
 
       final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.hostVersion, '0.0.9');
       expect(deployment.reason, contains('would not say'));
-      expect(target.commands.any((c) => c.contains('host.lock')), isFalse);
+      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isFalse);
     }, timeout: const Timeout(Duration(seconds: 40)));
 
-    test('an older host that will not stop keeps its version, and says so', () async {
-      final target = FakeTarget()..stopOutput = 'karmashala-still-running\n';
-      target.greet = (hello) => welcomeSaying('0.0.9');
+    test('an older serve that will not stop is reported, not pretended about', () async {
+      final target = FakeTarget()
+        ..stopOutput = 'karmashala-still-running\n'
+        ..runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
 
       final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.hostVersion, '0.0.9');
       expect(deployment.restartedByUs, isFalse);
       expect(deployment.reason, contains('could not be replaced'));
     }, timeout: const Timeout(Duration(seconds: 40)));
 
-    test('a host already at this build is never asked to stand down', () async {
+    test('a serve from this very binary is never asked to stand down', () async {
       final target = FakeTarget();
 
       final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.hostVersion, '0.1.0');
-      expect(target.commands.any((c) => c.contains('host.lock')), isFalse);
-      expect(deployment.reason, isNot(contains('version')));
+      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isFalse);
+      expect(deployment.reason, isNot(contains('installed beside it')));
+    }, timeout: const Timeout(Duration(seconds: 40)));
+
+    test('a machine that will not name the running serve is left alone', () async {
+      final target = FakeTarget()..runningServe = null;
+
+      final deployment = await deployerFor(target).deploy();
+
+      expect(deployment.isReady, isTrue);
+      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isFalse);
     }, timeout: const Timeout(Duration(seconds: 40)));
 
     test('a host that was already running is not reported as restarted', () async {
