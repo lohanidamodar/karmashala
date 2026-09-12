@@ -48,12 +48,21 @@ class FakeTarget implements HostDeployTarget {
   int existingSize = -1;
   var execCount = 0;
 
+  /// How many sessions the running host reports when asked. Null refuses to
+  /// say, which is a third answer and not zero.
+  int? heldSessions = 0;
+
+  /// What the stop command prints. The default is a machine whose `serve`
+  /// took the signal and went.
+  String stopOutput = 'karmashala-stopped\n';
+
   @override
   Future<RemoteRun> run(String command) async {
     commands.add(command);
     for (final entry in scripted.entries) {
       if (command.contains(entry.key)) return entry.value;
     }
+    if (command.contains('host.lock')) return RemoteRun(0, stopOutput, '');
     if (command.startsWith('uname')) return RemoteRun(0, uname, '');
     if (command.contains(r'echo "$HOME"')) return RemoteRun(0, '${home ?? ''}\n', '');
     if (command.contains('wc -c <')) {
@@ -103,11 +112,45 @@ class FakeChannel implements RemoteChannel {
   void add(Uint8List bytes) {
     for (final frame in _parser.add(bytes)) {
       final message = decodeMessage(frame);
-      if (message is! HelloMessage) continue;
-      final reply = _target.greet?.call(message);
-      if (reply != null) _out.add(reply.toFrame().encode());
+      if (message is HelloMessage) {
+        final reply = _target.greet?.call(message);
+        if (reply != null) _out.add(reply.toFrame().encode());
+        continue;
+      }
+      if (message is! ListMessage) continue;
+      final held = _target.heldSessions;
+      if (held == null) {
+        _out.add(
+          ErrorMessage(
+            message.requestId,
+            ProtocolErrorCode.internal,
+            'not saying',
+          ).toFrame().encode(),
+        );
+        continue;
+      }
+      _out.add(
+        SessionsMessage(message.requestId, [
+          for (var i = 0; i < held; i++) _summary('s$i'),
+        ]).toFrame().encode(),
+      );
     }
   }
+
+  static SessionSummary _summary(String id) => SessionSummary(
+    id: id,
+    argv: const ['/bin/sh'],
+    workingDirectory: null,
+    pid: 7,
+    columns: 80,
+    rows: 24,
+    startedAt: DateTime.utc(2026),
+    observedAt: DateTime.utc(2026),
+    totalBytes: 0,
+    firstAvailableOffset: 0,
+    lifecycle: const SessionRunning(),
+    writeHolder: null,
+  );
 
   @override
   Future<int> get exitCode async => 0;
@@ -147,6 +190,18 @@ HostDeployer deployerFor(FakeTarget target, {HostBinarySource? binaries}) => Hos
   // times in the gate for hosts that are *meant* to stay silent is a minute of
   // nothing; the bound under test is that it gives up, not how long it waits.
   helloTimeout: const Duration(milliseconds: 50),
+);
+
+WelcomeMessage welcomeSaying(String version) => WelcomeMessage(
+  requestId: 1,
+  protocolVersion: kProtocolVersion,
+  hostVersion: version,
+  operatingSystem: 'linux',
+  architecture: 'x64',
+  ptyLibrary: 'libc.so.6',
+  pid: 5,
+  startedAt: DateTime.utc(2026),
+  observedAt: DateTime.utc(2026),
 );
 
 void main() {
@@ -363,6 +418,73 @@ void main() {
       expect(start, contains('serve'));
       expect(start, contains('< /dev/null'), reason: 'the channel must not stay open');
       expect(start, contains('host.log'));
+    }, timeout: const Timeout(Duration(seconds: 40)));
+
+    test('an older host holding nothing is replaced with this build', () async {
+      final target = FakeTarget();
+      var asked = 0;
+      target.greet = (hello) {
+        asked++;
+        // The first answer is the stale `serve`; after the kill and restart
+        // the machine answers with what was installed on it.
+        return welcomeSaying(asked == 1 ? '0.0.9' : '0.1.0');
+      };
+
+      final deployment = await deployerFor(target).deploy();
+
+      expect(deployment.isReady, isTrue);
+      expect(deployment.hostVersion, '0.1.0');
+      expect(deployment.restartedByUs, isTrue);
+      expect(target.commands.any((c) => c.contains('host.lock')), isTrue);
+      expect(target.commands.any((c) => c.contains('setsid nohup')), isTrue);
+    }, timeout: const Timeout(Duration(seconds: 40)));
+
+    test('an older host with work on it is left alone, and says so', () async {
+      final target = FakeTarget()..heldSessions = 2;
+      target.greet = (hello) => welcomeSaying('0.0.9');
+
+      final deployment = await deployerFor(target).deploy();
+
+      // Ready, because it answers and speaks the protocol — replacing it would
+      // cost the two sessions, which is never this method's call to make.
+      expect(deployment.isReady, isTrue);
+      expect(deployment.hostVersion, '0.0.9');
+      expect(deployment.restartedByUs, isFalse);
+      expect(deployment.reason, contains('2 session(s)'));
+      expect(deployment.reason, contains('left alone'));
+      expect(target.commands.any((c) => c.contains('host.lock')), isFalse);
+    }, timeout: const Timeout(Duration(seconds: 40)));
+
+    test('an older host that will not say what it holds is not touched', () async {
+      final target = FakeTarget()..heldSessions = null;
+      target.greet = (hello) => welcomeSaying('0.0.9');
+
+      final deployment = await deployerFor(target).deploy();
+
+      expect(deployment.hostVersion, '0.0.9');
+      expect(deployment.reason, contains('would not say'));
+      expect(target.commands.any((c) => c.contains('host.lock')), isFalse);
+    }, timeout: const Timeout(Duration(seconds: 40)));
+
+    test('an older host that will not stop keeps its version, and says so', () async {
+      final target = FakeTarget()..stopOutput = 'karmashala-still-running\n';
+      target.greet = (hello) => welcomeSaying('0.0.9');
+
+      final deployment = await deployerFor(target).deploy();
+
+      expect(deployment.hostVersion, '0.0.9');
+      expect(deployment.restartedByUs, isFalse);
+      expect(deployment.reason, contains('could not be replaced'));
+    }, timeout: const Timeout(Duration(seconds: 40)));
+
+    test('a host already at this build is never asked to stand down', () async {
+      final target = FakeTarget();
+
+      final deployment = await deployerFor(target).deploy();
+
+      expect(deployment.hostVersion, '0.1.0');
+      expect(target.commands.any((c) => c.contains('host.lock')), isFalse);
+      expect(deployment.reason, isNot(contains('version')));
     }, timeout: const Timeout(Duration(seconds: 40)));
 
     test('a host that was already running is not reported as restarted', () async {

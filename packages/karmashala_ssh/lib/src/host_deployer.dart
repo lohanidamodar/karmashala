@@ -149,6 +149,34 @@ class HostDeployer {
         restartedByUs: restarted,
       );
     }
+    // A `serve` already running answers `hello` whatever version started it,
+    // and the protocol check above passes while the protocol holds — so a
+    // machine keeps the first host it was ever given until something replaces
+    // it. Replacing one costs every session it holds, so it is replaced only
+    // when it holds none.
+    var stale = '';
+    if (!restarted && greeting.hostVersion != binary.version) {
+      final held = await _sessionsHeld(remotePath);
+      if (held == 0 && await _stopServe(home)) {
+        final started = await _startServe(home, remotePath);
+        final fresh = started.ok ? await _sayHello(remotePath) : null;
+        if (fresh != null) {
+          greeting = fresh;
+          restarted = true;
+        }
+      }
+      if (greeting.hostVersion != binary.version) {
+        stale = held == null
+            ? ' It is version ${greeting.hostVersion} and would not say what it '
+                  'is running, so ${binary.version} was left uninstalled on it.'
+            : held == 0
+            ? ' It is version ${greeting.hostVersion} and could not be replaced '
+                  'with ${binary.version}.'
+            : ' It is version ${greeting.hostVersion}; ${binary.version} is '
+                  'installed beside it, and $held session(s) are running on the '
+                  'old one, so it was left alone.';
+      }
+    }
     return HostDeployment(
       status: HostDeploymentStatus.ready,
       observedAt: _now(),
@@ -160,7 +188,8 @@ class HostDeployer {
       reason:
           'karmashala_host ${greeting.hostVersion} answering on ${target.address} '
           '(${platform.targetKey}, ${greeting.ptyLibrary}).'
-          '${restarted ? ' It was not running and has been restarted, so any sessions it held before are gone.' : ''}',
+          '${restarted ? ' It was not running and has been restarted, so any sessions it held before are gone.' : ''}'
+          '$stale',
     );
   }
 
@@ -324,6 +353,63 @@ class HostDeployer {
 
   /// `setsid nohup … &`, so the daemon leaves this channel's process group
   /// before it closes; output goes to a log, which would hold the channel open.
+  /// How many sessions the running host holds, or null when it would not say.
+  /// Zero is the only answer that makes replacing it safe.
+  Future<int?> _sessionsHeld(String remotePath) async {
+    RemoteChannel? channel;
+    try {
+      channel = await target.exec('$remotePath attach');
+      final parser = FrameParser();
+      final counted = Completer<int?>();
+      final subscription = channel.stdout.listen((chunk) {
+        if (counted.isCompleted) return;
+        for (final frame in parser.add(chunk)) {
+          final message = decodeMessage(frame);
+          if (message is SessionsMessage) {
+            counted.complete(message.summaries.length);
+            return;
+          }
+          if (message is ErrorMessage) {
+            counted.complete(null);
+            return;
+          }
+        }
+      }, onError: (Object _) {});
+      channel.add(
+        const HelloMessage(requestId: 1, clientId: 'karmashala-deployer').toFrame().encode(),
+      );
+      channel.add(const ListMessage(2).toFrame().encode());
+      try {
+        return await counted.future.timeout(helloTimeout);
+      } finally {
+        await subscription.cancel();
+      }
+    } on Object catch (e) {
+      _logger.debug('${target.address} would not list its sessions: $e');
+      return null;
+    } finally {
+      await channel?.close();
+    }
+  }
+
+  /// Stops the running `serve` by the pid in its own lock file. The directory
+  /// is resolved the way `HostPaths` resolves it, which is the one place this
+  /// knowledge is duplicated — a lock read from the wrong directory would kill
+  /// nothing and report success.
+  Future<bool> _stopServe(String home) async {
+    final result = await target.run(
+      'd="\${XDG_RUNTIME_DIR:+\$XDG_RUNTIME_DIR/karmashala}"; '
+      '[ -n "\$d" ] || d=${_quote('$home/$remoteHomeSubdirectory')}; '
+      'p=\$(cat "\$d/host.lock" 2>/dev/null); '
+      'case "\$p" in ""|*[!0-9]*) echo karmashala-no-pid; exit 0;; esac; '
+      'kill "\$p" 2>/dev/null || true; '
+      'for i in 1 2 3 4 5 6 7 8 9 10; do '
+      'kill -0 "\$p" 2>/dev/null || { echo karmashala-stopped; exit 0; }; '
+      'sleep 0.2; done; echo karmashala-still-running',
+    );
+    return result.stdout.contains('karmashala-stopped');
+  }
+
   Future<RemoteRun> _startServe(String home, String remotePath) {
     final directory = '$home/$remoteHomeSubdirectory';
     return target.run(
