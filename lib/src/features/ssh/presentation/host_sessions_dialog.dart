@@ -167,7 +167,6 @@ class _SessionRow extends StatelessWidget {
             padding: const EdgeInsets.only(top: 2, right: Insets.sm),
             child: Icon(
               running ? AppIcons.playCircle : AppIcons.checkCircle,
-              size: 16,
               color: running ? scheme.primary : scheme.onSurfaceVariant,
             ),
           ),
