@@ -112,6 +112,86 @@ void main() {
     });
   });
 
+  /// **The rename shapes, measured against git 2.55.0.** A row keyed by the old
+  /// name is a count that never reaches the file it belongs to, and every form
+  /// below came out of a real `git diff --numstat HEAD`.
+  group('parseNumstatByFile', () {
+    test('keeps one entry per file', () {
+      const out = '12\t3\tlib/a.dart\n0\t7\tlib/b.dart\n';
+      expect(parseNumstatByFile(out), {
+        'lib/a.dart': const FileDiffStat(added: 12, removed: 3),
+        'lib/b.dart': const FileDiffStat(added: 0, removed: 7),
+      });
+    });
+
+    test('a binary file has no counts rather than zero ones', () {
+      final stats = parseNumstatByFile('5\t1\tlib/a.dart\n-\t-\tassets/i.png\n');
+      expect(stats['assets/i.png'], FileDiffStat.binary);
+      expect(stats['assets/i.png']!.isBinary, isTrue);
+      expect(stats['lib/a.dart']!.isBinary, isFalse);
+    });
+
+    test('a braced rename is keyed by the new path', () {
+      // lib/old/x.dart -> lib/b/y.dart
+      expect(
+        parseNumstatByFile('4\t2\tlib/{old/x.dart => b/y.dart}').keys,
+        ['lib/b/y.dart'],
+      );
+    });
+
+    test('an arrow rename is keyed by the new path', () {
+      // lib/a/y.dart -> dst_deep.dart, which share no directory
+      expect(
+        parseNumstatByFile('4\t2\tlib/a/y.dart => dst_deep.dart').keys,
+        ['dst_deep.dart'],
+      );
+    });
+
+    test('a braced rename survives spaces in the path', () {
+      expect(
+        parseNumstatByFile('0\t0\tdir with space/{s p.dart => t q.dart}').keys,
+        ['dir with space/t q.dart'],
+      );
+    });
+
+    test('an emptied brace side does not leave a doubled slash', () {
+      // lib/old/x.dart -> lib/x.dart. Joining the pieces verbatim would key
+      // `lib//x.dart`, which matches nothing `git status` prints.
+      expect(parseNumstatByFile('0\t0\tlib/{old => }/x.dart').keys, [
+        'lib/x.dart',
+      ]);
+      expect(parseNumstatByFile('0\t0\tlib/{ => new}/x.dart').keys, [
+        'lib/new/x.dart',
+      ]);
+    });
+
+    test('a quoted rename keeps git\'s own spelling, as v1 status prints it', () {
+      // `git status --porcelain=v1` quotes the same path the same way, so the
+      // quoted key is the one a row is looked up by.
+      expect(
+        parseNumstatByFile(
+          r'0	0	"uni-caf\303\251.dart" => "uni-na\303\257ve.dart"',
+        ).keys,
+        [r'"uni-na\303\257ve.dart"'],
+      );
+    });
+
+    test('a tab-separated rename is keyed by the new path', () {
+      expect(parseNumstatByFile('3\t2\told.dart\tnew.dart').keys, ['new.dart']);
+    });
+
+    test('a path with no rename in it is left alone', () {
+      expect(parseNumstatByFile('1\t0\tlib/a{b}c.dart').keys, [
+        'lib/a{b}c.dart',
+      ]);
+    });
+
+    test('no output is an empty map', () {
+      expect(parseNumstatByFile(''), isEmpty);
+      expect(parseNumstatByFile('\n\n'), isEmpty);
+    });
+  });
+
   group('parseAheadBehind', () {
     test('left is behind, right is ahead', () {
       expect(

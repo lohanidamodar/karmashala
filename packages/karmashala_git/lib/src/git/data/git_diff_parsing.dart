@@ -361,3 +361,47 @@ FileChange _v2Change(String xy, String path, {String? originalPath}) {
     unstaged: y != '.',
   );
 }
+
+/// Parses `git diff --numstat` output as one entry per file, keyed by the path
+/// git printed.
+///
+/// A rename is keyed by its **new** path, which is what `git status` calls the
+/// file, so a caller can look a row up by the name it already has.
+Map<String, FileDiffStat> parseNumstatByFile(String output) {
+  final stats = <String, FileDiffStat>{};
+  for (final line in output.split(RegExp(r'[\r\n]+'))) {
+    if (line.isEmpty) continue;
+    final parts = line.split('\t');
+    if (parts.length < 3) continue;
+    // A tab-separated rename puts the new path last; otherwise there is one.
+    // git quotes a path containing a tab, so an unquoted field never holds one.
+    final path = _numstatNewPath(parts.length > 3 ? parts.last : parts[2]);
+    if (path.isEmpty) continue;
+    stats[path] = FileDiffStat(
+      added: int.tryParse(parts[0]),
+      removed: int.tryParse(parts[1]),
+    );
+  }
+  return stats;
+}
+
+/// The **new** name of the file a `--numstat` path field describes.
+///
+/// git compacts a rename to `lib/{old => new}/x.dart` when the two names share
+/// a directory and writes `old/x.dart => new/x.dart` when they do not; an empty
+/// new middle (`lib/{old => }/x.dart`) would otherwise rebuild a doubled slash.
+String _numstatNewPath(String field) {
+  final brace = field.indexOf('{');
+  final arrow = field.indexOf(' => ', brace < 0 ? 0 : brace);
+  if (arrow < 0) return field;
+  if (brace < 0) return field.substring(arrow + 4);
+  final close = field.indexOf('}', arrow);
+  if (close < 0) return field;
+  final prefix = field.substring(0, brace);
+  final middle = field.substring(arrow + 4, close);
+  final suffix = field.substring(close + 1);
+  if (middle.isEmpty && prefix.endsWith('/') && suffix.startsWith('/')) {
+    return prefix + suffix.substring(1);
+  }
+  return prefix + middle + suffix;
+}

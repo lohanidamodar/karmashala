@@ -61,3 +61,27 @@ class AheadBehind {
   @override
   String toString() => 'AheadBehind(ahead $ahead, behind $behind)';
 }
+
+/// Lines added and removed in one file, as `--numstat` reports them. Both null
+/// for a binary file, which reports `-` for each count.
+class FileDiffStat {
+  const FileDiffStat({required this.added, required this.removed});
+
+  static const binary = FileDiffStat(added: null, removed: null);
+
+  final int? added;
+  final int? removed;
+
+  bool get isBinary => added == null;
+
+  @override
+  bool operator ==(Object other) =>
+      other is FileDiffStat && other.added == added && other.removed == removed;
+
+  @override
+  int get hashCode => Object.hash(added, removed);
+
+  @override
+  String toString() =>
+      isBinary ? 'FileDiffStat(binary)' : 'FileDiffStat(+$added -$removed)';
+}
