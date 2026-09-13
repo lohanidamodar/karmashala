@@ -69,6 +69,7 @@ class Settings {
     this.explorerPaneWidth = 304,
     this.detailSidebarWidth = 320,
     this.compactDensity = true,
+    this.explorerGroupByEnvironment = false,
     this.windowWidth,
     this.windowHeight,
     this.defaultSystemTerminalId,
@@ -154,6 +155,11 @@ class Settings {
   final double detailSidebarWidth;
 
   final bool compactDensity;
+
+  /// Whether the Explorer's spine is the environment rather than the project.
+  /// Off by default: what you are working on is the usual question, and where
+  /// it runs is the one you ask when something remote is involved.
+  final bool explorerGroupByEnvironment;
 
   final double? windowWidth;
   final double? windowHeight;
@@ -270,6 +276,7 @@ class Settings {
     double? explorerPaneWidth,
     double? detailSidebarWidth,
     bool? compactDensity,
+    bool? explorerGroupByEnvironment,
     double? windowWidth,
     double? windowHeight,
     String? defaultSystemTerminalId,
@@ -325,6 +332,8 @@ class Settings {
     explorerPaneWidth: explorerPaneWidth ?? this.explorerPaneWidth,
     detailSidebarWidth: detailSidebarWidth ?? this.detailSidebarWidth,
     compactDensity: compactDensity ?? this.compactDensity,
+    explorerGroupByEnvironment:
+        explorerGroupByEnvironment ?? this.explorerGroupByEnvironment,
     windowWidth: windowWidth ?? this.windowWidth,
     windowHeight: windowHeight ?? this.windowHeight,
     defaultSystemTerminalId:
@@ -404,6 +413,7 @@ class Settings {
     'explorerPaneWidth': explorerPaneWidth,
     'detailSidebarWidth': detailSidebarWidth,
     'compactDensity': compactDensity,
+    'explorerGroupByEnvironment': explorerGroupByEnvironment,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
     if (defaultSystemTerminalId != null)
@@ -518,6 +528,9 @@ class Settings {
           : 'auto',
       explorerPaneWidth: toDouble(json['explorerPaneWidth']) ?? 304,
       detailSidebarWidth: toDouble(json['detailSidebarWidth']) ?? 320,
+      explorerGroupByEnvironment: json['explorerGroupByEnvironment'] is bool
+          ? json['explorerGroupByEnvironment'] as bool
+          : false,
       compactDensity: json['compactDensity'] is bool
           ? json['compactDensity'] as bool
           : true,

@@ -136,6 +136,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Which spine the Explorer draws: the project, or the machine it runs on.
+  void setExplorerGroupByEnvironment(bool value) {
+    state = state.copyWith(explorerGroupByEnvironment: value);
+    _save();
+  }
+
   void setCompactDensity(bool value) {
     state = state.copyWith(compactDensity: value);
     _save();

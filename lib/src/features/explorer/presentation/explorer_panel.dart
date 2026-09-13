@@ -19,6 +19,7 @@ import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/detected_projects_view.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
+import '../application/environment_grouping.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
@@ -426,6 +427,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final selecting = ref.watch(
       sessionSelectionProvider.select((s) => s.active),
     );
+    final groupByEnvironment = ref.watch(
+      settingsControllerProvider.select((s) => s.explorerGroupByEnvironment),
+    );
 
     final Widget body;
     if (projects.isEmpty) {
@@ -447,7 +451,18 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           // Spliced into the *same* list rather than wrapped in a column, so the
           // sliver goes on inflating only what is on screen.
           if (query.isEmpty) ...explorerSectionNodes(ref),
-          for (final project in projects) ..._projectNodes(project, menuFacts),
+          if (groupByEnvironment)
+            for (final group in groupProjectsByEnvironment(
+              projects,
+              ref.read(executionEnvironmentDaoProvider).getAll(),
+            )) ...[
+              _EnvironmentHeader(group: group),
+              for (final project in group.projects)
+                ..._projectNodes(project, menuFacts),
+            ]
+          else
+            for (final project in projects)
+              ..._projectNodes(project, menuFacts),
         ],
       );
     }
@@ -473,6 +488,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             if (projects.isNotEmpty)
               _ExplorerFilterButton(
                 filter: agentFilter,
+                groupByEnvironment: groupByEnvironment,
                 hidingEmptySections: hidingEmptySections,
                 hiddenSections: layout?.hidden,
                 sectionsOnScreen: layout != null,
@@ -995,9 +1011,11 @@ class _ExplorerFilterButton extends ConsumerWidget {
     required this.hidingEmptySections,
     required this.hiddenSections,
     required this.sectionsOnScreen,
+    required this.groupByEnvironment,
   });
 
   final AgentFilter filter;
+  final bool groupByEnvironment;
   final bool hidingEmptySections;
 
   /// How many sections the empty filter folded away, null when sections are
@@ -1008,6 +1026,7 @@ class _ExplorerFilterButton extends ConsumerWidget {
 
   static const String _allAgents = 'agents:all';
   static const String _emptySections = 'sections:empty';
+  static const String _byEnvironment = 'group:environment';
   static const String _agentPrefix = 'agent:';
 
   @override
@@ -1021,7 +1040,9 @@ class _ExplorerFilterButton extends ConsumerWidget {
       icon: Icon(filter.isUnfiltered ? AppIcons.funnel : AppIcons.funnelFill),
       onSelected: (value) {
         final settings = ref.read(settingsControllerProvider.notifier);
-        if (value == _emptySections) {
+        if (value == _byEnvironment) {
+          settings.setExplorerGroupByEnvironment(!groupByEnvironment);
+        } else if (value == _emptySections) {
           settings.setHideEmptySections(!hidingEmptySections);
         } else if (value == _allAgents) {
           settings.setExplorerAgentFilter(const {});
@@ -1032,6 +1053,15 @@ class _ExplorerFilterButton extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => [
+        DesktopMenuItem(
+          value: _byEnvironment,
+          // The one item here that arranges rather than hides, which is why it
+          // sits above its own divider.
+          label: 'Group by environment',
+          icon: AppIcons.globe,
+          selected: groupByEnvironment,
+        ),
+        const PopupMenuDivider(),
         DesktopMenuItem(
           value: _allAgents,
           label: 'All agents',
@@ -1097,6 +1127,58 @@ class _TreeHint extends StatelessWidget {
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
         ),
+      ),
+    );
+  }
+}
+
+
+/// The row a group of projects sits under when the Explorer's spine is the
+/// machine rather than the project.
+class _EnvironmentHeader extends StatelessWidget {
+  const _EnvironmentHeader({required this.group});
+
+  final EnvironmentGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final kind = group.environment?.kind;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.sm, Insets.sm, 2),
+      child: Row(
+        children: [
+          Icon(
+            switch (kind) {
+              EnvironmentKind.ssh => AppIcons.globe,
+              EnvironmentKind.wsl => AppIcons.terminalWindow,
+              _ => AppIcons.terminal,
+            },
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: Insets.xs),
+          Flexible(
+            child: Text(
+              group.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (group.environment == null) ...[
+            const SizedBox(width: Insets.xs),
+            // Said rather than hidden: the projects are still here, the
+            // machine's record is not.
+            Tooltip(
+              message: 'This environment is no longer in the workspace.',
+              child: Icon(AppIcons.warningCircle, color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ],
       ),
     );
   }
