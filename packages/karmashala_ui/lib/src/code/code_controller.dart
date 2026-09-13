@@ -53,9 +53,8 @@ class CodeEditingController extends TextEditingController {
   bool? _memoEnabled;
   TextStyle? _memoStyle;
 
-  /// Rebuilt only when the text, language, palette or style actually changed:
-  /// a caret blink and every selection change come through here too, and
-  /// re-parsing a large file on each would stall the field.
+  /// Rebuilt only when the text, language, palette or style changed: a caret
+  /// blink comes through here too, and would re-parse the file.
   @override
   TextSpan buildTextSpan({
     required BuildContext context,
@@ -90,9 +89,8 @@ class CodeEditingController extends TextEditingController {
     return span;
   }
 
-  /// Handles Enter (continue the previous line's indent, and add one level
-  /// after an opening brace), Tab and Shift+Tab. Returns true when it consumed
-  /// the key; the field then does nothing else with it.
+  /// Handles Enter, Tab and Shift+Tab. True when it consumed the key, and the
+  /// field then does nothing else with it.
   bool handleKey(LogicalKeyboardKey key, {required bool shift}) {
     if (!selection.isValid) return false;
     if (key == LogicalKeyboardKey.enter ||
@@ -129,9 +127,8 @@ class CodeEditingController extends TextEditingController {
     return false;
   }
 
-  /// Every line the selection touches, moved one level, and left selected so
-  /// the next Tab moves the same block. Replacing the selection instead — what
-  /// Tab used to do — deleted the code it spanned.
+  /// Every line the selection touches, moved one level and left selected, so
+  /// the next Tab moves the same block.
   bool _indentLines(int start, int end, {required bool outdent}) {
     final from = _lineStartAt(start);
     // A selection ending at column 0 has not reached that line's text.

@@ -229,8 +229,8 @@ void main() {
       final text = lines(100000);
       await pump(tester, text, onCopiedAll: () => confirmed++);
 
-      // The rows off screen were never built, so no selection could reach
-      // them; the buffer is in memory and the button hands it over whole.
+      // No selection can reach a row the list never built; the buffer is in
+      // memory, and the button hands it over whole.
       await tester.tap(find.byTooltip('Copy file'));
       await tester.pump();
 
@@ -253,9 +253,8 @@ void main() {
   testWidgets('one enormous line is clipped, never shaped whole', (
     tester,
   ) async {
-    // A minified bundle is one line of megabytes. Laying it out is the one
-    // cost a per-row viewer can still hit, and it hit it: 1.6M code units on
-    // one line cost 524 ms to open.
+    // A minified bundle is one line of megabytes, and laying it out whole is
+    // the one cost a per-row viewer can still hit.
     await pump(tester, 'x' * 400000);
 
     final drawn = tester.widget<Text>(rows().first).data!;

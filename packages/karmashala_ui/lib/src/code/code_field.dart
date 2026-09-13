@@ -1,6 +1,6 @@
-import 'dart:io' show Platform;
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,15 +10,12 @@ import 'code_gutter.dart';
 import 'code_lines.dart';
 import 'code_theme.dart';
 
-/// The strut the field is laid out with. One gutter row is the line box that
-/// strut actually produced, measured rather than multiplied out: the engine's
-/// answer is not `fontSize * height` to the pixel, and half a pixel per line is
-/// a whole line lost within one screenful.
+/// The strut the field is laid out with. A gutter row is the line box it
+/// produced, measured rather than multiplied out.
 const double kCodeLineHeight = 1.4;
 
 /// A code buffer with a line-number gutter: one vertical viewport over both, so
-/// the numbers cannot scroll away from the lines they count, and a horizontal
-/// one under the text alone, because code is never soft-wrapped.
+/// the numbers cannot scroll away from the lines they count.
 class CodeField extends StatefulWidget {
   const CodeField({
     required this.controller,
@@ -64,8 +61,7 @@ class _CodeFieldState extends State<CodeField> {
     super.initState();
     widget.controller.addListener(_onControllerChanged);
     // A field mounted with a line already asked for never reaches
-    // [didUpdateWidget], and that is the ordinary case: the caller sets the
-    // line in the same turn it opens the file.
+    // [didUpdateWidget], and that is the ordinary case.
     if (widget.revealLine case final line?) _revealAfterFrame(line);
   }
 
@@ -148,10 +144,8 @@ class _CodeFieldState extends State<CodeField> {
         : 0;
   }
 
-  /// The widest line, shaped to at most [kMaxLineUnitsLaidOut] code units: a
-  /// 400 KB minified bundle is one line, and this runs per keystroke. Past the
-  /// cap the width is extrapolated from the sample, which is exact in a
-  /// monospace face and keeps the field from wrapping what it cannot measure.
+  /// The widest line, shaped to at most [kMaxLineUnitsLaidOut] code units and
+  /// extrapolated past that — exact in a monospace face, and never a wrap.
   double _widthOfLongest(
     String text,
     int start,
@@ -202,9 +196,7 @@ class _CodeFieldState extends State<CodeField> {
     if (onSave != null &&
         event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.keyS &&
-        (Platform.isMacOS
-            ? keyboard.isMetaPressed
-            : keyboard.isControlPressed)) {
+        _saveChord(keyboard)) {
       onSave();
       return KeyEventResult.handled;
     }
@@ -214,6 +206,16 @@ class _CodeFieldState extends State<CodeField> {
       shift: keyboard.isShiftPressed,
     );
     return consumed ? KeyEventResult.handled : KeyEventResult.ignored;
+  }
+
+  /// Exactly Ctrl+S (Cmd+S on macOS): Ctrl+Shift+S is a different chord and
+  /// belongs to whatever the embedder binds it to.
+  bool _saveChord(HardwareKeyboard keyboard) {
+    final mac = defaultTargetPlatform == TargetPlatform.macOS;
+    if (keyboard.isShiftPressed || keyboard.isAltPressed) return false;
+    return mac
+        ? keyboard.isMetaPressed && !keyboard.isControlPressed
+        : keyboard.isControlPressed && !keyboard.isMetaPressed;
   }
 
   @override
@@ -233,9 +235,8 @@ class _CodeFieldState extends State<CodeField> {
       height: kCodeLineHeight,
       forceStrutHeight: true,
     );
-    // Explicit letterSpacing: the field merges its style over the text theme's
-    // body style, so a theme that spaces prose would widen every line past the
-    // width measured here and wrap the code that must not wrap.
+    // Explicit letterSpacing: a theme that spaces prose would widen every line
+    // past the width measured here and wrap the code that must not wrap.
     final codeStyle = TextStyle(
       fontFamily: kMonoFamily,
       fontSize: widget.fontSize,
@@ -281,8 +282,7 @@ class _CodeFieldState extends State<CodeField> {
                       // own would fight them for the drag.
                       scrollPhysics: const NeverScrollableScrollPhysics(),
                       // Spelled out rather than `collapsed`: the app's
-                      // InputDecorationTheme is filled and bordered, and a
-                      // code surface drawn as a text box reads as a form.
+                      // decoration theme draws a code surface as a form.
                       decoration: const InputDecoration(
                         isCollapsed: true,
                         filled: false,
@@ -307,9 +307,8 @@ class _CodeFieldState extends State<CodeField> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Outside the scroll view on purpose: it is painted at the
-              // viewport and scrolled by the controller, so its cost is the
-              // rows on screen rather than the rows in the file.
+              // Outside the scroll view on purpose: painted at the viewport,
+              // so its cost is the rows on screen and not those in the file.
               if (widget.showLineNumbers)
                 CodeGutter(
                   lineCount: controller.lineCount,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -262,6 +263,53 @@ void main() {
 
     expect(saves, 1);
     expect(controller.text, 'a');
+  });
+
+  testWidgets('Ctrl+Shift+S is a different chord and saves nothing', (
+    tester,
+  ) async {
+    var saves = 0;
+    controller.text = 'a';
+    await pump(tester, onSave: () => saves++);
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+
+    expect(saves, 0);
+  });
+
+  testWidgets('on macOS the chord is Cmd+S, and Ctrl+S is not it', (
+    tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    var saves = 0;
+    controller.text = 'a';
+    await pump(tester, onSave: () => saves++);
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pump();
+    expect(saves, 0);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    await tester.pump();
+    // Unset inside the body: the binding checks for a leaked debug variable
+    // before any tearDown runs.
+    debugDefaultTargetPlatformOverride = null;
+
+    expect(saves, 1);
   });
 
   testWidgets('revealLine scrolls the buffer to the line it names', (

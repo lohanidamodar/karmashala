@@ -5,8 +5,7 @@ import 'package:flutter/material.dart';
 import '../design_tokens.dart';
 
 /// The rows a gutter of [lineCount] draws in a viewport [height] tall scrolled
-/// to [offset] — inclusive, 0-based, and empty as `first > last`. Public
-/// because it *is* the cost story: this range, never the file.
+/// to [offset] — inclusive, 0-based, and empty as `first > last`.
 ({int first, int last}) visibleGutterRows({
   required int lineCount,
   required double rowHeight,
@@ -100,8 +99,7 @@ class _GutterPainter extends CustomPainter {
       offset: offset,
       height: size.height,
     );
-    // One painter re-laid out per row: a fresh one per line allocates a
-    // TextPainter and a paragraph for every number on screen, every frame.
+    // One painter re-laid out per row, rather than one allocated per line.
     final painter = TextPainter(
       textDirection: TextDirection.ltr,
       textScaler: scaler,

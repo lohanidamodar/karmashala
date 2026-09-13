@@ -95,6 +95,29 @@ void main() {
     });
   }
 
+  // A minified bundle is one line of megabytes: flat in the line *count* says
+  // nothing about it, and the viewer used to shape the whole line to measure
+  // its width. This must be flat in the length too.
+  for (final units in const [100000, 400000, 1600000]) {
+    testWidgets('viewer: one line of $units', (tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final open = Stopwatch()..start();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: CodeViewer(text: 'x' * units)),
+        ),
+      );
+      open.stop();
+
+      // ignore: avoid_print
+      print('viewer 1 line x $units | ${open.elapsedMilliseconds}');
+    });
+  }
+
   // The read-only viewer draws only the rows on screen, so its cost must be
   // flat in the file. Read these as a *slope*: a number that grows with the
   // line count means something is still touching the whole buffer per frame.

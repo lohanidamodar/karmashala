@@ -9,12 +9,8 @@ import 'code_field.dart' show kCodeLineHeight;
 import 'code_gutter.dart';
 import 'code_lines.dart';
 
-/// A file too big to edit, drawn read-only **one screenful at a time**.
-///
-/// [CodeField] hands its whole buffer to a `TextField`, which lays it out as a
-/// single paragraph — linear in the file, on every keystroke. This draws the
-/// lines on screen and nothing else, so opening costs the same at ten lines and
-/// ten million. Plain mono on purpose: colouring needs the whole file parsed.
+/// A file too big to edit, drawn read-only one screenful at a time: the rows on
+/// screen and nothing else, in plain mono.
 class CodeViewer extends StatefulWidget {
   const CodeViewer({
     required this.text,
@@ -105,8 +101,7 @@ class _CodeViewerState extends State<CodeViewer> {
   }
 
   /// One line, cut to [kMaxLineUnitsLaidOut]: past that the row is clipped
-  /// rather than shaped, which is the difference between 4 ms and half a
-  /// second on a minified bundle.
+  /// rather than shaped.
   String _lineAt(int index) {
     final start = _starts[index];
     final end = index + 1 < _starts.length
@@ -119,9 +114,8 @@ class _CodeViewerState extends State<CodeViewer> {
     return clipLineForLayout(_splitText, start, math.max(start, stop));
   }
 
-  /// What a row draws: the line plus a newline, so the fragments a selection
-  /// copies join up — `getSelectedContent` concatenates each row's own text
-  /// with no separator between them.
+  /// The line plus a newline, so a copied selection joins up:
+  /// `getSelectedContent` concatenates each row's text with no separator.
   String _rowText(int index) => '${_lineAt(index)}\n';
 
   void _measure(TextStyle style, StrutStyle strut, TextScaler scaler) {
@@ -198,8 +192,7 @@ class _CodeViewerState extends State<CodeViewer> {
     return Stack(
       children: [
         Positioned.fill(child: _code(codeStyle, strut, scheme)),
-        // Outside the SelectionArea: select-all must not reach the button, and
-        // a lazy list only ever offers a screenful to the clipboard anyway.
+        // Outside the SelectionArea, so select-all cannot reach the button.
         Positioned(
           top: Insets.xs,
           right: Insets.md,
