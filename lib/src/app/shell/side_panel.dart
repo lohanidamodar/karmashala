@@ -10,6 +10,7 @@ import 'shell_shortcuts.dart';
 import 'side_panel_context.dart';
 import 'side_panel_state.dart';
 
+import '../../features/agents/presentation/agent_context_panel.dart';
 import '../../features/browser/presentation/browser_pane.dart';
 import '../../features/checkpoints/presentation/checkpoints_view.dart';
 import '../../features/flutter_apps/presentation/flutter_app_pane.dart';
@@ -52,6 +53,7 @@ class SidePanel extends ConsumerWidget {
     SidePanelSurface.decisions => AppIcons.stack,
     SidePanelSurface.todos => AppIcons.listChecks,
     SidePanelSurface.notes => AppIcons.note,
+    SidePanelSurface.agentContext => AppIcons.robot,
     SidePanelSurface.logs => AppIcons.article,
   };
 
@@ -312,6 +314,7 @@ class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
     SidePanelSurface.decisions => const DecisionRecordPanel(),
     SidePanelSurface.todos => const TodosView(),
     SidePanelSurface.notes => const NotesView(),
+    SidePanelSurface.agentContext => const AgentContextPanel(),
     SidePanelSurface.logs => const LogsPanel(),
   };
 }

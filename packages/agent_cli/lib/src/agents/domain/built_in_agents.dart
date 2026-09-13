@@ -1,6 +1,7 @@
 import '../../permissions/permission_risk.dart';
 import './agent_descriptor.dart';
 import './agent_kind.dart';
+import './agent_mcp_config.dart';
 import './agent_plan.dart';
 import './agent_permission_support.dart';
 import './agent_skill_support.dart';
@@ -719,10 +720,31 @@ const _claudeCode = AgentDescriptor(
   plan: kClaudeCodeTodoWrite,
   skills: AgentSkillSupport.homeDirectory(
     ['.claude', 'skills'],
+    projectDirectorySegments: ['.claude', 'skills'],
     evidence:
         'claude 2.1.263: --safe-mode names skills among the customizations it '
         'disables, and ~/.claude/skills/pinokio/SKILL.md is one already '
-        'installed at user level on this machine. Read 2026-09-09.',
+        'installed at user level on this machine. Read 2026-09-09. The project '
+        'root is the 2.1.270 binary\'s own `.claude/skills/<name>/SKILL.md`, '
+        'beside `~/.claude/skills/` as two separate discovery roots.',
+  ),
+  mcpConfig: AgentMcpConfigSpec.json(
+    projectFileName: '.mcp.json',
+    projectServersPath: ['mcpServers'],
+    // Store-home-relative, and it walks out: the store is `~/.claude` and the
+    // config is `~/.claude.json` beside it.
+    userFileName: '../.claude.json',
+    userServersPath: ['mcpServers'],
+    perProjectKey: 'projects',
+    perProjectServersPath: ['mcpServers'],
+    approvedKey: 'enabledMcpjsonServers',
+    refusedKey: 'disabledMcpjsonServers',
+    evidence:
+        'claude 2.1.270 on this machine: ~/.claude.json holds `mcpServers` at '
+        'its top level (the three this session was started with) and one entry '
+        'per directory under `projects`, each with its own `mcpServers`, '
+        '`enabledMcpjsonServers` and `disabledMcpjsonServers`; the binary '
+        'carries the literal `.mcp.json`. Read 2026-09-13.',
   ),
 );
 
@@ -1347,6 +1369,11 @@ const _codex = AgentDescriptor(
         'stable, and the bundled skill-installer skill installs into '
         '\$CODEX_HOME/skills — ~/.codex/skills/.system/<name>/SKILL.md on '
         'disk. Read 2026-09-09.',
+  ),
+  mcpConfig: AgentMcpConfigSpec.undeclared(
+    refusal:
+        'Codex keeps its servers in ~/.codex/config.toml, and nothing here '
+        'reads TOML yet, so what it would be given has not been read.',
   ),
 );
 
@@ -2018,5 +2045,10 @@ const _antigravity = AgentDescriptor(
         '`~/.gemini/config/skills/<name>/SKILL.md`, and its bundled '
         'agy-customizations skill names ~/.gemini/config/ as the global '
         'discovery root. Read 2026-09-09.',
+  ),
+  mcpConfig: AgentMcpConfigSpec.undeclared(
+    refusal:
+        'Nobody has established where agy reads its own MCP servers, so what '
+        'it would be given has not been read.',
   ),
 );

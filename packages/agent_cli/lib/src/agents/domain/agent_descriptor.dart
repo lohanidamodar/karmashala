@@ -1,6 +1,7 @@
 import '../../environments/environment_kind.dart';
 import '../../permissions/permission_risk.dart';
 import './agent_kind.dart';
+import './agent_mcp_config.dart';
 import './agent_plan.dart';
 import './agent_permission_support.dart';
 import './agent_skill_support.dart';
@@ -1001,6 +1002,7 @@ class AgentDescriptor {
     this.attachments = const AgentAttachmentSupport.none(),
     this.plan = const AgentPlanSupport.none(),
     this.skills = const AgentSkillSupport.none(),
+    this.mcpConfig = const AgentMcpConfigSpec.undeclared(),
   });
 
   final String id;
@@ -1056,6 +1058,14 @@ class AgentDescriptor {
   /// is not "does this CLI have skills": all three of them do. It is *where*,
   /// and on 2026-09-09 that had two different shapes.
   final AgentSkillSupport skills;
+
+  /// **Where this agent reads its own MCP servers**, so the app can report what
+  /// a session started in a directory would be given.
+  ///
+  /// Not [AgentLaunchSpec.mcp], which is the opposite direction: that one is
+  /// how Karmashala adds *itself* to one launch. Undeclared by default, and an
+  /// undeclared agent reads as unknown rather than as having none.
+  final AgentMcpConfigSpec mcpConfig;
 
   @override
   String toString() => 'AgentDescriptor($id)';

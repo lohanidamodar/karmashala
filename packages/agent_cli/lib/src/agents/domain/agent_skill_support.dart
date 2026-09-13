@@ -50,6 +50,7 @@ class AgentSkillSupport {
   const AgentSkillSupport.homeDirectory(
     this.directorySegments, {
     required this.evidence,
+    this.projectDirectorySegments = const [],
   }) : refusal = '';
 
   /// Nothing may be installed for this agent. The default, and the answer for
@@ -59,11 +60,17 @@ class AgentSkillSupport {
   /// host's words because only the host has ever looked at this CLI.
   const AgentSkillSupport.none({this.refusal = ''})
     : directorySegments = const [],
+      projectDirectorySegments = const [],
       evidence = '';
 
   /// The skills root, split so no separator has to be guessed for a Windows
   /// path, a POSIX path or a `\\wsl.localhost` UNC share.
   final List<String> directorySegments;
+
+  /// Where the same agent also discovers skills **inside a checkout**, relative
+  /// to its root. Read but never written: rule 5 above is why nothing is
+  /// installed here.
+  final List<String> projectDirectorySegments;
 
   /// Empty exactly when nothing is installed.
   final String evidence;
