@@ -29,6 +29,56 @@ class EditorTabView extends ConsumerStatefulWidget {
   ConsumerState<EditorTabView> createState() => _EditorTabViewState();
 }
 
+/// Why this file cannot be typed into, said once at the top rather than left
+/// for the reader to discover by pressing a key.
+class _ReadOnlyNotice extends StatelessWidget {
+  const _ReadOnlyNotice({required this.bytes, required this.onOpenExternally});
+
+  final int bytes;
+  final VoidCallback onOpenExternally;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      color: scheme.surfaceContainerHigh,
+      padding: const EdgeInsets.fromLTRB(
+        Insets.md,
+        Insets.xs,
+        Insets.xs,
+        Insets.xs,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            AppIcons.info,
+            size: Chrome.iconAction,
+            color: scheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: Insets.sm),
+          Expanded(
+            child: Text(
+              'Read-only: ${_megabytes(bytes)} is too large to edit here '
+              'without the editor becoming slow.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          TextButton.icon(
+            onPressed: onOpenExternally,
+            icon: const Icon(AppIcons.arrowSquareOut, size: Chrome.iconAction),
+            label: const Text('Open in external editor'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _megabytes(int bytes) => bytes >= 1024 * 1024
+      ? '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB'
+      : '${(bytes / 1024).round()} KB';
+}
+
 class _EditorTabViewState extends ConsumerState<EditorTabView> {
   final _controller = CodeEditingController();
   final _focus = FocusNode(debugLabel: 'editor');
@@ -217,13 +267,15 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
       children: [
         _header(document),
         Expanded(child: _body(document)),
-        if (document != null && document.isReadable) _footer(document),
+        if (document != null && document.isReadable && document.isEditable)
+          _footer(document),
       ],
     );
   }
 
   Widget _header(SourceDocument? document) {
-    final readable = document != null && document.isReadable;
+    final editable =
+        document != null && document.isReadable && document.isEditable;
     final dirty = document?.isDirty ?? false;
     return PaneHeader(
       icon: AppIcons.fileCode,
@@ -238,7 +290,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
               tooltip: 'Unsaved changes',
             ),
           ),
-        if (readable) ...[
+        if (editable) ...[
           IconButton(
             tooltip: 'Save (Ctrl+S)',
             visualDensity: VisualDensity.compact,
@@ -311,22 +363,33 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
         ),
       );
     }
-    _controller
-      ..language = document.language
-      ..highlightingEnabled = document.canHighlight;
     final fontSize = ref.watch(
       settingsControllerProvider.select((s) => s.terminalFontSize),
     );
-    final reveal = ref.watch(
-      editorRevealLineProvider.select((lines) => lines[widget.hostPath]),
-    );
-    if (reveal != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          ref.read(editorRevealLineProvider.notifier).clear(widget.hostPath);
-        }
-      });
+    final reveal = _takeRevealLine();
+    // Too big to edit at a usable speed, so it is drawn a screenful at a time
+    // instead of handed whole to a field. Nothing is missing but typing.
+    if (!document.isEditable) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _ReadOnlyNotice(
+            bytes: document.text.length,
+            onOpenExternally: _openExternally,
+          ),
+          Expanded(
+            child: CodeViewer(
+              text: document.text,
+              fontSize: fontSize,
+              revealLine: reveal,
+            ),
+          ),
+        ],
+      );
     }
+    _controller
+      ..language = document.language
+      ..highlightingEnabled = document.canHighlight;
     return CodeField(
       controller: _controller,
       focusNode: _focus,
@@ -334,6 +397,22 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
       revealLine: reveal,
       onSave: _save,
     );
+  }
+
+  /// The line this file was asked to show, consumed: cleared once read, so
+  /// asking for the same line twice scrolls twice.
+  int? _takeRevealLine() {
+    final line = ref.watch(
+      editorRevealLineProvider.select((lines) => lines[widget.hostPath]),
+    );
+    if (line != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ref.read(editorRevealLineProvider.notifier).clear(widget.hostPath);
+        }
+      });
+    }
+    return line;
   }
 
   /// Where the caret is, and what the file is being read as — questions a

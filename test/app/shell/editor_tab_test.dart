@@ -42,6 +42,7 @@ import '../../support/fixtures.dart';
 const _path = r'C:\repo\lib\counter.dart';
 const _binary = r'C:\repo\build\app.so';
 const _initial = 'void main() {\n  print(1);\n}\n';
+const _huge = r'C:\repo\build\bundle.js';
 
 class _FakeStore extends DocumentStore {
   _FakeStore(this.disk);
@@ -86,6 +87,9 @@ class _FakeStore extends DocumentStore {
       savedText: text,
       language: highlightLanguageFor(hostPath),
       stamp: await stamp(hostPath),
+      mode: text.length > kEditableSizeLimit
+          ? DocumentMode.view
+          : DocumentMode.edit,
     );
   }
 
@@ -114,7 +118,12 @@ void main() {
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
     AgentInstallationDao(db).insert(agentInstallation());
-    store = _FakeStore({_path: _initial, _binary: 'ELF\u0000\u0001'});
+    store = _FakeStore({
+      _path: _initial,
+      _binary: 'ELF\u0000\u0001',
+      // Comfortably over kEditableSizeLimit, so it opens in the viewer.
+      _huge: List.generate(60000, (i) => 'var x$i = $i;').join('\n'),
+    });
   });
   tearDown(() => db.close());
 
@@ -326,16 +335,52 @@ void main() {
     expect(field.controller.text, 'after the restart\n');
   });
 
+  testWidgets('a file too big to edit opens read-only, and says so', (
+    tester,
+  ) async {
+    await openFile(tester, _huge);
+
+    // No field to type into, and the reason is on screen rather than left for
+    // the reader to discover by pressing a key.
+    expect(find.byType(CodeViewer), findsOneWidget);
+    expect(find.byType(CodeField), findsNothing);
+    expect(find.textContaining('Read-only'), findsOneWidget);
+    expect(find.text('Open in external editor'), findsOneWidget);
+    // Nothing that claims it could be saved.
+    expect(find.byTooltip('Save (Ctrl+S)'), findsNothing);
+  });
+
+  testWidgets('and that file cannot be edited or saved behind the viewer', (
+    tester,
+  ) async {
+    final container = await openFile(tester, _huge);
+    final documents = container.read(openDocumentsProvider.notifier);
+    final before = store.disk[_huge];
+
+    documents.edit(_huge, 'nope');
+    final outcome = await documents.save(_huge);
+
+    expect(documents.isDirty(_huge), isFalse);
+    expect(outcome.ok, isFalse);
+    expect(store.disk[_huge], before);
+  });
+
   testWidgets('a file it will not open says why, and offers the way out', (
     tester,
   ) async {
     await openFile(tester, _binary);
 
     expect(find.byType(CodeField), findsNothing);
+    expect(find.byType(CodeViewer), findsNothing);
     expect(
       find.text('This file is binary, so it cannot be edited as text.'),
       findsOneWidget,
     );
     expect(find.text('Open in external editor'), findsOneWidget);
+    // A refused file is not an editable one: `isEditable` is about size alone
+    // and stays true for it, so the header must ask whether it opened first.
+    expect(find.byTooltip('Save (Ctrl+S)'), findsNothing);
+    expect(find.byTooltip('Reload from disk'), findsNothing);
+    expect(find.textContaining('Ln 1, Col 1'), findsNothing);
   });
 }

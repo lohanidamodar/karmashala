@@ -218,18 +218,31 @@ const _sampleDiff = """
  }
 """;
 
+/// A file past kEditableSizeLimit, so the scene opens the read-only viewer.
+final _bigFile = r'C:\src\karmashala\build\web\main.dart.js';
+final _bigSource = List.generate(
+  60000,
+  (i) => "  var t$i = a$i.call(b$i, 'chunk-$i'); // minified line $i",
+).join('\n');
+
 /// Serves [_sampleSource] so the scene never touches a real file.
 class _SampleStore extends DocumentStore {
   const _SampleStore();
 
   @override
-  Future<SourceDocument> load(String hostPath) async => SourceDocument(
-    hostPath: hostPath,
-    text: _sampleSource,
-    savedText: _sampleSource,
-    language: 'dart',
-    stamp: const FileStamp(length: 0, modified: null),
-  );
+  Future<SourceDocument> load(String hostPath) async {
+    final text = hostPath == _bigFile ? _bigSource : _sampleSource;
+    return SourceDocument(
+      hostPath: hostPath,
+      text: text,
+      savedText: text,
+      language: 'dart',
+      stamp: const FileStamp(length: 0, modified: null),
+      mode: text.length > kEditableSizeLimit
+          ? DocumentMode.view
+          : DocumentMode.edit,
+    );
+  }
 }
 
 void main() {
@@ -588,6 +601,20 @@ void main() {
         container
             .read(diffTabActionsProvider)
             .open('lib/src/app/shell/side_panel.dart');
+        await tester.pump();
+      },
+    );
+  });
+
+  testWidgets('dark editor, a file too big to edit', (tester) async {
+    await shoot(
+      tester,
+      name: 'dark-editor-readonly',
+      size: desktop,
+      brightness: Brightness.dark,
+      panel: null,
+      afterMount: (tester) async {
+        container.read(editorTabActionsProvider).open(_bigFile);
         await tester.pump();
       },
     );
