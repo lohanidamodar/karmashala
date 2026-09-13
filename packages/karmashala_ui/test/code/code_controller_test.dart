@@ -132,6 +132,31 @@ void main() {
     });
   });
 
+  group('a line the engine is asked to shape', () {
+    test('a short line is handed over whole', () {
+      expect(clipLineForLayout('final a = 1;'), 'final a = 1;');
+      expect(clipLineForLayout('abcdef', 2, 4), 'cd');
+      expect(clipLineForLayout(''), '');
+    });
+
+    test('a minified line is cut to the cap', () {
+      final line = 'x' * (kMaxLineUnitsLaidOut * 3);
+
+      expect(clipLineForLayout(line), hasLength(kMaxLineUnitsLaidOut));
+      expect(clipLineForLayout('.$line', 1), hasLength(kMaxLineUnitsLaidOut));
+    });
+
+    test('the cut never lands inside a surrogate pair', () {
+      // An emoji straddling the cap would otherwise leave half of itself,
+      // which lays out as a replacement glyph of its own width.
+      final line = '${'x' * (kMaxLineUnitsLaidOut - 1)}😀 rest';
+
+      final clipped = clipLineForLayout(line);
+      expect(clipped, hasLength(kMaxLineUnitsLaidOut - 1));
+      expect(clipped.codeUnits.last, lessThan(0xD800));
+    });
+  });
+
   group('indentation', () {
     CodeEditingController at(String text, int offset) =>
         CodeEditingController(text: text)
@@ -140,7 +165,10 @@ void main() {
     test('Enter continues the line it left', () {
       final controller = at('  foo', 5);
 
-      expect(controller.handleKey(LogicalKeyboardKey.enter, shift: false), isTrue);
+      expect(
+        controller.handleKey(LogicalKeyboardKey.enter, shift: false),
+        isTrue,
+      );
       expect(controller.text, '  foo\n  ');
       expect(controller.selection.baseOffset, 8);
     });
@@ -148,7 +176,10 @@ void main() {
     test('Enter after an opening brace adds a level', () {
       final controller = at('  if (x) {', 10);
 
-      expect(controller.handleKey(LogicalKeyboardKey.enter, shift: false), isTrue);
+      expect(
+        controller.handleKey(LogicalKeyboardKey.enter, shift: false),
+        isTrue,
+      );
       expect(controller.text, '  if (x) {\n    ');
       expect(controller.selection.baseOffset, 15);
     });
@@ -163,7 +194,10 @@ void main() {
     test('Tab inserts one indent at the caret', () {
       final controller = at('ab', 1);
 
-      expect(controller.handleKey(LogicalKeyboardKey.tab, shift: false), isTrue);
+      expect(
+        controller.handleKey(LogicalKeyboardKey.tab, shift: false),
+        isTrue,
+      );
       expect(controller.text, 'a${CodeEditingController.indent}b');
       expect(controller.selection.baseOffset, 3);
     });
@@ -194,15 +228,24 @@ void main() {
     test('Shift+Tab at column 0 does nothing and does not consume the key', () {
       final controller = at('foo', 0);
 
-      expect(controller.handleKey(LogicalKeyboardKey.tab, shift: true), isFalse);
+      expect(
+        controller.handleKey(LogicalKeyboardKey.tab, shift: true),
+        isFalse,
+      );
       expect(controller.text, 'foo');
     });
 
     test('any other key is left alone', () {
       final controller = at('foo', 3);
 
-      expect(controller.handleKey(LogicalKeyboardKey.keyA, shift: false), isFalse);
-      expect(controller.handleKey(LogicalKeyboardKey.escape, shift: true), isFalse);
+      expect(
+        controller.handleKey(LogicalKeyboardKey.keyA, shift: false),
+        isFalse,
+      );
+      expect(
+        controller.handleKey(LogicalKeyboardKey.escape, shift: true),
+        isFalse,
+      );
       expect(controller.text, 'foo');
     });
 
@@ -210,7 +253,10 @@ void main() {
       final controller = CodeEditingController(text: 'foo');
 
       expect(controller.selection.isValid, isFalse);
-      expect(controller.handleKey(LogicalKeyboardKey.tab, shift: false), isFalse);
+      expect(
+        controller.handleKey(LogicalKeyboardKey.tab, shift: false),
+        isFalse,
+      );
       expect(controller.text, 'foo');
     });
   });

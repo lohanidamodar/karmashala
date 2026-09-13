@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../app_icons.dart';
 import '../design_tokens.dart';
 import 'code_field.dart' show kCodeLineHeight;
 import 'code_gutter.dart';
@@ -19,6 +21,7 @@ class CodeViewer extends StatefulWidget {
     this.fontSize = 13,
     this.showLineNumbers = true,
     this.revealLine,
+    this.onCopiedAll,
     super.key,
   });
 
@@ -28,6 +31,10 @@ class CodeViewer extends StatefulWidget {
 
   /// A 1-based line to put on screen when it changes.
   final int? revealLine;
+
+  /// Called after "Copy file" has put the whole buffer on the clipboard, so a
+  /// host can confirm it. Null copies silently.
+  final VoidCallback? onCopiedAll;
 
   @override
   State<CodeViewer> createState() => _CodeViewerState();
@@ -48,9 +55,8 @@ class _CodeViewerState extends State<CodeViewer> {
   String _measuredText = '';
   double _measuredFontSize = 0;
 
-  /// How wide a line is laid out before the rest of it is simply clipped. A
-  /// minified bundle is one line of several megabytes, and laying that out is
-  /// the one cost a per-row viewer can still hit.
+  /// A ceiling on the *width* [kMaxLineUnitsLaidOut] code units can reach, for
+  /// a font whose glyphs are wide or a large text scale.
   static const double _maxLineWidth = 40000;
 
   @override
@@ -97,6 +103,9 @@ class _CodeViewerState extends State<CodeViewer> {
     _starts = starts;
   }
 
+  /// One line, cut to [kMaxLineUnitsLaidOut]: past that the row is clipped
+  /// rather than shaped, which is the difference between 4 ms and half a
+  /// second on a minified bundle.
   String _lineAt(int index) {
     final start = _starts[index];
     final end = index + 1 < _starts.length
@@ -106,8 +115,13 @@ class _CodeViewerState extends State<CodeViewer> {
     final stop = end > start && _splitText.codeUnitAt(end - 1) == 0x0D
         ? end - 1
         : end;
-    return _splitText.substring(start, math.max(start, stop));
+    return clipLineForLayout(_splitText, start, math.max(start, stop));
   }
+
+  /// What a row draws: the line plus a newline, so the fragments a selection
+  /// copies join up — `getSelectedContent` concatenates each row's own text
+  /// with no separator between them.
+  String _rowText(int index) => '${_lineAt(index)}\n';
 
   void _measure(TextStyle style, StrutStyle strut, TextScaler scaler) {
     final fontSize = scaler.scale(widget.fontSize);
@@ -175,6 +189,38 @@ class _CodeViewerState extends State<CodeViewer> {
     _split();
     _measure(codeStyle, strut, MediaQuery.textScalerOf(context));
 
+    return Stack(
+      children: [
+        Positioned.fill(child: _code(codeStyle, strut, scheme)),
+        // Outside the SelectionArea: select-all must not reach the button, and
+        // a lazy list only ever offers a screenful to the clipboard anyway.
+        Positioned(
+          top: Insets.xs,
+          right: Insets.md,
+          child: IconButton(
+            tooltip: 'Copy file',
+            onPressed: _copyAll,
+            icon: const Icon(AppIcons.copy),
+            iconSize: Chrome.icon,
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              backgroundColor: scheme.surfaceContainerHighest.withValues(
+                alpha: 0.85,
+              ),
+              foregroundColor: scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _copyAll() async {
+    await Clipboard.setData(ClipboardData(text: widget.text));
+    widget.onCopiedAll?.call();
+  }
+
+  Widget _code(TextStyle codeStyle, StrutStyle strut, ColorScheme scheme) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final bodyWidth = math.max(0.0, constraints.maxWidth - _gutterWidth);
@@ -204,7 +250,7 @@ class _CodeViewerState extends State<CodeViewer> {
                       itemExtent: _rowHeight,
                       itemCount: _starts.length,
                       itemBuilder: (context, index) => Text(
-                        _lineAt(index),
+                        _rowText(index),
                         style: codeStyle,
                         strutStyle: strut,
                         maxLines: 1,

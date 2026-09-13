@@ -33,6 +33,7 @@ void main() {
     double fontSize = 13,
     VoidCallback? onSave,
     int? revealLine,
+    TextScaler scaler = TextScaler.noScaling,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -40,13 +41,18 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: CodeField(
-            controller: controller,
-            showLineNumbers: showLineNumbers,
-            readOnly: readOnly,
-            fontSize: fontSize,
-            onSave: onSave,
-            revealLine: revealLine,
+          body: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: scaler),
+              child: CodeField(
+                controller: controller,
+                showLineNumbers: showLineNumbers,
+                readOnly: readOnly,
+                fontSize: fontSize,
+                onSave: onSave,
+                revealLine: revealLine,
+              ),
+            ),
           ),
         ),
       ),
@@ -245,6 +251,40 @@ void main() {
     // A single-line field's box is its own line box plus a couple of pixels,
     // so the check is against a second row rather than an exact height.
     expect(field.height, lessThan(rowHeight(tester) * 2));
+  });
+
+  testWidgets('a minified line is measured from a sample, and still fits', (
+    tester,
+  ) async {
+    // The measurement is capped at kMaxLineUnitsLaidOut code units, so the
+    // width past it is extrapolated — and the line must still not wrap, or
+    // the gutter would number rows the buffer does not have.
+    const units = 40 * kMaxLineUnitsLaidOut;
+    controller.text = 'x' * units;
+    await pump(tester, size: const Size(390, 844));
+
+    final field = tester.getSize(find.byType(TextField));
+    expect(field.height, lessThan(rowHeight(tester) * 2));
+    expect(gutter(tester).lineCount, 1);
+    // The sample is a fortieth of the line; the box is still the whole line.
+    final sample = tester.renderObject<RenderBox>(find.byType(TextField));
+    expect(sample.size.width, greaterThan(units * 0.9));
+  });
+
+  testWidgets('it draws at a text scale §5 asks for', (tester) async {
+    controller.text = 'alpha\nbeta\ngamma';
+    await pump(tester);
+    final unscaled = gutter(tester);
+
+    await pump(tester, scaler: const TextScaler.linear(1.8));
+    final scaled = gutter(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(scaled.rowHeight, greaterThan(unscaled.rowHeight));
+    expect(scaled.width, greaterThan(unscaled.width));
+    // The row is still the field's own line box at any scale.
+    final field = tester.getSize(find.byType(TextField)).height;
+    expect(scaled.rowHeight * 3, closeTo(field, 0.01));
   });
 
   for (final size in const [Size(390, 844), Size(1440, 900)]) {

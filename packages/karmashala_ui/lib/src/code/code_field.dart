@@ -133,19 +133,39 @@ class _CodeFieldState extends State<CodeField> {
       start = i + 1;
     }
 
-    _longestLineWidth = longestEnd == longestStart
-        ? 0
-        : _layout(
-            text.substring(longestStart, longestEnd),
-            style,
-            strut,
-            scaler,
-          ).width;
+    _longestLineWidth = _widthOfLongest(
+      text,
+      longestStart,
+      longestEnd,
+      style,
+      strut,
+      scaler,
+    );
     _lineHeight = _layout('0', style, strut, scaler).height;
 
     _gutterWidth = widget.showLineNumbers
         ? CodeGutter.widthFor(widget.controller.lineCount, style, scaler)
         : 0;
+  }
+
+  /// The widest line, shaped to at most [kMaxLineUnitsLaidOut] code units: a
+  /// 400 KB minified bundle is one line, and this runs per keystroke. Past the
+  /// cap the width is extrapolated from the sample, which is exact in a
+  /// monospace face and keeps the field from wrapping what it cannot measure.
+  double _widthOfLongest(
+    String text,
+    int start,
+    int end,
+    TextStyle style,
+    StrutStyle strut,
+    TextScaler scaler,
+  ) {
+    if (end == start) return 0;
+    final sample = clipLineForLayout(text, start, end);
+    final width = _layout(sample, style, strut, scaler).width;
+    return sample.length >= end - start
+        ? width
+        : width * (end - start) / sample.length;
   }
 
   Size _layout(

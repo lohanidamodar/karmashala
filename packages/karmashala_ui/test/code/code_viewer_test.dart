@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/code.dart';
 
@@ -9,12 +10,32 @@ import 'package:karmashala_ui/code.dart';
 /// others. A test cannot time a frame reliably, so it counts widgets instead:
 /// a hundred thousand lines must not become a hundred thousand `Text`s.
 void main() {
+  final copied = <String>[];
+
+  setUp(() {
+    copied.clear();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            copied.add((call.arguments as Map)['text'] as String);
+          }
+          return null;
+        });
+  });
+
+  tearDown(
+    () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null),
+  );
+
   Future<void> pump(
     WidgetTester tester,
     String text, {
     Size size = const Size(1440, 900),
     bool showLineNumbers = true,
     int? revealLine,
+    TextScaler scaler = TextScaler.noScaling,
+    VoidCallback? onCopiedAll,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
@@ -23,10 +44,16 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: CodeViewer(
-            text: text,
-            showLineNumbers: showLineNumbers,
-            revealLine: revealLine,
+          body: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(textScaler: scaler),
+              child: CodeViewer(
+                text: text,
+                showLineNumbers: showLineNumbers,
+                revealLine: revealLine,
+                onCopiedAll: onCopiedAll,
+              ),
+            ),
           ),
         ),
       ),
@@ -34,8 +61,9 @@ void main() {
     await tester.pump();
   }
 
-  /// One drawn row, found by the text it carries.
-  Finder row(String text) => find.text(text);
+  /// One drawn row, found by the text it carries — which ends in the newline
+  /// that makes a copied selection join up.
+  Finder row(String text) => find.text('$text\n');
 
   String lines(int count) =>
       List.generate(count, (i) => 'line ${i + 1}').join('\n');
@@ -142,6 +170,83 @@ void main() {
     expect(tester.takeException(), isNull);
 
     await pump(tester, lines(5000), size: const Size(1440, 900));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('it draws at a text scale §5 asks for', (tester) async {
+    await pump(tester, lines(200));
+    final unscaled = tester.widget<CodeGutter>(find.byType(CodeGutter));
+
+    await pump(tester, lines(200), scaler: const TextScaler.linear(1.8));
+    final scaled = tester.widget<CodeGutter>(find.byType(CodeGutter));
+
+    expect(tester.takeException(), isNull);
+    expect(scaled.rowHeight, greaterThan(unscaled.rowHeight));
+    expect(scaled.width, greaterThan(unscaled.width));
+  });
+
+  group('copying', () {
+    /// Select-all then copy, the way the shortcut does: the region's own
+    /// action, not the deprecated `copySelection`.
+    Future<void> selectAllAndCopy(WidgetTester tester) async {
+      tester
+          .state<SelectableRegionState>(find.byType(SelectableRegion))
+          .selectAll();
+      await tester.pump();
+      Actions.invoke(
+        tester.element(find.byType(ListView)),
+        CopySelectionTextIntent.copy,
+      );
+      await tester.pump();
+    }
+
+    testWidgets('a selection keeps the line breaks it spans', (tester) async {
+      await pump(tester, 'alpha\nbeta\ngamma');
+
+      await selectAllAndCopy(tester);
+
+      expect(copied, isNotEmpty);
+      expect(copied.single, contains('alpha\nbeta\ngamma'));
+    });
+
+    testWidgets('"Copy file" copies the file, not the screenful', (
+      tester,
+    ) async {
+      var confirmed = 0;
+      final text = lines(100000);
+      await pump(tester, text, onCopiedAll: () => confirmed++);
+
+      // The rows off screen were never built, so no selection could reach
+      // them; the buffer is in memory and the button hands it over whole.
+      await tester.tap(find.byTooltip('Copy file'));
+      await tester.pump();
+
+      expect(copied.single, text);
+      expect(confirmed, 1);
+    });
+
+    testWidgets('a viewer with no host to confirm still copies', (
+      tester,
+    ) async {
+      await pump(tester, 'alpha\nbeta');
+
+      await tester.tap(find.byTooltip('Copy file'));
+      await tester.pump();
+
+      expect(copied.single, 'alpha\nbeta');
+    });
+  });
+
+  testWidgets('one enormous line is clipped, never shaped whole', (
+    tester,
+  ) async {
+    // A minified bundle is one line of megabytes. Laying it out is the one
+    // cost a per-row viewer can still hit, and it hit it: 1.6M code units on
+    // one line cost 524 ms to open.
+    await pump(tester, 'x' * 400000);
+
+    final drawn = tester.widget<Text>(rows().first).data!;
+    expect(drawn.length, lessThanOrEqualTo(kMaxLineUnitsLaidOut + 1));
     expect(tester.takeException(), isNull);
   });
 }

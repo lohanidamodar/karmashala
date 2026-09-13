@@ -13,12 +13,17 @@ bool isCodeLineBreak(int codeUnit) =>
 /// can still hit.
 const int kMaxLineUnitsLaidOut = 5000;
 
-/// [line] cut to [kMaxLineUnitsLaidOut] code units, never through a surrogate
-/// pair.
-String clipLineForLayout(String line) {
-  if (line.length <= kMaxLineUnitsLaidOut) return line;
-  var end = kMaxLineUnitsLaidOut;
-  final last = line.codeUnitAt(end - 1);
-  if (last >= 0xD800 && last <= 0xDBFF) end--;
-  return line.substring(0, end);
+/// [source] from [start] to [end], cut to [kMaxLineUnitsLaidOut] code units and
+/// never through a surrogate pair. Cut here rather than after a `substring`, so
+/// a megabyte-long line is never copied to be thrown away.
+String clipLineForLayout(String source, [int start = 0, int? end]) {
+  final stop = end ?? source.length;
+  var cut = stop - start > kMaxLineUnitsLaidOut
+      ? start + kMaxLineUnitsLaidOut
+      : stop;
+  if (cut < stop && cut > start) {
+    final last = source.codeUnitAt(cut - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) cut--;
+  }
+  return source.substring(start, cut);
 }
