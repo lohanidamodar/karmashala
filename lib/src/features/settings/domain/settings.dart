@@ -69,7 +69,7 @@ class Settings {
     this.explorerPaneWidth = 304,
     this.detailSidebarWidth = 320,
     this.compactDensity = true,
-    this.explorerGroupByEnvironment = false,
+    this.collapsedExplorerNodes = const [],
     this.windowWidth,
     this.windowHeight,
     this.defaultSystemTerminalId,
@@ -156,10 +156,10 @@ class Settings {
 
   final bool compactDensity;
 
-  /// Whether the Explorer's spine is the environment rather than the project.
-  /// Off by default: what you are working on is the usual question, and where
-  /// it runs is the one you ask when something remote is involved.
-  final bool explorerGroupByEnvironment;
+  /// Explorer rows the user has folded away, by [ExplorerNode.id] — a machine,
+  /// one of its sections, or a context inside it. Absent means expanded, so a
+  /// machine that appears after this was written opens rather than hiding.
+  final List<String> collapsedExplorerNodes;
 
   final double? windowWidth;
   final double? windowHeight;
@@ -276,7 +276,7 @@ class Settings {
     double? explorerPaneWidth,
     double? detailSidebarWidth,
     bool? compactDensity,
-    bool? explorerGroupByEnvironment,
+    List<String>? collapsedExplorerNodes,
     double? windowWidth,
     double? windowHeight,
     String? defaultSystemTerminalId,
@@ -332,8 +332,8 @@ class Settings {
     explorerPaneWidth: explorerPaneWidth ?? this.explorerPaneWidth,
     detailSidebarWidth: detailSidebarWidth ?? this.detailSidebarWidth,
     compactDensity: compactDensity ?? this.compactDensity,
-    explorerGroupByEnvironment:
-        explorerGroupByEnvironment ?? this.explorerGroupByEnvironment,
+    collapsedExplorerNodes:
+        collapsedExplorerNodes ?? this.collapsedExplorerNodes,
     windowWidth: windowWidth ?? this.windowWidth,
     windowHeight: windowHeight ?? this.windowHeight,
     defaultSystemTerminalId:
@@ -413,7 +413,7 @@ class Settings {
     'explorerPaneWidth': explorerPaneWidth,
     'detailSidebarWidth': detailSidebarWidth,
     'compactDensity': compactDensity,
-    'explorerGroupByEnvironment': explorerGroupByEnvironment,
+    'collapsedExplorerNodes': collapsedExplorerNodes,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
     if (defaultSystemTerminalId != null)
@@ -528,9 +528,11 @@ class Settings {
           : 'auto',
       explorerPaneWidth: toDouble(json['explorerPaneWidth']) ?? 304,
       detailSidebarWidth: toDouble(json['detailSidebarWidth']) ?? 320,
-      explorerGroupByEnvironment: json['explorerGroupByEnvironment'] is bool
-          ? json['explorerGroupByEnvironment'] as bool
-          : false,
+      collapsedExplorerNodes: json['collapsedExplorerNodes'] is List
+          ? (json['collapsedExplorerNodes'] as List)
+                .whereType<String>()
+                .toList()
+          : const [],
       compactDensity: json['compactDensity'] is bool
           ? json['compactDensity'] as bool
           : true,
@@ -663,6 +665,7 @@ class Settings {
       other.logToFile == logToFile &&
       other.logBufferSize == logBufferSize &&
       _listEquals(other.pinnedProjectIds, pinnedProjectIds) &&
+      _listEquals(other.collapsedExplorerNodes, collapsedExplorerNodes) &&
       _listEquals(other.pinnedSessionIds, pinnedSessionIds) &&
       _mapEquals(other.permissions, permissions) &&
       _stringMapEquals(other.defaultModels, defaultModels) &&
@@ -688,7 +691,10 @@ class Settings {
     defaultCodeEditorId,
     customEditorPath,
     Object.hash(
-      Object.hashAll(pinnedProjectIds),
+      Object.hash(
+        Object.hashAll(pinnedProjectIds),
+        Object.hashAll(collapsedExplorerNodes),
+      ),
       Object.hashAll(pinnedSessionIds),
       launcherHotkeyJson,
       launcherHotkeyEnabled,

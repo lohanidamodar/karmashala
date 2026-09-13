@@ -5,6 +5,7 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_sections.dart';
+import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -220,6 +221,9 @@ void main() {
       container
           .read(settingsControllerProvider.notifier)
           .setHideEmptySections(hideEmpty);
+      // The tree's spine is the machine; the saved views are the surface
+      // these sections are drawn on.
+      container.read(explorerShowingViewsProvider.notifier).toggle();
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -402,6 +406,9 @@ void main() {
           .read(settingsControllerProvider.notifier)
           .setHideEmptySections(hideEmpty);
       db.reset();
+      // The tree's spine is the machine; the saved views are the surface
+      // these sections are drawn on.
+      container.read(explorerShowingViewsProvider.notifier).toggle();
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,

@@ -136,9 +136,18 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
-  /// Which spine the Explorer draws: the project, or the machine it runs on.
-  void setExplorerGroupByEnvironment(bool value) {
-    state = state.copyWith(explorerGroupByEnvironment: value);
+  /// Folds an Explorer row away, or opens it again. Absent means expanded, so
+  /// a machine that appears later opens rather than inheriting somebody's fold.
+  void toggleExplorerNodeCollapsed(String nodeId) {
+    final collapsed = state.collapsedExplorerNodes;
+    state = state.copyWith(
+      collapsedExplorerNodes: collapsed.contains(nodeId)
+          ? [
+              for (final id in collapsed)
+                if (id != nodeId) id,
+            ]
+          : [...collapsed, nodeId],
+    );
     _save();
   }
 

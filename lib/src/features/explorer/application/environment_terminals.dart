@@ -40,6 +40,7 @@ class EnvironmentTerminals {
     required this.terminals,
     required this.readAt,
     this.problem,
+    this.busy = false,
   });
 
   /// Nothing has been asked yet. Not an empty machine — an unasked one.
@@ -52,6 +53,10 @@ class EnvironmentTerminals {
 
   /// The machine's own words for why it could not be asked.
   final String? problem;
+
+  /// A question is in flight. Kept beside the last answer rather than
+  /// replacing it, so a refresh does not blank the rows underneath.
+  final bool busy;
 
   bool get asked => readAt != null;
 

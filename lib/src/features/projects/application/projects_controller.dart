@@ -360,14 +360,11 @@ final projectPathMissingProvider = FutureProvider.autoDispose
 
       var path = project.root.path;
       if (env.kind == EnvironmentKind.wsl) {
-        ExecutionEnvironment? windows;
-        for (final e in environmentDao.getAll()) {
-          if (e.kind == EnvironmentKind.windowsNative) {
-            windows = e;
-            break;
-          }
+        // Swept once for the whole workspace, not once per WSL project.
+        final windows = ref.watch(localEnvironmentProvider);
+        if (windows == null || windows.kind != EnvironmentKind.windowsNative) {
+          return false;
         }
-        if (windows == null) return false;
         try {
           path = ref
               .read(pathTranslatorProvider)

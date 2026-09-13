@@ -1,5 +1,6 @@
-/// One of the user's contexts, the level above [Project] and a *scope filter*
-/// rather than a navigation level. Called a **context** wherever a human reads.
+/// One of the user's contexts, the level above [Project]. It is a navigation
+/// level in the Explorer — a node inside the machine its projects run on — and
+/// a scope for where new work goes. Called a **context** wherever a human reads.
 class Workspace {
   const Workspace({
     required this.id,

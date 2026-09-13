@@ -15,8 +15,6 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
-import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
-import 'package:karmashala/src/features/workspaces/presentation/workspace_scope_bar.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -39,11 +37,10 @@ import '../../support/fixtures.dart';
 /// closed scope bar wears whichever of the last three is selected, so it agrees
 /// with the menu row that set it.
 ///
-/// **The chrome is measured because it is taken from the list.** Three rows sit
-/// above the tree — the pane header, the scope bar, the search field — and at
-/// the 720x560 minimum window they are 21% of the Explorer's column. That is
-/// the ratchet: these numbers may fall, and a fourth row has to argue with a
-/// failing test first.
+/// **The chrome is measured because it is taken from the list.** Two rows sit
+/// above the tree — the pane header and the search field. The scope bar was the
+/// third until the context became a node inside its machine; the ratchet only
+/// turns down, so a row coming back has to argue with a failing test first.
 void main() {
   late AppDatabase db;
 
@@ -120,24 +117,21 @@ void main() {
       ('minimum window 720x560', Size(720, 560), 240.0),
     ]) {
       final (label, window, paneWidth) = cell;
-      testWidgets('is three rows and 109px at $label', (tester) async {
+      testWidgets('is two rows and 83px at $label', (tester) async {
         await pumpPanel(tester, window: window, paneWidth: paneWidth);
 
-        // The header is its row plus the hairline it owns; the scope bar is one
-        // dense list row, which is what makes it cost exactly one project.
+        // The header is its row plus the hairline it owns.
         expect(heightOf(tester, find.byType(PaneHeader)), Chrome.tabStrip + 1);
-        expect(heightOf(tester, find.byType(WorkspaceScopeBar)), Chrome.row);
 
         final chrome =
             heightOf(tester, find.byType(PaneHeader)) +
-            heightOf(tester, find.byType(WorkspaceScopeBar)) +
             heightOf(tester, searchBlock());
         expect(
           chrome,
-          lessThanOrEqualTo(109),
+          lessThanOrEqualTo(83),
           reason:
-              'the three rows above the tree cost two project rows '
-              'already — a fourth row, or a taller one, has to be argued for',
+              'the rows above the tree cost a project row already — a third '
+              'row, or a taller one, has to be argued for',
         );
       });
     }
@@ -148,7 +142,6 @@ void main() {
       final list = heightOf(tester, find.byType(ListView));
       final chrome =
           heightOf(tester, find.byType(PaneHeader)) +
-          heightOf(tester, find.byType(WorkspaceScopeBar)) +
           heightOf(tester, searchBlock());
       expect(chrome + list, 900);
     });
@@ -181,18 +174,6 @@ void main() {
   });
 
   group('the glyph vocabulary', () {
-    /// The leading glyph the closed scope bar is wearing.
-    IconData scopeGlyph(WidgetTester tester) => tester
-        .widget<Icon>(
-          find
-              .descendant(
-                of: find.byType(WorkspaceScopeBar),
-                matching: find.byType(Icon),
-              )
-              .first,
-        )
-        .icon!;
-
     testWidgets('the pane header no longer repeats the surface mark', (
       tester,
     ) async {
@@ -210,11 +191,25 @@ void main() {
       }
     });
 
-    testWidgets('every project is folders, never the surface mark', (
-      tester,
-    ) async {
+    /// Every glyph the tree is drawing, in row order.
+    List<IconData> glyphs(WidgetTester tester) => [
+      for (final icon in tester.widgetList<Icon>(
+        find.descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Icon),
+        ),
+      ))
+        if (icon.icon case final IconData data) data,
+    ];
+
+    testWidgets('a machine wears the mark of what it is', (tester) async {
       await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
-      expect(scopeGlyph(tester), AppIcons.folders);
+
+      expect(
+        glyphs(tester),
+        contains(AppIcons.terminal),
+        reason: 'this machine is a local one, and says so on its own row',
+      );
     });
 
     testWidgets('a context is a stack', (tester) async {
@@ -222,31 +217,20 @@ void main() {
       final games = c
           .read(workspacesControllerProvider.notifier)
           .create('Game dev');
-      c
-          .read(workspaceScopeProvider.notifier)
-          .select(WorkspaceScope.of(games.id));
+      c.read(workspacesControllerProvider.notifier).assign('p1', games.id);
       await pumpPanel(
         tester,
         window: const Size(1440, 900),
         paneWidth: 304,
         scope: c,
       );
-      expect(scopeGlyph(tester), AppIcons.stack);
-    });
 
-    testWidgets('the projects filed under nothing keep the menu mark', (
-      tester,
-    ) async {
-      final c = container();
-      c.read(workspacesControllerProvider.notifier).create('Game dev');
-      c.read(workspaceScopeProvider.notifier).select(WorkspaceScope.unassigned);
-      await pumpPanel(
-        tester,
-        window: const Size(1440, 900),
-        paneWidth: 304,
-        scope: c,
+      expect(find.text('Game dev'), findsOneWidget);
+      expect(
+        glyphs(tester),
+        contains(AppIcons.stack),
+        reason: 'the same mark the rest of the app gives a context',
       );
-      expect(scopeGlyph(tester), AppIcons.minusCircle);
     });
   });
 }

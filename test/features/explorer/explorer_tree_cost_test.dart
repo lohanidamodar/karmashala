@@ -23,19 +23,17 @@ import '../../support/fixtures.dart';
 import '../scale/scale_harness.dart';
 import '../terminal/fake_instance.dart';
 
-/// **What drawing the Explorer by machine instead of by project costs.**
+/// **What the Explorer's tree costs, counted as table sweeps.**
 ///
 /// Reported 2026-09-13 as *"grouping by environment is very slow and feels
-/// unresponsive"*. Measured against the reporter's own workspace in a debug
-/// build it is 60 ms cold and 14-20 ms warm, so the spine is not the cost —
-/// but nothing pinned that, and the shape that would make it true is one a
-/// reasonable change could introduce at any time: reading the environment of
-/// each project *per row* rather than sweeping the table once.
+/// unresponsive"*. Measured against the reporter's own workspace it was 60 ms
+/// cold and 14-20 ms warm, so the spine was never the cost — but the shape
+/// that *would* make it the cost is one a reasonable change reintroduces
+/// easily, and this file caught it once already: `projectPathMissingProvider`
+/// swept `execution_environments` once per WSL project, 34 times at a hundred.
 ///
-/// So this counts the sweep as a difference against the same panel ungrouped,
-/// the way `explorer_agent_filter_cost_test` counts its own. The claim is not
-/// that grouping is free; it is that what it adds does not grow with the
-/// workspace.
+/// Two claims, both about growth rather than about absolute numbers:
+/// the sweep is per build, and a machine nobody opened costs nothing.
 bool _isEnvSweep(String sql) =>
     sql.startsWith('SELECT * FROM execution_environments ORDER BY');
 
@@ -108,10 +106,14 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    if (grouped) {
-      container
-          .read(settingsControllerProvider.notifier)
-          .setExplorerGroupByEnvironment(true);
+    if (!grouped) {
+      // The spine is always the machine now, so the "ungrouped" arm of this
+      // measurement is the tree with every machine folded away.
+      for (final id in ['windows', 'wsl:Ubuntu', 'ssh:h1']) {
+        container
+            .read(settingsControllerProvider.notifier)
+            .toggleExplorerNodeCollapsed('env:$id');
+      }
     }
     db.reset();
     await tester.pumpWidget(
@@ -166,29 +168,27 @@ void main() {
         for (final count in scale)
           count: on[count]!.statements - off[count]!.statements,
       };
-      // Ten times the projects, the same extra work: the headers sweep the
-      // environment table once per build and read the SSH host once per group,
-      // never once per project. A delta that moves with the count is the
-      // per-row read this test exists to catch.
+      // Ten times the projects, the same sweeps: the environment table is
+      // read once for the whole tree, never once per row.
       expect(
-        sweeps[100],
-        sweeps[10],
-        reason: 'the header sweep is per build, not per project: $sweeps',
+        on[100]!.sweeps,
+        on[10]!.sweeps,
+        reason: 'a sweep that grows with the workspace is the per-row read '
+            'this test exists to catch: $sweeps',
+      );
+      // A folded machine draws no project, so it pays for none of them.
+      expect(
+        off[100]!.statements,
+        lessThan(on[100]!.statements),
+        reason: 'folding every machine away must actually save the work: '
+            '${off[100]} against ${on[100]}',
       );
       expect(
-        extra[100],
-        extra[10],
-        reason: 'grouping costs the same at 100 projects as at 10: $extra',
+        off[100]!.statements - off[10]!.statements,
+        lessThan(10),
+        reason: 'and what is left when everything is folded does not grow '
+            'with the workspace either: $extra',
       );
-      for (final count in scale) {
-        expect(
-          extra[count],
-          lessThan(count + 1),
-          reason:
-              'grouping must not add a statement per project at $count: '
-              '${on[count]} against ${off[count]}',
-        );
-      }
     });
   });
 }

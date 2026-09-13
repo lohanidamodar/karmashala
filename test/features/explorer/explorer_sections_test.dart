@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/application/checkout.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_sections.dart';
 import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
+import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -308,6 +309,9 @@ void main() {
       container
           .read(settingsControllerProvider.notifier)
           .setHideEmptySections(hideEmpty);
+      // The tree's spine is the machine; the saved views are the surface
+      // these sections are drawn on.
+      container.read(explorerShowingViewsProvider.notifier).toggle();
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
@@ -398,6 +402,9 @@ void main() {
         ],
       );
       addTearDown(container.dispose);
+      // The tree's spine is the machine; the saved views are the surface
+      // these sections are drawn on.
+      container.read(explorerShowingViewsProvider.notifier).toggle();
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,

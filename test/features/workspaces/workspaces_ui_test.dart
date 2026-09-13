@@ -12,7 +12,6 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/projects/domain/project.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
-import 'package:karmashala/src/features/workspaces/presentation/workspace_scope_bar.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
 
 import '../../support/fakes.dart';
@@ -55,17 +54,6 @@ void main() {
     container.read(projectsControllerProvider.notifier).refreshFromStore();
   }
 
-  Widget scopeBarApp() => UncontrolledProviderScope(
-    container: container,
-    child: MaterialApp(
-      debugShowCheckedModeBanner: false,
-      // The Explorer's own column: narrow, and the bar has to live in it.
-      home: const Scaffold(
-        body: SizedBox(width: 240, child: WorkspaceScopeBar()),
-      ),
-    ),
-  );
-
   Widget dialogApp() => UncontrolledProviderScope(
     container: container,
     child: const MaterialApp(
@@ -74,84 +62,22 @@ void main() {
     ),
   );
 
-  group('the scope bar', () {
-    testWidgets('reads All projects until something narrows it', (
-      tester,
-    ) async {
-      seedProjects();
-      final games = container
-          .read(workspacesControllerProvider.notifier)
-          .create('Game dev');
-      await tester.pumpWidget(scopeBarApp());
-      await tester.pumpAndSettle();
-      expect(find.text('All projects'), findsOneWidget);
-
-      await tester.tap(find.byType(WorkspaceScopeBar));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Game dev').last);
-      await tester.pumpAndSettle();
-
-      expect(container.read(workspaceScopeProvider), WorkspaceScope.of(games.id));
-      expect(find.text('Game dev'), findsOneWidget);
-    });
-
-    testWidgets('offers No context only once there is a context', (
-      tester,
-    ) async {
-      await tester.pumpWidget(scopeBarApp());
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(WorkspaceScopeBar));
-      await tester.pumpAndSettle();
-      expect(find.text('No context'), findsNothing);
-      expect(find.text('New context'), findsOneWidget);
-      await tester.tapAt(const Offset(700, 20));
-      await tester.pumpAndSettle();
-
-      container.read(workspacesControllerProvider.notifier).create('Personal');
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(WorkspaceScopeBar));
-      await tester.pumpAndSettle();
-      expect(find.text('No context'), findsOneWidget);
-      expect(find.text('Manage contexts'), findsOneWidget);
-    });
-
-    testWidgets('All comes back from a narrowed list', (tester) async {
-      seedProjects();
+  group('the scope', () {
+    // The bar that used to set this in the Explorer is gone: the context is a
+    // node inside its machine now, and choosing a scope is Quick Open's act —
+    // where new work goes, rather than what the tree lists. What still has to
+    // hold is that a scope never outlives the context it names.
+    test('a deleted context does not leave the scope naming it', () {
       final games = container
           .read(workspacesControllerProvider.notifier)
           .create('Game dev');
       container
           .read(workspaceScopeProvider.notifier)
           .select(WorkspaceScope.of(games.id));
-      await tester.pumpWidget(scopeBarApp());
-      await tester.pumpAndSettle();
-      expect(find.text('Game dev'), findsOneWidget);
-
-      await tester.tap(find.byType(WorkspaceScopeBar));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('All projects').last);
-      await tester.pumpAndSettle();
-
-      expect(container.read(workspaceScopeProvider), WorkspaceScope.all);
-      expect(container.read(workspaceScopedProjectsProvider).length, 3);
-    });
-
-    testWidgets('a deleted context does not leave the bar naming it', (
-      tester,
-    ) async {
-      final games = container
-          .read(workspacesControllerProvider.notifier)
-          .create('Game dev');
-      container
-          .read(workspaceScopeProvider.notifier)
-          .select(WorkspaceScope.of(games.id));
-      await tester.pumpWidget(scopeBarApp());
-      await tester.pumpAndSettle();
 
       container.read(workspacesControllerProvider.notifier).delete(games.id);
-      await tester.pumpAndSettle();
 
-      expect(find.text('All projects'), findsOneWidget);
+      expect(container.read(workspaceScopeProvider).isAll, isTrue);
     });
   });
 
@@ -302,18 +228,6 @@ void main() {
   });
 
   group('the window matrix', () {
-    testWidgets('the scope bar survives 720x560', (tester) async {
-      seedProjects();
-      container
-          .read(workspacesControllerProvider.notifier)
-          .create('A context with a name nobody would call short');
-      await expectSurvivesWindowMatrix(
-        tester,
-        build: scopeBarApp,
-        because: 'the selector sits in the Explorer column at every width',
-      );
-    });
-
     testWidgets('the contexts dialog survives 720x560', (tester) async {
       seedProjects(1);
       final controller = container.read(workspacesControllerProvider.notifier)

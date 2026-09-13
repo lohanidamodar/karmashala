@@ -59,6 +59,7 @@ final class EnvironmentSectionNode extends ExplorerNode {
     required this.section,
     required this.expanded,
     this.count,
+    this.detail,
   }) : super(id: 'env:$environmentId/${section.name}', depth: 1);
 
   final String environmentId;
@@ -68,6 +69,10 @@ final class EnvironmentSectionNode extends ExplorerNode {
   /// How many the section holds, or **null for not asked**. A terminals
   /// section that has not dialled must not read as empty (§19).
   final int? count;
+
+  /// The muted line on the right — an age, a refusal. Null where there is
+  /// nothing measured to say.
+  final String? detail;
 
   String get label => section.label;
 }
@@ -108,6 +113,8 @@ final class SessionRowNode extends ExplorerNode {
     required super.depth,
     required this.projectId,
     required this.session,
+    this.subPath,
+    this.pinned = false,
     this.link,
     this.parentTitle,
     this.lineageBroken = false,
@@ -115,6 +122,10 @@ final class SessionRowNode extends ExplorerNode {
 
   final String projectId;
   final Session session;
+
+  /// Where inside the project this session works, when that is not the root.
+  final String? subPath;
+  final bool pinned;
 
   /// Why this session names a parent — spawned, handed off, forked.
   final SessionLink? link;
@@ -128,10 +139,14 @@ final class ImportedRowNode extends ExplorerNode {
     required super.depth,
     required this.projectId,
     required this.session,
+    this.subPath,
+    this.pinned = false,
   }) : super(id: 'imported:${session.id}');
 
   final String projectId;
   final ImportedSession session;
+  final String? subPath;
+  final bool pinned;
 }
 
 /// One row under a machine's `Terminals`.
@@ -167,9 +182,12 @@ List<ExplorerNode> buildExplorerTree({
   required List<Workspace> contexts,
   required Set<String> collapsed,
   required Set<String> expandedProjects,
+  Set<String> expandedTerminals = const {},
   List<ExplorerNode> Function(ProjectNode node)? childrenOf,
   List<ExplorerNode> Function(EnvironmentNode node)? terminalsOf,
   int? Function(String environmentId)? terminalCountOf,
+  String? Function(String environmentId)? terminalDetailOf,
+  bool includeEmptyEnvironments = true,
 }) {
   final contextsById = {for (final context in contexts) context.id: context};
   final nodes = <ExplorerNode>[];
@@ -177,7 +195,7 @@ List<ExplorerNode> buildExplorerTree({
   for (final group in groupProjectsByEnvironment(
     projects,
     environments,
-    includeEmpty: true,
+    includeEmpty: includeEmptyEnvironments,
   )) {
     final environment = EnvironmentNode(
       environmentId: group.environmentId,
@@ -201,8 +219,12 @@ List<ExplorerNode> buildExplorerTree({
     final terminals = EnvironmentSectionNode(
       environmentId: group.environmentId,
       section: EnvironmentSection.terminals,
-      expanded: !collapsed.contains('env:${group.environmentId}/terminals'),
+      // Not from [collapsed], and deliberately not persisted: opening this
+      // dials a machine, and a fold restored at launch would dial every host
+      // on the first frame (§19).
+      expanded: expandedTerminals.contains(group.environmentId),
       count: terminalCountOf?.call(group.environmentId),
+      detail: terminalDetailOf?.call(group.environmentId),
     );
     nodes.add(terminals);
     if (terminals.expanded && terminalsOf != null) {

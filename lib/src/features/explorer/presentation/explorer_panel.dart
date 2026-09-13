@@ -19,8 +19,10 @@ import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/detected_projects_view.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../application/environment_grouping.dart';
-import 'host_terminals_node.dart';
+import '../application/environment_terminals_providers.dart';
+import '../application/explorer_tree_nodes.dart';
+import '../application/explorer_view_mode.dart';
+import 'environment_rows.dart';
 import '../../ssh/application/ssh_providers.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:agent_cli/process.dart';
@@ -51,7 +53,6 @@ import 'session_selection_bar.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/domain/workspace.dart';
 import '../../workspaces/presentation/new_context_dialog.dart';
-import '../../workspaces/presentation/workspace_scope_bar.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_defaults.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -70,6 +71,16 @@ const _newContext = 'new';
 
 /// What a project row's menu needs, resolved once by [ExplorerPanel]'s build:
 /// menus are built eagerly per row, so a per-row DAO read is one query a row.
+/// What a project row draws, resolved while the panel builds because the row
+/// itself is inflated during layout.
+typedef _ProjectFacts = ({
+  bool selected,
+  bool pinned,
+  bool missing,
+  ProjectSummary summary,
+  String? badge,
+});
+
 typedef _RowMenuFacts = ({
   List<Workspace> workspaces,
   Map<String, int> counts,
@@ -88,6 +99,11 @@ class ExplorerPanel extends ConsumerStatefulWidget {
 class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   String _query = '';
   final Set<String> _expandedProjects = {};
+
+  /// Machines whose `Terminals` the user has opened. Not persisted: opening
+  /// one dials a machine, and a fold restored at launch would dial every host
+  /// on the first frame (§19).
+  final Set<String> _expandedTerminals = {};
 
   void _showDetected() {
     ref.read(detectedProjectsControllerProvider.notifier).detect();
@@ -374,7 +390,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final focused =
         ref.watch(shellControllerProvider).focusedPane == ShellPane.explorer;
     final allProjects = ref.watch(sortedProjectsProvider);
-    final scoped = ref.watch(workspaceScopedProjectsProvider);
     // Re-read sessions whenever the workspace mutates. Not on a permission
     // mode: the panel draws none, and its children each narrow further.
     ref.watchSessionKinds(const {
@@ -387,8 +402,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
     final query = _query.trim().toLowerCase();
     final projects = query.isEmpty
-        ? scoped
-        : scoped
+        ? allProjects
+        : allProjects
               .where(
                 (p) =>
                     p.name.toLowerCase().contains(query) ||
@@ -420,7 +435,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final agentFilter = ref.watch(explorerAgentFilterProvider);
     // Watched only under the condition the sections are drawn under: watching it
     // is what pays for the empty filter — see [explorerSectionLayoutProvider].
-    final layout = query.isEmpty && projects.isNotEmpty
+    final layout = ref.watch(explorerShowingViewsProvider)
         ? ref.watch(explorerSectionLayoutProvider)
         : null;
 
@@ -430,55 +445,53 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final selecting = ref.watch(
       sessionSelectionProvider.select((s) => s.active),
     );
-    final groupByEnvironment = ref.watch(
-      settingsControllerProvider.select((s) => s.explorerGroupByEnvironment),
-    );
+    final showingViews = ref.watch(explorerShowingViewsProvider);
+    final collapsed = ref
+        .watch(settingsControllerProvider.select((s) => s.collapsedExplorerNodes))
+        .toSet();
 
     final Widget body;
-    if (projects.isEmpty) {
-      body = PanePlaceholder(
-        message: allProjects.isEmpty
-            ? 'No projects yet.\nUse + to create one from a folder, then its '
-                  'CLI sessions are imported automatically.'
-            : scoped.isEmpty
-            ? 'No projects in this context.\nPick All projects above to see '
-                  'everything.'
-            : 'No projects match "$_query".',
+    if (showingViews) {
+      body = ListView(
+        padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
+        children: explorerSectionNodes(ref),
+      );
+    } else if (allProjects.isEmpty) {
+      body = const PanePlaceholder(
+        message: 'No projects yet.\nUse + to create one from a folder, then its '
+            'CLI sessions are imported automatically.',
       );
     } else {
-      body = ListView(
-        // The same gap the rows put between themselves, above the first and
-        // below the last.
-        padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
-        children: [
-          // Spliced into the *same* list rather than wrapped in a column, so the
-          // sliver goes on inflating only what is on screen.
-          if (query.isEmpty) ...explorerSectionNodes(ref),
-          if (groupByEnvironment)
-            for (final group in groupProjectsByEnvironment(
-              projects,
-              ref.read(executionEnvironmentDaoProvider).getAll(),
-            )) ...[
-              _EnvironmentHeader(
-                key: ValueKey('env:${group.environmentId}'),
-                group: group,
-              ),
-              for (final project in group.projects)
-                ..._projectNodes(project, menuFacts),
-              // Only where there is a host to ask. Collapsed it dials nothing.
-              if (group.environment?.sshHostId case final String hostId)
-                if (ref.read(sshHostDaoProvider).getById(hostId)
-                    case final SshHost host)
-                  HostTerminalsNode(
-                    key: ValueKey('host-terminals:${host.id}'),
-                    host: host,
-                  ),
-            ]
-          else
-            for (final project in projects)
-              ..._projectNodes(project, menuFacts),
-        ],
+      final nodes = buildExplorerTree(
+        projects: projects,
+        environments: ref.watch(executionEnvironmentDaoProvider).getAll(),
+        contexts: menuFacts.workspaces,
+        collapsed: collapsed,
+        expandedProjects: _expandedProjects,
+        expandedTerminals: _expandedTerminals,
+        // A machine holding nothing is worth a row; a machine holding nothing
+        // that *matches a search* is noise.
+        includeEmptyEnvironments: query.isEmpty,
+        childrenOf: _projectChildren,
+        terminalsOf: _terminalNodes,
+        terminalCountOf: _terminalCount,
+        terminalDetailOf: _terminalDetail,
       );
+      // Watched here rather than in the row, which is inflated during layout.
+      final projectFacts = {
+        for (final node in nodes.whereType<ProjectNode>())
+          node.project.id: _factsFor(node.project),
+      };
+      body = nodes.isEmpty
+          ? PanePlaceholder(message: 'No projects match "$_query".')
+          : ListView.builder(
+              // Only the rows on screen are inflated, so the tree costs what is
+              // visible rather than what the workspace holds.
+              padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
+              itemCount: nodes.length,
+              itemBuilder: (context, index) =>
+                  _rowFor(nodes[index], menuFacts, projectFacts),
+            );
     }
 
     return PaneScaffold(
@@ -502,7 +515,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             if (projects.isNotEmpty)
               _ExplorerFilterButton(
                 filter: agentFilter,
-                groupByEnvironment: groupByEnvironment,
+                showingViews: showingViews,
                 hidingEmptySections: hidingEmptySections,
                 hiddenSections: layout?.hidden,
                 sectionsOnScreen: layout != null,
@@ -539,7 +552,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       ],
       body: Column(
         children: [
-          const WorkspaceScopeBar(),
           if (allProjects.isNotEmpty)
             Padding(
               // Inset to the row tiles' own edges: the field and the rows
@@ -570,32 +582,44 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   // --- rows ------------------------------------------------------------------
 
   /// The rows for one project: its card, then (when expanded) its tree.
-  List<Widget> _projectNodes(Project project, _RowMenuFacts menu) {
-    final selectedProjectId = ref.watch(selectedProjectIdProvider);
-    final pinned = ref.watch(
+  /// What a project row draws. Resolved while the panel builds, because the
+  /// row itself is inflated during layout, where `ref.watch` is not allowed.
+  _ProjectFacts _factsFor(Project project) => (
+    selected: project.id == ref.watch(selectedProjectIdProvider),
+    pinned: ref.watch(
       settingsControllerProvider.select((s) => s.isPinned(project.id)),
-    );
-    final expanded = _expandedProjects.contains(project.id);
-    final missing =
-        ref.watch(projectPathMissingProvider(project)).asData?.value ?? false;
+    ),
+    missing: ref.watch(projectPathMissingProvider(project)).asData?.value ?? false,
     // Sessions come from the database; changed files are whatever the
     // per-checkout providers already answered, so no header starts a git wave.
-    final summary = ref.watch(projectSummaryProvider(project.id));
-    final envDao = ref.watch(executionEnvironmentDaoProvider);
-    final env = envDao.getById(project.environmentId);
-    final envBadge = env == null ? null : environmentBadge(env);
+    summary: ref.watch(projectSummaryProvider(project.id)),
+    badge: switch (ref
+        .watch(executionEnvironmentDaoProvider)
+        .getById(project.environmentId)) {
+      final ExecutionEnvironment env => environmentBadge(env),
+      null => null,
+    },
+  );
 
-    final rows = <Widget>[
-      ProjectCard(
-        key: ValueKey('project:${project.id}'),
+  Widget _projectCard(
+    Project project,
+    _RowMenuFacts menu,
+    _ProjectFacts facts,
+    int depth,
+  ) {
+    final pinned = facts.pinned;
+    final expanded = _expandedProjects.contains(project.id);
+    return Padding(
+      padding: EdgeInsets.only(left: depth * ExplorerRow.indent),
+      child: ProjectCard(
         name: project.name,
         path: project.root.path,
         expanded: expanded,
-        selected: project.id == selectedProjectId,
-        missing: missing,
+        selected: facts.selected,
+        missing: facts.missing,
         pinned: pinned,
-        environmentBadge: envBadge,
-        summary: summary,
+        environmentBadge: facts.badge,
+        summary: facts.summary,
         onTap: () => _toggleProject(project),
         // Starts one; the menu below is where the dialog lives.
         onNewSession: () => _startWithDefaults(project),
@@ -708,18 +732,241 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           }
         },
       ),
-    ];
-    if (!expanded) return rows;
+    );
+  }
 
+  /// One row, built when it comes on screen. **No `ref.watch` here**: this
+  /// runs during layout, where watching is not allowed — everything watched
+  /// is resolved while the panel builds and arrives on the node or in [facts].
+  Widget _rowFor(
+    ExplorerNode node,
+    _RowMenuFacts menu,
+    Map<String, _ProjectFacts> facts,
+  ) => switch (node) {
+    EnvironmentNode() => ExplorerHeaderRow(
+      key: ValueKey(node.id),
+      depth: node.depth,
+      expanded: node.expanded,
+      label: node.label,
+      icon: environmentGlyph(node.kind),
+      emphasis: HeaderEmphasis.machine,
+      trailingText: environmentSummary(node),
+      tooltip: node.environment == null
+          ? 'This environment is no longer in the workspace.'
+          : null,
+      onTap: () => _toggleNode(node.id),
+      actions: [
+        ExplorerRowAction(
+          tooltip: 'Open a terminal on ${node.label}',
+          icon: AppIcons.plus,
+          onPressed: () => _openTerminalOn(node),
+        ),
+      ],
+    ),
+    EnvironmentSectionNode() => ExplorerHeaderRow(
+      key: ValueKey(node.id),
+      depth: node.depth,
+      expanded: node.expanded,
+      label: node.label,
+      trailingText:
+          node.detail ?? (node.count == null ? null : '${node.count}'),
+      onTap: () => node.section == EnvironmentSection.terminals
+          ? _toggleTerminals(node.environmentId)
+          : _toggleNode(node.id),
+    ),
+    ContextNode() => ExplorerHeaderRow(
+      key: ValueKey(node.id),
+      depth: node.depth,
+      expanded: node.expanded,
+      label: node.label,
+      icon: AppIcons.stack,
+      emphasis: HeaderEmphasis.context,
+      trailingText: '${node.projectCount}',
+      onTap: () => _toggleNode(node.id),
+    ),
+    ProjectNode() => _projectCard(
+      node.project,
+      menu,
+      facts[node.project.id]!,
+      node.depth,
+    ),
+    SessionRowNode() => NativeSessionRow(
+      key: ValueKey(node.id),
+      session: node.session,
+      depth: node.depth,
+      subPath: node.subPath,
+      pinned: node.pinned,
+      link: node.link,
+      parentTitle: node.parentTitle,
+      lineageBroken: node.lineageBroken,
+    ),
+    ImportedRowNode() => ImportedSessionRow(
+      key: ValueKey(node.id),
+      session: node.session,
+      depth: node.depth,
+      subPath: node.subPath,
+      pinned: node.pinned,
+    ),
+    TerminalRowNode() => TerminalRow(
+      key: ValueKey(node.id),
+      depth: node.depth,
+      terminal: node.terminal,
+      onOpen: () => _openTerminal_(node),
+      onEnd: node.terminal.isHosted ? () => _endTerminal(node) : null,
+    ),
+    HintNode() => _TreeHint(
+      key: ValueKey(node.id),
+      depth: node.depth,
+      message: node.message,
+    ),
+  };
+
+  void _toggleNode(String nodeId) =>
+      ref.read(settingsControllerProvider.notifier).toggleExplorerNodeCollapsed(nodeId);
+
+  /// Opening a machine's terminals asks it; closing one asks nothing. The
+  /// answer is never refreshed on a timer (§19).
+  void _toggleTerminals(String environmentId) {
+    final opening = !_expandedTerminals.contains(environmentId);
+    setState(() {
+      if (opening) {
+        _expandedTerminals.add(environmentId);
+      } else {
+        _expandedTerminals.remove(environmentId);
+      }
+    });
+    if (opening) {
+      ref.read(environmentTerminalsProvider(environmentId).notifier).refresh();
+    }
+  }
+
+  /// Only while the node is open: a machine nobody asked reads as unknown
+  /// rather than idle.
+  int? _terminalCount(String environmentId) =>
+      _expandedTerminals.contains(environmentId)
+      ? ref.watch(environmentTerminalsProvider(environmentId)).runningCount
+      : null;
+
+  String? _terminalDetail(String environmentId) {
+    if (!_expandedTerminals.contains(environmentId)) return null;
+    final reading = ref.watch(environmentTerminalsProvider(environmentId));
+    if (reading.busy) return 'asking…';
+    final readAt = reading.readAt;
+    if (readAt == null) return null;
+    final age = ref.read(clockProvider).nowUtc().difference(readAt);
+    return 'read ${describeAge(age)}';
+  }
+
+  List<ExplorerNode> _terminalNodes(EnvironmentNode node) {
+    final reading = ref.watch(environmentTerminalsProvider(node.environmentId));
+    if (reading.problem case final String problem) {
+      return [
+        HintNode(id: '${node.id}/terminals/problem', depth: 2, message: problem),
+      ];
+    }
+    if (!reading.asked) {
+      return [
+        HintNode(
+          id: '${node.id}/terminals/asking',
+          depth: 2,
+          message: 'Asking this machine what it is running…',
+        ),
+      ];
+    }
+    if (reading.terminals.isEmpty) {
+      return [
+        HintNode(
+          id: '${node.id}/terminals/empty',
+          depth: 2,
+          message: 'Nothing is running here.',
+        ),
+      ];
+    }
+    return [
+      for (final terminal in reading.terminals)
+        TerminalRowNode(environmentId: node.environmentId, terminal: terminal),
+    ];
+  }
+
+  /// Focuses a pane already open here, or adopts a session the host is still
+  /// holding into a new pane.
+  void _openTerminal_(TerminalRowNode node) {
+    final controller = ref.read(terminalSessionsControllerProvider.notifier);
+    final paneId = node.terminal.paneId;
+    if (!node.terminal.isHosted) {
+      if (paneId != null) {
+        controller.focusPane(paneId);
+        controller.showTerminalHere();
+      }
+      return;
+    }
+    final host = _hostFor(node.environmentId);
+    if (host == null) return;
+    controller.openTab(
+      TerminalProfile.ssh(host.id, hostName: host.name),
+      adoptPaneId: paneId,
+    );
+    controller.showTerminalHere();
+  }
+
+  Future<void> _endTerminal(TerminalRowNode node) async {
+    final id = node.terminal.hostSessionId;
+    if (id == null) return;
+    try {
+      await ref
+          .read(environmentTerminalsProvider(node.environmentId).notifier)
+          .end(id);
+    } on Object catch (e) {
+      _say('$e');
+    }
+  }
+
+  SshHost? _hostFor(String environmentId) {
+    final hostId = ref
+        .read(executionEnvironmentDaoProvider)
+        .getById(environmentId)
+        ?.sshHostId;
+    return hostId == null ? null : ref.read(sshHostDaoProvider).getById(hostId);
+  }
+
+  /// A new terminal on this machine, from its own row.
+  void _openTerminalOn(EnvironmentNode node) {
+    final controller = ref.read(terminalSessionsControllerProvider.notifier);
+    final environment = node.environment;
+    final distro = environment?.wslDistribution ?? environment?.name ?? '';
+    controller.openTab(
+      switch (environment?.kind) {
+        EnvironmentKind.ssh when environment?.sshHostId != null =>
+          TerminalProfile.ssh(
+            environment!.sshHostId!,
+            hostName: environment.name,
+          ),
+        EnvironmentKind.wsl => TerminalProfile(
+          id: TerminalProfile.wslId(distro),
+          label: '$distro (WSL)',
+          shell: TerminalShell.wsl,
+          wslDistribution: distro,
+        ),
+        _ => TerminalProfile.powerShell,
+      },
+    );
+    controller.showTerminalHere();
+  }
+
+  /// Everything under one expanded project. Asked by the tree, so a project
+  /// nobody opened costs neither of the two indexed reads below.
+  List<ExplorerNode> _projectChildren(ProjectNode node) {
+    final project = node.project;
+    final depth = node.depth + 1;
     // Two indexed DAO reads, and no git at any depth: the checkouts a session
     // works in are the right sidebar's subject now, not a row here.
     final visible = ref.watch(visibleProjectSessionsProvider(project.id));
     final sessions = visible.sessions;
     if (sessions.isEmpty) {
-      rows.add(
-        _TreeHint(
-          key: ValueKey('hint-empty:${project.id}'),
-          depth: 1,
+      return [
+        HintNode(
+          id: 'hint-empty:${project.id}',
+          depth: depth,
           // Never "no sessions yet" over sessions the filter took away: that
           // invites the user to start work they already have.
           message: visible.hidden == 0
@@ -731,27 +978,24 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                     : 'No sessions yet — start one with the + on this project.'
               : '${_sessionCount(visible.hidden)} hidden by the agent filter.',
         ),
-      );
-      return rows;
+      ];
     }
-    rows.addAll(_sessionCards(project, sessions, depth: 1));
-    // Said where the rows are missing, and only while a narrowing is in force:
-    // a partly-filtered list looks exactly like a shorter one.
-    if (visible.hidden > 0) {
-      rows.add(
-        _TreeHint(
-          key: ValueKey('hint-hidden:${project.id}'),
-          depth: 1,
+    return [
+      ..._sessionNodes(project, sessions, depth: depth),
+      // Said where the rows are missing, and only while a narrowing is in
+      // force: a partly-filtered list looks exactly like a shorter one.
+      if (visible.hidden > 0)
+        HintNode(
+          id: 'hint-hidden:${project.id}',
+          depth: depth,
           message: '${visible.hidden} more hidden by the agent filter.',
         ),
-      );
-    }
-    return rows;
+    ];
   }
 
   /// The cards on one row: native sessions arranged parent-and-child, imported
   /// conversations interleaved by when they were last touched.
-  List<Widget> _sessionCards(
+  List<ExplorerNode> _sessionNodes(
     Project project,
     CheckoutSessions sessions, {
     required int depth,
@@ -779,7 +1023,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     // Pinned first, then most recently active, applied to the *top* of each
     // lineage so a child never floats above the session it came from.
     final entries =
-        <({SessionActivityOrder order, bool pinned, List<Widget> rows})>[
+        <({SessionActivityOrder order, bool pinned, List<ExplorerNode> rows})>[
           for (final node in forest)
             (
               order: (
@@ -787,12 +1031,13 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 createdAt: node.session.createdAt,
               ),
               pinned: pinnedIds.contains(node.session.id),
-              rows: _lineageRows(
+              rows: _lineageNodes(
                 project,
                 node,
                 depth: depth,
                 parent: null,
                 repositoryPaths: repositoryPaths,
+                pinnedIds: pinnedIds,
               ),
             ),
           for (final imported in sessions.imported)
@@ -806,8 +1051,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               ),
               pinned: pinnedIds.contains(imported.id),
               rows: [
-                ImportedSessionRow(
-                  key: ValueKey('imported:${imported.id}'),
+                ImportedRowNode(
+                  projectId: project.id,
                   session: imported,
                   depth: depth + (imported.isSubagent ? 1 : 0),
                   subPath: _subPathForImported(
@@ -826,32 +1071,32 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     return [for (final entry in entries) ...entry.rows];
   }
 
-  List<Widget> _lineageRows(
+  List<ExplorerNode> _lineageNodes(
     Project project,
     SessionNode node, {
     required int depth,
     required Session? parent,
     required Map<String, EnvironmentPath> repositoryPaths,
+    required Set<String> pinnedIds,
   }) => [
-    NativeSessionRow(
-      key: ValueKey('session:${node.session.id}'),
+    SessionRowNode(
+      projectId: project.id,
       session: node.session,
       depth: depth,
       subPath: _subPathForNative(project, node.session, repositoryPaths),
-      pinned: ref
-          .watch(settingsControllerProvider.select((s) => s.pinnedSessionIds))
-          .contains(node.session.id),
+      pinned: pinnedIds.contains(node.session.id),
       link: node.link,
       parentTitle: parent?.title,
       lineageBroken: node.lineageBroken,
     ),
     for (final child in node.children)
-      ..._lineageRows(
+      ..._lineageNodes(
         project,
         child,
         depth: depth + 1,
         parent: node.session,
         repositoryPaths: repositoryPaths,
+        pinnedIds: pinnedIds,
       ),
   ];
 
@@ -1030,11 +1275,11 @@ class _ExplorerFilterButton extends ConsumerWidget {
     required this.hidingEmptySections,
     required this.hiddenSections,
     required this.sectionsOnScreen,
-    required this.groupByEnvironment,
+    required this.showingViews,
   });
 
   final AgentFilter filter;
-  final bool groupByEnvironment;
+  final bool showingViews;
   final bool hidingEmptySections;
 
   /// How many sections the empty filter folded away, null when sections are
@@ -1045,7 +1290,7 @@ class _ExplorerFilterButton extends ConsumerWidget {
 
   static const String _allAgents = 'agents:all';
   static const String _emptySections = 'sections:empty';
-  static const String _byEnvironment = 'group:environment';
+  static const String _savedViews = 'views:saved';
   static const String _agentPrefix = 'agent:';
 
   @override
@@ -1059,8 +1304,8 @@ class _ExplorerFilterButton extends ConsumerWidget {
       icon: Icon(filter.isUnfiltered ? AppIcons.funnel : AppIcons.funnelFill),
       onSelected: (value) {
         final settings = ref.read(settingsControllerProvider.notifier);
-        if (value == _byEnvironment) {
-          settings.setExplorerGroupByEnvironment(!groupByEnvironment);
+        if (value == _savedViews) {
+          ref.read(explorerShowingViewsProvider.notifier).toggle();
         } else if (value == _emptySections) {
           settings.setHideEmptySections(!hidingEmptySections);
         } else if (value == _allAgents) {
@@ -1073,12 +1318,12 @@ class _ExplorerFilterButton extends ConsumerWidget {
       },
       itemBuilder: (context) => [
         DesktopMenuItem(
-          value: _byEnvironment,
-          // The one item here that arranges rather than hides, which is why it
-          // sits above its own divider.
-          label: 'Group by environment',
-          icon: AppIcons.globe,
-          selected: groupByEnvironment,
+          value: _savedViews,
+          // The one item here that changes *what* is listed rather than what
+          // is held back, which is why it sits above its own divider.
+          label: 'Saved views',
+          icon: AppIcons.listChecks,
+          selected: showingViews,
         ),
         const PopupMenuDivider(),
         DesktopMenuItem(
@@ -1152,53 +1397,3 @@ class _TreeHint extends StatelessWidget {
 }
 
 
-/// The row a group of projects sits under when the Explorer's spine is the
-/// machine rather than the project.
-class _EnvironmentHeader extends StatelessWidget {
-  const _EnvironmentHeader({required this.group, super.key});
-
-  final EnvironmentGroup group;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final kind = group.environment?.kind;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.sm, Insets.sm, 2),
-      child: Row(
-        children: [
-          Icon(
-            switch (kind) {
-              EnvironmentKind.ssh => AppIcons.globe,
-              EnvironmentKind.wsl => AppIcons.terminalWindow,
-              _ => AppIcons.terminal,
-            },
-            color: scheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: Insets.xs),
-          Flexible(
-            child: Text(
-              group.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          if (group.environment == null) ...[
-            const SizedBox(width: Insets.xs),
-            // Said rather than hidden: the projects are still here, the
-            // machine's record is not.
-            Tooltip(
-              message: 'This environment is no longer in the workspace.',
-              child: Icon(AppIcons.warningCircle, color: scheme.onSurfaceVariant),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}

@@ -64,15 +64,15 @@ void main() {
       '      + proc-nepal',
       '      + jholunge',
       '    + field-report',
-      '  - Terminals',
+      '  + Terminals',
       '- Ubuntu',
       '  - Projects (1)',
       '    + popupbits',
-      '  - Terminals',
+      '  + Terminals',
       '- build-box',
       '  - Projects (1)',
       '    + Test ssh',
-      '  - Terminals',
+      '  + Terminals',
     ]);
   });
 
@@ -100,25 +100,37 @@ void main() {
     ]);
   });
 
-  test('Terminals is asked for nothing until it is expanded', () {
-    var asked = 0;
+  test('Terminals dials nothing until it is expanded, and never at launch', () {
+    final asked = <String>[];
+    List<ExplorerNode> record(EnvironmentNode node) {
+      asked.add(node.environmentId);
+      return const [];
+    }
+
     buildExplorerTree(
       projects: projects,
       environments: environments,
       contexts: contexts,
-      collapsed: const {
-        'env:windows/terminals',
-        'env:wsl:Ubuntu/terminals',
-        'env:ssh:h1/terminals',
-      },
+      collapsed: const {},
       expandedProjects: const {},
-      terminalsOf: (_) {
-        asked++;
-        return const [];
-      },
+      terminalsOf: record,
+    );
+    expect(
+      asked,
+      isEmpty,
+      reason: 'expansion is not persisted, so a fresh launch dials nobody',
     );
 
-    expect(asked, 0, reason: 'a collapsed Terminals must not dial');
+    buildExplorerTree(
+      projects: projects,
+      environments: environments,
+      contexts: contexts,
+      collapsed: const {},
+      expandedProjects: const {},
+      expandedTerminals: const {'ssh:h1'},
+      terminalsOf: record,
+    );
+    expect(asked, ['ssh:h1'], reason: 'only the machine the user opened');
   });
 
   test('an unasked Terminals count is null, never a zero', () {
@@ -197,7 +209,7 @@ void main() {
       '- Windows',
       '  - Projects (0)',
       '    # No projects on this machine yet.',
-      '  - Terminals',
+      '  + Terminals',
     ]);
   });
 

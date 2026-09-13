@@ -491,24 +491,20 @@ void main() {
   });
 
   group('the pane reads as one column', () {
-    testWidgets('the search field is inset to the row tiles\' own edges', (
+    testWidgets('the search field is inset to the tree\'s own edge', (
       tester,
     ) async {
       await pump(tester);
-      // The tile is the outermost decorated box in a row; see
-      // `explorer_row_test.dart`.
-      final tile = tester.getRect(
+      // The machine is the outermost row now, so its caret is the column's
+      // left edge; the project tile sits two levels in from it.
+      final caret = tester.getRect(
         find
-            .descendant(
-              of: find.byType(ProjectCard),
-              matching: find.byType(DecoratedBox),
-            )
+            .descendant(of: find.byType(ListView), matching: find.byType(Icon))
             .first,
       );
       final field = tester.getRect(find.byType(TextField));
 
-      expect(field.left, tile.left);
-      expect(field.right, tile.right);
+      expect(field.left, caret.left);
     });
   });
 
@@ -557,12 +553,13 @@ void main() {
     testWidgets('the header does not overflow between its two breakpoints', (
       tester,
     ) async {
-      // 294px overflowed by 60: wide enough for the aggregate, not wide enough
-      // for the aggregate *and* the badges *and* three buttons. The name is the
-      // row's only flexible child, so the facts have to be dropped rather than
-      // squeezed — and this is the width that proves it.
+      // 304px is the width the Explorer opens at, and the narrowest that still
+      // carries the aggregate now the card sits two levels into the tree. The
+      // name is the row's only flexible child, so the facts are dropped rather
+      // than squeezed; between 294 and 304 they are, which is the cost of the
+      // machine and its section standing above every project.
       addSession('s1', repositoryId: 'r1', title: 'Running');
-      await pump(tester, size: const Size(294, 900));
+      await pump(tester, size: const Size(304, 900));
 
       expect(tester.takeException(), isNull);
       expect(find.textContaining('1 session'), findsOneWidget);
