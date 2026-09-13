@@ -49,6 +49,9 @@ class _FakeStore extends DocumentStore {
       language: highlightLanguageFor(hostPath),
       stamp: await stamp(hostPath),
       crlf: crlf,
+      mode: text.length > kEditableSizeLimit
+          ? DocumentMode.view
+          : DocumentMode.edit,
     );
   }
 
@@ -140,6 +143,21 @@ void main() {
         container.read(openDocumentProvider(_path))?.text,
         'one\ntwo\nthree\n',
       );
+    });
+
+    test('an edit to a file opened read-only is ignored', () async {
+      const big = r'C:\src\app\lib\big.dart';
+      store.disk[big] = 'a' * (kEditableSizeLimit + 1);
+      await documents.open(big);
+
+      documents.edit(big, 'typed\n');
+
+      expect(
+        container.read(openDocumentProvider(big))?.text.length,
+        kEditableSizeLimit + 1,
+      );
+      expect(documents.isDirty(big), isFalse);
+      expect(container.read(dirtyDocumentPathsProvider), isEmpty);
     });
 
     test('an edit to a file that is not open is ignored', () {
@@ -242,6 +260,23 @@ void main() {
         expect(store.writes, isEmpty);
       },
     );
+
+    test('a file too big to edit is not written, and says why', () async {
+      const big = r'C:\src\app\lib\big.dart';
+      store.disk[big] = 'a' * (kEditableSizeLimit + 1);
+      await documents.open(big);
+
+      expect(container.read(openDocumentProvider(big))?.isEditable, isFalse);
+
+      final outcome = await documents.save(big);
+
+      expect(outcome.result, SaveResult.failed);
+      expect(outcome.ok, isFalse);
+      expect(outcome.message, contains('big.dart'));
+      expect(outcome.message, contains('read-only'));
+      expect(store.writes, isEmpty);
+      expect(store.disk[big]!.length, kEditableSizeLimit + 1);
+    });
 
     test('a file nobody opened cannot be saved', () async {
       final outcome = await documents.save(_path);

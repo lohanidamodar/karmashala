@@ -43,7 +43,8 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
 
   void edit(String hostPath, String text) {
     final document = state[hostPath];
-    if (document == null || document.text == text) return;
+    if (document == null || !document.isEditable) return;
+    if (document.text == text) return;
     state = {...state, hostPath: document.withText(text)};
   }
 
@@ -56,6 +57,12 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
     }
     if (!document.isReadable) {
       return SaveOutcome(SaveResult.failed, document.error);
+    }
+    if (!document.isEditable) {
+      return SaveOutcome(
+        SaveResult.failed,
+        '${document.name} was opened read-only because of its size.',
+      );
     }
     final store = ref.read(documentStoreProvider);
     if (!force) {
