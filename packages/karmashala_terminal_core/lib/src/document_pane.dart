@@ -20,3 +20,20 @@ bool isDocumentPane(String paneId) => paneId.startsWith(kDocumentPanePrefix);
 
 /// Whether [paneId] is the Settings document.
 bool isSettingsPane(String paneId) => paneId == kSettingsPaneId;
+
+/// The prefix an open file's pane id carries. The host path follows it: the id
+/// is the whole model, so restore rebuilds the buffer by reading that file.
+const String kEditorPanePrefix = '${kDocumentPanePrefix}file:';
+
+/// The pane id for the file at [hostPath].
+String editorPaneId(String hostPath) => '$kEditorPanePrefix$hostPath';
+
+/// The host path [paneId] names, or null when it is not an editor pane.
+String? editorPanePath(String paneId) {
+  if (!paneId.startsWith(kEditorPanePrefix)) return null;
+  final path = paneId.substring(kEditorPanePrefix.length);
+  return path.isEmpty ? null : path;
+}
+
+/// Whether [paneId] is an open file.
+bool isEditorPane(String paneId) => editorPanePath(paneId) != null;
