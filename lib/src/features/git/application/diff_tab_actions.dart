@@ -53,12 +53,26 @@ DiffTarget? diffTargetOf(String paneId) {
 /// The unified diff for [target]. Its own family rather than
 /// `fileDiffByPathProvider`, which follows the sidebar: a tab has to keep
 /// showing the file it was opened on.
+///
+/// Against `HEAD`, so the tab measures what the sidebar's `+N −M` measures: a
+/// staged change is absent from a bare `git diff` and the row promised it.
 final diffForTargetProvider = FutureProvider.autoDispose
     .family<String, DiffTarget>(
       (ref, target) async => ref
           .read(changesServiceProvider)
-          .diff(target.checkout, path: target.path),
+          .diff(target.checkout, path: target.path, base: 'HEAD'),
     );
+
+/// The file the diff tab on screen is showing, or null when the active tab is
+/// not a diff. Derived rather than stored: a stored selection and the tab strip
+/// disagreed the moment a chip was clicked or a tab closed.
+final activeDiffFileProvider = Provider<String?>((ref) {
+  final tab = ref.watch(
+    terminalSessionsControllerProvider.select((s) => s.activeTab),
+  );
+  final paneId = tab?.focusedPaneId;
+  return paneId == null ? null : diffTargetOf(paneId)?.path;
+});
 
 /// Opening a file's diff in a tab of its own.
 class DiffTabActions {
@@ -74,14 +88,10 @@ class DiffTabActions {
     return openFor(DiffTarget(checkout: checkout, path: path));
   }
 
-  /// Opens [target], or brings its tab forward. The sidebar's selection follows
-  /// so the row and the tab cannot disagree about what is being read.
-  String openFor(DiffTarget target) {
-    _ref.read(selectedChangeFileProvider.notifier).select(target.path);
-    return _ref
-        .read(terminalSessionsControllerProvider.notifier)
-        .openDocumentTab(diffPaneIdFor(target));
-  }
+  /// Opens [target], or brings its tab forward.
+  String openFor(DiffTarget target) => _ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openDocumentTab(diffPaneIdFor(target));
 }
 
 final diffTabActionsProvider = Provider<DiffTabActions>(

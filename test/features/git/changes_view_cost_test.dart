@@ -4,6 +4,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala/src/features/git/application/review_threads.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala_git/github.dart';
@@ -131,6 +132,9 @@ void main() {
   Future<ProviderContainer> pump(WidgetTester tester) async {
     final container = ProviderContainer(
       overrides: [
+        // No workbench here, so no diff tab: the real provider would build
+        // the terminal controller and leave its autosave timer pending.
+        activeDiffFileProvider.overrideWithValue(null),
         databaseProvider.overrideWithValue(db),
         selectedRepositoryIdProvider.overrideWith(_FixedRepository.new),
         repositoryChangesProvider.overrideWith((ref) async {
@@ -284,10 +288,7 @@ void main() {
         .browse(
           const WorktreeBrowse(
             repositoryId: 'r1',
-            path: EnvironmentPath(
-              environmentId: 'windows',
-              path: worktreePath,
-            ),
+            path: EnvironmentPath(environmentId: 'windows', path: worktreePath),
             branch: 'agent-a',
           ),
         );

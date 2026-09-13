@@ -17,6 +17,7 @@ class FileDiffView extends ConsumerWidget {
   const FileDiffView({
     required this.path,
     this.checkout,
+    this.repositoryId,
     this.wrap = false,
     this.scrollWidth = 1400,
     super.key,
@@ -28,6 +29,10 @@ class FileDiffView extends ConsumerWidget {
   /// what the sidebar itself wants; a tab names its own so it keeps showing the
   /// file it was opened on.
   final EnvironmentPath? checkout;
+
+  /// The repository the review threads beside this diff belong to. Null falls
+  /// back to the sidebar's selection, which is the sidebar's own case.
+  final String? repositoryId;
 
   /// Soft-wrap long lines (the narrow side panel) instead of letting them run
   /// off the side for a horizontal scroller to catch.
@@ -63,7 +68,9 @@ class FileDiffView extends ConsumerWidget {
           return Padding(
             padding: const EdgeInsets.all(Insets.md),
             child: Text(
-              'No textual diff (binary or untracked file).',
+              // What was observed, and no guess at why: git answers this for a
+              // binary file, for one it is not tracking, and for no change.
+              'git reported no textual diff for this file.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           );
@@ -72,7 +79,7 @@ class FileDiffView extends ConsumerWidget {
         // rendering becomes a line of the file. A row index would not survive.
         final numbers = newFileLineNumbers(lines);
         final threads =
-            ref.watch(repositoryReviewThreadsProvider).asData?.value ??
+            ref.watch(reviewThreadsOf(repositoryId)).asData?.value ??
             ReviewThreadIndex.empty;
         // Threads no line can carry, above the diff rather than lost inside it.
         final unplaced = threads.unplaced(path);
@@ -82,11 +89,15 @@ class FileDiffView extends ConsumerWidget {
           itemCount: unplaced.length + lines.length,
           itemBuilder: (context, index) {
             if (index < unplaced.length) {
-              return UnplacedThreadTile(entry: unplaced[index]);
+              return UnplacedThreadTile(
+                entry: unplaced[index],
+                repositoryId: repositoryId,
+              );
             }
             final row = index - unplaced.length;
             return ReviewableDiffLine(
               path: path,
+              repositoryId: repositoryId,
               lineNumber: numbers[row],
               line: lines[row],
               wrap: wrap,
@@ -114,6 +125,7 @@ class ReviewableDiffLine extends ConsumerWidget {
     required this.path,
     required this.lineNumber,
     required this.line,
+    this.repositoryId,
     this.wrap = false,
     super.key,
   });
@@ -121,14 +133,19 @@ class ReviewableDiffLine extends ConsumerWidget {
   final String path;
   final int? lineNumber;
   final DiffLine line;
+
+  /// See [FileDiffView.repositoryId]; the sidebar is the only caller that
+  /// leaves it null.
+  final String? repositoryId;
+
   final bool wrap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final repositoryId = ref.watch(selectedRepositoryIdProvider);
+    final repository = repositoryId ?? ref.watch(selectedRepositoryIdProvider);
     final index =
-        ref.watch(repositoryReviewThreadsProvider).asData?.value ??
+        ref.watch(reviewThreadsOf(repositoryId)).asData?.value ??
         ReviewThreadIndex.empty;
     // Attached threads only: `atLine` will not return one whose file has moved
     // on. Those are drawn above the diff instead.
@@ -157,11 +174,11 @@ class ReviewableDiffLine extends ConsumerWidget {
                 size: Chrome.iconSmall,
                 color: here.isEmpty ? null : scheme.tertiary,
               ),
-              onPressed: repositoryId == null
+              onPressed: repository == null
                   ? null
                   : () => showReviewThreadDialog(
                       context,
-                      repositoryId: repositoryId,
+                      repositoryId: repository,
                       path: path,
                       // Null for a removed line, which opens a file-level
                       // thread quoting the removed text.
@@ -178,22 +195,25 @@ class ReviewableDiffLine extends ConsumerWidget {
 /// A thread no line of this diff can carry — file-level, or detached by an
 /// edit — given a row above the diff because saying so takes a sentence.
 class UnplacedThreadTile extends ConsumerWidget {
-  const UnplacedThreadTile({required this.entry, super.key});
+  const UnplacedThreadTile({required this.entry, this.repositoryId, super.key});
 
   final AnchoredReviewThread entry;
+
+  /// See [FileDiffView.repositoryId].
+  final String? repositoryId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final repositoryId = ref.watch(selectedRepositoryIdProvider);
+    final repository = repositoryId ?? ref.watch(selectedRepositoryIdProvider);
     final detached = !entry.isAttached;
     return InkWell(
-      onTap: repositoryId == null
+      onTap: repository == null
           ? null
           : () => showReviewThreadDialog(
               context,
-              repositoryId: repositoryId,
+              repositoryId: repository,
               path: entry.anchor.path,
               lineNumber: null,
               excerpt: null,
@@ -311,7 +331,7 @@ class _ReviewThreadDialogState extends ConsumerState<_ReviewThreadDialog> {
     // Re-read rather than trusting what was passed in: a reply posted in this
     // dialog, or one an agent posted over MCP while it was open, has to appear.
     final index =
-        ref.watch(repositoryReviewThreadsProvider).asData?.value ??
+        ref.watch(reviewThreadsOf(widget.repositoryId)).asData?.value ??
         ReviewThreadIndex.empty;
     final ids = {for (final entry in widget.existing) entry.thread.id};
     final threads = [

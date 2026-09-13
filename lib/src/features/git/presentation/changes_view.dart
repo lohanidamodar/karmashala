@@ -322,8 +322,10 @@ class _ChangedFileRow extends ConsumerWidget {
         (stats) => stats.asData?.value[file.path],
       ),
     );
+    // Read off the tab on screen, so closing it unhighlights the row and a
+    // click on another tab's chip moves the highlight with it.
     final selected = ref.watch(
-      selectedChangeFileProvider.select((path) => path == file.path),
+      activeDiffFileProvider.select((path) => path == file.path),
     );
     final folder = p.posix.dirname(file.path);
     return Semantics(
@@ -426,8 +428,6 @@ Color _colorFor(FileChangeType type, BuildContext context) {
   };
 }
 
-/// What the type glyph means, in words, for the tooltip — a conflict names
-/// which kind, since one icon cannot carry all of them.
 /// git's own one-letter status, which is what a reviewer's eye scans for. The
 /// colour repeats it rather than carrying it (§5).
 String changeLetter(FileChangeType type) => switch (type) {
@@ -441,6 +441,8 @@ String changeLetter(FileChangeType type) => switch (type) {
   FileChangeType.unknown => '?',
 };
 
+/// What the type glyph means, in words, for the tooltip — a conflict names
+/// which kind, since one icon cannot carry all of them.
 String changeWords(FileChange change) => switch (change.type) {
   FileChangeType.added => 'added',
   FileChangeType.modified => 'modified',

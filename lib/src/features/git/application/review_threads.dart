@@ -182,13 +182,28 @@ class ReviewThreadRevision extends Notifier<int> {
 final reviewThreadRevisionProvider =
     NotifierProvider<ReviewThreadRevision, int>(ReviewThreadRevision.new);
 
-/// Every review thread on the selected repository, anchors already checked. One
-/// provider for the whole panel: each `_DiffLineTile` reads its threads out of
-/// this index by line number rather than filtering the whole list per build.
+/// Every review thread on [repositoryId], anchors already checked. Keyed, so a
+/// diff tab reads the repository it was opened on rather than whichever row the
+/// sidebar is pointed at now.
+final reviewThreadsByRepositoryProvider = FutureProvider.autoDispose
+    .family<ReviewThreadIndex, String>((ref, repositoryId) async {
+      ref.watch(reviewThreadRevisionProvider);
+      return ref.read(reviewThreadServiceProvider).indexFor(repositoryId);
+    });
+
+/// The selected repository's threads — the sidebar's own case. One provider for
+/// the whole panel: each `_DiffLineTile` reads its threads out of this index by
+/// line number rather than filtering the whole list per build.
 final repositoryReviewThreadsProvider =
     FutureProvider.autoDispose<ReviewThreadIndex>((ref) async {
       final repositoryId = ref.watch(selectedRepositoryIdProvider);
       if (repositoryId == null) return ReviewThreadIndex.empty;
-      ref.watch(reviewThreadRevisionProvider);
-      return ref.read(reviewThreadServiceProvider).indexFor(repositoryId);
+      return ref.watch(reviewThreadsByRepositoryProvider(repositoryId).future);
     });
+
+/// The threads a surface should draw: its own repository's when it names one,
+/// and the sidebar's selection when it does not.
+FutureProvider<ReviewThreadIndex> reviewThreadsOf(String? repositoryId) =>
+    repositoryId == null
+    ? repositoryReviewThreadsProvider
+    : reviewThreadsByRepositoryProvider(repositoryId);

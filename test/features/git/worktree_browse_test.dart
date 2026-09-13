@@ -6,6 +6,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/explorer/application/picked_checkouts.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_browse.dart';
@@ -77,6 +78,9 @@ void main() {
   ProviderContainer container() {
     final container = ProviderContainer(
       overrides: [
+        // No workbench here, so no diff tab: the real provider would build
+        // the terminal controller and leave its autosave timer pending.
+        activeDiffFileProvider.overrideWithValue(null),
         databaseProvider.overrideWithValue(db),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: FakeCommandRunner()),

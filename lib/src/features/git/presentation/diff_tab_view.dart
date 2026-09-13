@@ -12,6 +12,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../editor/application/code_editor_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
+import '../application/changes_providers.dart';
 import '../application/diff_tab_actions.dart';
 import 'diff_counts.dart';
 import 'diff_view.dart';
@@ -44,6 +45,11 @@ class DiffTabView extends ConsumerWidget {
             builder: (context, constraints) => FileDiffView(
               path: target.path,
               checkout: target.checkout,
+              // This tab's own repository, so its review threads cannot follow
+              // the sidebar onto another one.
+              repositoryId: ref.watch(
+                repositoryIdForCheckoutProvider(target.checkout),
+              ),
               // At least the viewport, so a short diff does not scroll
               // sideways, and never narrower than the lines it has to hold.
               scrollWidth: math.max(constraints.maxWidth, 1400),

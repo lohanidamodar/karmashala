@@ -56,18 +56,6 @@ final selectedRepositoryProvider = Provider<Repository?>((ref) {
       .firstOrNull;
 });
 
-/// The file within the selected repository whose diff is shown, or `null`.
-class SelectedChangeFileController extends Notifier<String?> {
-  @override
-  String? build() => null;
-  void select(String? path) => state = path;
-}
-
-final selectedChangeFileProvider =
-    NotifierProvider<SelectedChangeFileController, String?>(
-      SelectedChangeFileController.new,
-    );
-
 /// A worktree the user is *reading*, filed against the checkout it was picked
 /// under: browsing writes no session row or working directory, so it can never
 /// move where the next agent launches.
@@ -111,6 +99,17 @@ final selectedCheckoutPathProvider = Provider.autoDispose<EnvironmentPath?>((
   if (id == null) return null;
   return ref.read(repositoryDaoProvider).getById(id)?.path;
 });
+
+/// The repository row whose working tree is [checkout], or null when no row
+/// names it — a browsed worktree has none of its own.
+final repositoryIdForCheckoutProvider = Provider.autoDispose
+    .family<String?, EnvironmentPath>(
+      (ref, checkout) => ref
+          .read(repositoryDaoProvider)
+          .getByLocation(checkout)
+          .firstOrNull
+          ?.id,
+    );
 
 /// The browse that still applies: null while another checkout is selected, so a
 /// pick made under one never describes another.
@@ -281,9 +280,9 @@ final repoWorktreesProvider = FutureProvider.autoDispose<List<GitWorktree>>((
 /// One verdict for the whole GIT section, null while it still has facts —
 /// including while finding out. Read off [repoWorktreesProvider] because
 /// [currentBranchProvider] folds a failure into the null it uses for "detached".
-final selectedCheckoutGitTroubleProvider = Provider.autoDispose<
-  GitTroubleReport?
->((ref) {
+final selectedCheckoutGitTroubleProvider = Provider.autoDispose<GitTroubleReport?>((
+  ref,
+) {
   final checkout = ref.watch(selectedCheckoutPathProvider);
   if (checkout == null) return null;
   if (ref.watch(checkoutGitPresenceProvider(checkout)).asData?.value ==
