@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../design_tokens.dart';
 import 'code_field.dart' show kCodeLineHeight;
 import 'code_gutter.dart';
+import 'code_lines.dart';
 
 /// A file too big to edit, drawn read-only **one screenful at a time**.
 ///
@@ -91,7 +92,7 @@ class _CodeViewerState extends State<CodeViewer> {
     _splitText = widget.text;
     final starts = <int>[0];
     for (var i = 0; i < _splitText.length; i++) {
-      if (_splitText.codeUnitAt(i) == 0x0A) starts.add(i + 1);
+      if (isCodeLineBreak(_splitText.codeUnitAt(i))) starts.add(i + 1);
     }
     _starts = starts;
   }

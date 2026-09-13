@@ -135,6 +135,29 @@ void main() {
     expect(rowHeight(tester) * gutter(tester).lineCount, closeTo(field, 0.01));
   });
 
+  // Flutter's paragraph layout breaks on more than a line feed, so a gutter
+  // that counts only `\n` numbers rows the field is not drawing.
+  const separators = <String, String>{
+    r'\n': '\n',
+    r'\v (vertical tab)': '\u000B',
+    r'\f (form feed)': '\u000C',
+    r'U+2028 (line separator)': '\u2028',
+    r'U+2029 (paragraph separator)': '\u2029',
+  };
+  separators.forEach((name, separator) {
+    testWidgets('$name is one line break, in the gutter and in the field', (
+      tester,
+    ) async {
+      controller.text = 'alpha${separator}beta${separator}gamma';
+      await pump(tester);
+
+      expect(gutter(tester).lineCount, 3);
+      // The count is only right if it is the count of rows actually drawn.
+      final field = tester.getSize(find.byType(TextField)).height;
+      expect(rowHeight(tester) * 3, closeTo(field, 0.01));
+    });
+  });
+
   testWidgets('showLineNumbers: false draws no numbers', (tester) async {
     controller.text = 'alpha\nbeta';
     await pump(tester, showLineNumbers: false);

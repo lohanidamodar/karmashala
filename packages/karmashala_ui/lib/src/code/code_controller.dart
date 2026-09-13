@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'code_lines.dart';
 import 'code_spans.dart';
 
 /// Above this many characters a buffer is drawn in plain mono: highlighting is
@@ -29,14 +30,13 @@ class CodeEditingController extends TextEditingController {
   String? _countedText;
 
   /// Lines in the buffer (never 0 — an empty buffer is one line). Counted by
-  /// code unit and memoised: a `RegExp` here allocated a match per line, on
-  /// every build, for a file with fifty thousand of them.
+  /// code unit and memoised: a caret blink asks for this too.
   int get lineCount {
     final source = text;
     if (_countedText == source) return _lineCount!;
     var lines = 1;
     for (var i = 0; i < source.length; i++) {
-      if (source.codeUnitAt(i) == 0x0A) lines++;
+      if (isCodeLineBreak(source.codeUnitAt(i))) lines++;
     }
     _countedText = source;
     return _lineCount = lines;

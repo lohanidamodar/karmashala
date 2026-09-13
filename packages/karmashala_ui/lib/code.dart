@@ -7,6 +7,7 @@ library;
 export 'src/code/code_controller.dart';
 export 'src/code/code_field.dart';
 export 'src/code/code_gutter.dart';
+export 'src/code/code_lines.dart';
 export 'src/code/code_spans.dart';
 export 'src/code/code_theme.dart';
 export 'src/code/code_viewer.dart';

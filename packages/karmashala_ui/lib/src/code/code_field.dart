@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../design_tokens.dart';
 import 'code_controller.dart';
 import 'code_gutter.dart';
+import 'code_lines.dart';
 import 'code_theme.dart';
 
 /// The strut the field is laid out with. One gutter row is the line box that
@@ -119,13 +120,12 @@ class _CodeFieldState extends State<CodeField> {
     _measuredText = text;
     _measuredFontSize = fontSize;
 
-    // One scan over the code units rather than `split` + `runes`: the old form
-    // allocated a string and a rune iterator per line on every keystroke.
+    // One scan over the code units rather than `split` + `runes`.
     var longestStart = 0;
     var longestEnd = 0;
     var start = 0;
     for (var i = 0; i <= text.length; i++) {
-      if (i != text.length && text.codeUnitAt(i) != 0x0A) continue;
+      if (i != text.length && !isCodeLineBreak(text.codeUnitAt(i))) continue;
       if (i - start > longestEnd - longestStart) {
         longestStart = start;
         longestEnd = i;

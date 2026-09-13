@@ -34,6 +34,9 @@ void main() {
     await tester.pump();
   }
 
+  /// One drawn row, found by the text it carries.
+  Finder row(String text) => find.text(text);
+
   String lines(int count) =>
       List.generate(count, (i) => 'line ${i + 1}').join('\n');
 
@@ -44,8 +47,8 @@ void main() {
     // list keeps as cache extent. The number that matters is that it is not
     // 100,000.
     expect(find.byType(Text).evaluate().length, lessThan(400));
-    expect(find.text('line 1'), findsOneWidget);
-    expect(find.text('line 100000'), findsNothing);
+    expect(row('line 1'), findsOneWidget);
+    expect(row('line 100000'), findsNothing);
   });
 
   testWidgets('the gutter counts every line even so', (tester) async {
@@ -57,11 +60,39 @@ void main() {
     );
   });
 
+  /// The rows the list actually built — the only honest counterpart to the
+  /// number the gutter prints.
+  Finder rows() =>
+      find.descendant(of: find.byType(ListView), matching: find.byType(Text));
+
+  // The paragraph layout breaks on more than a line feed, and a row is drawn
+  // `maxLines: 1`: a separator the split misses is text nobody can scroll to.
+  const separators = <String, String>{
+    r'\n': '\n',
+    r'\v (vertical tab)': '\u000B',
+    r'\f (form feed)': '\u000C',
+    r'U+2028 (line separator)': '\u2028',
+    r'U+2029 (paragraph separator)': '\u2029',
+  };
+  separators.forEach((name, separator) {
+    testWidgets('$name is one line break, and all three lines are drawn', (
+      tester,
+    ) async {
+      await pump(tester, 'alpha${separator}beta${separator}gamma');
+
+      expect(tester.widget<CodeGutter>(find.byType(CodeGutter)).lineCount, 3);
+      expect(rows(), findsNWidgets(3));
+      expect(row('alpha'), findsOneWidget);
+      expect(row('beta'), findsOneWidget);
+      expect(row('gamma'), findsOneWidget);
+    });
+  });
+
   testWidgets('showLineNumbers: false draws no gutter', (tester) async {
     await pump(tester, lines(10), showLineNumbers: false);
 
     expect(find.byType(CodeGutter), findsNothing);
-    expect(find.text('line 1'), findsOneWidget);
+    expect(row('line 1'), findsOneWidget);
   });
 
   testWidgets('an empty file is one empty line, not a crash', (tester) async {
@@ -75,8 +106,8 @@ void main() {
   ) async {
     await pump(tester, 'alpha\nbeta');
 
-    expect(find.text('alpha'), findsOneWidget);
-    expect(find.text('beta'), findsOneWidget);
+    expect(row('alpha'), findsOneWidget);
+    expect(row('beta'), findsOneWidget);
     expect(tester.widget<CodeGutter>(find.byType(CodeGutter)).lineCount, 2);
   });
 
@@ -87,16 +118,16 @@ void main() {
     // arrive with them, and a stray \r draws as a box.
     await pump(tester, 'alpha\r\nbeta\r\n');
 
-    expect(find.text('alpha'), findsOneWidget);
-    expect(find.text('beta'), findsOneWidget);
+    expect(row('alpha'), findsOneWidget);
+    expect(row('beta'), findsOneWidget);
   });
 
   testWidgets('revealLine puts that line on screen', (tester) async {
     await pump(tester, lines(100000), revealLine: 5000);
     await tester.pump();
 
-    expect(find.text('line 5000'), findsOneWidget);
-    expect(find.text('line 1'), findsNothing);
+    expect(row('line 5000'), findsOneWidget);
+    expect(row('line 1'), findsNothing);
   });
 
   testWidgets('it is read-only: no field to type into', (tester) async {
