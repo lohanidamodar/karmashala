@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
@@ -8,6 +9,15 @@ import '../domain/source_document.dart';
 
 /// How much of a file decides whether it is binary, and whether it is CRLF.
 const int _sniffBytes = 8 * 1024;
+
+/// VS Code's own wording, and the honest one: the two cannot be told apart.
+const String _binaryFileMessage =
+    'The file is not displayed in the editor because it is either binary or '
+    'uses an unsupported text encoding.';
+
+const List<int> _utf8Bom = [0xef, 0xbb, 0xbf];
+const List<int> _utf16LeBom = [0xff, 0xfe];
+const List<int> _utf16BeBom = [0xfe, 0xff];
 
 final p.Context _hostPaths = p.windows;
 
@@ -46,26 +56,25 @@ class DocumentStore {
           '${_describeSize(kDocumentSizeLimit)} this editor opens.',
         );
       }
-      final bytes = await file.readAsBytes();
-      final sniffed = bytes.length < _sniffBytes ? bytes.length : _sniffBytes;
-      for (var i = 0; i < sniffed; i++) {
-        if (bytes[i] == 0) {
-          return _refused(
-            hostPath,
-            DocumentRefusal.binary,
-            '$name is a binary file — there is a NUL byte in it.',
-          );
+      // The head alone answers "is this text?", so a 64 MB binary never
+      // reaches memory.
+      final head = await _readHead(file);
+      if (_startsWith(head, _utf16LeBom) || _startsWith(head, _utf16BeBom)) {
+        return _refused(hostPath, DocumentRefusal.binary, _binaryFileMessage);
+      }
+      final bom = _startsWith(head, _utf8Bom);
+      for (final byte in head) {
+        if (byte == 0) {
+          return _refused(hostPath, DocumentRefusal.binary, _binaryFileMessage);
         }
       }
+      var bytes = await file.readAsBytes();
+      if (bom) bytes = Uint8List.sublistView(bytes, _utf8Bom.length);
       final String decoded;
       try {
         decoded = utf8.decode(bytes);
       } on FormatException {
-        return _refused(
-          hostPath,
-          DocumentRefusal.binary,
-          '$name is not UTF-8 text.',
-        );
+        return _refused(hostPath, DocumentRefusal.binary, _binaryFileMessage);
       }
       final crlf = decoded
           .substring(
@@ -81,6 +90,10 @@ class DocumentStore {
         language: highlightLanguageFor(hostPath),
         stamp: FileStamp(length: stat.size, modified: stat.modified),
         crlf: crlf,
+        bom: bom,
+        mode: stat.size > kEditableSizeLimit
+            ? DocumentMode.view
+            : DocumentMode.edit,
       );
     } on FileSystemException catch (error) {
       return _refused(
@@ -89,6 +102,23 @@ class DocumentStore {
         '$name could not be read: ${_reason(error)}',
       );
     }
+  }
+
+  Future<Uint8List> _readHead(File file) async {
+    final handle = await file.open();
+    try {
+      return await handle.read(_sniffBytes);
+    } finally {
+      await handle.close();
+    }
+  }
+
+  bool _startsWith(Uint8List bytes, List<int> prefix) {
+    if (bytes.length < prefix.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (bytes[i] != prefix[i]) return false;
+    }
+    return true;
   }
 
   /// What the file looks like now, or null when there is nothing there.

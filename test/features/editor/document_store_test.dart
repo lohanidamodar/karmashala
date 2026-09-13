@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -5,6 +6,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/editor/data/document_store.dart';
 import 'package:karmashala/src/features/editor/domain/source_document.dart';
 import 'package:path/path.dart' as p;
+
+const _binaryMessage =
+    'The file is not displayed in the editor because it is either binary or '
+    'uses an unsupported text encoding.';
+
+/// A file of [size] bytes without writing [size] bytes.
+void _sizedFile(String path, int size) {
+  final handle = File(path).openSync(mode: FileMode.write);
+  try {
+    handle.truncateSync(size);
+  } finally {
+    handle.closeSync();
+  }
+}
 
 void main() {
   late Directory dir;
@@ -51,9 +66,7 @@ void main() {
 
     test('over the size limit it refuses and says how big', () async {
       final path = at('huge.dart');
-      File(path).writeAsBytesSync(
-        Uint8List(3 * 1024 * 1024)..fillRange(0, 3 * 1024 * 1024, 0x61),
-      );
+      _sizedFile(path, kDocumentSizeLimit + 16 * 1024 * 1024);
 
       final doc = await store.load(path);
 
@@ -61,8 +74,8 @@ void main() {
       expect(doc.isReadable, isFalse);
       expect(doc.text, isEmpty);
       expect(doc.error, contains('huge.dart'));
-      expect(doc.error, contains('3.0 MB'));
-      expect(doc.error, contains('2.0 MB'));
+      expect(doc.error, contains('80.0 MB'));
+      expect(doc.error, contains('64.0 MB'));
     });
 
     test('a NUL byte makes it binary', () async {
@@ -72,8 +85,19 @@ void main() {
       final doc = await store.load(path);
 
       expect(doc.refusal, DocumentRefusal.binary);
-      expect(doc.error, contains('a.bin'));
-      expect(doc.error, contains('NUL'));
+      expect(doc.error, _binaryMessage);
+    });
+
+    test('a NUL past the sniffed head is not looked for', () async {
+      final path = at('late.dart');
+      final bytes = Uint8List(9 * 1024)..fillRange(0, 9 * 1024, 0x61);
+      bytes[8 * 1024 + 10] = 0;
+      File(path).writeAsBytesSync(bytes);
+
+      final doc = await store.load(path);
+
+      expect(doc.refusal, DocumentRefusal.none);
+      expect(doc.text.length, 9 * 1024);
     });
 
     test('bytes that are not UTF-8 make it binary too', () async {
@@ -83,7 +107,69 @@ void main() {
       final doc = await store.load(path);
 
       expect(doc.refusal, DocumentRefusal.binary);
-      expect(doc.error, contains('UTF-8'));
+      expect(doc.error, _binaryMessage);
+    });
+
+    test('invalid UTF-8 past the head is found too', () async {
+      final path = at('c.dart');
+      final bytes = Uint8List(9 * 1024)..fillRange(0, 9 * 1024, 0x61);
+      bytes[8 * 1024 + 10] = 0xc3;
+      bytes[8 * 1024 + 11] = 0x28;
+      File(path).writeAsBytesSync(bytes);
+
+      final doc = await store.load(path);
+
+      expect(doc.refusal, DocumentRefusal.binary);
+      expect(doc.error, _binaryMessage);
+    });
+
+    test('a UTF-16 BOM is an encoding we do not decode, not a crash', () async {
+      for (final bom in [
+        [0xff, 0xfe],
+        [0xfe, 0xff],
+      ]) {
+        final path = at('utf16_${bom.first}.txt');
+        File(path).writeAsBytesSync(Uint8List.fromList([...bom, 0x61, 0x00]));
+
+        final doc = await store.load(path);
+
+        expect(doc.refusal, DocumentRefusal.binary, reason: '$bom');
+        expect(doc.error, _binaryMessage);
+      }
+    });
+
+    test('a UTF-8 BOM is text: stripped, remembered, written back', () async {
+      final path = at('bom.dart');
+      File(path).writeAsBytesSync(
+        Uint8List.fromList([0xef, 0xbb, 0xbf, ...utf8.encode('one\n')]),
+      );
+
+      final doc = await store.load(path);
+
+      expect(doc.refusal, DocumentRefusal.none);
+      expect(doc.bom, isTrue);
+      expect(doc.text, 'one\n');
+
+      await store.write(path, doc.withText('one\ntwo\n').diskText);
+
+      expect(File(path).readAsBytesSync(), [
+        0xef,
+        0xbb,
+        0xbf,
+        ...utf8.encode('one\ntwo\n'),
+      ]);
+    });
+
+    test('a file without a BOM does not grow one', () async {
+      final path = at('plain.dart');
+      File(path).writeAsStringSync('one\n');
+
+      final doc = await store.load(path);
+      expect(doc.bom, isFalse);
+
+      await store.write(path, doc.withText('one\ntwo\n').diskText);
+
+      expect(File(path).readAsBytesSync().first, 0x6f);
     });
 
     test('a path with nothing at it is not found', () async {
@@ -103,6 +189,48 @@ void main() {
       expect(doc.refusal, DocumentRefusal.unreadable);
       expect(doc.error, contains('lib'));
       expect(doc.error, contains('folder'));
+    });
+  });
+
+  group('how big it is decides how it opens', () {
+    test('a file just under the editable limit opens to be edited', () async {
+      final path = at('ok.dart');
+      File(path).writeAsStringSync('a' * kEditableSizeLimit);
+
+      final doc = await store.load(path);
+
+      expect(doc.refusal, DocumentRefusal.none);
+      expect(doc.mode, DocumentMode.edit);
+      expect(doc.isEditable, isTrue);
+      expect(doc.text.length, kEditableSizeLimit);
+    });
+
+    test('a file just over it opens read-only, and whole', () async {
+      final path = at('big.dart');
+      File(path).writeAsStringSync('a' * (kEditableSizeLimit + 1));
+
+      final doc = await store.load(path);
+
+      expect(doc.refusal, DocumentRefusal.none);
+      expect(doc.isReadable, isTrue);
+      expect(doc.mode, DocumentMode.view);
+      expect(doc.isEditable, isFalse);
+      expect(doc.error, isNull);
+      expect(doc.text.length, kEditableSizeLimit + 1);
+      expect(doc.canHighlight, isFalse);
+    });
+
+    test('a big file that is binary is still refused', () async {
+      final path = at('big.bin');
+      final bytes = Uint8List(kEditableSizeLimit + 1)
+        ..fillRange(0, kEditableSizeLimit + 1, 0x61);
+      bytes[3] = 0;
+      File(path).writeAsBytesSync(bytes);
+
+      final doc = await store.load(path);
+
+      expect(doc.refusal, DocumentRefusal.binary);
+      expect(doc.text, isEmpty);
     });
   });
 

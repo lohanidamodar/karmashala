@@ -1,9 +1,15 @@
 import 'package:path/path.dart' as p;
 
-/// Over this, a file does not open at all (2 MB).
-const int kDocumentSizeLimit = 2 * 1024 * 1024;
+/// Over this a file opens read-only ([DocumentMode.view]): the editable field
+/// lays the whole buffer out as one paragraph — tool/benchmark/code_field_bench.dart.
+const int kEditableSizeLimit = 512 * 1024;
 
-/// Over this, a file opens and edits but is drawn in plain mono (256 KB).
+/// Over this a file does not open at all: a viewer's drawing does not care
+/// about length, but reading the bytes and splitting them does.
+const int kDocumentSizeLimit = 64 * 1024 * 1024;
+
+/// Over this the buffer is drawn in plain mono: one `highlight.parse` of the
+/// whole file is linear and runs on every change.
 const int kHighlightSizeLimit = 256 * 1024;
 
 /// Host paths are spelled for Windows, and a UNC share is one of them; asking
@@ -12,6 +18,17 @@ final p.Context _hostPaths = p.windows;
 
 /// Why a file will not open, or [none].
 enum DocumentRefusal { none, notFound, unreadable, binary, tooLarge }
+
+/// How a file can be opened.
+enum DocumentMode {
+  /// Small enough to edit: the full field, highlighting, saving.
+  edit,
+
+  /// Too big to edit at a usable speed, so it opens read-only in a viewer that
+  /// draws only the lines on screen. Nothing about it is broken; editing it
+  /// here would be.
+  view,
+}
 
 /// What a file looked like when it was read — what a save checks before it
 /// overwrites. Null [modified] means the filesystem did not say.
@@ -57,6 +74,8 @@ class SourceDocument {
     this.refusal = DocumentRefusal.none,
     this.error,
     this.crlf = false,
+    this.bom = false,
+    this.mode = DocumentMode.edit,
   });
 
   final String hostPath;
@@ -76,6 +95,12 @@ class SourceDocument {
   /// the file's own endings back rather than rewriting every line.
   final bool crlf;
 
+  /// Whether the file on disk began with a UTF-8 BOM. The buffer never holds
+  /// it; a save writes it back rather than silently dropping it.
+  final bool bom;
+
+  final DocumentMode mode;
+
   /// The file's own name, for a tab title.
   String get name => _hostPaths.basename(hostPath);
 
@@ -83,11 +108,17 @@ class SourceDocument {
 
   bool get isReadable => refusal == DocumentRefusal.none;
 
+  /// Whether it opened small enough to type into — see [kEditableSizeLimit].
+  bool get isEditable => mode == DocumentMode.edit;
+
   /// Whether it is small enough to colour — see [kHighlightSizeLimit].
   bool get canHighlight => isReadable && text.length <= kHighlightSizeLimit;
 
-  /// The buffer as bytes for this file: LF back to CRLF where it came that way.
-  String get diskText => crlf ? text.replaceAll('\n', '\r\n') : text;
+  /// The buffer as bytes for this file: the BOM and CRLF it came with, back.
+  String get diskText {
+    final lines = crlf ? text.replaceAll('\n', '\r\n') : text;
+    return bom ? '\u{FEFF}$lines' : lines;
+  }
 
   SourceDocument withText(String next) => _copy(text: next);
 
@@ -104,5 +135,7 @@ class SourceDocument {
         refusal: refusal,
         error: error,
         crlf: crlf,
+        bom: bom,
+        mode: mode,
       );
 }

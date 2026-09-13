@@ -6,6 +6,8 @@ SourceDocument _doc({
   String text = 'void main() {}\n',
   String? savedText,
   bool crlf = false,
+  bool bom = false,
+  DocumentMode mode = DocumentMode.edit,
 }) => SourceDocument(
   hostPath: hostPath,
   text: text,
@@ -13,6 +15,8 @@ SourceDocument _doc({
   language: 'dart',
   stamp: const FileStamp(length: 15, modified: null),
   crlf: crlf,
+  bom: bom,
+  mode: mode,
 );
 
 void main() {
@@ -66,7 +70,41 @@ void main() {
       expect(_doc().canHighlight, isTrue);
       expect(_doc(text: 'x' * kHighlightSizeLimit).canHighlight, isTrue);
       expect(_doc(text: 'x' * (kHighlightSizeLimit + 1)).canHighlight, isFalse);
-      expect(kHighlightSizeLimit, lessThan(kDocumentSizeLimit));
+      expect(kHighlightSizeLimit, lessThan(kEditableSizeLimit));
+      expect(kEditableSizeLimit, lessThan(kDocumentSizeLimit));
+    });
+
+    test('it is editable unless it was opened to be viewed', () {
+      expect(_doc().mode, DocumentMode.edit);
+      expect(_doc().isEditable, isTrue);
+
+      final viewer = _doc(mode: DocumentMode.view);
+      expect(viewer.isEditable, isFalse);
+      expect(viewer.isReadable, isTrue);
+      expect(viewer.canHighlight, isTrue);
+    });
+
+    test('an edit and a save carry the mode and the BOM along', () {
+      final viewer = _doc(mode: DocumentMode.view, bom: true, crlf: true);
+
+      final edited = viewer.withText('other\n');
+      expect(edited.mode, DocumentMode.view);
+      expect(edited.bom, isTrue);
+      expect(edited.crlf, isTrue);
+
+      final saved = edited.asSaved(const FileStamp(length: 6, modified: null));
+      expect(saved.mode, DocumentMode.view);
+      expect(saved.bom, isTrue);
+      expect(saved.crlf, isTrue);
+    });
+
+    test('a file that had a BOM gets it back on the way to disk', () {
+      expect(_doc(text: 'a\nb\n', bom: true).diskText, '\u{FEFF}a\nb\n');
+      expect(
+        _doc(text: 'a\nb\n', bom: true, crlf: true).diskText,
+        '\u{FEFF}a\r\nb\r\n',
+      );
+      expect(_doc(text: 'a\nb\n').diskText, 'a\nb\n');
     });
 
     test('a CRLF file gets its endings back on the way to disk', () {
