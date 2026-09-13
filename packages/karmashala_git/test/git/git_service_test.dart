@@ -273,6 +273,57 @@ bare
       expect(GitService(runner).diffStat(repo(r'C:\app')), completion(isNull));
     });
 
+    test('fileDiffStats asks the same one question, keyed by file', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '4\t1\tlib/a.dart\n-\t-\tassets/i.png\n',
+            stderr: '',
+          );
+        },
+      );
+      final stats = await GitService(runner).fileDiffStats(repo(r'C:\app'));
+      expect(captured.arguments, [
+        '-C',
+        r'C:\app',
+        'diff',
+        '--numstat',
+        'HEAD',
+      ]);
+      expect(stats, {
+        'lib/a.dart': const FileDiffStat(added: 4, removed: 1),
+        'assets/i.png': FileDiffStat.binary,
+      });
+    });
+
+    test('fileDiffStats against a base asks about that base', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      await GitService(runner).fileDiffStats(repo(r'C:\app'), base: 'main');
+      expect(captured.arguments.last, 'main');
+    });
+
+    test('fileDiffStats shows no counts rather than failing when git does', () {
+      // Empty and "could not tell" are the same to this caller on purpose: the
+      // sidebar draws the listing either way.
+      final runner = FakeCommandRunner(
+        responder: (_) =>
+            const CommandResult(exitCode: 128, stdout: '', stderr: 'fatal'),
+      );
+      expect(
+        GitService(runner).fileDiffStats(repo(r'C:\app')),
+        completion(isEmpty),
+      );
+    });
+
     test('aheadBehind asks for both counts once', () async {
       late CommandRequest captured;
       final runner = FakeCommandRunner(

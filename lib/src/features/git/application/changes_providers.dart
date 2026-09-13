@@ -190,6 +190,18 @@ final repositoryChangesProvider = FutureProvider.autoDispose<List<FileChange>>((
   return changes.changes(path);
 }, retry: _retryOnlyRealFailures);
 
+/// Lines added and removed per file in the checkout being viewed. One `git
+/// diff --numstat` for the whole listing rather than one per row. A path that
+/// is absent was not reported — an untracked file never is.
+final repositoryFileDiffStatsProvider =
+    FutureProvider.autoDispose<Map<String, FileDiffStat>>((ref) async {
+      final path = ref.watch(viewedCheckoutProvider);
+      if (path == null) return const {};
+      final changes = ref.read(changesServiceProvider);
+      await _requireRepository(ref, path);
+      return changes.fileDiffStats(path);
+    }, retry: _retryOnlyRealFailures);
+
 /// Whether there is a merge to abort in the checkout being viewed. A conflicted
 /// row *is* an unfinished merge, so only an all-resolved-but-uncommitted tree
 /// costs a `.git/MERGE_HEAD` stat.
@@ -287,13 +299,6 @@ final selectedCheckoutGitTroubleProvider = Provider.autoDispose<
     GitTrouble.failed => GitTroubleReport(GitTrouble.failed, detail: '$error'),
     final trouble => GitTroubleReport(trouble),
   };
-});
-
-/// Unified diff for the selected file in the selected repository.
-final fileDiffProvider = FutureProvider.autoDispose<String>((ref) async {
-  final file = ref.watch(selectedChangeFileProvider);
-  if (file == null) return '';
-  return ref.watch(fileDiffByPathProvider(file).future);
 });
 
 /// Unified diff for a specific [path] within the checkout being viewed — used

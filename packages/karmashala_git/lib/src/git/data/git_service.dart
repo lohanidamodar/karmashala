@@ -201,6 +201,25 @@ class GitService {
     }
   }
 
+  /// Lines added and removed per file in [repo]'s working tree, from [base] (or
+  /// `HEAD`).
+  ///
+  /// **Empty on failure**, so a caller cannot tell that from a clean tree and
+  /// simply shows no counts. No `git diff` sees an untracked file either: an
+  /// absent path means "git did not say", never "nothing changed".
+  Future<Map<String, FileDiffStat>> fileDiffStats(
+    EnvironmentPath repo, {
+    String? base,
+  }) async {
+    try {
+      final result = await _git(repo, ['diff', '--numstat', base ?? 'HEAD']);
+      if (!result.ok) return const {};
+      return parseNumstatByFile(result.stdout);
+    } on CommandException {
+      return const {};
+    }
+  }
+
   /// How [repo]'s `HEAD` stands against [base], both directions in one call.
   Future<AheadBehind?> aheadBehind(
     EnvironmentPath repo, {

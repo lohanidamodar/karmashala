@@ -74,6 +74,31 @@ void main() {
     ]);
   });
 
+  test('fileDiffStats asks git once for the whole listing', () async {
+    final numstat = FakeCommandRunner(
+      responder: (_) => const CommandResult(
+        exitCode: 0,
+        stdout: '9\t2\tlib/a.dart\n0\t0\tlib/{old => new}/b.dart\n',
+        stderr: '',
+      ),
+    );
+    final stats = await ChangesService(
+      runnerFactory: FakeCommandRunnerFactory(fallback: numstat),
+      environmentDao: ExecutionEnvironmentDao(db),
+    ).fileDiffStats(repo);
+
+    expect(numstat.requests.single.arguments, [
+      '-C',
+      r'C:\app',
+      'diff',
+      '--numstat',
+      'HEAD',
+    ]);
+    expect(stats['lib/a.dart'], const FileDiffStat(added: 9, removed: 2));
+    // The rename is filed under the name the listing beside it uses.
+    expect(stats.keys, contains('lib/new/b.dart'));
+  });
+
   test('a merge announces the working tree it rewrote', () async {
     final changed = <EnvironmentPath>[];
     final notifying = ChangesService(

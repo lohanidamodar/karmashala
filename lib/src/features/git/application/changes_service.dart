@@ -125,6 +125,11 @@ class ChangesService {
   Future<DiffStat?> diffStat(EnvironmentPath repo, {String? base}) =>
       _ask(repo, (git, at) => git.diffStat(at, base: base));
 
+  /// Lines added and removed per file in [repo]. Empty when git could not say,
+  /// and a path git never mentioned — an untracked one — is simply absent.
+  Future<Map<String, FileDiffStat>> fileDiffStats(EnvironmentPath repo) =>
+      _ask(repo, (git, at) => git.fileDiffStats(at));
+
   /// How [repo] stands against [base] in both directions; `null` when git could
   /// not answer.
   Future<AheadBehind?> aheadBehind(
