@@ -1,8 +1,9 @@
 # Changelog
 
-This file records **1.1.0 (2026-08-31) through 1.21.0 (2026-09-10)**, and what
-is on `main` past it. Anything before 1.1.0 is not recorded — no release notes
-were written for those versions and this file does not invent them.
+This file records **1.1.0 (2026-08-31) through 1.21.0 (2026-09-10)** and
+**1.24.0**, and what is on `main` past them. 1.22.x and 1.23.0 have no entries:
+no release notes were written for them and this file does not invent any.
+Anything before 1.1.0 is not recorded, for the same reason.
 
 Entries are derived from the repository's own history: the `chore: release`
 commit bodies where they exist, and the commits in each version's range where
@@ -13,6 +14,40 @@ rather than guessing.
 Versions are listed newest first. The number in brackets is the build number
 from `pubspec.yaml`, which is what a shipped binary reports — useful when two
 installs claim the same version name.
+
+---
+
+## 1.24.0 — 2026-09-14 (build 43)
+
+**Code is read and written in the app now.** Schema head is unchanged.
+
+- **An editor tab.** A file opens in the workbench beside your terminals —
+  syntax highlighting, a line-number gutter, Tab/Shift+Tab that moves a selected
+  block, Ctrl+S. It is a document pane, so it comes back after a quit and
+  re-reads the file. Tapping a file in the Files panel, picking one in Quick
+  Open and Ctrl+clicking a path in a terminal all open it here; the external
+  editor moved to the right-click menu.
+- **Large files open, and fast.** The line numbers used to be four widgets a
+  line: a 50,000-line file took **52 seconds** to appear. They are painted at
+  the viewport now — 1.7 s for the same file, and 0.47 s for 20,000 lines.
+  Past 512 KB a file opens read-only in a viewer that draws only the rows on
+  screen, because a text field lays the whole buffer out on every keystroke; a
+  69 MB file of a million lines opens in 197 ms. The pane says why it is
+  read-only rather than leaving you to find out by typing.
+- **Binary files are refused with the reason**, in the words VS Code uses,
+  because "binary" and "an encoding we cannot read" genuinely cannot be told
+  apart. Only the first 8 KB is read to decide, so a 64 MB binary never reaches
+  memory. A UTF-8 BOM is text and is written back; a UTF-16 one is refused.
+- **Unsaved work is asked about on every route that closes a tab** — the chip,
+  the bulk closes, the tab picker, a group, and the agent-facing
+  `terminal_close`, which reports what it discarded. Closing the *window* still
+  does not ask; that is written down in `BACKLOG.md` rather than promised.
+- **Reading a diff is a tab too.** The Changes panel is a list again — file
+  name, the folder it sits in, `+N −M` from one `git diff --numstat`, and git's
+  status letter — and a row opens the diff with room to read it. A staged
+  change now shows in that tab instead of reporting "no textual diff", and a
+  file whose name git has to quote is one name everywhere instead of four
+  different broken ones.
 
 ---
 
