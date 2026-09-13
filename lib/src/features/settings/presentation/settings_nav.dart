@@ -112,6 +112,13 @@ enum SettingsSectionId {
     'flutter sdk',
     'sdk',
     'dart',
+    // Carried over when the SSH page was folded in, so a search for what
+    // used to have its own entry still lands somewhere.
+    'ssh',
+    'hosts',
+    'known hosts',
+    'keys',
+    'remote build',
   ]),
   environmentVariables('Environment variables', AppIcons.code, [
     'env',
@@ -123,7 +130,6 @@ enum SettingsSectionId {
     'api key',
     'credential',
   ]),
-  ssh('SSH', AppIcons.globe, ['hosts', 'known hosts', 'keys', 'remote build']),
   remote('Remote access', AppIcons.deviceMobile, [
     'companion',
     'phone',

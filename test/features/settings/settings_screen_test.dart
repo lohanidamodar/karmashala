@@ -129,11 +129,12 @@ void main() {
     await tester.enterText(find.byType(TextField).first, 'known hosts');
     await tester.pumpAndSettle();
 
-    // Only SSH mentions known hosts; the rest of the rail is gone.
-    expect(find.text('SSH'), findsOneWidget);
+    // Only Environments mentions known hosts — the SSH page was folded into
+    // it, hosts and all — and the rest of the rail is gone.
+    expect(find.text('Environments'), findsOneWidget);
     expect(find.text('Permissions'), findsNothing);
 
-    await tester.tap(find.text('SSH'));
+    await tester.tap(find.text('Environments'));
     await tester.pumpAndSettle();
     expect(find.text('TRUSTED HOST KEYS'), findsOneWidget);
   });

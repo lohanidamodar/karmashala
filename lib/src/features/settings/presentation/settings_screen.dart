@@ -174,19 +174,19 @@ class _SectionContent extends StatelessWidget {
     SettingsSectionId.automations => const AutomationsPage(),
     SettingsSectionId.worktrees => const WorktreeSetupPage(),
     // Two blocks: what was found, and what a person may have to say.
+    // An SSH host *is* an `ssh:<id>` environment, so the hosts belong with the
+    // places they are. Known hosts and keys follow as SSH plumbing, not places.
     SettingsSectionId.environments => const Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         EnvironmentsSection(),
+        SshHostsSection(),
         FlutterSdkSection(),
         ProjectKindsSection(),
+        KnownHostsSection(),
       ],
     ),
     SettingsSectionId.environmentVariables => const EnvSecretsPage(),
-    SettingsSectionId.ssh => const Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [SshHostsSection(), KnownHostsSection()],
-    ),
     SettingsSectionId.remote => const RemoteAccessSection(),
     SettingsSectionId.notes => const NotesSettingsSection(),
     SettingsSectionId.diagnostics => const DiagnosticsPage(),
