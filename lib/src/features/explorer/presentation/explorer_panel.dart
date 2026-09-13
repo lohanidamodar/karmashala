@@ -20,6 +20,9 @@ import '../../cli_detection/presentation/detected_projects_view.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../application/environment_grouping.dart';
+import 'host_terminals_node.dart';
+import '../../ssh/application/ssh_providers.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
@@ -459,6 +462,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               _EnvironmentHeader(group: group),
               for (final project in group.projects)
                 ..._projectNodes(project, menuFacts),
+              // Only where there is a host to ask. Collapsed it dials nothing.
+              if (group.environment?.sshHostId case final String hostId)
+                if (ref.read(sshHostDaoProvider).getById(hostId)
+                    case final SshHost host)
+                  HostTerminalsNode(host: host),
             ]
           else
             for (final project in projects)
