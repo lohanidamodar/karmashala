@@ -20,12 +20,14 @@ void main() {
     required List<FileChange> files,
     List<GitCommit> commits = const [],
     SessionDelivery? delivery,
+    Map<String, FileDiffStat> stats = const {},
   }) {
     return tester.pumpWidget(
       ProviderScope(
         overrides: [
           noWorktrees,
           repositoryChangesProvider.overrideWith((ref) async => files),
+          repositoryFileDiffStatsProvider.overrideWith((ref) async => stats),
           recentCommitsProvider.overrideWith((ref) async => commits),
           selectedRepositoryIdProvider.overrideWith(
             () => _FixedRepository(delivery == null ? null : 'r1'),
@@ -44,7 +46,7 @@ void main() {
     );
   }
 
-  testWidgets('lists changed files and expands one to show its diff inline', (
+  testWidgets('a row is a name, its folder, its counts and its status', (
     tester,
   ) async {
     await pump(
@@ -57,19 +59,47 @@ void main() {
           unstaged: true,
         ),
       ],
+      stats: const {'lib/main.dart': FileDiffStat(added: 4, removed: 1)},
     );
     await tester.pumpAndSettle();
 
-    // Collapsed by default: the file is listed, the diff is not shown yet.
-    expect(find.text('lib/main.dart'), findsOneWidget);
-    expect(find.text('+new line'), findsNothing);
+    expect(find.text('main.dart'), findsOneWidget);
+    expect(find.text('lib'), findsOneWidget);
+    // One label, so the pair is read as one phrase rather than two numbers.
+    expect(find.text('+4 −1'), findsOneWidget);
+    // git's own letter, and the words behind it for anyone who cannot see
+    // which colour it is drawn in.
+    expect(find.text('M'), findsOneWidget);
+    expect(find.byTooltip('modified'), findsOneWidget);
 
-    // Expanding the file reveals its diff inline.
-    await tester.tap(find.text('lib/main.dart'));
+    // The diff is not here any more — reading one is a tab's job.
+    expect(find.text('+new line'), findsNothing);
+    await tester.tap(find.text('main.dart'));
+    await tester.pumpAndSettle();
+    expect(find.text('+new line'), findsNothing);
+  });
+
+  testWidgets('a file git reported no counts for simply shows none', (
+    tester,
+  ) async {
+    // `git diff --numstat` never sees an untracked file, and `+0 −0` would be
+    // a number we were not given.
+    await pump(
+      tester,
+      files: const [
+        FileChange(
+          path: 'lib/new.dart',
+          type: FileChangeType.untracked,
+          staged: false,
+          unstaged: true,
+        ),
+      ],
+    );
     await tester.pumpAndSettle();
 
-    expect(find.text('+new line'), findsOneWidget);
-    expect(find.text('-old line'), findsOneWidget);
+    expect(find.text('new.dart'), findsOneWidget);
+    expect(find.text('U'), findsOneWidget);
+    expect(find.textContaining('+'), findsNothing);
   });
 
   testWidgets('the list opens on what a reviewer reads first, and hides none', (
@@ -110,12 +140,12 @@ void main() {
 
     double top(String path) => tester.getTopLeft(find.text(path)).dy;
 
-    expect(top('lib/main.dart'), lessThan(top('lib/models/user.g.dart')));
-    expect(top('lib/models/user.g.dart'), lessThan(top('pubspec.lock')));
-    expect(top('pubspec.lock'), lessThan(top('build/app/outputs/log.txt')));
+    expect(top('main.dart'), lessThan(top('user.g.dart')));
+    expect(top('user.g.dart'), lessThan(top('pubspec.lock')));
+    expect(top('pubspec.lock'), lessThan(top('log.txt')));
     // Every one of them is still on screen.
     expect(find.byType(ListTile), findsNothing);
-    expect(find.text('build/app/outputs/log.txt'), findsOneWidget);
+    expect(find.text('log.txt'), findsOneWidget);
   });
 
   testWidgets('shows an empty state when there are no changes', (tester) async {

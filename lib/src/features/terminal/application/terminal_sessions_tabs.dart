@@ -34,33 +34,9 @@ extension TerminalTabVerbs on TerminalSessionsController {
     return tabId;
   }
 
-  /// Opens the Settings tab, or brings the open one forward: it is one document
-  /// over one store, so a second tab would be the same page disagreeing.
-  String openSettingsTab() {
-    final open = _tabContaining(kSettingsPaneId);
-    if (open != null) {
-      activateTab(open.id);
-      return open.id;
-    }
-    final tabId = _newId();
-    _tabs.add(
-      TerminalTab(
-        id: tabId,
-        layout: PaneLayout.single(kSettingsPaneId),
-        focusedPaneId: kSettingsPaneId,
-      ),
-    );
-    _tabsMutated();
-    _activeTabId = tabId;
-    _publish();
-    persistStructure();
-    return tabId;
-  }
-
-  /// Opens [hostPath] in an editor tab, or brings the open one forward: one
-  /// tab per file, or two buffers would disagree about the same bytes.
-  String openEditorTab(String hostPath) {
-    final paneId = editorPaneId(hostPath);
+  /// Opens document pane [paneId] in a tab, or brings the open one forward:
+  /// one tab per document, or two views would disagree about the same thing.
+  String openDocumentTab(String paneId) {
     final open = _tabContaining(paneId);
     if (open != null) {
       activateTab(open.id);
@@ -80,6 +56,15 @@ extension TerminalTabVerbs on TerminalSessionsController {
     persistStructure();
     return tabId;
   }
+
+  /// Settings is one document over one store, so a second tab would be the
+  /// same page disagreeing with itself.
+  String openSettingsTab() => openDocumentTab(kSettingsPaneId);
+
+  /// Opens [hostPath] in an editor tab: one tab per file, or two buffers would
+  /// disagree about the same bytes.
+  String openEditorTab(String hostPath) =>
+      openDocumentTab(editorPaneId(hostPath));
 
   /// Opens a new tab running an agent CLI in a PTY and makes it active. The
   /// pane is an ordinary terminal, which is what makes any registry agent usable
@@ -192,11 +177,7 @@ extension TerminalTabVerbs on TerminalSessionsController {
 
   /// Closes every tab in [ids] at once — one publish and one save whatever the
   /// count. [activate] names the tab to leave in front if the active one goes.
-  void closeTabs(
-    Iterable<String> ids, {
-    bool detach = true,
-    String? activate,
-  }) {
+  void closeTabs(Iterable<String> ids, {bool detach = true, String? activate}) {
     final closing = {
       for (final id in ids)
         if (_tabById(id) != null) id,

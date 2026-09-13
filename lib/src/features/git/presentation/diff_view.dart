@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:agent_cli/process.dart';
 import '../application/changes_providers.dart';
+import '../application/diff_tab_actions.dart';
 import '../application/review_threads.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_git/git.dart';
@@ -14,12 +16,18 @@ import 'diff_line_tile.dart';
 class FileDiffView extends ConsumerWidget {
   const FileDiffView({
     required this.path,
+    this.checkout,
     this.wrap = false,
     this.scrollWidth = 1400,
     super.key,
   });
 
   final String path;
+
+  /// The checkout to diff [path] inside. Null follows the sidebar's, which is
+  /// what the sidebar itself wants; a tab names its own so it keeps showing the
+  /// file it was opened on.
+  final EnvironmentPath? checkout;
 
   /// Soft-wrap long lines (the narrow side panel) instead of letting them run
   /// off the side for a horizontal scroller to catch.
@@ -31,7 +39,12 @@ class FileDiffView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final diff = ref.watch(fileDiffByPathProvider(path));
+    final target = checkout;
+    final diff = target == null
+        ? ref.watch(fileDiffByPathProvider(path))
+        : ref.watch(
+            diffForTargetProvider(DiffTarget(checkout: target, path: path)),
+          );
     return diff.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(Insets.md),
@@ -228,8 +241,7 @@ class UnplacedThreadTile extends ConsumerWidget {
 String detachedThreadHeadline(AnchoredReviewThread entry) {
   final status = entry.thread.status.label;
   return switch (entry.attachment) {
-    ReviewThreadAttachment.attached =>
-      '${entry.anchor.location} · $status',
+    ReviewThreadAttachment.attached => '${entry.anchor.location} · $status',
     ReviewThreadAttachment.detached =>
       'Detached — the file changed since this was written. Was at '
           '${entry.anchor.location} · $status',

@@ -47,6 +47,10 @@ extension TerminalPaneTitles on TerminalSessionsController {
     // directory.
     if (isSettingsPane(paneId)) return 'Settings';
     if (editorPanePath(paneId) case final path?) return p.basename(path);
+    // git prints a relative path with `/` whatever the host separator is.
+    if (diffPaneTarget(paneId) case final diff?) {
+      return p.posix.basename(diff.path);
+    }
     final instance = _instances[paneId];
     if (instance == null) return 'Terminal';
 

@@ -18,6 +18,7 @@ import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
 import '../../../features/repositories/application/repository_providers.dart';
 import '../../../features/editor/application/editor_tab_actions.dart';
+import '../../../features/git/application/diff_tab_actions.dart';
 import '../../../features/explorer/application/explorer_actions.dart';
 import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
@@ -803,12 +804,12 @@ class QuickOpenSources {
       ),
   ];
 
-  /// A file with uncommitted changes opens in the diff we already render; any
-  /// other opens in an editor tab. Either way the panel follows.
+  /// A file with uncommitted changes opens as its diff; any other opens as
+  /// itself. Either way it is a tab, and the panel follows.
   void _openFile(IndexedFile file, {required bool changed}) {
     final panel = ref.read(sidePanelProvider.notifier);
-    if (changed) {
-      ref.read(selectedChangeFileProvider.notifier).select(file.relativePath);
+    if (changed &&
+        ref.read(diffTabActionsProvider).open(file.relativePath) != null) {
       panel.select(SidePanelSurface.changes);
       return;
     }

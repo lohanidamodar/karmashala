@@ -8,6 +8,8 @@ import '../../notes/application/notes_providers.dart';
 import '../../notes/presentation/note_edit_dialog.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../editor/presentation/editor_tab_view.dart';
+import '../../git/application/diff_tab_actions.dart';
+import '../../git/presentation/diff_tab_view.dart';
 import '../../settings/presentation/settings_tab_view.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../todos/presentation/todo_edit_dialog.dart';
@@ -152,8 +154,8 @@ class _TerminalPaneStackState extends ConsumerState<TerminalPaneStack> {
                           layout: tab.layout,
                           // Already a share of the split it belongs to. Pixels over the *panel's*
                           // longest side moved a divider 36 px per 100 in a 1440x560 window.
-                          onResize: (splitId, index, share) =>
-                              _sessions.resizePane(tab.id, splitId, index, share),
+                          onResize: (splitId, index, share) => _sessions
+                              .resizePane(tab.id, splitId, index, share),
                           regionBuilder: (group) => _buildRegion(
                             group,
                             tab,

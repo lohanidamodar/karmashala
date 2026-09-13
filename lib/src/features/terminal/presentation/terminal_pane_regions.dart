@@ -52,6 +52,9 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (editorPanePath(paneId) case final path?) {
       return EditorTabView(hostPath: path);
     }
+    if (diffTargetOf(paneId) case final target?) {
+      return DiffTabView(target: target);
+    }
     final instance = _sessions.instanceFor(paneId);
     // No instance is the `isEmptySlot` invariant and the only way this can be
     // null, so it is the empty state rather than nothing.
@@ -60,10 +63,8 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
         paneId: paneId,
         focused: focused,
         onNewTerminal: () => _actions.openInSlot(paneId),
-        onNewSession: () => NewSessionDialog.show(
-          context,
-          targetPaneId: paneId,
-        ),
+        onNewSession: () =>
+            NewSessionDialog.show(context, targetPaneId: paneId),
         onClose: () => _sessions.closePane(paneId),
         onMoveTabHere: _canMoveAPaneHere(paneId)
             ? () => TabPicker.show(
@@ -124,7 +125,9 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
             Consumer(
               builder: (context, ref, _) {
                 final recording = ref.watch(
-                  terminalRecordingProvider.select((s) => s.isRecording(paneId)),
+                  terminalRecordingProvider.select(
+                    (s) => s.isRecording(paneId),
+                  ),
                 );
                 if (!recording) return const SizedBox.shrink();
                 return PaneRecordingBanner(

@@ -83,9 +83,7 @@ void main() {
         ),
         deliveryPollIntervalProvider.overrideWithValue(Duration.zero),
         repoWorktreesProvider.overrideWith((ref) async => worktrees),
-        recentCommitsProvider.overrideWith(
-          (ref) async => const <GitCommit>[],
-        ),
+        recentCommitsProvider.overrideWith((ref) async => const <GitCommit>[]),
         repositoryDeliveryProvider.overrideWith(
           (ref, _) async => SessionDelivery.unknown,
         ),
@@ -130,12 +128,12 @@ void main() {
     tester,
   ) async {
     final scope = await pump(tester);
-    expect(find.text('lib/main.dart'), findsOneWidget);
+    expect(find.text('main.dart'), findsOneWidget);
 
     await pick(tester, longBranch);
 
-    expect(find.text('lib/from_a.dart'), findsOneWidget);
-    expect(find.text('lib/main.dart'), findsNothing);
+    expect(find.text('from_a.dart'), findsOneWidget);
+    expect(find.text('main.dart'), findsNothing);
     // The header names what it is reading rather than leaving it implicit.
     expect(find.text(longBranch), findsOneWidget);
 
@@ -149,11 +147,11 @@ void main() {
   testWidgets('the checkout itself is the way back', (tester) async {
     final scope = await pump(tester);
     await pick(tester, longBranch);
-    expect(find.text('lib/from_a.dart'), findsOneWidget);
+    expect(find.text('from_a.dart'), findsOneWidget);
 
     await pick(tester, 'main');
 
-    expect(find.text('lib/main.dart'), findsOneWidget);
+    expect(find.text('main.dart'), findsOneWidget);
     expect(scope.read(worktreeBrowsingProvider), isNull);
   });
 
@@ -165,14 +163,14 @@ void main() {
     // empty pane with no explanation.
     final scope = await pump(tester);
     await pick(tester, 'agent-b');
-    expect(find.text('lib/from_b.dart'), findsOneWidget);
+    expect(find.text('from_b.dart'), findsOneWidget);
 
     worktrees = [worktreeAt(homePath, 'main'), worktreeAt(pathA, longBranch)];
     scope.invalidate(repoWorktreesProvider);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('is gone'), findsOneWidget);
-    expect(find.text('lib/main.dart'), findsOneWidget);
+    expect(find.text('main.dart'), findsOneWidget);
     expect(scope.read(viewedCheckoutProvider)?.path, homePath);
 
     await tester.tap(find.byTooltip('Stop reading the removed worktree'));
@@ -185,9 +183,15 @@ void main() {
     tester,
   ) async {
     final scope = container();
-    scope.read(worktreeBrowsingProvider.notifier).browse(
-      WorktreeBrowse(repositoryId: 'r1', path: at(pathA), branch: longBranch),
-    );
+    scope
+        .read(worktreeBrowsingProvider.notifier)
+        .browse(
+          WorktreeBrowse(
+            repositoryId: 'r1',
+            path: at(pathA),
+            branch: longBranch,
+          ),
+        );
     await tester.pumpWidget(pane(scope));
     // One frame only: `git worktree list` has not answered yet.
     await tester.pump();
@@ -201,9 +205,15 @@ void main() {
     tester,
   ) async {
     final scope = container();
-    scope.read(worktreeBrowsingProvider.notifier).browse(
-      WorktreeBrowse(repositoryId: 'r1', path: at(pathA), branch: longBranch),
-    );
+    scope
+        .read(worktreeBrowsingProvider.notifier)
+        .browse(
+          WorktreeBrowse(
+            repositoryId: 'r1',
+            path: at(pathA),
+            branch: longBranch,
+          ),
+        );
 
     await expectSurvivesWindowMatrix(
       tester,

@@ -14,8 +14,6 @@ import 'package:karmashala/src/features/environments/presentation/environment_he
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
 import 'package:karmashala/src/features/fanout/presentation/fanout_dialog.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
-import 'package:karmashala_git/git.dart';
-import 'package:karmashala/src/features/git/presentation/changes_view.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -348,55 +346,6 @@ void main() {
   // Each of these asks for a fixed box that is wider or taller than the whole
   // supported window, and none of them had a test that pumped it small enough
   // to notice.
-
-  testWidgets('the full-screen diff dialog', (tester) async {
-    // `_DiffFullscreenDialog` is private, so it is reached the way a user
-    // reaches it: through the "Open full screen" button on a changed file. It
-    // constrains itself to 1200x900 around a `width: 1400` child.
-    Widget build() => ProviderScope(
-      overrides: [
-        repositoryChangesProvider.overrideWith(
-          (ref) async => const [
-            FileChange(
-              path: 'lib/src/features/git/presentation/changes_view.dart',
-              type: FileChangeType.modified,
-              staged: false,
-              unstaged: true,
-            ),
-          ],
-        ),
-        recentCommitsProvider.overrideWith((ref) async => const []),
-        fileDiffByPathProvider(
-          'lib/src/features/git/presentation/changes_view.dart',
-        ).overrideWith(
-          (ref) async =>
-              '@@ -1,2 +1,2 @@\n'
-              '-final short = 1;\n'
-              // A line far longer than the window, which is what the 1400-wide
-              // horizontal scroller inside the dialog exists for.
-              '+final long = ${'x' * 400};\n',
-        ),
-        ...noProcessOverrides(),
-      ],
-      child: const MaterialApp(
-        home: Scaffold(body: ChangesView(repositoryName: 'app')),
-      ),
-    );
-
-    await expectSurvivesWindowMatrix(
-      tester,
-      build: build,
-      warmUp: (tester) async {
-        await tester.tap(find.byTooltip('Open full screen'));
-        await tester.pump();
-        // "Copy diff" exists only inside the dialog, so this is what stops the
-        // cell from passing vacuously if the tap stopped opening it.
-        expect(find.byTooltip('Copy diff'), findsOneWidget);
-      },
-      because:
-          'the dialog constrains itself to 1200x900 around a 1400-wide diff',
-    );
-  });
 
   testWidgets('RemoteFileBrowserDialog', (tester) async {
     // Offline on purpose: the host is not saved, so `forHostId` refuses before

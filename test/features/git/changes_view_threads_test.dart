@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
+import 'package:karmashala/src/features/git/presentation/diff_view.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
@@ -20,7 +21,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import 'review_thread_harness.dart';
 
-/// What the Changes panel draws once a comment is a thread.
+/// What a file's diff draws once a comment is a thread.
 ///
 /// The interesting case is the second one. A thread whose file has changed must
 /// not be drawn beside a line — the line it names is not the line it was
@@ -79,15 +80,27 @@ void main() {
           repositoryDeliveryProvider.overrideWith(
             (ref, _) async => SessionDelivery.unknown,
           ),
-          fileDiffByPathProvider('lib/a.dart').overrideWith((ref) async => diff),
+          fileDiffByPathProvider(
+            'lib/a.dart',
+          ).overrideWith((ref) async => diff),
         ],
+        // The diff is a tab's content now, and the "send" button is still the
+        // panel's header — both, so one harness covers both halves.
         child: const MaterialApp(
-          home: Scaffold(body: ChangesView(repositoryName: 'app')),
+          home: Scaffold(
+            body: Column(
+              children: [
+                SizedBox(
+                  height: 120,
+                  child: ChangesView(repositoryName: 'app'),
+                ),
+                Expanded(child: FileDiffView(path: 'lib/a.dart')),
+              ],
+            ),
+          ),
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('lib/a.dart'));
     await tester.pumpAndSettle();
   }
 
@@ -216,8 +229,7 @@ void main() {
 }
 
 /// The tooltip the send button wears when exactly one thread is pending.
-const _sendTooltip =
-    'Send 1 should-fix review comments to the agent';
+const _sendTooltip = 'Send 1 should-fix review comments to the agent';
 
 /// A session is selected, so the send button is enabled.
 class _FixedSession extends SelectedSessionController {

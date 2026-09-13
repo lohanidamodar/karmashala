@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/process.dart';
+import 'package:path/path.dart' as p;
+import '../application/diff_tab_actions.dart';
+import 'diff_counts.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../application/changes_providers.dart';
 import '../application/review_threads.dart';
@@ -16,9 +18,9 @@ import 'diff_view.dart';
 import 'remote_link.dart';
 import 'worktree_browse.dart';
 
-/// Read-only Git change review: changed files, each expandable to its unified
-/// diff inline and openable full-screen. There is no editor.
-class ChangesView extends ConsumerStatefulWidget {
+/// Read-only Git change review: what changed, listed. Reading a change happens
+/// in a workbench tab ([DiffTabView]), which has the room for it.
+class ChangesView extends ConsumerWidget {
   const ChangesView({required this.repositoryName, super.key});
 
   final String repositoryName;
@@ -29,14 +31,7 @@ class ChangesView extends ConsumerStatefulWidget {
   static int debugFileRowBuildCount = 0;
 
   @override
-  ConsumerState<ChangesView> createState() => _ChangesViewState();
-}
-
-class _ChangesViewState extends ConsumerState<ChangesView> {
-  final _expanded = <String>{};
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // Nothing here watches a provider: each header action subscribes to the one
     // thing it draws, so a commit does not repaint every file row.
     return Column(
@@ -69,24 +64,8 @@ class _ChangesViewState extends ConsumerState<ChangesView> {
           ],
         ),
         const WorktreeBrowseNotice(),
-        Expanded(
-          child: _ChangedFiles(
-            expanded: _expanded,
-            onToggle: (path) => setState(() {
-              if (!_expanded.remove(path)) _expanded.add(path);
-            }),
-            onFullscreen: (file) => _openFullscreen(context, file),
-          ),
-        ),
+        const Expanded(child: _ChangedFiles()),
       ],
-    );
-  }
-
-  void _openFullscreen(BuildContext context, FileChange file) {
-    ref.read(selectedChangeFileProvider.notifier).select(file.path);
-    showDialog<void>(
-      context: context,
-      builder: (_) => _DiffFullscreenDialog(file: file),
     );
   }
 }
@@ -234,7 +213,9 @@ class _AbortMergeButton extends ConsumerWidget {
     );
     if (confirmed != true) return;
 
-    final restored = await ref.read(changesServiceProvider).abortMerge(checkout);
+    final restored = await ref
+        .read(changesServiceProvider)
+        .abortMerge(checkout);
     // Only on the half that rewrote files; an abort that found nothing to undo
     // changed no file.
     if (restored) ref.invalidate(repositoryChangesProvider);
@@ -283,10 +264,7 @@ class _SendReviewThreadsButton extends ConsumerWidget {
               // somebody looks at the code and decides it is done.
               await ref
                   .read(sessionActionsProvider)
-                  .continueSession(
-                    sessionId,
-                    buildReviewThreadPrompt(pending),
-                  );
+                  .continueSession(sessionId, buildReviewThreadPrompt(pending));
             },
     );
   }
@@ -295,15 +273,7 @@ class _SendReviewThreadsButton extends ConsumerWidget {
 /// The list of changed files — the only part of the panel that watches the
 /// changes themselves.
 class _ChangedFiles extends ConsumerWidget {
-  const _ChangedFiles({
-    required this.expanded,
-    required this.onToggle,
-    required this.onFullscreen,
-  });
-
-  final Set<String> expanded;
-  final void Function(String path) onToggle;
-  final void Function(FileChange file) onFullscreen;
+  const _ChangedFiles();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -328,150 +298,91 @@ class _ChangedFiles extends ConsumerWidget {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
       itemCount: ordered.length,
-      itemBuilder: (context, index) {
-        final file = ordered[index];
-        return _ChangedFileSection(
-          file: file,
-          expanded: expanded.contains(file.path),
-          onToggle: () => onToggle(file.path),
-          onFullscreen: () => onFullscreen(file),
-        );
-      },
+      itemBuilder: (context, index) => _ChangedFileRow(file: ordered[index]),
     );
   }
 }
 
-class _ChangedFileSection extends ConsumerWidget {
-  const _ChangedFileSection({
-    required this.file,
-    required this.expanded,
-    required this.onToggle,
-    required this.onFullscreen,
-  });
+/// One changed file, listed the way VS Code lists one: the name, the folder it
+/// sits in, and how many lines moved. A tap reads it in a tab — the sidebar is
+/// for finding a change, not for reading one through a 300px window.
+class _ChangedFileRow extends ConsumerWidget {
+  const _ChangedFileRow({required this.file});
 
   final FileChange file;
-  final bool expanded;
-  final VoidCallback onToggle;
-  final VoidCallback onFullscreen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ChangesView.debugFileRowBuildCount++;
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: onToggle,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(Insets.xs, 2, Insets.xs, 2),
-            child: Row(
-              children: [
-                Icon(
-                  expanded ? AppIcons.caretDown : AppIcons.caretRight,
-                  size: Chrome.icon,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                Tooltip(
-                  message: changeWords(file),
-                  child: Icon(
-                    _iconFor(file.type),
-                    size: Chrome.iconAction,
-                    color: _colorFor(file.type, context),
-                  ),
-                ),
-                const SizedBox(width: Insets.xs),
-                Expanded(
-                  child: Text(
-                    file.path,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: MonoStyles.body,
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Open full screen',
-                  visualDensity: VisualDensity.compact,
-                  iconSize: Chrome.iconAction,
-                  constraints: const BoxConstraints(
-                    minWidth: 26,
-                    minHeight: 26,
-                  ),
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(AppIcons.arrowsOutSimple),
-                  onPressed: onFullscreen,
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (expanded)
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 320),
-            child: FileDiffView(path: file.path, wrap: true),
-          ),
-        const Divider(height: 1),
-      ],
+    final scheme = Theme.of(context).colorScheme;
+    // Each row asks only about itself, so a count arriving for one file does
+    // not repaint the list.
+    final stat = ref.watch(
+      repositoryFileDiffStatsProvider.select(
+        (stats) => stats.asData?.value[file.path],
+      ),
     );
-  }
-}
-
-class _DiffFullscreenDialog extends StatelessWidget {
-  const _DiffFullscreenDialog({required this.file});
-  final FileChange file;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1200, maxHeight: 900),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Insets.lg,
-                Insets.sm,
-                8,
-                Insets.sm,
-              ),
-              child: Row(
-                children: [
-                  Icon(_iconFor(file.type)),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    child: Text(
-                      file.path,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontFamily: kMonoFamily,
+    final selected = ref.watch(
+      selectedChangeFileProvider.select((path) => path == file.path),
+    );
+    final folder = p.posix.dirname(file.path);
+    return Semantics(
+      selected: selected,
+      child: InkWell(
+        onTap: () => ref.read(diffTabActionsProvider).open(file.path),
+        child: Container(
+          color: selected ? scheme.primary.withValues(alpha: 0.14) : null,
+          padding: const EdgeInsets.fromLTRB(Insets.sm, 3, Insets.xs, 3),
+          child: Row(
+            children: [
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        p.posix.basename(file.path),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: MonoStyles.body,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  Consumer(
-                    builder: (context, ref, _) => IconButton(
-                      tooltip: 'Copy diff',
-                      icon: const Icon(AppIcons.copySimple),
-                      onPressed: () async {
-                        final diff = await ref.read(
-                          fileDiffByPathProvider(file.path).future,
-                        );
-                        await Clipboard.setData(ClipboardData(text: diff));
-                      },
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Close',
-                    icon: const Icon(AppIcons.x),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
+                    // The folder is context, not the name — dimmed, and it
+                    // gives way first when the panel is dragged narrow.
+                    if (folder != '.') ...[
+                      const SizedBox(width: Insets.sm),
+                      Flexible(
+                        child: Text(
+                          folder,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: MonoStyles.small.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-            const Divider(height: 1),
-            Expanded(child: FileDiffView(path: file.path)),
-          ],
+              if (stat != null && !stat.isBinary) ...[
+                const SizedBox(width: Insets.xs),
+                DiffCountLabel(added: stat.added!, removed: stat.removed!),
+              ],
+              const SizedBox(width: Insets.sm),
+              Tooltip(
+                message: changeWords(file),
+                child: Text(
+                  changeLetter(file.type),
+                  style: MonoStyles.body.copyWith(
+                    color: _colorFor(file.type, context),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -502,15 +413,6 @@ class _NoChangesToRead extends StatelessWidget {
   };
 }
 
-IconData _iconFor(FileChangeType type) => switch (type) {
-  FileChangeType.added => AppIcons.plusCircle,
-  FileChangeType.deleted => AppIcons.minusCircle,
-  FileChangeType.renamed => AppIcons.pencilSimple,
-  FileChangeType.untracked => AppIcons.question,
-  FileChangeType.conflicted => AppIcons.warning,
-  _ => AppIcons.pencil,
-};
-
 Color _colorFor(FileChangeType type, BuildContext context) {
   final scheme = Theme.of(context).colorScheme;
   final semantic = SemanticColors.of(context);
@@ -526,6 +428,19 @@ Color _colorFor(FileChangeType type, BuildContext context) {
 
 /// What the type glyph means, in words, for the tooltip — a conflict names
 /// which kind, since one icon cannot carry all of them.
+/// git's own one-letter status, which is what a reviewer's eye scans for. The
+/// colour repeats it rather than carrying it (§5).
+String changeLetter(FileChangeType type) => switch (type) {
+  FileChangeType.added => 'A',
+  FileChangeType.modified => 'M',
+  FileChangeType.deleted => 'D',
+  FileChangeType.renamed => 'R',
+  FileChangeType.copied => 'C',
+  FileChangeType.untracked => 'U',
+  FileChangeType.conflicted => '!',
+  FileChangeType.unknown => '?',
+};
+
 String changeWords(FileChange change) => switch (change.type) {
   FileChangeType.added => 'added',
   FileChangeType.modified => 'modified',

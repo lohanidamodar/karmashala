@@ -30,6 +30,8 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala_git/git.dart';
+import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala_session/session.dart';
@@ -146,6 +148,76 @@ class SidePanel extends ConsumerWidget {
 }
 """;
 
+/// A review's worth of changed files, for the Changes panel's scene.
+const _changedFiles = [
+  FileChange(
+    path: 'lib/src/app/shell/side_panel.dart',
+    type: FileChangeType.modified,
+    staged: false,
+    unstaged: true,
+  ),
+  FileChange(
+    path: 'lib/src/features/git/presentation/diff_tab_view.dart',
+    type: FileChangeType.added,
+    staged: true,
+    unstaged: false,
+  ),
+  FileChange(
+    path: 'lib/src/features/git/presentation/changes_view.dart',
+    type: FileChangeType.modified,
+    staged: false,
+    unstaged: true,
+  ),
+  FileChange(
+    path: 'test/features/git/diff_tab_test.dart',
+    type: FileChangeType.untracked,
+    staged: false,
+    unstaged: true,
+  ),
+  FileChange(
+    path: 'pubspec.lock',
+    type: FileChangeType.modified,
+    staged: false,
+    unstaged: true,
+  ),
+];
+
+const _changeStats = {
+  'lib/src/app/shell/side_panel.dart': FileDiffStat(added: 12, removed: 3),
+  'lib/src/features/git/presentation/diff_tab_view.dart': FileDiffStat(
+    added: 122,
+    removed: 0,
+  ),
+  'lib/src/features/git/presentation/changes_view.dart': FileDiffStat(
+    added: 61,
+    removed: 496,
+  ),
+  'pubspec.lock': FileDiffStat(added: 2, removed: 2),
+};
+
+const _sampleDiff = """
+@@ -18,9 +18,8 @@ class SidePanel extends ConsumerWidget {
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+     final theme = Theme.of(context);
+-    if (surface == null) return const SizedBox(width: Chrome.rail);
+-    return Row(
+-      children: [
++    if (surface == null) return const SizedBox(width: Chrome.rail);
++    return Row(children: [
+         const SidePanelRail(),
+         SizedBox(
+           width: ref.watch(sidePanelWidthProvider),
+@@ -31,6 +30,5 @@ class SidePanel extends ConsumerWidget {
+           ),
+         ),
+-      ],
+-    );
++    ]);
+   }
+ }
+""";
+
 /// Serves [_sampleSource] so the scene never touches a real file.
 class _SampleStore extends DocumentStore {
   const _SampleStore();
@@ -218,6 +290,13 @@ void main() {
         ...fakeTerminalOverrides(database: db),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         documentStoreProvider.overrideWithValue(const _SampleStore()),
+        repositoryChangesProvider.overrideWith((ref) async => _changedFiles),
+        repositoryFileDiffStatsProvider.overrideWith(
+          (ref) async => _changeStats,
+        ),
+        repoWorktreesProvider.overrideWith((ref) async => const []),
+        diffForTargetProvider.overrideWith((ref, target) async => _sampleDiff),
+        fileDiffByPathProvider.overrideWith((ref, path) async => _sampleDiff),
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
         ),
@@ -490,6 +569,25 @@ void main() {
         container
             .read(openDocumentsProvider.notifier)
             .edit(_sampleFile, '$_sampleSource\n// edited, not saved\n');
+        await tester.pump();
+      },
+    );
+  });
+
+  testWidgets('dark changes and a diff tab', (tester) async {
+    await shoot(
+      tester,
+      name: 'dark-diff',
+      size: desktop,
+      brightness: Brightness.dark,
+      panel: SidePanelSurface.changes,
+      afterMount: (tester) async {
+        container.read(selectedProjectIdProvider.notifier).select('p1');
+        container.read(selectedRepositoryIdProvider.notifier).select('r1');
+        await tester.pump();
+        container
+            .read(diffTabActionsProvider)
+            .open('lib/src/app/shell/side_panel.dart');
         await tester.pump();
       },
     );
