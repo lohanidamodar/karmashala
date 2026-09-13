@@ -112,10 +112,17 @@ class _HostTerminalsNodeState extends ConsumerState<HostTerminalsNode> {
                   ),
                 ),
                 const SizedBox(width: Insets.xs),
+                if (_busy) ...[
+                  const SizedBox.square(
+                    dimension: 12,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: Insets.xs),
+                ],
                 Expanded(
                   child: Text(
                     _busy
-                        ? 'asking…'
+                        ? 'asking ${widget.host.name}…'
                         : _readAt == null
                         ? ''
                         : [
@@ -140,7 +147,19 @@ class _HostTerminalsNodeState extends ConsumerState<HostTerminalsNode> {
           ),
         ),
         if (_open) ...[
-          if (_error case final String message)
+          if (_busy && sessions == null && _error == null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Insets.lg, 0, Insets.md, Insets.xs),
+              child: Text(
+                // A dial over a network takes as long as it takes; silence
+                // here reads as an empty host.
+                'Asking this host what it is running…',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            )
+          else if (_error case final String message)
             Padding(
               padding: const EdgeInsets.fromLTRB(Insets.lg, 0, Insets.md, Insets.xs),
               child: Text(

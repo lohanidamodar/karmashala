@@ -459,14 +459,20 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               projects,
               ref.read(executionEnvironmentDaoProvider).getAll(),
             )) ...[
-              _EnvironmentHeader(group: group),
+              _EnvironmentHeader(
+                key: ValueKey('env:${group.environmentId}'),
+                group: group,
+              ),
               for (final project in group.projects)
                 ..._projectNodes(project, menuFacts),
               // Only where there is a host to ask. Collapsed it dials nothing.
               if (group.environment?.sshHostId case final String hostId)
                 if (ref.read(sshHostDaoProvider).getById(hostId)
                     case final SshHost host)
-                  HostTerminalsNode(host: host),
+                  HostTerminalsNode(
+                    key: ValueKey('host-terminals:${host.id}'),
+                    host: host,
+                  ),
             ]
           else
             for (final project in projects)
@@ -581,6 +587,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
 
     final rows = <Widget>[
       ProjectCard(
+        key: ValueKey('project:${project.id}'),
         name: project.name,
         path: project.root.path,
         expanded: expanded,
@@ -711,6 +718,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     if (sessions.isEmpty) {
       rows.add(
         _TreeHint(
+          key: ValueKey('hint-empty:${project.id}'),
           depth: 1,
           // Never "no sessions yet" over sessions the filter took away: that
           // invites the user to start work they already have.
@@ -732,6 +740,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     if (visible.hidden > 0) {
       rows.add(
         _TreeHint(
+          key: ValueKey('hint-hidden:${project.id}'),
           depth: 1,
           message: '${visible.hidden} more hidden by the agent filter.',
         ),
@@ -798,6 +807,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               pinned: pinnedIds.contains(imported.id),
               rows: [
                 ImportedSessionRow(
+                  key: ValueKey('imported:${imported.id}'),
                   session: imported,
                   depth: depth + (imported.isSubagent ? 1 : 0),
                   subPath: _subPathForImported(
@@ -824,6 +834,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     required Map<String, EnvironmentPath> repositoryPaths,
   }) => [
     NativeSessionRow(
+      key: ValueKey('session:${node.session.id}'),
       session: node.session,
       depth: depth,
       subPath: _subPathForNative(project, node.session, repositoryPaths),
@@ -1114,7 +1125,7 @@ class _ExplorerFilterButton extends ConsumerWidget {
 }
 
 class _TreeHint extends StatelessWidget {
-  const _TreeHint({required this.depth, required this.message});
+  const _TreeHint({required this.depth, required this.message, super.key});
   final int depth;
   final String message;
 
@@ -1144,7 +1155,7 @@ class _TreeHint extends StatelessWidget {
 /// The row a group of projects sits under when the Explorer's spine is the
 /// machine rather than the project.
 class _EnvironmentHeader extends StatelessWidget {
-  const _EnvironmentHeader({required this.group});
+  const _EnvironmentHeader({required this.group, super.key});
 
   final EnvironmentGroup group;
 

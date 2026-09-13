@@ -63,7 +63,15 @@ class UsageRefreshController extends Notifier<int> {
         if (ref.read(windowFocusedProvider)) refresh();
       },
     );
-    ensurePolling();
+    // Armed at the floor rather than through [_delay]: the schedule lives in
+    // the usage service, and mounting that provider from here runs inside a
+    // widget build and marks the tree dirty mid-build. Before the first
+    // reading the schedule answers the floor anyway.
+    if (!_disposed &&
+        _floor > Duration.zero &&
+        ref.read(windowFocusedProvider)) {
+      _timer ??= Timer(_floor, _tick);
+    }
     return 0;
   }
 
