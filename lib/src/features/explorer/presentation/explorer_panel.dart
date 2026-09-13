@@ -756,11 +756,14 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           : null,
       onTap: () => _toggleNode(node.id),
       actions: [
-        ExplorerRowAction(
-          tooltip: 'Open a terminal on ${node.label}',
-          icon: AppIcons.plus,
-          onPressed: () => _openTerminalOn(node),
-        ),
+        // Not offered for a machine whose row is gone: we cannot say what it
+        // is, and the fallback would quietly open a shell on this one.
+        if (node.environment != null)
+          ExplorerRowAction(
+            tooltip: 'Open a terminal on ${node.label}',
+            icon: AppIcons.plus,
+            onPressed: () => _openTerminalOn(node),
+          ),
       ],
     ),
     EnvironmentSectionNode() => ExplorerHeaderRow(
