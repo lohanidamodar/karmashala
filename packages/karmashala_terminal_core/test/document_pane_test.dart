@@ -36,6 +36,71 @@ void main() {
     });
   });
 
+  group('a diff pane id', () {
+    test('round-trips all three fields, whatever shape the paths take', () {
+      for (final path in paths) {
+        final id = diffPaneId(
+          environmentId: 'wsl:archlinux',
+          checkoutPath: r'C:\src\app',
+          path: path,
+        );
+        expect(diffPaneTarget(id), (
+          environmentId: 'wsl:archlinux',
+          checkoutPath: r'C:\src\app',
+          path: path,
+        ), reason: path);
+        expect(isDiffPane(id), isTrue, reason: path);
+      }
+    });
+
+    test('is a document, and is not the editor\'s', () {
+      final id = diffPaneId(
+        environmentId: 'windows',
+        checkoutPath: r'C:\src\app',
+        path: 'lib/main.dart',
+      );
+      expect(isDocumentPane(id), isTrue);
+      expect(isSettingsPane(id), isFalse);
+      // An editor pane and a diff pane are different documents over one file.
+      expect(isEditorPane(id), isFalse);
+      expect(editorPanePath(id), isNull);
+      expect(isDiffPane(editorPaneId(r'C:\src\app\lib\main.dart')), isFalse);
+    });
+
+    test('names nothing for an id that is not one', () {
+      expect(diffPaneTarget(kSettingsPaneId), isNull);
+      expect(diffPaneTarget('shell:1'), isNull);
+      expect(diffPaneTarget(kDiffPanePrefix), isNull);
+      expect(isDiffPane(kSettingsPaneId), isFalse);
+    });
+
+    test('names nothing for the wrong number of fields', () {
+      const sep = kPaneFieldSeparator;
+      expect(diffPaneTarget('${kDiffPanePrefix}windows${sep}C:\\app'), isNull);
+      expect(
+        diffPaneTarget('${kDiffPanePrefix}windows${sep}C:\\app${sep}a${sep}b'),
+        isNull,
+      );
+    });
+
+    test('names nothing when any one field is empty', () {
+      const sep = kPaneFieldSeparator;
+      // Half an answer would diff some other file rather than refuse.
+      expect(
+        diffPaneTarget('$kDiffPanePrefix${sep}C:\\app${sep}a.dart'),
+        isNull,
+      );
+      expect(
+        diffPaneTarget('${kDiffPanePrefix}windows$sep${sep}a.dart'),
+        isNull,
+      );
+      expect(
+        diffPaneTarget('${kDiffPanePrefix}windows${sep}C:\\app$sep'),
+        isNull,
+      );
+    });
+  });
+
   group('the documents that were already there', () {
     test('settings still answers as before', () {
       expect(isSettingsPane(kSettingsPaneId), isTrue);

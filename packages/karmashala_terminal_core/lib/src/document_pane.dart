@@ -37,3 +37,37 @@ String? editorPanePath(String paneId) {
 
 /// Whether [paneId] is an open file.
 bool isEditorPane(String paneId) => editorPanePath(paneId) != null;
+
+/// The prefix a diff document's pane id carries. A diff names three things —
+/// which machine, which checkout, and which file inside it — so restore can
+/// re-run the diff without asking anything else.
+const String kDiffPanePrefix = '${kDocumentPanePrefix}diff:';
+
+/// The three fields are joined by ␟ (U+241F, SYMBOL FOR UNIT SEPARATOR), which
+/// no path may contain and which survives sqlite, JSON and being drawn.
+const String kPaneFieldSeparator = '\u241F';
+
+/// The pane id for [path] as diffed inside [checkoutPath] on [environmentId].
+String diffPaneId({
+  required String environmentId,
+  required String checkoutPath,
+  required String path,
+}) =>
+    '$kDiffPanePrefix$environmentId$kPaneFieldSeparator$checkoutPath'
+    '$kPaneFieldSeparator$path';
+
+/// What [paneId] names, or null when it is not a diff pane or is malformed.
+({String environmentId, String checkoutPath, String path})? diffPaneTarget(
+  String paneId,
+) {
+  if (!paneId.startsWith(kDiffPanePrefix)) return null;
+  final fields = paneId
+      .substring(kDiffPanePrefix.length)
+      .split(kPaneFieldSeparator);
+  // All three or none: a half-read id would diff some other file in silence.
+  if (fields.length != 3 || fields.any((field) => field.isEmpty)) return null;
+  return (environmentId: fields[0], checkoutPath: fields[1], path: fields[2]);
+}
+
+/// Whether [paneId] is a file's diff.
+bool isDiffPane(String paneId) => diffPaneTarget(paneId) != null;
