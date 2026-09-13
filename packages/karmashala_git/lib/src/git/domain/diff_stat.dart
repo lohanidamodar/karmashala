@@ -72,7 +72,9 @@ class FileDiffStat {
   final int? added;
   final int? removed;
 
-  bool get isBinary => added == null;
+  /// Either count missing: git writes `-` for a count it has no number for, and
+  /// a caller reading the other one through `!` would crash on a half-`-` row.
+  bool get isBinary => added == null || removed == null;
 
   @override
   bool operator ==(Object other) =>

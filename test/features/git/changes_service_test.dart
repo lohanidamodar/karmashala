@@ -99,6 +99,87 @@ void main() {
     expect(stats.keys, contains('lib/new/b.dart'));
   });
 
+  /// **The sidebar's counts and the tab's diff have to measure one thing.**
+  ///
+  /// Both measured against git 2.55.0 on 2026-09-13, in a repository with one
+  /// staged file and one whose name git has to quote.
+  group('what a row promises is what its tab can show', () {
+    /// git, scripted: `--numstat HEAD` and `diff HEAD` see the index, a bare
+    /// `diff` does not. The quoted spellings are git's own.
+    FakeCommandRunner scriptedGit() => FakeCommandRunner(
+      responder: (req) {
+        final args = req.arguments.skip(2).toList();
+        if (args.first == 'status') {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: 'M  lib/plain.dart\n M "lib/h\\303\\251llo.dart"\n',
+            stderr: '',
+          );
+        }
+        if (args.contains('--numstat')) {
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '1\t0\tlib/plain.dart\n1\t1\t"lib/h\\303\\251llo.dart"\n',
+            stderr: '',
+          );
+        }
+        // Only a diff that named a base sees the staged file.
+        final based = args.contains('HEAD');
+        return CommandResult(
+          exitCode: 0,
+          stdout: based ? '@@ -1 +1 @@\n-old\n+new\n' : '',
+          stderr: '',
+        );
+      },
+    );
+
+    late FakeCommandRunner git;
+    late ChangesService scripted;
+
+    setUp(() {
+      git = scriptedGit();
+      scripted = ChangesService(
+        runnerFactory: FakeCommandRunnerFactory(fallback: git),
+        environmentDao: ExecutionEnvironmentDao(db),
+      );
+    });
+
+    test('a staged file counted +1 -0 has a diff to show', () async {
+      final stats = await scripted.fileDiffStats(repo);
+      expect(stats['lib/plain.dart'], const FileDiffStat(added: 1, removed: 0));
+
+      // What the tab used to ask: no base, so git answers nothing at all and
+      // the pane said "no textual diff" about a file the row had counted.
+      expect(await scripted.diff(repo, path: 'lib/plain.dart'), isEmpty);
+      expect(
+        await scripted.diff(repo, path: 'lib/plain.dart', base: 'HEAD'),
+        contains('+new'),
+      );
+      expect(git.requests.last.arguments, [
+        '-C',
+        r'C:\app',
+        'diff',
+        'HEAD',
+        '--',
+        'lib/plain.dart',
+      ]);
+    });
+
+    test('a quoted path is one name from status to the pathspec', () async {
+      final change = (await scripted.changes(
+        repo,
+      )).firstWhere((c) => c.path != 'lib/plain.dart');
+      expect(change.path, 'lib/héllo.dart');
+
+      // The counts are keyed by that same name, so the row finds them.
+      final stats = await scripted.fileDiffStats(repo);
+      expect(stats[change.path], const FileDiffStat(added: 1, removed: 1));
+
+      await scripted.diff(repo, path: change.path, base: 'HEAD');
+      expect(git.requests.last.arguments.last, 'lib/héllo.dart');
+    });
+  });
+
   test('a merge announces the working tree it rewrote', () async {
     final changed = <EnvironmentPath>[];
     final notifying = ChangesService(
@@ -253,13 +334,17 @@ void main() {
       // path on *this* machine, which is the mistake constraint 8 exists for.
       ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
       final files = _FakeFiles(const {});
-      final facts = await ChangesService(
-        runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-        environmentDao: ExecutionEnvironmentDao(db),
-        files: files,
-      ).originFacts(
-        const EnvironmentPath(environmentId: 'ssh:h1', path: '/home/me/app'),
-      );
+      final facts =
+          await ChangesService(
+            runnerFactory: FakeCommandRunnerFactory(fallback: runner),
+            environmentDao: ExecutionEnvironmentDao(db),
+            files: files,
+          ).originFacts(
+            const EnvironmentPath(
+              environmentId: 'ssh:h1',
+              path: '/home/me/app',
+            ),
+          );
 
       expect(facts.url, 'https://github.com/acme/asked.git');
       expect(files.reads, isEmpty);
@@ -383,10 +468,7 @@ void main() {
       ExecutionEnvironmentDao(db).upsert(posixEnv());
 
       await serviceOver(db).changes(
-        const EnvironmentPath(
-          environmentId: 'windows',
-          path: '/Users/me/app',
-        ),
+        const EnvironmentPath(environmentId: 'windows', path: '/Users/me/app'),
       );
 
       expect(windows.requests.single.arguments, [

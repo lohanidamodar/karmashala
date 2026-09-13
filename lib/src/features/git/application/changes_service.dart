@@ -154,11 +154,17 @@ class ChangesService {
       _ask(repo, (git, at) => git.upstreamOf(at, branch));
 
   /// Unified diff for [repo], optionally limited to [path] / staged changes.
+  /// [base] is the ref it is taken against — `HEAD` for staged and unstaged
+  /// together, which is what [fileDiffStats] counts.
   Future<String> diff(
     EnvironmentPath repo, {
     String? path,
     bool staged = false,
-  }) => _ask(repo, (git, at) => git.diff(at, path: path, staged: staged));
+    String? base,
+  }) => _ask(
+    repo,
+    (git, at) => git.diff(at, path: path, staged: staged, base: base),
+  );
 
   /// The content fingerprint of each of [paths] as they stand on disk, for the
   /// review-thread anchors. A path git could not hash is absent from the map,
