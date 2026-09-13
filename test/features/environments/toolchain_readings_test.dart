@@ -1,6 +1,8 @@
 import 'package:agent_cli/process.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/environments/application/toolchain_readings.dart';
@@ -18,8 +20,14 @@ import '../../support/fixtures.dart';
 /// **nobody could ask** — which §19 says must never be reported as absence.
 void main() {
   ProviderContainer containerWith(FakeCommandRunner runner) {
+    // The Flutter row is answered by `FlutterSdkReadings`, which reads the
+    // hand-set SDK paths out of settings — so this needs a database even
+    // though nothing here stores anything.
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
     final container = ProviderContainer(
       overrides: [
+        databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: runner),
@@ -38,12 +46,68 @@ void main() {
     expect(readings.cached('windows'), isEmpty);
   });
 
+  test('Flutter is asked for by the name Windows actually has', () async {
+    // CLAUDE.md §17: the SDK ships `flutter.bat`, and a bare `flutter` is not
+    // found at all — Windows resolves PATHEXT only through a shell. Probing
+    // the wrong name reported "not found" on a machine that has Flutter.
+    final runner = FakeCommandRunner();
+    final container = containerWith(runner);
+
+    await container
+        .read(toolchainReadingsProvider.notifier)
+        .readAll(windowsEnv());
+
+    expect(
+      runner.requests
+          .where((r) => r.executable == 'where')
+          .map((r) => r.arguments.first),
+      contains('flutter.bat'),
+    );
+  });
+
+  test('a POSIX machine is asked for plain flutter', () async {
+    final runner = FakeCommandRunner();
+    final container = containerWith(runner);
+
+    await container
+        .read(toolchainReadingsProvider.notifier)
+        .readAll(wslEnv());
+
+    final located = runner.requests.map((r) => r.arguments.join(' ')).join(' ');
+    expect(located, contains('flutter'));
+    expect(located, isNot(contains('flutter.bat')));
+  });
+
+  test('a tool nothing can locate is missing, without being run', () async {
+    final runner = FakeCommandRunner(
+      responder: (request) => request.executable == 'where'
+          ? const CommandResult(exitCode: 1, stdout: '', stderr: '')
+          : const CommandResult(exitCode: 0, stdout: 'v1\n', stderr: ''),
+    );
+    final container = containerWith(runner);
+
+    final found = await container
+        .read(toolchainReadingsProvider.notifier)
+        .readAll(windowsEnv());
+
+    expect(found[Toolchain.node]!.status, ToolchainStatus.missing);
+    expect(
+      runner.requests.map((r) => r.executable),
+      isNot(contains('node')),
+      reason: 'nothing on PATH is nothing to run',
+    );
+  });
+
   test('a tool that answers is read at the version it printed', () async {
     final container = containerWith(
       FakeCommandRunner(
         responder: (request) => CommandResult(
           exitCode: 0,
-          stdout: request.executable == 'node' ? 'v22.11.0\n' : 'something\n',
+          stdout: request.executable == 'where'
+              ? r'C:\tools\node.exe' '\n'
+              : request.executable == 'node'
+              ? 'v22.11.0\n'
+              : 'something\n',
           stderr: '',
         ),
       ),
@@ -58,14 +122,21 @@ void main() {
   });
 
   test('a tool that writes its version to stderr is still read', () async {
-    // `java -version` has done this forever.
+    // `java -version` has done this forever. The locate that precedes it still
+    // answers on stdout, as `where` and `command -v` do.
     final container = containerWith(
       FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 0,
-          stdout: '',
-          stderr: 'openjdk version "21.0.4" 2024-07-16\n',
-        ),
+        responder: (request) => request.executable == 'where'
+            ? const CommandResult(
+                exitCode: 0,
+                stdout: r'C:\jdk\bin\java.exe' '\n',
+                stderr: '',
+              )
+            : const CommandResult(
+                exitCode: 0,
+                stdout: '',
+                stderr: 'openjdk version "21.0.4" 2024-07-16\n',
+              ),
       ),
     );
 
@@ -131,9 +202,11 @@ void main() {
         .read(toolchainReadingsProvider.notifier)
         .readAll(posixEnv(id: 'mac'));
 
+    // Named in the locate's arguments rather than spawned directly — a POSIX
+    // lookup runs through the shell, so the executable is the shell.
     expect(
-      runner.requests.map((r) => r.executable),
-      contains('xcodebuild'),
+      runner.requests.map((r) => '${r.executable} ${r.arguments.join(' ')}'),
+      anyElement(contains('xcodebuild')),
       reason: 'a localPosix may be a Mac or a Linux box; only it knows',
     );
   });

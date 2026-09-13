@@ -10,6 +10,7 @@ enum Toolchain {
     label: 'Flutter SDK',
     purpose: 'Flutter apps, and the Flutter half of a React Native one',
     executable: 'flutter',
+    windowsExecutable: 'flutter.bat',
     arguments: ['--version'],
   ),
   jdk(
@@ -42,6 +43,7 @@ enum Toolchain {
     required this.purpose,
     required this.executable,
     required this.arguments,
+    this.windowsExecutable,
   });
 
   final String label;
@@ -52,6 +54,15 @@ enum Toolchain {
 
   final String executable;
   final List<String> arguments;
+
+  /// What the same tool is called where Windows paths are used, when that
+  /// differs. **Flutter ships `flutter.bat`** (CLAUDE.md §17), and a bare
+  /// `flutter` is not found at all: Windows resolves PATHEXT only through a
+  /// shell, which a probe does not use.
+  final String? windowsExecutable;
+
+  String executableFor(EnvironmentKind kind) =>
+      usesWindowsPaths(kind) ? (windowsExecutable ?? executable) : executable;
 
   /// Whether this machine's kind rules the toolchain out on its own.
   ///
@@ -107,6 +118,11 @@ enum ToolchainStatus {
 
   /// This kind of machine cannot have it, established without asking.
   notApplicable,
+
+  /// Found, and refused on purpose. The only case today is §17's: a POSIX
+  /// environment whose `flutter` is really the Windows installation reached
+  /// through a drive mount, which must not be run there at all.
+  refused,
 }
 
 /// The first non-empty line, trimmed — which is where every one of these

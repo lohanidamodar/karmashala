@@ -67,8 +67,12 @@ final agentWorkingDirectoriesProvider =
 /// `agent:` pane's profile does not name one — its session does, which is what
 /// [focusedDirectoryProvider] falls back to.
 EnvironmentPath? paneDirectory(Ref ref, String paneId) {
-  final state = ref.watch(terminalSessionsControllerProvider);
-  final path = state.directoryOf(paneId);
+  // This one pane's directory, never the whole state: watching the state made
+  // the follower re-run on any pane's liveness or title moving, which is the
+  // cost `activePaneSessionIdProvider` documents beside itself.
+  final path = ref.watch(
+    terminalSessionsControllerProvider.select((s) => s.directoryOf(paneId)),
+  );
   if (path == null || path.isEmpty) return null;
   final instance = ref
       .read(terminalSessionsControllerProvider.notifier)

@@ -142,6 +142,11 @@ class SessionContext {
       directory,
     );
     if (repository == null) return null;
+    // Already there: a sweep of the repositories has happened, but nothing
+    // below needs doing — no selection write, no settings read, no reveal.
+    if (_ref.read(selectedRepositoryIdProvider) == repository.id) {
+      return repository;
+    }
     _ref.read(selectedProjectIdProvider.notifier).select(repository.projectId);
     _ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
     reveal(repository.projectId);

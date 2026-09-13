@@ -52,11 +52,13 @@ class ExplorerHeaderRow extends StatelessWidget {
     final row = InkWell(
       onTap: onTap,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: Chrome.row),
+        constraints: BoxConstraints(
+          minHeight: Chrome.row + emphasis.spaceAbove,
+        ),
         child: Padding(
           padding: EdgeInsets.fromLTRB(
             Insets.xs + depth * ExplorerRow.indent,
-            0,
+            emphasis.spaceAbove,
             Insets.xs,
             0,
           ),
@@ -74,7 +76,7 @@ class ExplorerHeaderRow extends StatelessWidget {
               const SizedBox(width: Insets.xs),
               Flexible(
                 child: Text(
-                  label,
+                  emphasis.write(label),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: style,
@@ -105,20 +107,36 @@ class ExplorerHeaderRow extends StatelessWidget {
   }
 }
 
+/// Three ranks, drawn so the eye can tell them apart without reading: the
+/// machine is a heading, its two sections are sub-headings under it, and a
+/// context is a grouping row among the projects it holds.
 enum HeaderEmphasis {
   machine,
   section,
   context;
 
   TextStyle? style(ThemeData theme) => switch (this) {
-    HeaderEmphasis.machine => theme.textTheme.labelMedium?.copyWith(
+    HeaderEmphasis.machine => theme.textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w700,
     ),
-    HeaderEmphasis.section => theme.textTheme.labelSmall,
+    // Spaced small caps, the same voice `SettingsSection` gives its own
+    // titles, so a section reads as a label over a list rather than a row in
+    // one.
+    HeaderEmphasis.section => theme.textTheme.labelSmall?.copyWith(
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.8,
+    ),
     HeaderEmphasis.context => theme.textTheme.labelSmall?.copyWith(
       fontWeight: FontWeight.w600,
     ),
   };
+
+  /// A machine wants air above it; nothing else does.
+  double get spaceAbove => this == HeaderEmphasis.machine ? Insets.sm : 0;
+
+  /// `PROJECTS`, not `Projects` — a sub-heading, not a thing in the list.
+  String write(String label) =>
+      this == HeaderEmphasis.section ? label.toUpperCase() : label;
 }
 
 /// The glyph for a machine, by what it is rather than by what it is called.

@@ -96,12 +96,23 @@ WslInteropState parseWslInterop(String stdout) {
   return enabled ? WslInteropState.registered : WslInteropState.disabled;
 }
 
-/// The line that puts the handler back, for the duration of this boot.
+/// The line that puts the handler back **and stops it going again**.
 ///
-/// Registering `MZ` magic against `/init` is what WSL itself does at start-up;
-/// running it by hand is the documented recovery and needs root inside the
-/// distribution. It does not survive a `wsl --shutdown`, which is the honest
-/// thing to say about it rather than presenting it as a fix.
+/// Three statements, in WSL's own order: write the durable registration, drop
+/// whatever is registered under that name now, and register it again for this
+/// boot. The middle one is why it works when the handler is merely *disabled*
+/// as well as when it is gone.
+///
+/// Measured 2026-09-13, and the file is the half that lasts. WSL already ships
+/// a repair — a generated drop-in gives `systemd-binfmt.service` an extra
+/// `ExecStart` that re-registers the handler — but the unit is gated on
+/// `ConditionDirectoryNotEmpty` across the five `binfmt.d` directories, so on
+/// a distribution where all five are empty it is skipped every boot, WSL's own
+/// repair with it: `Set Up Additional Binary Formats skipped, no trigger
+/// condition checks were met.` Writing one file into `/etc/binfmt.d` registers
+/// the handler *and* makes that condition pass.
 const String kWslInteropRepairCommand =
-    'sudo sh -c \'echo ":WSLInterop:M::MZ::/init:PF" '
-    '> /proc/sys/fs/binfmt_misc/register\'';
+    'sudo sh -c \'printf ":WSLInterop:M::MZ::/init:PF\\n" '
+    '> /etc/binfmt.d/WSLInterop.conf; '
+    'echo -1 > /proc/sys/fs/binfmt_misc/WSLInterop 2>/dev/null; '
+    'echo ":WSLInterop:M::MZ::/init:PF" > /proc/sys/fs/binfmt_misc/register\'';

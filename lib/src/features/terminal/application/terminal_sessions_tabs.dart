@@ -193,6 +193,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
     if (closing.contains(_activeTabId)) {
       _activeTabId =
           _tabById(activate)?.id ??
+          // Where the user was before this tab, not the first one in the strip.
+          _mostRecentSurvivor(closing) ??
           _survivorInFocusedGroup(closing) ??
           (_tabs.isEmpty ? null : _tabs.last.id);
     }

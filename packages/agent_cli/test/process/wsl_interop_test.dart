@@ -97,14 +97,34 @@ void main() {
     });
   });
 
-  test('the repair line registers MZ against /init', () {
-    // The exact line that brought interop back on the owner's machine; it is
-    // offered to copy, so it must be usable verbatim.
-    expect(kWslInteropRepairCommand, contains(':WSLInterop:M::MZ::/init:PF'));
-    expect(
-      kWslInteropRepairCommand,
-      contains('/proc/sys/fs/binfmt_misc/register'),
-    );
-    expect(kWslInteropRepairCommand, startsWith('sudo '));
+  group('the repair line', () {
+    // Offered to copy, so it must be usable verbatim.
+    test('registers MZ against /init for this boot', () {
+      expect(kWslInteropRepairCommand, contains(':WSLInterop:M::MZ::/init:PF'));
+      expect(
+        kWslInteropRepairCommand,
+        contains('/proc/sys/fs/binfmt_misc/register'),
+      );
+      expect(kWslInteropRepairCommand, startsWith('sudo '));
+    });
+
+    test('and writes the file that makes the repair survive a shutdown', () {
+      // Without this the handler goes again on the next boot:
+      // systemd-binfmt.service, where WSL's own re-registration lives, is
+      // skipped whenever every binfmt.d directory is empty.
+      expect(
+        kWslInteropRepairCommand,
+        contains('/etc/binfmt.d/WSLInterop.conf'),
+      );
+    });
+
+    test('drops a stale registration first, so a disabled one is repaired', () {
+      // The same order WSL's own drop-in uses. Registering over a name that
+      // already exists fails, which is exactly the "switched off" case.
+      final unregister = kWslInteropRepairCommand.indexOf('echo -1 >');
+      final register = kWslInteropRepairCommand.indexOf('binfmt_misc/register');
+      expect(unregister, greaterThan(-1));
+      expect(unregister, lessThan(register));
+    });
   });
 }
