@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../design_tokens.dart';
 import 'code_controller.dart';
+import 'code_gutter.dart';
 import 'code_theme.dart';
 
 /// The strut the field is laid out with. One gutter row is the line box that
@@ -118,24 +119,32 @@ class _CodeFieldState extends State<CodeField> {
     _measuredText = text;
     _measuredFontSize = fontSize;
 
-    var longest = '';
-    var longestRunes = 0;
-    for (final line in text.split('\n')) {
-      final runes = line.runes.length;
-      if (runes > longestRunes) {
-        longestRunes = runes;
-        longest = line;
+    // One scan over the code units rather than `split` + `runes`: the old form
+    // allocated a string and a rune iterator per line on every keystroke.
+    var longestStart = 0;
+    var longestEnd = 0;
+    var start = 0;
+    for (var i = 0; i <= text.length; i++) {
+      if (i != text.length && text.codeUnitAt(i) != 0x0A) continue;
+      if (i - start > longestEnd - longestStart) {
+        longestStart = start;
+        longestEnd = i;
       }
+      start = i + 1;
     }
 
-    _longestLineWidth = longest.isEmpty
+    _longestLineWidth = longestEnd == longestStart
         ? 0
-        : _layout(longest, style, strut, scaler).width;
+        : _layout(
+            text.substring(longestStart, longestEnd),
+            style,
+            strut,
+            scaler,
+          ).width;
     _lineHeight = _layout('0', style, strut, scaler).height;
 
-    final digits = widget.controller.lineCount.toString().length;
     _gutterWidth = widget.showLineNumbers
-        ? _layout('0' * digits, style, strut, scaler).width + Insets.sm * 2
+        ? CodeGutter.widthFor(widget.controller.lineCount, style, scaler)
         : 0;
   }
 
@@ -218,123 +227,82 @@ class _CodeFieldState extends State<CodeField> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final fieldWidth = math.max(0.0, constraints.maxWidth - _gutterWidth);
-        return Focus(
-          canRequestFocus: false,
-          skipTraversal: true,
-          onKeyEvent: _onKeyEvent,
+        final code = GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // The buffer rarely fills the pane; a click in the space under the
+          // last line should still put the caret in the file.
+          onTap: _focusNode.requestFocus,
           // No Scrollbar of our own: the scroll behaviour already draws the
           // vertical one on desktop, and two would paint over each other.
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            // The buffer rarely fills the pane; a click in the space under the
-            // last line should still put the caret in the file.
-            onTap: _focusNode.requestFocus,
-            child: SingleChildScrollView(
-              controller: _vertical,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (widget.showLineNumbers)
-                      _Gutter(
-                        lineCount: controller.lineCount,
-                        width: _gutterWidth,
-                        rowHeight: _lineHeight,
-                        strut: strut,
-                        style: codeStyle.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+          child: SingleChildScrollView(
+            controller: _vertical,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              // Loose, so the field is as tall as its own text and the space
+              // under the last line is empty rather than a stretched field.
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: SingleChildScrollView(
+                  controller: _horizontal,
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: math.max(fieldWidth, _longestLineWidth + Insets.lg),
+                    child: TextField(
+                      controller: controller,
+                      focusNode: _focusNode,
+                      readOnly: widget.readOnly,
+                      maxLines: null,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      keyboardType: TextInputType.multiline,
+                      cursorColor: scheme.primary,
+                      scrollPadding: EdgeInsets.zero,
+                      // The two viewports above own scrolling; the field's
+                      // own would fight them for the drag.
+                      scrollPhysics: const NeverScrollableScrollPhysics(),
+                      // Spelled out rather than `collapsed`: the app's
+                      // InputDecorationTheme is filled and bordered, and a
+                      // code surface drawn as a text box reads as a form.
+                      decoration: const InputDecoration(
+                        isCollapsed: true,
+                        filled: false,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
                       ),
-                    SizedBox(
-                      width: fieldWidth,
-                      child: SingleChildScrollView(
-                        controller: _horizontal,
-                        scrollDirection: Axis.horizontal,
-                        child: SizedBox(
-                          width: math.max(
-                            fieldWidth,
-                            _longestLineWidth + Insets.lg,
-                          ),
-                          child: TextField(
-                            controller: controller,
-                            focusNode: _focusNode,
-                            readOnly: widget.readOnly,
-                            maxLines: null,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            keyboardType: TextInputType.multiline,
-                            cursorColor: scheme.primary,
-                            scrollPadding: EdgeInsets.zero,
-                            // The two viewports above own scrolling; the field's
-                            // own would fight them for the drag.
-                            scrollPhysics: const NeverScrollableScrollPhysics(),
-                            // Spelled out rather than `collapsed`: the app's
-                            // InputDecorationTheme is filled and bordered, and a
-                            // code surface drawn as a text box reads as a form.
-                            decoration: const InputDecoration(
-                              isCollapsed: true,
-                              filled: false,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                            strutStyle: strut,
-                            style: codeStyle,
-                          ),
-                        ),
-                      ),
+                      strutStyle: strut,
+                      style: codeStyle,
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
         );
-      },
-    );
-  }
-}
-
-class _Gutter extends StatelessWidget {
-  const _Gutter({
-    required this.lineCount,
-    required this.width,
-    required this.rowHeight,
-    required this.strut,
-    required this.style,
-  });
-
-  final int lineCount;
-  final double width;
-  final double rowHeight;
-  final StrutStyle strut;
-  final TextStyle style;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: width,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var line = 1; line <= lineCount; line++)
-            SizedBox(
-              height: rowHeight,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-                child: Text(
-                  '$line',
-                  style: style,
-                  strutStyle: strut,
-                  textAlign: TextAlign.right,
-                  maxLines: 1,
+        return Focus(
+          canRequestFocus: false,
+          skipTraversal: true,
+          onKeyEvent: _onKeyEvent,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Outside the scroll view on purpose: it is painted at the
+              // viewport and scrolled by the controller, so its cost is the
+              // rows on screen rather than the rows in the file.
+              if (widget.showLineNumbers)
+                CodeGutter(
+                  lineCount: controller.lineCount,
+                  rowHeight: _lineHeight,
+                  scroll: _vertical,
+                  width: _gutterWidth,
+                  style: codeStyle.copyWith(color: scheme.onSurfaceVariant),
                 ),
-              ),
-            ),
-        ],
-      ),
+              SizedBox(width: fieldWidth, child: code),
+            ],
+          ),
+        );
+      },
     );
   }
 }

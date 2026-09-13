@@ -25,8 +25,22 @@ class CodeEditingController extends TextEditingController {
   /// Text a Tab inserts, and the unit Shift+Tab removes.
   static const String indent = '  ';
 
-  /// Lines in the buffer (never 0 — an empty buffer is one line).
-  int get lineCount => '\n'.allMatches(text).length + 1;
+  int? _lineCount;
+  String? _countedText;
+
+  /// Lines in the buffer (never 0 — an empty buffer is one line). Counted by
+  /// code unit and memoised: a `RegExp` here allocated a match per line, on
+  /// every build, for a file with fifty thousand of them.
+  int get lineCount {
+    final source = text;
+    if (_countedText == source) return _lineCount!;
+    var lines = 1;
+    for (var i = 0; i < source.length; i++) {
+      if (source.codeUnitAt(i) == 0x0A) lines++;
+    }
+    _countedText = source;
+    return _lineCount = lines;
+  }
 
   static final RegExp _leading = RegExp(r'^[ \t]*');
 

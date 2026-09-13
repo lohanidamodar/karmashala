@@ -15,12 +15,15 @@ void main() {
   setUp(() => controller = CodeEditingController(language: 'dart'));
   tearDown(() => controller.dispose());
 
-  /// The line box the field actually produced, read off a gutter row. The
-  /// engine's answer is not `fontSize * kCodeLineHeight` to the pixel, so the
-  /// gutter is measured from the same layout rather than multiplied out.
-  double rowHeight(WidgetTester tester) => tester
-      .getSize(find.ancestor(of: find.text('1'), matching: find.byType(SizedBox)).first)
-      .height;
+  /// The gutter, which is painted rather than built — so what a test can read
+  /// is the widget's own arithmetic, not a `Text` per line.
+  CodeGutter gutter(WidgetTester tester) =>
+      tester.widget<CodeGutter>(find.byType(CodeGutter));
+
+  /// The line box the field actually produced. The engine's answer is not
+  /// `fontSize * kCodeLineHeight` to the pixel, so the gutter takes its row
+  /// height from the same layout rather than multiplying it out.
+  double rowHeight(WidgetTester tester) => gutter(tester).rowHeight;
 
   Future<void> pump(
     WidgetTester tester, {
@@ -50,23 +53,61 @@ void main() {
     );
   }
 
-  testWidgets('one number per line, and no number for a line that is not there', (
-    tester,
-  ) async {
-    controller.text = 'alpha\nbeta\ngamma';
-    await pump(tester);
+  testWidgets(
+    'one number per line, and no number for a line that is not there',
+    (tester) async {
+      controller.text = 'alpha\nbeta\ngamma';
+      await pump(tester);
 
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
-    expect(find.text('4'), findsNothing);
-  });
+      expect(gutter(tester).lineCount, 3);
+    },
+  );
 
   testWidgets('an empty buffer still has line one', (tester) async {
     await pump(tester);
 
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('2'), findsNothing);
+    expect(gutter(tester).lineCount, 1);
+  });
+
+  testWidgets('the gutter draws the rows on screen, never the file', (
+    tester,
+  ) async {
+    // The whole reason it is painted: a hundred thousand lines must cost a
+    // screenful, and the arithmetic that decides that is worth pinning.
+    const rows = 18.0;
+    expect(
+      visibleGutterRows(
+        lineCount: 100000,
+        rowHeight: rows,
+        offset: 0,
+        height: 900,
+      ),
+      (first: 0, last: 50),
+    );
+    // Scrolled a long way down: still a screenful, and it starts where the
+    // viewport does rather than at line one.
+    final deep = visibleGutterRows(
+      lineCount: 100000,
+      rowHeight: rows,
+      offset: 90000,
+      height: 900,
+    );
+    expect(deep.first, 5000);
+    expect(deep.last - deep.first, lessThan(60));
+    // The end of the file is the end of the gutter, not one row past it.
+    expect(
+      visibleGutterRows(lineCount: 10, rowHeight: rows, offset: 0, height: 900),
+      (first: 0, last: 9),
+    );
+    // Nothing to draw is an empty range, never a negative loop.
+    expect(
+      visibleGutterRows(lineCount: 0, rowHeight: rows, offset: 0, height: 900),
+      (first: 0, last: -1),
+    );
+    expect(
+      visibleGutterRows(lineCount: 5, rowHeight: 0, offset: 0, height: 900),
+      (first: 0, last: -1),
+    );
   });
 
   testWidgets('a gutter row is exactly the line it stands beside', (
@@ -84,21 +125,21 @@ void main() {
     expect(strut.forceStrutHeight, isTrue);
   });
 
-  testWidgets('the second line sits one row below the first', (tester) async {
+  testWidgets('the gutter is as tall as the code, row for row', (tester) async {
     controller.text = 'a\nb\nc';
     await pump(tester);
 
-    final first = tester.getTopLeft(find.text('1')).dy;
-    final second = tester.getTopLeft(find.text('2')).dy;
-    expect(second - first, rowHeight(tester));
+    // The one invariant a painted gutter still has to keep: its row height is
+    // the field's line box, so row n stands beside line n at any scroll.
+    final field = tester.getSize(find.byType(TextField)).height;
+    expect(rowHeight(tester) * gutter(tester).lineCount, closeTo(field, 0.01));
   });
 
   testWidgets('showLineNumbers: false draws no numbers', (tester) async {
     controller.text = 'alpha\nbeta';
     await pump(tester, showLineNumbers: false);
 
-    expect(find.text('1'), findsNothing);
-    expect(find.text('2'), findsNothing);
+    expect(find.byType(CodeGutter), findsNothing);
     expect(find.byType(TextField), findsOneWidget);
   });
 
@@ -194,7 +235,7 @@ void main() {
       await pump(tester, size: size);
 
       expect(tester.takeException(), isNull);
-      expect(find.text('60'), findsOneWidget);
+      expect(gutter(tester).lineCount, greaterThanOrEqualTo(60));
       expect(find.byType(CodeField), findsOneWidget);
     });
   }
