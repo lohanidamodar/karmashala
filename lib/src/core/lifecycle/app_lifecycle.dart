@@ -5,6 +5,8 @@ import 'package:riverpod/riverpod.dart';
 import '../../features/agents/application/agent_hook_installation_service.dart';
 import '../../features/agents/application/agent_skill_installation_service.dart';
 import '../../features/agents/application/agent_hook_intake.dart';
+import '../../features/agents/application/agent_hook_sweep.dart';
+import '../../features/mcp/control_server_restart.dart';
 import '../../features/agents/application/agent_installations_controller.dart';
 import '../../features/agents/application/agent_path_repair_providers.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -136,6 +138,8 @@ class AppLifecycle {
     // Before the await: a partially started server may hold a port and files,
     // and `stop()` is safe on one that never bound.
     _controlServer = instance;
+    // Published so Settings can restart the one that is actually up.
+    _container.read(controlServerHandleProvider.notifier).set(instance);
     try {
       await instance.start();
       return instance;
@@ -221,27 +225,7 @@ class AppLifecycle {
         );
       }
     }
-    try {
-      final results = await _container
-          .read(agentHookInstallationServiceProvider)
-          .installAll(endpoint);
-      final report = AgentHookInstallationReport(results);
-      // Published, not just logged: a skipped environment means the hook-only
-      // states are unreportable there all run, and Settings is where to say so.
-      _container.read(agentHookInstallationReportProvider.notifier).set(report);
-      // The environments that report by file rather than by socket — a WSL agent
-      // cannot reach any address this app binds. An empty list stops the timer.
-      _container.read(agentHookSpoolDrainerProvider).watch(report.spoolSources);
-      _logger.info(
-        'Agent hooks: ${report.installed} installed, '
-        '${results.length - report.installed - report.unknown} skipped'
-        '${report.unknown == 0 ? '' : ', ${report.unknown} unknown'}'
-        '${report.spoolSources.isEmpty ? '' : ', '
-              '${report.spoolSources.length} reporting by spool'}.',
-      );
-    } on Object catch (error, stack) {
-      _logger.warning('Agent hook installation failed.', error, stack);
-    }
+    await sweepAgentHooks(_container, endpoint, logger: _logger);
   }
 
   /// Installs Karmashala's skills into every agent CLI that declares a root,

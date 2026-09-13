@@ -45,6 +45,11 @@ class _Family extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ExpansionTile(
+      // Its own slot in PageStorage. Without one this tile's identifier is the
+      // enclosing scroll view's — `settings_screen.dart` keys it per section —
+      // so it read that view's saved *offset* as its expanded flag: a `double`
+      // cast to `bool?` in initState, which rendered the page as nothing.
+      key: PageStorageKey<String>('agent-tools:${category.label}'),
       // The settings page has no cards; this tile's would be the only one.
       shape: const Border(),
       collapsedShape: const Border(),
