@@ -139,6 +139,11 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
     );
     try {
       final found = await ref.read(hostSessionsServiceProvider).list(host);
+      // A dial outlives the node that started it: collapsing Terminals, or the
+      // Explorer rebuilding, disposes this provider while the host is still
+      // being asked. Riverpod throws on `ref` after that, and the answer is
+      // nobody's to keep.
+      if (!ref.mounted) return;
       state = EnvironmentTerminals(
         terminals: [
           for (final session in found)
@@ -153,6 +158,7 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
         readAt: ref.read(clockProvider).nowUtc(),
       );
     } on Object catch (e) {
+      if (!ref.mounted) return;
       // In the host's own words: "could not look" is a different answer from
       // "nothing is running", and an empty list would tell the second story.
       state = EnvironmentTerminals(
@@ -170,6 +176,7 @@ class EnvironmentTerminalsController extends Notifier<EnvironmentTerminals> {
     final host = ref.read(sshHostDaoProvider).getById(hostId);
     if (host == null) return;
     await ref.read(hostSessionsServiceProvider).end(host, hostSessionId);
+    if (!ref.mounted) return;
     await refresh();
   }
 }

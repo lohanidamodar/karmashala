@@ -44,6 +44,11 @@ enum SidePanelSurface {
   /// agent when the user is ready for them. Hidden when Notes is switched off.
   notes('Notes', drawsOwnHeader: true, requiresNotes: true),
 
+  /// **What a session started here would be given** — the MCP servers and
+  /// skills the agent's own configuration names, read off files with their
+  /// age. Never what a running session bound; the CLI owns that (§19).
+  agentContext('Context'),
+
   /// The app's own log tail. Hidden unless debug mode is on: a diagnostic, not
   /// a tool, and a rail glyph nobody needs is in the way of the daily ones.
   logs('Logs', requiresDebugMode: true);

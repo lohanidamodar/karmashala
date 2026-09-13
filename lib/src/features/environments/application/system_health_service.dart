@@ -247,8 +247,10 @@ class SystemHealthService {
   static const String _interopRemedy =
       'This is the machine, not the app, and it takes out everything at once: '
       'the MCP bridge a session here spawns, cmd.exe, and any Windows build '
-      'tool. Registering the handler again fixes it until the next '
-      '`wsl --shutdown`, after which WSL registers its own.';
+      'tool. It keeps coming back because WSL\'s own repair lives in '
+      'systemd-binfmt.service, which is skipped on every boot where each '
+      'binfmt.d directory is empty. The command below registers the handler '
+      'now and writes the file that makes that repair run from here on.';
 
   // --- Android tooling -----------------------------------------------------
 

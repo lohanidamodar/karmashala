@@ -53,6 +53,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   final List<TerminalTab> _tabs = [];
   String? _activeTabId;
 
+  /// Tab ids most-recently-active first. Closing a tab hands the keyboard back
+  /// to where the user was *before* it, rather than to whichever tab happens
+  /// to sit first in the strip.
+  final List<String> _tabOrder = [];
+
   /// The workspace split tree — see [WorkspaceLayout]. Kept in step with
   /// [_tabs] by [_reconcileWorkspace] rather than by every tab verb.
   WorkspaceLayout? _workspace;
@@ -220,6 +225,7 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   void _publish() {
     _warnIfPublishingDuringBuild();
+    _rememberActiveTab();
     // Here, on the way out, rather than in [_snapshot], which `build()` also
     // calls: a reconciler reachable from a read writes at a moment Riverpod
     // refuses in debug and swallows in release.
@@ -228,6 +234,31 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     _titles.clear();
     _applyIngestTiers();
     state = _snapshot();
+  }
+
+  /// Records the tab on screen as the most recent, and forgets tabs that have
+  /// gone. Done on the way out of every mutation, so no tab verb has to
+  /// remember to.
+  void _rememberActiveTab() {
+    final id = _activeTabId;
+    if (id != null && (_tabOrder.isEmpty || _tabOrder.first != id)) {
+      _tabOrder
+        ..remove(id)
+        ..insert(0, id);
+    }
+    _tabOrder.removeWhere((tabId) => !_tabIndex.containsKey(tabId));
+  }
+
+  /// The most recently active tab that survives [closing] and is in the group
+  /// the user is working in. Null when none of them is.
+  String? _mostRecentSurvivor(Set<String> closing) {
+    final group = _focusedGroup;
+    for (final id in _tabOrder) {
+      if (closing.contains(id) || _tabById(id) == null) continue;
+      if (group != null && !group.panes.contains(id)) continue;
+      return id;
+    }
+    return null;
   }
 
   /// Says **where** a publish landed inside a build, in debug only: Riverpod's

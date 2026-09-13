@@ -1,8 +1,12 @@
+import 'package:agent_cli/discovery.dart' show locateRequest;
 import 'package:agent_cli/process.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
+import 'package:karmashala_flutter_apps/flutter_apps.dart';
+
+import '../../flutter_apps/application/flutter_sdk_readings.dart';
 import '../domain/toolchain.dart';
 
 /// How long a reading is worth reusing before the panel measures again.
@@ -57,7 +61,18 @@ class ToolchainReadings
         found[toolchain] = ToolchainReading.impossible(toolchain, now);
         continue;
       }
-      found[toolchain] = await _probe(runner, toolchain, now);
+      // Flutter is not probed here. `FlutterSdkService` already locates it —
+      // `flutter.bat` on Windows, a hand-set path never overruled, and §17's
+      // refusal for a POSIX `flutter` that is really the Windows install
+      // through a drive mount. A second lookup got all three wrong.
+      found[toolchain] = toolchain == Toolchain.flutterSdk
+          ? _fromFlutterReading(
+              await ref
+                  .read(flutterSdkReadingsProvider.notifier)
+                  .readFor(environment, force: force),
+              now,
+            )
+          : await _probe(runner, environment, toolchain, now);
     }
     state = {...state, environment.id: found};
     return found;
@@ -69,15 +84,62 @@ class ToolchainReadings
     state = {...state}..remove(environmentId);
   }
 
+  ToolchainReading _fromFlutterReading(FlutterSdkReading reading, DateTime now) {
+    if (reading.isUsable) {
+      return ToolchainReading(
+        toolchain: Toolchain.flutterSdk,
+        status: reading.version == null
+            ? ToolchainStatus.presentVersionUnknown
+            : ToolchainStatus.present,
+        readAt: reading.readAt,
+        version: reading.version,
+      );
+    }
+    return ToolchainReading(
+      toolchain: Toolchain.flutterSdk,
+      status: switch (reading.refusal) {
+        FlutterSdkRefusal.notFound => ToolchainStatus.missing,
+        FlutterSdkRefusal.environmentUnreachable => ToolchainStatus.unknown,
+        FlutterSdkRefusal.windowsInstallOnPosixPath => ToolchainStatus.refused,
+        // Located and running, and it would not say which version it is.
+        FlutterSdkRefusal.versionUnreadable =>
+          ToolchainStatus.presentVersionUnknown,
+        // A path a *person* named and that will not run. Refused rather than
+        // missing: only correcting or clearing that row helps, and saying
+        // "not found" would send them looking for an install instead.
+        FlutterSdkRefusal.handSetUnusable => ToolchainStatus.refused,
+        null => ToolchainStatus.unknown,
+      },
+      readAt: reading.readAt,
+      detail: reading.reason,
+    );
+  }
+
   Future<ToolchainReading> _probe(
     CommandRunner runner,
+    ExecutionEnvironment environment,
     Toolchain toolchain,
     DateTime now,
   ) async {
+    // Located before it is run, the way agent discovery already locates a CLI.
+    // Running the bare name would answer "missing" for anything Windows
+    // resolves through PATHEXT — `flutter.bat` above all (CLAUDE.md §17).
+    final name = toolchain.executableFor(environment.kind);
     try {
+      final located = await runner.run(
+        locateRequest(environment.kind, name),
+      );
+      if (!located.ok || (firstLineOf(located.stdout) ?? '').isEmpty) {
+        return ToolchainReading(
+          toolchain: toolchain,
+          status: ToolchainStatus.missing,
+          readAt: now,
+          detail: 'no $name on PATH in ${environment.name}',
+        );
+      }
       final result = await runner.run(
         CommandRequest(
-          executable: toolchain.executable,
+          executable: name,
           arguments: toolchain.arguments,
           timeout: const Duration(seconds: 20),
         ),

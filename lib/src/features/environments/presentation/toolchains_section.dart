@@ -188,6 +188,7 @@ class _ToolchainRow extends StatelessWidget {
         scheme.onSurfaceVariant,
       ),
       ToolchainStatus.unknown => (AppIcons.warningCircle, semantic.neutral),
+      ToolchainStatus.refused => (AppIcons.warningCircle, semantic.attention),
     };
     final said = switch (status) {
       ToolchainStatus.present => reading?.version ?? toolchain.label,
@@ -196,6 +197,7 @@ class _ToolchainRow extends StatelessWidget {
       ToolchainStatus.missing => 'not found',
       ToolchainStatus.notApplicable => 'not on this kind of machine',
       ToolchainStatus.unknown => 'could not be asked',
+      ToolchainStatus.refused => 'found here, and refused',
     };
 
     return Padding(
@@ -226,8 +228,11 @@ class _ToolchainRow extends StatelessWidget {
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
+                // The reason matters for both: one says why it could not be
+                // asked, the other why what it found must not be run.
                 if (reading?.detail case final String detail
-                    when status == ToolchainStatus.unknown)
+                    when status == ToolchainStatus.unknown ||
+                        status == ToolchainStatus.refused)
                   Text(
                     detail,
                     maxLines: 2,

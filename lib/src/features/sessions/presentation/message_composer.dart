@@ -1,3 +1,4 @@
+import 'package:karmashala_core/logging.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -46,6 +47,8 @@ class MessageComposer extends StatefulWidget {
 }
 
 class _MessageComposerState extends State<MessageComposer> {
+  static final _log = AppLogger.named('composer');
+
   late TextEditingController _input;
   final _attachments = <_Attachment>[];
   bool _busy = false;
@@ -103,11 +106,28 @@ class _MessageComposerState extends State<MessageComposer> {
     return KeyEventResult.ignored;
   }
 
+  /// Ctrl/Cmd+V also attaches a clipboard image when there is one.
+  ///
+  /// **It used to swallow every failure**, so a paste that did not attach left
+  /// nothing behind — not a message, not a log line — and there was no way to
+  /// tell a clipboard holding no image from one that could not be read. Both
+  /// now say so, and only the second is an error.
   Future<void> _pasteImageIfAny() async {
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final img = await Pasteboard.image;
-      if (img != null && img.isNotEmpty) await _addImageBytes(img);
-    } catch (_) {}
+      if (img != null && img.isNotEmpty) {
+        await _addImageBytes(img);
+        return;
+      }
+      _log.debug('Paste: the clipboard holds no image.');
+    } on Object catch (error, stack) {
+      _log.warning('Paste: the clipboard could not be read.', error, stack);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('That image could not be pasted: $error')),
+      );
+    }
   }
 
   Future<Directory> _attachmentsDir() async {
