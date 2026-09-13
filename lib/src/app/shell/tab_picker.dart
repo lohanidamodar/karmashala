@@ -192,8 +192,9 @@ class _TabPickerState extends ConsumerState<TabPicker> {
     }
     // Closing the last row leaves the cursor past the end. It stays where the
     // list now ends rather than snapping to the top.
-    if (_selected >= _rows.length)
+    if (_selected >= _rows.length) {
       _selected = _rows.isEmpty ? 0 : _rows.length - 1;
+    }
 
     return Dialog(
       alignment: Alignment.topCenter,
