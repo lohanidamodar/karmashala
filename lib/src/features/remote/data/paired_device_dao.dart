@@ -80,6 +80,17 @@ class PairedDeviceDao {
     ]);
   }
 
+  /// What the user calls this device. The name a phone sent at pairing is a
+  /// reading of what it said it was; only this makes it correctable (§20).
+  void rename(String id, String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    _db.execute('UPDATE paired_devices SET name = ? WHERE id = ?;', [
+      trimmed,
+      id,
+    ]);
+  }
+
   /// Revokes a device: the key is **deleted**, not merely flagged, so a
   /// revoked row can never seal or open another frame.
   void revoke(String id) {

@@ -137,7 +137,7 @@ void main() {
   RemoteCompanionGateway makeGateway() {
     final gateway = RemoteCompanionGateway(
       store: store,
-      deviceName: 'Test phone',
+      deviceModel: 'Test phone',
       relayFactory: (relay, rendezvous) => RelayTransport(
         endpoint: RelayTransport.endpointFor(relay, rendezvous),
         backoff: fastBackoff(),
@@ -685,7 +685,7 @@ void main() {
     // should be able to poison the launch either.
     final gateway = RemoteCompanionGateway(
       store: _ThrowingStore(),
-      deviceName: 'Test phone',
+      deviceModel: 'Test phone',
       relayFactory: (relay, rendezvous) => RelayTransport(
         endpoint: RelayTransport.endpointFor(relay, rendezvous),
         backoff: fastBackoff(),

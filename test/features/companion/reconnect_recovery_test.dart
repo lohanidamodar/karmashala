@@ -87,7 +87,7 @@ void main() {
   Future<RemoteCompanionGateway> pairedPhone() async {
     final gateway = RemoteCompanionGateway(
       store: store,
-      deviceName: 'Test phone',
+      deviceModel: 'Test phone',
       relayFactory: (url, rendezvous) => RelayTransport(
         endpoint: RelayTransport.endpointFor(url, rendezvous),
         backoff: fastBackoff(),

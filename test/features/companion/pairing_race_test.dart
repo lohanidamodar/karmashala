@@ -99,7 +99,7 @@ void main() {
   RemoteCompanionGateway makeGateway({LanPathScout? lan}) {
     final gateway = RemoteCompanionGateway(
       store: store,
-      deviceName: 'Race phone',
+      deviceModel: 'Race phone',
       lan: lan,
       relayFactory: (relay, rendezvous) => RelayTransport(
         endpoint: RelayTransport.endpointFor(relay, rendezvous),

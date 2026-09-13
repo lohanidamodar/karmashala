@@ -338,6 +338,40 @@ class _DeviceRow extends ConsumerWidget {
     return 'Last seen ${since.inDays} d ago';
   }
 
+  /// A phone names itself at pairing, and two of them once arrived calling
+  /// themselves the same thing. This is the only way to tell them apart again.
+  Future<void> _rename(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController(text: device.name);
+    final picked = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename device'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Name',
+            helperText: 'Only this desktop sees it; the phone is not told.',
+          ),
+          onSubmitted: (value) => Navigator.of(context).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (picked == null || picked.trim().isEmpty) return;
+    ref.read(remoteAccessControllerProvider).rename(device, picked);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -381,7 +415,13 @@ class _DeviceRow extends ConsumerWidget {
               ],
             ),
           ),
-          if (!device.revoked)
+          if (!device.revoked) ...[
+            IconButton(
+              tooltip: 'Rename',
+              iconSize: Chrome.icon,
+              icon: const Icon(AppIcons.pencilSimple),
+              onPressed: () => _rename(context, ref),
+            ),
             TextButton.icon(
               onPressed: () =>
                   ref.read(remoteAccessControllerProvider).revoke(device),
@@ -389,6 +429,7 @@ class _DeviceRow extends ConsumerWidget {
               label: const Text('Revoke'),
               style: TextButton.styleFrom(foregroundColor: scheme.error),
             ),
+          ],
         ],
       ),
     );

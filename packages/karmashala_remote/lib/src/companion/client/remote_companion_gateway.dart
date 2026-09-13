@@ -17,6 +17,7 @@ import '../../client/companion_store.dart' as stored;
 import '../../client/lan_path.dart';
 import '../../client/relay_candidates.dart';
 import '../../domain/remote_payloads.dart';
+import '../../pairing/companion_device_name.dart';
 import '../../pairing/pairing_code.dart';
 import '../../pairing/pairing_payload.dart';
 import '../../protocol.dart';
@@ -46,7 +47,7 @@ part 'remote_companion_gateway_attachments.dart';
 class RemoteCompanionGateway implements CompanionGateway {
   RemoteCompanionGateway({
     required this.store,
-    this.deviceName = 'Companion',
+    this.deviceModel,
     this.deviceKind = CompanionDeviceKind.unknown,
     RelayTransportFactoryFn? relayFactory,
     this.requestTimeout = const Duration(seconds: 15),
@@ -81,7 +82,10 @@ class RemoteCompanionGateway implements CompanionGateway {
   final stored.CompanionStore store;
 
   /// What the desktop's device list will call this phone.
-  final String deviceName;
+  /// What this device says it is, or null when it could not be read. The name
+  /// on the wire is built from it and the stable device id, so two phones are
+  /// never indistinguishable in the desktop's list.
+  final String? deviceModel;
 
   /// What this companion runs on, as `notifications.register` reports it.
   /// [CompanionDeviceKind.unknown] by default: a build not told must not guess.
@@ -315,7 +319,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     final pairingClient = CompanionPairingClient(
       store: store,
       deviceId: await stableDeviceId(),
-      deviceName: deviceName,
+      deviceName: await _deviceName(),
     );
     final record = await _runPairing(
       attempt: (link) => pairingClient.pair(
@@ -350,7 +354,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     final pairingClient = CompanionPairingClient(
       store: store,
       deviceId: await stableDeviceId(),
-      deviceName: deviceName,
+      deviceName: await _deviceName(),
     );
     final record = await _runPairing(
       attempt: (link) => pairingClient.pairWithTypedCode(
@@ -381,6 +385,11 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// and again. Read at most once: two pairings racing must not mint two.
   Future<DeviceId> stableDeviceId() => _deviceIdOnce ??= _readOrMintDeviceId();
   Future<DeviceId>? _deviceIdOnce;
+
+  Future<String> _deviceName() async => companionDeviceName(
+    model: deviceModel,
+    deviceId: (await stableDeviceId()).value,
+  );
 
   @override
   Future<Uri> pairingRelay() async {

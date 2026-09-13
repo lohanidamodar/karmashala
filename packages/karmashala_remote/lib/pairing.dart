@@ -2,6 +2,7 @@
 /// and the wire format both ends read.
 library;
 
+export 'src/pairing/companion_device_name.dart';
 export 'src/pairing/host_pairing.dart';
 export 'src/pairing/pairing_code.dart';
 export 'src/pairing/pairing_payload.dart';

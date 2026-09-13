@@ -203,6 +203,9 @@ dependencies:
   # runs on a worker isolate rather than the one drawing the app.
   image: ^4.8.0
   ffi: ^2.2.0
+  # What a phone calls itself when it pairs, so two paired devices are not
+  # both "Companion" in the desktop's list.
+  device_info_plus: ^12.4.0
 
 # Dart-only stand-ins for the two Windows plugin implementations, whose C++
 # needs ATL and /await — both gone from the VS 2026 toolchain (MSVC 14.51).

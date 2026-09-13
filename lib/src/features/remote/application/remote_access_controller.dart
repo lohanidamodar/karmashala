@@ -163,6 +163,13 @@ class RemoteAccessController {
     await _service?.cancelPairing();
   }
 
+  /// Renames a paired device. Nothing on the wire changes: the name is this
+  /// desktop's own label for a row it stores, and the phone never learns it.
+  void rename(PairedDevice device, String name) {
+    _ref.read(pairedDeviceDaoProvider).rename(device.id, name);
+    _ref.read(pairedDevicesRevisionProvider.notifier).bump();
+  }
+
   /// Revokes a device: key deleted, frames rejected. Works with the service
   /// off too — a revocation must never wait for a listener.
   Future<void> revoke(PairedDevice device) async {

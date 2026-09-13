@@ -102,7 +102,7 @@ void main() {
   RemoteCompanionGateway makeGateway() {
     final gateway = RemoteCompanionGateway(
       store: store,
-      deviceName: 'Test phone',
+      deviceModel: 'Test phone',
       relayFactory: (relay, rendezvous) => RelayTransport(
         endpoint: RelayTransport.endpointFor(relay, rendezvous),
         backoff: fastBackoff(),

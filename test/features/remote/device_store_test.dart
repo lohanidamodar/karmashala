@@ -30,6 +30,44 @@ void main() {
     createdAt: DateTime.utc(2026, 8, 31, 12),
   );
 
+  group('renaming', () {
+    // Two phones once arrived both calling themselves "Companion", and the
+    // desktop's list could not say which row was which. Pairing names only new
+    // pairings; this is what repairs the rows that already exist (§20).
+    test('the desktop can correct what a phone called itself', () {
+      dao.insert(device());
+
+      dao.rename(idA, '  Damodar\u2019s Oppo  ');
+
+      expect(dao.getById(idA)!.name, 'Damodar\u2019s Oppo');
+    });
+
+    test('an empty name is refused rather than stored', () {
+      dao.insert(device());
+
+      dao.rename(idA, '   ');
+
+      expect(
+        dao.getById(idA)!.name,
+        'OPPO',
+        reason: 'a nameless row is worse than the name it was replacing',
+      );
+    });
+
+    test('renaming touches nothing else about the device', () {
+      dao.insert(device());
+      final before = dao.getById(idA)!;
+
+      dao.rename(idA, 'Pixel 7 Pro');
+
+      final after = dao.getById(idA)!;
+      expect(after.deviceKey, before.deviceKey);
+      expect(after.generation, before.generation);
+      expect(after.capabilities, before.capabilities);
+      expect(after.revoked, isFalse);
+    });
+  });
+
   test('a device round-trips through the store', () {
     dao.insert(device());
 

@@ -78,7 +78,7 @@ void main() {
       await started.start();
       final gateway = RemoteCompanionGateway(
         store: store,
-        deviceName: 'Test phone',
+        deviceModel: 'Test phone',
         relayFactory: (relay, rendezvous) => RelayTransport(
           endpoint: RelayTransport.endpointFor(relay, rendezvous),
           backoff: fastBackoff(),

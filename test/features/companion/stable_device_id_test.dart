@@ -87,7 +87,7 @@ void main() {
   RemoteCompanionGateway makeGateway({stored.CompanionStore? over}) {
     final gateway = RemoteCompanionGateway(
       store: over ?? store,
-      deviceName: 'Test phone',
+      deviceModel: 'Test phone',
       relayFactory: (relay, rendezvous) => RelayTransport(
         endpoint: RelayTransport.endpointFor(relay, rendezvous),
         backoff: fastBackoff(),

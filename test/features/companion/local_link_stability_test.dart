@@ -187,7 +187,7 @@ void main() {
   }) {
     final gateway = RemoteCompanionGateway(
       store: store,
-      deviceName: 'Test phone',
+      deviceModel: 'Test phone',
       lan: scout,
       relayFactory: (url, rendezvous) {
         final transport = CountingRelayTransport(

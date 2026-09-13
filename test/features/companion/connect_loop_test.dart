@@ -151,7 +151,7 @@ void main() {
   }) {
     final gateway = RemoteCompanionGateway(
       store: store,
-      deviceName: 'Test phone',
+      deviceModel: 'Test phone',
       lan: scout,
       pairingTimeout: pairingTimeout,
       relayFactory: (relay, rendezvous) {

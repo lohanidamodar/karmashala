@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import 'companion_device_name.dart';
 import '../../core/lifecycle/uncaught_errors.dart';
 import '../../core/logging/diagnostics_bootstrap.dart';
 import 'package:karmashala_remote/companion.dart';
@@ -37,6 +38,11 @@ Future<void> runCompanionApp() async {
 
   // The real protocol client behind the gateway seam. Only this bootstrap wires
   // it, so tests and the desktop build keep the fake and never touch storage.
+  // Read before the gateway is built: the name rides the pairing hello, and a
+  // phone that pairs as "Companion" cannot be told from the next one.
+  final deviceModel = await readDeviceModel();
+  logger.info('This device reports itself as ${deviceModel ?? "unnamed"}.');
+
   final container = ProviderContainer(
     overrides: [
       companionGatewayProvider.overrideWith((ref) {
@@ -46,6 +52,7 @@ Future<void> runCompanionApp() async {
         final gatewayLog = AppLogger.named('companion.gateway');
         final gateway = RemoteCompanionGateway(
           store: SecureCompanionStore(),
+          deviceModel: deviceModel,
           // What this build actually runs on, reported so a push can be routed by it.
           // Nothing spends it yet; a guess would be worse than the honest `unknown`.
           deviceKind: !kIsWeb && (Platform.isAndroid || Platform.isIOS)
