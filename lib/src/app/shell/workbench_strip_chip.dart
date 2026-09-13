@@ -98,15 +98,15 @@ class _TabChip extends ConsumerWidget {
         title: const DesktopDialogTitle(
           icon: AppIcons.terminalWindow,
           title: 'Save this layout as a preset',
-          subtitle: 'The shape only — which panes, split how, running what and '
+          subtitle:
+              'The shape only — which panes, split how, running what and '
               'where. Opening it later starts fresh terminals.',
         ),
         content: TextField(
           controller: controller,
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Name'),
-          onSubmitted: (value) =>
-              Navigator.of(context).pop(value.trim()),
+          onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
         ),
         actions: [
           TextButton(
@@ -114,8 +114,7 @@ class _TabChip extends ConsumerWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(context).pop(controller.text.trim()),
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
             child: const Text('Save'),
           ),
         ],
@@ -129,10 +128,10 @@ class _TabChip extends ConsumerWidget {
     WidgetRef ref, {
     bool detach = true,
   }) async {
-    if (!await releaseEditorsBeforeClose(context, ref, [tab.id])) return;
-    ref
-        .read(terminalSessionsControllerProvider.notifier)
-        .closeTab(tab.id, detach: detach);
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    await closeEditors(context, ref, [
+      tab.id,
+    ], () => sessions.closeTab(tab.id, detach: detach));
   }
 
   /// Whether any editor pane in this tab has unsaved edits. Narrowed twice, so
@@ -159,9 +158,9 @@ class _TabChip extends ConsumerWidget {
     final group = groupId;
     final tabs = group == null
         ? ref.read(terminalTabsProvider)
-        : ref.read(terminalSessionsControllerProvider.notifier).tabsInGroup(
-            group,
-          );
+        : ref
+              .read(terminalSessionsControllerProvider.notifier)
+              .tabsInGroup(group);
     final at = tabs.indexWhere((candidate) => candidate.id == tab.id);
     if (at < 0) return;
     final ids = scope.apply([for (final tab in tabs) tab.id], at);
@@ -179,9 +178,15 @@ class _TabChip extends ConsumerWidget {
         .length;
 
     if (!context.mounted) return;
-    if (!await releaseEditorsBeforeClose(context, ref, ids)) return;
+    // Asked before the second question and released only after the close, or
+    // cancelling the *live sessions* dialog would have thrown the edits away
+    // and left every editor pane with no document to draw.
+    if (!await confirmEditorsClosable(context, ref, ids)) return;
+    final editors = ref.read(editorTabActionsProvider);
+    final paths = editors.pathsIn(ids);
     if (live == 0) {
       sessions.closeTabs(ids, activate: tab.id);
+      editors.release(paths);
       return;
     }
     if (!context.mounted) return;
@@ -196,6 +201,7 @@ class _TabChip extends ConsumerWidget {
       detach: choice == BulkCloseChoice.keepRunning,
       activate: tab.id,
     );
+    editors.release(paths);
   }
 
   /// The strongest liveness among this tab's panes, asked pane by pane: the
@@ -216,8 +222,9 @@ class _TabChip extends ConsumerWidget {
 
   /// What the agent in this tab is doing, or null when it holds none. Pane by
   /// pane for [_liveness]'s reason; [paneAgentActivityProvider] is narrowed twice.
-  AgentActivityStatus? _agentActivity(WidgetRef ref) => mostUrgentAgentActivity([
-    for (final paneId in tab.layout.panes)
-      ref.watch(paneAgentActivityProvider(paneId)),
-  ]);
+  AgentActivityStatus? _agentActivity(WidgetRef ref) =>
+      mostUrgentAgentActivity([
+        for (final paneId in tab.layout.panes)
+          ref.watch(paneAgentActivityProvider(paneId)),
+      ]);
 }

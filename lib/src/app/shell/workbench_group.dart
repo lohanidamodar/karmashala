@@ -22,6 +22,7 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
   /// The session whose **conversation** is mounted, or null when none is. Built
   /// only once asked for: an [IndexedStack] mounts every child, transcript and all.
   String? _conversationFor;
+
   /// Wired to the labelled Chat half of the bar's toggle. No *ordinary* tap
   /// opens the conversation — every writer of `false` is a deliberate request.
   void _showChat() {
@@ -149,7 +150,9 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
     final hosted = _hostedSelection(ref, groupId);
     if (hosted != null) {
       if (!hosted.native) {
-        final imported = ref.read(importedSessionDaoProvider).getById(hosted.id);
+        final imported = ref
+            .read(importedSessionDaoProvider)
+            .getById(hosted.id);
         return _WorkbenchSession(
           id: hosted.id,
           title: imported?.displayTitle ?? 'Session',
@@ -250,7 +253,9 @@ class _EmptyGroup extends ConsumerWidget {
         sessions.focusGroup(groupId);
         NewSessionDialog.show(context);
       },
-      onClose: () => sessions.closeGroup(groupId),
+      onClose: () => closeEditors(context, ref, [
+        for (final tab in sessions.tabsInGroup(groupId)) tab.id,
+      ], () => sessions.closeGroup(groupId)),
       onMoveTabHere: () =>
           TabPicker.show(context, (ref) => tabsMovableToGroup(ref, groupId)),
     );

@@ -49,11 +49,21 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     }
     // No `showing` gate: the stack keeps every mounted tab alive, and an
     // editor rebuilt on every switch would lose the caret and the scroll.
+    // Keyed by the file: two editor panes can share one region, and without a
+    // key the State of the one leaving is handed the other's path.
     if (editorPanePath(paneId) case final path?) {
-      return EditorTabView(hostPath: path);
+      return EditorTabView(key: ValueKey(paneId), hostPath: path);
     }
     if (diffTargetOf(paneId) case final target?) {
-      return DiffTabView(target: target);
+      return DiffTabView(key: ValueKey(paneId), target: target);
+    }
+    // A document id we cannot read is still a document: saying so beats
+    // drawing the empty-terminal slot the instance lookup below would.
+    if (isDocumentPane(paneId)) {
+      return const PanePlaceholder(
+        message: 'This tab names a document Karmashala cannot read.',
+        icon: AppIcons.warningCircle,
+      );
     }
     final instance = _sessions.instanceFor(paneId);
     // No instance is the `isEmptySlot` invariant and the only way this can be

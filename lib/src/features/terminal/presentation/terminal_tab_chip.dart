@@ -140,23 +140,10 @@ class TerminalTabChip extends StatelessWidget {
           ? TabLivenessDot(liveness: liveness)
           : TabAgentStatusDot(status: status),
       label: title,
-      trailing: IconButton(
-        tooltip: unsaved
-            ? 'Unsaved changes — close tab'
-            : liveness.isLive
-            ? 'Close tab (the session keeps running)'
-            : 'Close tab',
-        iconSize: Chrome.iconSmall,
-        visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-        padding: EdgeInsets.zero,
-        icon: unsaved
-            ? StatusDot(
-                color: Theme.of(context).colorScheme.primary,
-                label: 'unsaved changes',
-              )
-            : const Icon(AppIcons.x),
-        onPressed: onClose,
+      trailing: _TabCloseButton(
+        unsaved: unsaved,
+        liveness: liveness,
+        onClose: onClose,
       ),
     );
   }
@@ -216,5 +203,54 @@ class TerminalTabChip extends StatelessWidget {
       default:
         onBulkClose(TabCloseScope.values.byName(choice));
     }
+  }
+}
+
+/// The chip's close control. A dirty tab wears a dot in the slot — a different
+/// mark, not a different colour — and the pointer turns it back into the `×`,
+/// so the way to close it is never hidden (§5).
+class _TabCloseButton extends StatefulWidget {
+  const _TabCloseButton({
+    required this.unsaved,
+    required this.liveness,
+    required this.onClose,
+  });
+
+  final bool unsaved;
+  final PaneLiveness liveness;
+  final VoidCallback onClose;
+
+  @override
+  State<_TabCloseButton> createState() => _TabCloseButtonState();
+}
+
+class _TabCloseButtonState extends State<_TabCloseButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final dot = widget.unsaved && !_hovered;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: IconButton(
+        tooltip: widget.unsaved
+            ? 'Unsaved changes — close tab'
+            : widget.liveness.isLive
+            ? 'Close tab (the session keeps running)'
+            : 'Close tab',
+        iconSize: Chrome.iconSmall,
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+        padding: EdgeInsets.zero,
+        icon: dot
+            ? StatusDot(
+                color: Theme.of(context).colorScheme.primary,
+                label: 'unsaved changes',
+              )
+            : const Icon(AppIcons.x),
+        onPressed: widget.onClose,
+      ),
+    );
   }
 }

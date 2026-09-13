@@ -21,7 +21,7 @@ abstract interface class TerminalLinkActions {
   Future<TerminalPathKind?> kindOf(String hostPath);
 
   /// Opens [hostPath], returning a message to show or null when it worked.
-  /// [line] and [column] are threaded but not honoured yet.
+  /// [line] is scrolled to; [column] is threaded but not honoured yet.
   Future<String?> open(
     String hostPath,
     TerminalPathKind kind, {
@@ -31,8 +31,8 @@ abstract interface class TerminalLinkActions {
 }
 
 /// The app's [TerminalLinkActions]: a directory reveals through
-/// [RevealInFileManager], a file opens through [EditorActions], a URL goes to
-/// the browser — the same openers every other surface uses.
+/// [RevealInFileManager], a file opens in an editor tab, a URL goes to the
+/// browser — the same openers every other surface uses.
 class AppTerminalLinkActions implements TerminalLinkActions {
   AppTerminalLinkActions(this._ref);
 

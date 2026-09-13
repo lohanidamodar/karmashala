@@ -31,6 +31,7 @@ import '../../../app/shell/quick_open/quick_open.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/shell/tab_picker.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'empty_pane_region.dart';
 import 'pane_group_strip.dart';
 import 'pane_layout_view.dart';

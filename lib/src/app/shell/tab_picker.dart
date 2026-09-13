@@ -10,12 +10,21 @@ import 'quick_open/quick_open_list.dart';
 /// One tab in the workbench strip, as the picker needs it. Wraps a
 /// [QuickOpenItem] so a tab is scored and drawn like every other row.
 class TabEntry {
-  const TabEntry({required this.item, required this.active, this.onClose});
+  const TabEntry({
+    required this.item,
+    required this.active,
+    this.unsaved = false,
+    this.onClose,
+  });
 
   final QuickOpenItem item;
 
   /// Whether this is the tab the workbench is showing.
   final bool active;
+
+  /// Whether it holds a file with edits that are not on disk — said here too,
+  /// because this list offers to close it.
+  final bool unsaved;
 
   /// Closes the tab from the list. `null` when it cannot be closed from here.
   final VoidCallback? onClose;
@@ -183,7 +192,8 @@ class _TabPickerState extends ConsumerState<TabPicker> {
     }
     // Closing the last row leaves the cursor past the end. It stays where the
     // list now ends rather than snapping to the top.
-    if (_selected >= _rows.length) _selected = _rows.isEmpty ? 0 : _rows.length - 1;
+    if (_selected >= _rows.length)
+      _selected = _rows.isEmpty ? 0 : _rows.length - 1;
 
     return Dialog(
       alignment: Alignment.topCenter,
@@ -243,6 +253,8 @@ class _TabPickerState extends ConsumerState<TabPicker> {
       // highlight is the keyboard cursor and means something else.
       detail: entry.active
           ? (item.detail == null ? 'current' : 'current · ${item.detail}')
+          : entry.unsaved
+          ? (item.detail == null ? 'unsaved' : 'unsaved · ${item.detail}')
           : item.detail,
       selected: index == _selected,
       onTap: () {
@@ -252,7 +264,9 @@ class _TabPickerState extends ConsumerState<TabPicker> {
       trailing: onClose == null
           ? null
           : IconButton(
-              tooltip: 'Close ${item.title}',
+              tooltip: entry.unsaved
+                  ? 'Unsaved changes — close ${item.title}'
+                  : 'Close ${item.title}',
               iconSize: Chrome.iconSmall,
               visualDensity: VisualDensity.compact,
               constraints: const BoxConstraints(

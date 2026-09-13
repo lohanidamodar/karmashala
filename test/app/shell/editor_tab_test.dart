@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -301,6 +302,100 @@ void main() {
 
     expect(editorTabsIn(container), isEmpty);
     expect(store.disk[_path], 'kept\n');
+  });
+
+  testWidgets('cancelling the unsaved dialog keeps the tab and the edits', (
+    tester,
+  ) async {
+    final container = await openFile(tester);
+    await tester.enterText(codeInput, 'unsaved\n');
+    await settle(tester);
+    final tabId = editorTabsIn(container).single;
+
+    await tester.tap(find.byTooltip('Unsaved changes — close tab'));
+    await settle(tester);
+    await tester.tap(find.text('Cancel'));
+    await settle(tester);
+
+    expect(editorTabsIn(container), [tabId]);
+    expect(container.read(openDocumentProvider(_path))?.text, 'unsaved\n');
+    expect(container.read(dirtyDocumentPathsProvider), contains(_path));
+    // And the pane still has a document to draw, rather than a spinner.
+    expect(find.byType(CodeField), findsOneWidget);
+  });
+
+  testWidgets('cancelling the *second* question also keeps the edits', (
+    tester,
+  ) async {
+    // The review's worst finding. A bulk close asks twice — about unsaved
+    // files, then about live sessions — and used to release every buffer
+    // between the two. Answering "close, don't save" and then cancelling the
+    // live-sessions dialog closed nothing and lost the edits anyway, leaving
+    // each editor pane with no document to draw.
+    final container = await launch(tester);
+    // The terminal first: opening a tab activates it, and the editor has to be
+    // the one on screen for its own chip to be the one right-clicked.
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .openTab(TerminalProfile.powerShell);
+    await settle(tester);
+    refOf(tester).read(editorTabActionsProvider).open(_path);
+    await settle(tester);
+    await tester.enterText(codeInput, 'unsaved\n');
+    await settle(tester);
+    final before = container
+        .read(terminalSessionsControllerProvider)
+        .tabs
+        .map((tab) => tab.id)
+        .toList();
+
+    await tester.tap(
+      find.byTooltip('Unsaved changes — close tab'),
+      buttons: kSecondaryButton,
+    );
+    await settle(tester);
+    await tester.tap(find.text('Close all'));
+    await settle(tester);
+    await tester.tap(find.text("Close, don't save"));
+    await settle(tester);
+    // The live-sessions dialog is the second question; cancel it.
+    expect(find.text('Cancel'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await settle(tester);
+
+    expect(
+      container
+          .read(terminalSessionsControllerProvider)
+          .tabs
+          .map((tab) => tab.id),
+      before,
+      reason: 'nothing was closed',
+    );
+    expect(
+      container.read(openDocumentProvider(_path))?.text,
+      'unsaved\n',
+      reason: 'so nothing may have been released',
+    );
+    expect(find.byType(CodeField), findsOneWidget);
+  });
+
+  testWidgets('a buffer closed while a save is in flight stays closed', (
+    tester,
+  ) async {
+    final container = await openFile(tester);
+    final documents = container.read(openDocumentsProvider.notifier);
+    documents.edit(_path, 'in flight\n');
+    await settle(tester);
+
+    final saving = documents.save(_path);
+    documents.close(_path);
+    await saving;
+    await settle(tester);
+
+    // The write lands on disk, but nothing puts the buffer back: it belongs to
+    // no tab now, and reopening the file must read what is there.
+    expect(container.read(openDocumentProvider(_path)), isNull);
+    expect(store.disk[_path], 'in flight\n');
   });
 
   testWidgets('a clean tab closes without asking', (tester) async {

@@ -28,14 +28,36 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
   @override
   Map<String, SourceDocument> build() => const {};
 
+  /// The files a tab still wants. A read or a write started before a close
+  /// must not put its result back afterwards — the buffer would outlive every
+  /// tab holding it and be served to whoever opened that file next.
+  final Set<String> _wanted = {};
+
+  bool _stillWanted(String hostPath) => _wanted.contains(hostPath);
+
   /// Reads [hostPath] from disk unless it is already open. Idempotent: a
   /// restored tab and an explicit open both call it.
   Future<void> open(String hostPath) async {
+    _wanted.add(hostPath);
     if (state.containsKey(hostPath) || !_reading.add(hostPath)) return;
     try {
       final document = await ref.read(documentStoreProvider).load(hostPath);
-      if (state.containsKey(hostPath)) return;
+      if (state.containsKey(hostPath) || !_stillWanted(hostPath)) return;
       state = {...state, hostPath: document};
+    } on Object catch (error) {
+      // `load` classifies rather than throws, so this is a contract break — but
+      // an escaped error here leaves the pane on a spinner for ever (§5).
+      if (!_stillWanted(hostPath)) return;
+      state = {
+        ...state,
+        hostPath: SourceDocument(
+          hostPath: hostPath,
+          text: '',
+          savedText: '',
+          refusal: DocumentRefusal.unreadable,
+          error: 'Could not read this file: $error',
+        ),
+      };
     } finally {
       _reading.remove(hostPath);
     }
@@ -67,6 +89,14 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
     final store = ref.read(documentStoreProvider);
     if (!force) {
       final onDisk = await store.stamp(hostPath);
+      if (document.stamp != null && onDisk == null) {
+        // Gone is not changed, and the difference decides what "reload" would
+        // do to the buffer (§19).
+        return SaveOutcome(
+          SaveResult.stale,
+          '${document.name} is no longer on disk.',
+        );
+      }
       if (!(document.stamp?.matches(onDisk) ?? true)) {
         return SaveOutcome(
           SaveResult.stale,
@@ -90,18 +120,20 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
     if (typedMeanwhile != null && typedMeanwhile != document.text) {
       saved = saved.withText(typedMeanwhile);
     }
-    state = {...state, hostPath: saved};
+    if (_stillWanted(hostPath)) state = {...state, hostPath: saved};
     return const SaveOutcome(SaveResult.saved);
   }
 
   /// Re-reads from disk, discarding the buffer.
   Future<void> reload(String hostPath) async {
     final document = await ref.read(documentStoreProvider).load(hostPath);
+    if (!_stillWanted(hostPath)) return;
     state = {...state, hostPath: document};
   }
 
   /// Drops the buffer. Unsaved text is gone — the caller asks first.
   void close(String hostPath) {
+    _wanted.remove(hostPath);
     if (!state.containsKey(hostPath)) return;
     state = {...state}..remove(hostPath);
   }

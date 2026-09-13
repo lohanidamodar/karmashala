@@ -42,17 +42,31 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
           subtitle: _whereabouts(tab, titles, sessions),
           // A document is not a process, so it has no liveness to report —
           // "not running" would be true of a page and say nothing about it.
-          detail:
-              _isDocumentTab(tab) || sessions.livenessForTab(tab.id).isLive
+          detail: _isDocumentTab(tab) || sessions.livenessForTab(tab.id).isLive
               ? null
               : 'not running',
           icon: _documentIconFor(tab) ?? AppIcons.terminal,
           onSelect: () => activateTerminalTab(ref, tab.id),
         ),
         active: onPanes && tab.id == active,
-        onClose: () => sessions.closeTab(tab.id),
+        unsaved: _tabHasUnsaved(ref, tab),
+        onClose: () => closeEditors(ref.context, ref, [
+          tab.id,
+        ], () => sessions.closeTab(tab.id)),
       ),
   ];
+}
+
+/// Whether [tab] holds a file with edits that are not on disk — so the picker
+/// can say so before offering to close it.
+bool _tabHasUnsaved(WidgetRef ref, TerminalTab tab) {
+  final paths = [
+    for (final paneId in tab.layout.panes) ?editorPanePath(paneId),
+  ];
+  if (paths.isEmpty) return false;
+  return ref.watch(
+    dirtyDocumentPathsProvider.select((dirty) => paths.any(dirty.contains)),
+  );
 }
 
 /// Whether every pane in [tab] is a surface the workbench draws itself.

@@ -13,6 +13,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../features/agents/presentation/usage_chip.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/imported_session_view.dart';
+import '../../features/editor/application/editor_tab_actions.dart';
 import '../../features/editor/application/open_documents.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/explorer/application/explorer_actions.dart';
@@ -122,7 +123,9 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
         ref.read(selectedImportedSessionIdProvider);
     ref
         .read(selectionHostGroupProvider.notifier)
-        .host(selected == null ? null : ref.read(focusedWorkspaceGroupProvider));
+        .host(
+          selected == null ? null : ref.read(focusedWorkspaceGroupProvider),
+        );
   }
 
   /// Reveals the pane [sessionId] is already running in; starts and stops
@@ -210,7 +213,9 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     });
     // Going somewhere yourself releases whatever your last click was holding.
     ref.listen(
-      terminalSessionsControllerProvider.select((s) => s.activeTab?.focusedPaneId),
+      terminalSessionsControllerProvider.select(
+        (s) => s.activeTab?.focusedPaneId,
+      ),
       (_, _) => ref.read(explorerFollowHoldProvider.notifier).release(),
     );
     // **Where the pane on screen is working, now** — an agent's hook cwd, a

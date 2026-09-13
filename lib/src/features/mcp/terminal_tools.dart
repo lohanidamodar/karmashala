@@ -1,5 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
+import 'package:karmashala_terminal_core/geometry.dart';
+import '../editor/application/editor_tab_actions.dart';
+import '../editor/application/open_documents.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import '../terminal/data/command_run_watch.dart';
 import '../terminal/data/terminal_grid_text.dart';
@@ -335,7 +338,18 @@ class TerminalControlTools {
       throw StateError('No terminal tab with id $tabId.');
     }
     final panes = List<String>.from(tab.layout.panes);
+    // No dialog to put to an agent, so an unsaved buffer is reported rather
+    // than silently dropped — and released, or it would outlive every tab that
+    // could show it and be served to whoever opened that file next.
+    final dirty = _container.read(dirtyDocumentPathsProvider);
+    final unsaved = [
+      for (final paneId in panes)
+        if (editorPanePath(paneId) case final path?)
+          if (dirty.contains(path)) path,
+    ];
+    final files = [for (final paneId in panes) ?editorPanePath(paneId)];
     _controller.closeTab(tabId, detach: !kill);
+    _container.read(editorTabActionsProvider).release(files);
 
     final after = _container.read(terminalSessionsControllerProvider);
     final stillDetached = <String>{
@@ -344,6 +358,7 @@ class TerminalControlTools {
     return <String, Object?>{
       'tabId': tabId,
       'closed': true,
+      if (unsaved.isNotEmpty) 'unsavedEditsDiscarded': unsaved,
       'panes': <Object?>[
         for (final paneId in panes)
           <String, Object?>{

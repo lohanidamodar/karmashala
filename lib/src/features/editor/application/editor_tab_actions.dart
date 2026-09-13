@@ -40,16 +40,23 @@ class EditorTabActions {
     ];
   }
 
-  /// Drops the buffers the closed [tabIds] held, so reopening one of those
-  /// files reads it from disk rather than restoring an edit nobody kept.
-  void releaseIn(Iterable<String> tabIds) {
+  /// The files open in [tabIds]. Read **before** a close: once the tabs are
+  /// gone there is nothing left to ask which files they held.
+  List<String> pathsIn(Iterable<String> tabIds) {
     final wanted = tabIds.toSet();
+    return [
+      for (final tab in _ref.read(terminalSessionsControllerProvider).tabs)
+        if (wanted.contains(tab.id))
+          for (final paneId in tab.layout.panes) ?editorPanePath(paneId),
+    ];
+  }
+
+  /// Drops those buffers, so reopening one of those files reads it from disk
+  /// rather than restoring an edit nobody kept.
+  void release(Iterable<String> paths) {
     final documents = _ref.read(openDocumentsProvider.notifier);
-    for (final tab in _ref.read(terminalSessionsControllerProvider).tabs) {
-      if (!wanted.contains(tab.id)) continue;
-      for (final paneId in tab.layout.panes) {
-        if (editorPanePath(paneId) case final path?) documents.close(path);
-      }
+    for (final path in paths) {
+      documents.close(path);
     }
   }
 }
