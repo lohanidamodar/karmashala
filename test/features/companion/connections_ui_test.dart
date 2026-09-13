@@ -251,9 +251,12 @@ void main() {
   });
 
   group('the switcher strip above the sessions', () {
-    testWidgets('one desktop pays no chrome for a choice it does not have', (
+    testWidgets('one desktop is still named, and still offers another', (
       tester,
     ) async {
+      // It used to hide itself below two desktops, which is precisely what
+      // made a second one undiscoverable: this strip is where "Add a desktop"
+      // lives.
       final gateway = FakeCompanionGateway.paired(
         connections: [
           CompanionConnection(hostId: studio, name: 'Studio', active: true),
@@ -265,7 +268,16 @@ void main() {
         home: const HostSwitcherBar(),
       );
 
-      expect(find.text('Studio'), findsNothing);
+      expect(find.text('Studio'), findsOneWidget);
+      expect(
+        find.text('1 saved'),
+        findsNothing,
+        reason: 'a count of one is noise beside the name it counts',
+      );
+
+      await tester.tap(find.text('Studio'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add a desktop'), findsOneWidget);
     });
 
     testWidgets('two desktops name the active one and how many are saved', (
@@ -369,7 +381,9 @@ void main() {
       expect(find.text('THIS CONNECTION'), findsOneWidget);
     });
 
-    testWidgets('a single-desktop phone shows no strip at all', (tester) async {
+    testWidgets('a single-desktop phone is told which desktop it is on', (
+      tester,
+    ) async {
       final gateway = FakeCompanionGateway.paired(
         sessions: [summary('s1')],
         connections: [
@@ -379,7 +393,8 @@ void main() {
       await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
 
       expect(find.byType(HostSwitcherBar), findsOneWidget);
-      expect(find.text('2 saved'), findsNothing);
+      expect(find.text('Studio'), findsOneWidget);
+      expect(find.text('1 saved'), findsNothing);
       expect(find.text('Session s1'), findsOneWidget);
     });
   });

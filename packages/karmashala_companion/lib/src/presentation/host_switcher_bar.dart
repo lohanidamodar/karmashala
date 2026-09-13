@@ -9,8 +9,11 @@ import 'companion_chrome.dart';
 import 'pairing/pairing_screen.dart';
 
 /// The strip above the session list that names the desktop being shown and
-/// switches to another in one tap. Absent with a single saved desktop, which
-/// Settings still lists.
+/// switches to another in one tap.
+///
+/// **Drawn at one desktop too.** Hiding it there is what made a second desktop
+/// undiscoverable: this is where "Add a desktop" lives. It says nothing about
+/// the link — [LinkBanner] owns that, and says *why* as well.
 class HostSwitcherBar extends ConsumerWidget {
   const HostSwitcherBar({super.key});
 
@@ -62,7 +65,8 @@ class HostSwitcherBar extends ConsumerWidget {
     final connections =
         ref.watch(companionConnectionsProvider).asData?.value ??
         const <CompanionConnection>[];
-    if (connections.length < 2) return const SizedBox.shrink();
+    // Nothing paired at all is the pairing screen's business, not this strip's.
+    if (connections.isEmpty) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -112,8 +116,13 @@ class HostSwitcherBar extends ConsumerWidget {
                   style: density.title(theme),
                 ),
               ),
-              Text('${connections.length} saved', style: density.muted(theme)),
-              const SizedBox(width: Insets.xs),
+              if (connections.length > 1) ...[
+                Text(
+                  '${connections.length} saved',
+                  style: density.muted(theme),
+                ),
+                const SizedBox(width: Insets.xs),
+              ],
               Icon(
                 AppIcons.caretDown,
                 size: density.iconSmall,
