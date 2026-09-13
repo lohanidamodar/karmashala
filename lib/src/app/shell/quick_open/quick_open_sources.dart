@@ -8,7 +8,6 @@ import '../../../features/agents/application/agent_installations_controller.dart
 import '../../../features/agents/application/agent_providers.dart';
 import '../../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../../features/cli_detection/data/conversation_index_dao.dart';
-import '../../../features/editor/application/code_editor_providers.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
 import '../../../features/fanout/presentation/fanout_dialog.dart';
 import '../../../features/git/application/changes_providers.dart';
@@ -18,6 +17,7 @@ import '../../../features/notifications/application/notification_providers.dart'
 import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
 import '../../../features/repositories/application/repository_providers.dart';
+import '../../../features/editor/application/editor_tab_actions.dart';
 import '../../../features/explorer/application/explorer_actions.dart';
 import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
@@ -804,8 +804,8 @@ class QuickOpenSources {
   ];
 
   /// A file with uncommitted changes opens in the diff we already render; any
-  /// other opens in the configured editor. Either way the panel follows.
-  Future<void> _openFile(IndexedFile file, {required bool changed}) async {
+  /// other opens in an editor tab. Either way the panel follows.
+  void _openFile(IndexedFile file, {required bool changed}) {
     final panel = ref.read(sidePanelProvider.notifier);
     if (changed) {
       ref.read(selectedChangeFileProvider.notifier).select(file.relativePath);
@@ -813,14 +813,7 @@ class QuickOpenSources {
       return;
     }
     panel.select(SidePanelSurface.files);
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    try {
-      await ref.read(editorActionsProvider).openPath(file.hostPath);
-    } catch (error) {
-      messenger?.showSnackBar(
-        SnackBar(content: Text(error is StateError ? error.message : '$error')),
-      );
-    }
+    ref.read(editorTabActionsProvider).open(file.hostPath);
   }
 
   // --- branches, pull requests and issues ----------------------------------

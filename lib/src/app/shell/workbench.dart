@@ -13,6 +13,8 @@ import 'package:agent_cli/descriptors.dart';
 import '../../features/agents/presentation/usage_chip.dart';
 import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/imported_session_view.dart';
+import '../../features/editor/application/open_documents.dart';
+import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/explorer/application/explorer_actions.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/explorer/application/where_you_are.dart';

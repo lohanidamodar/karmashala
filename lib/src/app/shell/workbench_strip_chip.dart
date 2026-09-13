@@ -30,7 +30,6 @@ class _TabChip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     final title = ref.watch(terminalTabTitleProvider(tab.id));
     final chip = TerminalTabChip(
       title: title,
@@ -38,18 +37,15 @@ class _TabChip extends ConsumerWidget {
       agentStatus: _agentActivity(ref),
       // A document tab has nothing running in it, so it wears what it is rather
       // than a liveness dot reporting `exited`.
-      icon:
-          tab.layout.panes.length == 1 &&
-              isSettingsPane(tab.layout.panes.single)
-          ? AppIcons.gearSix
-          : null,
+      icon: _documentIconFor(tab),
+      unsaved: _hasUnsaved(ref),
       selected: selected,
       accented: accented,
       index: index,
       tabCount: tabCount,
       onTap: () => activateTerminalTab(ref, tab.id),
-      onClose: () => sessions.closeTab(tab.id),
-      onEnd: () => sessions.closeTab(tab.id, detach: false),
+      onClose: () => _close(context, ref),
+      onEnd: () => _close(context, ref, detach: false),
       onBulkClose: (scope) => _bulkClose(context, ref, scope),
       onSavePreset: () => _savePreset(context, ref),
     );
@@ -127,6 +123,30 @@ class _TabChip extends ConsumerWidget {
     ).then((value) => (value == null || value.isEmpty) ? null : value);
   }
 
+  /// Closes this tab, asking first when it holds edits that are not on disk.
+  Future<void> _close(
+    BuildContext context,
+    WidgetRef ref, {
+    bool detach = true,
+  }) async {
+    if (!await releaseEditorsBeforeClose(context, ref, [tab.id])) return;
+    ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .closeTab(tab.id, detach: detach);
+  }
+
+  /// Whether any editor pane in this tab has unsaved edits. Narrowed twice, so
+  /// a tab holding no file never subscribes to the set at all.
+  bool _hasUnsaved(WidgetRef ref) {
+    final paths = [
+      for (final paneId in tab.layout.panes) ?editorPanePath(paneId),
+    ];
+    if (paths.isEmpty) return false;
+    return ref.watch(
+      dirtyDocumentPathsProvider.select((dirty) => paths.any(dirty.contains)),
+    );
+  }
+
   /// Runs [scope], asking first when it would take a running session with it: a
   /// bulk close that silently parks a dozen live agents is nobody's intent.
   Future<void> _bulkClose(
@@ -158,10 +178,13 @@ class _TabChip extends ConsumerWidget {
         )
         .length;
 
+    if (!context.mounted) return;
+    if (!await releaseEditorsBeforeClose(context, ref, ids)) return;
     if (live == 0) {
       sessions.closeTabs(ids, activate: tab.id);
       return;
     }
+    if (!context.mounted) return;
     final choice = await confirmBulkTabClose(
       context,
       tabs: ids.length,

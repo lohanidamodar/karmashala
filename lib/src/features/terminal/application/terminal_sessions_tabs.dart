@@ -57,6 +57,30 @@ extension TerminalTabVerbs on TerminalSessionsController {
     return tabId;
   }
 
+  /// Opens [hostPath] in an editor tab, or brings the open one forward: one
+  /// tab per file, or two buffers would disagree about the same bytes.
+  String openEditorTab(String hostPath) {
+    final paneId = editorPaneId(hostPath);
+    final open = _tabContaining(paneId);
+    if (open != null) {
+      activateTab(open.id);
+      return open.id;
+    }
+    final tabId = _newId();
+    _tabs.add(
+      TerminalTab(
+        id: tabId,
+        layout: PaneLayout.single(paneId),
+        focusedPaneId: paneId,
+      ),
+    );
+    _tabsMutated();
+    _activeTabId = tabId;
+    _publish();
+    persistStructure();
+    return tabId;
+  }
+
   /// Opens a new tab running an agent CLI in a PTY and makes it active. The
   /// pane is an ordinary terminal, which is what makes any registry agent usable
   /// without a protocol adapter.

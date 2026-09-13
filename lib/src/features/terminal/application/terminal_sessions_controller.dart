@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_core/logging.dart';

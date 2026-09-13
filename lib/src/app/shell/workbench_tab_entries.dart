@@ -46,7 +46,7 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
               _isDocumentTab(tab) || sessions.livenessForTab(tab.id).isLive
               ? null
               : 'not running',
-          icon: _isDocumentTab(tab) ? AppIcons.gearSix : AppIcons.terminal,
+          icon: _documentIconFor(tab) ?? AppIcons.terminal,
           onSelect: () => activateTerminalTab(ref, tab.id),
         ),
         active: onPanes && tab.id == active,
@@ -55,9 +55,18 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
   ];
 }
 
-/// Whether every pane in [tab] is a surface the workbench draws itself — the
-/// Settings tab, and nothing else so far.
+/// Whether every pane in [tab] is a surface the workbench draws itself.
 bool _isDocumentTab(TerminalTab tab) => tab.layout.panes.every(isDocumentPane);
+
+/// The glyph a document tab wears in place of a liveness dot, or null when the
+/// tab holds a process. One table, so the strip and the picker cannot disagree.
+IconData? _documentIconFor(TerminalTab tab) {
+  if (tab.layout.panes.length != 1) return null;
+  final paneId = tab.layout.panes.single;
+  if (isSettingsPane(paneId)) return AppIcons.gearSix;
+  if (isEditorPane(paneId)) return AppIcons.fileCode;
+  return null;
+}
 
 /// Where a tab is: the session running in its focused pane, the directory that
 /// pane is in, or both — without it a window of `zsh` tabs is identical rows.

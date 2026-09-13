@@ -190,6 +190,18 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData fileCode = IconData(
+    0xe914,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+  static const IconData floppyDisk = IconData(
+    0xe248,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData folder = IconData(
     0xe24a,
     fontFamily: 'PhosphorRegular',
@@ -532,6 +544,7 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
   /// The same glyph filled. Phosphor keeps one codepoint per icon across its
   /// weights, so the fill is the family, not the character.
   static const IconData funnelFill = IconData(

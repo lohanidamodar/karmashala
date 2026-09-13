@@ -11,6 +11,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../../../app/shell/workbench_tab_chip.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'session_status.dart';
 
 /// A bulk close, named the way VS Code names it. Declared in the order the menu
@@ -64,6 +65,7 @@ class TerminalTabChip extends StatelessWidget {
     this.onSavePreset,
     this.agentStatus,
     this.icon,
+    this.unsaved = false,
     this.accented = true,
     super.key,
   });
@@ -85,6 +87,10 @@ class TerminalTabChip extends StatelessWidget {
   /// process: a document has no liveness, and `exited` would read as a session
   /// that died.
   final IconData? icon;
+
+  /// Whether this tab holds edits that are not on disk. Drawn as a dot in place
+  /// of the close glyph — a different mark, not a different colour.
+  final bool unsaved;
 
   final bool selected;
 
@@ -135,14 +141,21 @@ class TerminalTabChip extends StatelessWidget {
           : TabAgentStatusDot(status: status),
       label: title,
       trailing: IconButton(
-        tooltip: liveness.isLive
+        tooltip: unsaved
+            ? 'Unsaved changes — close tab'
+            : liveness.isLive
             ? 'Close tab (the session keeps running)'
             : 'Close tab',
         iconSize: Chrome.iconSmall,
         visualDensity: VisualDensity.compact,
         constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
         padding: EdgeInsets.zero,
-        icon: const Icon(AppIcons.x),
+        icon: unsaved
+            ? StatusDot(
+                color: Theme.of(context).colorScheme.primary,
+                label: 'unsaved changes',
+              )
+            : const Icon(AppIcons.x),
         onPressed: onClose,
       ),
     );

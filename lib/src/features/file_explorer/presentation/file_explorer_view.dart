@@ -8,6 +8,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import '../../editor/application/code_editor_providers.dart';
+import '../../editor/application/editor_tab_actions.dart';
 import 'package:agent_cli/process.dart';
 import '../application/file_explorer_providers.dart';
 import '../data/file_listing_service.dart';
@@ -138,7 +139,12 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _openInEditor() async {
+  /// Opens the file in a workbench tab. The external editor is still one
+  /// right-click away, for the files this one refuses.
+  void _open() =>
+      ref.read(editorTabActionsProvider).open(widget.entry.windowsPath);
+
+  Future<void> _openExternally() async {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ref.read(editorActionsProvider).openPath(widget.entry.windowsPath);
@@ -171,6 +177,19 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
   /// Right-click items. Reveal is offered only where the host can reach the row;
   /// `canReveal` starts no process, so asking while building is free.
   List<PopupMenuEntry<String>> _menuItems() => [
+    if (!widget.entry.isDirectory)
+      DesktopMenuItem(
+        value: 'open',
+        label: 'Open in editor',
+        icon: AppIcons.fileCode,
+      ),
+    DesktopMenuItem(
+      value: 'external',
+      label: widget.entry.isDirectory
+          ? 'Open folder in external editor'
+          : 'Open in external editor',
+      icon: AppIcons.arrowSquareOut,
+    ),
     if (ref.read(revealInFileManagerProvider).canReveal(_path))
       DesktopMenuItem(
         value: 'reveal',
@@ -188,6 +207,10 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
 
   void _onMenu(String action) {
     switch (action) {
+      case 'open':
+        _open();
+      case 'external':
+        _openExternally();
       case 'reveal':
         _reveal();
       case 'copy-path':
@@ -243,9 +266,7 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
     _followReveal(role);
     final selected = role == FileRevealRole.target;
     final row = InkWell(
-      onTap: isDir
-          ? () => setState(() => _expanded = !_expanded)
-          : _openInEditor,
+      onTap: isDir ? () => setState(() => _expanded = !_expanded) : _open,
       child: Container(
         color: selected
             ? theme.colorScheme.primary.withValues(alpha: 0.14)

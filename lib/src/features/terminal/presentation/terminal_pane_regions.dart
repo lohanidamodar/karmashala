@@ -47,6 +47,11 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (isSettingsPane(paneId)) {
       return showing ? const SettingsTabView() : const SizedBox.shrink();
     }
+    // No `showing` gate: the stack keeps every mounted tab alive, and an
+    // editor rebuilt on every switch would lose the caret and the scroll.
+    if (editorPanePath(paneId) case final path?) {
+      return EditorTabView(hostPath: path);
+    }
     final instance = _sessions.instanceFor(paneId);
     // No instance is the `isEmptySlot` invariant and the only way this can be
     // null, so it is the empty state rather than nothing.

@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../notes/presentation/note_edit_dialog.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../editor/presentation/editor_tab_view.dart';
 import '../../settings/presentation/settings_tab_view.dart';
 import '../../sessions/presentation/new_session_dialog.dart';
 import '../../todos/presentation/todo_edit_dialog.dart';

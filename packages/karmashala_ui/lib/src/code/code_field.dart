@@ -61,6 +61,10 @@ class _CodeFieldState extends State<CodeField> {
   void initState() {
     super.initState();
     widget.controller.addListener(_onControllerChanged);
+    // A field mounted with a line already asked for never reaches
+    // [didUpdateWidget], and that is the ordinary case: the caller sets the
+    // line in the same turn it opens the file.
+    if (widget.revealLine case final line?) _revealAfterFrame(line);
   }
 
   @override
@@ -76,9 +80,13 @@ class _CodeFieldState extends State<CodeField> {
       _stale = true;
     }
     final line = widget.revealLine;
-    if (line != null && line != oldWidget.revealLine) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(line));
-    }
+    if (line != null && line != oldWidget.revealLine) _revealAfterFrame(line);
+  }
+
+  void _revealAfterFrame(int line) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reveal(line);
+    });
   }
 
   @override
@@ -235,7 +243,10 @@ class _CodeFieldState extends State<CodeField> {
                     controller: _horizontal,
                     scrollDirection: Axis.horizontal,
                     child: SizedBox(
-                      width: math.max(fieldWidth, _longestLineWidth + Insets.lg),
+                      width: math.max(
+                        fieldWidth,
+                        _longestLineWidth + Insets.lg,
+                      ),
                       child: TextField(
                         controller: controller,
                         focusNode: _focusNode,

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
-import '../../editor/application/code_editor_providers.dart';
+import '../../editor/application/editor_tab_actions.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/remote_links.dart';
 
@@ -77,12 +77,8 @@ class AppTerminalLinkActions implements TerminalLinkActions {
           );
       return outcome.ok ? null : outcome.error;
     }
-    try {
-      await _ref.read(editorActionsProvider).openPath(hostPath);
-      return null;
-    } catch (error) {
-      return error is StateError ? error.message : '$error';
-    }
+    _ref.read(editorTabActionsProvider).open(hostPath, line: line);
+    return null;
   }
 }
 
