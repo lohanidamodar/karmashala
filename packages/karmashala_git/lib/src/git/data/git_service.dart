@@ -204,9 +204,9 @@ class GitService {
   /// Lines added and removed per file in [repo]'s working tree, from [base] (or
   /// `HEAD`).
   ///
-  /// **Empty on failure**, so a caller cannot tell that from a clean tree and
-  /// simply shows no counts. No `git diff` sees an untracked file either: an
-  /// absent path means "git did not say", never "nothing changed".
+  /// An absent path means "git did not say", never "nothing changed" — which is
+  /// already true of every untracked file, and is why **empty on failure** is
+  /// acceptable here: no count is invented, only withheld.
   Future<Map<String, FileDiffStat>> fileDiffStats(
     EnvironmentPath repo, {
     String? base,
@@ -300,14 +300,19 @@ class GitService {
 
   /// Returns the unified diff for [repo], optionally limited to [path] and/or the
   /// staged (index) changes.
+  ///
+  /// [base] is what the diff is taken against: `HEAD` covers staged and unstaged
+  /// together, which is what [fileDiffStats] counts. Omitted, it is unstaged only.
   Future<String> diff(
     EnvironmentPath repo, {
     String? path,
     bool staged = false,
+    String? base,
   }) async {
     final result = await _git(repo, [
       'diff',
       if (staged) '--staged',
+      ?base,
       if (path != null) ...['--', path],
     ]);
     if (!result.ok) {
@@ -477,7 +482,7 @@ class GitService {
       if (result.exitCode > 1) return null;
       return {
         for (final line in result.stdout.split(RegExp(r'[\r\n]')))
-          if (line.trim().isNotEmpty) line.trim(),
+          if (line.trim().isNotEmpty) unquoteGitPath(line.trim()),
       };
     } on CommandException {
       return null;

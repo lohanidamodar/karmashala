@@ -165,14 +165,21 @@ void main() {
       ]);
     });
 
-    test('a quoted rename keeps the spelling v1 status prints', () {
-      // `git status --porcelain=v1` quotes the same path the same way, so the
-      // quoted key is the one a row is looked up by.
+    test('a quoted rename is keyed by the name v1 status prints', () {
+      // Measured against git 2.55.0: a rename whose names need quoting is
+      // written `"old" => "new"`, with no braces, and `git status` quotes the
+      // same path the same way — so both sides unquote to the same key.
       expect(
         parseNumstatByFile(
           r'0	0	"uni-caf\303\251.dart" => "uni-na\303\257ve.dart"',
         ).keys,
-        [r'"uni-na\303\257ve.dart"'],
+        ['uni-na\u00efve.dart'],
+      );
+      expect(
+        parseGitStatus(r'R  "uni-caf\303\251.dart" -> "uni-na\303\257ve.dart"')
+            .single
+            .path,
+        'uni-na\u00efve.dart',
       );
     });
 
@@ -190,6 +197,60 @@ void main() {
       expect(parseNumstatByFile(''), isEmpty);
       expect(parseNumstatByFile('\n\n'), isEmpty);
     });
+  });
+
+  /// **Measured against git 2.55.0 on 2026-09-13.** A path git has to quote is
+  /// printed the same way by `status --porcelain=v1`, `diff --numstat`,
+  /// `diff --name-status` and `check-ignore`, and this is where it is undone.
+  ///
+  /// Not `-c core.quotePath=false`: that emits the raw UTF-8 bytes, and this
+  /// app decodes a process with `systemEncoding` — measured on Windows, the
+  /// same file came back as `lib/hÃ©llo.dart`. It also leaves a path holding a
+  /// quote, tab or newline quoted anyway.
+  group('unquoteGitPath', () {
+    test('a path git did not quote is returned unchanged', () {
+      expect(unquoteGitPath('lib/main.dart'), 'lib/main.dart');
+      // A space needs no quoting, and the quotes are part of the name here.
+      expect(unquoteGitPath('lib/two words.dart'), 'lib/two words.dart');
+      expect(unquoteGitPath('"unclosed.dart'), '"unclosed.dart');
+    });
+
+    test('octal escapes are bytes, decoded as the UTF-8 they are', () {
+      expect(unquoteGitPath(r'"lib/h\303\251llo.dart"'), 'lib/héllo.dart');
+      expect(unquoteGitPath(r'"\346\227\245.dart"'), '日.dart');
+    });
+
+    test('the C escapes git writes for a quote, a tab and a newline', () {
+      expect(unquoteGitPath(r'"lib/qu\"ote.dart"'), 'lib/qu"ote.dart');
+      expect(unquoteGitPath(r'"lib/back\\slash.dart"'), r'lib/back\slash.dart');
+      expect(unquoteGitPath(r'"lib/a\tb.dart"'), 'lib/a\tb.dart');
+      expect(unquoteGitPath(r'"lib/a\nb.dart"'), 'lib/a\nb.dart');
+    });
+
+    test('a half-written escape loses a character, never the path', () {
+      expect(unquoteGitPath(r'"lib/a\"'), 'lib/a');
+      // A byte that is not UTF-8 becomes one replacement character.
+      expect(unquoteGitPath(r'"lib/\303.dart"'), 'lib/\u{FFFD}.dart');
+    });
+  });
+
+  test('a non-ASCII path is one name from status through to numstat', () {
+    // The row, its counts and the pathspec a diff is asked for all have to be
+    // the same string, or the tab diffs nothing and the file cannot be opened.
+    const status = r'R  "lib/old/h\303\251llo.dart" -> "lib/new/h\303\251llo.dart"';
+    const numstat = r'1	1	"lib/old/h\303\251llo.dart" => "lib/new/h\303\251llo.dart"';
+    final change = parseGitStatus(status).single;
+    expect(change.path, 'lib/new/héllo.dart');
+    expect(change.originalPath, 'lib/old/héllo.dart');
+    expect(parseNumstatByFile(numstat).keys, [change.path]);
+    expect(
+      parseNameStatus('A\t"lib/new/h\\303\\251llo.dart"').single.path,
+      change.path,
+    );
+    expect(
+      parseGitStatusV2('? "lib/new/h\\303\\251llo.dart"').changes.single.path,
+      change.path,
+    );
   });
 
   group('parseAheadBehind', () {

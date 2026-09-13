@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../domain/diff_line.dart';
 import '../domain/diff_stat.dart';
 import '../domain/file_change.dart';
@@ -21,9 +23,10 @@ List<FileChange> parseGitStatus(String porcelain) {
     var path = rest;
     if (rest.contains(' -> ')) {
       final parts = rest.split(' -> ');
-      originalPath = parts.first;
+      originalPath = unquoteGitPath(parts.first);
       path = parts.last;
     }
+    path = unquoteGitPath(path);
 
     final conflict = MergeConflict.ofCode('$x$y');
     if (conflict != MergeConflict.unrecorded) {
@@ -166,8 +169,10 @@ List<FileChange> parseNameStatus(String output) {
     final renamed = code.startsWith('R') || code.startsWith('C');
     changes.add(
       FileChange(
-        path: renamed && parts.length > 2 ? parts[2] : parts[1],
-        originalPath: renamed && parts.length > 2 ? parts[1] : null,
+        path: unquoteGitPath(renamed && parts.length > 2 ? parts[2] : parts[1]),
+        originalPath: renamed && parts.length > 2
+            ? unquoteGitPath(parts[1])
+            : null,
         type: _typeOf(code[0]),
         staged: false,
         unstaged: false,
@@ -306,7 +311,7 @@ FileChange? _v2Record(String line) {
       final fields = _v2Fields(line, 11);
       if (fields == null) return null;
       return FileChange(
-        path: fields[10],
+        path: unquoteGitPath(fields[10]),
         type: FileChangeType.conflicted,
         conflict: MergeConflict.ofCode(fields[1]),
         // Both: an unmerged path has entries in the index *and* a working-tree
@@ -318,7 +323,7 @@ FileChange? _v2Record(String line) {
     case '?':
       if (line.length < 3) return null;
       return FileChange(
-        path: line.substring(2),
+        path: unquoteGitPath(line.substring(2)),
         type: FileChangeType.untracked,
         staged: false,
         unstaged: true,
@@ -354,8 +359,8 @@ FileChange _v2Change(String xy, String path, {String? originalPath}) {
   final x = xy.isNotEmpty ? xy[0] : '.';
   final y = xy.length > 1 ? xy[1] : '.';
   return FileChange(
-    path: path,
-    originalPath: originalPath,
+    path: unquoteGitPath(path),
+    originalPath: originalPath == null ? null : unquoteGitPath(originalPath),
     type: _typeOf(x != '.' ? x : y),
     staged: x != '.',
     unstaged: y != '.',
@@ -375,7 +380,9 @@ Map<String, FileDiffStat> parseNumstatByFile(String output) {
     if (parts.length < 3) continue;
     // A tab-separated rename puts the new path last; otherwise there is one.
     // git quotes a path containing a tab, so an unquoted field never holds one.
-    final path = _numstatNewPath(parts.length > 3 ? parts.last : parts[2]);
+    final path = unquoteGitPath(
+      _numstatNewPath(parts.length > 3 ? parts.last : parts[2]),
+    );
     if (path.isEmpty) continue;
     stats[path] = FileDiffStat(
       added: int.tryParse(parts[0]),
@@ -385,11 +392,8 @@ Map<String, FileDiffStat> parseNumstatByFile(String output) {
   return stats;
 }
 
-/// The **new** name of the file a `--numstat` path field describes.
-///
-/// git compacts a rename to `lib/{old => new}/x.dart` when the two names share
-/// a directory and writes `old/x.dart => new/x.dart` when they do not; an empty
-/// new middle (`lib/{old => }/x.dart`) would otherwise rebuild a doubled slash.
+/// The **new** name of the file a `--numstat` path field describes — see
+/// `docs/SETTLED.md` for the rename shapes git writes.
 String _numstatNewPath(String field) {
   final brace = field.indexOf('{');
   final arrow = field.indexOf(' => ', brace < 0 ? 0 : brace);
@@ -405,3 +409,63 @@ String _numstatNewPath(String field) {
   }
   return prefix + middle + suffix;
 }
+
+/// A path field as git printed it, with C-style quoting undone; a field git did
+/// not quote is returned unchanged.
+///
+/// Done here rather than with `-c core.quotePath=false`: the escapes are ASCII
+/// whatever the path's bytes are, and the raw UTF-8 that flag emits instead is
+/// mangled by `systemEncoding` on the way back from a Windows process.
+String unquoteGitPath(String field) {
+  if (field.length < 2 || !field.startsWith('"') || !field.endsWith('"')) {
+    return field;
+  }
+  final bytes = <int>[];
+  var i = 1;
+  final end = field.length - 1;
+  while (i < end) {
+    final char = field.codeUnitAt(i++);
+    if (char != _backslash) {
+      // Everything git escapes is ASCII; anything else is passed through as
+      // the UTF-8 it will be decoded back out of below.
+      if (char < 0x80) {
+        bytes.add(char);
+      } else {
+        bytes.addAll(utf8.encode(String.fromCharCode(char)));
+      }
+      continue;
+    }
+    if (i >= end) break;
+    final escaped = field.codeUnitAt(i++);
+    final octal = _octalDigit(escaped);
+    if (octal == null) {
+      bytes.add(_cEscapes[escaped] ?? escaped);
+      continue;
+    }
+    var value = octal;
+    for (var digit = 1; digit < 3 && i < end; digit++) {
+      final next = _octalDigit(field.codeUnitAt(i));
+      if (next == null) break;
+      value = value * 8 + next;
+      i++;
+    }
+    bytes.add(value & 0xff);
+  }
+  // Lenient: a half-escaped field is one wrong character, not a lost path.
+  return utf8.decode(bytes, allowMalformed: true);
+}
+
+const int _backslash = 0x5c;
+
+/// git's own C escapes, `\<letter>` to the byte it stands for.
+const Map<int, int> _cEscapes = {
+  0x61: 0x07, // \a
+  0x62: 0x08, // \b
+  0x66: 0x0c, // \f
+  0x6e: 0x0a, // \n
+  0x72: 0x0d, // \r
+  0x74: 0x09, // \t
+  0x76: 0x0b, // \v
+};
+
+int? _octalDigit(int char) => char >= 0x30 && char <= 0x37 ? char - 0x30 : null;
