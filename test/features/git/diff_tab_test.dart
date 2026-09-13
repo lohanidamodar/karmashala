@@ -1,3 +1,4 @@
+import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +16,6 @@ import 'package:karmashala/src/features/git/presentation/diff_tab_view.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala_git/git.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 
 import '../../features/scale/scale_harness.dart';
@@ -31,11 +31,56 @@ import '../../support/fixtures.dart';
 /// replacement: a row opens a workbench tab, one tab per file, and the tab
 /// keeps showing the file it was opened on.
 const _file = 'lib/src/app/shell/side_panel.dart';
+
+/// Staged, so a diff with no base answers nothing: the row's `+1 −1` and the
+/// tab's contents have to come from the same measurement (git 2.55.0).
+const _stagedFile = 'lib/staged.dart';
+
+/// git quotes this one, and the sidebar, the pane id and the pathspec all have
+/// to end up with the name a human typed.
+const _quotedFile = 'lib/héllo.dart';
+
+/// Two files whose basenames are identical: the row shows the name and the
+/// folder, and the folder is the only thing telling them apart.
+const _twinA = 'lib/a/twin.dart';
+const _twinB = 'lib/b/twin.dart';
+
 const _diff =
     '@@ -1,3 +1,3 @@\n final a = 1;\n-final b = 2;\n+final b = 3;\n final c = 4;\n';
 
+/// `git status --porcelain=v1` and `git diff --numstat HEAD`, spelled the way
+/// git 2.55.0 spells them — the quoted path included, since undoing that is
+/// half of what this file pins.
+const _status =
+    ' M lib/src/app/shell/side_panel.dart\n'
+    'M  lib/staged.dart\n'
+    ' M "lib/h\\303\\251llo.dart"\n'
+    ' M lib/a/twin.dart\n'
+    ' M lib/b/twin.dart\n';
+const _numstat =
+    '1\t1\tlib/src/app/shell/side_panel.dart\n'
+    '1\t1\tlib/staged.dart\n'
+    '1\t1\t"lib/h\\303\\251llo.dart"\n';
+
+/// git as this test's repository answers. **Only a diff that named a base sees
+/// the index**, which is the whole of the staged case.
+CommandResult _git(CommandRequest request) {
+  const nothing = CommandResult(exitCode: 0, stdout: '', stderr: '');
+  final args = request.arguments.skip(2).toList();
+  if (args.first == 'status') {
+    return const CommandResult(exitCode: 0, stdout: _status, stderr: '');
+  }
+  if (args.contains('--numstat')) {
+    return const CommandResult(exitCode: 0, stdout: _numstat, stderr: '');
+  }
+  if (args.first != 'diff' || !args.contains('--')) return nothing;
+  if (args.last == _stagedFile && !args.contains('HEAD')) return nothing;
+  return const CommandResult(exitCode: 0, stdout: _diff, stderr: '');
+}
+
 void main() {
   late CountingDatabase db;
+  late FakeCommandRunner git;
 
   setUp(() {
     db = CountingDatabase();
@@ -47,31 +92,19 @@ void main() {
   tearDown(() => db.close());
 
   ProviderContainer shellContainer() {
+    git = FakeCommandRunner(responder: _git);
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+          FakeCommandRunnerFactory(fallback: git),
         ),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
-        repositoryChangesProvider.overrideWith(
-          (ref) async => const [
-            FileChange(
-              path: _file,
-              type: FileChangeType.modified,
-              staged: false,
-              unstaged: true,
-            ),
-          ],
-        ),
-        repositoryFileDiffStatsProvider.overrideWith(
-          (ref) async => const {_file: FileDiffStat(added: 1, removed: 1)},
-        ),
         repoWorktreesProvider.overrideWith((ref) async => const []),
         recentCommitsProvider.overrideWith((ref) async => const []),
-        fileDiffByPathProvider(_file).overrideWith((ref) async => _diff),
-        // What a tab reads: its own checkout's diff, not the sidebar's.
-        diffForTargetProvider.overrideWith((ref, target) async => _diff),
+        // Neither the listing, the counts nor `diffForTargetProvider` is
+        // overridden: every one of them is what `ChangesService` asked git for,
+        // which is where a staged file and a quoted path go wrong.
       ],
     );
     addTearDown(container.dispose);
@@ -135,7 +168,8 @@ void main() {
 
     expect(find.text('side_panel.dart'), findsOneWidget);
     expect(find.text('lib/src/app/shell'), findsOneWidget);
-    expect(find.text('+1 −1'), findsOneWidget);
+    // One per file git gave counts for; the two twins got none.
+    expect(find.text('+1 −1'), findsNWidgets(3));
     expect(find.byType(DiffTabView), findsNothing);
     expect(find.text('+final b = 3;'), findsNothing);
   });
@@ -190,5 +224,140 @@ void main() {
     expect(target.path, _file);
     // And it survives being written down, which is what restore reads back.
     expect(diffPaneIdFor(target), paneId);
+  });
+
+  /// Every `git diff` this test's app asked for, as the pathspec and whether it
+  /// named a base.
+  List<({String path, bool based})> diffsAsked() => [
+    for (final request in git.requests)
+      if (request.arguments.contains('--'))
+        (
+          path: request.arguments.last,
+          based: request.arguments.contains('HEAD'),
+        ),
+  ];
+
+  testWidgets('a staged file shows the change its row counted', (tester) async {
+    await launch(tester);
+
+    expect(find.text('staged.dart'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ChangesView),
+        matching: find.text('+1 −1'),
+      ),
+      findsNWidgets(3),
+    );
+
+    await tester.tap(find.text('staged.dart'));
+    await settle(tester);
+
+    // The row promised a change; the tab shows it, because the diff was taken
+    // against HEAD. With no base git answers nothing for a staged file and the
+    // pane said so about a file that is neither binary nor untracked.
+    expect(find.text('+final b = 3;'), findsOneWidget);
+    expect(find.textContaining('no textual diff'), findsNothing);
+    final asked = diffsAsked().where((d) => d.path == _stagedFile);
+    expect(asked, isNotEmpty);
+    expect(asked.every((d) => d.based), isTrue);
+  });
+
+  testWidgets('a path git has to quote opens the file git meant', (
+    tester,
+  ) async {
+    final container = await launch(tester);
+
+    // The row wears the real name, not `h\303\251llo.dart"` with a stray quote.
+    expect(find.text('héllo.dart'), findsOneWidget);
+
+    await tester.tap(find.text('héllo.dart'));
+    await settle(tester);
+
+    final paneId = container
+        .read(terminalSessionsControllerProvider)
+        .tabs
+        .expand((tab) => tab.layout.panes)
+        .firstWhere(isDiffPane);
+    expect(diffTargetOf(paneId)!.path, _quotedFile);
+    expect(diffsAsked().map((d) => d.path), contains(_quotedFile));
+    expect(find.text('+final b = 3;'), findsOneWidget);
+  });
+
+  testWidgets('two files with one basename are told apart by their folder', (
+    tester,
+  ) async {
+    final container = await launch(tester);
+
+    expect(find.text('twin.dart'), findsNWidgets(2));
+    expect(find.text('lib/a'), findsOneWidget);
+    expect(find.text('lib/b'), findsOneWidget);
+
+    // Each opens its own tab, and each tab names its own file in full.
+    refOf(tester).read(diffTabActionsProvider).open(_twinA);
+    refOf(tester).read(diffTabActionsProvider).open(_twinB);
+    await settle(tester);
+
+    final targets = [
+      for (final tab in container.read(terminalSessionsControllerProvider).tabs)
+        for (final pane in tab.layout.panes)
+          if (diffTargetOf(pane) case final target?) target.path,
+    ];
+    expect(targets, containsAll(const [_twinA, _twinB]));
+  });
+
+  testWidgets('the sidebar highlight is the tab on screen, and nothing else', (
+    tester,
+  ) async {
+    final container = await launch(tester);
+
+    /// The rows drawn as selected. Read off `Semantics.selected`, which is the
+    /// same flag the highlight colour is drawn from.
+    int highlighted() => tester
+        .widgetList<Semantics>(
+          find.descendant(
+            of: find.byType(ChangesView),
+            matching: find.byType(Semantics),
+          ),
+        )
+        .where((row) => row.properties.selected ?? false)
+        .length;
+
+    expect(container.read(activeDiffFileProvider), isNull);
+    expect(highlighted(), 0);
+
+    final first = refOf(tester).read(diffTabActionsProvider).open(_file);
+    await settle(tester);
+    expect(container.read(activeDiffFileProvider), _file);
+    expect(highlighted(), 1);
+
+    refOf(tester).read(diffTabActionsProvider).open(_stagedFile);
+    await settle(tester);
+    expect(container.read(activeDiffFileProvider), _stagedFile);
+
+    // Clicking the first tab's chip is what the stored selection never heard
+    // about: the pane showed one file and the sidebar highlighted the other.
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .activateTab(first!);
+    await settle(tester);
+    expect(container.read(activeDiffFileProvider), _file);
+    expect(highlighted(), 1);
+
+    // Closing it hands the highlight to the tab that is now on screen, and
+    // closing the last one leaves no row highlighted at all — where the stored
+    // selection left the row lit for ever.
+    final sessions = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    sessions.closeTab(first);
+    await settle(tester);
+    expect(container.read(activeDiffFileProvider), _stagedFile);
+
+    for (final tab in diffTabsIn(container)) {
+      sessions.closeTab(tab);
+    }
+    await settle(tester);
+    expect(container.read(activeDiffFileProvider), isNull);
+    expect(highlighted(), 0);
   });
 }

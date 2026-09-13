@@ -176,9 +176,9 @@ void main() {
         ['uni-na\u00efve.dart'],
       );
       expect(
-        parseGitStatus(r'R  "uni-caf\303\251.dart" -> "uni-na\303\257ve.dart"')
-            .single
-            .path,
+        parseGitStatus(
+          r'R  "uni-caf\303\251.dart" -> "uni-na\303\257ve.dart"',
+        ).single.path,
         'uni-na\u00efve.dart',
       );
     });
@@ -237,8 +237,10 @@ void main() {
   test('a non-ASCII path is one name from status through to numstat', () {
     // The row, its counts and the pathspec a diff is asked for all have to be
     // the same string, or the tab diffs nothing and the file cannot be opened.
-    const status = r'R  "lib/old/h\303\251llo.dart" -> "lib/new/h\303\251llo.dart"';
-    const numstat = r'1	1	"lib/old/h\303\251llo.dart" => "lib/new/h\303\251llo.dart"';
+    const status =
+        r'R  "lib/old/h\303\251llo.dart" -> "lib/new/h\303\251llo.dart"';
+    const numstat =
+        r'1	1	"lib/old/h\303\251llo.dart" => "lib/new/h\303\251llo.dart"';
     final change = parseGitStatus(status).single;
     expect(change.path, 'lib/new/héllo.dart');
     expect(change.originalPath, 'lib/old/héllo.dart');

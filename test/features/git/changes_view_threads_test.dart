@@ -16,6 +16,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -182,6 +184,127 @@ void main() {
     expect(find.textContaining('Detached'), findsNothing);
   });
 
+  /// **A diff tab's comments belong to the repository it was opened on.**
+  ///
+  /// The shipped UI only ever uses this branch — `DiffTabView` hands
+  /// `FileDiffView` a checkout and a repository — and it was the one nothing
+  /// pumped. Both reads used to follow `selectedRepositoryIdProvider`, so
+  /// selecting another repository in the sidebar redrew this tab with that
+  /// repository's threads beside this one's lines.
+  /// Pumps the branch the shipped UI actually uses: a checkout and a repository
+  /// of its own, with the sidebar pointed somewhere else — or nowhere.
+  Future<void> pumpTab(
+    WidgetTester tester,
+    ReviewThreadHarness harness, {
+    required String? sidebar,
+  }) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(harness.db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          idGeneratorProvider.overrideWithValue(
+            SequentialIdGenerator('scope-thread-'),
+          ),
+          changesServiceProvider.overrideWithValue(
+            ChangesService(
+              runnerFactory: FakeCommandRunnerFactory(
+                fallback: FakeCommandRunner(
+                  responder: (request) =>
+                      request.arguments.contains('hash-object')
+                      ? _hashObject(request, harness.shas)
+                      : const CommandResult(
+                          exitCode: 0,
+                          stdout: diff,
+                          stderr: '',
+                        ),
+                ),
+              ),
+              environmentDao: ExecutionEnvironmentDao(harness.db),
+            ),
+          ),
+          selectedRepositoryIdProvider.overrideWith(() => _Sidebar(sidebar)),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: FileDiffView(
+              path: 'lib/a.dart',
+              checkout: EnvironmentPath(
+                environmentId: 'windows',
+                path: r'C:\src\demo\app',
+              ),
+              repositoryId: 'r1',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  /// Whether any comment button on the diff can be pressed.
+  bool canComment(WidgetTester tester) => tester
+      .widgetList<IconButton>(find.byType(IconButton))
+      .any((button) => button.onPressed != null);
+
+  /// **A diff tab's comments belong to the repository it was opened on.**
+  ///
+  /// The shipped UI only ever uses this branch — `DiffTabView` hands
+  /// `FileDiffView` a checkout and a repository — and it was the one nothing
+  /// pumped. Both reads used to follow `selectedRepositoryIdProvider`, so
+  /// selecting another repository in the sidebar redrew this tab with that
+  /// repository's threads beside this one's lines, and filed a new comment
+  /// against it.
+  testWidgets('a tab draws its own repository, not the sidebar\'s', (
+    tester,
+  ) async {
+    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    addTearDown(harness.dispose);
+    RepositoryDao(
+      harness.db,
+    ).insert(repository(id: 'r2', name: 'other', path: r'C:\src\demo\other'));
+    await harness.service.open(
+      repositoryId: 'r1',
+      path: 'lib/a.dart',
+      body: comment,
+      author: 'the user',
+      authorKind: ReviewAuthorKind.user,
+      startLine: 2,
+      excerpt: '+final b = 3;',
+    );
+    await harness.service.open(
+      repositoryId: 'r2',
+      path: 'lib/a.dart',
+      body: 'Written against the other repository.',
+      author: 'the user',
+      authorKind: ReviewAuthorKind.user,
+      startLine: 2,
+      excerpt: '+final b = 3;',
+    );
+
+    await pumpTab(tester, harness, sidebar: 'r2');
+
+    expect(find.byTooltip(comment), findsOneWidget);
+    expect(
+      find.byTooltip('Written against the other repository.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a restored tab can be commented on before anything is '
+      'selected', (tester) async {
+    // Restore rebuilds a diff tab before the sidebar has picked a repository.
+    // The button used to be disabled on a perfectly good diff, with no reason
+    // given anywhere.
+    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    addTearDown(harness.dispose);
+
+    await pumpTab(tester, harness, sidebar: null);
+
+    expect(find.text('+final b = 3;'), findsOneWidget);
+    expect(canComment(tester), isTrue);
+  });
+
   testWidgets('sending gathers the pending set and clears nothing', (
     tester,
   ) async {
@@ -268,4 +391,14 @@ CommandResult _hashObject(CommandRequest request, Map<String, String> shas) {
 class _FixedRepository extends SelectedRepositoryController {
   @override
   String? build() => 'r1';
+}
+
+/// The sidebar's selection, which a diff tab must not read.
+class _Sidebar extends SelectedRepositoryController {
+  _Sidebar(this._id);
+
+  final String? _id;
+
+  @override
+  String? build() => _id;
 }
