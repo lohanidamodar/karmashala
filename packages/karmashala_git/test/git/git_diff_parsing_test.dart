@@ -125,7 +125,9 @@ void main() {
     });
 
     test('a binary file has no counts rather than zero ones', () {
-      final stats = parseNumstatByFile('5\t1\tlib/a.dart\n-\t-\tassets/i.png\n');
+      final stats = parseNumstatByFile(
+        '5\t1\tlib/a.dart\n-\t-\tassets/i.png\n',
+      );
       expect(stats['assets/i.png'], FileDiffStat.binary);
       expect(stats['assets/i.png']!.isBinary, isTrue);
       expect(stats['lib/a.dart']!.isBinary, isFalse);
@@ -133,18 +135,16 @@ void main() {
 
     test('a braced rename is keyed by the new path', () {
       // lib/old/x.dart -> lib/b/y.dart
-      expect(
-        parseNumstatByFile('4\t2\tlib/{old/x.dart => b/y.dart}').keys,
-        ['lib/b/y.dart'],
-      );
+      expect(parseNumstatByFile('4\t2\tlib/{old/x.dart => b/y.dart}').keys, [
+        'lib/b/y.dart',
+      ]);
     });
 
     test('an arrow rename is keyed by the new path', () {
       // lib/a/y.dart -> dst_deep.dart, which share no directory
-      expect(
-        parseNumstatByFile('4\t2\tlib/a/y.dart => dst_deep.dart').keys,
-        ['dst_deep.dart'],
-      );
+      expect(parseNumstatByFile('4\t2\tlib/a/y.dart => dst_deep.dart').keys, [
+        'dst_deep.dart',
+      ]);
     });
 
     test('a braced rename survives spaces in the path', () {
@@ -165,7 +165,7 @@ void main() {
       ]);
     });
 
-    test('a quoted rename keeps git\'s own spelling, as v1 status prints it', () {
+    test('a quoted rename keeps the spelling v1 status prints', () {
       // `git status --porcelain=v1` quotes the same path the same way, so the
       // quoted key is the one a row is looked up by.
       expect(
