@@ -98,6 +98,8 @@ extension _GatewaySessions on RemoteCompanionGateway {
       folderMissing: snapshot.folderMissing || raw?['folderMissing'] == true,
       attachments: snapshot.attachments,
       environmentBadge: snapshot.environmentBadge ?? text('environmentBadge'),
+      environmentId: snapshot.environmentId ?? text('environmentId'),
+      environmentKind: snapshot.environmentKind ?? text('environmentKind'),
     );
   }
 

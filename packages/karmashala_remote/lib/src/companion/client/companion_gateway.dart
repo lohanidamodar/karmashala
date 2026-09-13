@@ -202,6 +202,8 @@ class CompanionSessionSummary {
     this.folderMissing = false,
     this.attachments,
     this.environmentBadge,
+    this.environmentId,
+    this.environmentKind,
   });
 
   final String id;
@@ -255,6 +257,12 @@ class CompanionSessionSummary {
   /// The badge on a non-local session card ("WSL · Ubuntu"); null for local.
   final String? environmentBadge;
 
+  /// The desktop's own id for the machine this runs on, and what kind it is.
+  /// **Null from a desktop older than these fields** — the phone groups by the
+  /// badge then, and never invents an id.
+  final String? environmentId;
+  final String? environmentKind;
+
   /// A narrow copy: only the facts that change while a session is listed.
   CompanionSessionSummary copyWith({
     CompanionSessionStatus? status,
@@ -282,6 +290,8 @@ class CompanionSessionSummary {
     folderMissing: folderMissing,
     attachments: attachments,
     environmentBadge: environmentBadge ?? this.environmentBadge,
+    environmentId: environmentId,
+    environmentKind: environmentKind,
   );
 
   /// What the list groups by: the repository's real identity when the host

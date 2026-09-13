@@ -50,6 +50,8 @@ List<RemoteWorkspaceProject> listRemoteWorkspace(Ref ref) {
     return environment == null ? null : environmentBadge(environment);
   }
 
+  String? kindOf(String environmentId) => environments[environmentId]?.kind.name;
+
   final out = <RemoteWorkspaceProject>[];
   for (final project in ref.read(sortedProjectsProvider)) {
     final repositories =
@@ -66,6 +68,8 @@ List<RemoteWorkspaceProject> listRemoteWorkspace(Ref ref) {
         path: project.root.path,
         environmentName: nameOf(project.environmentId),
         environmentBadge: badgeOf(project.environmentId),
+        environmentId: project.environmentId,
+        environmentKind: kindOf(project.environmentId),
         checkouts: [
           for (final repository in repositories)
             RemoteCheckoutOption(
@@ -97,6 +101,8 @@ List<RemoteWorkspaceProject> listRemoteProjects(Ref ref) => [
       path: project.root.path,
       environmentName: environmentNameFor(ref, project.environmentId),
       environmentBadge: environmentBadgeFor(ref, project.environmentId),
+      environmentId: project.environmentId,
+      environmentKind: environmentKindFor(ref, project.environmentId),
     ),
 ];
 
@@ -133,6 +139,8 @@ Future<RemoteWorkspaceProject> addRemoteProject(
         path: project.root.path,
         environmentName: env == null ? null : environmentLabel(env),
         environmentBadge: env == null ? null : environmentBadge(env),
+        environmentId: project.environmentId,
+        environmentKind: env?.kind.name,
       );
     }
   }
@@ -147,6 +155,8 @@ Future<RemoteWorkspaceProject> addRemoteProject(
     path: result.project.root.path,
     environmentName: createdEnv == null ? null : environmentLabel(createdEnv),
     environmentBadge: createdEnv == null ? null : environmentBadge(createdEnv),
+    environmentId: result.project.environmentId,
+    environmentKind: createdEnv?.kind.name,
     checkouts: [
       for (final repository in result.repositories)
         RemoteCheckoutOption(

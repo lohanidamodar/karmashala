@@ -146,6 +146,8 @@ RemoteSessionSnapshot remoteSessionSnapshot(
     // The project's environment, as the Explorer card badges it. A session
     // has none of its own, and one with no project has nothing to badge.
     environmentBadge: environmentBadgeFor(ref, owner?.environmentId),
+    environmentId: owner?.environmentId,
+    environmentKind: environmentKindFor(ref, owner?.environmentId),
   );
 }
 
@@ -196,6 +198,11 @@ RemoteSessionSnapshot remoteImportedSnapshot(
       'terminal to attach anything.',
     ),
     environmentBadge: environmentBadgeFor(
+      ref,
+      owner?.environmentId ?? repository?.path.environmentId,
+    ),
+    environmentId: owner?.environmentId ?? repository?.path.environmentId,
+    environmentKind: environmentKindFor(
       ref,
       owner?.environmentId ?? repository?.path.environmentId,
     ),

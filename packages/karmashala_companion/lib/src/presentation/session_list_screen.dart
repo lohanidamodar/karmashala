@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_runtime.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_remote/remote.dart';
+import '../application/companion_environments.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
@@ -12,6 +14,7 @@ import 'companion_route.dart';
 import 'companion_search.dart';
 import 'companion_session_list.dart';
 import 'companion_states.dart';
+import 'environment_index.dart';
 import 'add_project_screen.dart';
 import 'project_group.dart';
 import 'project_sessions_screen.dart';
@@ -125,11 +128,42 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
             return _empty(context, ref, link, hostName);
           }
         }
+        // Which machine, before which project. A key naming nothing here is a
+        // desktop we have since switched away from, and reads as "all of them"
+        // rather than as an empty list.
+        final machines = companionEnvironments(
+          list,
+          projects: projects.asData?.value ?? const [],
+        );
+        final chosen = ref.watch(companionEnvironmentProvider);
+        final active = machines.any((m) => m.key == chosen) ? chosen : null;
+        if (machines.length > 1 && active == null && query.isEmpty) {
+          return EnvironmentIndex(
+            environments: machines,
+            onPick: (key) =>
+                ref.read(companionEnvironmentProvider.notifier).choose(key),
+          );
+        }
+        // One machine needs no step, and a search crosses all of them.
+        final scoped = active == null
+            ? list
+            : sessionsOnEnvironment(list, active);
+        final onMachine = active == null
+            ? null
+            : machines.firstWhere((m) => m.key == active);
+
         final metadata = projects.asData?.value;
         final groups = metadata == null
-            ? groupByProject(list)
-            : mergeProjectsAndSessions(metadata, list);
+            ? groupByProject(scoped)
+            : mergeProjectsAndSessions(metadata, scoped);
         final shown = companionMatchingGroups(groups, query);
+        final back = onMachine == null
+            ? null
+            : _BackToMachines(
+                label: onMachine.label,
+                onBack: () =>
+                    ref.read(companionEnvironmentProvider.notifier).choose(null),
+              );
         if (groups.length == 1 && groups.single.sessions.isNotEmpty) {
           final only = shown.firstOrNull;
           if (only == null || only.sessions.isEmpty) return _noMatch();
@@ -141,6 +175,7 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
             header: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                ?back,
                 ProjectHeaderCard(group: only),
                 RunningSessionsGroup(sessions: split.running),
               ],
@@ -154,12 +189,20 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
         final running = [
           for (final group in shown) ...partitionByRunning(group.sessions).running,
         ];
+        final header = [
+          ?back,
+          if (running.isNotEmpty)
+            RunningSessionsGroup(sessions: running, showProject: true),
+        ];
         return _projectIndex(
           context,
           shown,
-          header: running.isEmpty
+          header: header.isEmpty
               ? null
-              : RunningSessionsGroup(sessions: running, showProject: true),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: header,
+                ),
         );
       },
     );
@@ -323,4 +366,51 @@ class ProjectHeaderCard extends StatelessWidget {
     onMenu: (_) {},
     showMenu: false,
   );
+}
+
+
+/// The row above a machine's projects that gets back to the machines.
+class _BackToMachines extends StatelessWidget {
+  const _BackToMachines({required this.label, required this.onBack});
+
+  final String label;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    return InkWell(
+      onTap: onBack,
+      child: Container(
+        constraints: density.isTouch
+            ? const BoxConstraints(minHeight: Touch.target)
+            : null,
+        padding: EdgeInsets.symmetric(
+          horizontal: density.padX,
+          vertical: density.padY,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              AppIcons.caretLeft,
+              size: density.icon,
+              color: scheme.onSurfaceVariant,
+            ),
+            SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: density.title(theme),
+              ),
+            ),
+            Text('All machines', style: density.muted(theme)),
+          ],
+        ),
+      ),
+    );
+  }
 }

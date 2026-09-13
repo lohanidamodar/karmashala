@@ -37,7 +37,9 @@
                         "image/webp"
                       ],
                       "max": 12582912
-                    }
+                    },
+                    "environmentId": "windows",
+                    "environmentKind": "windowsNative"
                   },
                   {
                     "sessionId": "s1",
@@ -64,7 +66,9 @@
                         "image/webp"
                       ],
                       "max": 12582912
-                    }
+                    },
+                    "environmentId": "windows",
+                    "environmentKind": "windowsNative"
                   },
                   {
                     "sessionId": "s2",
@@ -91,7 +95,9 @@
                         "image/webp"
                       ],
                       "max": 12582912
-                    }
+                    },
+                    "environmentId": "windows",
+                    "environmentKind": "windowsNative"
                   },
                   {
                     "sessionId": "s3",
@@ -114,7 +120,9 @@
                       "types": [],
                       "max": 0,
                       "why": "This agent is not known to open a file named in a prompt."
-                    }
+                    },
+                    "environmentId": "windows",
+                    "environmentKind": "windowsNative"
                   },
                   {
                     "sessionId": "imp1",
@@ -136,7 +144,9 @@
                       "types": [],
                       "max": 0,
                       "why": "This is imported history, read-only here — continue it in its own terminal to attach anything."
-                    }
+                    },
+                    "environmentId": "windows",
+                    "environmentKind": "windowsNative"
                   },
                   {
                     "sessionId": "s4",
@@ -164,7 +174,9 @@
                       ],
                       "max": 12582912
                     },
-                    "environmentBadge": "WSL · Ubuntu"
+                    "environmentBadge": "WSL · Ubuntu",
+                    "environmentId": "wsl:Ubuntu",
+                    "environmentKind": "wsl"
                   },
                   {
                     "sessionId": "imp2",
@@ -187,7 +199,9 @@
                       "max": 0,
                       "why": "This is imported history, read-only here — continue it in its own terminal to attach anything."
                     },
-                    "environmentBadge": "WSL · Ubuntu"
+                    "environmentBadge": "WSL · Ubuntu",
+                    "environmentId": "wsl:Ubuntu",
+                    "environmentKind": "wsl"
                   },
                   {
                     "sessionId": "s5",
@@ -211,7 +225,9 @@
                       "max": 0,
                       "why": "build-box runs on another machine — a file written here is not a file it can open."
                     },
-                    "environmentBadge": "SSH · build-box"
+                    "environmentBadge": "SSH · build-box",
+                    "environmentId": "ssh:build-box",
+                    "environmentKind": "ssh"
                   }
                 ]
               }
@@ -260,7 +276,9 @@
                     "image/webp"
                   ],
                   "max": 12582912
-                }
+                },
+                "environmentId": "windows",
+                "environmentKind": "windowsNative"
               }
             }
           ]
@@ -465,6 +483,8 @@
                     "name": "Proj",
                     "path": "C:\\work",
                     "environmentName": "Windows",
+                    "environmentId": "windows",
+                    "environmentKind": "windowsNative",
                     "checkouts": [
                       {
                         "repositoryId": "r1",
@@ -544,6 +564,8 @@
                     "path": "/home/dev/work",
                     "environmentName": "WSL · Ubuntu",
                     "environmentBadge": "WSL · Ubuntu",
+                    "environmentId": "wsl:Ubuntu",
+                    "environmentKind": "wsl",
                     "checkouts": [
                       {
                         "repositoryId": "r2",
@@ -609,6 +631,8 @@
                     "path": "/srv/farm",
                     "environmentName": "SSH · build-box",
                     "environmentBadge": "SSH · build-box",
+                    "environmentId": "ssh:build-box",
+                    "environmentKind": "ssh",
                     "checkouts": [
                       {
                         "repositoryId": "r3",
@@ -731,6 +755,8 @@
                 "name": "Workspace",
                 "path": "<projectFolder>",
                 "environmentName": "Windows",
+                "environmentId": "windows",
+                "environmentKind": "windowsNative",
                 "checkouts": []
               }
             }

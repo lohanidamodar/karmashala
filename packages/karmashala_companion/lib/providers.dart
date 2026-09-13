@@ -2,5 +2,6 @@
 /// its streams, and the clock, id generator and log buffer under them.
 library;
 
+export 'src/application/companion_environments.dart';
 export 'src/application/companion_providers.dart';
 export 'src/application/companion_runtime.dart';

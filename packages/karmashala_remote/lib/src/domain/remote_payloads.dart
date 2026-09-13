@@ -36,6 +36,8 @@ class RemoteSessionSnapshot {
     this.branch,
     this.attachments,
     this.environmentBadge,
+    this.environmentId,
+    this.environmentKind,
   });
 
   final String sessionId;
@@ -109,6 +111,12 @@ class RemoteSessionSnapshot {
   /// The badge on a non-local session card ("WSL · Ubuntu"); null for local.
   final String? environmentBadge;
 
+  /// The desktop's own id for the machine this runs on, and what kind it is.
+  /// **Both null from a desktop older than this field** — the phone groups by
+  /// name then and never invents an id, which would collide across desktops.
+  final String? environmentId;
+  final String? environmentKind;
+
   /// [clearAttention] because "nothing is waiting" is a value a null argument
   /// cannot express, and an approval being answered is exactly that move.
   RemoteSessionSnapshot copyWith({
@@ -140,6 +148,8 @@ class RemoteSessionSnapshot {
         branch: branch,
         attachments: attachments,
         environmentBadge: environmentBadge ?? this.environmentBadge,
+        environmentId: environmentId,
+        environmentKind: environmentKind,
       );
 
   Map<String, Object?> toJson() => {
@@ -167,6 +177,8 @@ class RemoteSessionSnapshot {
     if (branch != null) 'branch': branch,
     if (attachments != null) 'attach': attachments!.toJson(),
     if (environmentBadge != null) 'environmentBadge': environmentBadge,
+    if (environmentId != null) 'environmentId': environmentId,
+    if (environmentKind != null) 'environmentKind': environmentKind,
   };
 
   static RemoteSessionSnapshot fromJson(Map<String, Object?> json) {
@@ -201,6 +213,8 @@ class RemoteSessionSnapshot {
       branch: str(json['branch']),
       attachments: RemoteAttachmentSupport.parse(json['attach']),
       environmentBadge: str(json['environmentBadge']),
+      environmentId: str(json['environmentId']),
+      environmentKind: str(json['environmentKind']),
     );
   }
 
@@ -229,7 +243,9 @@ class RemoteSessionSnapshot {
       other.worktree == worktree &&
       other.branch == branch &&
       other.attachments == attachments &&
-      other.environmentBadge == environmentBadge;
+      other.environmentBadge == environmentBadge &&
+      other.environmentId == environmentId &&
+      other.environmentKind == environmentKind;
 
   @override
   int get hashCode => Object.hash(
@@ -251,7 +267,15 @@ class RemoteSessionSnapshot {
     projectPath,
     pinned,
     folderMissing,
-    Object.hash(subPath, worktree, branch, attachments),
+    Object.hash(
+      subPath,
+      worktree,
+      branch,
+      attachments,
+      environmentBadge,
+      environmentId,
+      environmentKind,
+    ),
   );
 }
 
@@ -1089,6 +1113,8 @@ class RemoteWorkspaceProject {
     this.path,
     this.environmentName,
     this.environmentBadge,
+    this.environmentId,
+    this.environmentKind,
     this.checkouts = const [],
   });
 
@@ -1103,6 +1129,11 @@ class RemoteWorkspaceProject {
   /// The badge on a non-local project card ("WSL · Ubuntu"); null for local.
   final String? environmentBadge;
 
+  /// The desktop's own id for the machine, and what kind it is. Both null from
+  /// a desktop older than this field; the phone groups by name then.
+  final String? environmentId;
+  final String? environmentKind;
+
   final List<RemoteCheckoutOption> checkouts;
 
   Map<String, Object?> toJson() => {
@@ -1111,6 +1142,8 @@ class RemoteWorkspaceProject {
     if (path != null) 'path': path,
     if (environmentName != null) 'environmentName': environmentName,
     if (environmentBadge != null) 'environmentBadge': environmentBadge,
+    if (environmentId != null) 'environmentId': environmentId,
+    if (environmentKind != null) 'environmentKind': environmentKind,
     'checkouts': [for (final checkout in checkouts) checkout.toJson()],
   };
 
@@ -1129,6 +1162,12 @@ class RemoteWorkspaceProject {
           : null,
       environmentBadge: json['environmentBadge'] is String
           ? json['environmentBadge']! as String
+          : null,
+      environmentId: json['environmentId'] is String
+          ? json['environmentId']! as String
+          : null,
+      environmentKind: json['environmentKind'] is String
+          ? json['environmentKind']! as String
           : null,
       checkouts: [
         if (checkouts is List)

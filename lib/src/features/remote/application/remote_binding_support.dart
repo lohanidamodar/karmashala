@@ -74,6 +74,18 @@ String? environmentBadgeFor(Ref ref, String? environmentId) {
   return environment == null ? null : environmentBadge(environment);
 }
 
+/// What kind of machine an environment is, for the glyph a phone draws. Null
+/// when the id names a row the desktop no longer holds — the id is still sent,
+/// because it is what the project says and the phone can still group by it.
+String? environmentKindFor(Ref ref, String? environmentId) {
+  if (environmentId == null) return null;
+  return ref
+      .read(executionEnvironmentDaoProvider)
+      .getById(environmentId)
+      ?.kind
+      .name;
+}
+
 /// The desktop's own name for where a folder lives, by environment id — the
 /// same lookup as [environmentBadgeFor], and null for the same two reasons.
 String? environmentNameFor(Ref ref, String? environmentId) {

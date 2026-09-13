@@ -34,6 +34,8 @@ CompanionSessionSummary summary(
   bool imported = false,
   RemoteAttachmentSupport? attachments,
   String? environmentBadge,
+  String? environmentId,
+  String? environmentKind,
 }) => CompanionSessionSummary(
   id: id,
   title: title ?? 'Session $id',
@@ -53,4 +55,6 @@ CompanionSessionSummary summary(
   imported: imported,
   attachments: attachments,
   environmentBadge: environmentBadge,
+  environmentId: environmentId,
+  environmentKind: environmentKind,
 );
