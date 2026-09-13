@@ -57,6 +57,10 @@ enum SettingsSectionId {
     'agent tools',
     'tool list',
     'browser consent',
+    'app projects',
+    'flutter',
+    'react native',
+    'build',
   ]),
   agents('Agents', AppIcons.robot, [
     'default agent',

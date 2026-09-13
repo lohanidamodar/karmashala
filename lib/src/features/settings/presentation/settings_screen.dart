@@ -6,7 +6,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../environments/presentation/environments_section.dart';
-import '../../app_projects/presentation/project_kinds_section.dart';
+import '../../environments/presentation/toolchains_section.dart';
 import '../../flutter_apps/presentation/flutter_sdk_section.dart';
 import '../../git/presentation/worktree_setup_page.dart';
 import '../../notes/presentation/notes_settings_section.dart';
@@ -182,7 +182,7 @@ class _SectionContent extends StatelessWidget {
         EnvironmentsSection(),
         SshHostsSection(),
         FlutterSdkSection(),
-        ProjectKindsSection(),
+        ToolchainsSection(),
         KnownHostsSection(),
       ],
     ),

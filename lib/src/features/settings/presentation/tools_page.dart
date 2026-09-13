@@ -20,6 +20,7 @@ import '../../environments/application/system_health.dart';
 import '../../environments/application/system_health_service.dart';
 import '../../environments/presentation/environment_health_dialog.dart'
     show healthColor, healthIcon;
+import '../../app_projects/presentation/project_kinds_section.dart';
 import '../../mcp/control_server_restart.dart';
 import '../../mcp/control_server_status.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
@@ -40,6 +41,7 @@ class ToolsPage extends StatelessWidget {
     'External apps',
     'Agent access',
     'Agent tools',
+    'What can be built',
     'Consent',
   ];
 
@@ -68,6 +70,16 @@ class ToolsPage extends StatelessWidget {
               'What it can call once it is in. Static: this is the catalogue '
               'the bridge serves, not a reading.',
           children: [AgentToolsSection(), AgentSkillsSection()],
+        ),
+        ToolsCategory(
+          // Not "App projects": the tool catalogue above already has a
+          // category by that name, on this same page.
+          title: 'What can be built',
+          blurb:
+              'What a checkout is detected as, and what would be built from '
+              'it. Static, like the tool catalogue above: what each *machine* '
+              'can build with is measured under Environments.',
+          children: [ProjectKindsSection()],
         ),
         ToolsCategory(
           title: 'Consent',
