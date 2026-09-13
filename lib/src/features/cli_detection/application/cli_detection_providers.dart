@@ -305,6 +305,12 @@ List<AdoptablePane> adoptablePanes(Ref ref) {
   ];
 }
 
+/// [adoptablePanes] for a reader that holds a container rather than a `Ref` —
+/// a hook callback. Callable, not cached: the pane list changes every frame.
+final adoptablePanesProvider = Provider<List<AdoptablePane> Function()>(
+  (ref) => () => adoptablePanes(ref),
+);
+
 /// One pass over every CLI store, flattened to the sessions it found. Walks on
 /// the worker isolate, and unnarrowed: callers have no path to narrow by.
 Future<List<DetectedSession>> scanCliStores(Ref ref) async {

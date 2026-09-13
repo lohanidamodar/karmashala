@@ -13,6 +13,7 @@ import 'package:agent_cli/process.dart';
 import '../../explorer/application/where_you_are.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_rebind_providers.dart';
 
 /// Drains the spool directories a file-reporting agent writes into, applying
 /// each payload exactly as the HTTP route does. An empty list starts no timer.
@@ -62,6 +63,25 @@ AgentStatusReport applyAgentHookCallback(
         );
   } on Object catch (error) {
     logger?.warning('Session adoption from a hook failed: $error');
+  }
+  // A launched pane whose CLI has moved to a conversation we never named — a
+  // `/clear`, a fork, a resume that minted a fresh id. Left alone, the row goes
+  // on reading a transcript that stopped and the session looks finished.
+  try {
+    final rebound = rebindSessionFromHook(
+      container,
+      agentId: report.agentId,
+      conversationId: report.sessionId,
+      body: body,
+    );
+    if (rebound != null) {
+      logger?.info(
+        'Session $rebound is on conversation ${report.sessionId} now; its '
+        'pane is live and the one it named had gone quiet.',
+      );
+    }
+  } on Object catch (error) {
+    logger?.warning('Re-pointing a session from a hook failed: $error');
   }
   // Where the agent is working *now*. An agent pane paints a TUI and emits no
   // OSC 7, so its hook is the only live reading of this.
