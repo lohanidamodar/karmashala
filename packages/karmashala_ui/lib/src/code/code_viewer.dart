@@ -54,6 +54,7 @@ class _CodeViewerState extends State<CodeViewer> {
   double _gutterWidth = 0;
   String _measuredText = '';
   double _measuredFontSize = 0;
+  bool _measuredLineNumbers = false;
 
   /// A ceiling on the *width* [kMaxLineUnitsLaidOut] code units can reach, for
   /// a font whose glyphs are wide or a large text scale.
@@ -125,9 +126,14 @@ class _CodeViewerState extends State<CodeViewer> {
 
   void _measure(TextStyle style, StrutStyle strut, TextScaler scaler) {
     final fontSize = scaler.scale(widget.fontSize);
-    if (_measuredText == widget.text && _measuredFontSize == fontSize) return;
+    if (_measuredText == widget.text &&
+        _measuredFontSize == fontSize &&
+        _measuredLineNumbers == widget.showLineNumbers) {
+      return;
+    }
     _measuredText = widget.text;
     _measuredFontSize = fontSize;
+    _measuredLineNumbers = widget.showLineNumbers;
 
     var longest = 0;
     var longestIndex = 0;

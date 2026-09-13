@@ -202,12 +202,83 @@ void main() {
       expect(controller.selection.baseOffset, 3);
     });
 
-    test('Tab replaces a selection', () {
+    test('Tab replaces a selection inside one line', () {
       final controller = CodeEditingController(text: 'abcd')
         ..selection = const TextSelection(baseOffset: 1, extentOffset: 3);
 
       controller.handleKey(LogicalKeyboardKey.tab, shift: false);
       expect(controller.text, 'a  d');
+    });
+
+    test('Tab indents a selected block instead of deleting it', () {
+      final controller = CodeEditingController(text: 'aaa\nbbb\nccc')
+        ..selection = const TextSelection(baseOffset: 0, extentOffset: 11);
+
+      expect(
+        controller.handleKey(LogicalKeyboardKey.tab, shift: false),
+        isTrue,
+      );
+      expect(controller.text, '  aaa\n  bbb\n  ccc');
+      // Still selected, so the next Tab moves the same block.
+      expect(controller.selection.start, 0);
+      expect(controller.selection.end, controller.text.length);
+    });
+
+    test('Tab indents every line the selection touches, whole', () {
+      // The selection starts mid-line and ends mid-line; both lines move.
+      final controller = CodeEditingController(text: 'aaa\nbbb\nccc')
+        ..selection = const TextSelection(baseOffset: 2, extentOffset: 5);
+
+      controller.handleKey(LogicalKeyboardKey.tab, shift: false);
+      expect(controller.text, '  aaa\n  bbb\nccc');
+      expect(controller.selection.start, 0);
+      expect(controller.selection.end, 11);
+    });
+
+    test('a selection ending at column 0 leaves that line alone', () {
+      final controller = CodeEditingController(text: 'aaa\nbbb\nccc')
+        ..selection = const TextSelection(baseOffset: 0, extentOffset: 4);
+
+      controller.handleKey(LogicalKeyboardKey.tab, shift: false);
+      expect(controller.text, '  aaa\nbbb\nccc');
+    });
+
+    test('an empty line in the block gets no whitespace of its own', () {
+      final controller = CodeEditingController(text: 'aaa\n\nccc')
+        ..selection = const TextSelection(baseOffset: 0, extentOffset: 8);
+
+      controller.handleKey(LogicalKeyboardKey.tab, shift: false);
+      expect(controller.text, '  aaa\n\n  ccc');
+    });
+
+    test('Shift+Tab is the inverse over the same block', () {
+      final controller = CodeEditingController(text: 'aaa\nbbb\nccc')
+        ..selection = const TextSelection(baseOffset: 0, extentOffset: 11);
+
+      controller.handleKey(LogicalKeyboardKey.tab, shift: false);
+      expect(controller.handleKey(LogicalKeyboardKey.tab, shift: true), isTrue);
+      expect(controller.text, 'aaa\nbbb\nccc');
+      expect(controller.selection.start, 0);
+      expect(controller.selection.end, 11);
+    });
+
+    test('Shift+Tab over a block removes at most one level a line', () {
+      final controller = CodeEditingController(text: '      a\n  b\nc')
+        ..selection = const TextSelection(baseOffset: 0, extentOffset: 13);
+
+      controller.handleKey(LogicalKeyboardKey.tab, shift: true);
+      expect(controller.text, '    a\nb\nc');
+    });
+
+    test('Shift+Tab over a block with nothing to remove keeps the key', () {
+      final controller = CodeEditingController(text: 'a\nb\nc')
+        ..selection = const TextSelection(baseOffset: 0, extentOffset: 5);
+
+      expect(
+        controller.handleKey(LogicalKeyboardKey.tab, shift: true),
+        isFalse,
+      );
+      expect(controller.text, 'a\nb\nc');
     });
 
     test('Shift+Tab removes one level and keeps the caret on its text', () {

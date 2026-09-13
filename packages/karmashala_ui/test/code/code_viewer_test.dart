@@ -123,6 +123,19 @@ void main() {
     expect(row('line 1'), findsOneWidget);
   });
 
+  testWidgets('turning the line numbers back on draws them', (tester) async {
+    // The measurement is memoised, and the memo used to key on the text and
+    // the scaled font size alone: a rebuilt viewer kept a gutter 0px wide.
+    await pump(tester, lines(20), showLineNumbers: false);
+    expect(find.byType(CodeGutter), findsNothing);
+
+    await pump(tester, lines(20));
+
+    final gutter = tester.widget<CodeGutter>(find.byType(CodeGutter));
+    expect(gutter.width, greaterThan(0));
+    expect(tester.getSize(find.byType(CodeGutter)).width, gutter.width);
+  });
+
   testWidgets('an empty file is one empty line, not a crash', (tester) async {
     await pump(tester, '');
 

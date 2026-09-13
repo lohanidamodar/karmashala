@@ -42,7 +42,9 @@ class CodeEditingController extends TextEditingController {
     return _lineCount = lines;
   }
 
-  static final RegExp _leading = RegExp(r'^[ \t]*');
+  /// Unanchored on purpose: `matchAsPrefix` anchors at the offset it is given,
+  /// and a `^` would refuse to match anywhere but the start of the buffer.
+  static final RegExp _leading = RegExp(r'[ \t]*');
 
   TextSpan? _memo;
   String? _memoText;
@@ -98,8 +100,13 @@ class CodeEditingController extends TextEditingController {
       return _newline();
     }
     if (key == LogicalKeyboardKey.tab) {
+      final start = selection.start;
+      final end = selection.end;
+      if (_spansLines(start, end)) {
+        return _indentLines(start, end, outdent: shift);
+      }
       if (shift) return _outdent();
-      _replace(selection.start, selection.end, indent);
+      _replace(start, end, indent);
       return true;
     }
     return false;
@@ -115,9 +122,58 @@ class CodeEditingController extends TextEditingController {
     return true;
   }
 
+  bool _spansLines(int start, int end) {
+    for (var i = start; i < end; i++) {
+      if (text.codeUnitAt(i) == 0x0A) return true;
+    }
+    return false;
+  }
+
+  /// Every line the selection touches, moved one level, and left selected so
+  /// the next Tab moves the same block. Replacing the selection instead — what
+  /// Tab used to do — deleted the code it spanned.
+  bool _indentLines(int start, int end, {required bool outdent}) {
+    final from = _lineStartAt(start);
+    // A selection ending at column 0 has not reached that line's text.
+    final lastTouched = end > from && _lineStartAt(end) == end ? end - 1 : end;
+    final to = _lineEndAt(lastTouched);
+
+    final rebuilt = StringBuffer();
+    var changed = false;
+    var first = true;
+    for (final line in text.substring(from, to).split('\n')) {
+      if (!first) rebuilt.write('\n');
+      first = false;
+      if (outdent) {
+        final lead = _leading.matchAsPrefix(line)?.group(0) ?? '';
+        final removed = lead.length < indent.length
+            ? lead.length
+            : indent.length;
+        changed |= removed > 0;
+        rebuilt.write(line.substring(removed));
+      } else if (line.isNotEmpty) {
+        changed = true;
+        rebuilt
+          ..write(indent)
+          ..write(line);
+      }
+    }
+    if (!changed) return false;
+
+    final next = rebuilt.toString();
+    value = TextEditingValue(
+      text: text.replaceRange(from, to, next),
+      selection: TextSelection(
+        baseOffset: from,
+        extentOffset: from + next.length,
+      ),
+    );
+    return true;
+  }
+
   bool _outdent() {
     final lineStart = _lineStartAt(selection.start);
-    final lead = _leading.firstMatch(text.substring(lineStart))?.group(0) ?? '';
+    final lead = _leading.matchAsPrefix(text, lineStart)?.group(0) ?? '';
     if (lead.isEmpty) return false;
 
     final removed = lead.length < indent.length ? lead.length : indent.length;
@@ -137,6 +193,11 @@ class CodeEditingController extends TextEditingController {
 
   int _lineStartAt(int offset) =>
       offset == 0 ? 0 : text.lastIndexOf('\n', offset - 1) + 1;
+
+  int _lineEndAt(int offset) {
+    final index = text.indexOf('\n', offset);
+    return index < 0 ? text.length : index;
+  }
 
   void _replace(int start, int end, String insertion) {
     value = TextEditingValue(

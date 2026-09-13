@@ -15,13 +15,15 @@ import '../design_tokens.dart';
 }) {
   if (rowHeight <= 0 || lineCount <= 0) return (first: 0, last: -1);
   final first = math.max(0, offset ~/ rowHeight);
-  final last = math.min(lineCount - 1, ((offset + height) / rowHeight).ceil());
+  final last = math.min(
+    lineCount - 1,
+    ((offset + height) / rowHeight).ceil() - 1,
+  );
   return (first: first, last: last);
 }
 
-/// The line numbers beside a code surface, **painted rather than built**: one
-/// widget a line meant a 50,000-line file laid out 200,000 of them before it
-/// drew anything. Only the rows on screen cost anything now.
+/// The line numbers beside a code surface, painted rather than built, so only
+/// the rows on screen cost anything.
 class CodeGutter extends StatelessWidget {
   const CodeGutter({
     required this.lineCount,
@@ -90,6 +92,7 @@ class _GutterPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (rowHeight <= 0) return;
+    canvas.clipRect(Offset.zero & size);
     final offset = _offset;
     final rows = visibleGutterRows(
       lineCount: lineCount,

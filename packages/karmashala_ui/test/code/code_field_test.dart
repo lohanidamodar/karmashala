@@ -88,7 +88,7 @@ void main() {
         offset: 0,
         height: 900,
       ),
-      (first: 0, last: 50),
+      (first: 0, last: 49),
     );
     // Scrolled a long way down: still a screenful, and it starts where the
     // viewport does rather than at line one.
@@ -114,6 +114,53 @@ void main() {
       visibleGutterRows(lineCount: 5, rowHeight: 0, offset: 0, height: 900),
       (first: 0, last: -1),
     );
+  });
+
+  testWidgets('and never a row outside its own box', (tester) async {
+    // Ten rows fit exactly: the eleventh would be painted past the bottom of
+    // a CustomPaint that clipped nothing.
+    expect(
+      visibleGutterRows(lineCount: 100, rowHeight: 10, offset: 0, height: 100),
+      (first: 0, last: 9),
+    );
+    // A row height the layout produced rather than one a test chose: the last
+    // row is half on screen and is still drawn.
+    expect(
+      visibleGutterRows(
+        lineCount: 100,
+        rowHeight: 18.2,
+        offset: 0,
+        height: 100,
+      ),
+      (first: 0, last: 5),
+    );
+    expect(
+      visibleGutterRows(
+        lineCount: 100,
+        rowHeight: 18.2,
+        offset: 9.1,
+        height: 100,
+      ),
+      (first: 0, last: 5),
+    );
+    // Overscrolled past the top: the first row is still row one.
+    expect(
+      visibleGutterRows(
+        lineCount: 100,
+        rowHeight: 10,
+        offset: -50,
+        height: 100,
+      ),
+      (first: 0, last: 4),
+    );
+    // Scrolled past the end: nothing to draw, and no reversed loop.
+    final past = visibleGutterRows(
+      lineCount: 100,
+      rowHeight: 10,
+      offset: 2000,
+      height: 100,
+    );
+    expect(past.first, greaterThan(past.last));
   });
 
   testWidgets('a gutter row is exactly the line it stands beside', (
