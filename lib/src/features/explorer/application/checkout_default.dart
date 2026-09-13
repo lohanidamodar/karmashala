@@ -31,20 +31,23 @@ List<Repository> sessionCheckouts(Ref ref, Session session) {
   }
 
   final recorded = session.workingDirectory ?? session.worktree;
-  if (recorded != null) add(_deepestContaining(repositories, recorded) ?? own);
+  if (recorded != null) add(checkoutContaining(repositories, recorded) ?? own);
   _subagentCheckouts(ref, session, own).forEach(add);
   final directory = own?.path;
   add(
     directory == null
         ? own
-        : _deepestContaining(repositories, directory) ?? own,
+        : checkoutContaining(repositories, directory) ?? own,
   );
   return ordered;
 }
 
 /// The registered checkout containing [directory] that is deepest — a session
 /// in `hub/projects/app` belongs to `app`, not the `hub` above it.
-Repository? _deepestContaining(
+///
+/// Public because the sidebar asks the same question of a live directory: a
+/// second copy of this rule is how the tree and the follower would disagree.
+Repository? checkoutContaining(
   RepositoryDao repositories,
   EnvironmentPath directory,
 ) {
@@ -72,7 +75,7 @@ List<Repository> _subagentCheckouts(Ref ref, Session parent, Repository? own) {
   for (final child in children) {
     final directory = child.workingDirectory ?? child.worktree;
     if (directory == null) continue;
-    final repository = _deepestContaining(repositories, directory);
+    final repository = checkoutContaining(repositories, directory);
     if (repository == null || repository.projectId != own.projectId) continue;
     found[repository.id] = repository;
     votes[repository.id] = (votes[repository.id] ?? 0) + 1;

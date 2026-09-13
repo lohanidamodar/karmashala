@@ -22,6 +22,7 @@ import '../../environments/application/environment_providers.dart';
 import '../application/environment_terminals_providers.dart';
 import '../application/explorer_tree_nodes.dart';
 import '../application/explorer_view_mode.dart';
+import '../application/where_you_are.dart';
 import 'environment_rows.dart';
 import '../../ssh/application/ssh_providers.dart';
 import 'package:karmashala_ssh/connection.dart';
@@ -100,10 +101,56 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
   String _query = '';
   final Set<String> _expandedProjects = {};
 
+  final _scroll = ScrollController();
+
+  /// The row the selection was last scrolled to. A reveal happens on a
+  /// *change* of selection, never on every build, or the list would fight the
+  /// user's own scrolling.
+  String? _revealed;
+
+  /// Held by the selected project's row while it is on screen, so the reveal
+  /// can finish exactly rather than at its estimate.
+  final _selectedRow = GlobalKey();
+
   /// Machines whose `Terminals` the user has opened. Not persisted: opening
   /// one dials a machine, and a fold restored at launch would dial every host
   /// on the first frame (§19).
   final Set<String> _expandedTerminals = {};
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Brings the selected project into view. The list is built lazily, so an
+  /// off-screen row has no context to scroll to: jump by the proportion of the
+  /// list it sits at, then settle exactly once it exists.
+  void _revealSelected(int index, int total) {
+    if (!mounted || !_scroll.hasClients || total == 0) return;
+    void settle() {
+      final target = _selectedRow.currentContext;
+      if (target == null) return;
+      Scrollable.ensureVisible(
+        target,
+        alignment: 0.3,
+        duration: const Duration(milliseconds: 120),
+      );
+    }
+
+    if (_selectedRow.currentContext != null) {
+      settle();
+      return;
+    }
+    final position = _scroll.position;
+    final content = position.maxScrollExtent + position.viewportDimension;
+    final guess =
+        content * index / total - position.viewportDimension / 3;
+    _scroll.jumpTo(guess.clamp(0.0, position.maxScrollExtent));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) settle();
+    });
+  }
 
   void _showDetected() {
     ref.read(detectedProjectsControllerProvider.notifier).detect();
@@ -220,6 +267,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         _expandedProjects.remove(project.id);
       }
     });
+    // A deliberate pick outranks wherever the pane on screen has wandered to,
+    // until you move panes yourself.
+    ref.read(explorerFollowHoldProvider.notifier).hold();
     ref.read(selectedProjectIdProvider.notifier).select(project.id);
     // Single-repository projects select that repository so "New session" and
     // the detail view have a working context immediately.
@@ -477,6 +527,21 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
         terminalCountOf: _terminalCount,
         terminalDetailOf: _terminalDetail,
       );
+      // A selection that moved — by a click, or by the pane on screen going
+      // somewhere — is brought into view once, after this frame.
+      final selectedProjectId = ref.watch(selectedProjectIdProvider);
+      if (selectedProjectId != _revealed) {
+        final index = nodes.indexWhere(
+          (node) =>
+              node is ProjectNode && node.project.id == selectedProjectId,
+        );
+        _revealed = selectedProjectId;
+        if (index >= 0) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _revealSelected(index, nodes.length),
+          );
+        }
+      }
       // Watched here rather than in the row, which is inflated during layout.
       final projectFacts = {
         for (final node in nodes.whereType<ProjectNode>())
@@ -487,6 +552,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           : ListView.builder(
               // Only the rows on screen are inflated, so the tree costs what is
               // visible rather than what the workspace holds.
+              controller: _scroll,
               padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
               itemCount: nodes.length,
               itemBuilder: (context, index) =>
@@ -610,6 +676,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     final pinned = facts.pinned;
     final expanded = _expandedProjects.contains(project.id);
     return Padding(
+      key: facts.selected ? _selectedRow : null,
       padding: EdgeInsets.only(left: depth * ExplorerRow.indent),
       child: ProjectCard(
         name: project.name,

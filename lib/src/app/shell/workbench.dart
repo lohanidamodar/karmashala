@@ -15,6 +15,7 @@ import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/imported_session_view.dart';
 import '../../features/explorer/application/explorer_actions.dart';
 import '../../features/explorer/application/session_context.dart';
+import '../../features/explorer/application/where_you_are.dart';
 import '../../features/sessions/application/delivery_providers.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_status_providers.dart';
@@ -200,9 +201,23 @@ class _WorkbenchViewState extends ConsumerState<WorkbenchView> {
     // screen, not the selection, so activating another tab moves it too.
     ref.listen(activePaneSessionIdProvider, (_, next) {
       final context = ref.read(sessionContextProvider);
-      // A shell tab follows nothing, and saying so matters: a checkout picked
-      // while one is up would otherwise stick to the last followed session.
+      // A shell tab follows no *session*, and saying so matters: a checkout
+      // picked while one is up would otherwise stick to the last followed
+      // session. Where it is working is a separate question, below.
       next == null ? context.stopFollowing() : context.follow(next);
+    });
+    // Going somewhere yourself releases whatever your last click was holding.
+    ref.listen(
+      terminalSessionsControllerProvider.select((s) => s.activeTab?.focusedPaneId),
+      (_, _) => ref.read(explorerFollowHoldProvider.notifier).release(),
+    );
+    // **Where the pane on screen is working, now** — an agent's hook cwd, a
+    // shell's OSC 7, or the directory the session was launched in. A click in
+    // the Explorer outranks it until you move panes.
+    ref.listen(focusedDirectoryProvider, (_, next) {
+      if (next == null) return;
+      if (ref.read(explorerFollowHoldProvider)) return;
+      ref.read(sessionContextProvider).followDirectory(next);
     });
 
     final workspace = ref.watch(workspaceLayoutProvider);

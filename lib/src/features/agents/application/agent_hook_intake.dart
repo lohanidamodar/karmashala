@@ -7,6 +7,12 @@ import '../../sessions/application/session_outcome_writer.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'agent_hook_spool_drainer.dart';
 import 'agent_status_providers.dart';
+import 'hook_payload_field.dart';
+import 'agent_providers.dart';
+import 'package:agent_cli/process.dart';
+import '../../explorer/application/where_you_are.dart';
+import '../../repositories/application/repository_providers.dart';
+import '../../sessions/application/session_providers.dart';
 
 /// Drains the spool directories a file-reporting agent writes into, applying
 /// each payload exactly as the HTTP route does. An empty list starts no timer.
@@ -57,6 +63,18 @@ AgentStatusReport applyAgentHookCallback(
   } on Object catch (error) {
     logger?.warning('Session adoption from a hook failed: $error');
   }
+  // Where the agent is working *now*. An agent pane paints a TUI and emits no
+  // OSC 7, so its hook is the only live reading of this.
+  try {
+    recordAgentDirectoryFromHook(
+      container,
+      agentId: report.agentId,
+      agentSessionId: report.sessionId,
+      body: body,
+    );
+  } on Object catch (error) {
+    logger?.warning('Recording an agent working directory failed: $error');
+  }
   // The status pipeline's *primary* input: a hook is authoritative and already
   // in memory, so folding it in here beats a poll five seconds later.
   try {
@@ -81,4 +99,41 @@ AgentStatusReport applyAgentHookCallback(
     logger?.warning('Recording a session ending from a hook failed: $error');
   }
   return report;
+}
+
+/// Files the `cwd` a hook carried under **our** session id.
+///
+/// The field is declared per agent on [AgentHookSpec.cwdPath], so nothing here
+/// parses a shape. The environment comes from the session's own checkout: a
+/// path an agent reports is spelled for the machine it runs on, and reading it
+/// as this one would move the tree to another machine's folder.
+void recordAgentDirectoryFromHook(
+  ProviderContainer container, {
+  required String agentId,
+  required String agentSessionId,
+  required String body,
+}) {
+  if (agentId.isEmpty || agentSessionId.isEmpty) return;
+  final path =
+      container.read(agentRegistryProvider).byId(agentId)?.hooks?.cwdPath ??
+      const <String>[];
+  if (path.isEmpty) return;
+  final cwd = hookStringAt(path, body);
+  if (cwd.isEmpty) return;
+  final session = container
+      .read(sessionDaoProvider)
+      .getByExternalSessionId(agentSessionId);
+  if (session == null) return;
+  final environmentId = container
+      .read(repositoryDaoProvider)
+      .getById(session.repositoryId)
+      ?.path
+      .environmentId;
+  if (environmentId == null) return;
+  container
+      .read(agentWorkingDirectoriesProvider.notifier)
+      .record(
+        session.id,
+        EnvironmentPath(environmentId: environmentId, path: cwd),
+      );
 }

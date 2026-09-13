@@ -1,3 +1,4 @@
+import 'where_you_are.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/frame_yield.dart';
@@ -335,6 +336,7 @@ class ExplorerActions {
   /// Selects a native session, and the repository above it, so the detail pane
   /// and the workbench follow the tree.
   void selectNative(Session session) {
+    _ref.read(explorerFollowHoldProvider.notifier).hold();
     _ref
         .read(selectedRepositoryIdProvider.notifier)
         .select(session.repositoryId);
@@ -343,6 +345,7 @@ class ExplorerActions {
   }
 
   void selectImported(ImportedSession session) {
+    _ref.read(explorerFollowHoldProvider.notifier).hold();
     _ref
         .read(selectedRepositoryIdProvider.notifier)
         .select(session.repositoryId);

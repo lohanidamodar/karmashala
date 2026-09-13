@@ -1,4 +1,4 @@
-import 'dart:convert';
+import '../../agents/application/hook_payload_field.dart';
 
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
@@ -227,32 +227,8 @@ class SessionAdoptionService {
     );
   }
 
-  /// The string at [path] in the JSON [body], or `''` for anything else — a
-  /// missing key, a non-string value, or a body that is not JSON at all.
-  String _stringAt(List<String> path, String body) {
-    Object? value;
-    try {
-      value = jsonDecode(body);
-    } on FormatException {
-      return '';
-    }
-    for (final segment in path) {
-      if (value is Map) {
-        value = value[segment];
-      } else if (value is List) {
-        final index = int.tryParse(segment);
-        if (index == null || index < 0 || index >= value.length) return '';
-        value = value[index];
-      } else {
-        return '';
-      }
-    }
-    if (value is String) return value;
-    if (value is List && value.isNotEmpty && value.first is String) {
-      return value.first as String;
-    }
-    return '';
-  }
+  /// The declared field, read by the one shared parser — see [hookStringAt].
+  String _stringAt(List<String> path, String body) => hookStringAt(path, body);
 
   /// The rationed half — pane screens, then the CLI stores. Returns how many
   /// were adopted; runs only on `SessionStatusRegistry`'s store slot.

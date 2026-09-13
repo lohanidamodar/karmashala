@@ -169,6 +169,20 @@ final class HintNode extends ExplorerNode {
   final String message;
 }
 
+/// The collapse ids that must be open for a project on [environmentId] — and
+/// filed under [workspaceId], when it is — to be drawn at all.
+///
+/// One spelling of these strings: a reveal that built them itself would drift
+/// from the tree that reads them, and the row would stay hidden.
+List<String> explorerAncestorsOf({
+  required String environmentId,
+  String? workspaceId,
+}) => [
+  'env:$environmentId',
+  'env:$environmentId/${EnvironmentSection.projects.name}',
+  if (workspaceId != null) 'env:$environmentId/ctx:$workspaceId',
+];
+
 /// **The Explorer's shape, as a flat list.** Machine, then its `Projects` and
 /// `Terminals`, then contexts before loose projects — each row appearing only
 /// when everything above it is expanded, so the list is exactly what is drawn.

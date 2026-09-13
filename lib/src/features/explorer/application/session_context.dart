@@ -1,3 +1,4 @@
+import 'package:agent_cli/process.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../git/application/changes_providers.dart';
@@ -8,6 +9,9 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'checkout_default.dart';
+import 'explorer_tree_nodes.dart';
+import '../../projects/application/project_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import 'picked_checkouts.dart';
 
 /// The session running in the pane the terminal is showing, or null. Keyed off
@@ -122,7 +126,41 @@ class SessionContext {
     _ref.read(followedSessionProvider.notifier).set(sessionId);
     _ref.read(selectedProjectIdProvider.notifier).select(repository.projectId);
     _ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
+    reveal(repository.projectId);
     return repository;
+  }
+
+  /// Points the Explorer at whatever checkout [directory] sits in, and opens
+  /// the rows above it so the selection can actually be seen.
+  ///
+  /// **A directory in no checkout we hold changes nothing.** A `cd` to `/tmp`
+  /// is not a statement about the workspace, and blanking the selection on it
+  /// would empty the side panel every time you stepped outside.
+  Repository? followDirectory(EnvironmentPath directory) {
+    final repository = checkoutContaining(
+      _ref.read(repositoryDaoProvider),
+      directory,
+    );
+    if (repository == null) return null;
+    _ref.read(selectedProjectIdProvider.notifier).select(repository.projectId);
+    _ref.read(selectedRepositoryIdProvider.notifier).select(repository.id);
+    reveal(repository.projectId);
+    return repository;
+  }
+
+  /// Opens the machine, its `Projects` section and the context above
+  /// [projectId], so a selected row is not highlighted off screen.
+  void reveal(String projectId) {
+    final project = _ref.read(projectDaoProvider).getById(projectId);
+    if (project == null) return;
+    _ref
+        .read(settingsControllerProvider.notifier)
+        .revealExplorerNodes(
+          explorerAncestorsOf(
+            environmentId: project.environmentId,
+            workspaceId: project.workspaceId,
+          ),
+        );
   }
 
   /// Nothing is being followed. Without it, a pick made under a plain shell tab

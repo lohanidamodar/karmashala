@@ -136,6 +136,23 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Opens every one of [nodeIds] that is folded, so a row beneath them can be
+  /// seen. Writes nothing when they are all open already — this runs whenever
+  /// the workbench moves, and a settings write per `cd` would be absurd.
+  void revealExplorerNodes(Iterable<String> nodeIds) {
+    final collapsed = state.collapsedExplorerNodes;
+    if (collapsed.isEmpty) return;
+    final folded = nodeIds.toSet();
+    if (!collapsed.any(folded.contains)) return;
+    state = state.copyWith(
+      collapsedExplorerNodes: [
+        for (final id in collapsed)
+          if (!folded.contains(id)) id,
+      ],
+    );
+    _save();
+  }
+
   /// Folds an Explorer row away, or opens it again. Absent means expanded, so
   /// a machine that appears later opens rather than inheriting somebody's fold.
   void toggleExplorerNodeCollapsed(String nodeId) {
