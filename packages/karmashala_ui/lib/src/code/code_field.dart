@@ -224,52 +224,71 @@ class _CodeFieldState extends State<CodeField> {
           onKeyEvent: _onKeyEvent,
           // No Scrollbar of our own: the scroll behaviour already draws the
           // vertical one on desktop, and two would paint over each other.
-          child: SingleChildScrollView(
-            controller: _vertical,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.showLineNumbers)
-                  _Gutter(
-                    lineCount: controller.lineCount,
-                    width: _gutterWidth,
-                    rowHeight: _lineHeight,
-                    strut: strut,
-                    style: codeStyle.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                SizedBox(
-                  width: fieldWidth,
-                  child: SingleChildScrollView(
-                    controller: _horizontal,
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: math.max(
-                        fieldWidth,
-                        _longestLineWidth + Insets.lg,
-                      ),
-                      child: TextField(
-                        controller: controller,
-                        focusNode: _focusNode,
-                        readOnly: widget.readOnly,
-                        maxLines: null,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        keyboardType: TextInputType.multiline,
-                        cursorColor: scheme.primary,
-                        scrollPadding: EdgeInsets.zero,
-                        // The two viewports above own scrolling; the field's
-                        // own would fight them for the drag.
-                        scrollPhysics: const NeverScrollableScrollPhysics(),
-                        decoration: const InputDecoration.collapsed(
-                          hintText: '',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            // The buffer rarely fills the pane; a click in the space under the
+            // last line should still put the caret in the file.
+            onTap: _focusNode.requestFocus,
+            child: SingleChildScrollView(
+              controller: _vertical,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.showLineNumbers)
+                      _Gutter(
+                        lineCount: controller.lineCount,
+                        width: _gutterWidth,
+                        rowHeight: _lineHeight,
+                        strut: strut,
+                        style: codeStyle.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
-                        strutStyle: strut,
-                        style: codeStyle,
+                      ),
+                    SizedBox(
+                      width: fieldWidth,
+                      child: SingleChildScrollView(
+                        controller: _horizontal,
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: math.max(
+                            fieldWidth,
+                            _longestLineWidth + Insets.lg,
+                          ),
+                          child: TextField(
+                            controller: controller,
+                            focusNode: _focusNode,
+                            readOnly: widget.readOnly,
+                            maxLines: null,
+                            autocorrect: false,
+                            enableSuggestions: false,
+                            keyboardType: TextInputType.multiline,
+                            cursorColor: scheme.primary,
+                            scrollPadding: EdgeInsets.zero,
+                            // The two viewports above own scrolling; the field's
+                            // own would fight them for the drag.
+                            scrollPhysics: const NeverScrollableScrollPhysics(),
+                            // Spelled out rather than `collapsed`: the app's
+                            // InputDecorationTheme is filled and bordered, and a
+                            // code surface drawn as a text box reads as a form.
+                            decoration: const InputDecoration(
+                              isCollapsed: true,
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                            strutStyle: strut,
+                            style: codeStyle,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         );

@@ -33,6 +33,10 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala/src/features/editor/application/editor_tab_actions.dart';
+import 'package:karmashala/src/features/editor/application/open_documents.dart';
+import 'package:karmashala/src/features/editor/data/document_store.dart';
+import 'package:karmashala/src/features/editor/domain/source_document.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -107,6 +111,55 @@ Future<void> _loadFonts(String fontDir) async {
   if (mono != null) await load('monospace', {'regular': mono});
 }
 
+/// A file the editor scene opens, with no disk behind it.
+const _sampleFile = r'C:\src\karmashala\lib\src\app\shell\side_panel.dart';
+const _sampleSource = """
+import 'package:flutter/material.dart';
+
+import 'package:karmashala_ui/tokens.dart';
+import 'side_panel_state.dart';
+
+/// The rail and the surface it opens, as one column. A surface draws its own
+/// header; the rail only says which one is showing.
+class SidePanel extends ConsumerWidget {
+  const SidePanel({required this.surface, super.key});
+
+  final SidePanelSurface? surface;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    if (surface == null) return const SizedBox(width: Chrome.rail);
+    return Row(
+      children: [
+        const SidePanelRail(),
+        SizedBox(
+          width: ref.watch(sidePanelWidthProvider),
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: theme.colorScheme.surface),
+            child: surface!.build(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+""";
+
+/// Serves [_sampleSource] so the scene never touches a real file.
+class _SampleStore extends DocumentStore {
+  const _SampleStore();
+
+  @override
+  Future<SourceDocument> load(String hostPath) async => SourceDocument(
+    hostPath: hostPath,
+    text: _sampleSource,
+    savedText: _sampleSource,
+    language: 'dart',
+    stamp: const FileStamp(length: 0, modified: null),
+  );
+}
+
 void main() {
   final fontDir = _findFontDir();
   if (fontDir == null) {
@@ -164,6 +217,7 @@ void main() {
       overrides: [
         ...fakeTerminalOverrides(database: db),
         hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+        documentStoreProvider.overrideWithValue(const _SampleStore()),
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
         ),
@@ -388,6 +442,71 @@ void main() {
           ),
           'des',
         );
+        await tester.pump();
+      },
+    );
+  });
+
+  Future<void> openTheEditor(WidgetTester tester) async {
+    container.read(selectedProjectIdProvider.notifier).select('p1');
+    container.read(selectedRepositoryIdProvider.notifier).select('r1');
+    container.read(editorTabActionsProvider).open(_sampleFile);
+    await tester.pump();
+  }
+
+  testWidgets('dark editor', (tester) async {
+    await shoot(
+      tester,
+      name: 'dark-editor',
+      size: desktop,
+      brightness: Brightness.dark,
+      panel: SidePanelSurface.files,
+      afterMount: openTheEditor,
+    );
+  });
+
+  testWidgets('light editor', (tester) async {
+    await shoot(
+      tester,
+      name: 'light-editor',
+      size: desktop,
+      brightness: Brightness.light,
+      panel: SidePanelSurface.files,
+      afterMount: openTheEditor,
+    );
+  });
+
+  // The unsaved mark on the tab chip and in the pane header, which is the one
+  // thing on this surface that has to be legible at a glance.
+  testWidgets('dark editor, unsaved', (tester) async {
+    await shoot(
+      tester,
+      name: 'dark-editor-unsaved',
+      size: desktop,
+      brightness: Brightness.dark,
+      panel: null,
+      afterMount: (tester) async {
+        await openTheEditor(tester);
+        container
+            .read(openDocumentsProvider.notifier)
+            .edit(_sampleFile, '$_sampleSource\n// edited, not saved\n');
+        await tester.pump();
+      },
+    );
+  });
+
+  testWidgets('narrow editor', (tester) async {
+    await shoot(
+      tester,
+      name: 'light-editor-narrow',
+      size: const Size(700, 820),
+      brightness: Brightness.light,
+      panel: null,
+      afterMount: (tester) async {
+        await openTheEditor(tester);
+        // A narrow shell opens on the Explorer; the editor is behind the other
+        // half of its bottom switch.
+        await tester.tap(find.text('Workbench'));
         await tester.pump();
       },
     );
