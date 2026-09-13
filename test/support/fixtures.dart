@@ -43,10 +43,12 @@ Project project({
   String name = 'Demo',
   String environmentId = 'windows',
   String path = r'C:\src\demo',
+  String? workspaceId,
 }) => Project(
   id: id,
   name: name,
   root: EnvironmentPath(environmentId: environmentId, path: path),
+  workspaceId: workspaceId,
   createdAt: testTime,
 );
 

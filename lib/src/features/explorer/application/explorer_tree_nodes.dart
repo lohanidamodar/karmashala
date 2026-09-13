@@ -1,0 +1,305 @@
+import 'package:agent_cli/process.dart';
+import 'package:agent_cli/read.dart';
+import 'package:karmashala_session/lineage.dart';
+import 'package:karmashala_session/session.dart';
+
+import '../../projects/domain/project.dart';
+import '../../workspaces/domain/workspace.dart';
+import 'environment_grouping.dart';
+import 'environment_terminals.dart';
+
+/// One row of the Explorer, as a value rather than a widget. The panel
+/// inflates only the rows on screen, so a node carries what its row draws and
+/// nothing it has to go and ask for.
+sealed class ExplorerNode {
+  const ExplorerNode({required this.id, required this.depth});
+
+  /// Stable across rebuilds: the row's widget key, and for a collapsible row
+  /// the id held in `Settings.collapsedExplorerNodes`.
+  final String id;
+
+  final int depth;
+}
+
+/// A machine. Drawn even when it holds nothing — it is where a terminal is
+/// opened, and an absent row would say the machine is not there (§19).
+final class EnvironmentNode extends ExplorerNode {
+  EnvironmentNode({
+    required this.environmentId,
+    required this.environment,
+    required this.projectCount,
+    required this.expanded,
+  }) : super(id: 'env:$environmentId', depth: 0);
+
+  final String environmentId;
+
+  /// Null when a project names an environment the workspace no longer has.
+  /// Shown as the bare id rather than folded into this machine.
+  final ExecutionEnvironment? environment;
+
+  final int projectCount;
+  final bool expanded;
+
+  String get label => environment?.name ?? environmentId;
+  EnvironmentKind? get kind => environment?.kind;
+}
+
+enum EnvironmentSection {
+  projects,
+  terminals;
+
+  String get slug => name;
+  String get label => this == projects ? 'Projects' : 'Terminals';
+}
+
+/// `Projects` or `Terminals` under one machine.
+final class EnvironmentSectionNode extends ExplorerNode {
+  EnvironmentSectionNode({
+    required this.environmentId,
+    required this.section,
+    required this.expanded,
+    this.count,
+  }) : super(id: 'env:$environmentId/${section.name}', depth: 1);
+
+  final String environmentId;
+  final EnvironmentSection section;
+  final bool expanded;
+
+  /// How many the section holds, or **null for not asked**. A terminals
+  /// section that has not dialled must not read as empty (§19).
+  final int? count;
+
+  String get label => section.label;
+}
+
+/// A context, inside the machine its projects run on. One spanning two
+/// machines is drawn under each: that is the truth, not a duplicate.
+final class ContextNode extends ExplorerNode {
+  ContextNode({
+    required this.environmentId,
+    required this.workspace,
+    required this.projectCount,
+    required this.expanded,
+  }) : super(id: 'env:$environmentId/ctx:${workspace.id}', depth: 2);
+
+  final String environmentId;
+  final Workspace workspace;
+  final int projectCount;
+  final bool expanded;
+
+  String get label => workspace.name;
+}
+
+/// A project, at depth 2 loose under its machine or 3 inside a context.
+final class ProjectNode extends ExplorerNode {
+  ProjectNode({
+    required this.project,
+    required this.expanded,
+    required super.depth,
+  }) : super(id: 'project:${project.id}');
+
+  final Project project;
+  final bool expanded;
+}
+
+/// A session started here, under the project it belongs to.
+final class SessionRowNode extends ExplorerNode {
+  SessionRowNode({
+    required super.depth,
+    required this.projectId,
+    required this.session,
+    this.link,
+    this.parentTitle,
+    this.lineageBroken = false,
+  }) : super(id: 'session:${session.id}');
+
+  final String projectId;
+  final Session session;
+
+  /// Why this session names a parent — spawned, handed off, forked.
+  final SessionLink? link;
+  final String? parentTitle;
+  final bool lineageBroken;
+}
+
+/// A conversation read out of a CLI's own store rather than started here.
+final class ImportedRowNode extends ExplorerNode {
+  ImportedRowNode({
+    required super.depth,
+    required this.projectId,
+    required this.session,
+  }) : super(id: 'imported:${session.id}');
+
+  final String projectId;
+  final ImportedSession session;
+}
+
+/// One row under a machine's `Terminals`.
+final class TerminalRowNode extends ExplorerNode {
+  TerminalRowNode({required this.environmentId, required this.terminal})
+    : super(id: 'terminal:$environmentId:${terminal.id}', depth: 2);
+
+  final String environmentId;
+  final EnvironmentTerminal terminal;
+}
+
+/// A line of prose at [depth] — "nothing here yet", "could not look".
+final class HintNode extends ExplorerNode {
+  HintNode({
+    required super.id,
+    required super.depth,
+    required this.message,
+  });
+
+  final String message;
+}
+
+/// **The Explorer's shape, as a flat list.** Machine, then its `Projects` and
+/// `Terminals`, then contexts before loose projects — each row appearing only
+/// when everything above it is expanded, so the list is exactly what is drawn.
+///
+/// [childrenOf] and [terminalsOf] are asked **only for an expanded node**,
+/// which is what keeps a collapsed machine free of both a session query and a
+/// dial.
+List<ExplorerNode> buildExplorerTree({
+  required List<Project> projects,
+  required List<ExecutionEnvironment> environments,
+  required List<Workspace> contexts,
+  required Set<String> collapsed,
+  required Set<String> expandedProjects,
+  List<ExplorerNode> Function(ProjectNode node)? childrenOf,
+  List<ExplorerNode> Function(EnvironmentNode node)? terminalsOf,
+  int? Function(String environmentId)? terminalCountOf,
+}) {
+  final contextsById = {for (final context in contexts) context.id: context};
+  final nodes = <ExplorerNode>[];
+
+  for (final group in groupProjectsByEnvironment(
+    projects,
+    environments,
+    includeEmpty: true,
+  )) {
+    final environment = EnvironmentNode(
+      environmentId: group.environmentId,
+      environment: group.environment,
+      projectCount: group.projects.length,
+      expanded: !collapsed.contains('env:${group.environmentId}'),
+    );
+    nodes.add(environment);
+    if (!environment.expanded) continue;
+
+    nodes.addAll(
+      _projectsSection(
+        group: group,
+        contextsById: contextsById,
+        collapsed: collapsed,
+        expandedProjects: expandedProjects,
+        childrenOf: childrenOf,
+      ),
+    );
+
+    final terminals = EnvironmentSectionNode(
+      environmentId: group.environmentId,
+      section: EnvironmentSection.terminals,
+      expanded: !collapsed.contains('env:${group.environmentId}/terminals'),
+      count: terminalCountOf?.call(group.environmentId),
+    );
+    nodes.add(terminals);
+    if (terminals.expanded && terminalsOf != null) {
+      nodes.addAll(terminalsOf(environment));
+    }
+  }
+  return nodes;
+}
+
+List<ExplorerNode> _projectsSection({
+  required EnvironmentGroup group,
+  required Map<String, Workspace> contextsById,
+  required Set<String> collapsed,
+  required Set<String> expandedProjects,
+  List<ExplorerNode> Function(ProjectNode node)? childrenOf,
+}) {
+  final section = EnvironmentSectionNode(
+    environmentId: group.environmentId,
+    section: EnvironmentSection.projects,
+    expanded: !collapsed.contains('env:${group.environmentId}/projects'),
+    count: group.projects.length,
+  );
+  final nodes = <ExplorerNode>[section];
+  if (!section.expanded) return nodes;
+  if (group.projects.isEmpty) {
+    nodes.add(
+      HintNode(
+        id: 'env:${group.environmentId}/projects/empty',
+        depth: 2,
+        message: 'No projects on this machine yet.',
+      ),
+    );
+    return nodes;
+  }
+
+  // A project whose context row has gone reads as loose rather than vanishing.
+  final filed = <String, List<Project>>{};
+  final loose = <Project>[];
+  for (final project in group.projects) {
+    final context = project.workspaceId;
+    if (context != null && contextsById.containsKey(context)) {
+      filed.putIfAbsent(context, () => []).add(project);
+    } else {
+      loose.add(project);
+    }
+  }
+
+  // Contexts before loose projects, the way folders sort above files.
+  final ordered = filed.keys.toList()
+    ..sort(
+      (a, b) => contextsById[a]!.name.toLowerCase().compareTo(
+        contextsById[b]!.name.toLowerCase(),
+      ),
+    );
+  for (final id in ordered) {
+    final context = ContextNode(
+      environmentId: group.environmentId,
+      workspace: contextsById[id]!,
+      projectCount: filed[id]!.length,
+      expanded: !collapsed.contains('env:${group.environmentId}/ctx:$id'),
+    );
+    nodes.add(context);
+    if (!context.expanded) continue;
+    for (final project in filed[id]!) {
+      nodes.addAll(
+        _project(
+          project,
+          depth: 3,
+          expandedProjects: expandedProjects,
+          childrenOf: childrenOf,
+        ),
+      );
+    }
+  }
+  for (final project in loose) {
+    nodes.addAll(
+      _project(
+        project,
+        depth: 2,
+        expandedProjects: expandedProjects,
+        childrenOf: childrenOf,
+      ),
+    );
+  }
+  return nodes;
+}
+
+List<ExplorerNode> _project(
+  Project project, {
+  required int depth,
+  required Set<String> expandedProjects,
+  required List<ExplorerNode> Function(ProjectNode node)? childrenOf,
+}) {
+  // Expansion is the panel's, not the collapse set's: a project's tree is
+  // session state and is deliberately not persisted.
+  final expanded = expandedProjects.contains(project.id);
+  final node = ProjectNode(project: project, expanded: expanded, depth: depth);
+  if (!expanded || childrenOf == null) return [node];
+  return [node, ...childrenOf(node)];
+}

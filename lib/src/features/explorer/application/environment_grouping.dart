@@ -29,12 +29,21 @@ class EnvironmentGroup {
 /// reads them: this machine first, then its WSL distributions, then the
 /// machines reached over SSH, then anything whose environment is missing.
 /// Within a kind, by name, so the list does not reshuffle between builds.
+/// [includeEmpty] adds a group for every environment holding no project at
+/// all. The Explorer wants them — a machine with nothing on it is where a
+/// terminal is opened, and leaving it out would say it is not there (§19).
 List<EnvironmentGroup> groupProjectsByEnvironment(
   List<Project> projects,
-  List<ExecutionEnvironment> environments,
-) {
+  List<ExecutionEnvironment> environments, {
+  bool includeEmpty = false,
+}) {
   final byId = {for (final e in environments) e.id: e};
   final grouped = <String, List<Project>>{};
+  if (includeEmpty) {
+    for (final environment in environments) {
+      grouped[environment.id] = [];
+    }
+  }
   for (final project in projects) {
     grouped.putIfAbsent(project.root.environmentId, () => []).add(project);
   }
