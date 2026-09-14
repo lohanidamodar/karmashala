@@ -33,10 +33,13 @@ dependencies:
     path: ../karmashala_session
   # A transcript message: markdown, its highlighted code, and the inline
   # syntax the path links are found by.
-  flutter_highlight: ^0.7.0
   flutter_markdown_plus: ^1.0.7
-  highlight: ^0.7.0
   markdown: ^7.3.1
+  # The code editor, and the highlighter behind both it and the transcript's
+  # fenced code. `re_highlight` is a Dart port of highlight.js 11.9 and ships
+  # the same two Atom One palettes the app already drew with.
+  re_editor: ^0.10.0
+  re_highlight: ^0.0.3
   # Every "Browse…" in the app; see `picking.dart` for why there is one copy.
   file_selector: ^1.1.0
   # The QR matrix QrPainter paints.
