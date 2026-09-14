@@ -309,7 +309,6 @@ void main() {
         ),
         repoWorktreesProvider.overrideWith((ref) async => const []),
         diffForTargetProvider.overrideWith((ref, target) async => _sampleDiff),
-        fileDiffByPathProvider.overrideWith((ref, path) async => _sampleDiff),
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
         ),

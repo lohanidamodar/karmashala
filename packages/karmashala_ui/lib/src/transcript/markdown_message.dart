@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_highlight/themes/atom-one-dark.dart';
-import 'package:flutter_highlight/themes/atom-one-light.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import '../code/code_spans.dart';
+import '../code/code_theme.dart';
 import '../design_tokens.dart';
 import 'package:karmashala_session/transcript.dart';
 
@@ -73,7 +72,7 @@ class MarkdownMessage extends StatelessWidget {
         if (title == kPathLinkTitle && href != null) onPathTap?.call(href);
       },
       syntaxHighlighter: _HighlightAdapter(
-        dark ? atomOneDarkTheme : atomOneLightTheme,
+        codeHighlightTheme(dark ? Brightness.dark : Brightness.light),
       ),
     );
   }

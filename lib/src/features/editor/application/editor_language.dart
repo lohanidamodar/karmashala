@@ -3,8 +3,8 @@ import 'package:path/path.dart' as p;
 /// Host paths are Windows-spelled, so both separators have to split.
 final p.Context _hostPaths = p.windows;
 
-/// Every value here is a key `highlight` registers; an id it does not know
-/// makes `highlight.parse` throw rather than fall back to plain text.
+/// Every value here is a key `re_highlight` registers; an id it does not know
+/// draws the file unhighlighted, which `editor_language_test` pins.
 const Map<String, String> _byExtension = <String, String>{
   'dart': 'dart',
   'js': 'javascript',
@@ -20,14 +20,13 @@ const Map<String, String> _byExtension = <String, String>{
   'kt': 'kotlin',
   'kts': 'kotlin',
   'swift': 'swift',
-  // No `c` grammar is registered; C reads acceptably as C++.
-  'c': 'cpp',
-  'h': 'cpp',
+  'c': 'c',
+  'h': 'c',
   'cc': 'cpp',
   'cpp': 'cpp',
   'cxx': 'cpp',
   'hpp': 'cpp',
-  'cs': 'cs',
+  'cs': 'csharp',
   'rb': 'ruby',
   'php': 'php',
   'sh': 'bash',

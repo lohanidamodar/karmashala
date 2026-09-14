@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:highlight/languages/all.dart' show allLanguages;
+import 'package:re_highlight/languages/all.dart' show builtinAllLanguages;
 import 'package:karmashala/src/features/editor/application/editor_language.dart';
 
 void main() {
@@ -31,11 +31,11 @@ void main() {
         'a.kt': 'kotlin',
         'a.kts': 'kotlin',
         'a.swift': 'swift',
-        'a.c': 'cpp',
-        'a.h': 'cpp',
+        'a.c': 'c',
+        'a.h': 'c',
         'a.cpp': 'cpp',
         'a.hpp': 'cpp',
-        'a.cs': 'cs',
+        'a.cs': 'csharp',
         'a.rb': 'ruby',
         'a.php': 'php',
         'a.sh': 'bash',
@@ -95,9 +95,9 @@ void main() {
       expect(highlightLanguageFor(r'C:\src'), isNull);
     });
 
-    test('every id it can answer with is one highlight registers', () {
+    test('every id it can answer with is one re_highlight registers', () {
       for (final id in highlightLanguageIds) {
-        expect(allLanguages.containsKey(id), isTrue, reason: id);
+        expect(builtinAllLanguages.containsKey(id), isTrue, reason: id);
       }
       expect(highlightLanguageIds, isNotEmpty);
     });

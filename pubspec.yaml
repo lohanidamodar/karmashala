@@ -129,7 +129,6 @@ dependencies:
   file_selector: ^1.1.0
   flutter:
     sdk: flutter
-  flutter_highlight: ^0.7.0
   # Companion mode only: attention notifications on the phone.
   flutter_local_notifications: ^19.0.0
   flutter_markdown_plus: ^1.0.7
@@ -145,7 +144,6 @@ dependencies:
   # Companion mode only: the pairing record (device key) at rest in the
   # platform keystore — design §2 forbids plain preferences.
   flutter_secure_storage: ^10.0.0
-  highlight: ^0.7.0
   hotkey_manager: ^0.2.3
   launch_at_startup: ^0.5.1
   local_notifier: ^0.1.6
@@ -154,6 +152,9 @@ dependencies:
   # transcript adds an inline syntax of its own (`md.InlineSyntax`) rather than
   # preprocessing the message text, which would corrupt code fences.
   markdown: ^7.3.1
+  # The highlighter behind the editor and the transcript's fenced code;
+  # named here because a test asserts our language ids against its registry.
+  re_highlight: ^0.0.3
   media_kit: ^1.2.6
   # libmpv, one package per host platform, and all three are needed.
   # `MediaKit.ensureInitialized()` in main.dart is unguarded, so a host with no

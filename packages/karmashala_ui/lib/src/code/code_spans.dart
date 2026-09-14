@@ -1,43 +1,34 @@
 import 'package:flutter/painting.dart';
-import 'package:highlight/highlight.dart' show highlight, Node;
+import 'package:re_highlight/languages/all.dart';
+import 'package:re_highlight/re_highlight.dart';
 
-/// `highlight` nodes as spans, styled by [theme]. The one node walk in the app:
-/// the transcript's fenced code and the editor both come through here.
-List<TextSpan> highlightSpans(List<Node> nodes, Map<String, TextStyle> theme) {
-  TextSpan spanFor(Node node) {
-    final className = node.className;
-    final style = className == null ? null : theme[className];
-    if (node.value != null) return TextSpan(text: node.value, style: style);
-    return TextSpan(
-      style: style,
-      children: <TextSpan>[
-        for (final child in node.children ?? const <Node>[]) spanFor(child),
-      ],
-    );
-  }
+/// The one highlighter in the app, with every grammar registered once.
+///
+/// `Highlight` holds the compiled grammars, so building one per code block
+/// would recompile them for every fenced block in a transcript.
+final Highlight _highlight = Highlight()
+  ..registerLanguages(builtinAllLanguages);
 
-  return <TextSpan>[for (final node in nodes) spanFor(node)];
-}
-
-/// [source] parsed as [language] (or auto-detected when null) and returned as
-/// one span under [base]. A parse that throws falls back to a single plain
-/// span, because a coloured buffer is worth less than a readable one.
+/// [source] parsed as [language] and returned as one span under [base].
+///
+/// A language the highlighter does not know, and any parse that throws, falls
+/// back to a single plain span: a coloured buffer is worth less than a
+/// readable one. Auto-detection is deliberately not used — it is the expensive
+/// path, and a fenced block without a language is far more often prose or
+/// output than it is code.
 TextSpan highlightedCode(
   String source, {
   String? language,
   required Map<String, TextStyle> theme,
   TextStyle? base,
 }) {
+  if (language == null || !builtinAllLanguages.containsKey(language)) {
+    return TextSpan(text: source, style: base);
+  }
   try {
-    final result = highlight.parse(
-      source,
-      language: language,
-      autoDetection: language == null,
-    );
-    return TextSpan(
-      style: base,
-      children: highlightSpans(result.nodes ?? const <Node>[], theme),
-    );
+    final renderer = TextSpanRenderer(base, theme);
+    _highlight.highlight(code: source, language: language).render(renderer);
+    return renderer.span ?? TextSpan(text: source, style: base);
   } on Object {
     return TextSpan(text: source, style: base);
   }
