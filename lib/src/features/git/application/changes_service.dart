@@ -171,6 +171,28 @@ class ChangesService {
   Future<String> diffUntracked(EnvironmentPath repo, String path) =>
       _ask(repo, (git, at) => git.diffUntracked(at, path));
 
+  /// Whether git tracks [path] in [repo].
+  Future<bool> isTracked(EnvironmentPath repo, String path) =>
+      _ask(repo, (git, at) => git.isTracked(at, path));
+
+  /// The diff for one file, asking whichever question git will answer for it.
+  ///
+  /// A plain `git diff` reports nothing for an untracked path, which is what
+  /// used to render as an empty pane. The second question is only worth asking
+  /// when the first came back empty **and** git confirms the path is untracked:
+  /// a tracked file with no changes is also empty, and `--no-index` would draw
+  /// the whole of it as added.
+  Future<String> diffForFile(
+    EnvironmentPath repo,
+    String path, {
+    String? base,
+  }) async {
+    final patch = await diff(repo, path: path, base: base);
+    if (patch.isNotEmpty) return patch;
+    if (await isTracked(repo, path)) return patch;
+    return diffUntracked(repo, path);
+  }
+
   /// The content fingerprint of each of [paths] as they stand on disk, for the
   /// review-thread anchors. A path git could not hash is absent from the map,
   /// which the caller must read as "cannot tell" and never as unchanged.

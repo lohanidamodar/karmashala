@@ -321,6 +321,22 @@ class GitService {
     return result.stdout;
   }
 
+  /// Whether git tracks [path] in [repo].
+  ///
+  /// `ls-files --error-unmatch` exits 0 for a tracked path and 1 for one it
+  /// does not know. Anything above that is git refusing the question, and the
+  /// answer is **tracked** — the conservative one, because it leaves every
+  /// caller doing what it did before this method existed.
+  Future<bool> isTracked(EnvironmentPath repo, String path) async {
+    final result = await _git(repo, [
+      'ls-files',
+      '--error-unmatch',
+      '--',
+      path,
+    ]);
+    return result.exitCode != 1;
+  }
+
   /// Unified diff for an **untracked** [path] in [repo], as an all-added file.
   ///
   /// `git diff` never sees untracked files, so this asks `--no-index` against

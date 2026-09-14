@@ -60,7 +60,7 @@ final diffForTargetProvider = FutureProvider.autoDispose
     .family<String, DiffTarget>(
       (ref, target) async => ref
           .read(changesServiceProvider)
-          .diff(target.checkout, path: target.path, base: 'HEAD'),
+          .diffForFile(target.checkout, target.path, base: 'HEAD'),
     );
 
 /// The file the diff tab on screen is showing, or null when the active tab is

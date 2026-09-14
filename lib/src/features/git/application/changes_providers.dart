@@ -306,23 +306,5 @@ final fileDiffByPathProvider = FutureProvider.autoDispose
     .family<String, String>((ref, path) async {
       final checkout = ref.watch(viewedCheckoutProvider);
       if (checkout == null) return '';
-      final changes = ref.read(changesServiceProvider);
-      return await _isUntracked(ref, path)
-          ? changes.diffUntracked(checkout, path)
-          : changes.diff(checkout, path: path);
+      return ref.read(changesServiceProvider).diffForFile(checkout, path);
     });
-
-/// Whether [path] is untracked in the checkout being viewed. `git diff` reports
-/// nothing for one, so the caller has to ask a different question instead of
-/// rendering an empty diff. A listing that failed reads as tracked — the plain
-/// diff is then the safe answer, and it is the one that was being given anyway.
-Future<bool> _isUntracked(Ref ref, String path) async {
-  try {
-    final changes = await ref.watch(repositoryChangesProvider.future);
-    return changes.any(
-      (c) => c.path == path && c.type == FileChangeType.untracked,
-    );
-  } on Object {
-    return false;
-  }
-}

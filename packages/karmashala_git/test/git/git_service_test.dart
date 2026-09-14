@@ -522,4 +522,52 @@ bare
       );
     });
   });
+
+  group('isTracked', () {
+    test('exit 0 is tracked, exit 1 is not', () async {
+      Future<bool> ask(int exitCode) => GitService(
+        FakeCommandRunner(
+          responder: (_) =>
+              CommandResult(exitCode: exitCode, stdout: '', stderr: ''),
+        ),
+      ).isTracked(repo(r'C:\src\app'), 'x.txt');
+      expect(await ask(0), isTrue);
+      expect(await ask(1), isFalse);
+    });
+
+    test('git refusing the question reads as tracked', () async {
+      // The conservative answer: it leaves the caller doing what it did before
+      // the untracked path was special-cased at all.
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 128,
+          stdout: '',
+          stderr: 'fatal: not a git repository',
+        ),
+      );
+      expect(
+        await GitService(runner).isTracked(repo(r'C:\src\app'), 'x.txt'),
+        isTrue,
+      );
+    });
+
+    test('asks ls-files --error-unmatch', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+        },
+      );
+      await GitService(runner).isTracked(repo(r'C:\src\app'), 'x.txt');
+      expect(captured.arguments, [
+        '-C',
+        r'C:\src\app',
+        'ls-files',
+        '--error-unmatch',
+        '--',
+        'x.txt',
+      ]);
+    });
+  });
 }
