@@ -23,6 +23,7 @@ class CodeField extends StatefulWidget {
     this.readOnly = false,
     this.fontSize = 13,
     this.showLineNumbers = true,
+    this.wrap = false,
     this.onSave,
     this.revealLine,
     super.key,
@@ -33,6 +34,13 @@ class CodeField extends StatefulWidget {
   final bool readOnly;
   final double fontSize;
   final bool showLineNumbers;
+
+  /// Soft-wrap long lines instead of scrolling sideways.
+  ///
+  /// Line numbers are suppressed while this is on: the gutter paints number
+  /// *n* at *n* x row height, so one wrapped line puts every number below it
+  /// against the wrong row. A gutter that lies is worse than none.
+  final bool wrap;
 
   /// Ctrl+S (Cmd+S on macOS). Null leaves the chord alone.
   final VoidCallback? onSave;
@@ -45,6 +53,9 @@ class CodeField extends StatefulWidget {
 }
 
 class _CodeFieldState extends State<CodeField> {
+  /// Numbers are drawn only when they can be trusted — see [CodeField.wrap].
+  bool get _showsGutter => widget.showLineNumbers && !widget.wrap;
+
   final ScrollController _vertical = ScrollController();
   final ScrollController _horizontal = ScrollController();
   FocusNode? _ownedFocus;
@@ -55,6 +66,13 @@ class _CodeFieldState extends State<CodeField> {
   double _gutterWidth = 0;
   double _lineHeight = 0;
   bool _stale = true;
+
+  /// The last measured text style, strut, scaler and field width — kept only
+  /// so a reveal can lay the text out the way the field just did.
+  TextStyle? _codeStyle;
+  StrutStyle? _codeStrut;
+  TextScaler _codeScaler = TextScaler.noScaling;
+  double _fieldWidth = 0;
 
   @override
   void initState() {
@@ -139,7 +157,11 @@ class _CodeFieldState extends State<CodeField> {
     );
     _lineHeight = _layout('0', style, strut, scaler).height;
 
-    _gutterWidth = widget.showLineNumbers
+    _codeStyle = style;
+    _codeStrut = strut;
+    _codeScaler = scaler;
+
+    _gutterWidth = _showsGutter
         ? CodeGutter.widthFor(widget.controller.lineCount, style, scaler)
         : 0;
   }
@@ -182,9 +204,42 @@ class _CodeFieldState extends State<CodeField> {
 
   void _reveal(int line) {
     if (!mounted || !_vertical.hasClients) return;
-    _vertical.jumpTo(
-      ((line - 1) * _lineHeight).clamp(0.0, _vertical.position.maxScrollExtent),
-    );
+    final top = widget.wrap
+        ? _wrappedTopOf(line)
+        : (line - 1) * _lineHeight;
+    _vertical.jumpTo(top.clamp(0.0, _vertical.position.maxScrollExtent));
+  }
+
+  /// Where line [line] begins once everything above it has wrapped.
+  ///
+  /// `(line - 1) * _lineHeight` is only true while one line is one row, so a
+  /// wrapped buffer needs the text above the target actually laid out. Nothing
+  /// exposes the field's own line metrics, so this lays it out again at the
+  /// same width and strut. One layout on a jump nobody makes in a loop, and
+  /// being a few pixels short only scrolls slightly short — it states nothing.
+  double _wrappedTopOf(int line) {
+    final style = _codeStyle;
+    final strut = _codeStrut;
+    if (style == null || strut == null || _fieldWidth <= 0 || line <= 1) {
+      return 0;
+    }
+    final text = widget.controller.text;
+    var end = 0;
+    for (var i = 1; i < line; i++) {
+      final next = text.indexOf('\n', end);
+      if (next < 0) return 0;
+      end = next + 1;
+    }
+    if (end == 0) return 0;
+    final painter = TextPainter(
+      text: TextSpan(text: text.substring(0, end), style: style),
+      strutStyle: strut,
+      textScaler: _codeScaler,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: _fieldWidth);
+    final height = painter.height;
+    painter.dispose();
+    return height;
   }
 
   KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
@@ -248,6 +303,36 @@ class _CodeFieldState extends State<CodeField> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final fieldWidth = math.max(0.0, constraints.maxWidth - _gutterWidth);
+        _fieldWidth = fieldWidth;
+        // Lifted out so wrapping can drop the horizontal viewport around it
+        // without duplicating the field configuration.
+        final field = TextField(
+          controller: controller,
+          focusNode: _focusNode,
+          readOnly: widget.readOnly,
+          maxLines: null,
+          autocorrect: false,
+          enableSuggestions: false,
+          keyboardType: TextInputType.multiline,
+          cursorColor: scheme.primary,
+          scrollPadding: EdgeInsets.zero,
+          // The two viewports above own scrolling; the field's
+          // own would fight them for the drag.
+          scrollPhysics: const NeverScrollableScrollPhysics(),
+          // Spelled out rather than `collapsed`: the app's
+          // decoration theme draws a code surface as a form.
+          decoration: const InputDecoration(
+            isCollapsed: true,
+            filled: false,
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+          ),
+          strutStyle: strut,
+          style: codeStyle,
+        );
+
         final code = GestureDetector(
           behavior: HitTestBehavior.opaque,
           // The buffer rarely fills the pane; a click in the space under the
@@ -263,39 +348,19 @@ class _CodeFieldState extends State<CodeField> {
               // under the last line is empty rather than a stretched field.
               child: Align(
                 alignment: Alignment.topLeft,
-                child: SingleChildScrollView(
-                  controller: _horizontal,
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: math.max(fieldWidth, _longestLineWidth + Insets.lg),
-                    child: TextField(
-                      controller: controller,
-                      focusNode: _focusNode,
-                      readOnly: widget.readOnly,
-                      maxLines: null,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      keyboardType: TextInputType.multiline,
-                      cursorColor: scheme.primary,
-                      scrollPadding: EdgeInsets.zero,
-                      // The two viewports above own scrolling; the field's
-                      // own would fight them for the drag.
-                      scrollPhysics: const NeverScrollableScrollPhysics(),
-                      // Spelled out rather than `collapsed`: the app's
-                      // decoration theme draws a code surface as a form.
-                      decoration: const InputDecoration(
-                        isCollapsed: true,
-                        filled: false,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
+                child: widget.wrap
+                    ? SizedBox(width: fieldWidth, child: field)
+                    : SingleChildScrollView(
+                        controller: _horizontal,
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: math.max(
+                            fieldWidth,
+                            _longestLineWidth + Insets.lg,
+                          ),
+                          child: field,
+                        ),
                       ),
-                      strutStyle: strut,
-                      style: codeStyle,
-                    ),
-                  ),
-                ),
               ),
             ),
           ),
@@ -309,7 +374,7 @@ class _CodeFieldState extends State<CodeField> {
             children: [
               // Outside the scroll view on purpose: painted at the viewport,
               // so its cost is the rows on screen and not those in the file.
-              if (widget.showLineNumbers)
+              if (_showsGutter)
                 CodeGutter(
                   lineCount: controller.lineCount,
                   rowHeight: _lineHeight,

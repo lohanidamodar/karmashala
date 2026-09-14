@@ -366,6 +366,9 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
     final fontSize = ref.watch(
       settingsControllerProvider.select((s) => s.terminalFontSize),
     );
+    final wrap = ref.watch(
+      settingsControllerProvider.select((s) => s.editorWordWrap),
+    );
     final reveal = _takeRevealLine();
     // Too big to edit at a usable speed, so it is drawn a screenful at a time
     // instead of handed whole to a field. Nothing is missing but typing.
@@ -382,6 +385,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
               text: document.text,
               fontSize: fontSize,
               revealLine: reveal,
+              wrap: wrap,
             ),
           ),
         ],
@@ -395,6 +399,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
       focusNode: _focus,
       fontSize: fontSize,
       revealLine: reveal,
+      wrap: wrap,
       onSave: _save,
     );
   }

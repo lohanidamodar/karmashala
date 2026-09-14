@@ -69,6 +69,7 @@ class Settings {
     this.explorerPaneWidth = 304,
     this.detailSidebarWidth = 320,
     this.compactDensity = true,
+    this.editorWordWrap = false,
     this.collapsedExplorerNodes = const [],
     this.windowWidth,
     this.windowHeight,
@@ -155,6 +156,11 @@ class Settings {
   final double detailSidebarWidth;
 
   final bool compactDensity;
+
+  /// Soft-wrap long lines in the in-app editor. Off by default, and the line
+  /// numbers go with it: the gutter paints at a fixed row height, so a wrapped
+  /// line would put every number below it against the wrong row.
+  final bool editorWordWrap;
 
   /// Explorer rows the user has folded away, by [ExplorerNode.id] — a machine,
   /// one of its sections, or a context inside it. Absent means expanded, so a
@@ -276,6 +282,7 @@ class Settings {
     double? explorerPaneWidth,
     double? detailSidebarWidth,
     bool? compactDensity,
+    bool? editorWordWrap,
     List<String>? collapsedExplorerNodes,
     double? windowWidth,
     double? windowHeight,
@@ -332,6 +339,7 @@ class Settings {
     explorerPaneWidth: explorerPaneWidth ?? this.explorerPaneWidth,
     detailSidebarWidth: detailSidebarWidth ?? this.detailSidebarWidth,
     compactDensity: compactDensity ?? this.compactDensity,
+    editorWordWrap: editorWordWrap ?? this.editorWordWrap,
     collapsedExplorerNodes:
         collapsedExplorerNodes ?? this.collapsedExplorerNodes,
     windowWidth: windowWidth ?? this.windowWidth,
@@ -413,6 +421,7 @@ class Settings {
     'explorerPaneWidth': explorerPaneWidth,
     'detailSidebarWidth': detailSidebarWidth,
     'compactDensity': compactDensity,
+    'editorWordWrap': editorWordWrap,
     'collapsedExplorerNodes': collapsedExplorerNodes,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
@@ -536,6 +545,9 @@ class Settings {
       compactDensity: json['compactDensity'] is bool
           ? json['compactDensity'] as bool
           : true,
+      editorWordWrap: json['editorWordWrap'] is bool
+          ? json['editorWordWrap'] as bool
+          : false,
       windowWidth: toDouble(json['windowWidth']),
       windowHeight: toDouble(json['windowHeight']),
       defaultSystemTerminalId: json['defaultSystemTerminalId'] is String
@@ -638,6 +650,7 @@ class Settings {
       other.explorerPaneWidth == explorerPaneWidth &&
       other.detailSidebarWidth == detailSidebarWidth &&
       other.compactDensity == compactDensity &&
+      other.editorWordWrap == editorWordWrap &&
       other.windowWidth == windowWidth &&
       other.windowHeight == windowHeight &&
       other.defaultSystemTerminalId == defaultSystemTerminalId &&
@@ -717,6 +730,7 @@ class Settings {
       Object.hash(
         hostBackedLocalPanes,
         androidSlimming,
+        editorWordWrap,
         hideEmptySections,
         Object.hashAll(explorerAgentFilter),
         Object.hashAll(androidSlimmingEnabled),

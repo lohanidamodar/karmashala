@@ -30,6 +30,7 @@ void main() {
     WidgetTester tester, {
     Size size = const Size(1440, 900),
     bool showLineNumbers = true,
+    bool wrap = false,
     bool readOnly = false,
     double fontSize = 13,
     VoidCallback? onSave,
@@ -48,6 +49,7 @@ void main() {
               child: CodeField(
                 controller: controller,
                 showLineNumbers: showLineNumbers,
+                wrap: wrap,
                 readOnly: readOnly,
                 fontSize: fontSize,
                 onSave: onSave,
@@ -397,4 +399,48 @@ void main() {
       expect(find.byType(CodeField), findsOneWidget);
     });
   }
+
+  /// **Wrapping and the gutter cannot both be right.**
+  ///
+  /// The gutter paints number *n* at *n* x row height. One wrapped line makes
+  /// every number below it name the wrong row, so wrapping takes the numbers
+  /// away rather than letting them lie.
+  group('wrap', () {
+    testWidgets('wrapping hides the gutter, and unwrapping brings it back', (
+      tester,
+    ) async {
+      controller.text = 'alpha\nbeta\ngamma';
+
+      await pump(tester, wrap: true);
+      expect(find.byType(CodeGutter), findsNothing);
+
+      await pump(tester, wrap: false);
+      expect(find.byType(CodeGutter), findsOneWidget);
+    });
+
+    testWidgets('wrapping drops the horizontal viewport', (tester) async {
+      // Long enough that it would certainly overflow 1440 unwrapped.
+      controller.text = 'x' * 4000;
+
+      await pump(tester, wrap: true);
+      expect(_horizontalScrollers(tester), isEmpty);
+
+      await pump(tester, wrap: false);
+      expect(_horizontalScrollers(tester), isNotEmpty);
+    });
+
+    testWidgets('a wrapped buffer still shows every line', (tester) async {
+      controller.text = List.generate(40, (i) => 'line $i').join('\n');
+      await pump(tester, wrap: true);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(TextField), findsOneWidget);
+    });
+  });
 }
+
+/// Every horizontal [SingleChildScrollView] currently in the tree.
+List<SingleChildScrollView> _horizontalScrollers(WidgetTester tester) => tester
+    .widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
+    .where((view) => view.scrollDirection == Axis.horizontal)
+    .toList();

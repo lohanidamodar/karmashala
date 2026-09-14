@@ -88,6 +88,14 @@ class AppearancePage extends ConsumerWidget {
                 value: settings.compactDensity,
                 onChanged: controller.setCompactDensity,
               ),
+              SettingsSwitchRow(
+                label: 'Wrap long lines in the editor',
+                help: 'Soft-wrap instead of scrolling sideways. Line numbers '
+                    'are hidden while wrapping, because the gutter cannot line '
+                    'up with a wrapped line.',
+                value: settings.editorWordWrap,
+                onChanged: controller.setEditorWordWrap,
+              ),
             ],
           ),
         ),

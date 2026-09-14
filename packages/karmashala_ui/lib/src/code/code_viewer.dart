@@ -16,6 +16,7 @@ class CodeViewer extends StatefulWidget {
     required this.text,
     this.fontSize = 13,
     this.showLineNumbers = true,
+    this.wrap = false,
     this.revealLine,
     this.onCopiedAll,
     super.key,
@@ -24,6 +25,11 @@ class CodeViewer extends StatefulWidget {
   final String text;
   final double fontSize;
   final bool showLineNumbers;
+
+  /// Soft-wrap long lines instead of scrolling sideways. Line numbers go with
+  /// it — see [CodeField.wrap] — and so does the fixed row height, because a
+  /// wrapped row is no longer one line tall.
+  final bool wrap;
 
   /// A 1-based line to put on screen when it changes.
   final int? revealLine;
@@ -37,6 +43,9 @@ class CodeViewer extends StatefulWidget {
 }
 
 class _CodeViewerState extends State<CodeViewer> {
+  /// Numbers are drawn only when they can be trusted — see [CodeViewer.wrap].
+  bool get _showsGutter => widget.showLineNumbers && !widget.wrap;
+
   final ScrollController _vertical = ScrollController();
   final ScrollController _horizontal = ScrollController();
 
@@ -122,12 +131,12 @@ class _CodeViewerState extends State<CodeViewer> {
     final fontSize = scaler.scale(widget.fontSize);
     if (_measuredText == widget.text &&
         _measuredFontSize == fontSize &&
-        _measuredLineNumbers == widget.showLineNumbers) {
+        _measuredLineNumbers == _showsGutter) {
       return;
     }
     _measuredText = widget.text;
     _measuredFontSize = fontSize;
-    _measuredLineNumbers = widget.showLineNumbers;
+    _measuredLineNumbers = _showsGutter;
 
     var longest = 0;
     var longestIndex = 0;
@@ -148,7 +157,7 @@ class _CodeViewerState extends State<CodeViewer> {
             _maxLineWidth,
             _layout(_lineAt(longestIndex), style, strut, scaler).width,
           );
-    _gutterWidth = widget.showLineNumbers
+    _gutterWidth = _showsGutter
         ? CodeGutter.widthFor(_starts.length, style, scaler)
         : 0;
   }
@@ -226,7 +235,7 @@ class _CodeViewerState extends State<CodeViewer> {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.showLineNumbers)
+            if (_showsGutter)
               CodeGutter(
                 lineCount: _starts.length,
                 rowHeight: _rowHeight,
@@ -236,28 +245,38 @@ class _CodeViewerState extends State<CodeViewer> {
               ),
             SizedBox(
               width: bodyWidth,
-              child: SingleChildScrollView(
-                controller: _horizontal,
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: math.max(bodyWidth, _longestLineWidth + Insets.lg),
-                  child: SelectionArea(
-                    child: ListView.builder(
+              child: SelectionArea(
+                child: Builder(
+                  builder: (context) {
+                    final rows = ListView.builder(
                       controller: _vertical,
-                      // Fixed, so the list never measures a row it is not
-                      // drawing and the scrollbar is right from the first frame.
-                      itemExtent: _rowHeight,
+                      // Fixed only while a row is one line tall. Wrapping makes
+                      // that false, and the cost is a scrollbar that settles as
+                      // the list is scrolled rather than on the first frame.
+                      itemExtent: widget.wrap ? null : _rowHeight,
                       itemCount: _starts.length,
                       itemBuilder: (context, index) => Text(
                         _rowText(index),
                         style: codeStyle,
                         strutStyle: strut,
-                        maxLines: 1,
-                        softWrap: false,
+                        maxLines: widget.wrap ? null : 1,
+                        softWrap: widget.wrap,
                         overflow: TextOverflow.clip,
                       ),
-                    ),
-                  ),
+                    );
+                    if (widget.wrap) return rows;
+                    return SingleChildScrollView(
+                      controller: _horizontal,
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: math.max(
+                          bodyWidth,
+                          _longestLineWidth + Insets.lg,
+                        ),
+                        child: rows,
+                      ),
+                    );
+                  },
                 ),
               ),
             ),

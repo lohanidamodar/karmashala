@@ -173,6 +173,11 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setEditorWordWrap(bool value) {
+    state = state.copyWith(editorWordWrap: value);
+    _save();
+  }
+
   /// Sets the overall UI text scale, clamped to the supported 90%–150%.
   void setUiTextScale(double scale) {
     state = state.copyWith(
