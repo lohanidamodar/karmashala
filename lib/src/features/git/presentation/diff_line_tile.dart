@@ -8,16 +8,11 @@ import 'package:karmashala_git/git.dart';
 class DiffLineTile extends StatelessWidget {
   const DiffLineTile({
     required this.line,
-    this.wrap = false,
     this.trailing,
     super.key,
   });
 
   final DiffLine line;
-
-  /// Soft-wrap long lines (a narrow side panel) instead of letting them run off
-  /// the side for a horizontal scroller to catch (a full-screen read).
-  final bool wrap;
 
   /// An action at the end of the row — the Changes panel's review comment.
   final Widget? trailing;
@@ -70,9 +65,9 @@ class DiffLineTile extends StatelessWidget {
               // An empty row still needs a height, and ' ' is what the diff
               // format writes for an empty context line.
               line.text.isEmpty ? ' ' : line.text,
-              softWrap: wrap,
-              overflow: wrap ? TextOverflow.clip : TextOverflow.visible,
-              maxLines: wrap ? null : 1,
+              softWrap: false,
+              overflow: TextOverflow.visible,
+              maxLines: 1,
               style: MonoStyles.body.copyWith(height: 1.4, color: foreground),
             ),
           ),

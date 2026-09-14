@@ -35,9 +35,6 @@ void main() {
           repositoryDeliveryProvider.overrideWith(
             (ref, _) async => delivery ?? SessionDelivery.unknown,
           ),
-          fileDiffByPathProvider(
-            'lib/main.dart',
-          ).overrideWith((ref) async => '@@ -1 +1 @@\n-old line\n+new line\n'),
         ],
         child: const MaterialApp(
           home: Scaffold(body: ChangesView(repositoryName: 'app')),

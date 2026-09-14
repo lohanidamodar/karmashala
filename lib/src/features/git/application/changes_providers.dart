@@ -300,11 +300,3 @@ final selectedCheckoutGitTroubleProvider = Provider.autoDispose<GitTroubleReport
   };
 });
 
-/// Unified diff for a specific [path] within the checkout being viewed — used
-/// to render each changed file's diff inline (expandable) in the Changes view.
-final fileDiffByPathProvider = FutureProvider.autoDispose
-    .family<String, String>((ref, path) async {
-      final checkout = ref.watch(viewedCheckoutProvider);
-      if (checkout == null) return '';
-      return ref.read(changesServiceProvider).diffForFile(checkout, path);
-    });

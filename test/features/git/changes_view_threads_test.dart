@@ -4,6 +4,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/git/application/diff_tab_actions.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
@@ -83,8 +84,8 @@ void main() {
           repositoryDeliveryProvider.overrideWith(
             (ref, _) async => SessionDelivery.unknown,
           ),
-          fileDiffByPathProvider(
-            'lib/a.dart',
+          diffForTargetProvider(
+            const DiffTarget(checkout: _fixtureCheckout, path: 'lib/a.dart'),
           ).overrideWith((ref) async => diff),
         ],
         // The diff is a tab's content now, and the "send" button is still the
@@ -97,7 +98,12 @@ void main() {
                   height: 120,
                   child: ChangesView(repositoryName: 'app'),
                 ),
-                Expanded(child: FileDiffView(path: 'lib/a.dart')),
+                Expanded(
+                  child: FileDiffView(
+                    path: 'lib/a.dart',
+                    checkout: _fixtureCheckout,
+                  ),
+                ),
               ],
             ),
           ),
@@ -230,10 +236,7 @@ void main() {
           home: Scaffold(
             body: FileDiffView(
               path: 'lib/a.dart',
-              checkout: EnvironmentPath(
-                environmentId: 'windows',
-                path: r'C:\src\demo\app',
-              ),
+              checkout: _fixtureCheckout,
               repositoryId: 'r1',
             ),
           ),
@@ -412,6 +415,12 @@ class _FixedRepository extends SelectedRepositoryController {
   @override
   String? build() => 'r1';
 }
+
+/// The checkout every fixture in this file diffs inside.
+const _fixtureCheckout = EnvironmentPath(
+  environmentId: 'windows',
+  path: r'C:\src\demo\app',
+);
 
 /// The sidebar's selection, which a diff tab must not read.
 class _Sidebar extends SelectedRepositoryController {

@@ -16,27 +16,21 @@ import 'diff_line_tile.dart';
 class FileDiffView extends ConsumerWidget {
   const FileDiffView({
     required this.path,
-    this.checkout,
+    required this.checkout,
     this.repositoryId,
-    this.wrap = false,
     this.scrollWidth = 1400,
     super.key,
   });
 
   final String path;
 
-  /// The checkout to diff [path] inside. Null follows the sidebar's, which is
-  /// what the sidebar itself wants; a tab names its own so it keeps showing the
-  /// file it was opened on.
-  final EnvironmentPath? checkout;
+  /// The checkout to diff [path] inside. A tab names its own, so it keeps
+  /// showing the file it was opened on however the sidebar moves.
+  final EnvironmentPath checkout;
 
   /// The repository the review threads beside this diff belong to. Null falls
   /// back to the sidebar's selection, which is the sidebar's own case.
   final String? repositoryId;
-
-  /// Soft-wrap long lines (the narrow side panel) instead of letting them run
-  /// off the side for a horizontal scroller to catch.
-  final bool wrap;
 
   /// How wide the non-wrapping diff is laid out before it scrolls. The caller
   /// knows its own viewport; 1400 was the full-screen dialog's.
@@ -44,12 +38,9 @@ class FileDiffView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final target = checkout;
-    final diff = target == null
-        ? ref.watch(fileDiffByPathProvider(path))
-        : ref.watch(
-            diffForTargetProvider(DiffTarget(checkout: target, path: path)),
-          );
+    final diff = ref.watch(
+      diffForTargetProvider(DiffTarget(checkout: checkout, path: path)),
+    );
     return diff.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(Insets.md),
@@ -100,15 +91,12 @@ class FileDiffView extends ConsumerWidget {
               repositoryId: repositoryId,
               lineNumber: numbers[row],
               line: lines[row],
-              wrap: wrap,
             );
           },
         );
         // Selectable so a line can be copied out of the diff. Only realised
         // rows are in the selection, which is why the header keeps a Copy that
         // takes the whole patch regardless of what is built.
-        if (wrap) return SelectionArea(child: list);
-        // Full-screen: let long code lines scroll horizontally.
         return SelectionArea(
           child: Scrollbar(
             child: SingleChildScrollView(
@@ -131,7 +119,6 @@ class ReviewableDiffLine extends ConsumerWidget {
     required this.lineNumber,
     required this.line,
     this.repositoryId,
-    this.wrap = false,
     super.key,
   });
 
@@ -142,8 +129,6 @@ class ReviewableDiffLine extends ConsumerWidget {
   /// See [FileDiffView.repositoryId]; the sidebar is the only caller that
   /// leaves it null.
   final String? repositoryId;
-
-  final bool wrap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -165,7 +150,6 @@ class ReviewableDiffLine extends ConsumerWidget {
         line.kind == DiffLineKind.context;
     return DiffLineTile(
       line: line,
-      wrap: wrap,
       trailing: commentable
           ? IconButton(
               tooltip: here.isEmpty
