@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/git/presentation/changes_view.dart';
+import 'package:karmashala/src/features/git/presentation/diff_line_tile.dart';
 import 'package:karmashala/src/features/git/presentation/diff_view.dart';
 import 'package:karmashala/src/features/sessions/application/delivery_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_actions.dart';
@@ -348,6 +349,25 @@ void main() {
     expect(after.pending, hasLength(1));
     expect(after.pending.single.thread.status, ReviewThreadStatus.shouldFix);
     expect(find.byTooltip(comment), findsOneWidget);
+  });
+
+  testWidgets('diff text sits inside a SelectionArea, so it can be copied', (
+    tester,
+  ) async {
+    final harness = ReviewThreadHarness(shas: {'lib/a.dart': 'sha-one'});
+    addTearDown(harness.dispose);
+    await pumpTab(tester, harness, sidebar: null);
+
+    // Not merely present: the rows have to be *inside* it, or a drag over the
+    // code selects nothing.
+    expect(find.byType(SelectionArea), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(SelectionArea),
+        matching: find.byType(DiffLineTile),
+      ),
+      findsWidgets,
+    );
   });
 }
 

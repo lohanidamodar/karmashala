@@ -104,12 +104,17 @@ class FileDiffView extends ConsumerWidget {
             );
           },
         );
-        if (wrap) return list;
+        // Selectable so a line can be copied out of the diff. Only realised
+        // rows are in the selection, which is why the header keeps a Copy that
+        // takes the whole patch regardless of what is built.
+        if (wrap) return SelectionArea(child: list);
         // Full-screen: let long code lines scroll horizontally.
-        return Scrollbar(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(width: scrollWidth, child: list),
+        return SelectionArea(
+          child: Scrollbar(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(width: scrollWidth, child: list),
+            ),
           ),
         );
       },

@@ -192,44 +192,48 @@ class _Body extends StatelessWidget {
     final rows = diff.lines;
     // Long lines run off the side rather than wrapping, so every row is exactly
     // [kDiffRowHeight] tall and `itemExtent` can build only what is visible.
-    final content = LayoutBuilder(
-      builder: (context, constraints) {
-        final width = math.max(constraints.maxWidth, 1400.0);
-        if (rows.length <= kFileEditInlineRows) {
-          return Scrollbar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: width,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final line in rows) DiffLineTile(line: line),
-                  ],
+    // Selectable, so a line can be copied out. The long-file branch below is a
+    // lazy list, so a selection only spans the rows that are built.
+    final content = SelectionArea(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = math.max(constraints.maxWidth, 1400.0);
+          if (rows.length <= kFileEditInlineRows) {
+            return Scrollbar(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: width,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (final line in rows) DiffLineTile(line: line),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+          return SizedBox(
+            height: kFileEditInlineRows * kDiffRowHeight,
+            child: Scrollbar(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: width,
+                  child: ListView.builder(
+                    primary: false,
+                    itemExtent: kDiffRowHeight,
+                    itemCount: rows.length,
+                    itemBuilder: (context, index) =>
+                        DiffLineTile(line: rows[index]),
+                  ),
                 ),
               ),
             ),
           );
-        }
-        return SizedBox(
-          height: kFileEditInlineRows * kDiffRowHeight,
-          child: Scrollbar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: width,
-                child: ListView.builder(
-                  primary: false,
-                  itemExtent: kDiffRowHeight,
-                  itemCount: rows.length,
-                  itemBuilder: (context, index) =>
-                      DiffLineTile(line: rows[index]),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+        },
+      ),
     );
 
     if (!diff.truncated) return content;
