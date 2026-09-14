@@ -228,17 +228,24 @@ class ExplorerRowAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final density = UiDensity.of(context);
     final slot = ExplorerRow.slotOf(density);
-    return IconButton(
-      tooltip: tooltip,
-      visualDensity: density.isTouch
-          ? VisualDensity.standard
-          : VisualDensity.compact,
-      iconSize: ExplorerRow.glyphOf(density),
-      constraints: BoxConstraints.tightFor(width: slot, height: slot),
-      padding: EdgeInsets.zero,
-      color: color,
-      icon: Icon(icon),
-      onPressed: onPressed,
+    // Sized like [RowMenuButton], which wraps rather than constrains: compact
+    // density takes 8px off tight constraints, so the two buttons laid out at
+    // different widths and no gutter reserved in slots could line up with them.
+    return SizedBox(
+      width: slot,
+      height: slot,
+      child: IconButton(
+        tooltip: tooltip,
+        visualDensity: density.isTouch
+            ? VisualDensity.standard
+            : VisualDensity.compact,
+        iconSize: ExplorerRow.glyphOf(density),
+        constraints: BoxConstraints.tightFor(width: slot, height: slot),
+        padding: EdgeInsets.zero,
+        color: color,
+        icon: Icon(icon),
+        onPressed: onPressed,
+      ),
     );
   }
 }

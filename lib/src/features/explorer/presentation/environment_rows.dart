@@ -39,15 +39,31 @@ class ExplorerHeaderRow extends StatelessWidget {
   final HeaderEmphasis emphasis;
   final String? tooltip;
 
+  /// The `+` and the `⋮` a project card below reserves. A header keeps the same
+  /// gutter whether or not it fills it, so every count in the tree ends in one
+  /// column and the `+` buttons share a centre-line.
+  static const int _gutterSlots = 2;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final slot = ExplorerRow.slotOf(density);
     final style = emphasis.style(theme)?.copyWith(
       color: emphasis == HeaderEmphasis.machine
           ? scheme.onSurface
           : scheme.onSurfaceVariant,
     );
+
+    // Everything on the row that is not the label or the count, so the count
+    // can be capped at what is left rather than at a guessed fraction.
+    final fixed =
+        Chrome.icon +
+        Insets.xs +
+        (icon == null ? 0 : Chrome.icon + Insets.xs) +
+        Insets.sm * 2 +
+        slot * _gutterSlots;
 
     final row = InkWell(
       onTap: onTap,
@@ -59,46 +75,62 @@ class ExplorerHeaderRow extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(
             Insets.xs + depth * ExplorerRow.indent,
             emphasis.spaceAbove,
-            Insets.xs,
+            // The project rows below sit inside a tile that pads its own
+            // content; a header has no tile, so it borrows the same inset or
+            // its right-hand column stands 6px further out than theirs.
+            Insets.xs + density.padX,
             0,
           ),
-          child: Row(
-            children: [
-              Icon(
-                expanded ? AppIcons.caretDown : AppIcons.caretRight,
-                size: Chrome.icon,
-                color: scheme.onSurfaceVariant,
-              ),
-              if (icon != null) ...[
-                const SizedBox(width: Insets.xs),
-                Icon(icon, size: Chrome.icon, color: scheme.onSurfaceVariant),
-              ],
-              const SizedBox(width: Insets.xs),
-              Flexible(
-                child: Text(
-                  emphasis.write(label),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: style,
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                Icon(
+                  expanded ? AppIcons.caretDown : AppIcons.caretRight,
+                  size: Chrome.icon,
+                  color: scheme.onSurfaceVariant,
                 ),
-              ),
-              if (trailingText case final String trailing) ...[
-                const SizedBox(width: Insets.sm),
+                if (icon != null) ...[
+                  const SizedBox(width: Insets.xs),
+                  Icon(icon, size: Chrome.icon, color: scheme.onSurfaceVariant),
+                ],
+                const SizedBox(width: Insets.xs),
+                // Tight, not `Flexible`: a loose child capped at half the free
+                // width hands back what it does not use, and the remainder fell
+                // off the right end as dead space behind the buttons.
                 Expanded(
                   child: Text(
-                    trailing,
+                    emphasis.write(label),
                     maxLines: 1,
-                    textAlign: TextAlign.right,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                    style: style,
                   ),
                 ),
-              ] else
-                const Spacer(),
-              ...actions,
-            ],
+                if (trailingText case final String trailing) ...[
+                  const SizedBox(width: Insets.sm),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: (constraints.maxWidth - fixed).clamp(
+                        0.0,
+                        double.infinity,
+                      ),
+                    ),
+                    child: Text(
+                      trailing,
+                      maxLines: 1,
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: Insets.sm),
+                ...actions,
+                if (actions.length < _gutterSlots)
+                  SizedBox(width: slot * (_gutterSlots - actions.length)),
+              ],
+            ),
           ),
         ),
       ),
@@ -170,11 +202,13 @@ class TerminalRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
         Insets.xs + depth * ExplorerRow.indent,
         0,
-        Insets.xs,
+        // The same right edge as the headers above and the project tiles below.
+        Insets.xs + density.padX,
         0,
       ),
       child: ConstrainedBox(
@@ -195,6 +229,7 @@ class TerminalRow extends StatelessWidget {
                 style: theme.textTheme.labelSmall,
               ),
             ),
+            const SizedBox(width: Insets.sm),
             if (terminal.running)
               TextButton(
                 onPressed: onOpen,

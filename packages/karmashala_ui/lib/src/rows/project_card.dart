@@ -141,6 +141,7 @@ class ProjectCard extends StatelessWidget {
               const SizedBox(width: Insets.sm),
               _runningBadge(muted, semantic, density),
             ],
+            const SizedBox(width: Insets.sm),
             if (onNewSession != null)
               ExplorerRowAction(
                 tooltip: 'Start a session here with the default agent',
@@ -261,6 +262,8 @@ class ProjectCard extends StatelessWidget {
             ),
           ),
         ],
+        // `34 sessions+` read as one glyph run without it.
+        const SizedBox(width: Insets.sm),
         if (pinned && onTogglePin != null)
           ExplorerRowAction(
             tooltip: 'Unpin',
