@@ -321,6 +321,27 @@ class GitService {
     return result.stdout;
   }
 
+  /// Unified diff for an **untracked** [path] in [repo], as an all-added file.
+  ///
+  /// `git diff` never sees untracked files, so this asks `--no-index` against
+  /// the null device instead. Exit 1 is git's "these differ" answer — measured
+  /// on both Windows and WSL git — and only above it is git refusing.
+  Future<String> diffUntracked(EnvironmentPath repo, String path) async {
+    final result = await _git(repo, [
+      'diff',
+      '--no-index',
+      '--',
+      '/dev/null',
+      path,
+    ]);
+    if (result.exitCode > 1) {
+      throw GitException(
+        'git diff --no-index failed: ${result.stderr.trim()}',
+      );
+    }
+    return result.stdout;
+  }
+
   /// The blob sha each of [paths] would have for its **current bytes on disk**;
   /// `git hash-object` writes nothing, and the sha is only a fingerprint. A path
   /// missing from the result is one git would not hash — "cannot tell", never

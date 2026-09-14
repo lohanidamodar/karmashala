@@ -166,6 +166,11 @@ class ChangesService {
     (git, at) => git.diff(at, path: path, staged: staged, base: base),
   );
 
+  /// Unified diff for an untracked [path] — the all-added file plain
+  /// `git diff` cannot produce, because it never reports untracked paths.
+  Future<String> diffUntracked(EnvironmentPath repo, String path) =>
+      _ask(repo, (git, at) => git.diffUntracked(at, path));
+
   /// The content fingerprint of each of [paths] as they stand on disk, for the
   /// review-thread anchors. A path git could not hash is absent from the map,
   /// which the caller must read as "cannot tell" and never as unchanged.

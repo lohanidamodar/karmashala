@@ -466,4 +466,60 @@ bare
       );
     });
   });
+
+  group('diffUntracked', () {
+    test('asks --no-index against the null device', () async {
+      late CommandRequest captured;
+      final runner = FakeCommandRunner(
+        responder: (req) {
+          captured = req;
+          return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+        },
+      );
+      await GitService(runner).diffUntracked(repo(r'C:\src\app'), 'new.txt');
+      expect(captured.arguments, [
+        '-C',
+        r'C:\src\app',
+        'diff',
+        '--no-index',
+        '--',
+        '/dev/null',
+        'new.txt',
+      ]);
+    });
+
+    test('exit 1 is the answer, not a failure', () async {
+      // Measured on Windows and WSL git alike: --no-index exits 1 whenever the
+      // two sides differ, which for an untracked file is always.
+      const patch =
+          'diff --git a/new.txt b/new.txt\n'
+          'new file mode 100644\n'
+          '--- /dev/null\n'
+          '+++ b/new.txt\n'
+          '@@ -0,0 +1,1 @@\n'
+          '+hello\n';
+      final runner = FakeCommandRunner(
+        responder: (_) =>
+            const CommandResult(exitCode: 1, stdout: patch, stderr: ''),
+      );
+      expect(
+        await GitService(runner).diffUntracked(repo(r'C:\src\app'), 'new.txt'),
+        patch,
+      );
+    });
+
+    test('above 1 is git refusing the question', () async {
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 128,
+          stdout: '',
+          stderr: 'fatal: not a git repository',
+        ),
+      );
+      expect(
+        () => GitService(runner).diffUntracked(repo(r'C:\src\app'), 'new.txt'),
+        throwsA(isA<GitException>()),
+      );
+    });
+  });
 }
