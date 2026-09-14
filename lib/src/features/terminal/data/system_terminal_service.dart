@@ -5,6 +5,8 @@ import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
+
+import '../../../core/apps/installed_application.dart';
 import 'pty_launch.dart';
 
 /// A standalone terminal emulator installed on the host that we can launch
@@ -227,8 +229,11 @@ class SystemTerminalService {
     required List<String> command,
     String? workingDirectory,
   }) async {
+    // A `.app` the user picked is a bundle like the two known ones: handed a
+    // script to run, never a command line it would read as a file to open.
     if (terminal.kind == SystemTerminalKind.macTerminal ||
-        terminal.kind == SystemTerminalKind.iterm2) {
+        terminal.kind == SystemTerminalKind.iterm2 ||
+        isMacApplicationBundle(terminal.executable)) {
       await _launchMacApp(terminal, command, workingDirectory);
       return;
     }

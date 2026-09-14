@@ -10,7 +10,9 @@ import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_skill_installation_service.dart';
 import '../../browser/application/browser_consent_providers.dart';
 import 'package:karmashala_browser/browser.dart';
+import '../../../core/apps/installed_application.dart';
 import '../../editor/application/code_editor_providers.dart';
+import 'choose_application_dialog.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
@@ -164,10 +166,21 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
       ],
     );
     if (file == null) return;
-    _path.text = file.path;
-    ref
-        .read(settingsControllerProvider.notifier)
-        .setCustomTerminalPath(file.path);
+    _use(file.path);
+  }
+
+  Future<void> _choose() async {
+    final app = await chooseInstalledApplication(
+      context,
+      what: 'a terminal application',
+    );
+    if (app == null) return;
+    _use(app.launchPath);
+  }
+
+  void _use(String path) {
+    _path.text = path;
+    ref.read(settingsControllerProvider.notifier).setCustomTerminalPath(path);
   }
 
   @override
@@ -199,9 +212,9 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
               items: [
                 for (final t in detected)
                   DropdownMenuItem(value: t.id, child: Text(t.label)),
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: 'custom',
-                  child: Text('Custom executable…'),
+                  child: Text(_customLabel(settings.customTerminalPath)),
                 ),
               ],
               onChanged: (v) {
@@ -232,6 +245,12 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
                 ),
                 const SizedBox(width: Insets.sm),
                 OutlinedButton.icon(
+                  onPressed: _choose,
+                  icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
+                  label: const Text('Choose app'),
+                ),
+                const SizedBox(width: Insets.sm),
+                OutlinedButton.icon(
                   onPressed: _browse,
                   icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),
                   label: const Text('Browse'),
@@ -249,6 +268,16 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
       ),
     );
   }
+}
+
+/// What the dropdown's last entry says: the application already chosen, by
+/// name, or the invitation to choose one. "Custom executable…" read as the
+/// only way in even once something was set.
+String _customLabel(String? path) {
+  final chosen = (path ?? '').trim();
+  return chosen.isEmpty
+      ? 'Another application…'
+      : '${applicationNameFor(chosen)} (chosen)';
 }
 
 /// The editor "open in editor" uses: a detected one, or a custom path.
@@ -283,10 +312,21 @@ class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
       ],
     );
     if (file == null) return;
-    _path.text = file.path;
-    ref
-        .read(settingsControllerProvider.notifier)
-        .setCustomEditorPath(file.path);
+    _use(file.path);
+  }
+
+  Future<void> _choose() async {
+    final app = await chooseInstalledApplication(
+      context,
+      what: 'an editor application',
+    );
+    if (app == null) return;
+    _use(app.launchPath);
+  }
+
+  void _use(String path) {
+    _path.text = path;
+    ref.read(settingsControllerProvider.notifier).setCustomEditorPath(path);
   }
 
   @override
@@ -315,9 +355,9 @@ class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
               items: [
                 for (final e in detected)
                   DropdownMenuItem(value: e.id, child: Text(e.label)),
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: 'custom',
-                  child: Text('Custom executable…'),
+                  child: Text(_customLabel(settings.customEditorPath)),
                 ),
               ],
               onChanged: (v) {
@@ -344,6 +384,12 @@ class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
                     ),
                     onChanged: (v) => controller.setCustomEditorPath(v.trim()),
                   ),
+                ),
+                const SizedBox(width: Insets.sm),
+                OutlinedButton.icon(
+                  onPressed: _choose,
+                  icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
+                  label: const Text('Choose app'),
                 ),
                 const SizedBox(width: Insets.sm),
                 OutlinedButton.icon(

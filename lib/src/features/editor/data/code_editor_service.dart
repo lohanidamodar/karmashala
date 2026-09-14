@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 
+import '../../../core/apps/installed_application.dart';
+
 /// A code editor installed on the host that we can open a folder in (as opposed
 /// to launching an agent in a terminal).
 enum CodeEditorKind { vscode, zed, custom }
@@ -84,6 +86,17 @@ class CodeEditorService {
   /// Opens [folderPath] — absolute on *this* host — in [editor].
   /// Fire-and-forget.
   Future<void> open(CodeEditor editor, {required String folderPath}) async {
+    // A macOS application the user picked is a bundle: `open -a` launches it,
+    // and `Process.start` on a directory fails.
+    if (isMacApplicationBundle(editor.executable)) {
+      await _runner.start(
+        CommandRequest(
+          executable: 'open',
+          arguments: ['-a', editor.executable, folderPath],
+        ),
+      );
+      return;
+    }
     await _runner.start(
       CommandRequest(
         executable: editor.executable,
