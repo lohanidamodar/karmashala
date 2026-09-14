@@ -183,12 +183,22 @@ void main() {
     return container;
   }
 
-  /// The editor's own field. The shell has other `TextField`s on screen — the
-  /// composer and the search bar — so a bare type finder matches several.
-  final codeInput = find.descendant(
-    of: find.byType(CodeField),
-    matching: find.byType(TextField),
-  );
+  /// Types into the editor, replacing what it holds — what `enterText` did
+  /// when the editor was a `TextField`.
+  ///
+  /// `re_editor` implements `DeltaTextInputClient` itself instead of hosting
+  /// one, so there is no input widget to aim a gesture at. Writing through the
+  /// controller drives the same listener a keystroke drives, which is the seam
+  /// every assertion below is actually about; it does not exercise the key
+  /// path, and nothing here claims to.
+  Future<void> typeInEditor(WidgetTester tester, String text) async {
+    tester
+            .widget<AppCodeEditor>(find.byType(AppCodeEditor))
+            .controller
+            .text =
+        text;
+    await tester.pumpAndSettle();
+  }
 
   List<String> editorTabsIn(ProviderContainer container) => [
     for (final tab in container.read(terminalSessionsControllerProvider).tabs)
@@ -221,7 +231,7 @@ void main() {
   ) async {
     final container = await openFile(tester);
 
-    final field = tester.widget<CodeField>(find.byType(CodeField));
+    final field = tester.widget<AppCodeEditor>(find.byType(AppCodeEditor));
     expect(field.controller.text, _initial);
     expect(container.read(openDocumentProvider(_path))?.language, 'dart');
   });
@@ -229,7 +239,7 @@ void main() {
   testWidgets('an edit reaches the file only when it is saved', (tester) async {
     final container = await openFile(tester);
 
-    await tester.enterText(codeInput, 'edited\n');
+    await typeInEditor(tester, 'edited\n');
     await settle(tester);
 
     final documents = container.read(openDocumentsProvider.notifier);
@@ -251,7 +261,7 @@ void main() {
   ) async {
     final container = await openFile(tester);
 
-    await tester.enterText(codeInput, 'mine\n');
+    await typeInEditor(tester, 'mine\n');
     await settle(tester);
     store.writeBehindOurBack(_path, 'someone else\n');
 
@@ -265,7 +275,7 @@ void main() {
 
   testWidgets('closing a tab with unsaved edits asks first', (tester) async {
     final container = await openFile(tester);
-    await tester.enterText(codeInput, 'unsaved\n');
+    await typeInEditor(tester, 'unsaved\n');
     await settle(tester);
 
     final tabId = editorTabsIn(container).single;
@@ -292,7 +302,7 @@ void main() {
     tester,
   ) async {
     final container = await openFile(tester);
-    await tester.enterText(codeInput, 'kept\n');
+    await typeInEditor(tester, 'kept\n');
     await settle(tester);
 
     await tester.tap(find.byTooltip('Unsaved changes — close tab'));
@@ -308,7 +318,7 @@ void main() {
     tester,
   ) async {
     final container = await openFile(tester);
-    await tester.enterText(codeInput, 'unsaved\n');
+    await typeInEditor(tester, 'unsaved\n');
     await settle(tester);
     final tabId = editorTabsIn(container).single;
 
@@ -321,7 +331,7 @@ void main() {
     expect(container.read(openDocumentProvider(_path))?.text, 'unsaved\n');
     expect(container.read(dirtyDocumentPathsProvider), contains(_path));
     // And the pane still has a document to draw, rather than a spinner.
-    expect(find.byType(CodeField), findsOneWidget);
+    expect(find.byType(AppCodeEditor), findsOneWidget);
   });
 
   testWidgets('cancelling the *second* question also keeps the edits', (
@@ -341,7 +351,7 @@ void main() {
     await settle(tester);
     refOf(tester).read(editorTabActionsProvider).open(_path);
     await settle(tester);
-    await tester.enterText(codeInput, 'unsaved\n');
+    await typeInEditor(tester, 'unsaved\n');
     await settle(tester);
     final before = container
         .read(terminalSessionsControllerProvider)
@@ -376,7 +386,7 @@ void main() {
       'unsaved\n',
       reason: 'so nothing may have been released',
     );
-    expect(find.byType(CodeField), findsOneWidget);
+    expect(find.byType(AppCodeEditor), findsOneWidget);
   });
 
   testWidgets('a buffer closed while a save is in flight stays closed', (
@@ -426,7 +436,7 @@ void main() {
     await settle(tester);
 
     expect(editorTabsIn(container), hasLength(1));
-    final field = tester.widget<CodeField>(find.byType(CodeField));
+    final field = tester.widget<AppCodeEditor>(find.byType(AppCodeEditor));
     expect(field.controller.text, 'after the restart\n');
   });
 
@@ -437,8 +447,10 @@ void main() {
 
     // No field to type into, and the reason is on screen rather than left for
     // the reader to discover by pressing a key.
-    expect(find.byType(CodeViewer), findsOneWidget);
-    expect(find.byType(CodeField), findsNothing);
+    expect(
+      tester.widget<AppCodeEditor>(find.byType(AppCodeEditor)).readOnly,
+      isTrue,
+    );
     expect(find.textContaining('Read-only'), findsOneWidget);
     expect(find.text('Open in external editor'), findsOneWidget);
     // Nothing that claims it could be saved.
@@ -465,8 +477,7 @@ void main() {
   ) async {
     await openFile(tester, _binary);
 
-    expect(find.byType(CodeField), findsNothing);
-    expect(find.byType(CodeViewer), findsNothing);
+    expect(find.byType(AppCodeEditor), findsNothing);
     expect(
       find.text('This file is binary, so it cannot be edited as text.'),
       findsOneWidget,

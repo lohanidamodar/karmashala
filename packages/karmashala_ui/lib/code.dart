@@ -1,13 +1,15 @@
-/// A code buffer as a widget: the highlighter's nodes as spans, the two Atom
-/// One palettes, the controller that colours and indents what it edits, the
-/// field that draws it beside a gutter, and the read-only viewer a file too
-/// big to edit opens in instead.
+/// A code buffer as a widget: the editor the app reads and edits files in,
+/// the two Atom One palettes it draws them with, and the highlighter's nodes
+/// as spans for a transcript's fenced code.
+///
+/// The editor itself is `re_editor`; this library owns only the theming and
+/// the app's own chrome around it. `re_editor` is re-exported so a caller
+/// needs one import for the widget and its controller.
 library;
 
-export 'src/code/code_controller.dart';
-export 'src/code/code_field.dart';
-export 'src/code/code_gutter.dart';
-export 'src/code/code_lines.dart';
+export 'package:re_editor/re_editor.dart'
+    show CodeLineEditingController, CodeLinePosition, CodeLineSelection;
+
+export 'src/code/app_code_editor.dart';
 export 'src/code/code_spans.dart';
 export 'src/code/code_theme.dart';
-export 'src/code/code_viewer.dart';

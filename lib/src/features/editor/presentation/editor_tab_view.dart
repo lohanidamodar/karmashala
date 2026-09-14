@@ -80,7 +80,7 @@ class _ReadOnlyNotice extends StatelessWidget {
 }
 
 class _EditorTabViewState extends ConsumerState<EditorTabView> {
-  final _controller = CodeEditingController();
+  final _controller = CodeLineEditingController();
   final _focus = FocusNode(debugLabel: 'editor');
 
   /// The text this widget last carried either way, so a keystroke is not
@@ -120,13 +120,13 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   void _adopt(SourceDocument document) {
     if (document.text == _mirrored) return;
     _mirrored = document.text;
+    // The controller re-derives its own lines from the text, so the caret is
+    // put back afterwards and only when the line it sat on is still there.
     final selection = _controller.selection;
-    _controller.value = TextEditingValue(
-      text: document.text,
-      selection: selection.isValid && selection.end <= document.text.length
-          ? selection
-          : const TextSelection.collapsed(offset: 0),
-    );
+    _controller.text = document.text;
+    if (selection.baseIndex < _controller.lineCount) {
+      _controller.selection = selection;
+    }
   }
 
   void _say(String message) {
@@ -381,25 +381,25 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
             onOpenExternally: _openExternally,
           ),
           Expanded(
-            child: CodeViewer(
-              text: document.text,
+            child: AppCodeEditor(
+              controller: _controller,
+              language: document.canHighlight ? document.language : null,
+              readOnly: true,
               fontSize: fontSize,
-              revealLine: reveal,
               wrap: wrap,
+              revealLine: reveal,
             ),
           ),
         ],
       );
     }
-    _controller
-      ..language = document.language
-      ..highlightingEnabled = document.canHighlight;
-    return CodeField(
+    return AppCodeEditor(
       controller: _controller,
       focusNode: _focus,
+      language: document.canHighlight ? document.language : null,
       fontSize: fontSize,
-      revealLine: reveal,
       wrap: wrap,
+      revealLine: reveal,
       onSave: _save,
     );
   }
@@ -442,13 +442,12 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   }
 
   String _caretLabel(SourceDocument document) {
-    final text = _controller.text;
-    final offset = _controller.selection.baseOffset;
-    final upto = offset < 0 || offset > text.length
-        ? ''
-        : text.substring(0, offset);
-    final line = '\n'.allMatches(upto).length + 1;
-    final column = upto.length - (upto.lastIndexOf('\n') + 1) + 1;
+    // Read off the selection rather than counted out of the text: the
+    // controller keeps the caret as a line index and an offset within it, so
+    // there is nothing to re-derive and nothing to get wrong on a large file.
+    final selection = _controller.selection;
+    final line = selection.baseIndex + 1;
+    final column = selection.baseOffset + 1;
     return [
       'Ln $line, Col $column',
       ?document.language,
