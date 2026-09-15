@@ -86,15 +86,24 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     // The index refreshes itself behind the dialog — a watcher fires, an agent
     // turn ends — so the open palette has to be told, not just asked once.
     _indexChanges = _index.changes.listen(_onIndexChanged);
-    // Take a copy of whatever the app has already loaded about this repository.
-    // Reading is free; the providers this reads from are never created here.
-    ref
-        .read(quickOpenCacheProvider.notifier)
-        .harvest(
-          ProviderScope.containerOf(context, listen: false),
-          ref.read(selectedRepositoryIdProvider),
-        );
     _rebuildItems();
+    // Take a copy of whatever the app has already loaded about this repository.
+    // Reading is free and the providers it reads are never created here — but
+    // `harvest` *writes* `quickOpenCacheProvider` at the end, and a provider
+    // may not be modified during a life-cycle. Debug asserts on it; release
+    // lets the write through and risks the missed rebuild the assert exists to
+    // prevent. So the palette opens on what was already cached and takes the
+    // harvested facts a frame later.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(quickOpenCacheProvider.notifier)
+          .harvest(
+            ProviderScope.containerOf(context, listen: false),
+            ref.read(selectedRepositoryIdProvider),
+          );
+      setState(_rebuildItems);
+    });
   }
 
   @override
