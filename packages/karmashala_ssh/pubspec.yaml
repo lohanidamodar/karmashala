@@ -30,7 +30,7 @@ dependencies:
   # it installs cannot drift from what that binary answers. Not a workspace
   # member on purpose (see the root pubspec), so it is a plain path dependency.
   karmashala_host:
-    path: ../../host
+    path: ../host
   meta: ^1.16.0
 
 dev_dependencies:

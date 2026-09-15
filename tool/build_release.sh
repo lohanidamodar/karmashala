@@ -33,8 +33,8 @@ fi
 # `Platform.resolvedExecutable`. Without it the Tools page cannot offer the
 # stdio form to a user who wants to point an agent at Karmashala by hand.
 echo "=== MCP BRIDGE ==="
-flutter pub get --directory mcp_bridge
-dart compile exe mcp_bridge/bin/karmashala_mcp.dart \
+flutter pub get --directory packages/mcp_bridge
+dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart \
   -o "$APP/Contents/MacOS/karmashala_mcp"
 
 # Re-sign after writing into the bundle: adding a file invalidates the seal

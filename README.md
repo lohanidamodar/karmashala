@@ -36,7 +36,7 @@ into the shell and reachable; caveats are stated inline rather than implied.
   ([`mcp_tool_catalogue.dart`](packages/karmashala_mcp/lib/src/mcp_tool_catalogue.dart) is
   the list). Served over HTTP by the app, and over stdio by a separate
   `karmashala_mcp` binary
-  ([`mcp_bridge/`](mcp_bridge/bin/karmashala_mcp.dart)). The bridge exists
+  ([`packages/mcp_bridge/`](packages/mcp_bridge/bin/karmashala_mcp.dart)). The bridge exists
   because a session inside WSL cannot reach the host across the WSL switch on
   every machine; it is spawned over WSL interop instead.
 - **Device control.** Android over `adb` with a bundled `scrcpy-server` for real
@@ -203,7 +203,7 @@ lib/
     app/                    # Shell, workbench, side panel, theme, shortcuts, companion boot
     core/                   # Database, logging, lifecycle, process
     features/               # 32 feature folders: sessions, terminal, agents, devices, …
-mcp_bridge/                 # The standalone stdio MCP bridge
+packages/mcp_bridge/        # The standalone stdio MCP bridge
 packages/                   # Vendored flutter_pty, the relay, local IPC, two Windows stubs
 test/                       # Mirrors lib/; 727 files
 integration_test/           # Driver tests that need a real device or PTY

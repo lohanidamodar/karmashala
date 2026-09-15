@@ -130,7 +130,7 @@ class SystemHealthService {
             'tools, and where that address is reset they get no Karmashala '
             'tools at all. Compile the bridge next to the app, or reinstall.',
         remedyCommand:
-            'dart compile exe mcp_bridge/bin/karmashala_mcp.dart '
+            'dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart '
             '-o <folder holding the app>/karmashala_mcp',
         took: result.took,
       ),

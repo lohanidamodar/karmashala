@@ -11,4 +11,4 @@ environment:
 
 dependencies:
   karmashala_local_ipc:
-    path: ../packages/local_ipc
+    path: ../local_ipc

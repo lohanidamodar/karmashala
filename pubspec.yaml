@@ -9,11 +9,15 @@ environment:
 # Pub workspace. The app is the root; every member declares `resolution:
 # workspace` and shares this one resolution, lock file and `.dart_tool`, so a
 # member's `dart test` needs no `pub get` of its own (docs/PACKAGE_SPLIT.md §2).
-# `host/`, `mcp_bridge/` and the plugin packages stay out on purpose: their
-# resolutions must not follow the app's.
-# `packages/relay` is deliberately NOT a member: its Dockerfile (fly.io, see
-# packages/relay/fly.toml) copies that directory alone and runs `dart pub get`
-# in it, which a member cannot do — "found no workspace root including it".
+# Not every directory under `packages/` is a member. `packages/host`,
+# `packages/mcp_bridge`, `packages/relay` and the plugin packages stay out on
+# purpose: each is a standalone binary that resolves on its own lock file, and
+# their resolutions must not follow the app's — `dart compile exe` cannot reach
+# a target that pulls in the app's build-hook plugins, and relay's Dockerfile
+# (fly.io, see packages/relay/fly.toml) copies that directory alone and runs
+# `dart pub get` in it, which a member cannot do ("found no workspace root
+# including it"). A member is marked by `resolution: workspace` in its own
+# pubspec and by appearing below; nothing else is.
 workspace:
   - packages/agent_cli
   - packages/karmashala_agent_reporting
@@ -38,7 +42,7 @@ dependencies:
   # `package:karmashala_host/protocol.dart` only — the pty layer binds libc
   # through dart:ffi and a web build would refuse the whole package for it.
   karmashala_host:
-    path: host
+    path: packages/host
   # The Chrome DevTools Protocol layer and the `browser_*` agent tools over
   # it. No dependencies of its own; the app hands it the process.
   karmashala_browser:

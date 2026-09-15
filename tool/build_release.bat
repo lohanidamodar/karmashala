@@ -41,9 +41,9 @@ rem Release directory, which the installer copies wholesale (karmashala.iss's
 rem `Source: {#SourceDir}\*`), so no installer change is needed. Without it a WSL
 rem session falls back to the switch URL and gets no tools.
 echo === MCP BRIDGE === >> "%LOG%"
-call "%FLUTTER%" pub get --directory mcp_bridge >> "%LOG%" 2>&1
+call "%FLUTTER%" pub get --directory packages\mcp_bridge >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
-"%DARTEXE%" compile exe mcp_bridge\bin\karmashala_mcp.dart -o "%RELEASE%\karmashala_mcp.exe" >> "%LOG%" 2>&1
+"%DARTEXE%" compile exe packages\mcp_bridge\bin\karmashala_mcp.dart -o "%RELEASE%\karmashala_mcp.exe" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
 rem The session host, cross-compiled for the machines it gets deployed to.
@@ -59,11 +59,11 @@ rem installer copies wholesale, so no installer change is needed. The version
 rem is in the filename because HostDeployer compares it against what the remote
 rem binary reports rather than trusting the name.
 echo === SESSION HOST (linux x64, arm64, and this machine) === >> "%LOG%"
-call "%FLUTTER%" pub get --directory host >> "%LOG%" 2>&1
+call "%FLUTTER%" pub get --directory packages\host >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
-"%DARTEXE%" compile exe host\bin\karmashala_host.dart --target-os=linux --target-arch=x64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-x64" >> "%LOG%" 2>&1
+"%DARTEXE%" compile exe packages\host\bin\karmashala_host.dart --target-os=linux --target-arch=x64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-x64" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
-"%DARTEXE%" compile exe host\bin\karmashala_host.dart --target-os=linux --target-arch=arm64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-arm64" >> "%LOG%" 2>&1
+"%DARTEXE%" compile exe packages\host\bin\karmashala_host.dart --target-os=linux --target-arch=arm64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-arm64" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
 rem And the same host for *this* machine, which is the local stage: the app
@@ -74,7 +74,7 @@ rem carry, because DirectoryHostBinaries matches on exactly that pattern and
 rem this binary must never be uploaded to somebody else's machine — it is a
 rem Windows PE. LocalHostExecutable looks for this name beside the app, the way
 rem karmashala_mcp.exe is found, so the installer needs no change.
-"%DARTEXE%" compile exe host\bin\karmashala_host.dart -o "%RELEASE%\karmashala_host.exe" >> "%LOG%" 2>&1
+"%DARTEXE%" compile exe packages\host\bin\karmashala_host.dart -o "%RELEASE%\karmashala_host.exe" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
 echo === INSTALLER === >> "%LOG%"

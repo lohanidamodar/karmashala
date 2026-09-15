@@ -607,7 +607,7 @@ packages:
   karmashala_host:
     dependency: "direct main"
     description:
-      path: host
+      path: "packages/host"
       relative: true
     source: path
     version: "0.0.0"
