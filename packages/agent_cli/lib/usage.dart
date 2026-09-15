@@ -8,6 +8,7 @@ library;
 
 export 'src/agents/data/agent_usage_service.dart';
 export 'src/agents/data/claude_auth_service.dart';
+export 'src/agents/data/credential_push.dart';
 export 'src/agents/data/codex_auth_service.dart';
 export 'src/agents/data/usage_throttle.dart';
 export 'src/agents/domain/agent_usage.dart';
