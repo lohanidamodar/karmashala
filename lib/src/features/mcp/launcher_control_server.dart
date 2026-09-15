@@ -32,6 +32,7 @@ import 'fanout_tools.dart';
 import 'package:karmashala_mcp/access.dart';
 import 'package:karmashala_mcp/instructions.dart';
 import 'inventory_tools.dart';
+import 'project_tools.dart';
 import 'package:karmashala_mcp/launch.dart';
 import 'package:karmashala_mcp/protocol.dart';
 import 'mcp_session_token_reaper.dart';
@@ -823,6 +824,8 @@ class LauncherControlServer implements SessionMcp {
         return toolSchemas;
       case final String name when InventoryTools.handles(name):
         return InventoryTools(_container).call(name, args);
+      case final String name when ProjectControlTools.handles(name):
+        return ProjectControlTools(_container).call(name, args);
       // The caller's identity matters: a session started here is recorded as
       // its child, which is what the spawn-depth cap counts.
       case final String name when SessionLaunchTools.handles(name):
@@ -932,6 +935,7 @@ class LauncherControlServer implements SessionMcp {
   static const List<Map<String, dynamic>> toolSchemas = [
     ...checkpointControlToolSchemas,
     ...inventoryToolSchemas,
+    ...projectControlToolSchemas,
     ...sessionLaunchToolSchemas,
     ...fanOutToolSchemas,
     ...sessionHandoffToolSchemas,

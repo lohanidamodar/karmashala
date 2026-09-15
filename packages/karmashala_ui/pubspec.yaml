@@ -42,6 +42,9 @@ dependencies:
   re_highlight: ^0.0.3
   # Every "Browse…" in the app; see `picking.dart` for why there is one copy.
   file_selector: ^1.1.0
+  # `GetFileAttributesW`, the only way to know a Windows hidden file: `dart:io`
+  # emulates `FileStat.mode` there and carries no attribute bits.
+  ffi: ^2.2.0
   # The QR matrix QrPainter paints.
   qr: ^4.0.0
   # Opening a link LinkableText found.

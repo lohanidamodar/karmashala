@@ -252,6 +252,21 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Which dialog "Browse…" opens. Null hands the answer back to the platform.
+  void setUseInAppFilePicker(bool? inApp) {
+    state = state.copyWith(
+      useInAppFilePicker: inApp,
+      clearUseInAppFilePicker: inApp == null,
+    );
+    _save();
+  }
+
+  /// Whether every file browser shows hidden entries.
+  void setShowHiddenFiles(bool value) {
+    state = state.copyWith(showHiddenFiles: value);
+    _save();
+  }
+
   void setDefaultAgent(String? agentId) {
     state = state.copyWith(
       defaultAgent: agentId,

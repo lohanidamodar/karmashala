@@ -20,6 +20,8 @@ import 'src/core/paths/app_support_directory.dart';
 import 'src/core/util/agent_cli_bridge.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
+import 'package:karmashala_ui/picking.dart';
+import 'src/features/environments/application/browse_sources.dart';
 import 'src/features/agents/application/agent_installations_controller.dart';
 import 'src/features/devices/application/device_bindings.dart';
 import 'src/features/environments/application/local_environment_bootstrap.dart';
@@ -217,6 +219,22 @@ Future<void> _bootstrap(AppLogger logger) async {
   // The CLI stores, **once**, behind the same gate. The project row's "Refresh
   // CLI sessions" is what re-runs it. Nothing here needs a bound server.
   unawaited(lifecycle.importCliSessions(afterFirstFrame: afterFirstFrame));
+
+  // Every "Browse…" can now look at a distribution or a host, not just this
+  // computer. Installed once, read on each open, so an environment discovered
+  // later is offered without restarting.
+  BrowseSources.lookup = () => browseSourcesFrom(container);
+  // And which dialog opens, when the user has an opinion. Read per call rather
+  // than captured, so switching it takes effect on the next Browse.
+  FilePickerChoice.prefersInApp = () =>
+      container.read(settingsControllerProvider).useInAppFilePicker ??
+      FilePickerChoice.platformDefault;
+  // And one answer about hidden files for every browser, persisted.
+  HiddenFilesPreference.read = () =>
+      container.read(settingsControllerProvider).showHiddenFiles;
+  HiddenFilesPreference.write = (value) => container
+      .read(settingsControllerProvider.notifier)
+      .setShowHiddenFiles(value);
 
   // The stored agent executables, on every launch: a path is durable state,
   // whether it resolves is a measurement, and Codex's self-update rots it.

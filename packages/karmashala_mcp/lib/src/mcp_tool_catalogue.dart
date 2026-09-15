@@ -70,6 +70,16 @@ const Map<String, McpToolAnnotations> kMcpToolAnnotations =
       'list_projects': McpToolAnnotations.read,
       'list_checkouts': McpToolAnnotations.read,
       'delivery_status': McpToolAnnotations.read,
+      // Adds a project and discovers what is under it. Not idempotent: asked
+      // twice with the same folder it files the workspace with two of them.
+      'project_add': McpToolAnnotations(movesAttention: false),
+      // Rewrites one project row, and with a new root the checkout rows under
+      // it. Same arguments, same result — and nothing is deleted, so a move
+      // that surprises is corrected by moving it back.
+      'project_update': McpToolAnnotations(
+        idempotent: true,
+        movesAttention: false,
+      ),
       // Running it twice over an unchanged directory changes nothing.
       'project_rescan': McpToolAnnotations(
         idempotent: true,
@@ -601,6 +611,14 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'list_checkouts': McpToolListing(
     McpToolCategory.workspace,
     'A project\'s checkouts: the branch each is on, and who works in it.',
+  ),
+  'project_add': McpToolListing(
+    McpToolCategory.workspace,
+    'Add a project: adopt a folder, or clone a repository into one.',
+  ),
+  'project_update': McpToolListing(
+    McpToolCategory.workspace,
+    'Rename a project, move its root folder, or set its default checkout.',
   ),
   'project_rescan': McpToolListing(
     McpToolCategory.workspace,

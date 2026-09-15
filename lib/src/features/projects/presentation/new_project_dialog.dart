@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -12,8 +11,6 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../repositories/data/repository_discovery_service.dart';
-import '../../ssh/application/ssh_hosts_controller.dart';
-import '../../ssh/presentation/remote_file_browser_dialog.dart';
 import '../../workspaces/application/workspace_suggestion.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/domain/workspace.dart';
@@ -78,53 +75,30 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     super.dispose();
   }
 
+  /// One browser for every environment: it opens on the machine the target
+  /// dropdown names and answers in **that machine's** spelling, which is what
+  /// the project root is stored as.
   Future<void> _browse() async {
-    final environments = ref.read(environmentsControllerProvider);
-    final target = _envById(environments, _targetId);
-    if (target != null && target.kind == EnvironmentKind.ssh) {
-      final hostId = target.sshHostId;
-      if (hostId != null) {
-        final hosts = ref.read(sshHostsControllerProvider);
-        final host = hosts.where((h) => h.id == hostId).firstOrNull;
-        if (host != null) {
-          final dir = await RemoteFileBrowserDialog.pickDirectory(
-            context,
-            host: host,
-          );
-          // `mounted` as well as null: this branch crosses an await over SFTP, and a
-          // `setState` on a State the user has since dismissed throws.
-          if (dir == null || !mounted) return;
-          setState(() {
-            _folderController.text = dir;
-            if (_nameController.text.trim().isEmpty) {
-              final cleaned = dir.replaceAll(RegExp(r'[\\/]+$'), '');
-              final lastSlash = cleaned.lastIndexOf('/');
-              _nameController.text = lastSlash != -1
-                  ? cleaned.substring(lastSlash + 1)
-                  : cleaned;
-            }
-          });
-          return;
-        }
-      }
-    }
-
-    // The only branch that opens a *native* picker — hence `pickOneDirectory`,
-    // which announces itself and gives the dialog a local folder to open in.
-    final dir = await pickOneDirectory(
+    final directory = await pickOneDirectory(
+      context: context,
+      environmentId: _targetId,
       what: 'a project folder',
       startNear: _folderController.text,
     );
-    if (dir == null || !mounted) return;
+    if (directory == null || !mounted) return;
     setState(() {
-      _folderController.text = dir;
+      _folderController.text = directory;
       if (_nameController.text.trim().isEmpty) {
-        _nameController.text = p.basename(
-          dir.replaceAll(RegExp(r'[\\/]+$'), ''),
-        );
+        _nameController.text = _leafOf(directory);
       }
       _suggestWorkspace();
     });
+  }
+
+  static String _leafOf(String path) {
+    final cleaned = path.replaceAll(RegExp(r'[\\/]+$'), '');
+    final cut = cleaned.lastIndexOf(RegExp(r'[\\/]'));
+    return cut == -1 ? cleaned : cleaned.substring(cut + 1);
   }
 
   /// Prefills the context from where the folder sits, by asking which context
@@ -151,6 +125,12 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       return EnvironmentPath(environmentId: _targetId, path: folder);
     }
     if (_targetId == localHostEnvironmentId) {
+      return EnvironmentPath(environmentId: _targetId, path: folder);
+    }
+    // Already spelled for the distribution — the browser answers in its
+    // namespace now, and translating a POSIX path as if it were Windows
+    // would refuse a folder the user just pointed at.
+    if (_isPosixAbsolute(folder)) {
       return EnvironmentPath(environmentId: _targetId, path: folder);
     }
     final windows = _envById(environments, localHostEnvironmentId);
@@ -211,6 +191,10 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
   static String _environmentLabel(ExecutionEnvironment env) =>
       environmentLabel(env) ?? env.id;
 
+  /// Whether [path] is written the way the distribution or host writes it.
+  static bool _isPosixAbsolute(String path) =>
+      path.startsWith('/') || path.startsWith('~');
+
   ExecutionEnvironment? _envById(List<ExecutionEnvironment> envs, String id) {
     for (final e in envs) {
       if (e.id == id) return e;
@@ -258,7 +242,10 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     try {
       final workspaceId = _resolveWorkspace();
       final ProjectCreationResult result;
-      if (gitUrl.isNotEmpty || isSsh) {
+      // `createInEnvironment` scans a **Windows** folder and translates; a path
+      // already spelled for its own machine must not go through it.
+      final nativeToTarget = isSsh || _isPosixAbsolute(folder);
+      if (gitUrl.isNotEmpty || nativeToTarget) {
         result = await ref.read(projectsControllerProvider.notifier).createProject(
               name: name,
               targetEnvironmentId: _targetId,

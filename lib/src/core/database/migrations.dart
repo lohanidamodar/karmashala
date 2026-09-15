@@ -57,6 +57,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   46: _migrateToV46,
   47: _migrateToV47,
   48: _migrateToV48,
+  49: _migrateToV49,
 };
 
 /// Was this pane running when its row was written? `DEFAULT 0` is the honest
@@ -1242,4 +1243,14 @@ void _migrateToV48(Database db) {
       FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
     );
   ''');
+}
+
+/// Which checkout a project's one-click "New session" runs in. Null means the
+/// old rule — the first checkout the picker would offer — so nothing is
+/// implied about projects that never chose.
+void _migrateToV49(Database db) {
+  db.execute(
+    'ALTER TABLE projects ADD COLUMN default_repository_id TEXT '
+    'REFERENCES repositories (id) ON DELETE SET NULL;',
+  );
 }

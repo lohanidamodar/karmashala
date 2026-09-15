@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:agent_cli/process.dart';
@@ -50,7 +51,6 @@ class _RemoteFileBrowserDialogState
   List<RemoteDirectoryEntry> _entries = const [];
   Object? _error;
   bool _busy = true;
-  bool _showHidden = false;
 
   @override
   void initState() {
@@ -119,12 +119,15 @@ class _RemoteFileBrowserDialogState
     final parent = directory == null ? null : parentRemotePath(directory.path);
     final error = _error;
     final rejection = hostKeyRejectionIn(error);
-    final visible = _showHidden
+    // One answer for every browser in the app, so this folder does not read
+    // one way here and another in the picker.
+    final visible = HiddenFilesPreference.shown
         ? _entries
         : [
             for (final entry in _entries)
               if (!entry.isHidden) entry,
           ];
+    final hiddenCount = _entries.where((entry) => entry.isHidden).length;
 
     return AlertDialog(
       title: DesktopDialogTitle(
@@ -160,13 +163,11 @@ class _RemoteFileBrowserDialogState
                     style: MonoStyles.body,
                   ),
                 ),
-                IconButton(
-                  tooltip: _showHidden ? 'Hide dotfiles' : 'Show dotfiles',
-                  isSelected: _showHidden,
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(AppIcons.circleHalf),
-                  onPressed: () => setState(() => _showHidden = !_showHidden),
+                HiddenFilesChip(
+                  hiddenCount: hiddenCount,
+                  onChanged: (_) => setState(() {}),
                 ),
+                const SizedBox(width: Insets.xs),
                 IconButton(
                   tooltip: 'Refresh',
                   visualDensity: VisualDensity.compact,

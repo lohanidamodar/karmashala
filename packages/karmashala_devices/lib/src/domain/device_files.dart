@@ -45,6 +45,9 @@ class DeviceFileEntry {
   /// Absolute path **on the device**.
   final String path;
 
+  /// A dot-file, the only hidden convention Android has.
+  bool get isHidden => name.startsWith('.');
+
   final String name;
   final DeviceEntryKind kind;
 

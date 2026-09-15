@@ -162,8 +162,11 @@ class _MessageComposerState extends State<MessageComposer> {
         await _addImageBytes(clip);
         return;
       }
-      // Otherwise let the user pick an image file.
+      // Otherwise let the user pick an image file. The clipboard read above
+      // yields, so the composer may already be gone.
+      if (!mounted) return;
       final file = await pickOneFile(
+        context: context,
         what: 'an image to attach',
         // The composer knows nothing about sessions, so the nearest useful
         // place is the user's own pictures.

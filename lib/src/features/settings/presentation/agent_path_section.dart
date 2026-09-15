@@ -96,6 +96,7 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
   /// is spelled for *that* machine, and the dialog only opens local folders.
   Future<void> _browse() async {
     final file = await pickOneFile(
+      context: context,
       what: 'an agent executable',
       startNear: _path.text,
       acceptedTypeGroups: const [

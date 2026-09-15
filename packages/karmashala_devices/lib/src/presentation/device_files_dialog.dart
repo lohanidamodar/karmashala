@@ -146,6 +146,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     // A directory to save into, not a save dialog: `file_selector`'s save
     // sheet is the one piece of this not dependable on every desktop.
     final directory = await pickOneDirectory(
+      context: context,
       // Nothing here knows a folder on this computer worth suggesting; the
       // fallback chain picks one that exists rather than the shell's own MRU.
       startNear: null,
@@ -176,6 +177,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     final path = _path;
     if (driver == null || path == null) return;
     final file = await pickOneFile(
+      context: context,
       startNear: null,
       what: 'a file to copy to the device',
     );
@@ -483,6 +485,16 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
             ),
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.only(left: Insets.sm),
+          child: HiddenFilesChip(
+            hiddenCount: _listing?.entries
+                    .where((entry) => entry.isHidden)
+                    .length ??
+                0,
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
         if (_clip case final clip?)
           Padding(
             padding: const EdgeInsets.only(left: Insets.sm),
@@ -547,11 +559,17 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
         detail: listing.note ?? 'This directory is empty.',
       );
     }
-    final entries = [...listing.entries]
-      ..sort((a, b) {
-        if (a.isDirectory != b.isDirectory) return a.isDirectory ? -1 : 1;
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      });
+    final entries = [
+      for (final entry in listing.entries)
+        if (HiddenFilesPreference.shown || !entry.isHidden) entry,
+    ]..sort(
+      (a, b) => compareBrowsedRows(
+        aIsDirectory: a.isDirectory,
+        aName: a.name,
+        bIsDirectory: b.isDirectory,
+        bName: b.name,
+      ),
+    );
     return ListView.builder(
       itemCount: entries.length + (listing.skipped.isEmpty ? 0 : 1),
       itemBuilder: (context, index) {

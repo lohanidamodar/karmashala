@@ -12,8 +12,9 @@ class ProjectDao {
   void insert(Project project) {
     _db.execute(
       'INSERT INTO projects '
-      '(id, name, root_environment_id, root_path, created_at, workspace_id) '
-      'VALUES (?, ?, ?, ?, ?, ?);',
+      '(id, name, root_environment_id, root_path, created_at, workspace_id, '
+      'default_repository_id) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?);',
       [
         project.id,
         project.name,
@@ -21,6 +22,7 @@ class ProjectDao {
         project.root.path,
         isoFromDate(project.createdAt),
         project.workspaceId,
+        project.defaultRepositoryId,
       ],
     );
   }
@@ -28,12 +30,13 @@ class ProjectDao {
   void update(Project project) {
     _db.execute(
       'UPDATE projects SET name = ?, root_environment_id = ?, root_path = ?, '
-      'workspace_id = ? WHERE id = ?;',
+      'workspace_id = ?, default_repository_id = ? WHERE id = ?;',
       [
         project.name,
         project.root.environmentId,
         project.root.path,
         project.workspaceId,
+        project.defaultRepositoryId,
         project.id,
       ],
     );
@@ -46,6 +49,16 @@ class ProjectDao {
       workspaceId,
       id,
     ]);
+  }
+
+  /// Points [id]'s one-click "New session" at [repositoryId], or back at the
+  /// picker's first row when null. Its own statement, for [setWorkspace]'s
+  /// reason: choosing a checkout must not rewrite the name or the root.
+  void setDefaultRepository(String id, String? repositoryId) {
+    _db.execute(
+      'UPDATE projects SET default_repository_id = ? WHERE id = ?;',
+      [repositoryId, id],
+    );
   }
 
   Project? getById(String id) {
@@ -71,5 +84,6 @@ class ProjectDao {
     ),
     createdAt: dateFromIso(row['created_at']),
     workspaceId: row['workspace_id'] as String?,
+    defaultRepositoryId: row['default_repository_id'] as String?,
   );
 }

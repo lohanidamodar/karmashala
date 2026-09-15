@@ -29,6 +29,7 @@ import 'package:karmashala_ssh/connection.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
+import '../../projects/presentation/edit_project_dialog.dart';
 import '../../projects/domain/project.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -43,6 +44,7 @@ import '../application/explorer_agent_filter.dart';
 import '../domain/agent_filter.dart';
 import '../application/project_tree.dart';
 import '../application/session_diff_stat.dart';
+import '../application/checkout_default.dart';
 import '../application/checkout_picker.dart';
 import '../application/session_forest.dart';
 import '../application/session_selection.dart';
@@ -299,11 +301,14 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     if (message != null) _say(message);
   }
 
-  /// Where a session started *at the project* runs — the first checkout the
-  /// picker would offer, so the `+` and the dialog cannot pick different clones.
-  Repository? _defaultCheckoutOf(Project project) =>
-      ref.read(checkoutsInProjectProvider(project.id)).firstOrNull ??
-      ref.read(repositoryDaoProvider).getByProject(project.id).firstOrNull;
+  /// Where a session started *at the project* runs — the checkout the project
+  /// chose, else the first one the picker would offer, so the `+` and the
+  /// dialog cannot pick different clones.
+  Repository? _defaultCheckoutOf(Project project) => projectDefaultCheckout(
+    defaultRepositoryId: project.defaultRepositoryId,
+    offered: ref.read(checkoutsInProjectProvider(project.id)),
+    all: ref.read(repositoryDaoProvider).getByProject(project.id),
+  );
 
   /// The `+` on a project row: starts a session with [SessionDefaults] and no
   /// dialog — unless a piece is missing, when the dialog opens to name it.
@@ -362,6 +367,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     String? subPath;
     if (chooseSubfolder) {
       final picked = await pickOneDirectory(
+        context: context,
         what: 'a folder of ${project.name} to open',
         startNear: actions.windowsRootPath(project),
         confirmButtonText: 'Open in editor',
@@ -723,6 +729,11 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
           ..._contextMenuItems(project, menu),
           const DesktopMenuDivider(),
           DesktopMenuItem(
+            value: 'edit',
+            label: 'Edit project…',
+            icon: AppIcons.pencilSimple,
+          ),
+          DesktopMenuItem(
             value: 'pin',
             label: pinned ? 'Unpin' : 'Pin to top',
             icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
@@ -788,6 +799,8 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               _reveal(project.root);
             case 'copy-path':
               _copyPath(project.root);
+            case 'edit':
+              EditProjectDialog.show(context, project);
             case 'pin':
               _togglePin(project);
             case 'refresh':
@@ -1090,10 +1103,18 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
       lastActive: lastActiveOf.call,
     );
 
-    // Pinned first, then most recently active, applied to the *top* of each
-    // lineage so a child never floats above the session it came from.
+    // Pinned first, then whatever is running in Karmashala right now, then most
+    // recently active — applied to the *top* of each lineage so a child never
+    // floats above the session it came from.
     final entries =
-        <({SessionActivityOrder order, bool pinned, List<ExplorerNode> rows})>[
+        <
+          ({
+            SessionActivityOrder order,
+            bool pinned,
+            bool live,
+            List<ExplorerNode> rows,
+          })
+        >[
           for (final node in forest)
             (
               order: (
@@ -1101,6 +1122,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 createdAt: node.session.createdAt,
               ),
               pinned: pinnedIds.contains(node.session.id),
+              live: _hasLivePane(node.session),
               rows: _lineageNodes(
                 project,
                 node,
@@ -1120,6 +1142,9 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
                 createdAt: imported.createdAt,
               ),
               pinned: pinnedIds.contains(imported.id),
+              // An imported conversation is a file on disk; nothing here is
+              // running it, so it can never outrank one this app is hosting.
+              live: false,
               rows: [
                 ImportedRowNode(
                   projectId: project.id,
@@ -1136,9 +1161,19 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             ),
         ]..sort((a, b) {
           if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+          if (a.live != b.live) return a.live ? -1 : 1;
           return compareByLastActive(a.order, b.order);
         });
     return [for (final entry in entries) ...entry.rows];
+  }
+
+  /// Whether a pane of ours is running [session] right now — the reading the
+  /// Explorer sorts on, and the cheapest one that answers it: a session with no
+  /// pane recorded cannot be live, so it costs no watch at all.
+  bool _hasLivePane(Session session) {
+    final paneId = session.paneId;
+    if (paneId == null) return false;
+    return ref.watch(terminalPaneLivenessProvider(paneId)).isLive;
   }
 
   List<ExplorerNode> _lineageNodes(

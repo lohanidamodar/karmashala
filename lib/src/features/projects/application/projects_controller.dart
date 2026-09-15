@@ -198,6 +198,70 @@ class ProjectsController extends Notifier<List<Project>> {
     return result;
   }
 
+  /// Edits [projectId]: its name, where its root folder is, and which checkout
+  /// its one-click session runs in. A moved root fails before anything is
+  /// written when the new folder cannot be read.
+  Future<ProjectUpdateResult> updateProject(
+    String projectId, {
+    String? name,
+    String? folderPath,
+    String? targetEnvironmentId,
+    String? defaultRepositoryId,
+    bool clearDefaultRepository = false,
+  }) async {
+    final project = ref.read(projectDaoProvider).getById(projectId);
+    if (project == null) {
+      throw StateError('This project is no longer in the workspace.');
+    }
+
+    final dao = ref.read(executionEnvironmentDaoProvider);
+    final windows = dao.getById(localHostEnvironmentId);
+    final environmentId = targetEnvironmentId ?? project.root.environmentId;
+    final target = dao.getById(environmentId) ?? windows;
+    if (windows == null || target == null) {
+      throw StateError('No execution environments available.');
+    }
+
+    final trimmed = folderPath?.trim();
+    final root = trimmed == null || trimmed.isEmpty
+        ? (targetEnvironmentId == null
+              ? null
+              : EnvironmentPath(
+                  environmentId: environmentId,
+                  path: project.root.path,
+                ))
+        : EnvironmentPath(environmentId: environmentId, path: trimmed);
+
+    final result = await ref
+        .read(projectServiceProvider)
+        .updateProject(
+          project,
+          name: name,
+          root: root,
+          defaultRepositoryId: defaultRepositoryId,
+          clearDefaultRepository: clearDefaultRepository,
+          target: target,
+          windows: windows,
+        );
+    if (result.discovered.isNotEmpty) {
+      await _autoImportSessions(result.discovered);
+    }
+    // Every checkout row a session points at may have moved, so the tree has to
+    // redraw even when nothing was discovered.
+    if (result.rebased.isNotEmpty || result.discovered.isNotEmpty) {
+      ref.read(sessionsRevisionProvider.notifier).bump();
+    }
+    _refresh();
+    return result;
+  }
+
+  /// Points [projectId]'s one-click "New session" at [repositoryId], or back at
+  /// the picker's first row when null.
+  void setDefaultRepository(String projectId, String? repositoryId) {
+    ref.read(projectDaoProvider).setDefaultRepository(projectId, repositoryId);
+    _refresh();
+  }
+
   /// Re-runs repository discovery over [projectId]'s root and records anything
   /// new. Without it a repository cloned in after the first scan stays invisible.
   Future<List<Repository>> rediscover(String projectId) async {

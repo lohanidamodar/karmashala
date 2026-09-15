@@ -4,3 +4,5 @@
 library;
 
 export 'src/file_picking.dart';
+export 'src/hidden_files.dart' show HiddenFilesPreference, isHiddenEntry;
+export 'src/hidden_files_chip.dart';

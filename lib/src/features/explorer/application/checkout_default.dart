@@ -109,3 +109,23 @@ int _changeRank(Ref ref, EnvironmentPath path) {
   if (dirtyFiles == null) return 1;
   return dirtyFiles > 0 ? 2 : 0;
 }
+
+/// Where a session started *at the project* runs: the checkout the project
+/// chose, else the first row the picker would offer. A chosen id that no longer
+/// names one of the project's checkouts falls back rather than refusing — a
+/// retired row must not take the `+` button down with it.
+Repository? projectDefaultCheckout({
+  required String? defaultRepositoryId,
+  required List<Repository> offered,
+  required List<Repository> all,
+}) {
+  if (defaultRepositoryId != null) {
+    for (final repository in offered) {
+      if (repository.id == defaultRepositoryId) return repository;
+    }
+    for (final repository in all) {
+      if (repository.id == defaultRepositoryId) return repository;
+    }
+  }
+  return offered.firstOrNull ?? all.firstOrNull;
+}

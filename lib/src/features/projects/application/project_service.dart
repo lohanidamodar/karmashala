@@ -375,3 +375,163 @@ cd "\$TARGET" && pwd
     return added;
   }
 }
+
+/// What editing a project did. [rebased] and [leftBehind] are only ever
+/// non-empty when the root moved.
+class ProjectUpdateResult {
+  const ProjectUpdateResult({
+    required this.project,
+    this.rebased = const [],
+    this.leftBehind = const [],
+    this.discovered = const [],
+  });
+
+  final Project project;
+
+  /// Checkouts whose recorded path was rewritten under the new root — the same
+  /// rows, keeping their ids, so every session that references one still does.
+  final List<Repository> rebased;
+
+  /// Checkouts that were not under the old root. Nothing here knows where they
+  /// went, so they are reported rather than guessed at.
+  final List<Repository> leftBehind;
+
+  /// Checkouts found under the new root that the project did not have.
+  final List<Repository> discovered;
+}
+
+/// Editing an existing project: its name, the checkout its one-click session
+/// runs in, and — the part with teeth — where its root folder is.
+extension ProjectEditing on ProjectService {
+  /// Applies the named changes to [project]. A moved root is discovered before
+  /// anything is written, so a folder that is not there fails with nothing
+  /// changed; the checkouts underneath keep their ids (§20), because that is
+  /// what every session, worktree and setting references.
+  Future<ProjectUpdateResult> updateProject(
+    Project project, {
+    String? name,
+    EnvironmentPath? root,
+    String? defaultRepositoryId,
+    bool clearDefaultRepository = false,
+    ExecutionEnvironment? target,
+    ExecutionEnvironment? windows,
+    int maxDepth = 5,
+  }) async {
+    final newName = name?.trim();
+    if (newName != null && newName.isEmpty) {
+      throw RepositoryDiscoveryException('A project needs a name.');
+    }
+
+    final moving =
+        root != null &&
+        !(root.environmentId == project.root.environmentId &&
+            samePath(root.path, project.root.path));
+
+    var discovered = const <DiscoveredRepository>[];
+    if (moving) {
+      if (target == null || windows == null) {
+        throw StateError('Moving a project root needs its environments.');
+      }
+      final scanRoot = target.kind == EnvironmentKind.ssh || target.id == windows.id
+          ? root
+          : translator.translate(root, from: target, to: windows);
+      discovered = await discovery.discover(scanRoot, maxDepth: maxDepth);
+    }
+
+    final rebased = <Repository>[];
+    final leftBehind = <Repository>[];
+    if (moving) {
+      for (final repository in repositoryDao.getByProject(project.id)) {
+        final relative = _relativeUnder(project.root, repository.path);
+        if (relative == null) {
+          leftBehind.add(repository);
+          continue;
+        }
+        final moved = repository.copyWith(path: _underRoot(root, relative));
+        repositoryDao.update(moved);
+        rebased.add(moved);
+      }
+    }
+
+    final added = <Repository>[];
+    if (moving) {
+      final known = {
+        for (final repository in [...rebased, ...leftBehind])
+          Checkout(repository.path),
+      };
+      final host = windows!;
+      final destination = target!;
+      EnvironmentPath toProject(EnvironmentPath hostPath) =>
+          destination.kind == EnvironmentKind.ssh || destination.id == host.id
+          ? hostPath
+          : translator.translate(hostPath, from: host, to: destination);
+      final now = clock.nowUtc();
+      for (final found in discovered) {
+        final path = toProject(found.path);
+        if (!known.add(Checkout(path))) continue;
+        final repository = Repository(
+          id: ids.newId(),
+          projectId: project.id,
+          name: found.name,
+          path: path,
+          createdAt: now,
+        );
+        repositoryDao.insert(repository);
+        added.add(repository);
+      }
+    }
+
+    // A default that no longer names one of this project's checkouts is not an
+    // error — it falls back to the picker's first row, which is the rule for a
+    // project that never chose.
+    final requested = clearDefaultRepository
+        ? null
+        : (defaultRepositoryId ?? project.defaultRepositoryId);
+    final owned = repositoryDao
+        .getByProject(project.id)
+        .any((repository) => repository.id == requested);
+
+    final updated = Project(
+      id: project.id,
+      name: newName ?? project.name,
+      root: root ?? project.root,
+      createdAt: project.createdAt,
+      workspaceId: project.workspaceId,
+      defaultRepositoryId: owned ? requested : null,
+    );
+    projectDao.update(updated);
+
+    return ProjectUpdateResult(
+      project: updated,
+      rebased: rebased,
+      leftBehind: leftBehind,
+      discovered: added,
+    );
+  }
+}
+
+/// [child] written relative to [root] using paths alone, so a root that also
+/// changes environment still carries its checkouts across. `''` when they are
+/// the same folder, null when [child] is not underneath.
+String? _relativeUnder(EnvironmentPath root, EnvironmentPath child) {
+  if (root.environmentId != child.environmentId) return null;
+  final parent = canonicalPathKey(root.path);
+  final under = canonicalPathKey(child.path);
+  if (under == parent) return '';
+  if (!under.startsWith('$parent/')) return null;
+  return child.path.replaceAll(r'\', '/').substring(parent.length + 1);
+}
+
+/// [relative] joined onto [root] in the spelling [root] is written in — a
+/// Windows root keeps backslashes, a POSIX one keeps forward slashes.
+EnvironmentPath _underRoot(EnvironmentPath root, String relative) {
+  if (relative.isEmpty) return root;
+  final windowsStyle =
+      RegExp(r'^[A-Za-z]:').hasMatch(root.path) || root.path.startsWith(r'\\');
+  final base = root.path.replaceAll(RegExp(r'[\\/]+$'), '');
+  final tail = windowsStyle ? relative.replaceAll('/', r'\') : relative;
+  return EnvironmentPath(
+    environmentId: root.environmentId,
+    path: windowsStyle ? '$base\\$tail' : '$base/$tail',
+  );
+}

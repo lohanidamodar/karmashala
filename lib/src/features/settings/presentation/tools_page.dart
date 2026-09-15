@@ -57,7 +57,11 @@ class ToolsPage extends StatelessWidget {
           blurb:
               'The programs Karmashala hands a session or a folder to when you '
               'open one outside it.',
-          children: [TerminalAppSection(), CodeEditorSection()],
+          children: [
+            TerminalAppSection(),
+            CodeEditorSection(),
+            FilePickerSection(),
+          ],
         ),
         ToolsCategory(
           title: 'Agent access',
@@ -159,6 +163,7 @@ class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
 
   Future<void> _browse() async {
     final file = await pickOneFile(
+      context: context,
       what: 'a terminal program',
       startNear: _path.text,
       acceptedTypeGroups: const [
@@ -305,6 +310,7 @@ class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
 
   Future<void> _browse() async {
     final file = await pickOneFile(
+      context: context,
       what: 'an editor program',
       startNear: _path.text,
       acceptedTypeGroups: const [
@@ -891,6 +897,92 @@ class _ControlServerRestartRowState
           ),
         ],
       ],
+    );
+  }
+}
+
+/// What the file-picker choice means on *this* desktop. A machine with no WSL
+/// is not told about one, and only Windows has seen the host dialog fail.
+String _blurbFor(bool inApp) {
+  if (inApp) {
+    return Platform.isWindows
+        ? 'Karmashala lists folders itself. It can also browse a WSL '
+              'distribution or a host over SSH, which the system dialog '
+              'cannot.'
+        : 'Karmashala lists folders itself. It can also browse a host over '
+              'SSH, which the system dialog cannot.';
+  }
+  return Platform.isWindows
+      ? "Your desktop's own dialog. On Windows it has been seen not to open at "
+            'all in this app; if Browse stops responding, switch back.'
+      : "Your desktop's own dialog. It cannot reach a host over SSH — a "
+            'Browse pointed at one still uses Karmashala’s.';
+}
+
+/// Which dialog every "Browse…" opens.
+///
+/// A setting rather than a rule because the two hosts differ: Windows' own
+/// dialog was measured failing to draw at all in this process, and macOS and
+/// Linux have given no such trouble. A folder on another machine ignores this
+/// either way — no local dialog can reach one.
+class FilePickerSection extends ConsumerWidget {
+  const FilePickerSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final chosen = ref.watch(
+      settingsControllerProvider.select((s) => s.useInAppFilePicker),
+    );
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final inApp = chosen ?? FilePickerChoice.platformDefault;
+
+    return SettingsSection(
+      title: 'FILE PICKER',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                value: true,
+                icon: Icon(AppIcons.folderOpen, size: Chrome.icon),
+                label: Text('Karmashala'),
+              ),
+              ButtonSegment(
+                value: false,
+                icon: Icon(AppIcons.stack, size: Chrome.icon),
+                label: Text('System dialog'),
+              ),
+            ],
+            selected: {inApp},
+            onSelectionChanged: (values) =>
+                controller.setUseInAppFilePicker(values.first),
+            showSelectedIcon: false,
+          ),
+          const SizedBox(height: Insets.sm),
+          Text(
+            _blurbFor(inApp),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: SemanticColors.of(context).neutral,
+            ),
+          ),
+          if (chosen != null) ...[
+            const SizedBox(height: Insets.xs),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => controller.setUseInAppFilePicker(null),
+                child: Text(
+                  FilePickerChoice.platformDefault
+                      ? 'Use what this platform defaults to (Karmashala)'
+                      : 'Use what this platform defaults to (system dialog)',
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

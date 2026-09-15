@@ -84,6 +84,7 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
   }
 
   Future<XFile?> _browse() => pickOneFile(
+    context: context,
     what: 'a build to install',
     startNear: _buildPath.text,
     acceptedTypeGroups: const [

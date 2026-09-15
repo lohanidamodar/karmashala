@@ -514,6 +514,35 @@ void main() {
       );
     });
 
+    test('every call names where it may draw', () {
+      final contextless = <String>[];
+      for (final root in everyLib()) {
+        for (final file in root.listSync(recursive: true).whereType<File>()) {
+          if (!file.path.endsWith('.dart')) continue;
+          final where = file.path.replaceAll(r'\', '/');
+          if (where.endsWith('karmashala_ui/lib/src/file_picking.dart')) {
+            continue;
+          }
+          final code = codeOnly(file.readAsStringSync());
+          for (final name in ['pickOneFile', 'pickOneDirectory']) {
+            for (final arguments in argumentsOf(code, name)) {
+              if (!arguments.contains('context:')) {
+                contextless.add('$where — $name');
+              }
+            }
+          }
+        }
+      }
+
+      expect(
+        contextless,
+        isEmpty,
+        reason:
+            'without a context the call falls back to the host dialog, which '
+            'on the reporting machine never draws a window at all',
+      );
+    });
+
     test('the sweep reaches the app and the packages, not just this one', () {
       final roots = everyLib().map((d) => d.path.replaceAll(r'\', '/'));
       expect(roots, contains(endsWith('/lib')));

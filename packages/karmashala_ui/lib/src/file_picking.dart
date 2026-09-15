@@ -1,26 +1,68 @@
-/// Every "Browse…" goes through here, for two reasons the log alone cannot
-/// give: the picker is recorded *before* it is asked for, and it is always
-/// handed a live **local** starting directory. Given none, the shell restores
-/// this executable's `LastVisitedPidlMRU` folder, and when that is a
-/// `\\wsl.localhost` path the dialog cannot draw it without enumerating
-/// Network — **30.3 s, measured 2026-09-10** (two cold runs, 30,683 and
-/// 30,335 ms; the same folder over the file redirector answers in 4 ms).
-/// Occupying the isolate reproduces the same frozen window, which is what the
-/// 2026-09-04 measurement did and why the diagnosis went the wrong way; the
-/// quieting below is kept because a dialog does need the thread, but it was
-/// never the reported cause. See docs/SETTLED.md.
+/// Every "Browse…" goes through here, for three reasons the log alone cannot
+/// give: the picker is recorded *before* it is asked for, it is always handed
+/// a live **local** starting directory, and this executable's shell
+/// last-visited row is dropped first.
+///
+/// The third is not the second. A local `initialDirectory` chooses what the
+/// dialog *shows*; it does not stop the dialog restoring its own
+/// `LastVisitedPidlMRU` folder while it builds, and a `\\wsl.localhost` row
+/// there costs an enumeration of Network — 30.3 s measured 2026-09-10, and a
+/// process hung with `p9np.dll` loaded and no dialog window at all on
+/// 2026-09-15. See [forgetLastVisitedFolder] and docs/SETTLED.md.
 library;
 
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'package:karmashala_core/logging.dart';
+
+import 'file_browser.dart';
+import 'picker_last_visited.dart';
 
 /// The picker types a caller needs, so nothing outside this file imports
 /// `file_selector` and goes round the announcement.
 export 'package:file_selector/file_selector.dart' show XFile, XTypeGroup;
+export 'file_browser.dart'
+    show
+        BrowseSource,
+        BrowseSources,
+        BrowsedEntry,
+        DirectoryExists,
+        DirectoryLister,
+        FileBrowserDialog,
+        kListingPatience,
+        listDirectory,
+        showFileBrowser;
+export 'picker_last_visited.dart'
+    show forgetLastVisitedFolder, forgetRemoteRecentFolders;
+
+/// Which dialog a "Browse…" opens, and who decides.
+///
+/// **Windows defaults to Karmashala's own browser** because the host's has been
+/// measured failing to draw at all in this process (see [showFileBrowser]);
+/// macOS and Linux default to the system dialog, which is the one their users
+/// know and which has given no trouble. [prefersInApp] is the user's own
+/// answer, installed by the app from settings.
+class FilePickerChoice {
+  const FilePickerChoice._();
+
+  /// The user's preference, or null while they have expressed none.
+  static bool Function()? prefersInApp;
+
+  /// What this platform does when nobody has said otherwise.
+  static bool get platformDefault => Platform.isWindows;
+
+  static bool get inApp {
+    try {
+      return prefersInApp?.call() ?? platformDefault;
+    } on Object {
+      // A settings read that throws must not cost the user their picker.
+      return platformDefault;
+    }
+  }
+}
 
 /// The host's open-file dialog. A seam, so a test can stand where the platform
 /// thread would be.
@@ -39,6 +81,18 @@ typedef ShowDirectoryDialog =
       String? confirmButtonText,
       String? initialDirectory,
     });
+
+/// Drops this executable's shell last-visited row. A seam, so a test never
+/// spawns `reg.exe`.
+@visibleForTesting
+typedef ForgetLastVisited = Future<int> Function();
+
+/// Drops the remote folders the shell offers as recent for these extensions.
+@visibleForTesting
+typedef ForgetRemoteRecent = Future<int> Function(List<String> extensions);
+
+Future<int> _forgetRemoteRecent(List<String> extensions) =>
+    forgetRemoteRecentFolders(extensions: extensions);
 
 /// Whether a directory is there. A seam; only ever asked about a path that has
 /// already been found local, because the stat itself is what can block.
@@ -198,28 +252,62 @@ void _remember(String? directory) {
   if (usable != null) _lastPicked = usable;
 }
 
-/// Asks the host for one file, announcing it first. [what] is the thing being
-/// chosen, in the user's words — the only clue to which Browse was pressed.
+/// Asks for one file, announcing it first. [what] is the thing being chosen,
+/// in the user's words — the only clue to which Browse was pressed.
 /// [startNear] is where to open; see [pickerStartDirectory] for what happens
 /// when it is null or is not somewhere we may start.
 Future<XFile?> pickOneFile({
   required String what,
+  BuildContext? context,
+  String? environmentId,
   String? startNear,
   List<XTypeGroup> acceptedTypeGroups = const [],
   @visibleForTesting ShowFileDialog show = openFile,
+  @visibleForTesting ForgetLastVisited forget = forgetLastVisitedFolder,
+  @visibleForTesting ForgetRemoteRecent forgetRemote = _forgetRemoteRecent,
   @visibleForTesting Diagnostics? diagnostics,
   @visibleForTesting PickerQuiet? quiet,
   @visibleForTesting DirectoryProbe probe = _directoryIsThere,
   @visibleForTesting Map<String, String>? environment,
+  @visibleForTesting bool? inApp,
 }) async {
   final start = pickerStartDirectory(
     startNear,
     probe: probe,
     environment: environment,
   );
+  if (_inApp(inApp, context, environmentId)) {
+    await _announce('file', what, start, diagnostics);
+    // The flush above yields; a caller dismissed in that gap has no navigator.
+    if (!context!.mounted) return null;
+    final clock = Stopwatch()..start();
+    try {
+      final chosen = await showFileBrowser(
+        context,
+        what: what,
+        directories: false,
+        environmentId: environmentId,
+        startAt: _startFor(environmentId, start, startNear),
+        acceptedTypeGroups: acceptedTypeGroups,
+      );
+      _remember(chosen == null ? null : _parentOf(chosen));
+      _report('file', what, chosen, clock);
+      return chosen == null ? null : XFile(chosen);
+    } on Object catch (error, stack) {
+      _fail('file', what, clock, error, stack);
+      return null;
+    }
+  }
+
   // Before the announce, not between it and the call: the flush below yields,
   // and whatever runs in that gap is already on the thread the dialog needs.
   final resume = (quiet ?? PickerQuiet.instance).begin();
+  await forget();
+  // And the *extension-keyed* list this filter will make the shell read; see
+  // [forgetRemoteRecentFolders] for why the two lists are not one job.
+  await forgetRemote([
+    for (final group in acceptedTypeGroups) ...?group.extensions,
+  ]);
   await _announce('file', what, start, diagnostics);
   final elapsed = Stopwatch()..start();
   try {
@@ -241,20 +329,47 @@ Future<XFile?> pickOneFile({
 /// Asks the host for one directory, announcing it first.
 Future<String?> pickOneDirectory({
   required String what,
+  BuildContext? context,
+  String? environmentId,
   String? startNear,
   String? confirmButtonText,
   @visibleForTesting ShowDirectoryDialog show = getDirectoryPath,
+  @visibleForTesting ForgetLastVisited forget = forgetLastVisitedFolder,
   @visibleForTesting Diagnostics? diagnostics,
   @visibleForTesting PickerQuiet? quiet,
   @visibleForTesting DirectoryProbe probe = _directoryIsThere,
   @visibleForTesting Map<String, String>? environment,
+  @visibleForTesting bool? inApp,
 }) async {
   final start = pickerStartDirectory(
     startNear,
     probe: probe,
     environment: environment,
   );
+  if (_inApp(inApp, context, environmentId)) {
+    await _announce('directory', what, start, diagnostics);
+    if (!context!.mounted) return null;
+    final clock = Stopwatch()..start();
+    try {
+      final chosen = await showFileBrowser(
+        context,
+        what: what,
+        directories: true,
+        environmentId: environmentId,
+        startAt: _startFor(environmentId, start, startNear),
+        confirmButtonText: confirmButtonText,
+      );
+      _remember(chosen);
+      _report('directory', what, chosen, clock);
+      return chosen;
+    } on Object catch (error, stack) {
+      _fail('directory', what, clock, error, stack);
+      return null;
+    }
+  }
+
   final resume = (quiet ?? PickerQuiet.instance).begin();
+  await forget();
   await _announce('directory', what, start, diagnostics);
   final elapsed = Stopwatch()..start();
   try {
@@ -313,4 +428,34 @@ void _fail(
     error,
     stack,
   );
+}
+
+/// Whether this call takes the in-app browser: it needs somewhere to draw, and
+/// a test may say so outright.
+///
+/// A folder on another machine is **not** a preference. This computer's own
+/// dialog cannot reach a distribution or a host, so a call that names one gets
+/// the in-app browser whatever the user chose.
+/// Whether this call takes the in-app browser. [forced] is a caller that has
+/// no choice to offer — see the `inApp` parameter of [pickOneFile].
+bool _inApp(bool? forced, BuildContext? context, String? environmentId) {
+  if (context == null || !context.mounted) return false;
+  if (forced != null) return forced;
+  if (environmentId != null) {
+    for (final source in BrowseSources.all) {
+      if (source.id == environmentId) return !source.local;
+    }
+  }
+  return FilePickerChoice.inApp;
+}
+
+/// Where to open when the browser is pointed at another machine. The local
+/// fallback chain is about *this* computer's folders, so it is no answer for a
+/// distribution or a host: those are left to the source's own home, unless the
+/// caller's hint is already spelled for them.
+String? _startFor(String? environmentId, String local, String? hint) {
+  if (environmentId == null) return local;
+  final spelled = hint?.trim();
+  if (spelled == null || spelled.isEmpty) return null;
+  return spelled;
 }

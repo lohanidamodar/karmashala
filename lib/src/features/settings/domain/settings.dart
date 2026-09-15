@@ -77,6 +77,8 @@ class Settings {
     this.customTerminalPath,
     this.defaultCodeEditorId,
     this.customEditorPath,
+    this.useInAppFilePicker,
+    this.showHiddenFiles = false,
     this.launcherHotkeyJson,
     this.launcherHotkeyEnabled = true,
     this.pinnedProjectIds = const [],
@@ -181,6 +183,16 @@ class Settings {
 
   /// Custom editor executable, when [defaultCodeEditorId] is `custom`.
   final String? customEditorPath;
+
+  /// Whether "Browse…" opens Karmashala's own file browser rather than the
+  /// host's dialog. **Null is not "no"** — it is "nobody has said", which each
+  /// platform answers for itself: Windows in-app, macOS and Linux native.
+  final bool? useInAppFilePicker;
+
+  /// Whether every file browser — the picker, the SSH browser and the device's
+  /// own — shows dot-files and hidden entries. One answer, so the same folder
+  /// does not read two ways.
+  final bool showHiddenFiles;
 
   /// The launcher hotkey as `hotkey_manager` JSON; `null` is Ctrl+Alt+Space.
   final String? launcherHotkeyJson;
@@ -290,6 +302,9 @@ class Settings {
     String? customTerminalPath,
     String? defaultCodeEditorId,
     String? customEditorPath,
+    bool? useInAppFilePicker,
+    bool clearUseInAppFilePicker = false,
+    bool? showHiddenFiles,
     String? launcherHotkeyJson,
     bool? launcherHotkeyEnabled,
     List<String>? pinnedProjectIds,
@@ -349,6 +364,10 @@ class Settings {
     customTerminalPath: customTerminalPath ?? this.customTerminalPath,
     defaultCodeEditorId: defaultCodeEditorId ?? this.defaultCodeEditorId,
     customEditorPath: customEditorPath ?? this.customEditorPath,
+    useInAppFilePicker: clearUseInAppFilePicker
+        ? null
+        : (useInAppFilePicker ?? this.useInAppFilePicker),
+    showHiddenFiles: showHiddenFiles ?? this.showHiddenFiles,
     launcherHotkeyJson: launcherHotkeyJson ?? this.launcherHotkeyJson,
     launcherHotkeyEnabled: launcherHotkeyEnabled ?? this.launcherHotkeyEnabled,
     pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
@@ -430,6 +449,8 @@ class Settings {
     if (customTerminalPath != null) 'customTerminalPath': customTerminalPath,
     if (defaultCodeEditorId != null) 'defaultCodeEditorId': defaultCodeEditorId,
     if (customEditorPath != null) 'customEditorPath': customEditorPath,
+    if (useInAppFilePicker != null) 'useInAppFilePicker': useInAppFilePicker,
+    'showHiddenFiles': showHiddenFiles,
     if (launcherHotkeyJson != null) 'launcherHotkeyJson': launcherHotkeyJson,
     'launcherHotkeyEnabled': launcherHotkeyEnabled,
     'pinnedProjectIds': pinnedProjectIds,
@@ -559,6 +580,10 @@ class Settings {
       defaultCodeEditorId: json['defaultCodeEditorId'] is String
           ? json['defaultCodeEditorId'] as String
           : null,
+      showHiddenFiles: json['showHiddenFiles'] as bool? ?? false,
+      useInAppFilePicker: json['useInAppFilePicker'] is bool
+          ? json['useInAppFilePicker'] as bool
+          : null,
       customEditorPath: json['customEditorPath'] is String
           ? json['customEditorPath'] as String
           : null,
@@ -657,6 +682,8 @@ class Settings {
       other.customTerminalPath == customTerminalPath &&
       other.defaultCodeEditorId == defaultCodeEditorId &&
       other.customEditorPath == customEditorPath &&
+      other.useInAppFilePicker == useInAppFilePicker &&
+      other.showHiddenFiles == showHiddenFiles &&
       other.launcherHotkeyJson == launcherHotkeyJson &&
       other.launcherHotkeyEnabled == launcherHotkeyEnabled &&
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
@@ -729,6 +756,8 @@ class Settings {
       // Folded in: the outer call is already at `Object.hash`'s 20-arg limit.
       Object.hash(
         hostBackedLocalPanes,
+        useInAppFilePicker,
+        showHiddenFiles,
         androidSlimming,
         editorWordWrap,
         hideEmptySections,
