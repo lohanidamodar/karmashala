@@ -365,13 +365,20 @@ flutter test --exclude-tags=live-ssh,live-wsl
 unwatched:
 
 ```bash
-dart.exe analyze --no-fatal-warnings lib test tool integration_test packages host
+dart.exe analyze --no-fatal-warnings lib test tool integration_test packages host mcp_bridge
 ```
 
 `integration_test/` is in no gate — `flutter test` does not run it — so nothing
 but the analyzer ever compiles it. Three of its files carried 72 errors for a
 day in September 2026 because every analyze command in flight listed
 `lib test packages host` and left it out.
+
+`mcp_bridge/` and `host/` are named separately because they are **not** pub
+workspace members — they resolve on their own lock files so `dart compile exe`
+can reach them, which is why they sit beside `packages/` rather than in it.
+`mcp_bridge` had been left out of this line entirely until 2026-09-15: the
+bridge every WSL session gets its tools through was compiled by the release
+recipe and analyzed by nothing.
 
 For UI changes, also run the app where practical:
 
