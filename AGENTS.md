@@ -34,3 +34,5 @@ WSL beside it. Always drive Flutter through the Windows toolchain — run
 Never run a bare `flutter` or `dart` from a WSL `PATH`: it resolves to a Linux
 SDK and rewrites the shared Windows install.
 <!-- popupbits:rails:end -->
+
+**Read [PROJECT.md](PROJECT.md) before changing anything** — it is the full guide for this repository.
