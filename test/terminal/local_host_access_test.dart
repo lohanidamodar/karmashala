@@ -217,12 +217,37 @@ void main() {
       paths: paths,
       executable: LocalHostExecutable(executableDirectory: home.path),
       startServe: (_) async =>
-          _FakeProcess('', stderr: 'no usable libc on this machine\n', exitCode: 4),
+          _FakeProcess('', stderr: 'no usable libc on this machine\n'),
     );
     final reading = await access.deployment();
     expect(reading.status, HostDeploymentStatus.cannotStart);
-    expect(reading.reason, contains('exited 4'));
+    // A detached process has no exit code to quote; what it said is the account.
+    expect(reading.reason, contains('exited before'));
     expect(reading.reason, contains('no usable libc'));
+  });
+
+  test('a real detached serve is read without asking for its exit code', () async {
+    // Not a fake: the process the app starts, in the mode it starts it in. The
+    // SDK gives a `detachedWithStdio` process streams and no exit code, and the
+    // start path asked for one — so every cold start of a local host threw
+    // "Process is detached" after the host had already come up, and the first
+    // host-backed pane refused itself.
+    anExecutable();
+    final banner = 'karmashala_host serving on ${paths.socketPath}';
+    final access = LocalHostSessionAccess(
+      paths: paths,
+      executable: LocalHostExecutable(executableDirectory: home.path),
+      startServe: (_) async {
+        await serve();
+        return Platform.isWindows
+            ? Process.start('cmd.exe', ['/c', 'echo $banner'], mode: ProcessStartMode.detachedWithStdio)
+            : Process.start('/bin/sh', ['-c', "echo '$banner'"], mode: ProcessStartMode.detachedWithStdio);
+      },
+    );
+
+    final reading = await access.deployment();
+    expect(reading.status, HostDeploymentStatus.ready, reason: reading.reason);
+    expect(reading.restartedByUs, isTrue);
   });
 
   group('observe', () {
@@ -308,7 +333,7 @@ void main() {
       executable: LocalHostExecutable(executableDirectory: home.path),
       startServe: (_) async {
         measuredAgain = true;
-        return _FakeProcess('', exitCode: 1);
+        return _FakeProcess('');
       },
     );
     await second.deployment();
@@ -319,15 +344,18 @@ void main() {
 /// A process that says what a test wants it to say. Not a real one on purpose:
 /// starting a real `serve` here would bind the developer's own socket and take
 /// their sessions with it when the test tore it down.
+/// A `serve` started the way the app starts one: `detachedWithStdio`. Its two
+/// streams end when it exits, and it has **no exit code** — the SDK throws
+/// `StateError('Process is detached')` for one, and this fake used to hand one
+/// out, which is how a start path that read it passed here for a week while
+/// failing every real cold start.
 class _FakeProcess implements Process {
-  _FakeProcess(String out, {String stderr = '', int exitCode = 0})
+  _FakeProcess(String out, {String stderr = ''})
     : _out = Stream.value(utf8.encode(out)),
-      _err = Stream.value(utf8.encode(stderr)),
-      _exit = exitCode;
+      _err = Stream.value(utf8.encode(stderr));
 
   final Stream<List<int>> _out;
   final Stream<List<int>> _err;
-  final int _exit;
 
   @override
   Stream<List<int>> get stdout => _out;
@@ -339,7 +367,7 @@ class _FakeProcess implements Process {
   IOSink get stdin => throw UnimplementedError();
 
   @override
-  Future<int> get exitCode async => _exit;
+  Future<int> get exitCode => throw StateError('Process is detached');
 
   @override
   int get pid => 4242;

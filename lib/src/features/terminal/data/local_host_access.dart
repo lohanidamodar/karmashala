@@ -298,19 +298,27 @@ class LocalHostSessionAccess implements HostSessionAccess {
       }
     }
 
-    process.stdout.transform(utf8.decoder).listen(look, onError: (Object _) {});
-    process.stderr.transform(utf8.decoder).listen(look, onError: (Object _) {});
-    unawaited(
-      process.exitCode.then((code) {
-        if (ready.isCompleted) return;
-        // Exit 3 is "another host already holds the lock", which means one is
-        // running after all — a race with another app instance, and not a
-        // failure to report.
-        ready.complete(
-          code == 3 ? null : 'Started ${binary.path} and it exited $code: ${said.toString().trim()}',
-        );
-      }),
-    );
+    // How a serve that died is noticed. NOT `process.exitCode`: a
+    // `detachedWithStdio` process has none, and the SDK throws "Process is
+    // detached" for it — which it did on every cold start, after the host was
+    // already up, so the first host-backed pane always refused itself. Both
+    // pipes closing before the banner is the same event, spelled the way a
+    // detached process can report it.
+    var open = 2;
+    void closed() {
+      if (--open > 0 || ready.isCompleted) return;
+      final text = said.toString().trim();
+      // "Another host is already running" (serve's exit 3) means one is up
+      // after all — a race with another app instance, not a failure to report.
+      ready.complete(
+        text.contains('another host is already running')
+            ? null
+            : 'Started ${binary.path} and it exited before serving: $text',
+      );
+    }
+
+    process.stdout.transform(utf8.decoder).listen(look, onError: (Object _) {}, onDone: closed);
+    process.stderr.transform(utf8.decoder).listen(look, onError: (Object _) {}, onDone: closed);
 
     return ready.future.timeout(
       const Duration(seconds: 20),
