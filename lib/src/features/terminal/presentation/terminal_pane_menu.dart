@@ -41,95 +41,14 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
         Rect.fromLTWH(position.dx, position.dy, 1, 1),
         Offset.zero & overlay.size,
       ),
-      items: [
-        DesktopMenuItem(
-          value: 'copy',
-          label: 'Copy',
-          icon: AppIcons.copy,
-          shortcut: shellChordLabel<CopySelectionTextIntent>(),
-          enabled: hasSelection,
-        ),
-        DesktopMenuItem(
-          value: 'paste',
-          label: 'Paste',
-          icon: AppIcons.clipboardText,
-          shortcut: shellChordLabel<TerminalPasteIntent>(),
-        ),
-        DesktopMenuItem(
-          value: 'find',
-          label: 'Find…',
-          icon: AppIcons.magnifyingGlass,
-          shortcut: shellChordLabel<FindInScrollbackIntent>(),
-        ),
-        // Offered only with a selection, because unlike Copy there is no
-        // disabled version that says anything: "create a todo from nothing" is
-        // not a lesser act, it is not an act.
-        if (capturable) ...[
-          const DesktopMenuDivider(),
-          DesktopMenuItem(
-            value: 'todo',
-            label: 'Create todo from selection',
-            icon: AppIcons.listChecks,
-          ),
-          // Absent, not disabled, when Notes is off, so the affordance and the
-          // surface cannot disagree about whether the user asked for it.
-          if (notesEnabled)
-            DesktopMenuItem(
-              value: 'note',
-              label: 'Create note from selection',
-              icon: AppIcons.notePencil,
-            ),
-        ],
-        const DesktopMenuDivider(),
-        // The pane splits below are the only place *pane* splitting is offered:
-        // the toolbar's buttons divide the whole workspace group, which is a
-        // different act. Recording is a pane's own verb for the same reason.
-        DesktopMenuItem(
-          value: 'record',
-          label: recordingThis
-              ? 'Stop recording'
-              : canWriteMp4
-              ? 'Record this pane'
-              : 'Record this pane — GIF only, no MP4 here',
-          icon: recordingThis ? AppIcons.stopCircle : AppIcons.circle,
-        ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'split-pane-right',
-          label: 'Split pane right',
-          icon: AppIcons.squareSplitHorizontal,
-        ),
-        DesktopMenuItem(
-          value: 'split-pane-down',
-          label: 'Split pane down',
-          icon: AppIcons.squareSplitVertical,
-        ),
-        const DesktopMenuDivider(),
-        // Only while there is a split to collapse: with one pane the tab
-        // strip's close button is the way, and two words for one act in two
-        // places is how a menu stops being read.
-        if (_sessions.isPaneInSplit(paneId)) ...[
-          DesktopMenuItem(
-            value: 'untangle',
-            label: 'Move pane to a new tab',
-            icon: AppIcons.terminalWindow,
-          ),
-          DesktopMenuItem(
-            value: 'close',
-            label: 'Close pane',
-            icon: AppIcons.x,
-            shortcut: shellChordLabel<CloseTerminalTabIntent>(),
-          ),
-          const DesktopMenuDivider(),
-        ],
-        // Closing the tab only detaches; this is how a session actually ends.
-        DesktopMenuItem(
-          value: 'end',
-          label: 'End session',
-          icon: AppIcons.power,
-          destructive: true,
-        ),
-      ],
+      items: terminalPaneMenuItems(
+        hasSelection: hasSelection,
+        capturable: capturable,
+        notesEnabled: notesEnabled,
+        recording: recordingThis,
+        canWriteMp4: canWriteMp4,
+        inSplit: _sessions.isPaneInSplit(paneId),
+      ),
     );
     switch (choice) {
       case 'record':
@@ -203,3 +122,101 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
     context,
   )?.showSnackBar(SnackBar(content: Text(message)));
 }
+
+/// A terminal pane's right-click menu, as values the caller switches on. Pure,
+/// so which entries appear for which pane is testable without a pane.
+List<PopupMenuEntry<String>> terminalPaneMenuItems({
+  required bool hasSelection,
+  required bool capturable,
+  required bool notesEnabled,
+  required bool recording,
+  required bool canWriteMp4,
+  required bool inSplit,
+}) => [
+  DesktopMenuItem(
+    value: 'copy',
+    label: 'Copy',
+    icon: AppIcons.copy,
+    shortcut: shellChordLabel<CopySelectionTextIntent>(),
+    enabled: hasSelection,
+  ),
+  DesktopMenuItem(
+    value: 'paste',
+    label: 'Paste',
+    icon: AppIcons.clipboardText,
+    shortcut: shellChordLabel<TerminalPasteIntent>(),
+  ),
+  DesktopMenuItem(
+    value: 'find',
+    label: 'Find…',
+    icon: AppIcons.magnifyingGlass,
+    shortcut: shellChordLabel<FindInScrollbackIntent>(),
+  ),
+  // Offered only with a selection, because unlike Copy there is no disabled
+  // version that says anything: "create a todo from nothing" is not an act.
+  if (capturable) ...[
+    const DesktopMenuDivider(),
+    DesktopMenuItem(
+      value: 'todo',
+      label: 'Create todo from selection',
+      icon: AppIcons.listChecks,
+    ),
+    // Absent, not disabled, when Notes is off, so the affordance and the
+    // surface cannot disagree about whether the user asked for it.
+    if (notesEnabled)
+      DesktopMenuItem(
+        value: 'note',
+        label: 'Create note from selection',
+        icon: AppIcons.notePencil,
+      ),
+  ],
+  const DesktopMenuDivider(),
+  // The pane splits below are the only place *pane* splitting is offered: the
+  // toolbar's buttons divide the whole workspace group, which is a different
+  // act. Recording is a pane's own verb for the same reason.
+  DesktopMenuItem(
+    value: 'record',
+    label: recording
+        ? 'Stop recording'
+        : canWriteMp4
+        ? 'Record this pane'
+        : 'Record this pane — GIF only, no MP4 here',
+    icon: recording ? AppIcons.stopCircle : AppIcons.circle,
+  ),
+  const DesktopMenuDivider(),
+  DesktopMenuItem(
+    value: 'split-pane-right',
+    label: 'Split pane right',
+    icon: AppIcons.squareSplitHorizontal,
+  ),
+  DesktopMenuItem(
+    value: 'split-pane-down',
+    label: 'Split pane down',
+    icon: AppIcons.squareSplitVertical,
+  ),
+  const DesktopMenuDivider(),
+  // Only while there is a split to collapse: with one pane the tab strip's
+  // close button is the way, and two words for one act in two places is how a
+  // menu stops being read.
+  if (inSplit) ...[
+    DesktopMenuItem(
+      value: 'untangle',
+      label: 'Move pane to a new tab',
+      icon: AppIcons.terminalWindow,
+    ),
+    DesktopMenuItem(
+      value: 'close',
+      label: 'Close pane',
+      icon: AppIcons.x,
+      shortcut: shellChordLabel<CloseTerminalTabIntent>(),
+    ),
+    const DesktopMenuDivider(),
+  ],
+  // Closing the tab only detaches; this is how a session actually ends.
+  DesktopMenuItem(
+    value: 'end',
+    label: 'End session',
+    icon: AppIcons.power,
+    destructive: true,
+  ),
+];
