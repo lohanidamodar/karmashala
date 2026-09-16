@@ -142,6 +142,15 @@ class _DevicePaneState extends ConsumerState<DevicePane>
     final simulatorShowing =
         ref.watch(simulatorLiveViewProvider) is! SimulatorLiveViewIdle;
 
+    // One bundle for every place the device list can be drawn from.
+    final listActions = _DeviceListActions(
+      stopping: _stopping,
+      booting: _booting,
+      onPreview: _startStream,
+      onStopEmulator: _stopEmulator,
+      onBootAvd: _bootAvd,
+    );
+
     return Column(
       children: [
         _DeviceToolbar(
@@ -174,22 +183,14 @@ class _DevicePaneState extends ConsumerState<DevicePane>
                 : reason != null
                 ? _DeviceEmptyState(
                     message: reason,
-                    stopping: _stopping,
-                    booting: _booting,
-                    onPreview: _startStream,
-                    onStopEmulator: _stopEmulator,
-                    onBootAvd: _bootAvd,
+                    actions: listActions,
                   )
                 : _streamError != null
                 ? _DeviceEmptyState(
                     message:
                         'Live view unavailable: $_streamError\n\n'
                         'Screenshots, input and logcat still work.',
-                    stopping: _stopping,
-                    booting: _booting,
-                    onPreview: _startStream,
-                    onStopEmulator: _stopEmulator,
-                    onBootAvd: _bootAvd,
+                    actions: listActions,
                   )
                 : _LiveView(
                     // The held frame while a restart is in flight, so the
@@ -210,11 +211,7 @@ class _DevicePaneState extends ConsumerState<DevicePane>
                         !(sdk.asData != null || sdk.hasError) ||
                         !deviceList.hasValue,
                     onRestart: _restartStream,
-                    stopping: _stopping,
-                    booting: _booting,
-                    onPreview: _startStream,
-                    onStopEmulator: _stopEmulator,
-                    onBootAvd: _bootAvd,
+                    listActions: listActions,
                   ),
             // Not while a simulator's picture is up: that pane carries its own
             // controls, and this row would offer Back under an iPhone.

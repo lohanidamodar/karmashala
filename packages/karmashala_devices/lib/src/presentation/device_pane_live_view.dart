@@ -16,11 +16,7 @@ class _LiveView extends ConsumerWidget {
     required this.exhausted,
     required this.probing,
     required this.onRestart,
-    required this.stopping,
-    required this.booting,
-    required this.onPreview,
-    required this.onStopEmulator,
-    required this.onBootAvd,
+    required this.listActions,
   });
 
   final VideoController? video;
@@ -49,12 +45,9 @@ class _LiveView extends ConsumerWidget {
   final bool probing;
 
   final VoidCallback onRestart;
-  final Set<String> stopping;
-  final Set<String> booting;
-  final Future<void> Function(AndroidDevice device) onPreview;
-  final Future<void> Function({required String serial, required String label})
-  onStopEmulator;
-  final Future<void> Function(String name) onBootAvd;
+
+  /// For the device list shown while there is no picture.
+  final _DeviceListActions listActions;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -70,11 +63,7 @@ class _LiveView extends ConsumerWidget {
         message: probing
             ? 'Looking for devices…'
             : 'Pick a device below, or start an emulator.',
-        stopping: stopping,
-        booting: booting,
-        onPreview: onPreview,
-        onStopEmulator: onStopEmulator,
-        onBootAvd: onBootAvd,
+        actions: listActions,
       );
     }
     // The size of the device on screen, asked for by name. Anything derived

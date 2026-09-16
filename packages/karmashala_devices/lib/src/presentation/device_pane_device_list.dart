@@ -2,9 +2,11 @@
 // the AVDs, the simulators. A part, so the committed tree still matches.
 part of 'device_pane.dart';
 
-class _DeviceEmptyState extends ConsumerWidget {
-  const _DeviceEmptyState({
-    required this.message,
+/// What the rows of the device list can do, and which of them are mid-way:
+/// built once by the pane and handed down, rather than five parameters
+/// threaded through every widget between the pane and a row.
+class _DeviceListActions {
+  const _DeviceListActions({
     required this.stopping,
     required this.booting,
     required this.onPreview,
@@ -12,13 +14,23 @@ class _DeviceEmptyState extends ConsumerWidget {
     required this.onBootAvd,
   });
 
-  final String message;
+  /// Emulators with a shutdown in flight, by serial.
   final Set<String> stopping;
+
+  /// AVDs with a boot in flight, by name.
   final Set<String> booting;
+
   final Future<void> Function(AndroidDevice device) onPreview;
   final Future<void> Function({required String serial, required String label})
   onStopEmulator;
   final Future<void> Function(String name) onBootAvd;
+}
+
+class _DeviceEmptyState extends ConsumerWidget {
+  const _DeviceEmptyState({required this.message, required this.actions});
+
+  final String message;
+  final _DeviceListActions actions;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,13 +55,7 @@ class _DeviceEmptyState extends ConsumerWidget {
               // Above both lists, because it governs both: inside Emulators,
               // a Mac with Xcode and no Android SDK never saw it.
               const _HeadlessDeviceToggle(),
-              _DeviceList(
-                stopping: stopping,
-                booting: booting,
-                onPreview: onPreview,
-                onStopEmulator: onStopEmulator,
-                onBootAvd: onBootAvd,
-              ),
+              _DeviceList(actions: actions),
               // Below the Android sections and independent of them: a Mac
               // with no SDK still has simulators to start.
               const SimulatorList(),
@@ -64,20 +70,9 @@ class _DeviceEmptyState extends ConsumerWidget {
 /// Everything the pane can be pointed at — connected devices and bootable
 /// AVDs — acting per row: stopping an emulator must not need a live view.
 class _DeviceList extends ConsumerWidget {
-  const _DeviceList({
-    required this.stopping,
-    required this.booting,
-    required this.onPreview,
-    required this.onStopEmulator,
-    required this.onBootAvd,
-  });
+  const _DeviceList({required this.actions});
 
-  final Set<String> stopping;
-  final Set<String> booting;
-  final Future<void> Function(AndroidDevice device) onPreview;
-  final Future<void> Function({required String serial, required String label})
-  onStopEmulator;
-  final Future<void> Function(String name) onBootAvd;
+  final _DeviceListActions actions;
 
   /// What a row says about itself under its name.
   static String _stateLine(AndroidDevice device) => switch (device.state) {
@@ -173,7 +168,7 @@ class _DeviceList extends ConsumerWidget {
                   _RowAction(
                     key: Key('preview-${device.serial}'),
                     label: 'Live preview',
-                    onPressed: () => onPreview(device),
+                    onPressed: () => actions.onPreview(device),
                   ),
                 // Reading the device's storage, and moving files either way.
                 // Its own dialog; it asks the driver which roots it can reach.
@@ -189,8 +184,8 @@ class _DeviceList extends ConsumerWidget {
                   _RowAction(
                     key: Key('stop-emulator-${device.serial}'),
                     label: 'Stop',
-                    busy: stopping.contains(device.serial),
-                    onPressed: () => onStopEmulator(
+                    busy: actions.stopping.contains(device.serial),
+                    onPressed: () => actions.onStopEmulator(
                       serial: device.serial,
                       label:
                           runningAvdNames[device.serial] ?? device.displayName,
@@ -222,13 +217,15 @@ class _DeviceList extends ConsumerWidget {
           for (final avd in idle)
             DeviceActionRow(
               title: avd.name,
-              subtitle: booting.contains(avd.name) ? 'starting…' : null,
+              subtitle: actions.booting.contains(avd.name)
+                  ? 'starting…'
+                  : null,
               actions: [
                 _RowAction(
                   key: Key('start-avd-${avd.name}'),
                   label: 'Start',
-                  busy: booting.contains(avd.name),
-                  onPressed: () => onBootAvd(avd.name),
+                  busy: actions.booting.contains(avd.name),
+                  onPressed: () => actions.onBootAvd(avd.name),
                 ),
               ],
             ),
