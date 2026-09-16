@@ -305,26 +305,26 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
     final hasGit = _gitUrlController.text.trim().isNotEmpty;
 
     return AlertDialog(
-      scrollable: true,
       title: const DesktopDialogTitle(
         icon: AppIcons.folderPlus,
         title: 'New project',
         subtitle: 'Add a folder or clone a repository.',
       ),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             DropdownButtonFormField<String>(
               initialValue: _targetId,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Environment'),
               items: [
                 for (final env in environments)
                   DropdownMenuItem(
                     value: env.id,
-                    child: Text(_environmentLabel(env)),
+                    child: _Choice(_environmentLabel(env)),
                   ),
               ],
               onChanged: (v) => setState(() {
@@ -469,16 +469,17 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
         Expanded(
           child: DropdownButtonFormField<String?>(
             initialValue: _workspaceId,
+            isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Context',
               helperText: 'Suggested from the folder. Change it or leave it.',
             ),
             items: [
-              const DropdownMenuItem(value: null, child: Text('None')),
+              const DropdownMenuItem(value: null, child: _Choice('None')),
               for (final workspace in workspaces)
                 DropdownMenuItem(
                   value: workspace.id,
-                  child: Text(workspace.name),
+                  child: _Choice(workspace.name),
                 ),
             ],
             onChanged: _busy
@@ -503,4 +504,16 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       ],
     );
   }
+}
+
+/// A dropdown choice: one line, ellipsized, because environment and context
+/// names are the user's own and have no length.
+class _Choice extends StatelessWidget {
+  const _Choice(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(label, maxLines: 1, overflow: TextOverflow.ellipsis);
 }

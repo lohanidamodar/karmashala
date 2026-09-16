@@ -146,14 +146,13 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
     final checkouts = ref.watch(checkoutsInProjectProvider(widget.project.id));
 
     return AlertDialog(
-      scrollable: true,
       title: const DesktopDialogTitle(
         icon: AppIcons.pencilSimple,
         title: 'Edit project',
         subtitle: 'The name, where it lives, and where a session starts.',
       ),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -172,12 +171,15 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
               initialValue: environments.any((e) => e.id == _targetId)
                   ? _targetId
                   : null,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Environment'),
               items: [
                 for (final environment in environments)
                   DropdownMenuItem(
                     value: environment.id,
-                    child: Text(environmentLabel(environment) ?? environment.id),
+                    child: _Choice(
+                      environmentLabel(environment) ?? environment.id,
+                    ),
                   ),
               ],
               onChanged: _busy
@@ -215,16 +217,17 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
                       workspaces.any((w) => w.id == _workspaceId)
                   ? _workspaceId
                   : _noContext,
+              isExpanded: true,
               decoration: const InputDecoration(labelText: 'Context'),
               items: [
                 const DropdownMenuItem(
                   value: _noContext,
-                  child: Text('No context'),
+                  child: _Choice('No context'),
                 ),
                 for (final workspace in workspaces)
                   DropdownMenuItem(
                     value: workspace.id,
-                    child: Text(workspace.name),
+                    child: _Choice(workspace.name),
                   ),
               ],
               onChanged: _busy
@@ -239,6 +242,7 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
                       checkouts.any((c) => c.id == _defaultCheckout)
                   ? _defaultCheckout
                   : _firstCheckout,
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Default checkout',
                 helperText: 'Where the + on this project starts a session.',
@@ -246,12 +250,12 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
               items: [
                 const DropdownMenuItem(
                   value: _firstCheckout,
-                  child: Text('First checkout (automatic)'),
+                  child: _Choice('First checkout (automatic)'),
                 ),
                 for (final checkout in checkouts)
                   DropdownMenuItem(
                     value: checkout.id,
-                    child: Text(checkout.name),
+                    child: _Choice(checkout.name),
                   ),
               ],
               onChanged: _busy
@@ -280,6 +284,18 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
       ],
     );
   }
+}
+
+/// A dropdown choice: one line, ellipsized, because every name here is the
+/// user's own and has no length.
+class _Choice extends StatelessWidget {
+  const _Choice(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) =>
+      Text(label, maxLines: 1, overflow: TextOverflow.ellipsis);
 }
 
 /// What moving a root will do, said before it is done rather than reported

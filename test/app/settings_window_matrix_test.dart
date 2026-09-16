@@ -7,6 +7,11 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/projects/presentation/edit_project_dialog.dart';
+import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
+import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
@@ -106,5 +111,91 @@ void main() {
       because:
           'host names, WSL distro names and paths are user data of any length',
     );
+  });
+
+  group('project dialogs with long names', () {
+    const longDistro = 'Ubuntu-22.04-LTS-with-a-long-distribution-name';
+    const longContext =
+        'Client work for the long-running migration engagement, phase two';
+    const longCheckout =
+        'karmashala-app-checkout-with-an-unreasonably-long-folder-name';
+
+    AppDatabase seeded() {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      ExecutionEnvironmentDao(db)
+        ..upsert(windowsEnv())
+        ..upsert(wslEnv(id: 'wsl:$longDistro', distro: longDistro));
+      WorkspaceDao(
+        db,
+      ).insert(Workspace(id: 'w1', name: longContext, createdAt: testTime));
+      ProjectDao(db).insert(
+        project(
+          environmentId: 'wsl:$longDistro',
+          path: '/home/dlohani/src/demo',
+          workspaceId: 'w1',
+        ),
+      );
+      RepositoryDao(db).insert(
+        repository(
+          name: longCheckout,
+          environmentId: 'wsl:$longDistro',
+          path: '/home/dlohani/src/demo/app',
+        ),
+      );
+      ProjectDao(db).setDefaultRepository('p1', 'r1');
+      return db;
+    }
+
+    ProviderContainer containerFor(AppDatabase db) {
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          ...noProcessOverrides(),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    testWidgets('EditProjectDialog', (tester) async {
+      final db = seeded();
+      final container = containerFor(db);
+      final edited = ProjectDao(db).getById('p1')!;
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(container, EditProjectDialog(project: edited)),
+        matrix: settingsMatrix,
+        because:
+            'the environment, context and default checkout dropdowns show '
+            'names the user chose',
+      );
+    });
+
+    testWidgets('NewProjectDialog', (tester) async {
+      final container = containerFor(seeded());
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(
+          container,
+          const NewProjectDialog(initialEnvironmentId: 'wsl:$longDistro'),
+        ),
+        warmUp: (tester) async {
+          // Pick the long context, then return to the top of the dialog.
+          await tester.ensureVisible(find.text('None'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('None'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text(longContext).last);
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(find.text('New project'));
+        },
+        matrix: settingsMatrix,
+        because:
+            'the environment and context dropdowns show names the user chose',
+      );
+    });
   });
 }
