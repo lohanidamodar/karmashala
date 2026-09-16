@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
+import 'package:karmashala_browser/browser.dart' show kBrowserConsentLocation;
 
 /// The catalogue the rail, search, page layout and deep links all read. A
 /// page nobody can land on, a section with nothing searchable in it, or an old
@@ -211,6 +212,26 @@ void main() {
     expect(SettingsSectionId.editorFiles.matches('file picker'), isTrue);
     expect(SettingsSectionId.projects.matches('worktree'), isTrue);
     expect(SettingsSectionId.accounts.matches('usage'), isTrue);
-    expect(SettingsSectionId.tools.matches('browser consent'), isTrue);
+    expect(SettingsSectionId.permissions.matches('browser consent'), isTrue);
+    expect(SettingsSectionId.tools.matches('browser consent'), isFalse);
+  });
+
+  test('browser consent sits with the permissions, where its refusals send '
+      'people', () {
+    expect(SettingsAnchor.browser.page, SettingsSectionId.permissions);
+    expect(
+      kBrowserConsentLocation,
+      'Settings → ${SettingsAnchor.browser.page.label} → '
+      '${SettingsAnchor.browser.title}',
+    );
+  });
+
+  test('a link naming the page a section used to be on still lands on it', () {
+    final target = SettingsTarget(
+      SettingsSectionId.tools,
+      anchor: SettingsAnchor.browser,
+    );
+    expect(target.page, SettingsSectionId.permissions);
+    expect(target.anchor, SettingsAnchor.browser);
   });
 }

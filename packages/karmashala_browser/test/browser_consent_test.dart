@@ -18,12 +18,12 @@ void main() {
       consent.grant(
         'p1',
         BrowserCapability.evaluate,
-        grantedBy: 'Settings → Tools → Browser',
+        grantedBy: 'Settings → Permissions → Browser',
         at: at,
       );
       final grant = consent.grantFor('p1', BrowserCapability.evaluate)!;
       expect(grant.grantedAt, at);
-      expect(grant.grantedBy, 'Settings → Tools → Browser');
+      expect(grant.grantedBy, 'Settings → Permissions → Browser');
     });
 
     test('a grant covers its own project and no other', () {
@@ -119,7 +119,7 @@ void main() {
       expect(decision.reason, contains('Karmashala'));
       // The refusal has to be actionable by the agent's *user*, so it names
       // both the place to say yes and the tools that work meanwhile.
-      expect(decision.reason, contains('Settings → Tools → Browser'));
+      expect(decision.reason, contains('Settings → Permissions → Browser'));
       expect(decision.reason, contains('browser_find'));
     });
 

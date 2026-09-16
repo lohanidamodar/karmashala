@@ -25,7 +25,7 @@ class ProjectScopedBrowserConsent implements BrowserConsent {
       'Not permitted: running JavaScript in the attached page has not been '
       'granted for the project "${resolved.name}". This is a one-time consent, '
       'not a per-call prompt — ask the developer to turn on "Run JavaScript in '
-      'the page" for "${resolved.name}" under Settings → Tools → Browser, and '
+      'the page" for "${resolved.name}" under $kBrowserConsentLocation, and '
       'they can take it back in the same place. Until then, use browser_find, '
       'browser_capture and browser_screenshot, which need no grant.',
     );

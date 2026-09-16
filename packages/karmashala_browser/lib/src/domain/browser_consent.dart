@@ -8,6 +8,10 @@ library;
 
 import 'dart:convert';
 
+/// Where a person grants a browser capability, as refusals and tool
+/// descriptions name it. Kept in step with the app's settings catalogue.
+const kBrowserConsentLocation = 'Settings → Permissions → Browser';
+
 enum BrowserCapability {
   /// Running caller-supplied JavaScript in the attached page
   /// (`browser_evaluate`). Includes, by construction, reading cookies,
@@ -201,7 +205,7 @@ class DeniedBrowserConsent implements BrowserConsent {
         'Karmashala cannot tell which project this call belongs to, so it '
         'cannot check whether "${capability.token}" was granted for it. Ask '
         'the developer to select a checkout in Karmashala (or run this from a '
-        'session that has one) and to grant it under Settings → Tools → '
-        'Browser.',
+        'session that has one) and to grant it under '
+        '$kBrowserConsentLocation.',
       );
 }

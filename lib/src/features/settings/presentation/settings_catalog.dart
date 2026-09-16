@@ -25,8 +25,8 @@ enum SettingsGroup {
 
 /// A page of the settings screen — one row in the rail. Declaration order is
 /// rail order: common first, advanced last. Labels quoted as "Settings → …" in
-/// refusals and tool descriptions (Agents, Environments, Tools, Diagnostics,
-/// Remote access, Terminal) keep those words.
+/// refusals and tool descriptions (Agents, Environments, Tools, Permissions,
+/// Diagnostics, Remote access, Terminal) keep those words.
 enum SettingsSectionId {
   general(
     'General',
@@ -94,14 +94,15 @@ enum SettingsSectionId {
     'Permissions',
     AppIcons.handTap,
     SettingsGroup.agents,
-    'What each agent may do without asking, in new and existing sessions.',
+    'What each agent may do without asking, and what each project lets it '
+        'do in the browser.',
   ),
   tools(
     'Tools',
     AppIcons.code,
     SettingsGroup.agents,
     'The MCP bridge an agent reaches Karmashala through, what it can call, '
-        'and what it needs your consent for.',
+        'and the skills written into it.',
   ),
   environments(
     'Environments',
@@ -310,19 +311,20 @@ enum SettingsAnchor {
     'accept edits',
     'sessions',
   ]),
+  // Quoted as kBrowserConsentLocation in the browser tools' refusals and
+  // schemas. Was Tools › Browser; the enum name is kept so old links resolve.
+  browser(SettingsSectionId.permissions, 'Browser', [
+    'browser consent',
+    'browser',
+    'consent',
+    'javascript',
+  ]),
   mcpBridge(SettingsSectionId.tools, 'MCP bridge', ['mcp', 'bridge']),
   toolCatalogue(SettingsSectionId.tools, 'What an agent can call', [
     'agent tools',
     'tool list',
   ]),
   skills(SettingsSectionId.tools, 'Skills', ['skills']),
-  // "Settings → Tools → Browser" is quoted in the browser tools' refusals and
-  // schemas, so the page and heading keep those words.
-  browser(SettingsSectionId.tools, 'Browser', [
-    'browser consent',
-    'browser',
-    'consent',
-  ]),
   executionEnvironments(
     SettingsSectionId.environments,
     'Execution environments',
@@ -739,8 +741,10 @@ const settingsEntries = <SettingsEntry>[
 /// Where a deep link or a search hit lands: a page, and optionally a section
 /// to scroll to.
 class SettingsTarget {
-  SettingsTarget(this.page, {this.anchor})
-    : assert(anchor == null || anchor.page == page);
+  /// An anchor wins over [page], so a link written before its section moved
+  /// (Tools › Browser) still lands on it.
+  SettingsTarget(SettingsSectionId page, {this.anchor})
+    : page = anchor?.page ?? page;
 
   SettingsTarget.anchor(SettingsAnchor this.anchor) : page = anchor.page;
 

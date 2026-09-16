@@ -390,8 +390,8 @@ inside an origin that is already authenticated, so it can read `document.cookie`
 and every stored token as easily as it reads a DOM node — and unlike a click,
 nothing about what it did is visible in the browser pane. It is refused until
 the developer grants "Run JavaScript in the page" for this project under
-Settings → Tools → Browser. That grant is per project, recorded with when it
-was made, and revocable in the same place.
+Settings → Permissions → Browser. That grant is per project, recorded with when
+it was made, and revocable in the same place.
 
 A refusal for consent is not a transient failure. Do not retry it. Ask, say
 what you want to run and why, and in the meantime use `browser_find`,

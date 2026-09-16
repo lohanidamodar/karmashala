@@ -6,6 +6,7 @@
 /// first is how an agent loops on `elementNotFound` forever.
 library;
 
+import 'browser_consent.dart' show kBrowserConsentLocation;
 import 'browser_failure.dart';
 
 /// The next move, from a closed vocabulary.
@@ -174,6 +175,6 @@ const BrowserRecovery badArgumentsRecovery = BrowserRecovery(
 const BrowserRecovery consentRequiredRecovery = BrowserRecovery(
   BrowserRecoveryAction.askUser,
   BrowserRetryAdvice.never,
-  'ask the developer to grant it in Settings → Tools → Browser, then say what '
-      'you will run and why',
+  'ask the developer to grant it in $kBrowserConsentLocation, then say '
+      'what you will run and why',
 );

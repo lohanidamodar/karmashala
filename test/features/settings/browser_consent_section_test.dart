@@ -5,7 +5,7 @@ import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
-import 'package:karmashala/src/features/settings/presentation/tools_page.dart';
+import 'package:karmashala/src/features/settings/presentation/permissions_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

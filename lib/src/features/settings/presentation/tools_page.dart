@@ -8,8 +8,6 @@ import '../../agents/application/agent_hook_installation_service.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_skill_installation_service.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../browser/application/browser_consent_providers.dart';
-import 'package:karmashala_browser/browser.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/application/environment_health.dart'
     show HealthLevel;
@@ -20,9 +18,7 @@ import '../../environments/presentation/environment_health_dialog.dart'
 import '../../mcp/control_server_restart.dart';
 import '../../mcp/control_server_status.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
-import '../../projects/application/projects_controller.dart';
 import 'settings_catalog.dart';
-import 'settings_row.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
 
@@ -383,80 +379,6 @@ class _ControlServerRestartRowState
           ),
         ],
       ],
-    );
-  }
-}
-
-/// Settings → Tools → Browser: a per-project consent switch rather than a
-/// prompt on first `browser_evaluate` — the agent may run with nobody there.
-class BrowserConsentSection extends ConsumerWidget {
-  const BrowserConsentSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final projects = ref.watch(projectsControllerProvider);
-    final store = ref.watch(browserConsentStoreProvider);
-    // The store reads storage per call, so there is nothing to watch.
-    ref.watch(browserConsentRevisionProvider);
-
-    return SettingsSection(
-      title: SettingsAnchor.browser.heading,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: Insets.sm),
-            child: Text(
-              'browser_evaluate runs whatever JavaScript an agent composes '
-              'inside a page you are already logged in to, so it can read '
-              'cookies and stored tokens as easily as it reads the DOM — and '
-              'nothing about it shows in the browser pane. It is refused until '
-              'you allow it, per project. Finding, capturing and screenshotting '
-              'a page never need this.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          if (projects.isEmpty)
-            Text(
-              'No projects yet. Add one and it will be listed here.',
-              style: theme.textTheme.bodySmall,
-            )
-          else
-            for (final project in projects)
-              Builder(
-                builder: (context) {
-                  final grant = store.grantFor(
-                    project.id,
-                    BrowserCapability.evaluate,
-                  );
-                  return SettingsSwitchRow(
-                    label: 'Run JavaScript in the page — ${project.name}',
-                    // The date is why a grant is a record, not a boolean.
-                    help: grant == null
-                        ? 'Not allowed. Agents working in this project cannot '
-                              'call browser_evaluate.'
-                        : 'Allowed since '
-                              '${grant.grantedAt.toLocal()} '
-                              '(${grant.grantedBy}).',
-                    value: grant != null,
-                    onChanged: (allow) {
-                      if (allow) {
-                        store.grant(
-                          project.id,
-                          BrowserCapability.evaluate,
-                          grantedBy: 'Settings → Tools → Browser',
-                        );
-                      } else {
-                        store.revoke(project.id, BrowserCapability.evaluate);
-                      }
-                      ref.read(browserConsentRevisionProvider.notifier).bump();
-                    },
-                  );
-                },
-              ),
-        ],
-      ),
     );
   }
 }
