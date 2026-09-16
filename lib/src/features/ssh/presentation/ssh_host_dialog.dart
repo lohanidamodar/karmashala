@@ -196,15 +196,9 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final environments = keyHostingEnvironments(
       ref.watch(environmentsControllerProvider),
     );
-    final keyEnvironment = environments
-        .where((e) => e.id == _keyEnvironmentId)
-        .firstOrNull;
-    final probe = _probe;
-    final rejection = probe == null ? null : hostKeyRejectionIn(probe.error);
 
     return AlertDialog(
       title: DesktopDialogTitle(
@@ -261,75 +255,16 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
                 ),
               ),
               const SizedBox(height: Insets.lg),
-              Text('AUTHENTICATION', style: theme.textTheme.labelSmall),
-              const SizedBox(height: Insets.sm),
-              SegmentedButton<SshAuthMethod>(
-                segments: const [
-                  ButtonSegment(
-                    value: SshAuthMethod.privateKey,
-                    label: Text('Private key'),
-                  ),
-                  ButtonSegment(
-                    value: SshAuthMethod.password,
-                    label: Text('Password'),
-                  ),
-                ],
-                selected: {_auth},
-                onSelectionChanged: (s) => setState(() => _auth = s.first),
+              _AuthFields(
+                method: _auth,
+                onMethodChanged: (method) => setState(() => _auth = method),
+                environments: environments,
+                keyEnvironmentId: _keyEnvironmentId,
+                onKeyEnvironmentChanged: (id) =>
+                    setState(() => _keyEnvironmentId = id),
+                keyPath: _keyPath,
+                onBrowseForKey: _browseForKey,
               ),
-              if (_auth == SshAuthMethod.privateKey) ...[
-                const SizedBox(height: Insets.md),
-                DropdownButtonFormField<String>(
-                  initialValue:
-                      environments.any((e) => e.id == _keyEnvironmentId)
-                      ? _keyEnvironmentId
-                      : null,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'The key file lives in',
-                    helperText:
-                        'A Windows path and a WSL path are different files, '
-                        'even when they read the same.',
-                  ),
-                  items: [
-                    for (final environment in environments)
-                      DropdownMenuItem(
-                        value: environment.id,
-                        child: Text(
-                          '${environment.name} · ${environment.id}',
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
-                  onChanged: (id) {
-                    if (id != null) setState(() => _keyEnvironmentId = id);
-                  },
-                ),
-                const SizedBox(height: Insets.md),
-                PathFieldRow.inDialog(
-                  controller: _keyPath,
-                  label: 'Private key path',
-                  hint: keyEnvironment?.kind == EnvironmentKind.wsl
-                      ? '/home/you/.ssh/id_ed25519'
-                      : r'C:\Users\you\.ssh\id_ed25519',
-                  actions: [
-                    OutlinedButton.icon(
-                      onPressed: _browseForKey,
-                      icon: const Icon(AppIcons.folderOpen),
-                      label: const Text('Browse'),
-                    ),
-                  ],
-                ),
-              ] else ...[
-                const SizedBox(height: Insets.sm),
-                Text(
-                  'The password is asked for each time you connect and is '
-                  'never written to disk.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
               const SizedBox(height: Insets.lg),
               TextField(
                 controller: _directory,
@@ -339,30 +274,13 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
                 ),
               ),
               const SizedBox(height: Insets.lg),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: _busy ? null : _test,
-                  icon: _busy
-                      ? const InlineSpinner()
-                      : const Icon(AppIcons.play),
-                  label: const Text('Test connection'),
-                ),
+              _ConnectionTest(
+                busy: _busy,
+                onTest: _test,
+                error: _error,
+                probe: _probe,
+                onKeyForgotten: () => setState(() => _probe = null),
               ),
-              if (_error != null) ...[
-                const SizedBox(height: Insets.md),
-                DesktopErrorBanner(_error!),
-              ],
-              if (rejection != null) ...[
-                const SizedBox(height: Insets.md),
-                HostKeyChangedAlert(
-                  presentation: rejection.presentation,
-                  onForgotten: () => setState(() => _probe = null),
-                ),
-              ] else if (probe != null) ...[
-                const SizedBox(height: Insets.md),
-                _ProbeResult(probe: probe),
-              ],
             ],
           ),
         ),
@@ -376,6 +294,164 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
           onPressed: _busy ? null : _save,
           child: Text(widget.existing == null ? 'Add host' : 'Save'),
         ),
+      ],
+    );
+  }
+}
+
+/// How the host is logged in to: a key file on one of this desktop's
+/// environments, or a password asked for on each connection.
+class _AuthFields extends StatelessWidget {
+  const _AuthFields({
+    required this.method,
+    required this.onMethodChanged,
+    required this.environments,
+    required this.keyEnvironmentId,
+    required this.onKeyEnvironmentChanged,
+    required this.keyPath,
+    required this.onBrowseForKey,
+  });
+
+  final SshAuthMethod method;
+  final ValueChanged<SshAuthMethod> onMethodChanged;
+
+  /// The environments a key file can live in.
+  final List<ExecutionEnvironment> environments;
+  final String keyEnvironmentId;
+  final ValueChanged<String> onKeyEnvironmentChanged;
+  final TextEditingController keyPath;
+  final VoidCallback onBrowseForKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final keyEnvironment = environments
+        .where((e) => e.id == keyEnvironmentId)
+        .firstOrNull;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('AUTHENTICATION', style: theme.textTheme.labelSmall),
+        const SizedBox(height: Insets.sm),
+        SegmentedButton<SshAuthMethod>(
+          segments: const [
+            ButtonSegment(
+              value: SshAuthMethod.privateKey,
+              label: Text('Private key'),
+            ),
+            ButtonSegment(
+              value: SshAuthMethod.password,
+              label: Text('Password'),
+            ),
+          ],
+          selected: {method},
+          onSelectionChanged: (s) => onMethodChanged(s.first),
+        ),
+        if (method == SshAuthMethod.privateKey) ...[
+          const SizedBox(height: Insets.md),
+          DropdownButtonFormField<String>(
+            initialValue: keyEnvironment?.id,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'The key file lives in',
+              helperText:
+                  'A Windows path and a WSL path are different files, '
+                  'even when they read the same.',
+            ),
+            items: [
+              for (final environment in environments)
+                DropdownMenuItem(
+                  value: environment.id,
+                  child: Text(
+                    '${environment.name} · ${environment.id}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (id) {
+              if (id != null) onKeyEnvironmentChanged(id);
+            },
+          ),
+          const SizedBox(height: Insets.md),
+          PathFieldRow.inDialog(
+            controller: keyPath,
+            label: 'Private key path',
+            hint: keyEnvironment?.kind == EnvironmentKind.wsl
+                ? '/home/you/.ssh/id_ed25519'
+                : r'C:\Users\you\.ssh\id_ed25519',
+            actions: [
+              OutlinedButton.icon(
+                onPressed: onBrowseForKey,
+                icon: const Icon(AppIcons.folderOpen),
+                label: const Text('Browse'),
+              ),
+            ],
+          ),
+        ] else ...[
+          const SizedBox(height: Insets.sm),
+          Text(
+            'The password is asked for each time you connect and is '
+            'never written to disk.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// The Test connection button and what the last test said: an error, a
+/// changed host key with the way to forget it, or the probe's result.
+class _ConnectionTest extends StatelessWidget {
+  const _ConnectionTest({
+    required this.busy,
+    required this.onTest,
+    required this.error,
+    required this.probe,
+    required this.onKeyForgotten,
+  });
+
+  final bool busy;
+  final VoidCallback onTest;
+  final String? error;
+  final SshHostProbe? probe;
+  final VoidCallback onKeyForgotten;
+
+  @override
+  Widget build(BuildContext context) {
+    final error = this.error;
+    final probe = this.probe;
+    final rejection = probe == null ? null : hostKeyRejectionIn(probe.error);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: busy ? null : onTest,
+            icon: busy ? const InlineSpinner() : const Icon(AppIcons.play),
+            label: const Text('Test connection'),
+          ),
+        ),
+        if (error != null) ...[
+          const SizedBox(height: Insets.md),
+          DesktopErrorBanner(error),
+        ],
+        if (rejection != null) ...[
+          const SizedBox(height: Insets.md),
+          HostKeyChangedAlert(
+            presentation: rejection.presentation,
+            onForgotten: onKeyForgotten,
+          ),
+        ] else if (probe != null) ...[
+          const SizedBox(height: Insets.md),
+          _ProbeResult(probe: probe),
+        ],
       ],
     );
   }
