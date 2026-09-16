@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_usage_providers.dart';
+import '../../agents/domain/usage_pace.dart';
+import '../../agents/presentation/usage_history_charts.dart';
+import '../../agents/presentation/usage_window_meter.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environment_providers.dart';
@@ -18,35 +22,107 @@ import 'settings_notice.dart';
 
 /// Usage / limits per agent installation, fetched on demand from the vendor
 /// OAuth endpoints with the token each install already stores.
-class UsageSection extends StatelessWidget {
+class UsageSection extends ConsumerStatefulWidget {
   const UsageSection({required this.installations, super.key});
 
   final List<AgentInstallation> installations;
 
   @override
+  ConsumerState<UsageSection> createState() => _UsageSectionState();
+}
+
+class _UsageSectionState extends ConsumerState<UsageSection> {
+  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final installations = widget.installations;
     return SettingsSection(
       title: SettingsAnchor.usage.heading,
       child: installations.isEmpty
-          ? Text(
-              'No Claude, Codex, or Antigravity installation identified.',
-              style: theme.textTheme.bodySmall,
+          ? const SettingsNotice(
+              message:
+                  'No Claude, Codex, or Antigravity installation identified.',
             )
           : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _AccountComparison(installations: installations),
                 for (final installation in installations)
-                  _UsageCard(installation: installation),
+                  _UsageCard(
+                    installation: installation,
+                    // A card's reading changes what the comparison shows.
+                    onReading: () => setState(() {}),
+                  ),
               ],
             ),
     );
   }
 }
 
+/// The tightest measured window of every account the app has a reading for,
+/// side by side — only once there are two to compare.
+class _AccountComparison extends ConsumerWidget {
+  const _AccountComparison({required this.installations});
+
+  final List<AgentInstallation> installations;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final service = ref.watch(agentUsageServiceProvider);
+    final bars = <BarDatum>[];
+    final seen = <String>{};
+    for (final installation in installations) {
+      if (!seen.add(usageAccountKey(installation))) continue;
+      final usage = service.remembered(installation);
+      if (usage == null) continue;
+      UsageWindow? tightest;
+      for (final window in usage.windows) {
+        final percent = window.percent;
+        if (percent == null) continue;
+        if (tightest == null || percent > tightest.percent!) tightest = window;
+      }
+      if (tightest == null) continue;
+      final percent = tightest.percent!;
+      bars.add(
+        BarDatum(
+          label:
+              '${agentLabel(installation.agentId)} · '
+              '${ref.watch(environmentLabelForIdProvider(installation.environmentId))}'
+              ' · ${tightest.label}',
+          value: percent.clamp(0, 100).toDouble(),
+          valueLabel: '${percent.round()}% used',
+          color: usageSeverityColor(context, usageSeverityFor(percent)),
+        ),
+      );
+    }
+    if (bars.length < 2) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Closest to a limit, per account',
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: Insets.xs),
+          RankedBars(
+            bars: bars,
+            maxValue: 100,
+            color: SemanticColors.of(context).idle,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _UsageCard extends ConsumerStatefulWidget {
-  const _UsageCard({required this.installation});
+  const _UsageCard({required this.installation, required this.onReading});
 
   final AgentInstallation installation;
+  final VoidCallback onReading;
 
   @override
   ConsumerState<_UsageCard> createState() => _UsageCardState();
@@ -88,9 +164,14 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _failure = UsageException('Unexpected error: $e'));
+      if (mounted) {
+        setState(() => _failure = UsageException('Unexpected error: $e'));
+      }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        widget.onReading();
+      }
     }
   }
 
@@ -100,9 +181,13 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
     final label = agentLabel(widget.installation.agentId);
     final usage = _usage;
     final failure = _failure;
+    final now = ref.watch(clockProvider).nowUtc();
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: SemanticColors.of(context).neutral,
+    );
     return SettingsCard(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
@@ -115,7 +200,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
                 ),
               ),
               if (_loading)
-                const InlineSpinner()
+                const InlineSpinner(semanticsLabel: 'Checking usage')
               else
                 TextButton.icon(
                   onPressed: _fetch,
@@ -137,10 +222,13 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: Insets.xs),
-                Text(
-                  usage!.email!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                Flexible(
+                  child: Text(
+                    usage!.email!,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ],
@@ -150,35 +238,48 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
             const SizedBox(height: Insets.xs),
             _FailureLine(failure: failure),
           ],
+          if (usage == null && failure == null) ...[
+            const SizedBox(height: Insets.xs),
+            Text(
+              _loading
+                  ? 'Reading this account’s limits…'
+                  : 'Not read yet. Limits are read with the sign-in this agent '
+                        'already has, when you ask or while a session on it is '
+                        'open.',
+              style: muted,
+            ),
+          ],
           if (usage != null) ...[
             const SizedBox(height: Insets.xs),
             // The age, always, not only on failure: a reading that is not
             // live must not look live.
             Text(
-              'Checked ${describeAge(ref.read(clockProvider).nowUtc().difference(usage.fetchedAt))}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: SemanticColors.of(context).neutral,
-              ),
+              'Checked ${describeAge(now.difference(usage.fetchedAt))}',
+              style: muted,
             ),
             // The sign-in's own lifetime, never dressed as a quota reset.
             if (usage.tokenExpiresAt case final expiry?)
-              Text(
-                _signInLine(
-                  expiry,
-                  ref.read(clockProvider).nowUtc(),
-                ),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: SemanticColors.of(context).neutral,
-                ),
-              ),
+              Text(_signInLine(expiry, now), style: muted),
             const SizedBox(height: Insets.sm),
             if (usage.isEmpty)
               Text(
                 'No usage windows reported.',
                 style: theme.textTheme.bodySmall,
               )
-            else
-              for (final window in usage.windows) _UsageBar(window: window),
+            else ...[
+              for (final window in usage.windows)
+                UsageWindowMeter(
+                  window: window,
+                  readAt: usage.fetchedAt,
+                  now: now,
+                ),
+              const SizedBox(height: Insets.sm),
+              UsageHistoryPanel(
+                accountKey: usageAccountKey(widget.installation),
+                usage: usage,
+                now: now,
+              ),
+            ],
           ],
         ],
       ),
@@ -228,85 +329,6 @@ class _FailureLine extends StatelessWidget {
       detail: failure.message,
     );
   }
-}
-
-class _UsageBar extends StatelessWidget {
-  const _UsageBar({required this.window});
-
-  final UsageWindow window;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final semantic = SemanticColors.of(context);
-    final percent = window.percent;
-    // A window measured for nothing. No bar: an empty one reads as no quota.
-    if (percent == null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(window.label, style: theme.textTheme.bodySmall),
-            ),
-            Text(
-              kUsageNoQuotaReported,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: semantic.neutral,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-    final fraction = (percent / 100).clamp(0.0, 1.0);
-    final color = percent >= 95
-        ? semantic.failure
-        : percent >= 80
-        ? semantic.attention
-        : theme.colorScheme.primary;
-    final reset = window.resetsAt == null
-        ? ''
-        : ' · resets ${_relativeReset(window.resetsAt!)}';
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(window.label, style: theme.textTheme.bodySmall),
-              ),
-              Text(
-                '${percent.toStringAsFixed(0)}%$reset',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(Radii.sm),
-            child: LinearProgressIndicator(
-              value: fraction,
-              minHeight: 6,
-              backgroundColor: theme.colorScheme.surfaceContainerHighest,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// A short relative reset time, e.g. "in 3h" / "in 2d" / "soon".
-String _relativeReset(DateTime when) {
-  final diff = when.difference(DateTime.now());
-  if (diff.isNegative) return 'soon';
-  if (diff.inDays >= 1) return 'in ${diff.inDays}d';
-  if (diff.inHours >= 1) return 'in ${diff.inHours}h';
-  return 'in ${diff.inMinutes}m';
 }
 
 /// **When the sign-in behind a reading lapses**, in this card's words. Read

@@ -86,6 +86,19 @@ void main() {
     expect(find.text('Sign-in expires in 3h'), findsOneWidget);
   });
 
+  testWidgets('a reset is counted down on the app clock, not the wall clock', (
+    tester,
+  ) async {
+    // The test clock is months from the real date. A countdown read against
+    // `DateTime.now()` says the reset already passed ("soon").
+    service.answer = usageSnapshot(percent: 62);
+    await pump(tester);
+    await check(tester);
+
+    expect(find.textContaining('resets in 2h11m'), findsOneWidget);
+    expect(find.textContaining('resets soon'), findsNothing);
+  });
+
   testWidgets('a 429 is a wait, and is not drawn as a fault', (tester) async {
     service.failure = UsageException(
       'Rate limited by the usage service.',
@@ -155,8 +168,10 @@ void main() {
 
     expect(find.text('Sign-in needed'), findsOneWidget);
     expect(
-      find.text('Access token expired. Run the agent once to refresh, '
-          'then retry.'),
+      find.text(
+        'Access token expired. Run the agent once to refresh, '
+        'then retry.',
+      ),
       findsOneWidget,
     );
     expect(find.byIcon(AppIcons.userCircle), findsOneWidget);
