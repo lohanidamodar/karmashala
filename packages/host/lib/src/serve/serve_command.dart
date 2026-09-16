@@ -11,6 +11,7 @@ import '../domain/session_registry.dart';
 import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../transport/socket_transport.dart';
+import 'package:karmashala_local_ipc/socket_location.dart';
 import 'host_paths.dart';
 import 'host_server.dart';
 import 'session_store.dart';
@@ -33,6 +34,30 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
       'made owner-only ($unrestricted)',
     );
     return 6;
+  }
+
+  // The socket goes where it fits: too long to bind in the host's directory — a
+  // long or non-Latin home — and it moves somewhere short and private, proven
+  // private before anything binds in it. Nowhere to go is refused in words,
+  // not left to the OS's "the length of path exceeds the limit".
+  switch (paths.socketLocation) {
+    case PreferredSocketLocation():
+      break;
+    case final FallbackSocketLocation location:
+      final refused =
+          await prepareFallbackSocketDirectory(location) ??
+          await HostPaths(Directory(location.directory)).restrictToCurrentUser();
+      if (refused != null) {
+        errSink.writeln(
+          'karmashala_host: refusing to serve — the socket directory could not '
+          'be made owner-only ($refused)',
+        );
+        return 6;
+      }
+      sink.writeln('karmashala_host socket moved: ${location.reason}');
+    case UnplaceableSocket(:final reason):
+      errSink.writeln('karmashala_host: refusing to serve — $reason');
+      return 6;
   }
 
   final lock = HostLock.tryAcquire(paths.lockPath);

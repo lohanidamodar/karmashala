@@ -10,6 +10,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+export 'socket_location.dart';
+
 /// Handles one request line and returns the response line.
 typedef LocalRpcHandler = FutureOr<String> Function(String request);
 

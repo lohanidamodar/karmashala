@@ -30,6 +30,10 @@ dependencies:
   # same wire the desktop does instead of inventing a second one.
   karmashala_remote:
     path: ../karmashala_remote
+  # Where a unix socket can actually be bound. Pure `dart:io`, and the app uses
+  # the same rule for the host's socket, so the two cannot disagree about it.
+  karmashala_local_ipc:
+    path: ../local_ipc
   karmashala_store:
     path: ../karmashala_store
 

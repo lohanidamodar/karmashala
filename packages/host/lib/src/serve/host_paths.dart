@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:karmashala_local_ipc/socket_location.dart';
+
 /// `$XDG_RUNTIME_DIR` first — per-user, 0700, tmpfs — then `~/.karmashala`,
 /// because plenty of SSH hosts have no runtime dir for a non-login session.
 /// Windows roots at `%USERPROFILE%`: a stray inherited `HOME` must not move it.
@@ -24,7 +26,16 @@ class HostPaths {
 
   /// A unix domain socket on Windows as well as POSIX: `AF_UNIX` has worked
   /// since 10 1803, so the local stage needs no second listener.
-  String get socketPath => '${directory.path}/host.sock';
+  ///
+  /// [preferredSocketPath] unless that is too long for this system to bind — a
+  /// long or non-Latin home directory — in which case a short private per-user
+  /// one. Both the app and `serve` read it here, so they always agree.
+  String get socketPath => socketLocation.path ?? preferredSocketPath;
+
+  /// Where the socket goes, and why, for `serve` to prepare or refuse.
+  SocketLocation get socketLocation => locateSocket(preferredSocketPath);
+
+  String get preferredSocketPath => '${directory.path}/host.sock';
   String get lockPath => '${directory.path}/host.lock';
   String get logPath => '${directory.path}/host.log';
   String get binDirectory => '${directory.path}/bin';

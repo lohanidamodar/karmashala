@@ -562,10 +562,42 @@ class LauncherControlServer implements SessionMcp {
         'the owner-only ACL on $dirPath was not applied',
       );
     }
-    final socketPath = p.join(dir.path, 'rpc.sock');
+    final socketPath = switch (locateSocket(p.join(dir.path, 'rpc.sock'))) {
+      PreferredSocketLocation(:final path) => path,
+      // Too long to bind where it was put — a data directory deep in a repo,
+      // a long or non-Latin username. Without this the bind failed and every
+      // privileged tool was withheld from the agents in this instance.
+      final FallbackSocketLocation location => await _prepareFallback(location),
+      UnplaceableSocket(:final reason) => throw _HardeningFailure(
+        ControlServerFailureStage.socketBind,
+        reason,
+      ),
+    };
     final socket = await LocalRpcServer.bind(socketPath, _handleSocketRpc);
     _logger.info('Owner-only RPC socket at $socketPath.');
     return socket;
+  }
+
+  /// Makes [location]'s directory as private as `ipc/` itself — proven private
+  /// by the IPC package, then given the same owner-only ACL — and returns the
+  /// path to bind. Clients find it in the handshake, so nothing else changes.
+  Future<String> _prepareFallback(FallbackSocketLocation location) async {
+    final refused = await prepareFallbackSocketDirectory(location);
+    if (refused != null) {
+      throw _HardeningFailure(
+        ControlServerFailureStage.socketDirectoryPermissions,
+        refused,
+      );
+    }
+    final fallback = Directory(location.directory);
+    if (!await _permissions.restrictDirectory(fallback, logger: _logger)) {
+      throw _HardeningFailure(
+        ControlServerFailureStage.socketDirectoryPermissions,
+        'the owner-only ACL on ${location.directory} was not applied',
+      );
+    }
+    _logger.info('RPC socket moved: ${location.reason}.');
+    return location.path;
   }
 
   /// Stops the server, removing the published files **first and synchronously**:
