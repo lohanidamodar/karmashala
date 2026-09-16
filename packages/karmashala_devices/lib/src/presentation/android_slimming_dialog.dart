@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/device_ports.dart';
@@ -40,42 +41,40 @@ class AndroidSlimmingDialog extends ConsumerWidget {
 
     return AlertDialog(
       title: const Text('Emulator slimming'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SwitchListTile(
-                key: const Key('android-slimming-enabled'),
-                contentPadding: EdgeInsets.zero,
-                value: enabled,
-                title: const Text('Slim emulators when they start'),
-                subtitle: const Text(
-                  'Measured on an API 34 emulator here: with the package '
-                  'groups below switched on too, 373 processes down to 312 and '
-                  'used RAM 1.40 GB down to 1.07 GB. The flags and animation '
-                  'groups on their own cost nothing and break nothing — they '
-                  'buy a device that settles instantly when you drive it. The '
-                  'packages are where the memory is.',
-                ),
-                onChanged: controller.setAndroidSlimming,
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SwitchListTile(
+              key: const Key('android-slimming-enabled'),
+              contentPadding: EdgeInsets.zero,
+              value: enabled,
+              title: const Text('Slim emulators when they start'),
+              subtitle: const Text(
+                'Measured on an API 34 emulator here: with the package '
+                'groups below switched on too, 373 processes down to 312 and '
+                'used RAM 1.40 GB down to 1.07 GB. The flags and animation '
+                'groups on their own cost nothing and break nothing — they '
+                'buy a device that settles instantly when you drive it. The '
+                'packages are where the memory is.',
               ),
-              const SizedBox(height: Insets.md),
-              _GpuPicker(enabled: true),
-              for (final layer in AndroidSlimmingLayer.values)
-                _LayerSection(
-                  layer: layer,
-                  selected: selected,
-                  // Nothing is applied at all while slimming is off, so
-                  // offering the choice would be a lie about what will happen.
-                  onChanged: enabled ? setSelected : null,
-                ),
-              const Divider(height: Insets.xl),
-              const _RestoreRow(),
-            ],
-          ),
+              onChanged: controller.setAndroidSlimming,
+            ),
+            const SizedBox(height: Insets.md),
+            _GpuPicker(enabled: true),
+            for (final layer in AndroidSlimmingLayer.values)
+              _LayerSection(
+                layer: layer,
+                selected: selected,
+                // Nothing is applied at all while slimming is off, so
+                // offering the choice would be a lie about what will happen.
+                onChanged: enabled ? setSelected : null,
+              ),
+            const Divider(height: Insets.xl),
+            const _RestoreRow(),
+          ],
         ),
       ),
       actions: [

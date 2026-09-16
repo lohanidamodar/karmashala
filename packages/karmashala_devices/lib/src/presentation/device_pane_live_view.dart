@@ -101,26 +101,12 @@ class _LiveView extends ConsumerWidget {
                       // together, so no later edit can un-label a held frame.
                       HeldPicture(
                         deviceLabel: currentDevice.displayName,
-                        child: Video(
-                          controller: controller,
-                          fit: BoxFit.fill,
-                          controls: NoVideoControls,
-                          // media_kit defaults to `low`, a plain bilinear
-                          // sample; this upscale is on every frame.
-                          filterQuality: FilterQuality.medium,
-                        ),
+                        child: _LivePicture(controller),
                       )
                     else
                       DeviceTouchSurface(
                         sink: sink,
-                        child: Video(
-                          controller: controller,
-                          fit: BoxFit.fill,
-                          controls: NoVideoControls,
-                          // media_kit defaults to `low`, a plain bilinear
-                          // sample; this upscale is on every frame.
-                          filterQuality: FilterQuality.medium,
-                        ),
+                        child: _LivePicture(controller),
                       ),
                     // A device with nothing new to show is not a fault: a chip
                     // rather than the scrim, with the way out on it.
@@ -156,4 +142,22 @@ class _LiveView extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// The mirrored frames themselves, drawn the one way both the live and the
+/// held picture draw them.
+class _LivePicture extends StatelessWidget {
+  const _LivePicture(this.controller);
+
+  final VideoController controller;
+
+  @override
+  Widget build(BuildContext context) => Video(
+    controller: controller,
+    fit: BoxFit.fill,
+    controls: NoVideoControls,
+    // media_kit defaults to `low`, a plain bilinear sample; this upscale is on
+    // every frame.
+    filterQuality: FilterQuality.medium,
+  );
 }
