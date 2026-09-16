@@ -28,10 +28,6 @@ final quickOpenRequestProvider = NotifierProvider<QuickOpenRequest, int>(
   QuickOpenRequest.new,
 );
 
-/// A section header's height. The rows themselves are [quickOpenRowHeight],
-/// shared with every other filtered list in the shell.
-const _headerHeight = 24.0;
-
 /// One search box over the whole workspace. *Nothing here fetches*: the file
 /// index is a bounded local walk that begins only once the user types.
 class QuickOpen extends ConsumerStatefulWidget {
@@ -230,13 +226,15 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
   /// The scroll offset of the row for result [index], counting the headers
   /// above it.
   double _offsetOf(int index) {
+    final header = quickOpenHeaderHeightOf(context);
+    final row = quickOpenRowHeightOf(context);
     var offset = 0.0;
     var seen = 0;
     for (final section in _sections) {
-      offset += _headerHeight;
+      offset += header;
       for (var i = 0; i < section.results.length; i++) {
         if (seen == index) return offset;
-        offset += quickOpenRowHeightOf(context);
+        offset += row;
         seen++;
       }
     }
@@ -475,11 +473,13 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      height: _headerHeight,
+      height: quickOpenHeaderHeightOf(context),
       alignment: Alignment.centerLeft,
       padding: const EdgeInsets.only(left: Insets.md, top: Insets.xs),
       child: Text(
         label.toUpperCase(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: theme.textTheme.labelSmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
           letterSpacing: 0.6,

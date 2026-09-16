@@ -1,4 +1,5 @@
 import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/app/shell/quick_open/quick_open_list.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -231,6 +232,32 @@ void main() {
 
     expect(last, isNot(first));
     expect(backAgain, first);
+  });
+
+  testWidgets('Down keeps the cursor in view at twice the text', (
+    tester,
+  ) async {
+    // The rows grow with the text and so must the section headers, or every
+    // header above the cursor puts the reveal arithmetic further out.
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await open(tester);
+    final list = tester.getRect(find.byType(ListView));
+    for (var step = 0; step < 30; step++) {
+      await press(tester, LogicalKeyboardKey.arrowDown);
+      final row = tester.getRect(
+        find.byWidgetPredicate((w) => w is QuickOpenRow && w.selected),
+      );
+      expect(row.top, greaterThanOrEqualTo(list.top), reason: 'step $step');
+      expect(
+        row.bottom,
+        lessThanOrEqualTo(list.bottom + 0.5),
+        reason: 'step $step',
+      );
+    }
   });
 
   testWidgets('typing keeps the caret in the field while the arrows move', (

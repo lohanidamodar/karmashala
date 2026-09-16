@@ -12,6 +12,14 @@ const double quickOpenRowHeight = 42.0;
 double quickOpenRowHeightOf(BuildContext context) =>
     MediaQuery.textScalerOf(context).scale(quickOpenRowHeight);
 
+/// A section header's height at 1.0 text.
+const double quickOpenHeaderHeight = 24.0;
+
+/// [quickOpenHeaderHeight] at the reader's text size, scaled as the rows are so
+/// the offset of a row below any number of headers is still arithmetic.
+double quickOpenHeaderHeightOf(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(quickOpenHeaderHeight);
+
 /// The offset a scroll view must move so the band at [leading] of [extent] is
 /// visible, or `null` when it already is. Clamped, so a reveal cannot overshoot.
 double? revealOffset({
@@ -49,7 +57,10 @@ class QuickOpenSearchField extends StatelessWidget {
       controller: controller,
       autofocus: true,
       decoration: InputDecoration(
-        prefixIcon: const Icon(AppIcons.magnifyingGlass, size: Chrome.iconTitle),
+        prefixIcon: const Icon(
+          AppIcons.magnifyingGlass,
+          size: Chrome.iconTitle,
+        ),
         hintText: hintText,
         border: const OutlineInputBorder(),
         isDense: true,
@@ -93,6 +104,9 @@ class QuickOpenRow extends StatelessWidget {
 
   final VoidCallback onTap;
 
+  /// The most of the row a [detail] may take.
+  static const _detailShare = 0.4;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -122,47 +136,58 @@ class QuickOpenRow extends StatelessWidget {
             left: Insets.md,
             right: trailing == null ? Insets.md : Insets.xs,
           ),
-          child: Row(
-            children: [
-              Icon(icon, size: Chrome.icon, color: foreground),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    HighlightedText(
-                      text: title,
-                      positions: titlePositions,
-                      style: theme.textTheme.bodyMedium!,
-                      accent: scheme.primary,
-                    ),
-                    if (subtitle != null)
-                      Text(
-                        subtitle!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (detail != null) ...[
+          child: LayoutBuilder(
+            builder: (context, constraints) => Row(
+              children: [
+                Icon(icon, size: Chrome.icon, color: foreground),
                 const SizedBox(width: Insets.sm),
-                Text(
-                  detail!,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      HighlightedText(
+                        text: title,
+                        positions: titlePositions,
+                        style: theme.textTheme.bodyMedium!,
+                        accent: scheme.primary,
+                      ),
+                      if (subtitle != null)
+                        Text(
+                          subtitle!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
+                if (detail != null) ...[
+                  const SizedBox(width: Insets.sm),
+                  // A note, not the row's subject: it gives up width before the
+                  // title does, and ends rather than overflowing.
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth * _detailShare,
+                    ),
+                    child: Text(
+                      detail!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+                if (trailing != null) ...[
+                  const SizedBox(width: Insets.xs),
+                  trailing!,
+                ],
               ],
-              if (trailing != null) ...[
-                const SizedBox(width: Insets.xs),
-                trailing!,
-              ],
-            ],
+            ),
           ),
         ),
       ),
