@@ -78,14 +78,9 @@ class _MessageComposerState extends State<MessageComposer> {
   @override
   void initState() {
     super.initState();
+    // No listener on [_input] or [_focusNode] here: [_SendButton] and the
+    // card's border listen for themselves, so neither rebuilds the text field.
     _input = widget.controller ?? TextEditingController();
-    _focusNode.addListener(_onFocusChange);
-  }
-
-  /// Focus decides the card's border and changes once per click, so this may
-  /// rebuild the composer. **No listener on [_input]** — [_SendButton] has one.
-  void _onFocusChange() {
-    if (mounted) setState(() {});
   }
 
   @override
@@ -101,7 +96,6 @@ class _MessageComposerState extends State<MessageComposer> {
 
   @override
   void dispose() {
-    _focusNode.removeListener(_onFocusChange);
     _focusNode.dispose();
     if (widget.controller == null) _input.dispose();
     super.dispose();
@@ -261,6 +255,67 @@ class _MessageComposerState extends State<MessageComposer> {
           style: theme.textTheme.bodyMedium,
           textScaler: textScaler,
         );
+        final body = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_attachments.isNotEmpty)
+              _AttachmentStrip(
+                attachments: _attachments,
+                onRemove: (i) => setState(() => _attachments.removeAt(i)),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: Insets.md,
+                vertical: Insets.sm,
+              ),
+              child: TextField(
+                controller: _input,
+                focusNode: _focusNode,
+                enabled: canType,
+                // **Three lines at rest, not one.** The glyphs got 19 of the
+                // composer's 113 logical pixels. Fewer only when the pane has
+                // no room for three.
+                minLines: math.min(3, maxLines),
+                maxLines: maxLines,
+                textInputAction: TextInputAction.newline,
+                style: theme.textTheme.bodyMedium,
+                decoration: InputDecoration(
+                  isDense: true,
+                  // `filled` is on in the app's theme, and with no border it
+                  // painted a rectangle inside this card.
+                  filled: false,
+                  border: InputBorder.none,
+                  // The wrapper above already spends `Insets.sm` vertically;
+                  // a second helping here paid twice.
+                  contentPadding: EdgeInsets.zero,
+                  hintText: widget.hintText,
+                  hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Insets.sm,
+                0,
+                Insets.sm,
+                Insets.sm,
+              ),
+              child: _ComposerToolbar(
+                chips: widget.chips,
+                onAttach: canType ? _attach : null,
+                send: _SendButton(
+                  input: _input,
+                  attachments: _attachments,
+                  busy: _busy,
+                  onSend: canType ? _send : null,
+                ),
+              ),
+            ),
+          ],
+        );
         return SingleChildScrollView(
           primary: false,
           child: Column(
@@ -274,69 +329,27 @@ class _MessageComposerState extends State<MessageComposer> {
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(Insets.sm),
-                    child: AnimatedContainer(
-                      duration: Motion.fast,
-                      decoration: BoxDecoration(
-                        color: scheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(Radii.lg),
-                        // The accent border is the whole focus signal. The
-                        // 1.0→1.5 width it also grew relaid the composer out
-                        // on every focus.
-                        border: Border.all(
-                          color: _focusNode.hasFocus
-                              ? scheme.primary
-                              : scheme.outlineVariant,
+                    // Only the border listens to focus: a click into the box
+                    // must not rebuild the field it landed in.
+                    child: ListenableBuilder(
+                      listenable: _focusNode,
+                      builder: (context, child) => AnimatedContainer(
+                        duration: Motion.fast,
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(Radii.lg),
+                          // The accent border is the whole focus signal. The
+                          // 1.0→1.5 width it also grew relaid the composer
+                          // out on every focus.
+                          border: Border.all(
+                            color: _focusNode.hasFocus
+                                ? scheme.primary
+                                : scheme.outlineVariant,
+                          ),
                         ),
+                        child: child,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_attachments.isNotEmpty) _attachmentStrip(theme),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: Insets.md,
-                              vertical: Insets.sm,
-                            ),
-                            child: TextField(
-                              controller: _input,
-                              focusNode: _focusNode,
-                              enabled: canType,
-                              // **Three lines at rest, not one.** The glyphs
-                              // got 19 of the composer's 113 logical pixels.
-                              // Fewer only when the pane has no room for three.
-                              minLines: math.min(3, maxLines),
-                              maxLines: maxLines,
-                              textInputAction: TextInputAction.newline,
-                              style: theme.textTheme.bodyMedium,
-                              decoration: InputDecoration(
-                                isDense: true,
-                                // `filled` is on in the app's theme, and with
-                                // no border it painted a rectangle inside
-                                // this card.
-                                filled: false,
-                                border: InputBorder.none,
-                                // The wrapper above already spends
-                                // `Insets.sm` vertically; a second helping
-                                // here paid twice.
-                                contentPadding: EdgeInsets.zero,
-                                hintText: widget.hintText,
-                                hintStyle: theme.textTheme.bodyMedium
-                                    ?.copyWith(color: scheme.onSurfaceVariant),
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(
-                              Insets.sm,
-                              0,
-                              Insets.sm,
-                              Insets.sm,
-                            ),
-                            child: _toolbar(canType),
-                          ),
-                        ],
-                      ),
+                      child: body,
                     ),
                   ),
                 ),
@@ -356,61 +369,86 @@ class _MessageComposerState extends State<MessageComposer> {
         1 + 2 * Insets.sm + 2 + 2 * Insets.sm + Chrome.control + Insets.sm;
     final toolbarWidth =
         math.min(width, Chrome.readableWidth) - 4 * Insets.sm - 2;
-    if (widget.chips.isNotEmpty && toolbarWidth <= _toolbarRowMinWidth) {
+    if (widget.chips.isNotEmpty &&
+        toolbarWidth <= _ComposerToolbar.rowMinWidth) {
       height += Insets.xs + Chrome.control;
     }
     if (_attachments.isNotEmpty) {
-      height += Insets.sm + 56 + Insets.xs + textScaler.scale(11) * 1.5;
+      height +=
+          Insets.sm +
+          _Thumbnail.extent +
+          Insets.xs +
+          textScaler.scale(11) * 1.5;
     }
     return height;
   }
+}
 
-  /// The thumbnails, and the one line explaining where the files went. Drawn
-  /// always, it cost 31 of the composer's 113px for a usually-false sentence.
-  Widget _attachmentStrip(ThemeData theme) => Padding(
-    padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 0),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: Insets.sm,
-          runSpacing: Insets.sm,
-          children: [
-            for (var i = 0; i < _attachments.length; i++)
-              _Thumbnail(
-                bytes: _attachments[i].bytes,
-                onRemove: () => setState(() => _attachments.removeAt(i)),
-              ),
-          ],
-        ),
-        const SizedBox(height: Insets.xs),
-        Text(
-          'Saved to a temp folder and sent to the agent as file paths.',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+/// The thumbnails, and the one line explaining where the files went. Drawn
+/// always, it cost 31 of the composer's 113px for a usually-false sentence.
+class _AttachmentStrip extends StatelessWidget {
+  const _AttachmentStrip({required this.attachments, required this.onRemove});
+
+  final List<_Attachment> attachments;
+  final ValueChanged<int> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: Insets.sm,
+            runSpacing: Insets.sm,
+            children: [
+              for (var i = 0; i < attachments.length; i++)
+                _Thumbnail(
+                  bytes: attachments[i].bytes,
+                  onRemove: () => onRemove(i),
+                ),
+            ],
           ),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: Insets.xs),
+          Text(
+            'Saved to a temp folder and sent to the agent as file paths.',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-  /// Attach, the session's chips, and send. At a pane's narrowest the three
-  /// cannot share a row, so the chips take one to themselves.
-  static const _toolbarRowMinWidth = 380.0;
+/// Attach, the session's chips, and send. At a pane's narrowest the three
+/// cannot share a row, so the chips take one to themselves.
+class _ComposerToolbar extends StatelessWidget {
+  const _ComposerToolbar({
+    required this.chips,
+    required this.onAttach,
+    required this.send,
+  });
 
-  Widget _toolbar(bool canType) => LayoutBuilder(
+  static const rowMinWidth = 380.0;
+
+  final List<Widget> chips;
+
+  /// Null while the composer cannot take input.
+  final VoidCallback? onAttach;
+  final Widget send;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final send = _SendButton(
-        input: _input,
-        attachments: _attachments,
-        busy: _busy,
-        onSend: canType ? _send : null,
-      );
       final attach = IconButton(
         tooltip: 'Attach image (or paste with Ctrl+V)',
-        onPressed: canType ? _attach : null,
+        onPressed: onAttach,
         // `VisualDensity.compact` is already the app-wide default; restating it
         // subtracted its 8px twice and left both buttons 18 logical pixels tall.
         style: IconButton.styleFrom(
@@ -420,18 +458,18 @@ class _MessageComposerState extends State<MessageComposer> {
         icon: const Icon(AppIcons.image),
       );
 
-      if (constraints.maxWidth > _toolbarRowMinWidth) {
+      if (constraints.maxWidth > rowMinWidth) {
         return Row(
           children: [
             attach,
-            if (widget.chips.isNotEmpty)
+            if (chips.isNotEmpty)
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
                   child: Wrap(
                     spacing: Insets.xs,
                     runSpacing: Insets.xs,
-                    children: widget.chips,
+                    children: chips,
                   ),
                 ),
               )
@@ -447,13 +485,13 @@ class _MessageComposerState extends State<MessageComposer> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(children: [attach, const Spacer(), send]),
-          if (widget.chips.isNotEmpty)
+          if (chips.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: Insets.xs),
               child: Wrap(
                 spacing: Insets.xs,
                 runSpacing: Insets.xs,
-                children: widget.chips,
+                children: chips,
               ),
             ),
         ],
@@ -520,19 +558,37 @@ class _Thumbnail extends StatelessWidget {
   final Uint8List bytes;
   final VoidCallback onRemove;
 
+  static const _image = 56.0;
+
+  /// How far the remove button hangs past the image's corner.
+  static const _overhang = 6.0;
+
+  /// The thumbnail's full height, overhang included.
+  static const extent = _image + _overhang;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // The overhang is padding inside the Stack rather than a negative offset
+    // out of it: a Stack only hit-tests its own bounds, so the part of the
+    // button drawn outside them could not be clicked.
     return Stack(
-      clipBehavior: Clip.none,
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(Radii.sm),
-          child: Image.memory(bytes, width: 56, height: 56, fit: BoxFit.cover),
+        Padding(
+          padding: const EdgeInsets.only(top: _overhang, right: _overhang),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            child: Image.memory(
+              bytes,
+              width: _image,
+              height: _image,
+              fit: BoxFit.cover,
+            ),
+          ),
         ),
         Positioned(
-          top: -6,
-          right: -6,
+          top: 0,
+          right: 0,
           child: IconButton(
             tooltip: 'Remove',
             iconSize: Chrome.iconAction,
