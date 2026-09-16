@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_companion/pairing.dart';
+import 'package:karmashala_companion/src/presentation/pairing/add_machine_screen.dart';
+import 'package:karmashala_companion/widgets.dart';
 import 'package:karmashala_remote/companion.dart';
 
 import 'companion_test_support.dart';
@@ -64,6 +66,26 @@ void main() {
           );
         },
       );
+    }
+  });
+
+  group('the pairing forms on a 1280x800 tablet', () {
+    for (final (name, screen) in <(String, Widget)>[
+      ('the code screen', const ShortCodeScreen()),
+      ('the add-machine screen', const AddMachineScreen()),
+    ]) {
+      testWidgets('$name keeps a phone measure, centred', (tester) async {
+        await pumpPhone(
+          tester,
+          size: const Size(1280, 800),
+          gateway: FakeCompanionGateway(),
+          home: screen,
+        );
+
+        final field = tester.getRect(find.byType(TextField).first);
+        expect(field.width, lessThanOrEqualTo(companionReadableWidth));
+        expect(field.left, moreOrLessEquals(1280 - field.right, epsilon: 1));
+      });
     }
   });
 }

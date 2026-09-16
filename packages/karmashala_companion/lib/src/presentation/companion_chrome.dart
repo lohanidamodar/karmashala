@@ -15,6 +15,11 @@ const double companionFabGutter = Touch.target + Insets.xl;
 /// not run a line of prose across 1280px (CLAUDE.md §6).
 const double companionReadableWidth = UiDensity.compactWidth;
 
+/// The width of a single focused thing on an otherwise empty screen — a notice,
+/// the pairing steps: narrower than [companionReadableWidth], since it is read
+/// at a glance rather than scanned.
+const double companionFocusedWidth = companionReadableWidth * 0.7;
+
 /// The room left either side of that column, or zero on a phone. Measured from
 /// the viewport, not the density: a tablet is wide and still held in a hand, so
 /// it gets the gutter and keeps the 48dp rows.

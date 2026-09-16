@@ -9,6 +9,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'package:karmashala_remote/companion.dart';
+import 'companion_chrome.dart';
 
 /// Draws [value] through its four states. Not `when`: a provider being retried
 /// is `AsyncLoading` *carrying* its error, so `when` skeletons for ever.
@@ -187,7 +188,7 @@ class CompanionNotice extends StatelessWidget {
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(Insets.xxl),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 360),
+          constraints: const BoxConstraints(maxWidth: companionFocusedWidth),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

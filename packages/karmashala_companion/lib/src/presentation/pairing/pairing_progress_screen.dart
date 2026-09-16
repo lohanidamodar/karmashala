@@ -112,7 +112,7 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(Insets.xl),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
+              constraints: const BoxConstraints(maxWidth: companionFocusedWidth),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,

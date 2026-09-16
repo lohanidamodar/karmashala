@@ -81,7 +81,10 @@ class _AddMachineScreenState extends ConsumerState<AddMachineScreen> {
       appBar: companionAppBar(context, title: const Text('Add a machine')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(Insets.lg),
+          padding: companionListInsets(
+            context,
+            const EdgeInsets.all(Insets.xl),
+          ),
           children: [
             Text(
               'A server running the Karmashala session host answers on its own '

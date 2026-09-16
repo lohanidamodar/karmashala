@@ -71,7 +71,10 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(Insets.xl),
+          padding: companionListInsets(
+            context,
+            const EdgeInsets.all(Insets.xl),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
