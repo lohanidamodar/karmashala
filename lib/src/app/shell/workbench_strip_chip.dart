@@ -90,37 +90,8 @@ class _TabChip extends ConsumerWidget {
     );
   }
 
-  Future<String?> _promptPresetName(BuildContext context) {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const DesktopDialogTitle(
-          icon: AppIcons.terminalWindow,
-          title: 'Save this layout as a preset',
-          subtitle:
-              'The shape only — which panes, split how, running what and '
-              'where. Opening it later starts fresh terminals.',
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Name'),
-          onSubmitted: (value) => Navigator.of(context).pop(value.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    ).then((value) => (value == null || value.isEmpty) ? null : value);
-  }
+  Future<String?> _promptPresetName(BuildContext context) =>
+      SavePresetNameDialog.show(context);
 
   /// Closes this tab, asking first when it holds edits that are not on disk.
   Future<void> _close(
@@ -227,4 +198,55 @@ class _TabChip extends ConsumerWidget {
         for (final paneId in tab.layout.panes)
           ref.watch(paneAgentActivityProvider(paneId)),
       ]);
+}
+
+/// Asks for a preset's name. Owns its field's controller, so the controller
+/// goes when the dialog does.
+class SavePresetNameDialog extends StatefulWidget {
+  const SavePresetNameDialog({super.key});
+
+  /// The trimmed name, or null when cancelled or left blank.
+  static Future<String?> show(BuildContext context) => showDialog<String>(
+    context: context,
+    builder: (_) => const SavePresetNameDialog(),
+  ).then((value) => (value == null || value.isEmpty) ? null : value);
+
+  @override
+  State<SavePresetNameDialog> createState() => _SavePresetNameDialogState();
+}
+
+class _SavePresetNameDialogState extends State<SavePresetNameDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() => Navigator.of(context).pop(_controller.text.trim());
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const DesktopDialogTitle(
+      icon: AppIcons.terminalWindow,
+      title: 'Save this layout as a preset',
+      subtitle:
+          'The shape only — which panes, split how, running what and '
+          'where. Opening it later starts fresh terminals.',
+    ),
+    content: TextField(
+      controller: _controller,
+      autofocus: true,
+      decoration: const InputDecoration(labelText: 'Name'),
+      onSubmitted: (_) => _save(),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: _save, child: const Text('Save')),
+    ],
+  );
 }
