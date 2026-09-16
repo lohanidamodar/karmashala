@@ -262,6 +262,8 @@ void main() {
           paneAtMinimumLarge,
           stackedSplit,
           narrowPane,
+          WindowCell('240x560 side panel', Size(240, 560)),
+          WindowCell('240x560 @1.3x', Size(240, 560), textScale: 1.3),
         ],
       );
     },

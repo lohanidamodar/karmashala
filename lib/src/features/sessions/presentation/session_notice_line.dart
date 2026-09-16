@@ -76,60 +76,83 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
               Insets.xs,
               Insets.xs,
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  warning ? AppIcons.warningCircle : AppIcons.info,
-                  size: Chrome.iconSmall,
-                  color: accent,
-                ),
-                const SizedBox(width: Insets.sm),
-                // Wraps rather than ellipsises: these name a cost the user
-                // cannot see coming, and a cut sentence still looks complete.
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 1),
-                    child: Text(
-                      notice.message,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface,
-                      ),
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final action = notice.action;
+                final actionButton = action == null
+                    ? null
+                    : TextButton(
+                        onPressed: () {
+                          // Cleared here rather than by the action, so the
+                          // offer is gone the moment it is taken.
+                          ref
+                              .read(sessionNoticesProvider.notifier)
+                              .dismiss(sessionId);
+                          action.onPressed();
+                        },
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          textStyle: theme.textTheme.labelMedium,
+                        ),
+                        child: Text(action.label),
+                      );
+                // In a side panel the action goes under the sentence: beside
+                // it, "Restart to apply" alone is wider than the text column.
+                final stacked =
+                    actionButton != null &&
+                    box.maxWidth <
+                        WidthClass.scaleBreakpoint(
+                          kNoticeInlineActionMinWidth,
+                          MediaQuery.textScalerOf(context),
+                        );
+                final message = Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    notice.message,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface,
                     ),
                   ),
-                ),
-                if (notice.action case final action?) ...[
-                  const SizedBox(width: Insets.sm),
-                  TextButton(
-                    onPressed: () {
-                      // Cleared here rather than by the action, so the offer is
-                      // gone the moment it is taken and every action gets it.
-                      ref
-                          .read(sessionNoticesProvider.notifier)
-                          .dismiss(sessionId);
-                      action.onPressed();
-                    },
-                    style: TextButton.styleFrom(
+                );
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      warning ? AppIcons.warningCircle : AppIcons.info,
+                      size: Chrome.iconSmall,
+                      color: accent,
+                    ),
+                    const SizedBox(width: Insets.sm),
+                    // Wraps rather than ellipsises: these name a cost the user
+                    // cannot see coming, and a cut sentence still looks whole.
+                    Expanded(
+                      child: stacked
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [message, actionButton],
+                            )
+                          : message,
+                    ),
+                    if (actionButton != null && !stacked) ...[
+                      const SizedBox(width: Insets.sm),
+                      actionButton,
+                    ],
+                    IconButton(
+                      tooltip: 'Dismiss',
+                      icon: const Icon(AppIcons.x, size: Chrome.iconAction),
                       visualDensity: VisualDensity.compact,
-                      textStyle: theme.textTheme.labelMedium,
+                      constraints: const BoxConstraints(
+                        minWidth: 24,
+                        minHeight: 24,
+                      ),
+                      padding: EdgeInsets.zero,
+                      onPressed: () => ref
+                          .read(sessionNoticesProvider.notifier)
+                          .dismiss(sessionId),
                     ),
-                    child: Text(action.label),
-                  ),
-                ],
-                IconButton(
-                  tooltip: 'Dismiss',
-                  icon: const Icon(AppIcons.x, size: Chrome.iconAction),
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(
-                    minWidth: 24,
-                    minHeight: 24,
-                  ),
-                  padding: EdgeInsets.zero,
-                  onPressed: () => ref
-                      .read(sessionNoticesProvider.notifier)
-                      .dismiss(sessionId),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -137,3 +160,7 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
     );
   }
 }
+
+/// The narrowest bar, at 1x text, that holds a notice's action beside its
+/// sentence rather than under it.
+const double kNoticeInlineActionMinWidth = 360;
