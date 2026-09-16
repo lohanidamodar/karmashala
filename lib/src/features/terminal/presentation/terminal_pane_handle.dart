@@ -42,73 +42,76 @@ class _PaneFloatingActionsState extends ConsumerState<_PaneFloatingActions> {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedOpacity(
         opacity: opacity,
-        duration: const Duration(milliseconds: 150),
-        // Invisible is also unclickable; the box stays so the hover target and
-        // the geometry are the same in every state.
-        child: IgnorePointer(
-          ignoring: opacity == 0.0,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.85),
-              borderRadius: BorderRadius.circular(Radii.sm),
-              border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.5),
-                width: 1,
+        duration: Motion.fast,
+        // Invisible is also unclickable and no Tab stop; the box stays so the
+        // hover target and the geometry are the same in every state.
+        child: ExcludeFocus(
+          excluding: opacity == 0.0,
+          child: IgnorePointer(
+            ignoring: opacity == 0.0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(Radii.sm),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.5),
+                  width: 1,
+                ),
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Draggable<TerminalDrag>(
-                  key: paneDragHandleKey(widget.paneId),
-                  data: PaneDrag(widget.paneId),
-                  dragAnchorStrategy: pointerDragAnchorStrategy,
-                  feedback: PaneDragFeedback(title: title),
-                  child: MouseRegion(
-                    cursor: SystemMouseCursors.grab,
-                    child: Tooltip(
-                      message: 'Drag the pane elsewhere',
-                      child: SizedBox(
-                        width: 16,
-                        height: 22,
-                        child: Icon(
-                          AppIcons.dotsSixVertical,
-                          size: 14,
-                          color: scheme.onSurfaceVariant,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Draggable<TerminalDrag>(
+                    key: paneDragHandleKey(widget.paneId),
+                    data: PaneDrag(widget.paneId),
+                    dragAnchorStrategy: pointerDragAnchorStrategy,
+                    feedback: PaneDragFeedback(title: title),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.grab,
+                      child: Tooltip(
+                        message: 'Drag the pane elsewhere',
+                        child: SizedBox(
+                          width: 16,
+                          height: 22,
+                          child: Icon(
+                            AppIcons.dotsSixVertical,
+                            size: Chrome.iconAction,
+                            color: scheme.onSurfaceVariant,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Move pane to a new tab',
-                  iconSize: Chrome.iconSmall,
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-                  padding: EdgeInsets.zero,
-                  icon: Icon(
-                    AppIcons.terminalWindow,
-                    size: 14,
-                    color: scheme.onSurfaceVariant,
+                  IconButton(
+                    tooltip: 'Move pane to a new tab',
+                    iconSize: Chrome.iconSmall,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                    padding: EdgeInsets.zero,
+                    icon: Icon(
+                      AppIcons.terminalWindow,
+                      size: Chrome.iconAction,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    onPressed: widget.onMoveToNewTab,
                   ),
-                  onPressed: widget.onMoveToNewTab,
-                ),
-                const SizedBox(width: 2),
-                IconButton(
-                  tooltip: 'Close pane',
-                  iconSize: Chrome.iconSmall,
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-                  padding: EdgeInsets.zero,
-                  icon: Icon(
-                    AppIcons.x,
-                    size: 14,
-                    color: scheme.onSurfaceVariant,
+                  const SizedBox(width: 2),
+                  IconButton(
+                    tooltip: 'Close pane',
+                    iconSize: Chrome.iconSmall,
+                    visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+                    padding: EdgeInsets.zero,
+                    icon: Icon(
+                      AppIcons.x,
+                      size: Chrome.iconAction,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    onPressed: widget.onClose,
                   ),
-                  onPressed: widget.onClose,
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
