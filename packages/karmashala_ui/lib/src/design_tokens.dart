@@ -532,11 +532,52 @@ class UiDensityScope extends InheritedWidget {
       oldWidget.density != density;
 }
 
-/// Motion durations.
+/// Motion durations and curves. Animate through [Motion.of], which collapses
+/// every duration to zero when the platform asks for reduced motion.
 class Motion {
   const Motion._();
+
+  /// Hover colour changes: none, so a pointer sweep never lags.
+  static const instant = Duration.zero;
+
+  /// Chevrons, focus borders.
   static const fast = Duration(milliseconds: 120);
-  static const base = Duration(milliseconds: 220);
+
+  /// Expand and collapse, the composer's morph, a scroll to a row.
+  static const base = Duration(milliseconds: 180);
+
+  /// Sheets, dialogs, the side panel: in slower than out.
+  static const emphasisIn = Duration(milliseconds: 300);
+  static const emphasisOut = Duration(milliseconds: 200);
+
+  static const standard = Cubic(0.4, 0, 0.2, 1);
+  static const enter = Cubic(0.16, 1, 0.3, 1);
+  static const exit = Cubic(0.7, 0, 0.84, 0);
+
+  /// One turn of the working spinner, drawn in [statusSteps] discrete frames.
+  static const statusPeriod = Duration(milliseconds: 1000);
+  static const statusSteps = 12;
+
+  static MotionDurations of(BuildContext context) =>
+      MotionDurations(animate: !MediaQuery.disableAnimationsOf(context));
+}
+
+/// [Motion]'s durations as they apply under one context.
+@immutable
+class MotionDurations {
+  const MotionDurations({required this.animate});
+
+  /// False when the platform asks for reduced motion.
+  final bool animate;
+
+  Duration _or(Duration d) => animate ? d : Duration.zero;
+
+  Duration get instant => Motion.instant;
+  Duration get fast => _or(Motion.fast);
+  Duration get base => _or(Motion.base);
+  Duration get emphasisIn => _or(Motion.emphasisIn);
+  Duration get emphasisOut => _or(Motion.emphasisOut);
+  Duration get statusPeriod => _or(Motion.statusPeriod);
 }
 
 /// Fixed heights for the desktop chrome, in logical pixels, sized for a mouse.

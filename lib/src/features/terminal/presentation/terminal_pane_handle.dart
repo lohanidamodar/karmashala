@@ -42,7 +42,7 @@ class _PaneFloatingActionsState extends ConsumerState<_PaneFloatingActions> {
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedOpacity(
         opacity: opacity,
-        duration: Motion.fast,
+        duration: Motion.of(context).fast,
         // Invisible is also unclickable and no Tab stop; the box stays so the
         // hover target and the geometry are the same in every state.
         child: ExcludeFocus(

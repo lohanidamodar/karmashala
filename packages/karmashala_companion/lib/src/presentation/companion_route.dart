@@ -8,9 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 Route<T> companionRoute<T>(BuildContext context, WidgetBuilder builder) {
-  final duration = MediaQuery.disableAnimationsOf(context)
-      ? Duration.zero
-      : Motion.base;
+  final duration = Motion.of(context).base;
   return PageRouteBuilder<T>(
     transitionDuration: duration,
     reverseTransitionDuration: duration,
@@ -19,8 +17,8 @@ Route<T> companionRoute<T>(BuildContext context, WidgetBuilder builder) {
       if (duration == Duration.zero) return child;
       final curved = CurvedAnimation(
         parent: animation,
-        curve: Curves.easeOut,
-        reverseCurve: Curves.easeIn,
+        curve: Motion.enter,
+        reverseCurve: Motion.exit,
       );
       return FadeTransition(
         opacity: curved,

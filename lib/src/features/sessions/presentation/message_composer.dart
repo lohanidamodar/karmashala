@@ -335,7 +335,7 @@ class _MessageComposerState extends State<MessageComposer> {
                     child: ListenableBuilder(
                       listenable: _focusNode,
                       builder: (context, child) => AnimatedContainer(
-                        duration: Motion.fast,
+                        duration: Motion.of(context).fast,
                         decoration: BoxDecoration(
                           color: scheme.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(Radii.lg),

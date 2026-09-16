@@ -32,6 +32,57 @@ void main() {
     expect(light.copyWith(unread: dark.unread).unread, dark.unread);
   });
 
+  test('motion durations and curves are the design-direction values', () {
+    expect(Motion.instant, Duration.zero);
+    expect(Motion.fast, const Duration(milliseconds: 120));
+    expect(Motion.base, const Duration(milliseconds: 180));
+    expect(Motion.emphasisIn, const Duration(milliseconds: 300));
+    expect(Motion.emphasisOut, const Duration(milliseconds: 200));
+    expect(Motion.statusPeriod, const Duration(milliseconds: 1000));
+    expect(Motion.statusSteps, 12);
+    expect(Motion.standard, const Cubic(0.4, 0, 0.2, 1));
+    expect(Motion.enter, const Cubic(0.16, 1, 0.3, 1));
+    expect(Motion.exit, const Cubic(0.7, 0, 0.84, 0));
+  });
+
+  for (final reduced in [false, true]) {
+    testWidgets('Motion.of honours reduced motion (reduced: $reduced)', (
+      tester,
+    ) async {
+      late MotionDurations motion;
+      await tester.pumpWidget(
+        MediaQuery(
+          data: MediaQueryData(disableAnimations: reduced),
+          child: Builder(
+            builder: (context) {
+              motion = Motion.of(context);
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+      expect(motion.animate, !reduced);
+      final expected = <Duration>[
+        Motion.fast,
+        Motion.base,
+        Motion.emphasisIn,
+        Motion.emphasisOut,
+        Motion.statusPeriod,
+      ].map((d) => reduced ? Duration.zero : d);
+      expect(
+        [
+          motion.fast,
+          motion.base,
+          motion.emphasisIn,
+          motion.emphasisOut,
+          motion.statusPeriod,
+        ],
+        expected.toList(),
+      );
+      expect(motion.instant, Duration.zero);
+    });
+  }
+
   for (final brightness in Brightness.values) {
     final theme = brightness == Brightness.dark
         ? AppTheme.dark()

@@ -119,7 +119,7 @@ class _FileTreeListState extends ConsumerState<FileTreeList> {
         Scrollable.ensureVisible(
           row,
           alignment: 0.5,
-          duration: const Duration(milliseconds: 150),
+          duration: Motion.of(context).fast,
         );
       }
 

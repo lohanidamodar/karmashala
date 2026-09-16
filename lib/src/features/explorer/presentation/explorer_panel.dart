@@ -148,7 +148,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
       Scrollable.ensureVisible(
         target,
         alignment: 0.3,
-        duration: const Duration(milliseconds: 120),
+        duration: Motion.of(context).fast,
       );
     }
 

@@ -80,8 +80,14 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
     if (atLatest != _atLatest) setState(() => _atLatest = atLatest);
   }
 
-  Future<void> _toLatest() =>
-      _scroll.animateTo(0, duration: Motion.base, curve: Curves.easeOut);
+  Future<void> _toLatest() async {
+    final duration = Motion.of(context).base;
+    if (duration == Duration.zero) {
+      _scroll.jumpTo(0);
+      return;
+    }
+    await _scroll.animateTo(0, duration: duration, curve: Motion.standard);
+  }
 
   /// The gateway's account of an empty transcript: not a turn, and a session
   /// with a reason gets an explanation rather than a welcome.

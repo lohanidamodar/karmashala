@@ -82,7 +82,7 @@ void main() {
       isEmpty,
       reason: 'animate with Motion.of(context), which honours reduced motion',
     );
-  }, skip: 'Motion.of lands with T3');
+  });
 
   test('the guards can fail', () {
     expect(
@@ -95,5 +95,6 @@ void main() {
     // The token layer is where both are allowed, and it still has them.
     final tokens = sources()[tokenLayer.single]!;
     expect(accentAlpha.hasMatch(tokens), isTrue);
+    expect(millis.hasMatch(tokens), isTrue);
   });
 }

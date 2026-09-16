@@ -223,14 +223,16 @@ class _TabRailState extends State<_TabRail> {
     final position = _onePosition;
     if (position == null) return;
     final step = position.viewportDimension * 0.8;
-    _scroll.animateTo(
-      (position.pixels + (forward ? step : -step)).clamp(
-        0.0,
-        position.maxScrollExtent,
-      ),
-      duration: Motion.base,
-      curve: Curves.easeOutCubic,
+    final target = (position.pixels + (forward ? step : -step)).clamp(
+      0.0,
+      position.maxScrollExtent,
     );
+    final duration = Motion.of(context).base;
+    if (duration == Duration.zero) {
+      _scroll.jumpTo(target);
+    } else {
+      _scroll.animateTo(target, duration: duration, curve: Motion.standard);
+    }
   }
 
   @override
