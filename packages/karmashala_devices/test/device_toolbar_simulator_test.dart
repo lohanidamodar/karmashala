@@ -310,6 +310,26 @@ void main() {
   });
 
   group('the device control row', () {
+    testWidgets('gives the simulator\'s Home and Record their own glyphs', (
+      tester,
+    ) async {
+      // Both were a plain circle, icon-only, side by side.
+      await pump(tester, live: _running(), devices: [_device()]);
+
+      IconData glyphOf(String key) => tester
+          .widget<Icon>(
+            find.descendant(
+              of: find.byKey(Key(key)),
+              matching: find.byType(Icon),
+            ),
+          )
+          .icon!;
+      expect(
+        glyphOf('simulator-home'),
+        isNot(glyphOf('simulator-record')),
+      );
+    });
+
     testWidgets('does not sit under the simulator picture', (tester) async {
       // With a phone attached the Android row appeared beneath an iPhone,
       // offering Back, Recents and a screenshot of a device nobody was looking

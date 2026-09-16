@@ -84,6 +84,7 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
     // What container the recording can be, said on the button before it starts.
     final mp4Support = ref.watch(deviceVideoSupportProvider);
     const idle = 'Start the live view to use the device controls';
+    final recordColor = Theme.of(context).colorScheme.error;
     String tooltip(String label) =>
         target == null ? idle : '$label — ${target.displayName}';
 
@@ -147,9 +148,12 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
               ? 'Record the screen to an MP4 — the file every player opens'
               : 'Record the screen to an MPEG-TS (.ts) file. '
                     '${mp4Support.detail}',
+          // The record glyph in the danger colour, never Home's circle beside
+          // it: icon-only, the two could not be told apart.
           icon: recording is DeviceRecordingActive
               ? AppIcons.stopCircle
-              : AppIcons.circle,
+              : AppIcons.target,
+          color: recording is DeviceRecordingActive ? null : recordColor,
           onPressed: recording is DeviceRecordingActive
               ? ref.read(deviceRecordingProvider.notifier).stop
               : widget.recordable
@@ -172,7 +176,8 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
                 ? 'Record to MPEG-TS instead — the only one that survives the '
                       'device rotating mid-recording'
                 : 'Start the live view to record to MPEG-TS',
-            icon: AppIcons.circle,
+            // A file glyph: the same recording, written as a different file.
+            icon: AppIcons.fileCode,
             onPressed: widget.recordable
                 ? () => ref
                       .read(deviceRecordingProvider.notifier)

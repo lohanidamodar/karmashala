@@ -283,9 +283,14 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
               : canRecord
               ? 'Record the screen to a QuickTime (.mov) file'
               : 'Recording a simulator needs simctl, which is macOS only',
+          // The record glyph in the danger colour: Home beside it is a circle,
+          // and icon-only the two could not be told apart.
           icon: recording is DeviceRecordingActive
               ? AppIcons.stopCircle
-              : AppIcons.circle,
+              : AppIcons.target,
+          color: recording is DeviceRecordingActive
+              ? null
+              : Theme.of(context).colorScheme.error,
           onPressed: recording is DeviceRecordingActive
               ? ref.read(deviceRecordingProvider.notifier).stop
               : canRecord

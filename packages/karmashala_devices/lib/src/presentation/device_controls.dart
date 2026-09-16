@@ -12,6 +12,7 @@ class DeviceControl {
     required this.icon,
     required this.onPressed,
     this.buttonKey,
+    this.color,
   });
 
   /// What this control is called when it fails: "Screenshot failed: …". Not
@@ -26,6 +27,11 @@ class DeviceControl {
   final Future<void> Function()? onPressed;
 
   final Key? buttonKey;
+
+  /// The glyph's colour while the control can be pressed — only where the
+  /// colour itself means something, like Record's red. Disabled, the theme's
+  /// disabled ink wins, so an inert Record does not look armed.
+  final Color? color;
 }
 
 /// The row of controls under a live picture, on either platform. Shared for
@@ -74,7 +80,10 @@ class _DeviceControlBarState extends State<DeviceControlBar> {
             IconButton(
               key: control.buttonKey,
               tooltip: control.tooltip,
-              icon: Icon(control.icon),
+              icon: Icon(
+                control.icon,
+                color: control.onPressed == null ? null : control.color,
+              ),
               onPressed: _busy || control.onPressed == null
                   ? null
                   : () => _run(control),

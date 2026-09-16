@@ -7,6 +7,7 @@ import 'package:karmashala_devices/pane.dart';
 import 'package:karmashala_devices/ports.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/widgets.dart';
+import 'package:karmashala_media/media.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import 'support/fake_command_runner.dart';
@@ -82,6 +83,10 @@ Future<ProviderContainer> _pump(
       hostCanRunSimulatorsProvider.overrideWithValue(false),
       iosSimulatorsProvider.overrideWith((ref) async => const []),
       simulatorBackendProvider.overrideWithValue(null),
+      // Available, so the second record button ("Record .ts") is drawn.
+      deviceVideoSupportProvider.overrideWithValue(
+        const VideoSupport.available('pinned for these cases'),
+      ),
     ],
   );
   addTearDown(container.dispose);
@@ -205,5 +210,31 @@ void main() {
         });
       }
     }
+  });
+
+  testWidgets('Home and the two record buttons each have their own glyph', (
+    tester,
+  ) async {
+    // Home, Record and Record .ts were all a plain circle, icon-only, with
+    // Home beside Record: nothing told "go home" from "start recording".
+    await _pump(
+      tester,
+      size: const Size(1000, 900),
+      textScale: 1.0,
+      devices: const [_emulatorDevice],
+    );
+
+    IconData glyphOf(String key) => tester
+        .widget<Icon>(
+          find.descendant(
+            of: find.byKey(Key(key)),
+            matching: find.byType(Icon),
+          ),
+        )
+        .icon!;
+    final home = glyphOf('android-home');
+    final record = glyphOf('android-record');
+    final recordTs = glyphOf('android-record-ts');
+    expect({home, record, recordTs}, hasLength(3));
   });
 }
