@@ -17,6 +17,7 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_recap_dao.dart';
+import 'package:karmashala/src/features/sessions/presentation/agent_status_badge.dart';
 import 'package:karmashala/src/features/sessions/presentation/chat_transcript.dart';
 import 'package:karmashala/src/features/sessions/presentation/session_transcript_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -28,6 +29,7 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_ui/icons.dart';
 
 import '../../app/minimum_window_matrix_test.dart' show noProcessOverrides;
 import '../../support/fakes.dart';
@@ -220,6 +222,33 @@ void main() {
       tester,
       matrix: const [...windowMatrix, paneAtMinimum, stackedSplit],
       busy: false,
+    );
+  });
+
+  testWidgets('the session header grows with the text scale', (tester) async {
+    await run(
+      tester,
+      matrix: const [
+        WindowCell('1440x900 @2x text', Size(1440, 900), textScale: 2),
+      ],
+      busy: false,
+      check: (tester) async {
+        // A cross-axis clip reports no overflow, so the label's own height is
+        // compared with the row that holds it.
+        final label = tester.renderObject<RenderBox>(
+          find
+              .descendant(
+                of: find.byType(AgentStatusBadge),
+                matching: find.byType(RichText),
+              )
+              .last,
+        );
+        final header = tester.getRect(find.byType(Divider).first).top;
+        expect(
+          label.getMaxIntrinsicHeight(double.infinity),
+          lessThanOrEqualTo(header),
+        );
+      },
     );
   });
 

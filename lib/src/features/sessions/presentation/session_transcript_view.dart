@@ -284,7 +284,8 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         // No title and no back button: the workbench tab above already names
         // and closes the session, and the strip's toggle switches the view.
         SizedBox(
-          height: Chrome.tabStrip,
+          // Grows with the text: the badge's label follows the text scale.
+          height: Chrome.tabStripOf(context),
           child: Row(
             children: [
               const SizedBox(width: Insets.md),
