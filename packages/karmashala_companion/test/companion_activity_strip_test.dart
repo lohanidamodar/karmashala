@@ -84,10 +84,11 @@ void main() {
     fake.setActivity('s1', running());
     await tester.pump();
 
-    final icon = tester.widget<Icon>(
+    // The working glyph is the shared spinner, at the touch step.
+    final icon = tester.widget<WorkingSpinner>(
       find.descendant(
         of: find.byType(CompanionActivityStrip),
-        matching: find.byType(Icon),
+        matching: find.byType(WorkingSpinner),
       ),
     );
     expect(icon.size, Touch.iconSmall);

@@ -105,10 +105,9 @@ class TabAgentStatusDot extends StatelessWidget {
       child: Tooltip(
         message: message,
         // The same 11 px [TabLivenessDot] uses, for the same row.
-        child: Icon(
-          appearance.icon,
+        child: StatusGlyph(
+          status: status,
           size: UiDensity.of(context).iconSmall,
-          color: appearance.colour(SemanticColors.of(context)),
           semanticLabel: message,
         ),
       ),

@@ -140,11 +140,10 @@ class _CompanionActivityStripState
         ),
         child: Row(
           children: [
-            Icon(
-              subagents > 0 ? AppIcons.robot : AppIcons.circleHalf,
-              size: density.iconSmall,
-              color: colour,
-            ),
+            if (subagents > 0)
+              Icon(AppIcons.robot, size: density.iconSmall, color: colour)
+            else
+              WorkingSpinner(size: density.iconSmall, color: colour),
             const SizedBox(width: Insets.xs),
             Expanded(
               child: Text(

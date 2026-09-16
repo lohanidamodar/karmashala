@@ -45,8 +45,8 @@ class CompanionStatusBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            appearance.icon,
+          StatusGlyph(
+            status: agentStatusOf(status),
             // Chrome's pointer step, not UiDensity's 11: beside `labelSmall` an
             // 11px mark disappears.
             size: density.isTouch ? Touch.iconSmall : Chrome.iconSmall,

@@ -10,3 +10,4 @@ export 'src/rows/explorer_row.dart';
 export 'src/rows/project_card.dart';
 export 'src/rows/row_stats.dart';
 export 'src/rows/session_card.dart';
+export 'src/rows/status_glyph.dart';

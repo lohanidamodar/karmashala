@@ -233,9 +233,14 @@ void main() {
           'Agent: $word',
         );
         expect(
-          tester.widget<Icon>(
-            find.descendant(of: dotIn(paneId), matching: find.byType(Icon)),
-          ).semanticLabel,
+          tester
+              .widget<StatusGlyph>(
+                find.descendant(
+                  of: dotIn(paneId),
+                  matching: find.byType(StatusGlyph),
+                ),
+              )
+              .semanticLabel,
           'Agent: $word',
         );
       }

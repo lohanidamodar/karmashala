@@ -111,11 +111,10 @@ class _ActivityStripState extends ConsumerState<ActivityStrip> {
             children: [
               // The app's own "working" glyph and colour, so this and the
               // status badge cannot describe one session in two languages.
-              Icon(
-                subagents > 0 ? AppIcons.robot : AppIcons.circleHalf,
-                size: Chrome.iconSmall,
-                color: colour,
-              ),
+              if (subagents > 0)
+                Icon(AppIcons.robot, size: Chrome.iconSmall, color: colour)
+              else
+                WorkingSpinner(size: Chrome.iconSmall, color: colour),
               const SizedBox(width: Insets.xs),
               Expanded(
                 child: Text(

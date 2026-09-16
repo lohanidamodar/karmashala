@@ -234,6 +234,11 @@ void main() {
       List<TranscriptMessage> messages, {
       int pumps = 0,
     }) async {
+      // Reduced motion keeps the working spinner's shared clock out of the
+      // count; its own cost is pinned in karmashala_ui's status_glyph_test.
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
       var timers = 0;
       await runZoned(
         () async {
