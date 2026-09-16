@@ -8,12 +8,11 @@ import '../../../app/shell/workbench_tabs.dart';
 import '../../settings/presentation/settings_nav.dart';
 import '../application/agent_usage_providers.dart';
 import '../application/usage_refresh_policy.dart';
+import '../domain/usage_pace.dart';
 import 'package:agent_cli/usage.dart';
 
-/// Where a quota stops being background information — the same two numbers
-/// Settings' usage bars use, so the chip and the bars cannot disagree.
-const double kUsageWarningPercent = 80;
-const double kUsageCriticalPercent = 95;
+export '../domain/usage_pace.dart'
+    show kUsageWarningPercent, kUsageCriticalPercent;
 
 /// The glyph size and gap the status bar's other items use. Named rather than
 /// re-guessed so the chip cannot drift away from the row it sits in.
