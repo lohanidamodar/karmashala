@@ -6,15 +6,12 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
-import '../../explorer/application/session_context.dart';
-import '../../notes/application/composer_draft.dart';
-import '../../sessions/application/session_providers.dart';
-import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/android_app_discovery.dart';
 import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
+import 'flutter_console.dart';
 
 /// The debug console for the Flutter app under development, and the two buttons
 /// worth having. Looks when it opens and when asked, never on a timer (§19).
@@ -61,7 +58,7 @@ class _FlutterAppPaneState extends ConsumerState<FlutterAppPane> {
         Expanded(
           child: selected == null
               ? _NothingAttached(registry: registry)
-              : _Console(app: selected),
+              : FlutterConsole(key: ValueKey(selected.id), app: selected),
         ),
       ],
     );
@@ -89,7 +86,9 @@ class _StatusRow extends ConsumerWidget {
     };
     final age = registry.lookedAt == null
         ? null
-        : describeAge(ref.watch(clockProvider).nowUtc().difference(registry.lookedAt!));
+        : describeAge(
+            ref.watch(clockProvider).nowUtc().difference(registry.lookedAt!),
+          );
 
     return PaneStatusRow(
       color: colour,
@@ -145,9 +144,8 @@ class _AppList extends ConsumerWidget {
               style: theme.textTheme.labelSmall,
               overflow: TextOverflow.ellipsis,
             ),
-            onTap: () => ref
-                .read(selectedFlutterAppIdProvider.notifier)
-                .select(app.id),
+            onTap: () =>
+                ref.read(selectedFlutterAppIdProvider.notifier).select(app.id),
           ),
       ],
     );
@@ -255,9 +253,7 @@ class _ActionsState extends ConsumerState<_Actions> {
             busy: _busy,
             onPressed: () => _run(
               app.isAttached ? 'Detach' : 'Forget',
-              () => app.isAttached
-                  ? apps.detach(app.id)
-                  : apps.forget(app.id),
+              () => app.isAttached ? apps.detach(app.id) : apps.forget(app.id),
             ),
           ),
           if (app.widgetLocations == WidgetLocationSupport.absent)
@@ -387,202 +383,6 @@ class _AttachByAddressState extends ConsumerState<_AttachByAddress> {
           helperText: 'The address "flutter run" printed.',
         ),
         onSubmitted: (_) => _attach(),
-      ),
-    );
-  }
-}
-
-/// One app's debug console.
-class _Console extends ConsumerWidget {
-  const _Console({required this.app});
-
-  /// The newest lines rendered at once — bounded separately from the buffer,
-  /// which is what an MCP call pages through.
-  static const int visibleLines = 500;
-
-  final AttachedApp app;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Subscribed for the repaint; the lines are read off the link.
-    ref.watch(flutterAppConsoleTickProvider(app.id));
-    final records = ref
-        .read(attachedAppsProvider.notifier)
-        .linkFor(app.id)
-        ?.tail(limit: visibleLines);
-
-    if (records == null || records.isEmpty) {
-      return PanePlaceholder(
-        icon: AppIcons.article,
-        message: app.isAttached
-            // Deliberately not "no output": what the app said before we
-            // attached is not ours to report (§19).
-            ? 'Nothing since Karmashala attached. Whatever the app said before '
-                  'that is not in this console.'
-            : 'Not attached, so there is nothing to show.',
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _ConsoleActions(app: app, records: records),
-        const Divider(height: 1),
-        Expanded(
-          child: ListView.builder(
-            reverse: true,
-            padding: const EdgeInsets.symmetric(
-              horizontal: Insets.sm,
-              vertical: Insets.xs,
-            ),
-            itemCount: records.length,
-            itemBuilder: (context, index) =>
-                _ConsoleLine(record: records[records.length - 1 - index]),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// What can be done with what the app said.
-class _ConsoleActions extends ConsumerWidget {
-  const _ConsoleActions({required this.app, required this.records});
-
-  final AttachedApp app;
-  final List<AppLogRecord> records;
-
-  /// The newest error, or null when the app has not thrown.
-  AppLogRecord? get _newestError {
-    for (final record in records.reversed) {
-      if (record.isError) return record;
-    }
-    return null;
-  }
-
-  /// Puts the error in the session's message box — offered, not sent, and
-  /// nothing notifies: an exception pushed mid-turn is Karmashala deciding.
-  void _offer(BuildContext context, WidgetRef ref, AppLogRecord error) {
-    final sessionId = ref.read(focusedSessionIdProvider);
-    final text = <String>[
-      'The running Flutter app (${app.label ?? app.id}) reported this:',
-      '',
-      error.message,
-      if (error.detail != null) error.detail!,
-    ].join('\n');
-    if (sessionId == null) {
-      Clipboard.setData(ClipboardData(text: text));
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(
-          content: Text('No session is focused — copied to the clipboard.'),
-        ),
-      );
-      return;
-    }
-    ref.read(composerDraftProvider.notifier).queue(sessionId, text);
-    ref.read(selectedSessionIdProvider.notifier).select(sessionId);
-    final title =
-        ref.read(sessionDaoProvider).getById(sessionId)?.title ?? 'the session';
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text('Waiting in $title\'s message box.')),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final error = _newestError;
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              error == null
-                  ? '${records.length} lines'
-                  : '${records.length} lines · newest error: ${error.message}',
-              style: theme.textTheme.labelSmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (error != null)
-            _Action(
-              icon: AppIcons.paperPlaneRight,
-              label: 'Offer error to session',
-              onPressed: () => _offer(context, ref, error),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ConsoleLine extends StatelessWidget {
-  const _ConsoleLine({required this.record});
-
-  final AppLogRecord record;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final semantic = SemanticColors.of(context);
-    final colour = switch (record.source) {
-      AppLogSource.flutterError || AppLogSource.stderr => semantic.failure,
-      AppLogSource.lifecycle => theme.colorScheme.onSurfaceVariant,
-      AppLogSource.developerLog => theme.colorScheme.tertiary,
-      AppLogSource.stdout => theme.colorScheme.onSurface,
-    };
-    final origin = switch (record.source) {
-      AppLogSource.stdout => 'out',
-      AppLogSource.stderr => 'err',
-      AppLogSource.developerLog => record.loggerName?.isNotEmpty == true
-          ? record.loggerName!
-          : 'log',
-      AppLogSource.flutterError => 'error',
-      AppLogSource.lifecycle => '·',
-    };
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 54,
-            child: Text(
-              origin,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Expanded(
-            child: SelectableText(
-              record.detail == null
-                  ? record.message
-                  : '${record.message}\n${record.detail}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colour,
-                fontFamily: kMonoFamily,
-                fontFamilyFallback: kMonoFallback,
-              ),
-            ),
-          ),
-          // History, marked: the VM service replays its buffer to every new
-          // subscriber, so the top of this console is the app's past.
-          if (record.beforeAttach)
-            Padding(
-              padding: const EdgeInsets.only(left: Insets.xs),
-              child: Text(
-                'before attach',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

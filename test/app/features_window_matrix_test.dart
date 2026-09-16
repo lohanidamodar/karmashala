@@ -20,6 +20,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../features/browser/fake_browser.dart';
+import '../features/flutter_apps/fake_vm_service.dart';
 import '../support/fakes.dart';
 import '../support/fixtures.dart';
 import '../support/window_matrix.dart';
@@ -91,7 +92,9 @@ void main() {
             flutterAppDiscoveryDirectoryProvider.overrideWith(
               (ref) async => VmServiceUriDirectory(temp),
             ),
-            dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(<String>[])),
+            dtdPidFilesProvider.overrideWithValue(
+              const DtdPidFiles(<String>[]),
+            ),
             adbServiceProvider.overrideWithValue(null),
             devicesProvider.overrideWith((ref) async => const []),
             vmServiceConnectorProvider.overrideWithValue(
@@ -106,6 +109,57 @@ void main() {
           await tester.tap(find.text('Attach by address'));
         },
         because: 'the address field is the way out, below a long empty state',
+      );
+    });
+
+    testWidgets('FlutterAppPane, a console with search, filters and an error', (
+      tester,
+    ) async {
+      final temp = Directory.systemTemp.createTempSync('karmashala-side-panel');
+      addTearDown(() => temp.deleteSync(recursive: true));
+      const uri = 'ws://127.0.0.1:1/a=/ws';
+      File(
+        '${temp.path}${Platform.pathSeparator}app.uri',
+      ).writeAsStringSync(uri);
+      late FakeVmService fake;
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () {
+          fake = FakeVmService(selectedWidget: null);
+          return ProviderScope(
+            overrides: [
+              clockProvider.overrideWithValue(
+                FixedClock(DateTime.utc(2026, 9, 8)),
+              ),
+              flutterAppDiscoveryDirectoryProvider.overrideWith(
+                (ref) async => VmServiceUriDirectory(temp),
+              ),
+              dtdPidFilesProvider.overrideWithValue(
+                const DtdPidFiles(<String>[]),
+              ),
+              adbServiceProvider.overrideWithValue(null),
+              devicesProvider.overrideWith((ref) async => const []),
+              vmServiceConnectorProvider.overrideWithValue(
+                (_) async => fake.client,
+              ),
+            ],
+            child: sidePanel(const FlutterAppPane()),
+          );
+        },
+        warmUp: (tester) async {
+          for (var i = 0; i < 30; i++) {
+            fake.emitStdout(
+              'flutter: a fairly long line of output number $i\n',
+            );
+          }
+          fake.emitDeveloperLog('connected', loggerName: 'network.http');
+          fake.emitFlutterError(flutterErrorTree());
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), 'output');
+          await tester.pumpAndSettle();
+          await tester.testTextInput.receiveAction(TextInputAction.done);
+        },
+        because: 'the console toolbar must fold into 240px, at 1.3x text too',
       );
     });
 
