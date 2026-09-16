@@ -142,17 +142,25 @@ class _HostCard extends ConsumerWidget {
                   Expanded(
                     child: Row(
                       children: [
-                        Text(host.name, style: theme.textTheme.titleSmall),
+                        // The name gives way; the count beside it does not.
+                        Flexible(
+                          child: Text(
+                            host.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall,
+                          ),
+                        ),
                         if (projects.isNotEmpty) ...[
                           const SizedBox(width: Insets.xs),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
+                              horizontal: Insets.xs,
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
                               color: theme.colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.circular(Radii.md),
                             ),
                             child: Text(
                               '${projects.length} project${projects.length == 1 ? '' : 's'}',
@@ -170,6 +178,8 @@ class _HostCard extends ConsumerWidget {
               Text(
                 host.address,
                 style: MonoStyles.body,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: Insets.xs),
               Text(
