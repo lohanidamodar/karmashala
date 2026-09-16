@@ -2066,8 +2066,9 @@ WorkbenchView
                                                                         Center
                                                                           RichText
                                                                 SizedBox
-                                                                Text text="Not checked"
-                                                                  RichText
+                                                                Flexible
+                                                                  Text text="Not checked"
+                                                                    RichText
                                           Row
                                             Icon
                                               Semantics
@@ -3109,8 +3110,9 @@ WorkbenchView
                                                                                                                                       Center
                                                                                                                                         RichText
                                                                                                                               SizedBox
-                                                                                                                              Text text="Not checked"
-                                                                                                                                RichText
+                                                                                                                              Flexible
+                                                                                                                                Text text="Not checked"
+                                                                                                                                  RichText
                                                                                                         Row
                                                                                                           Icon
                                                                                                             Semantics
@@ -4184,8 +4186,9 @@ WorkbenchView
                                                                         Center
                                                                           RichText
                                                                 SizedBox
-                                                                Text text="Not checked"
-                                                                  RichText
+                                                                Flexible
+                                                                  Text text="Not checked"
+                                                                    RichText
                                           Row
                                             Icon
                                               Semantics
@@ -5001,8 +5004,9 @@ WorkbenchView
                                                                         Center
                                                                           RichText
                                                                 SizedBox
-                                                                Text text="Not checked"
-                                                                  RichText
+                                                                Flexible
+                                                                  Text text="Not checked"
+                                                                    RichText
                                           Row
                                             Icon
                                               Semantics
