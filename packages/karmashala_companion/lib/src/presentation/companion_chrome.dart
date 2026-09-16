@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 /// The room a scrolling list leaves under its last row when a floating action
@@ -158,4 +159,33 @@ class CompanionSectionHeader extends StatelessWidget {
             child: text,
           );
   }
+}
+
+/// A form's one full-width action: its icon, or the house spinner while the
+/// work it started is in flight.
+class CompanionPrimaryButton extends StatelessWidget {
+  const CompanionPrimaryButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.busy = false,
+    super.key,
+  });
+
+  final String label;
+  final IconData icon;
+
+  /// Null disables the button; it is also disabled while [busy].
+  final VoidCallback? onPressed;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) => FilledButton.icon(
+    onPressed: busy ? null : onPressed,
+    icon: busy ? const InlineSpinner() : Icon(icon),
+    label: Text(label),
+    style: FilledButton.styleFrom(
+      minimumSize: const Size.fromHeight(Touch.target),
+    ),
+  );
 }

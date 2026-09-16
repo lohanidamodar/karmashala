@@ -330,26 +330,24 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
     final project = _project(projects);
     if (project == null) {
       final staleSelection = _projectId != null || widget.projectId != null;
+      final canAdd =
+          !staleSelection &&
+          ref
+              .read(companionGatewayProvider)
+              .capabilities
+              .has(Capability.addProject);
       return CompanionNotice(
         icon: AppIcons.folderPlus,
-        title: staleSelection ? 'Project no longer available' : 'Nothing to start in',
+        title: staleSelection
+            ? 'Project no longer available'
+            : 'Nothing to start in',
         body: staleSelection
             ? 'The project selected for this session is no longer in the '
-                'desktop workspace. Go back and choose another project.'
+                  'desktop workspace. Go back and choose another project.'
             : 'Your desktop lists no project with a checkout in it. Add one '
-                'here and it will show up on the next refresh.',
-        actionLabel: !staleSelection &&
-                ref
-                    .read(companionGatewayProvider)
-                    .capabilities
-                    .has(Capability.addProject)
-            ? 'Add project'
-            : null,
-        onAction: !staleSelection &&
-                ref
-                    .read(companionGatewayProvider)
-                    .capabilities
-                    .has(Capability.addProject)
+                  'here and it will show up on the next refresh.',
+        actionLabel: canAdd ? 'Add project' : null,
+        onAction: canAdd
             ? () async {
                 await Navigator.of(context).push(
                   companionRoute<void>(
@@ -377,8 +375,6 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
     }
     final agent = _agent(checkout);
     final mode = agent == null ? null : _selectedMode(agent);
-    final theme = Theme.of(context);
-    final muted = UiDensity.of(context).muted(theme);
 
     return ListView(
       // Capped at a phone's measure past the compact breakpoint: a form set
@@ -441,51 +437,13 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
             alert: mode?.dangerous ?? false,
             onTap: () => _pickMode(agent),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Insets.lg,
-              Insets.sm,
-              Insets.lg,
-              0,
-            ),
-            child: TextField(
-              controller: _title,
-              onChanged: (_) => _formChanged(),
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                helperText: 'Optional — your desktop names it if you do not.',
-                border: OutlineInputBorder(),
-              ),
-            ),
+          _StartFormFields(
+            agent: agent,
+            title: _title,
+            message: _message,
+            onChanged: _formChanged,
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Insets.lg,
-              Insets.md,
-              Insets.lg,
-              0,
-            ),
-            child: TextField(
-              controller: _message,
-              onChanged: (_) => _formChanged(),
-              enabled: agent.acceptsOpeningMessage,
-              minLines: 2,
-              maxLines: 5,
-              decoration: InputDecoration(
-                labelText: 'First message',
-                // Said before it is typed: the launch would decline an opening
-                // message this CLI cannot be handed.
-                helperText: agent.acceptsOpeningMessage
-                    ? 'Optional — sent as soon as the session is up.'
-                    : '${agent.name} takes no opening message on its command '
-                          'line. Start it and say it in the session.',
-                helperMaxLines: 3,
-                border: const OutlineInputBorder(),
-              ),
-            ),
-          ),
-          if (_failure != null)
+          if (_failure case final failure?)
             Padding(
               padding: const EdgeInsets.fromLTRB(
                 Insets.lg,
@@ -493,23 +451,7 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
                 Insets.lg,
                 0,
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    AppIcons.warningCircle,
-                    size: Touch.icon,
-                    color: theme.colorScheme.error,
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    child: Text(
-                      _failure!,
-                      style: muted?.copyWith(color: theme.colorScheme.error),
-                    ),
-                  ),
-                ],
-              ),
+              child: CompanionInlineError(failure),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -518,26 +460,78 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
               Insets.lg,
               0,
             ),
-            child: FilledButton.icon(
-              onPressed: _starting || mode == null
+            child: CompanionPrimaryButton(
+              busy: _starting,
+              label: _starting ? 'Starting…' : 'Start session',
+              icon: AppIcons.play,
+              onPressed: mode == null
                   ? null
                   : () => _start(checkout, agent, mode),
-              icon: _starting
-                  ? const SizedBox.square(
-                      dimension: Touch.iconSmall,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(AppIcons.play),
-              label: Text(_starting ? 'Starting…' : 'Start session'),
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(Touch.target),
-              ),
             ),
           ),
         ],
       ],
     );
   }
+}
+
+/// The two things typed on the form: a title, and the first message when
+/// [agent] can be handed one on its command line.
+class _StartFormFields extends StatelessWidget {
+  const _StartFormFields({
+    required this.agent,
+    required this.title,
+    required this.message,
+    required this.onChanged,
+  });
+
+  final RemoteAgentOption agent;
+  final TextEditingController title;
+  final TextEditingController message;
+
+  /// Any edit: the request is a different one now.
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.sm, Insets.lg, 0),
+        child: TextField(
+          controller: title,
+          onChanged: (_) => onChanged(),
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(
+            labelText: 'Title',
+            helperText: 'Optional — your desktop names it if you do not.',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(Insets.lg, Insets.md, Insets.lg, 0),
+        child: TextField(
+          controller: message,
+          onChanged: (_) => onChanged(),
+          enabled: agent.acceptsOpeningMessage,
+          minLines: 2,
+          maxLines: 5,
+          decoration: InputDecoration(
+            labelText: 'First message',
+            // Said before it is typed: the launch would decline an opening
+            // message this CLI cannot be handed.
+            helperText: agent.acceptsOpeningMessage
+                ? 'Optional — sent as soon as the session is up.'
+                : '${agent.name} takes no opening message on its command '
+                      'line. Start it and say it in the session.',
+            helperMaxLines: 3,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 /// Which execution environment something lives in, in the desktop's own words

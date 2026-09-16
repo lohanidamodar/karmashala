@@ -252,3 +252,35 @@ class CompanionNotice extends StatelessWidget {
 
 /// Which semantic colour a notice's glyph borrows; null is the muted default.
 enum NoticeTone { attention, failure, idle }
+
+/// A refusal or failure said in place, under the thing that failed: a warning
+/// glyph and the sentence, in the error colour. The one inline error style
+/// every companion form draws.
+class CompanionInlineError extends StatelessWidget {
+  const CompanionInlineError(this.text, {super.key});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final density = UiDensity.of(context);
+    final error = theme.colorScheme.error;
+    return Semantics(
+      liveRegion: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(AppIcons.warningCircle, size: density.icon, color: error),
+          SizedBox(width: density.glyphGap),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(color: error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
