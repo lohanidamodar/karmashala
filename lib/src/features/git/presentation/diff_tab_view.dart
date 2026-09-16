@@ -1,11 +1,8 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:karmashala_git/git.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -14,6 +11,7 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import '../application/changes_providers.dart';
 import '../application/diff_tab_actions.dart';
+import '../application/parsed_diff.dart';
 import 'diff_counts.dart';
 import 'diff_view.dart';
 
@@ -35,38 +33,67 @@ class DiffTabView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final diff = ref.watch(diffForTargetProvider(target));
+    final parsed = ref.watch(parsedDiffProvider(target)).asData?.value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _header(context, ref, diff.asData?.value),
+        DiffTabHeader(
+          target: target,
+          counts: parsed == null
+              ? null
+              : (added: parsed.added, removed: parsed.removed),
+          hostFile: _hostFile(ref),
+        ),
         Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) => FileDiffView(
-              path: target.path,
-              checkout: target.checkout,
-              // This tab's own repository, so its review threads cannot follow
-              // the sidebar onto another one.
-              repositoryId: ref.watch(
-                repositoryIdForCheckoutProvider(target.checkout),
-              ),
-              // At least the viewport, so a short diff does not scroll
-              // sideways, and never narrower than the lines it has to hold.
-              scrollWidth: math.max(constraints.maxWidth, 1400),
+          child: FileDiffView(
+            path: target.path,
+            checkout: target.checkout,
+            // This tab's own repository, so its review threads cannot follow
+            // the sidebar onto another one.
+            repositoryId: ref.watch(
+              repositoryIdForCheckoutProvider(target.checkout),
             ),
           ),
         ),
       ],
     );
   }
+}
 
-  Widget _header(BuildContext context, WidgetRef ref, String? diff) {
-    final hostFile = _hostFile(ref);
+/// A diff tab's header: the file, its `+N −M`, and what can be done with it.
+class DiffTabHeader extends ConsumerWidget {
+  const DiffTabHeader({
+    required this.target,
+    required this.counts,
+    required this.hostFile,
+    super.key,
+  });
+
+  final DiffTarget target;
+
+  /// Null until the diff has loaded.
+  final ({int added, int removed})? counts;
+
+  /// See [DiffTabView]; null disables Open.
+  final String? hostFile;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final diff = ref.watch(diffForTargetProvider(target)).asData?.value;
+    final counts = this.counts;
+    final hostFile = this.hostFile;
     return PaneHeader(
       icon: AppIcons.gitDiff,
       title: target.name,
       actions: [
-        if (diff != null) _DiffCounts(diff: diff),
+        if (counts != null && (counts.added > 0 || counts.removed > 0))
+          Padding(
+            padding: const EdgeInsets.only(right: Insets.xs),
+            child: DiffCountLabel(
+              added: counts.added,
+              removed: counts.removed,
+            ),
+          ),
         IconButton(
           tooltip: hostFile == null
               ? "This checkout's files are not on this machine"
@@ -102,29 +129,6 @@ class DiffTabView extends ConsumerWidget {
           onPressed: () => ref.invalidate(diffForTargetProvider(target)),
         ),
       ],
-    );
-  }
-}
-
-/// `+N −M` for a diff already in hand. Counted from the text rather than asked
-/// of git again: this is the very diff on screen, so the two cannot disagree.
-class _DiffCounts extends StatelessWidget {
-  const _DiffCounts({required this.diff});
-
-  final String diff;
-
-  @override
-  Widget build(BuildContext context) {
-    var added = 0;
-    var removed = 0;
-    for (final line in parseUnifiedDiff(diff)) {
-      if (line.kind == DiffLineKind.added) added++;
-      if (line.kind == DiffLineKind.removed) removed++;
-    }
-    if (added == 0 && removed == 0) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(right: Insets.xs),
-      child: DiffCountLabel(added: added, removed: removed),
     );
   }
 }

@@ -1,24 +1,30 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:agent_cli/process.dart';
 import '../application/changes_providers.dart';
 import '../application/diff_tab_actions.dart';
+import '../application/parsed_diff.dart';
 import '../application/review_threads.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_git/git.dart';
 import 'diff_line_tile.dart';
 
 /// Renders one file's unified diff, with the review threads anchored to it.
-class FileDiffView extends ConsumerWidget {
+///
+/// The code scrolls sideways under a pinned column: each row's comment action
+/// stays inside the pane however wide the widest line is.
+class FileDiffView extends ConsumerStatefulWidget {
   const FileDiffView({
     required this.path,
     required this.checkout,
     this.repositoryId,
-    this.scrollWidth = 1400,
     super.key,
   });
 
@@ -32,29 +38,75 @@ class FileDiffView extends ConsumerWidget {
   /// back to the sidebar's selection, which is the sidebar's own case.
   final String? repositoryId;
 
-  /// How wide the non-wrapping diff is laid out before it scrolls. The caller
-  /// knows its own viewport; 1400 was the full-screen dialog's.
-  final double scrollWidth;
+  /// The width a row's comment action takes, beside its text.
+  static const commentExtent = _DenseIconButton.extent;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<FileDiffView> createState() => _FileDiffViewState();
+}
+
+class _FileDiffViewState extends ConsumerState<FileDiffView> {
+  final _vertical = ScrollController();
+  final _horizontal = ScrollController();
+
+  /// [_horizontal]'s offset, for rows that are not its scroll view.
+  final _offset = ValueNotifier<double>(0);
+
+  @override
+  void initState() {
+    super.initState();
+    _horizontal.addListener(_followHorizontal);
+  }
+
+  @override
+  void dispose() {
+    _horizontal.removeListener(_followHorizontal);
+    _vertical.dispose();
+    _horizontal.dispose();
+    _offset.dispose();
+    super.dispose();
+  }
+
+  void _followHorizontal() {
+    if (_horizontal.hasClients) _offset.value = _horizontal.offset;
+  }
+
+  /// A sideways wheel, or Shift with a mouse wheel, over the code. The list
+  /// itself only scrolls vertically, so it leaves these alone.
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_horizontal.hasClients) return;
+    final shifted =
+        event.kind == PointerDeviceKind.mouse &&
+        HardwareKeyboard.instance.isShiftPressed;
+    final delta = shifted ? event.scrollDelta.dy : event.scrollDelta.dx;
+    if (delta == 0) return;
+    final position = _horizontal.position;
+    final target = (position.pixels + delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (target == position.pixels) return;
+    GestureBinding.instance.pointerSignalResolver.register(
+      event,
+      (_) => _horizontal.jumpTo(target),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final path = widget.path;
+    final repositoryId = widget.repositoryId;
     final diff = ref.watch(
-      diffForTargetProvider(DiffTarget(checkout: checkout, path: path)),
+      parsedDiffProvider(DiffTarget(checkout: widget.checkout, path: path)),
     );
     return diff.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(Insets.md),
-        child: Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        ),
+        child: Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
       ),
       error: (e, _) => DiffErrorBox(message: '$e'),
-      data: (text) {
-        final lines = parseUnifiedDiff(text);
+      data: (parsed) {
+        final lines = parsed.lines;
         if (lines.isEmpty) {
           return Padding(
             padding: const EdgeInsets.all(Insets.md),
@@ -68,45 +120,102 @@ class FileDiffView extends ConsumerWidget {
         }
         // The one translation that makes a comment anchorable: a row of this
         // rendering becomes a line of the file. A row index would not survive.
-        final numbers = newFileLineNumbers(lines);
+        final numbers = parsed.newLineNumbers;
         final threads =
             ref.watch(reviewThreadsOf(repositoryId)).asData?.value ??
             ReviewThreadIndex.empty;
         // Threads no line can carry, above the diff rather than lost inside it.
         final unplaced = threads.unplaced(path);
-        final list = ListView.builder(
-          primary: false,
-          padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-          itemCount: unplaced.length + lines.length,
-          itemBuilder: (context, index) {
-            if (index < unplaced.length) {
-              return UnplacedThreadTile(
-                entry: unplaced[index],
-                repositoryId: repositoryId,
+        final textScaler = MediaQuery.textScalerOf(context);
+
+        return LayoutBuilder(
+          builder: (context, box) {
+            final textWidth = _measure(parsed.widestLine, textScaler);
+            final viewport =
+                box.maxWidth -
+                DiffLineTile.leadingExtent -
+                FileDiffView.commentExtent;
+            final overflows = textWidth > viewport;
+            if (!overflows && _offset.value != 0) {
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => _offset.value = 0,
               );
             }
-            final row = index - unplaced.length;
-            return ReviewableDiffLine(
-              path: path,
-              repositoryId: repositoryId,
-              lineNumber: numbers[row],
-              line: lines[row],
+            final scroll = overflows
+                ? DiffLineScroll(offset: _offset, width: textWidth)
+                : null;
+
+            final list = ListView.builder(
+              controller: _vertical,
+              padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+              itemCount: unplaced.length + lines.length,
+              itemBuilder: (context, index) {
+                if (index < unplaced.length) {
+                  return UnplacedThreadTile(
+                    entry: unplaced[index],
+                    repositoryId: repositoryId,
+                  );
+                }
+                final row = index - unplaced.length;
+                return ReviewableDiffLine(
+                  path: path,
+                  repositoryId: repositoryId,
+                  lineNumber: numbers[row],
+                  line: lines[row],
+                  scroll: scroll,
+                );
+              },
+            );
+            // Selectable so a line can be copied out of the diff. Only realised
+            // rows are in the selection, which is why the header keeps a Copy
+            // that takes the whole patch regardless of what is built.
+            return SelectionArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Listener(
+                      onPointerSignal: _onPointerSignal,
+                      child: Scrollbar(controller: _vertical, child: list),
+                    ),
+                  ),
+                  if (overflows)
+                    Scrollbar(
+                      controller: _horizontal,
+                      thumbVisibility: true,
+                      child: SingleChildScrollView(
+                        controller: _horizontal,
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: textWidth + box.maxWidth - viewport,
+                          height: Insets.md,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             );
           },
         );
-        // Selectable so a line can be copied out of the diff. Only realised
-        // rows are in the selection, which is why the header keeps a Copy that
-        // takes the whole patch regardless of what is built.
-        return SelectionArea(
-          child: Scrollbar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(width: scrollWidth, child: list),
-            ),
-          ),
-        );
       },
     );
+  }
+
+  /// The widest row's width in the diff's own style, with a character to
+  /// spare so the last one is not flush against the edge.
+  static double _measure(String text, TextScaler textScaler) {
+    final painter = TextPainter(
+      text: TextSpan(
+        text: '$text ',
+        style: MonoStyles.body.copyWith(height: 1.4),
+      ),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
   }
 }
 
@@ -119,12 +228,16 @@ class ReviewableDiffLine extends ConsumerWidget {
     required this.lineNumber,
     required this.line,
     this.repositoryId,
+    this.scroll,
     super.key,
   });
 
   final String path;
   final int? lineNumber;
   final DiffLine line;
+
+  /// See [DiffLineTile.scroll].
+  final DiffLineScroll? scroll;
 
   /// See [FileDiffView.repositoryId]; the sidebar is the only caller that
   /// leaves it null.
@@ -150,17 +263,17 @@ class ReviewableDiffLine extends ConsumerWidget {
         line.kind == DiffLineKind.context;
     return DiffLineTile(
       line: line,
+      scroll: scroll,
+      // A blank of the same width on a row with nothing to comment on, so every
+      // row's text scrolls against the same edge.
       trailing: commentable
-          ? IconButton(
+          ? _DenseIconButton(
               tooltip: here.isEmpty
                   ? 'Add review comment'
                   : here.map((entry) => entry.thread.body).join('\n\n'),
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-              padding: EdgeInsets.zero,
               icon: Icon(
                 here.isEmpty ? AppIcons.chatCircle : AppIcons.chatCircleDots,
-                size: Chrome.iconSmall,
+                size: Chrome.iconAction,
                 color: here.isEmpty ? null : scheme.tertiary,
               ),
               onPressed: repository == null
@@ -176,9 +289,35 @@ class ReviewableDiffLine extends ConsumerWidget {
                       existing: here,
                     ),
             )
-          : null,
+          : const SizedBox(width: _DenseIconButton.extent),
     );
   }
+}
+
+/// An icon action inside a dense row: one square size wherever a row carries
+/// one, rather than a minimum picked per call site.
+class _DenseIconButton extends StatelessWidget {
+  const _DenseIconButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  static const extent = 24.0;
+
+  final String tooltip;
+  final Widget icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    visualDensity: VisualDensity.compact,
+    constraints: const BoxConstraints.tightFor(width: extent, height: extent),
+    padding: EdgeInsets.zero,
+    icon: icon,
+    onPressed: onPressed,
+  );
 }
 
 /// A thread no line of this diff can carry — file-level, or detached by an
@@ -209,7 +348,12 @@ class UnplacedThreadTile extends ConsumerWidget {
               existing: [entry],
             ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(Insets.sm, 4, Insets.sm, 4),
+        padding: const EdgeInsets.fromLTRB(
+          Insets.sm,
+          Insets.xs,
+          Insets.sm,
+          Insets.xs,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
