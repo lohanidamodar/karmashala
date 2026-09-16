@@ -330,6 +330,42 @@ void main() {
       );
     });
 
+    testWidgets('each simulator control has a glyph of its own meaning', (
+      tester,
+    ) async {
+      // Lock was the power glyph — the same one as the toolbar's Shut down
+      // beside it, for an act that only sleeps the screen.
+      await pump(tester, live: _running(), devices: [_device()]);
+
+      IconData glyphOf(String key) => tester
+          .widget<Icon>(
+            find.descendant(
+              of: find.byKey(Key(key)),
+              matching: find.byType(Icon),
+            ),
+          )
+          .icon!;
+      expect(glyphOf('simulator-home'), AppIcons.house);
+      expect(glyphOf('simulator-lock'), AppIcons.lockSimple);
+      expect(glyphOf('simulator-appearance'), AppIcons.moon);
+      expect(glyphOf('simulator-screenshot'), AppIcons.camera);
+      expect(glyphOf('simulator-record'), AppIcons.record);
+      // Toggles start unselected: nothing has been locked or darkened here.
+      expect(
+        tester
+            .widget<IconButton>(find.byKey(const Key('simulator-lock')))
+            .isSelected,
+        isFalse,
+      );
+      // Power is the toolbar's shut-down alone.
+      expect(find.byIcon(AppIcons.power), findsNWidgets(1));
+      // The picture is up, so the toolbar's action is the struck-out eye.
+      expect(
+        find.widgetWithIcon(TextButton, AppIcons.eyeSlash),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('does not sit under the simulator picture', (tester) async {
       // With a phone attached the Android row appeared beneath an iPhone,
       // offering Back, Recents and a screenshot of a device nobody was looking
@@ -337,7 +373,7 @@ void main() {
       // finding one under a simulator's picture can only mean the wrong row.
       await pump(tester, live: _running(), devices: [_device()]);
 
-      expect(find.byIcon(AppIcons.arrowLeft), findsNothing);
+      expect(find.byIcon(AppIcons.arrowUDownLeft), findsNothing);
       expect(
         find.byKey(const Key('simulator-home')),
         findsOneWidget,

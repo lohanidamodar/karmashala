@@ -125,7 +125,10 @@ void main() {
           final picker = find.byType(DropdownButton<String>);
           expect(tester.getSize(picker).width, greaterThanOrEqualTo(48));
           // The action is still there, named by its tooltip.
-          expect(find.byTooltip('Live view').hitTestable(), findsOneWidget);
+          expect(
+            find.byTooltip('Start live view').hitTestable(),
+            findsOneWidget,
+          );
         });
       }
     }

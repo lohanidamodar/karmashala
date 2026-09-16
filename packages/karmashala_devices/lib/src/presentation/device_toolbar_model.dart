@@ -42,6 +42,14 @@ enum PrimaryStreamKind {
     startSimulator || startAndroid => 'Live view',
   };
 
+  /// The label said in full, for when only the glyph is drawn: "Stop" alone
+  /// does not say what stops.
+  String get tooltip => switch (this) {
+    starting => 'Starting the live view',
+    stopSimulator || stopAndroid => 'Stop live view',
+    startSimulator || startAndroid => 'Start live view',
+  };
+
   bool get stops => this == stopSimulator || this == stopAndroid;
 }
 

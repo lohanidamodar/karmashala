@@ -84,113 +84,122 @@ class _AndroidControlsState extends ConsumerState<_AndroidControls> {
     // What container the recording can be, said on the button before it starts.
     final mp4Support = ref.watch(deviceVideoSupportProvider);
     const idle = 'Start the live view to use the device controls';
-    final recordColor = Theme.of(context).colorScheme.error;
+    final recordColor = SemanticColors.of(context).failure;
     String tooltip(String label) =>
         target == null ? idle : '$label — ${target.displayName}';
 
-    return DeviceControlBar(
-      controls: [
-        DeviceControl(
-          name: 'Back',
-          tooltip: tooltip('Back'),
-          icon: AppIcons.arrowLeft,
-          onPressed: canReach ? () => _press(DeviceKey.back) : null,
-          buttonKey: const Key('android-back'),
-        ),
-        DeviceControl(
-          name: 'Home',
-          tooltip: tooltip('Home'),
-          icon: AppIcons.circle,
-          onPressed: canReach ? () => _press(DeviceKey.home) : null,
-          buttonKey: const Key('android-home'),
-        ),
-        DeviceControl(
-          name: 'Recents',
-          tooltip: tooltip('Recents'),
-          icon: AppIcons.square,
-          onPressed: canReach ? () => _press(DeviceKey.recents) : null,
-          buttonKey: const Key('android-recents'),
-        ),
-        DeviceControl(
-          name: 'Appearance',
-          tooltip: target == null
-              ? idle
-              : _dark ?? false
-              ? 'Switch to light appearance'
-              : 'Switch to dark appearance',
-          icon: AppIcons.circleHalf,
-          onPressed: canReach ? _appearance : null,
-          buttonKey: const Key('android-appearance'),
-        ),
-        DeviceControl(
-          name: 'Screenshot',
-          tooltip: target == null ? idle : 'Save a screenshot to the Desktop',
-          icon: AppIcons.image,
-          onPressed: canReach ? _screenshot : null,
-          buttonKey: const Key('android-screenshot'),
-        ),
-        DeviceControl(
-          name: 'Open URL',
-          tooltip: target == null ? idle : 'Open a URL or deep link',
-          icon: AppIcons.globe,
-          onPressed: canReach ? _openUrl : null,
-          buttonKey: const Key('android-open-url'),
-        ),
-        // Gated on the live view, not adb: a recording is written from the
-        // picture's frames. MP4 opens anywhere, MPEG-TS survives a rotation.
-        DeviceControl(
-          name: 'Record',
-          tooltip: recording is DeviceRecordingActive
-              ? 'Stop recording'
-              : !widget.recordable
-              ? 'Start the live view to record the screen'
-              : mp4Support.available
-              ? 'Record the screen to an MP4 — the file every player opens'
-              : 'Record the screen to an MPEG-TS (.ts) file. '
-                    '${mp4Support.detail}',
-          // The record glyph in the danger colour, never Home's circle beside
-          // it: icon-only, the two could not be told apart.
-          icon: recording is DeviceRecordingActive
-              ? AppIcons.stopCircle
-              : AppIcons.target,
-          color: recording is DeviceRecordingActive ? null : recordColor,
-          onPressed: recording is DeviceRecordingActive
-              ? ref.read(deviceRecordingProvider.notifier).stop
-              : widget.recordable
-              ? () => ref
-                    .read(deviceRecordingProvider.notifier)
-                    .startLiveViewRecording(
-                      container: mp4Support.available
-                          ? DeviceRecordingContainer.mp4
-                          : DeviceRecordingContainer.transportStream,
-                    )
-              : null,
-          buttonKey: const Key('android-record'),
-        ),
-        // Only where MP4 is the primary: otherwise the button above already is
-        // the transport stream, and two of them would say the same thing.
-        if (recording is! DeviceRecordingActive && mp4Support.available)
+    // Rebuilt each second while recording, for the elapsed time on Stop.
+    return RecordingClock(
+      recording: recording,
+      builder: (context, now) => DeviceControlBar(
+        controls: [
           DeviceControl(
-            name: 'Record .ts',
-            tooltip: widget.recordable
-                ? 'Record to MPEG-TS instead — the only one that survives the '
-                      'device rotating mid-recording'
-                : 'Start the live view to record to MPEG-TS',
-            // A file glyph: the same recording, written as a different file.
-            icon: AppIcons.fileCode,
-            onPressed: widget.recordable
+            name: 'Back',
+            tooltip: tooltip('Back'),
+            // Android's Back, not the app's "go back" arrow.
+            icon: AppIcons.arrowUDownLeft,
+            onPressed: canReach ? () => _press(DeviceKey.back) : null,
+            buttonKey: const Key('android-back'),
+          ),
+          DeviceControl(
+            name: 'Home',
+            tooltip: tooltip('Home'),
+            icon: AppIcons.house,
+            onPressed: canReach ? () => _press(DeviceKey.home) : null,
+            buttonKey: const Key('android-home'),
+          ),
+          DeviceControl(
+            name: 'Recents',
+            tooltip: tooltip('Recents'),
+            icon: AppIcons.squaresFour,
+            onPressed: canReach ? () => _press(DeviceKey.recents) : null,
+            buttonKey: const Key('android-recents'),
+          ),
+          // A toggle: the moon is dark appearance, selected while it is on.
+          DeviceControl(
+            name: 'Appearance',
+            tooltip: target == null
+                ? idle
+                : _dark ?? false
+                ? 'Switch to light appearance'
+                : 'Switch to dark appearance',
+            icon: AppIcons.moon,
+            selected: _dark ?? false,
+            onPressed: canReach ? _appearance : null,
+            buttonKey: const Key('android-appearance'),
+          ),
+          DeviceControl(
+            name: 'Screenshot',
+            tooltip: target == null ? idle : 'Save a screenshot to the Desktop',
+            icon: AppIcons.camera,
+            onPressed: canReach ? _screenshot : null,
+            buttonKey: const Key('android-screenshot'),
+          ),
+          DeviceControl(
+            name: 'Open URL',
+            tooltip: target == null ? idle : 'Open a URL or deep link',
+            icon: AppIcons.globe,
+            onPressed: canReach ? _openUrl : null,
+            buttonKey: const Key('android-open-url'),
+          ),
+          // Gated on the live view, not adb: a recording is written from the
+          // picture's frames. MP4 opens anywhere, MPEG-TS survives a rotation.
+          DeviceControl(
+            name: 'Record',
+            tooltip: recording is DeviceRecordingActive
+                ? stopRecordingTooltip(recording, now)
+                : !widget.recordable
+                ? 'Start the live view to record the screen'
+                : mp4Support.available
+                ? 'Start recording the screen to an MP4 — the file every player '
+                      'opens'
+                : 'Start recording the screen to an MPEG-TS (.ts) file. '
+                      '${mp4Support.detail}',
+            // Record in the failure colour, and a solid stop square while it
+            // runs — neither is used by any other control in the pane.
+            icon: recording is DeviceRecordingActive
+                ? AppIcons.stopFill
+                : AppIcons.record,
+            color: recording is DeviceRecordingActive ? null : recordColor,
+            selected: recording is DeviceRecordingActive,
+            onPressed: recording is DeviceRecordingActive
+                ? ref.read(deviceRecordingProvider.notifier).stop
+                : widget.recordable
                 ? () => ref
                       .read(deviceRecordingProvider.notifier)
                       .startLiveViewRecording(
-                        container: DeviceRecordingContainer.transportStream,
+                        container: mp4Support.available
+                            ? DeviceRecordingContainer.mp4
+                            : DeviceRecordingContainer.transportStream,
                       )
                 : null,
-            buttonKey: const Key('android-record-ts'),
+            buttonKey: const Key('android-record'),
           ),
-        // The clipboard is gated on the *control socket*, not adb — which is
-        // why these two do not use [canReach]: adb cannot reach a clipboard.
-        ...deviceClipboardControls(bridge: widget.clipboard, say: _say),
-      ],
+          // Only where MP4 is the primary: otherwise the button above already is
+          // the transport stream, and two of them would say the same thing.
+          if (recording is! DeviceRecordingActive && mp4Support.available)
+            DeviceControl(
+              name: 'Record .ts',
+              tooltip: widget.recordable
+                  ? 'Start recording to MPEG-TS instead — the only one that '
+                        'survives the device rotating mid-recording'
+                  : 'Start the live view to record to MPEG-TS',
+              // A video file: the same recording, written as a different file.
+              icon: AppIcons.fileVideo,
+              onPressed: widget.recordable
+                  ? () => ref
+                        .read(deviceRecordingProvider.notifier)
+                        .startLiveViewRecording(
+                          container: DeviceRecordingContainer.transportStream,
+                        )
+                  : null,
+              buttonKey: const Key('android-record-ts'),
+            ),
+          // The clipboard is gated on the *control socket*, not adb — which is
+          // why these two do not use [canReach]: adb cannot reach a clipboard.
+          ...deviceClipboardControls(bridge: widget.clipboard, say: _say),
+        ],
+      ),
     );
   }
 

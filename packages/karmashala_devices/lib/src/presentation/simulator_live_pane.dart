@@ -13,6 +13,7 @@ import '../application/simulator_live_view.dart';
 import '../../devices.dart';
 import 'device_controls.dart';
 import 'device_keyboard_surface.dart';
+import 'device_recording_indicator.dart';
 import 'device_touch_surface.dart';
 
 /// The simulator's picture, when there is one. Draws nothing when nothing is
@@ -206,74 +207,83 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
     final canRecord =
         target != null && ref.watch(simctlServiceProvider) != null;
 
-    return DeviceControlBar(
-      controls: [
-        DeviceControl(
-          name: 'Home',
-          tooltip: canPress
-              ? 'Home'
-              : 'Home needs WebDriverAgent, which this build has no copy of',
-          icon: AppIcons.circle,
-          onPressed: canPress ? () => _press(SimulatorButton.home) : null,
-          buttonKey: const Key('simulator-home'),
-        ),
-        DeviceControl(
-          name: 'Lock',
-          tooltip: _locked ? 'Unlock' : 'Lock',
-          icon: AppIcons.power,
-          onPressed: canPress ? _toggleLock : null,
-          buttonKey: const Key('simulator-lock'),
-        ),
-        DeviceControl(
-          name: 'Appearance',
-          tooltip: _dark
-              ? 'Switch to light appearance'
-              : 'Switch to dark appearance',
-          icon: AppIcons.circleHalf,
-          onPressed: _appearance,
-          buttonKey: const Key('simulator-appearance'),
-        ),
-        DeviceControl(
-          name: 'Screenshot',
-          tooltip: 'Save a screenshot to the Desktop',
-          icon: AppIcons.image,
-          onPressed: _screenshot,
-          buttonKey: const Key('simulator-screenshot'),
-        ),
-        DeviceControl(
-          name: 'Open URL',
-          tooltip: 'Open a URL or deep link',
-          icon: AppIcons.globe,
-          onPressed: _openUrl,
-          buttonKey: const Key('simulator-open-url'),
-        ),
-        // `simctl io … recordVideo`, not a tee of the picture above: that is
-        // WebDriverAgent's MJPEG, screenshots with no encoded video behind it.
-        DeviceControl(
-          name: 'Record',
-          tooltip: recording is DeviceRecordingActive
-              ? 'Stop recording'
-              : canRecord
-              ? 'Record the screen to a QuickTime (.mov) file'
-              : 'Recording a simulator needs simctl, which is macOS only',
-          // The record glyph in the danger colour: Home beside it is a circle,
-          // and icon-only the two could not be told apart.
-          icon: recording is DeviceRecordingActive
-              ? AppIcons.stopCircle
-              : AppIcons.target,
-          color: recording is DeviceRecordingActive
-              ? null
-              : Theme.of(context).colorScheme.error,
-          onPressed: recording is DeviceRecordingActive
-              ? ref.read(deviceRecordingProvider.notifier).stop
-              : canRecord
-              ? () => ref
-                    .read(deviceRecordingProvider.notifier)
-                    .startSimulatorRecording(target)
-              : null,
-          buttonKey: const Key('simulator-record'),
-        ),
-      ],
+    // Rebuilt each second while recording, for the elapsed time on Stop.
+    return RecordingClock(
+      recording: recording,
+      builder: (context, now) => DeviceControlBar(
+        controls: [
+          DeviceControl(
+            name: 'Home',
+            tooltip: canPress
+                ? 'Home'
+                : 'Home needs WebDriverAgent, which this build has no copy of',
+            icon: AppIcons.house,
+            onPressed: canPress ? () => _press(SimulatorButton.home) : null,
+            buttonKey: const Key('simulator-home'),
+          ),
+          DeviceControl(
+            name: 'Lock',
+            tooltip: _locked ? 'Unlock' : 'Lock',
+            // A padlock, selected while locked: [AppIcons.power] is the
+            // toolbar's shut-down, and this only sleeps the screen.
+            icon: AppIcons.lockSimple,
+            selected: _locked,
+            onPressed: canPress ? _toggleLock : null,
+            buttonKey: const Key('simulator-lock'),
+          ),
+          DeviceControl(
+            name: 'Appearance',
+            tooltip: _dark
+                ? 'Switch to light appearance'
+                : 'Switch to dark appearance',
+            icon: AppIcons.moon,
+            selected: _dark,
+            onPressed: _appearance,
+            buttonKey: const Key('simulator-appearance'),
+          ),
+          DeviceControl(
+            name: 'Screenshot',
+            tooltip: 'Save a screenshot to the Desktop',
+            icon: AppIcons.camera,
+            onPressed: _screenshot,
+            buttonKey: const Key('simulator-screenshot'),
+          ),
+          DeviceControl(
+            name: 'Open URL',
+            tooltip: 'Open a URL or deep link',
+            icon: AppIcons.globe,
+            onPressed: _openUrl,
+            buttonKey: const Key('simulator-open-url'),
+          ),
+          // `simctl io … recordVideo`, not a tee of the picture above: that is
+          // WebDriverAgent's MJPEG, screenshots with no encoded video behind it.
+          DeviceControl(
+            name: 'Record',
+            tooltip: recording is DeviceRecordingActive
+                ? stopRecordingTooltip(recording, now)
+                : canRecord
+                ? 'Start recording the screen to a QuickTime (.mov) file'
+                : 'Recording a simulator needs simctl, which is macOS only',
+            // Record in the failure colour, and a solid stop square while it
+            // runs — neither is used by any other control in the pane.
+            icon: recording is DeviceRecordingActive
+                ? AppIcons.stopFill
+                : AppIcons.record,
+            color: recording is DeviceRecordingActive
+                ? null
+                : SemanticColors.of(context).failure,
+            selected: recording is DeviceRecordingActive,
+            onPressed: recording is DeviceRecordingActive
+                ? ref.read(deviceRecordingProvider.notifier).stop
+                : canRecord
+                ? () => ref
+                      .read(deviceRecordingProvider.notifier)
+                      .startSimulatorRecording(target)
+                : null,
+            buttonKey: const Key('simulator-record'),
+          ),
+        ],
+      ),
     );
   }
 }

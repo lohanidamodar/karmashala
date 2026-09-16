@@ -209,16 +209,19 @@ class _Controls extends StatelessWidget {
               level == null ? null : session.setMinLevel(level),
         ),
         IconButton(
-          tooltip: session.streaming ? 'Stop reading' : 'Start reading',
+          tooltip: session.streaming ? 'Pause logcat' : 'Resume logcat',
+          // Pause and play: the tail picks up again, and play/stop in circles
+          // were already Launch and Force-stop an app a few rows up.
           icon: Icon(
-            session.streaming ? AppIcons.stopCircle : AppIcons.playCircle,
+            session.streaming ? AppIcons.pause : AppIcons.play,
             size: Chrome.iconAction,
           ),
           onPressed: session.streaming ? session.stop : session.start,
         ),
         IconButton(
           tooltip: 'Clear what is on screen',
-          icon: const Icon(AppIcons.trash, size: Chrome.iconAction),
+          // A broom, not a bin: nothing on the device is deleted.
+          icon: const Icon(AppIcons.broom, size: Chrome.iconAction),
           onPressed: session.clear,
         ),
       ],

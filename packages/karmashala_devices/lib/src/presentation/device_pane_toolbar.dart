@@ -137,7 +137,7 @@ class _DeviceToolbar extends ConsumerWidget {
               if (restartableSimulator != null)
                 IconButton(
                   tooltip: 'Restart live view',
-                  icon: const Icon(AppIcons.arrowCounterClockwise),
+                  icon: const Icon(AppIcons.arrowClockwise),
                   // `start` tears the current view down first — the runner
                   // holds :8100 and :9100, so a second cannot come up beside.
                   onPressed: () => simulatorLive.start(restartableSimulator),
@@ -145,7 +145,7 @@ class _DeviceToolbar extends ConsumerWidget {
               else if (onRestart != null)
                 IconButton(
                   tooltip: 'Restart live view',
-                  icon: const Icon(AppIcons.arrowCounterClockwise),
+                  icon: const Icon(AppIcons.arrowClockwise),
                   onPressed: onRestart,
                 ),
               // Power acts on the device this toolbar is *about* — from
@@ -299,10 +299,12 @@ class _PrimaryStreamAction extends StatelessWidget {
         ),
       );
     }
-    final icon = Icon(kind.stops ? AppIcons.stop : AppIcons.play);
+    // The eye is the live view itself — play/stop were already Launch app,
+    // logcat and recording, and icon-only nothing told them apart.
+    final icon = Icon(kind.stops ? AppIcons.eyeSlash : AppIcons.eye);
     if (compact) {
       return IconButton(
-        tooltip: kind.label,
+        tooltip: kind.tooltip,
         icon: icon,
         onPressed: onPressed,
       );

@@ -125,7 +125,7 @@ class _WirelessPairingDialogState
                       avatar: Icon(
                         method == WirelessPairingMethod.qrCode
                             ? AppIcons.qrCode
-                            : AppIcons.handTap,
+                            : AppIcons.numpad,
                         size: Chrome.iconAction,
                       ),
                       label: Text(method.label),

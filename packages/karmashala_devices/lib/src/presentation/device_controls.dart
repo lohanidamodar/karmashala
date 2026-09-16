@@ -13,6 +13,7 @@ class DeviceControl {
     required this.onPressed,
     this.buttonKey,
     this.color,
+    this.selected,
   });
 
   /// What this control is called when it fails: "Screenshot failed: …". Not
@@ -32,6 +33,10 @@ class DeviceControl {
   /// colour itself means something, like Record's red. Disabled, the theme's
   /// disabled ink wins, so an inert Record does not look armed.
   final Color? color;
+
+  /// For a toggle, whether it is on — drawn as the selected state layer, not
+  /// a second glyph. `null` for a plain action.
+  final bool? selected;
 }
 
 /// The row of controls under a live picture, on either platform. Shared for
@@ -80,6 +85,18 @@ class _DeviceControlBarState extends State<DeviceControlBar> {
             IconButton(
               key: control.buttonKey,
               tooltip: control.tooltip,
+              isSelected: control.selected,
+              style: control.selected == null
+                  ? null
+                  : ButtonStyle(
+                      backgroundColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.selected)
+                            ? StateLayers.selected(
+                                Theme.of(context).colorScheme,
+                              )
+                            : null,
+                      ),
+                    ),
               icon: Icon(
                 control.icon,
                 color: control.onPressed == null ? null : control.color,

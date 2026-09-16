@@ -14,15 +14,16 @@ List<DeviceControl> deviceClipboardControls({
     name: 'Copy to device',
     tooltip: _tooltip(bridge, "Copy this computer's clipboard to the device"),
     // Up onto the device, down to this computer — the same sense the files
-    // dialog uses, where `downloadSimple` means "save here".
-    icon: AppIcons.arrowUp,
+    // dialog uses, where `downloadSimple` means "save here". Bare arrows were
+    // also the files dialog's "Up one level".
+    icon: AppIcons.uploadSimple,
     onPressed: bridge == null ? null : () => _toDevice(bridge, say),
     buttonKey: const ValueKey('android-clipboard-to-device'),
   ),
   DeviceControl(
     name: 'Copy from device',
     tooltip: _tooltip(bridge, "Copy the device's clipboard to this computer"),
-    icon: AppIcons.arrowDown,
+    icon: AppIcons.downloadSimple,
     onPressed: bridge == null ? null : () => _fromDevice(bridge, say),
     buttonKey: const ValueKey('android-clipboard-from-device'),
   ),

@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_devices/widgets.dart';
 
 /// The manners every device control shares, on either platform.
@@ -90,6 +92,68 @@ void main() {
     expect(
       tester.widget<IconButton>(find.byKey(const Key('home'))).onPressed,
       isNull,
+    );
+  });
+
+  testWidgets('a toggle shows on as the selected state layer', (tester) async {
+    Future<void> pump({required bool on}) => tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: DeviceControlBar(
+            controls: [
+              DeviceControl(
+                name: 'Appearance',
+                tooltip: 'Switch appearance',
+                icon: AppIcons.moon,
+                selected: on,
+                onPressed: () async {},
+                buttonKey: const Key('toggle'),
+              ),
+              DeviceControl(
+                name: 'Screenshot',
+                tooltip: 'Save a screenshot',
+                icon: AppIcons.camera,
+                onPressed: () async {},
+                buttonKey: const Key('plain'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    Color? fill(String key) {
+      final material = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byKey(Key(key)),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      return material.color;
+    }
+
+    await pump(on: true);
+    final scheme = Theme.of(
+      tester.element(find.byKey(const Key('toggle'))),
+    ).colorScheme;
+    expect(fill('toggle'), StateLayers.selected(scheme));
+    expect(
+      tester.widget<IconButton>(find.byKey(const Key('plain'))).isSelected,
+      isNull,
+      reason: 'a plain action is not a toggle',
+    );
+
+    await pump(on: false);
+    expect(fill('toggle'), isNot(StateLayers.selected(scheme)));
+    // The glyph does not change with the state; the layer says it.
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('toggle')),
+        matching: find.byIcon(AppIcons.moon),
+      ),
+      findsOneWidget,
     );
   });
 

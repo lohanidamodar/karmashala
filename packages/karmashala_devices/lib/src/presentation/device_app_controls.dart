@@ -116,10 +116,9 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
               Row(
                 children: [
                   TextButton.icon(
-                    icon: const Icon(
-                      AppIcons.downloadSimple,
-                      size: Chrome.iconAction,
-                    ),
+                    // A package, not a download: down is "to this computer"
+                    // everywhere else in the pane, and this goes to the device.
+                    icon: const Icon(AppIcons.package, size: Chrome.iconAction),
                     // The ellipsis is a promise that a dialog is coming, so it
                     // goes when there is a path to act on and nothing will open.
                     label: Text(
@@ -163,7 +162,7 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
                   IconButton(
                     tooltip: 'Launch this app',
                     icon: const Icon(
-                      AppIcons.playCircle,
+                      AppIcons.rocketLaunch,
                       size: Chrome.iconAction,
                     ),
                     onPressed: _ready && appId.isNotEmpty
@@ -177,7 +176,7 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
                   IconButton(
                     tooltip: 'Force-stop this app',
                     icon: const Icon(
-                      AppIcons.stopCircle,
+                      AppIcons.prohibit,
                       size: Chrome.iconAction,
                     ),
                     onPressed: _ready && appId.isNotEmpty

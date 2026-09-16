@@ -77,7 +77,7 @@ class StreamStalledOverlay extends StatelessWidget {
               SizedBox(height: roomy ? Insets.md : Insets.xs),
               FilledButton.icon(
                 onPressed: onRestart,
-                icon: const Icon(AppIcons.arrowCounterClockwise),
+                icon: const Icon(AppIcons.arrowClockwise),
                 label: const Text(
                   'Restart live view',
                   textAlign: TextAlign.center,

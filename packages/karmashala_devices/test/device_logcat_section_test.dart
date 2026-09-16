@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/ports.dart';
@@ -167,6 +168,30 @@ void main() {
       startedArgv(),
       ['-s', _serial, 'shell', 'logcat', '-v', 'threadtime'],
     );
+  });
+
+  testWidgets('streaming shows pause, and paused shows play — nothing else', (
+    tester,
+  ) async {
+    // Play and stop in circles were Launch and Force-stop an app a few rows
+    // up; trash was "delete a file" in the files dialog.
+    await pump(tester);
+    await tester.tap(strip());
+    await tester.pumpAndSettle();
+
+    Finder action(String tooltip, IconData glyph) => find.descendant(
+      of: find.byTooltip(tooltip),
+      matching: find.byIcon(glyph),
+    );
+    expect(action('Pause logcat', AppIcons.pause), findsOneWidget);
+    expect(action('Clear what is on screen', AppIcons.broom), findsOneWidget);
+    expect(find.byIcon(AppIcons.stopCircle), findsNothing);
+
+    await tester.tap(find.byTooltip('Pause logcat'));
+    await tester.pumpAndSettle();
+    expect(logcat.killed, isTrue);
+    expect(action('Resume logcat', AppIcons.play), findsOneWidget);
+    expect(find.byTooltip('Pause logcat'), findsNothing);
   });
 
   testWidgets('lines arrive and are drawn in the device\'s own words', (

@@ -8,6 +8,7 @@ import 'package:agent_cli/process.dart';
 import '../application/device_providers.dart';
 import '../application/device_recording_controller.dart';
 import '../../devices.dart';
+import 'device_recording_indicator.dart';
 
 /// The one thing on screen that says a recording is running: it reads
 /// [deviceRecordingProvider], which outlives the pane a switch unmounts.
@@ -59,27 +60,54 @@ class _Running extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final paused = _paused(ref);
-    return _Surface(
-      icon: paused == null ? AppIcons.circle : AppIcons.pauseCircle,
-      // The attention colour rather than the error colour: a recording in
-      // progress is something to remember, not something that went wrong.
-      iconColour: paused == null
-          ? SemanticColors.of(context).attention
-          : theme.colorScheme.onSurfaceVariant,
-      title: paused == null
-          ? 'Recording ${recording.target.label}'
-          : 'Recording ${recording.target.label} — paused',
-      detail: paused ?? recording.path,
-      secondDetail: paused == null ? null : recording.path,
-      actions: [
-        TextButton.icon(
-          key: const Key('device-recording-stop'),
-          onPressed: () =>
-              ref.read(deviceRecordingProvider.notifier).stop(),
-          icon: const Icon(AppIcons.stopCircle),
-          label: const Text('Stop recording'),
-        ),
-      ],
+    return RecordingClock(
+      recording: recording,
+      builder: (context, now) {
+        final elapsed = formatRecordingElapsed(
+          now.difference(recording.startedAt),
+        );
+        return _Surface(
+          // The red dot every recorder shows, pulsing while frames arrive —
+          // a plain circle read as a radio button, not as "recording".
+          leading: paused == null
+              ? RecordingDot(
+                  key: const Key('device-recording-dot'),
+                  size: Chrome.icon,
+                  semanticLabel: 'Recording',
+                )
+              : Icon(
+                  AppIcons.pauseCircle,
+                  key: const Key('device-recording-paused'),
+                  size: Chrome.icon,
+                  color: theme.colorScheme.onSurfaceVariant,
+                  semanticLabel: 'Recording paused',
+                ),
+          title: paused == null
+              ? 'Recording ${recording.target.label}'
+              : 'Recording ${recording.target.label} — paused',
+          detail: paused ?? recording.path,
+          secondDetail: paused == null ? null : recording.path,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+              child: Text(
+                elapsed,
+                key: const Key('device-recording-elapsed'),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+            TextButton.icon(
+              key: const Key('device-recording-stop'),
+              onPressed: () =>
+                  ref.read(deviceRecordingProvider.notifier).stop(),
+              icon: const Icon(AppIcons.stopFill, size: Chrome.icon),
+              label: const Text('Stop recording'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -123,14 +151,17 @@ class _Finished extends ConsumerWidget {
               ),
             );
     return _Surface(
-      icon: failed
-          ? AppIcons.warningCircle
-          : outcome.result == DeviceRecordingResult.empty
-          ? AppIcons.info
-          : AppIcons.checkCircle,
-      iconColour: failed
-          ? SemanticColors.of(context).failure
-          : theme.colorScheme.onSurfaceVariant,
+      leading: Icon(
+        failed
+            ? AppIcons.warningCircle
+            : outcome.result == DeviceRecordingResult.empty
+            ? AppIcons.info
+            : AppIcons.checkCircle,
+        size: Chrome.icon,
+        color: failed
+            ? SemanticColors.of(context).failure
+            : theme.colorScheme.onSurfaceVariant,
+      ),
       title: 'Recording of ${outcome.deviceId}',
       detail: outcome.message,
       actions: [
@@ -138,14 +169,14 @@ class _Finished extends ConsumerWidget {
           TextButton.icon(
             key: const Key('device-recording-reveal'),
             onPressed: () => _reveal(context, ref),
-            icon: const Icon(AppIcons.folderOpen),
+            icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),
             label: const Text('Show file'),
           ),
         IconButton(
           key: const Key('device-recording-dismiss'),
           tooltip: 'Dismiss',
           onPressed: () => ref.read(deviceRecordingProvider.notifier).dismiss(),
-          icon: const Icon(AppIcons.x),
+          icon: const Icon(AppIcons.x, size: Chrome.icon),
         ),
       ],
     );
@@ -154,16 +185,15 @@ class _Finished extends ConsumerWidget {
 
 class _Surface extends StatelessWidget {
   const _Surface({
-    required this.icon,
-    required this.iconColour,
+    required this.leading,
     required this.title,
     required this.detail,
     required this.actions,
     this.secondDetail,
   });
 
-  final IconData icon;
-  final Color iconColour;
+  /// The state glyph at the start of the line, sized [Chrome.icon].
+  final Widget leading;
   final String title;
   final String detail;
   final String? secondDetail;
@@ -182,10 +212,7 @@ class _Surface extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(icon, color: iconColour),
-          ),
+          Padding(padding: const EdgeInsets.only(top: 2), child: leading),
           const SizedBox(width: Insets.sm),
           Expanded(
             child: Column(

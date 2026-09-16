@@ -458,7 +458,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
         if (_writable && _path != null)
           TextButton.icon(
             onPressed: _busy == null ? _push : null,
-            icon: const Icon(AppIcons.plus, size: Chrome.iconAction),
+            icon: const Icon(AppIcons.uploadSimple, size: Chrome.iconAction),
             label: const Text('Add a file…'),
           ),
         TextButton(
@@ -589,7 +589,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            entry.isDirectory ? AppIcons.folder : AppIcons.note,
+            entry.isDirectory ? AppIcons.folder : AppIcons.file,
             size: Chrome.iconAction,
             color: scheme.onSurfaceVariant,
           ),
@@ -803,7 +803,7 @@ class _DeviceFileTile extends StatelessWidget {
       // Flutter asserts, because a tile paints on the nearest Material.
       tileColor: hovering ? scheme.primaryContainer : null,
       leading: Icon(
-        entry.isDirectory ? AppIcons.folder : AppIcons.note,
+        entry.isDirectory ? AppIcons.folder : AppIcons.file,
         size: Chrome.iconAction,
         // Unreadable is a fact about the entry, and it is said in the subtitle
         // as well — the dimming is not carrying the meaning on its own.

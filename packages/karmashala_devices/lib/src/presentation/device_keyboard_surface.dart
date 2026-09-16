@@ -217,8 +217,9 @@ class _KeyboardBar extends StatelessWidget {
     final live = armed && focused;
     final (label, icon) = switch ((available, live)) {
       (false, _) => (kKeyboardUnavailableLabel, AppIcons.warningCircle),
-      (true, true) => (kKeyboardOnLabel, AppIcons.terminalWindow),
-      (true, false) => (kKeyboardOffLabel, AppIcons.pauseCircle),
+      // The keyboard both ways: the headline and the accent say which.
+      (true, true) => (kKeyboardOnLabel, AppIcons.keyboard),
+      (true, false) => (kKeyboardOffLabel, AppIcons.keyboard),
     };
     // What the transport cannot do is said while it is armed, focused or not:
     // finding out that Ctrl+C went nowhere by pressing it is not a report.

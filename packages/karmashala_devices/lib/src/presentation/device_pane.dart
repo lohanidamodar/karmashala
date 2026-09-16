@@ -28,6 +28,7 @@ import 'device_app_controls.dart';
 import 'device_keyboard_surface.dart';
 import 'device_logcat_section.dart';
 import 'device_recording_banner.dart';
+import 'device_recording_indicator.dart';
 import 'device_stream_status.dart';
 import '../application/simulator_live_view.dart';
 import 'simulator_live_pane.dart';
