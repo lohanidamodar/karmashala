@@ -188,17 +188,6 @@ void main() {
   });
 
   testWidgets('the pairing dialog shows the grants and the QR', (tester) async {
-    // Pre-existing on main at 0c0a05e: the dialog's reveal/copy row overflows
-    // its 340-px width under the test font. The bug is real but lives in
-    // pairing_dialog.dart — the parallel pairing loop's territory — so only
-    // that overflow is swallowed here; everything else still fails the test.
-    final onError = FlutterError.onError!;
-    FlutterError.onError = (details) {
-      if ('${details.exception}'.contains('RenderFlex overflowed')) return;
-      onError(details);
-    };
-    addTearDown(() => FlutterError.onError = onError);
-
     await tester.pumpWidget(app());
     await enableRemoteAccess(tester);
 
