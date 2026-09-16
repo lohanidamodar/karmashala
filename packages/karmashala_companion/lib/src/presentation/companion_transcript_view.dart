@@ -5,22 +5,6 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'package:karmashala_remote/companion.dart';
 
-/// The reasoning some agents wrap their turn in: `<thinking>` or `<thought>`,
-/// as the desktop transcript folds them.
-final _thinkingTag = RegExp(
-  r'<(?:thinking|thought)>([\s\S]*?)</(?:thinking|thought)>',
-);
-
-/// The reasoning inside the first tag, and the turn with that tag removed.
-(String?, String) _splitThinking(String text) {
-  final match = _thinkingTag.firstMatch(text);
-  if (match == null) return (null, text);
-  final thinking = match.group(1)?.trim();
-  final clean = (text.substring(0, match.start) + text.substring(match.end))
-      .trim();
-  return (thinking, clean);
-}
-
 /// The phone's transcript, drawn newest-first: reversed, so offset zero *is*
 /// the newest message rather than a lazy list's estimated `maxScrollExtent`.
 class CompanionTranscriptView extends StatefulWidget {
@@ -386,7 +370,7 @@ class _MessageTile extends StatelessWidget {
     final mono = theme.textTheme.bodyMedium?.copyWith(fontFamily: kMonoFamily);
     final (thinking, clean) = switch (message.role) {
       'user' || 'tool' || 'error' => (null, message.text),
-      _ => _splitThinking(message.text),
+      _ => splitThinking(message.text),
     };
     return _TurnFrame(
       fill: style.fill,
@@ -414,7 +398,7 @@ class _MessageTile extends StatelessWidget {
   }
 }
 
-/// The rounded frame round a turn; padded only when it draws something.
+/// The rounded frame round a turn, at the phone's roomier radius and padding.
 class _TurnFrame extends StatelessWidget {
   const _TurnFrame({required this.child, this.fill, this.edge});
 
@@ -425,21 +409,17 @@ class _TurnFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-    child: Container(
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(Radii.lg),
-        border: edge == null ? null : Border.all(color: edge!),
-      ),
-      padding: fill == null && edge == null
-          ? EdgeInsets.zero
-          : const EdgeInsets.all(Insets.md),
+    child: TranscriptTurnFrame(
+      fill: fill,
+      edge: edge,
+      radius: Radii.lg,
+      padding: const EdgeInsets.all(Insets.md),
       child: child,
     ),
   );
 }
 
-/// Who is speaking, in one compact row sized by the label, not by a control.
+/// Who is speaking: the shared header at this density's sizes.
 class _RoleGutter extends StatelessWidget {
   const _RoleGutter({required this.style});
 
@@ -447,35 +427,16 @@ class _RoleGutter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final density = UiDensity.of(context);
-    final glyph = Icon(
-      style.icon,
-      size: density.iconSmall,
-      color: style.iconColour ?? style.colour,
-    );
-    final ring = style.ring;
-    return Row(
-      children: [
-        if (ring == null)
-          glyph
-        else
-          Container(
-            width: Touch.icon + Insets.xs,
-            height: Touch.icon + Insets.xs,
-            decoration: BoxDecoration(color: ring, shape: BoxShape.circle),
-            alignment: Alignment.center,
-            child: glyph,
-          ),
-        SizedBox(width: density.glyphGap),
-        Text(
-          style.label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: style.colour,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ],
+    return TranscriptRoleHeader(
+      icon: style.icon,
+      label: style.label,
+      color: style.colour,
+      iconColor: style.iconColour,
+      ring: style.ring,
+      ringDiameter: Touch.icon + Insets.xs,
+      iconSize: density.iconSmall,
+      gap: density.glyphGap,
     );
   }
 }
@@ -531,10 +492,7 @@ class _TranscriptUnavailable extends StatelessWidget {
 }
 
 class _CompanionEmptyState extends StatelessWidget {
-  const _CompanionEmptyState({
-    required this.emptyHint,
-    this.onSuggestionTap,
-  });
+  const _CompanionEmptyState({required this.emptyHint, this.onSuggestionTap});
 
   final String emptyHint;
   final ValueChanged<String>? onSuggestionTap;

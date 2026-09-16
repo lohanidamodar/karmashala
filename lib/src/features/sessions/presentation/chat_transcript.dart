@@ -346,27 +346,6 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   }
 }
 
-/// A `<thinking>` or `<thought>` block inside an agent's words.
-final _thinkingTag = RegExp(
-  r'<(?:thinking|thought)>([\s\S]*?)<\/(?:thinking|thought)>',
-);
-
-/// Extracts model reasoning from `<thinking>` tags or explicit fields.
-(String?, String) _resolveThinking(String rawText, String? explicitThinking) {
-  if (explicitThinking != null && explicitThinking.trim().isNotEmpty) {
-    return (explicitThinking.trim(), rawText);
-  }
-  final match = _thinkingTag.firstMatch(rawText);
-  if (match != null) {
-    final thought = match.group(1)?.trim();
-    final clean =
-        (rawText.substring(0, match.start) + rawText.substring(match.end))
-            .trim();
-    return (thought, clean);
-  }
-  return (null, rawText);
-}
-
 /// `mcp__server__tool` as `server · tool`; any other name as it came.
 String toolDisplayName(String name) {
   if (!name.startsWith('mcp__')) return name;
@@ -651,50 +630,16 @@ class _MessageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    Widget eyebrow = Text(
-      label.toUpperCase(),
-      maxLines: 1,
-      softWrap: false,
-      overflow: TextOverflow.ellipsis,
-      // `labelSmall` is the chrome eyebrow and the theme spaces it at 0.8 on
-      // purpose; a 0.5 override made these unique.
-      style: theme.textTheme.labelSmall?.copyWith(
-        color: color,
-        fontWeight: FontWeight.w700,
-      ),
-    );
-    if (fullLabel case final full?) {
-      eyebrow = Tooltip(
-        message: full,
-        // The text already names the row to a screen reader; a second name
-        // would merge into the row's controls.
-        excludeFromSemantics: true,
-        child: eyebrow,
-      );
-    }
     final at = this.at;
-    return Row(
-      children: [
-        Icon(icon, size: Chrome.iconSmall, color: color),
-        const SizedBox(width: Insets.xs),
-        Expanded(
-          child: Row(
-            children: [
-              Flexible(child: eyebrow),
-              if (badge case final badge?) ...[
-                const SizedBox(width: Insets.xs),
-                badge,
-              ],
-              if (at != null) ...[
-                const SizedBox(width: Insets.sm),
-                Flexible(child: _MessageAge(at: at)),
-              ],
-            ],
-          ),
-        ),
-        ...actions,
-      ],
+    // The shared header at the pointer's sizes, its defaults.
+    return TranscriptRoleHeader(
+      icon: icon,
+      label: label,
+      color: color,
+      fullLabel: fullLabel,
+      badge: badge,
+      meta: at == null ? null : _MessageAge(at: at),
+      actions: actions,
     );
   }
 }
@@ -713,13 +658,10 @@ class _UserMessageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(Radii.md),
-        // **No border.** `surfaceContainerHigh` already separates the card;
-        // the tool card keeps its border because its fill barely differs.
-      ),
+    return TranscriptTurnFrame(
+      // **No border.** `surfaceContainerHigh` already separates the card;
+      // the tool card keeps its border because its fill barely differs.
+      fill: scheme.surfaceContainerHigh,
       padding: const EdgeInsets.symmetric(
         horizontal: Insets.md,
         vertical: Insets.sm,
@@ -758,9 +700,9 @@ class _AgentMessageBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final (thinking, cleanText) = _resolveThinking(
+    final (thinking, cleanText) = splitThinking(
       message.text,
-      message.thinking,
+      explicit: message.thinking,
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -797,13 +739,9 @@ class _ErrorMessageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final failure = SemanticColors.of(context).failure;
-    return Container(
-      padding: const EdgeInsets.all(Insets.sm),
-      decoration: BoxDecoration(
-        color: failure.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: failure.withValues(alpha: 0.4)),
-      ),
+    return TranscriptTurnFrame(
+      fill: failure.withValues(alpha: 0.08),
+      edge: failure.withValues(alpha: 0.4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -872,60 +810,51 @@ class _ToolMessageCard extends StatelessWidget {
         };
     final shown = toolDisplayName(eyebrow);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.brightness == Brightness.dark
-            ? scheme.surfaceContainerLowest
-            : scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(
-          color: isToolError ? failure : scheme.outlineVariant,
-        ),
+    return TranscriptTurnFrame(
+      fill: theme.brightness == Brightness.dark
+          ? scheme.surfaceContainerLowest
+          : scheme.surfaceContainerLow,
+      edge: isToolError ? failure : scheme.outlineVariant,
+      clip: true,
+      // Tighter vertically than the other roles: a tool row is the most
+      // repeated thing in a transcript, so 4px multiplies by every call.
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.sm,
+        vertical: Insets.xs,
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(Radii.md),
-        child: Padding(
-          // Tighter vertically than the other roles: a tool row is the most
-          // repeated thing in a transcript, so 4px multiplies by every call.
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: Insets.xs,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // An MCP name is wider than a narrow pane; it gives way first.
+          _MessageHeader(
+            icon: _toolIcon(activity?.name),
+            label: shown,
+            fullLabel: activity == null ? null : eyebrow,
+            color: accent,
+            badge: isToolError ? _FailedBadge(color: failure) : null,
+            actions: _messageActions(
+              onSaveNote,
+              activity?.output ?? message.text,
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // An MCP name is wider than a narrow pane; it gives way first.
-              _MessageHeader(
-                icon: _toolIcon(activity?.name),
-                label: shown,
-                fullLabel: activity == null ? null : eyebrow,
-                color: accent,
-                badge: isToolError ? _FailedBadge(color: failure) : null,
-                actions: _messageActions(
-                  onSaveNote,
-                  activity?.output ?? message.text,
-                ),
-              ),
-              const SizedBox(height: Insets.xs),
-              if (thinking != null && thinking.isNotEmpty) ...[
-                ThinkingAccordion(thinking: thinking),
-                const SizedBox(height: Insets.xs),
-              ],
-              if (activity != null)
-                ToolActivityBody(
-                  activity: activity,
-                  resolveHostPath: resolveHostPath,
-                  onPathTap: onPathTap,
-                )
-              else
-                SelectableText(
-                  message.text,
-                  style: MonoStyles.label.copyWith(height: 1.35),
-                ),
-              ?detail,
-            ],
-          ),
-        ),
+          const SizedBox(height: Insets.xs),
+          if (thinking != null && thinking.isNotEmpty) ...[
+            ThinkingAccordion(thinking: thinking),
+            const SizedBox(height: Insets.xs),
+          ],
+          if (activity != null)
+            ToolActivityBody(
+              activity: activity,
+              resolveHostPath: resolveHostPath,
+              onPathTap: onPathTap,
+            )
+          else
+            SelectableText(
+              message.text,
+              style: MonoStyles.label.copyWith(height: 1.35),
+            ),
+          ?detail,
+        ],
       ),
     );
   }
