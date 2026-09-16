@@ -14,7 +14,6 @@ import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/android_app_discovery.dart';
 import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';
-import '../../browser/presentation/pane_status_row.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 /// The debug console for the Flutter app under development, and the two buttons

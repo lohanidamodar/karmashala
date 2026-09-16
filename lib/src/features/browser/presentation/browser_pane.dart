@@ -12,7 +12,6 @@ import '../application/browser_pane_controller.dart';
 import 'package:karmashala_browser/browser.dart';
 import 'browser_console.dart';
 import 'browser_viewport_shot.dart';
-import 'pane_status_row.dart';
 
 /// The browser pane: attach to the Chrome the developer already has open,
 /// drive it, and point at an element to send it to an agent.

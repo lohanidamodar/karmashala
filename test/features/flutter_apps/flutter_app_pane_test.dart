@@ -8,7 +8,6 @@ import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pane.dart';
-import 'package:karmashala/src/features/browser/presentation/pane_status_row.dart';
 import 'package:karmashala_ui/panes.dart';
 
 import '../../support/fakes.dart';

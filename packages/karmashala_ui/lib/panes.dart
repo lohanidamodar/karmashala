@@ -7,3 +7,4 @@ export 'src/pane_notice_bar.dart';
 export 'src/pane_scaffold.dart';
 export 'src/status_dot.dart';
 export 'src/eyebrow_label.dart';
+export 'src/pane_status_row.dart';

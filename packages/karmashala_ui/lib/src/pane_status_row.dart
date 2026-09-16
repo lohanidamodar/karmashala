@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:karmashala_ui/panes.dart';
-import 'package:karmashala_ui/tokens.dart';
+import 'design_tokens.dart';
+import 'status_dot.dart';
 
 /// The line at the top of an attach-to-something pane — the browser's and the
 /// running Flutter app's: a status dot, what we are attached to, one action.
