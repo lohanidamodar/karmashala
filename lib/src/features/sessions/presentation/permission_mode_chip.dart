@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/descriptors.dart';
+import '../../agents/presentation/picker_face.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
 import '../application/session_signals.dart';
@@ -56,8 +57,6 @@ class PermissionModeChip extends ConsumerWidget {
     final effective = launcher.effectivePermissionFor(sessionId);
     if (effective == null) return const SizedBox.shrink();
 
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final agentName = effective.descriptor?.displayName ?? 'This agent';
     final support = effective.descriptor?.launch.permission;
     final known = support != null && support.isKnown;
@@ -70,9 +69,6 @@ class PermissionModeChip extends ConsumerWidget {
     // Colour carries meaning only: an agent we cannot govern and a selection
     // that bypasses everything. Nothing else is tinted.
     final dangerous = known && support.isDangerous(effective.selection);
-    final foreground = !known || dangerous
-        ? scheme.error
-        : scheme.onSurfaceVariant;
     // The familiar name for the rung, ahead of this CLI's own word for it —
     // never instead of it. See `pairedWithFamiliarName`.
     final label = known
@@ -82,16 +78,15 @@ class PermissionModeChip extends ConsumerWidget {
     return PopupMenuButton<PermissionChoice>(
       tooltip: '',
       position: PopupMenuPosition.over,
-      onSelected: (choice) =>
-          _apply(
-            context,
-            ref,
-            launcher,
-            choice,
-            effective.selection,
-            support,
-            agentName,
-          ),
+      onSelected: (choice) => _apply(
+        context,
+        ref,
+        launcher,
+        choice,
+        effective.selection,
+        support,
+        agentName,
+      ),
       itemBuilder: (context) => [
         // First, and its own row: the default is where every session starts and
         // the only state that follows a later change. It names today's answer.
@@ -117,7 +112,8 @@ class PermissionModeChip extends ConsumerWidget {
           for (final axis in axes) ...[
             // Only when there is more than one: a flat list would imply Codex's
             // sandbox and approval policy are one question with seven answers.
-            if (axes.length > 1) DesktopMenuHeader<PermissionChoice>(axis.label),
+            if (axes.length > 1)
+              DesktopMenuHeader<PermissionChoice>(axis.label),
             for (final option in axis.options)
               DesktopMenuDetailItem<PermissionChoice>(
                 value: PermissionChoice(axis.id, option.id),
@@ -137,70 +133,25 @@ class PermissionModeChip extends ConsumerWidget {
           inherited: effective.inherited,
           unrecognised: effective.unrecognised,
         ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: 3,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Radii.sm),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                !known
-                    ? AppIcons.warningCircle
-                    : dangerous
-                    ? AppIcons.warning
-                    : AppIcons.check,
-                size: Chrome.iconSmall,
-                color: foreground,
-              ),
-              const SizedBox(width: Insets.xs),
-              // The mode's own name is what the chip is for, so it gives up its
-              // tail before the row does. Codex's two axes make it long, and
-              // the composer bar's one flexible cell is not this chip.
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxLabelWidth),
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: foreground,
-                    ),
-                  ),
-                ),
-              ),
-              // A mode this session is merely *following* has to look different
-              // from one it chose, and that is not discoverable by hovering.
-              for (final qualifier in [
-                if (effective.inherited) 'default',
-                // A mode this build does not name, substituted down to the
-                // agent's default — on the face, because the user set another.
-                if (effective.unrecognised) 'unrecognised',
-              ]) ...[
-                const SizedBox(width: Insets.xs),
-                Flexible(
-                  child: Text(
-                    '· $qualifier',
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: foreground,
-                    ),
-                  ),
-                ),
-              ],
-              // A disclosure caret, a step under the chip's own glyph — the
-              // same 11 the model chip and the permission picker draw.
-              Icon(AppIcons.caretDown, size: 11, color: foreground),
-            ],
-          ),
+        // The mode's own name is what the chip is for, so it gives up its tail
+        // before the row does. Codex's two axes make it long.
+        child: PickerFace(
+          icon: !known
+              ? AppIcons.warningCircle
+              : dangerous
+              ? AppIcons.warning
+              : AppIcons.check,
+          label: label,
+          qualifiers: [
+            // A mode this session is merely *following* has to look different
+            // from one it chose, and that is not discoverable by hovering.
+            if (effective.inherited) 'default',
+            // A mode this build does not name, substituted down to the agent's
+            // default — on the face, because the user set another.
+            if (effective.unrecognised) 'unrecognised',
+          ],
+          alarming: !known || dangerous,
+          maxLabelWidth: maxLabelWidth,
         ),
       ),
     );

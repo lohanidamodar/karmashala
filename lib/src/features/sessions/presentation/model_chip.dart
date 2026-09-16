@@ -7,6 +7,7 @@ import 'package:karmashala_ui/menus.dart';
 import '../../agents/application/session_model_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/model_picker.dart';
+import '../../agents/presentation/picker_face.dart';
 import '../application/session_launcher.dart';
 import '../application/session_notice.dart';
 
@@ -160,7 +161,6 @@ class ModelChip extends StatelessWidget {
     ModelChip.debugBuildCount++;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final foreground = view.alarming ? scheme.error : scheme.onSurfaceVariant;
 
     return PopupMenuButton<ModelChoice>(
       tooltip: '',
@@ -203,59 +203,14 @@ class ModelChip extends StatelessWidget {
       },
       child: Tooltip(
         message: view.tooltip,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: 3,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(Radii.sm),
-            border: Border.all(color: scheme.outlineVariant),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                view.alarming ? AppIcons.warningCircle : AppIcons.robot,
-                size: Chrome.iconSmall,
-                color: foreground,
-              ),
-              const SizedBox(width: Insets.xs),
-              // Capped, ellipsised **and** flexible: the cap stops a long name
-              // dominating a wide window, the `Flexible` yields the name first.
-              Flexible(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxLabelWidth),
-                  child: Text(
-                    view.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: foreground,
-                    ),
-                  ),
-                ),
-              ),
-              if (view.qualifier != null) ...[
-                const SizedBox(width: Insets.xs),
-                Flexible(
-                  child: Text(
-                    '· ${view.qualifier}',
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: foreground,
-                    ),
-                  ),
-                ),
-              ],
-              // A disclosure caret, deliberately a step under the chip's own
-              // glyph — the same 11 the permission chips and the picker draw.
-              Icon(AppIcons.caretDown, size: 11, color: foreground),
-            ],
-          ),
+        // Capped, ellipsised **and** flexible: the cap stops a long name
+        // dominating a wide window, the face yields the name first.
+        child: PickerFace(
+          icon: view.alarming ? AppIcons.warningCircle : AppIcons.robot,
+          label: view.label,
+          qualifiers: [?view.qualifier],
+          alarming: view.alarming,
+          maxLabelWidth: maxLabelWidth,
         ),
       ),
     );

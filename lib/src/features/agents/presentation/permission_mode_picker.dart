@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:agent_cli/descriptors.dart';
+
+import 'picker_face.dart';
 
 /// A menu of the permission modes one agent really has. Rows come from
 /// [permissionAxisOptionsFor]; a superseded axis is shown but disabled.
@@ -29,8 +30,6 @@ class PermissionModePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final name = agentName ?? descriptor?.displayName ?? 'This agent';
     final support = descriptor?.launch.permission;
     final known = support != null && support.isKnown;
@@ -41,11 +40,6 @@ class PermissionModePicker extends StatelessWidget {
     );
 
     final dangerous = known && support.isDangerous(selection);
-    // Colour carries meaning only: a bypass and an agent we cannot govern are
-    // both things the user should notice, and nothing else is tinted.
-    final foreground = dangerous || !known
-        ? scheme.error
-        : scheme.onSurfaceVariant;
     // Paired with the rung's familiar name, exactly as the composer chip is:
     // two controls drawing one selection must not name it two ways.
     final label = known
@@ -85,36 +79,16 @@ class PermissionModePicker extends StatelessWidget {
             if (axis != axes.last) const DesktopMenuDivider(),
           ],
       ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 3),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(Radii.sm),
-          border: Border.all(color: scheme.outlineVariant),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              !known
-                  ? AppIcons.warningCircle
-                  : dangerous
-                  ? AppIcons.warning
-                  : AppIcons.check,
-              size: Chrome.iconSmall,
-              color: foreground,
-            ),
-            const SizedBox(width: Insets.xs),
-            Flexible(
-              child: Text(
-                label,
-                softWrap: false,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall?.copyWith(color: foreground),
-              ),
-            ),
-            Icon(AppIcons.caretDown, size: 11, color: foreground),
-          ],
-        ),
+      child: PickerFace(
+        icon: !known
+            ? AppIcons.warningCircle
+            : dangerous
+            ? AppIcons.warning
+            : AppIcons.check,
+        label: label,
+        // Colour carries meaning only: a bypass and an agent we cannot govern
+        // are both things the user should notice, and nothing else is tinted.
+        alarming: dangerous || !known,
       ),
     );
   }
