@@ -9,6 +9,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'package:karmashala_remote/companion.dart';
+import 'package:karmashala_remote/remote.dart' show CapabilitySet;
 import 'companion_chrome.dart';
 
 /// Draws [value] through its four states. Not `when`: a provider being retried
@@ -35,6 +36,12 @@ String companionErrorText(Object error) => error is GatewayException
 /// was never recorded says "age unknown" and never "just now" (§19).
 String companionSnapshotAge(DateTime? receivedAt, DateTime now) =>
     receivedAt == null ? 'age unknown' : describeAge(now.difference(receivedAt));
+
+/// What a pairing let this phone do, in words: "send prompt, approve".
+String companionGrantsSentence(CapabilitySet capabilities) => capabilities
+    .granted
+    .map((c) => c.wire.replaceAll('_', ' '))
+    .join(', ');
 
 /// A block the size and shape of text that has not arrived yet.
 class _Bone extends StatelessWidget {
