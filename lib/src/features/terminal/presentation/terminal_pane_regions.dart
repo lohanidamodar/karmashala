@@ -54,6 +54,9 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (editorPanePath(paneId) case final path?) {
       return EditorTabView(key: ValueKey(paneId), hostPath: path);
     }
+    if (notePaneNoteId(paneId) case final noteId?) {
+      return NoteTabView(key: ValueKey(paneId), noteId: noteId);
+    }
     if (diffTargetOf(paneId) case final target?) {
       return DiffTabView(key: ValueKey(paneId), target: target);
     }

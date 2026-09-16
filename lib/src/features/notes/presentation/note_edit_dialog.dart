@@ -9,18 +9,9 @@ import '../../todos/presentation/project_menu.dart';
 import '../application/notes_providers.dart';
 import '../domain/note.dart';
 
-/// Opens an empty note editor and keeps whatever comes back. Shared by the
-/// panel's **+** and the palette, so a second door cannot file notes differently.
-Future<Note?> showNewNoteDialog(BuildContext context, WidgetRef ref) =>
-    _composeNote(
-      context,
-      ref,
-      body: '',
-      projectId: ref.read(noteScopeProvider).projectForNewItems,
-    );
-
-/// Keeps text captured from somewhere else as a note. It differs from the
-/// panel's **+** in one thing: a capture is filed under where it came from.
+/// Keeps text captured from somewhere else as a note, in a dialog so the
+/// capture does not take the user away from what they were reading. Writing a
+/// note from nothing opens a tab instead (`writeNewNote`).
 Future<Note?> showCapturedNoteDialog(
   BuildContext context,
   WidgetRef ref, {

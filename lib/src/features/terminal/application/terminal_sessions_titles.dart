@@ -49,6 +49,12 @@ extension TerminalPaneTitles on TerminalSessionsController {
     // A host path, which may be spelled for Windows: the windows context reads
     // `/` and `\` alike, as the editor's own `_hostPaths` does.
     if (editorPanePath(paneId) case final path?) return p.windows.basename(path);
+    if (notePaneNoteId(paneId) case final noteId?) {
+      for (final note in ref.read(notesProvider)) {
+        if (note.id == noteId) return note.displayTitle;
+      }
+      return 'Note';
+    }
     // git prints a relative path with `/` whatever the host separator is.
     if (diffPaneTarget(paneId) case final diff?) {
       return p.posix.basename(diff.path);

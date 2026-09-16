@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../notes/presentation/note_close_guard.dart';
 import '../application/editor_tab_actions.dart';
 import '../application/open_documents.dart';
 import 'discard_unsaved_dialog.dart';
@@ -18,6 +19,8 @@ Future<bool> confirmEditorsClosable(
   WidgetRef ref,
   List<String> tabIds,
 ) async {
+  if (!await confirmNotesClosable(context, ref, tabIds)) return false;
+  if (!context.mounted) return false;
   final unsaved = ref.read(editorTabActionsProvider).unsavedIn(tabIds);
   if (unsaved.isEmpty) return true;
   final choice = await confirmUnsavedClose(

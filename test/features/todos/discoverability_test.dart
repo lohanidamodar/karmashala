@@ -7,7 +7,10 @@ import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/notes/application/note_drafts.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
+import 'package:karmashala/src/features/notes/presentation/note_tab_view.dart';
+import 'package:karmashala_ui/code.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 
 import '../../support/fakes.dart';
@@ -91,7 +94,8 @@ void main() {
     expect(
       find.text('New todo'),
       findsOneWidget,
-      reason: 'the palette answers "todo" with something you can do, not only '
+      reason:
+          'the palette answers "todo" with something you can do, not only '
           'with a panel you would have to know the name of',
     );
 
@@ -103,7 +107,10 @@ void main() {
     // ...and it put the cursor where the todo goes, so the walk ends in
     // typing rather than in looking for the next thing to click.
     expect(find.text('New todo'), findsOneWidget, reason: 'the composer hint');
-    await tester.enterText(find.widgetWithText(TextField, 'New todo'), 'buy milk');
+    await tester.enterText(
+      find.widgetWithText(TextField, 'New todo'),
+      'buy milk',
+    );
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await settle(tester);
 
@@ -128,16 +135,22 @@ void main() {
     await tester.tap(find.text('New note…'));
     await settle(tester);
 
-    // The editor is open and says what it is doing, and the panel behind it is
-    // the one that will hold the result.
-    expect(find.text('New note'), findsOneWidget);
+    // The note is open in its tab, on the editor, and the panel behind it is
+    // the one that lists it.
+    expect(find.byType(NoteTabView), findsOneWidget);
     expect(container.read(sidePanelProvider), SidePanelSurface.notes);
 
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Note'),
-      'the toolbar needs a compact mode',
-    );
-    await tester.tap(find.text('Save'));
+    tester
+            .widget<AppCodeEditor>(
+              find.descendant(
+                of: find.byType(NoteTabView),
+                matching: find.byType(AppCodeEditor),
+              ),
+            )
+            .controller
+            .text =
+        'the toolbar needs a compact mode';
+    await tester.pump(NoteDrafts.autosaveDelay);
     await settle(tester);
 
     expect(
@@ -157,6 +170,6 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Write a note'));
     await settle(tester);
 
-    expect(find.text('New note'), findsOneWidget, reason: 'the editor opened');
+    expect(find.byType(NoteTabView), findsOneWidget, reason: 'the note opened');
   });
 }

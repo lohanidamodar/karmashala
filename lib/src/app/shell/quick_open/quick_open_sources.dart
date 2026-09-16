@@ -12,7 +12,6 @@ import '../../../features/environments/presentation/environment_health_dialog.da
 import '../../../features/fanout/presentation/fanout_dialog.dart';
 import '../../../features/git/application/changes_providers.dart';
 import '../../../features/notes/application/notes_providers.dart';
-import '../../../features/notes/presentation/note_edit_dialog.dart';
 import '../../../features/notifications/application/notification_providers.dart';
 import '../../../features/projects/application/projects_controller.dart';
 import '../../../features/projects/presentation/new_project_dialog.dart';
@@ -187,7 +186,7 @@ class QuickOpenSources {
           ],
           onSelect: () {
             panel.select(SidePanelSurface.notes);
-            showNewNoteDialog(context, ref);
+            writeNewNote(ref);
           },
         ),
       _command(

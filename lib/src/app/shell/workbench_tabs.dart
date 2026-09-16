@@ -4,13 +4,15 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_terminal_core/geometry.dart';
+
 import '../../features/explorer/application/session_context.dart';
+import '../../features/notes/application/notes_providers.dart';
 import '../../features/sessions/application/session_ui_providers.dart';
 import '../../features/sessions/presentation/session_transcript_view.dart';
 import '../../features/settings/application/settings_tab.dart';
 import '../../features/settings/presentation/settings_nav.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
-
 
 /// Brings [tabId] to the front and makes sure the terminal is what the workbench
 /// is showing: picking a tab from a strip or a list is a request to *see* it.
@@ -41,6 +43,28 @@ void openSettingsTab(
       .read(terminalSessionsControllerProvider.notifier)
       .openSettingsTab();
   activateTerminalTab(ref, tabId);
+}
+
+/// Opens note [noteId] in a tab of its own, or brings its open tab forward.
+void openNoteTab(WidgetRef ref, String noteId) {
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openDocumentTab(notePaneId(noteId));
+  activateTerminalTab(ref, tabId);
+}
+
+/// Starts an empty note, filed where the Notes panel is looking, and opens it.
+/// A note closed still empty is not kept (see `NoteTabsObserver`).
+String writeNewNote(WidgetRef ref) {
+  final note = ref
+      .read(notesProvider.notifier)
+      .capture(
+        body: '',
+        projectId: ref.read(noteScopeProvider).projectForNewItems,
+        inheritProjectFromSource: false,
+      );
+  openNoteTab(ref, note.id);
+  return note.id;
 }
 
 /// Lets go of a selection that has no pane of ours: `_NoPaneForSession` replaces

@@ -3,7 +3,6 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notes/application/composer_draft.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
-import 'package:karmashala/src/features/notes/presentation/note_edit_dialog.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_view.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -17,6 +16,7 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 
@@ -87,6 +87,12 @@ void main() {
     of: find.byType(AlertDialog),
     matching: find.text('Delete'),
   );
+
+  List<String> openNotePanes(ProviderContainer container) => [
+    for (final tab in container.read(terminalSessionsControllerProvider).tabs)
+      for (final paneId in tab.layout.panes)
+        if (isNotePane(paneId)) paneId,
+  ];
 
   /// Puts a mouse on [finder] and leaves it there.
   Future<TestGesture> hover(WidgetTester tester, Finder finder) async {
@@ -173,33 +179,16 @@ void main() {
     expect(container.read(noteDaoProvider).getById(note.id)!.body, long);
   });
 
-  testWidgets('a note can be retitled and rewritten', (tester) async {
+  testWidgets('the menu opens a note in its own tab', (tester) async {
     final container = await pump(tester);
     final note = container
         .read(notesProvider.notifier)
         .capture(body: 'first draft', sourceSessionId: 's1');
     await tester.pumpAndSettle();
 
-    await pickFromRowMenu(tester, 'first draft', 'Edit note');
-    expect(find.byType(NoteEditDialog), findsOneWidget);
+    await pickFromRowMenu(tester, 'first draft', 'Open note');
 
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Title (optional)'),
-      'Tab strip density',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Note'),
-      'second draft, with the actual idea',
-    );
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
-
-    final stored = container.read(noteDaoProvider).getById(note.id)!;
-    expect(stored.title, 'Tab strip density');
-    expect(stored.body, 'second draft, with the actual idea');
-    expect(find.text('Tab strip density'), findsOneWidget);
-    // The origin survives the edit.
-    expect(stored.sourceSessionId, 's1');
+    expect(openNotePanes(container), [notePaneId(note.id)]);
   });
 
   testWidgets('deleting a note asks first, and Cancel keeps it', (
@@ -555,7 +544,7 @@ void main() {
       expect(container.read(notesProvider), isEmpty);
     });
 
-    testWidgets('tapping the card opens the editor', (tester) async {
+    testWidgets('tapping the card opens the note in a tab', (tester) async {
       final container = await pump(tester);
       container.read(notesProvider.notifier).capture(body: 'tap to edit');
       await tester.pumpAndSettle();
@@ -563,7 +552,8 @@ void main() {
       await tester.tap(find.text('tap to edit').first);
       await tester.pumpAndSettle();
 
-      expect(find.byType(NoteEditDialog), findsOneWidget);
+      final note = container.read(notesProvider).single;
+      expect(openNotePanes(container), [notePaneId(note.id)]);
     });
   });
 

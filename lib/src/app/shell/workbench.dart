@@ -19,6 +19,8 @@ import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/explorer/application/explorer_actions.dart';
 import '../../features/explorer/application/session_context.dart';
 import '../../features/explorer/application/where_you_are.dart';
+import '../../features/notes/application/note_drafts.dart';
+import '../../features/notes/application/note_tabs.dart';
 import '../../features/sessions/application/delivery_providers.dart';
 import '../../features/sessions/application/session_providers.dart';
 import '../../features/sessions/application/session_status_providers.dart';

@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -60,32 +59,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     return container;
-  }
-
-  /// Puts a mouse on [finder] and leaves it there.
-  Future<TestGesture> hover(WidgetTester tester, Finder finder) async {
-    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
-    await gesture.addPointer(location: Offset.zero);
-    addTearDown(() => gesture.removePointer());
-    await gesture.moveTo(tester.getCenter(finder));
-    await tester.pumpAndSettle();
-    return gesture;
-  }
-
-  /// Opens a card's menu the way a mouse does: hover the card, then press the
-  /// `⋮` the hover just revealed, then pick [choice].
-  Future<void> pickFromRowMenu(
-    WidgetTester tester,
-    String title,
-    String choice,
-  ) async {
-    // `.first` because a short note's title and its body are the same run of
-    // text, drawn twice on the one card.
-    await hover(tester, find.text(title).first);
-    await tester.tap(find.byTooltip('Actions for “$title”'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(choice));
-    await tester.pumpAndSettle();
   }
 
   testWidgets('a note captured from a session is filed under its project', (
@@ -154,31 +127,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('No notes under this project'), findsOneWidget);
     expect(find.text('No notes yet.'), findsNothing);
-  });
-
-  testWidgets('an edit can re-file a note and can unfile it', (tester) async {
-    final container = await pump(tester);
-    final notes = container.read(notesProvider.notifier);
-    final note = notes.capture(body: 'about the toolbar', projectId: 'p1');
-    await tester.pumpAndSettle();
-
-    await pickFromRowMenu(tester, 'about the toolbar', 'Edit note');
-    // The dialog opens on the note's current filing.
-    expect(find.text('Demo'), findsOneWidget);
-    await tester.tap(find.text('Demo'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('No project').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
-    await tester.pumpAndSettle();
-
-    expect(
-      container.read(notesProvider).single.projectId,
-      isNull,
-      reason: 'null from the dialog means "unfile it", not "leave it alone"',
-    );
-    // Origin survives the re-filing: where it came from is not editable.
-    expect(container.read(notesProvider).single.id, note.id);
   });
 
   testWidgets('survives the window matrix', (tester) async {

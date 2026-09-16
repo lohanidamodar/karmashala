@@ -60,12 +60,25 @@ List<TabEntry> terminalTabEntries(WidgetRef ref) {
 /// Whether [tab] holds a file with edits that are not on disk — so the picker
 /// can say so before offering to close it.
 bool _tabHasUnsaved(WidgetRef ref, TerminalTab tab) {
+  if (_tabHasConflictedNote(ref, tab)) return true;
   final paths = [
     for (final paneId in tab.layout.panes) ?editorPanePath(paneId),
   ];
   if (paths.isEmpty) return false;
   return ref.watch(
     dirtyDocumentPathsProvider.select((dirty) => paths.any(dirty.contains)),
+  );
+}
+
+/// Whether [tab] holds a note whose close would have to ask: one that changed
+/// elsewhere under unsaved edits. Anything else is written on the way out.
+bool _tabHasConflictedNote(WidgetRef ref, TerminalTab tab) {
+  final ids = noteIdsIn([tab]);
+  if (ids.isEmpty) return false;
+  return ref.watch(
+    conflictedNoteIdsProvider.select(
+      (conflicted) => ids.any(conflicted.contains),
+    ),
   );
 }
 
@@ -80,6 +93,7 @@ IconData? _documentIconFor(TerminalTab tab) {
   if (isSettingsPane(paneId)) return AppIcons.gearSix;
   if (isEditorPane(paneId)) return AppIcons.fileCode;
   if (isDiffPane(paneId)) return AppIcons.gitDiff;
+  if (isNotePane(paneId)) return AppIcons.note;
   return null;
 }
 

@@ -6,6 +6,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../notes/application/notes_providers.dart';
 import '../../notes/presentation/note_edit_dialog.dart';
+import '../../notes/presentation/note_tab_view.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../editor/presentation/editor_tab_view.dart';
 import '../../git/application/diff_tab_actions.dart';

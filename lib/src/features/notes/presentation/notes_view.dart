@@ -13,7 +13,8 @@ import '../application/composer_draft.dart';
 import '../application/notes_providers.dart';
 import '../domain/note.dart';
 import 'note_delete.dart';
-import 'note_edit_dialog.dart';
+import '../../../app/shell/workbench_tabs.dart';
+import 'note_provenance.dart';
 import 'package:karmashala_ui/primitives.dart';
 
 /// The Notes surface. A note is a **deferred instruction**, so the list is
@@ -53,11 +54,11 @@ class NotesView extends ConsumerWidget {
               ),
             ),
             IconButton(
-              tooltip: 'New note  ·  write one here',
+              tooltip: 'New note  ·  opens in a tab',
               iconSize: Chrome.icon,
               visualDensity: VisualDensity.compact,
               icon: const Icon(AppIcons.plus),
-              onPressed: () => showNewNoteDialog(context, ref),
+              onPressed: () => writeNewNote(ref),
             ),
           ],
         ),
@@ -108,7 +109,7 @@ class _EmptyNotes extends ConsumerWidget {
       // The way out of the empty state, named. An icon-only **+** is how the
       // owner ended up asking "where can we add notes?" while looking at it.
       action: FilledButton.icon(
-        onPressed: () => showNewNoteDialog(context, ref),
+        onPressed: () => writeNewNote(ref),
         icon: const Icon(AppIcons.notePencil, size: Chrome.icon),
         label: const Text('Write a note'),
       ),
@@ -116,8 +117,9 @@ class _EmptyNotes extends ConsumerWidget {
   }
 }
 
-/// One note. **Send stays on the card; edit and delete are in the row's menu.**
-/// The body is a tap target because it is the card's focus stop for that menu.
+/// One note. **Send stays on the card; open and delete are in the row's menu.**
+/// The body is a tap target that opens the note's tab, and the card's focus
+/// stop for that menu.
 class _NoteCard extends ConsumerWidget {
   const _NoteCard({required this.note});
 
@@ -151,7 +153,7 @@ class _NoteCard extends ConsumerWidget {
           ),
           child: InkWell(
             borderRadius: BorderRadius.circular(Radii.sm),
-            onTap: () => _edit(context, ref),
+            onTap: () => openNoteTab(ref, note.id),
             child: Padding(
               padding: const EdgeInsets.all(Insets.sm),
               child: Column(
@@ -230,8 +232,8 @@ class _NoteCard extends ConsumerWidget {
       icon: AppIcons.paperPlaneRight,
     ),
     DesktopMenuItem(
-      value: 'edit',
-      label: 'Edit note',
+      value: 'open',
+      label: 'Open note',
       icon: AppIcons.pencilSimple,
     ),
     const DesktopMenuDivider(),
@@ -247,8 +249,8 @@ class _NoteCard extends ConsumerWidget {
     switch (value) {
       case 'send':
         _sendBack(context, ref);
-      case 'edit':
-        await _edit(context, ref);
+      case 'open':
+        openNoteTab(ref, note.id);
       case 'delete':
         if (!await confirmNoteDelete(context, note) || !context.mounted) {
           return;
@@ -260,18 +262,7 @@ class _NoteCard extends ConsumerWidget {
   /// Where the note is filed and where it came from, in the words of what is
   /// still true: a deleted session is said to be gone rather than dropped.
   String _origin(String? sessionTitle, String? projectName) =>
-      <String>[?projectName, _provenance(sessionTitle)].join('  ·  ');
-
-  String _provenance(String? sessionTitle) {
-    if (note.sourceSessionId == null) return 'Written here';
-    final role = switch (note.sourceMessageRole) {
-      'user' => 'your message',
-      'agent' => 'the agent’s reply',
-      _ => 'a message',
-    };
-    if (sessionTitle == null) return 'From a session that is gone  ·  $role';
-    return 'From $sessionTitle  ·  $role';
-  }
+      <String>[?projectName, noteProvenance(note, sessionTitle)].join('  ·  ');
 
   /// Offers the note to a session, deciding which — and where in it — only now.
   /// **Read, never watched**: Send is on every card, so watching costs the panel.
@@ -300,19 +291,6 @@ class _NoteCard extends ConsumerWidget {
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(content: Text(sessionOfferMessage(outcome, title))),
     );
-  }
-
-  Future<void> _edit(BuildContext context, WidgetRef ref) async {
-    final edit = await NoteEditDialog.show(context, note);
-    if (edit == null) return;
-    ref
-        .read(notesProvider.notifier)
-        .edit(
-          note.id,
-          body: edit.body,
-          title: edit.title,
-          projectId: edit.projectId,
-        );
   }
 }
 

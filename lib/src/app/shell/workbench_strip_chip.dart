@@ -108,6 +108,7 @@ class _TabChip extends ConsumerWidget {
   /// Whether any editor pane in this tab has unsaved edits. Narrowed twice, so
   /// a tab holding no file never subscribes to the set at all.
   bool _hasUnsaved(WidgetRef ref) {
+    if (_tabHasConflictedNote(ref, tab)) return true;
     final paths = [
       for (final paneId in tab.layout.panes) ?editorPanePath(paneId),
     ];

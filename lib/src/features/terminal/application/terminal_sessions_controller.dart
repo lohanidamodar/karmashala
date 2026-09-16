@@ -12,6 +12,7 @@ import 'package:karmashala_ui/primitives.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../env_secrets/application/env_secrets_controller.dart';
+import '../../notes/application/notes_providers.dart';
 import '../../sessions/application/session_mcp_arguments.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';

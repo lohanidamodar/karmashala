@@ -15,6 +15,7 @@ import '../../features/automations/application/automation_scheduler.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
 import '../../features/flutter_apps/application/flutter_gate_observer.dart';
 import '../../features/git/application/worktree_setup_providers.dart';
+import '../../features/notes/application/note_tabs.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/settings/application/settings_controller.dart';
 import '../../features/sessions/application/session_liveness_reconciler.dart';
@@ -116,6 +117,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     // no timer and an unwatched observer records no verdict, both silently.
     ref.watch(automationSchedulerProvider);
     ref.watch(automationRunObserverProvider);
+    // And for note tabs, which close with their note and flush on the way out.
+    ref.watch(noteTabsObserverProvider);
     // Focus mode: the workbench takes the window.
     final zen = ref.watch(terminalMaximizedProvider);
     final explorerWidth = ref.watch(
