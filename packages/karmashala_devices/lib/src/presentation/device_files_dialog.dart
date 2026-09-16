@@ -368,6 +368,9 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
 
   bool get _atRoot => _path == null || _path == _root?.path;
 
+  /// The body's height where the window allows it.
+  static const bodyHeight = 460.0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -375,14 +378,50 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     return AlertDialog(
       title: Text('Files on ${widget.device.displayName}'),
       contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
+      // Not `BoundedDialogContent`: the listing is a lazy ListView in an
+      // Expanded, which a body that scrolls as a whole cannot hold. The height
+      // is a ceiling — a shorter window shrinks the listing, not the dialog.
       content: SizedBox(
-        width: 620,
-        height: 460,
+        width: DialogWidth.wide,
+        height: bodyHeight,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_roots.length > 1) _rootPicker(theme),
-            _breadcrumb(theme),
+            if (_roots.length > 1)
+              _RootPicker(
+                roots: _roots,
+                value: _root,
+                onChanged: _busy != null
+                    ? null
+                    : (root) => _go(root, root.path),
+              ),
+            _Breadcrumb(
+              path: _path,
+              // Also a drop target, so dragging a row here moves it up a
+              // level — the only way out of a folder with a drag.
+              up: _dropTarget(
+                onto: _atRoot ? null : p.posix.dirname(_path ?? ''),
+                builder: (hovering) => IconButton(
+                  key: const Key('device-files-up'),
+                  tooltip: _atRoot
+                      ? 'Up one level'
+                      : 'Up one level — or drop a file here to move it up',
+                  isSelected: hovering,
+                  icon: const Icon(AppIcons.arrowUp, size: Chrome.iconAction),
+                  onPressed: _atRoot || _busy != null
+                      ? null
+                      : () => _go(_root!, p.posix.dirname(_path!)),
+                ),
+              ),
+              hiddenCount:
+                  _listing?.entries.where((entry) => entry.isHidden).length ??
+                  0,
+              onHiddenChanged: () => setState(() {}),
+              clip: _clip,
+              onPaste: _busy != null || _path == null || !_writable
+                  ? null
+                  : () => _paste(_path!),
+            ),
             const Divider(height: 1),
             Expanded(child: _body(theme, scheme)),
             if (_busy case final busy?) ...[
@@ -429,90 +468,6 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
       ],
     );
   }
-
-  Widget _rootPicker(ThemeData theme) => Padding(
-    padding: const EdgeInsets.fromLTRB(Insets.md, 0, Insets.md, Insets.sm),
-    child: DropdownButtonFormField<DeviceFileRoot>(
-      initialValue: _root,
-      decoration: const InputDecoration(
-        labelText: 'Where to look',
-        isDense: true,
-      ),
-      items: [
-        for (final root in _roots)
-          DropdownMenuItem(
-            value: root,
-            child: Text(root.label, overflow: TextOverflow.ellipsis),
-          ),
-      ],
-      onChanged: _busy != null
-          ? null
-          : (root) {
-              if (root != null) _go(root, root.path);
-            },
-    ),
-  );
-
-  Widget _breadcrumb(ThemeData theme) => Padding(
-    padding: const EdgeInsets.fromLTRB(Insets.sm, 0, Insets.md, Insets.sm),
-    child: Row(
-      children: [
-        // Also a drop target, so dragging a row here moves it up a level —
-        // the only way out of a folder with a drag.
-        _dropTarget(
-          onto: _atRoot ? null : p.posix.dirname(_path ?? ''),
-          builder: (hovering) => IconButton(
-            key: const Key('device-files-up'),
-            tooltip: _atRoot
-                ? 'Up one level'
-                : 'Up one level — or drop a file here to move it up',
-            isSelected: hovering,
-            icon: const Icon(AppIcons.arrowUp, size: Chrome.iconAction),
-            onPressed: _atRoot || _busy != null
-                ? null
-                : () => _go(_root!, p.posix.dirname(_path!)),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            _path ?? '',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: kMonoFamily,
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(left: Insets.sm),
-          child: HiddenFilesChip(
-            hiddenCount: _listing?.entries
-                    .where((entry) => entry.isHidden)
-                    .length ??
-                0,
-            onChanged: (_) => setState(() {}),
-          ),
-        ),
-        if (_clip case final clip?)
-          Padding(
-            padding: const EdgeInsets.only(left: Insets.sm),
-            child: TextButton.icon(
-              key: const Key('device-files-paste'),
-              onPressed: _busy != null || _path == null || !_writable
-                  ? null
-                  : () => _paste(_path!),
-              icon: const Icon(
-                AppIcons.clipboardText,
-                size: Chrome.iconAction,
-              ),
-              // The button says what it holds, so a Paste pressed ten minutes
-              // later is not a guess about which file is on its way.
-              label: Text('Paste — ${clip.summary}'),
-            ),
-          ),
-      ],
-    ),
-  );
 
   bool get _writable => _root?.writable == true;
 
@@ -581,7 +536,21 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     // The hover highlight goes on the `ListTile` itself, not a coloured box:
     // Flutter asserts, because a tile paints on the nearest Material.
     Widget wrap({required bool hovering}) {
-      final tile = _tile(theme, scheme, entry, hovering: hovering);
+      final tile = _DeviceFileTile(
+        entry: entry,
+        subtitle: _subtitle(entry),
+        writable: _writable,
+        busy: _busy != null,
+        hovering: hovering,
+        onOpen: () => _go(_root!, entry.path),
+        onPull: () => _pull(entry),
+        onMenu: (action) => switch (action) {
+          _RowAction.copy => _hold(entry, DeviceFileClipboardMode.copy),
+          _RowAction.cut => _hold(entry, DeviceFileClipboardMode.cut),
+          _RowAction.copyForHost => unawaited(_copyForHost(entry)),
+        },
+        onDelete: () => _delete(entry),
+      );
       // Only a writable root can be dragged out of: a move needs a delete at
       // the source, and a drag that always fails is worse than none.
       if (!_writable || !entry.readable || _busy != null) return tile;
@@ -631,87 +600,6 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     ),
   );
 
-  Widget _tile(
-    ThemeData theme,
-    ColorScheme scheme,
-    DeviceFileEntry entry, {
-    required bool hovering,
-  }) {
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: scheme.onSurfaceVariant,
-    );
-    return ListTile(
-      dense: true,
-      tileColor: hovering ? scheme.primaryContainer : null,
-      leading: Icon(
-        entry.isDirectory ? AppIcons.folder : AppIcons.note,
-        size: Chrome.iconAction,
-        // Unreadable is a fact about the entry, and it is said in the subtitle
-        // as well — the dimming is not carrying the meaning on its own.
-        color: entry.readable ? scheme.onSurfaceVariant : scheme.outline,
-      ),
-      title: Text(entry.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: Text(_subtitle(entry), style: muted, maxLines: 1),
-      onTap: _busy != null || !entry.isDirectory || !entry.readable
-          ? null
-          : () => _go(_root!, entry.path),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!entry.isDirectory && entry.readable)
-            IconButton(
-              tooltip: 'Save to this computer',
-              icon: const Icon(
-                AppIcons.downloadSimple,
-                size: Chrome.iconAction,
-              ),
-              onPressed: _busy == null ? () => _pull(entry) : null,
-            ),
-          if (entry.readable)
-            PopupMenuButton<_RowAction>(
-              key: Key('device-file-menu-${entry.name}'),
-              tooltip: 'More for ${entry.name}',
-              icon: const Icon(
-                AppIcons.dotsThreeVertical,
-                size: Chrome.iconAction,
-              ),
-              enabled: _busy == null,
-              onSelected: (action) => switch (action) {
-                _RowAction.copy => _hold(entry, DeviceFileClipboardMode.copy),
-                _RowAction.cut => _hold(entry, DeviceFileClipboardMode.cut),
-                _RowAction.copyForHost => unawaited(_copyForHost(entry)),
-              },
-              itemBuilder: (context) => [
-                // Copy and Cut hold a *device path* and are pasted by the
-                // device — no host round trip, which is the point.
-                if (_writable)
-                  const PopupMenuItem(
-                    value: _RowAction.copy,
-                    child: Text('Copy on the device'),
-                  ),
-                if (_writable)
-                  const PopupMenuItem(
-                    value: _RowAction.cut,
-                    child: Text('Cut on the device'),
-                  ),
-                if (!entry.isDirectory)
-                  const PopupMenuItem(
-                    value: _RowAction.copyForHost,
-                    child: Text('Copy for this computer'),
-                  ),
-              ],
-            ),
-          if (_writable)
-            IconButton(
-              tooltip: 'Delete on the device',
-              icon: const Icon(AppIcons.trash, size: Chrome.iconAction),
-              onPressed: _busy == null ? () => _delete(entry) : null,
-            ),
-        ],
-      ),
-    );
-  }
-
   String _subtitle(DeviceFileEntry entry) {
     final parts = <String>[
       if (!entry.readable) 'not permitted',
@@ -755,6 +643,226 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     required String title,
     required String detail,
   }) => PanePlaceholder(icon: icon, message: '$title\n$detail');
+}
+
+/// Which of the roots the driver can reach is being browsed.
+class _RootPicker extends StatelessWidget {
+  const _RootPicker({
+    required this.roots,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<DeviceFileRoot> roots;
+  final DeviceFileRoot? value;
+
+  /// Null while busy.
+  final ValueChanged<DeviceFileRoot>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(Insets.md, 0, Insets.md, Insets.sm),
+    child: DropdownButtonFormField<DeviceFileRoot>(
+      initialValue: value,
+      decoration: const InputDecoration(
+        labelText: 'Where to look',
+        isDense: true,
+      ),
+      items: [
+        for (final root in roots)
+          DropdownMenuItem(
+            value: root,
+            child: Text(root.label, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: onChanged == null
+          ? null
+          : (root) {
+              if (root != null) onChanged!(root);
+            },
+    ),
+  );
+}
+
+/// Up, the open path, the hidden-files switch, and Paste while something is
+/// held. The path and the Paste label share the room that is left, and both
+/// ellipsize: a held file's full name once pushed the row 449px off the edge.
+class _Breadcrumb extends StatelessWidget {
+  const _Breadcrumb({
+    required this.path,
+    required this.up,
+    required this.hiddenCount,
+    required this.onHiddenChanged,
+    required this.clip,
+    required this.onPaste,
+  });
+
+  final String? path;
+  final Widget up;
+  final int hiddenCount;
+  final VoidCallback onHiddenChanged;
+  final DeviceFileClipboard? clip;
+  final VoidCallback? onPaste;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final held = clip;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Insets.sm, 0, Insets.md, Insets.sm),
+      child: Row(
+        children: [
+          up,
+          Expanded(
+            child: Text(
+              path ?? '',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFamily: kMonoFamily,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: Insets.sm),
+            child: HiddenFilesChip(
+              hiddenCount: hiddenCount,
+              onChanged: (_) => onHiddenChanged(),
+            ),
+          ),
+          if (held != null)
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.only(left: Insets.sm),
+                child: TextButton.icon(
+                  key: const Key('device-files-paste'),
+                  onPressed: onPaste,
+                  icon: const Icon(
+                    AppIcons.clipboardText,
+                    size: Chrome.iconAction,
+                  ),
+                  // The button says what it holds, so a Paste pressed ten
+                  // minutes later is not a guess about which file is on its
+                  // way — and its tooltip says it whole when it is cut short.
+                  label: Tooltip(
+                    message: 'Paste — ${held.summary}',
+                    excludeFromSemantics: true,
+                    child: Text(
+                      'Paste — ${held.summary}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One entry in the listing: its name and facts, and what can be done to it.
+class _DeviceFileTile extends StatelessWidget {
+  const _DeviceFileTile({
+    required this.entry,
+    required this.subtitle,
+    required this.writable,
+    required this.busy,
+    required this.hovering,
+    required this.onOpen,
+    required this.onPull,
+    required this.onMenu,
+    required this.onDelete,
+  });
+
+  final DeviceFileEntry entry;
+  final String subtitle;
+  final bool writable;
+  final bool busy;
+
+  /// Whether a dragged entry is over this directory.
+  final bool hovering;
+
+  final VoidCallback onOpen;
+  final VoidCallback onPull;
+  final ValueChanged<_RowAction> onMenu;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+    return ListTile(
+      dense: true,
+      // The hover highlight goes on the `ListTile` itself, not a coloured box:
+      // Flutter asserts, because a tile paints on the nearest Material.
+      tileColor: hovering ? scheme.primaryContainer : null,
+      leading: Icon(
+        entry.isDirectory ? AppIcons.folder : AppIcons.note,
+        size: Chrome.iconAction,
+        // Unreadable is a fact about the entry, and it is said in the subtitle
+        // as well — the dimming is not carrying the meaning on its own.
+        color: entry.readable ? scheme.onSurfaceVariant : scheme.outline,
+      ),
+      title: Text(entry.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(subtitle, style: muted, maxLines: 1),
+      onTap: busy || !entry.isDirectory || !entry.readable ? null : onOpen,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!entry.isDirectory && entry.readable)
+            IconButton(
+              tooltip: 'Save to this computer',
+              icon: const Icon(
+                AppIcons.downloadSimple,
+                size: Chrome.iconAction,
+              ),
+              onPressed: busy ? null : onPull,
+            ),
+          if (entry.readable)
+            PopupMenuButton<_RowAction>(
+              key: Key('device-file-menu-${entry.name}'),
+              tooltip: 'More for ${entry.name}',
+              icon: const Icon(
+                AppIcons.dotsThreeVertical,
+                size: Chrome.iconAction,
+              ),
+              enabled: !busy,
+              onSelected: onMenu,
+              itemBuilder: (context) => [
+                // Copy and Cut hold a *device path* and are pasted by the
+                // device — no host round trip, which is the point.
+                if (writable)
+                  const PopupMenuItem(
+                    value: _RowAction.copy,
+                    child: Text('Copy on the device'),
+                  ),
+                if (writable)
+                  const PopupMenuItem(
+                    value: _RowAction.cut,
+                    child: Text('Cut on the device'),
+                  ),
+                if (!entry.isDirectory)
+                  const PopupMenuItem(
+                    value: _RowAction.copyForHost,
+                    child: Text('Copy for this computer'),
+                  ),
+              ],
+            ),
+          if (writable)
+            IconButton(
+              tooltip: 'Delete on the device',
+              icon: const Icon(AppIcons.trash, size: Chrome.iconAction),
+              onPressed: busy ? null : onDelete,
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The row menu's items. An enum so an action added without a handler is a
