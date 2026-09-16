@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/todos_providers.dart';
 import '../domain/todo.dart';
@@ -98,8 +99,8 @@ class _TodoEditDialogState extends ConsumerState<TodoEditDialog> {
     final joined = widget.joinedLines;
     return AlertDialog(
       title: const Text('New todo'),
-      content: SizedBox(
-        width: 560,
+      content: BoundedDialogContent(
+        width: DialogWidth.wide,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,

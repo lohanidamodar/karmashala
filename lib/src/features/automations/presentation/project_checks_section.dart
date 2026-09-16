@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_git/git.dart'
     show joinCommandLine, splitCommandLine;
@@ -212,8 +213,8 @@ class _AddCheckDialogState extends State<_AddCheckDialog> {
         projectCheckCommandRefusal(command);
     return AlertDialog(
       title: Text('A check for ${widget.checkoutName}'),
-      content: SizedBox(
-        width: 420,
+      content: BoundedDialogContent(
+        width: DialogWidth.narrow,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,

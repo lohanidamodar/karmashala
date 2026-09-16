@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
@@ -125,125 +126,123 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
             ? 'Arm an automation in ${repository.name}'
             : 'Edit "${widget.existing!.name}"',
       ),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _name,
-                autofocus: true,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  hintText: 'Nightly sweep',
-                ),
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _name,
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Name',
+                hintText: 'Nightly sweep',
               ),
-              const SizedBox(height: Insets.sm),
-              // A segmented control rather than two radios: `RadioListTile`'s
-              // `groupValue` is deprecated in this SDK.
-              SegmentedButton<bool>(
-                segments: const [
-                  ButtonSegment(value: true, label: Text('Repeating')),
-                  ButtonSegment(value: false, label: Text('Once')),
-                ],
-                selected: {_recurring},
-                onSelectionChanged: (selection) =>
-                    setState(() => _recurring = selection.first),
-              ),
-              if (_recurring)
-                TextField(
-                  controller: _cron,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    labelText: 'Schedule',
-                    hintText: '0 3 * * *',
-                    helperText: 'minute hour day-of-month month day-of-week, '
-                        'in this machine\'s own time',
-                  ),
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _once == null
-                            ? 'No moment picked yet.'
-                            : 'At ${_once!.toLocal()}',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: _pickMoment,
-                      child: const Text('Pick a moment'),
-                    ),
-                  ],
-                ),
-              if (scheduleRefusal != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: Insets.xs),
-                  child: Text(
-                    scheduleRefusal,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: Insets.sm),
-              if (installations.isEmpty)
-                Text(
-                  'No agent is installed in this checkout\'s environment, so '
-                  'there is nothing here to start.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                )
-              else
-                DropdownButtonFormField<String>(
-                  initialValue: _installationId,
-                  decoration: const InputDecoration(labelText: 'Agent'),
-                  items: [
-                    for (final installation in installations)
-                      DropdownMenuItem(
-                        value: installation.id,
-                        child: Text(
-                          ref
-                              .read(agentRegistryProvider)
-                              .displayNameFor(installation.agentId),
-                        ),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() {
-                    _installationId = value;
-                    _mode = null;
-                  }),
-                ),
-              const SizedBox(height: Insets.sm),
-              _modePicker(installations),
-              const SizedBox(height: Insets.sm),
-              TextField(
-                controller: _prompt,
-                minLines: 3,
-                maxLines: 6,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'What the agent is told',
-                  hintText: 'Run the checks and fix what broke.',
-                ),
-              ),
-              if (refusal != null) ...[
-                const SizedBox(height: Insets.sm),
-                Text(
-                  refusal.reason,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
+            ),
+            const SizedBox(height: Insets.sm),
+            // A segmented control rather than two radios: `RadioListTile`'s
+            // `groupValue` is deprecated in this SDK.
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: Text('Repeating')),
+                ButtonSegment(value: false, label: Text('Once')),
               ],
+              selected: {_recurring},
+              onSelectionChanged: (selection) =>
+                  setState(() => _recurring = selection.first),
+            ),
+            if (_recurring)
+              TextField(
+                controller: _cron,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Schedule',
+                  hintText: '0 3 * * *',
+                  helperText: 'minute hour day-of-month month day-of-week, '
+                      'in this machine\'s own time',
+                ),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _once == null
+                          ? 'No moment picked yet.'
+                          : 'At ${_once!.toLocal()}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _pickMoment,
+                    child: const Text('Pick a moment'),
+                  ),
+                ],
+              ),
+            if (scheduleRefusal != null)
+              Padding(
+                padding: const EdgeInsets.only(top: Insets.xs),
+                child: Text(
+                  scheduleRefusal,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ),
+            const SizedBox(height: Insets.sm),
+            if (installations.isEmpty)
+              Text(
+                'No agent is installed in this checkout\'s environment, so '
+                'there is nothing here to start.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              )
+            else
+              DropdownButtonFormField<String>(
+                initialValue: _installationId,
+                decoration: const InputDecoration(labelText: 'Agent'),
+                items: [
+                  for (final installation in installations)
+                    DropdownMenuItem(
+                      value: installation.id,
+                      child: Text(
+                        ref
+                            .read(agentRegistryProvider)
+                            .displayNameFor(installation.agentId),
+                      ),
+                    ),
+                ],
+                onChanged: (value) => setState(() {
+                  _installationId = value;
+                  _mode = null;
+                }),
+              ),
+            const SizedBox(height: Insets.sm),
+            _modePicker(installations),
+            const SizedBox(height: Insets.sm),
+            TextField(
+              controller: _prompt,
+              minLines: 3,
+              maxLines: 6,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'What the agent is told',
+                hintText: 'Run the checks and fix what broke.',
+              ),
+            ),
+            if (refusal != null) ...[
+              const SizedBox(height: Insets.sm),
+              Text(
+                refusal.reason,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
             ],
-          ),
+          ],
         ),
       ),
       actions: [

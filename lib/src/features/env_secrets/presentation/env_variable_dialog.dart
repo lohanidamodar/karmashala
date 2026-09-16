@@ -121,8 +121,8 @@ class _EnvVariableDialogState extends ConsumerState<EnvVariableDialog> {
             'Every terminal Karmashala opens inherits this, including agent '
             'panes. Anything run in a terminal can print its value.',
       ),
-      content: SizedBox(
-        width: 460,
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

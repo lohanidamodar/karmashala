@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../terminal/application/terminal_profiles.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -111,81 +112,77 @@ class _SnippetEditorDialogState extends ConsumerState<SnippetEditorDialog> {
       title: Text(
         widget.existing == null ? 'New command snippet' : 'Edit snippet',
       ),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _label,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  labelText: 'Name (optional)',
-                  hintText: 'Named by the command itself when left empty',
-                ),
-              ),
-              const SizedBox(height: Insets.md),
-              TextField(
-                controller: _command,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  labelText: 'Command',
-                  hintText: 'flutter test --exclude-tags=live-ssh',
-                ),
-                style: TextStyle(
-                  fontFamily: kMonoFamily,
-                  fontSize: theme.textTheme.bodyMedium?.fontSize,
-                ),
-                onSubmitted: (_) => _save(),
-              ),
-              const SizedBox(height: Insets.md),
-              DropdownButtonFormField<String>(
-                initialValue: _shellId,
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _label,
+              decoration: const InputDecoration(
                 isDense: true,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  labelText: 'Shell',
-                ),
-                items: [
-                  for (final option in _shellOptions())
-                    DropdownMenuItem(
-                      value: option,
-                      child: Text(
-                        option == _anyShell
-                            ? 'Any shell'
-                            : shellTagLabel(option),
-                      ),
-                    ),
-                ],
-                onChanged: (value) =>
-                    setState(() => _shellId = value ?? _anyShell),
+                labelText: 'Name (optional)',
+                hintText: 'Named by the command itself when left empty',
               ),
-              const SizedBox(height: Insets.sm),
-              Text(
-                'A tagged snippet is only offered in a pane running that '
-                'shell. Leave it on "Any shell" for something that works '
-                'everywhere.',
+            ),
+            const SizedBox(height: Insets.md),
+            TextField(
+              controller: _command,
+              autofocus: true,
+              decoration: const InputDecoration(
+                isDense: true,
+                labelText: 'Command',
+                hintText: 'flutter test --exclude-tags=live-ssh',
+              ),
+              style: TextStyle(
+                fontFamily: kMonoFamily,
+                fontSize: theme.textTheme.bodyMedium?.fontSize,
+              ),
+              onSubmitted: (_) => _save(),
+            ),
+            const SizedBox(height: Insets.md),
+            DropdownButtonFormField<String>(
+              initialValue: _shellId,
+              isDense: true,
+              decoration: const InputDecoration(
+                isDense: true,
+                labelText: 'Shell',
+              ),
+              items: [
+                for (final option in _shellOptions())
+                  DropdownMenuItem(
+                    value: option,
+                    child: Text(
+                      option == _anyShell ? 'Any shell' : shellTagLabel(option),
+                    ),
+                  ),
+              ],
+              onChanged: (value) =>
+                  setState(() => _shellId = value ?? _anyShell),
+            ),
+            const SizedBox(height: Insets.sm),
+            Text(
+              'A tagged snippet is only offered in a pane running that '
+              'shell. Leave it on "Any shell" for something that works '
+              'everywhere.',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: Insets.md),
+            CheckboxListTile(
+              value: _submit,
+              onChanged: (value) => setState(() => _submit = value ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Run it as soon as it is picked'),
+              subtitle: Text(
+                'Off by default: the command is typed at the prompt and '
+                'waits for you to press Enter. Turn this on only for a '
+                'command that is safe to run by accident.',
                 style: theme.textTheme.bodySmall,
               ),
-              const SizedBox(height: Insets.md),
-              CheckboxListTile(
-                value: _submit,
-                onChanged: (value) => setState(() => _submit = value ?? false),
-                controlAffinity: ListTileControlAffinity.leading,
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Run it as soon as it is picked'),
-                subtitle: Text(
-                  'Off by default: the command is typed at the prompt and '
-                  'waits for you to press Enter. Turn this on only for a '
-                  'command that is safe to run by accident.',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
       actions: [
@@ -255,7 +252,7 @@ class SnippetLibraryDialog extends ConsumerWidget {
       title: const Text('Command snippets'),
       contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
       content: SizedBox(
-        width: 520,
+        width: DialogWidth.regular,
         child: snippets.isEmpty
             ? Padding(
                 padding: const EdgeInsets.all(Insets.xl),

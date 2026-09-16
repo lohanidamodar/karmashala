@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../checkpoints/application/checkpoint_service.dart';
 import '../application/automation_undo.dart';
@@ -53,8 +54,8 @@ class _AutomationUndoDialogState extends ConsumerState<AutomationUndoDialog> {
 
     return AlertDialog(
       title: const Text('Undo this run'),
-      content: SizedBox(
-        width: 460,
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -89,7 +90,7 @@ class _AutomationUndoDialogState extends ConsumerState<AutomationUndoDialog> {
                   subtitle: refusal == null
                       ? Text(
                           'A history rewrite, so it is off unless you ask: '
-                          '${commits.commits.map((c) => c.shortSha).join(', ')}',
+                          '${_shortShas(commits.commits)}',
                           style: theme.textTheme.bodySmall,
                         )
                       : Text(refusal, style: theme.textTheme.bodySmall),
@@ -145,4 +146,12 @@ class _AutomationUndoDialogState extends ConsumerState<AutomationUndoDialog> {
       });
     }
   }
+}
+
+/// The first few short shas and a count of the rest: the list is a checkbox's
+/// subtitle, and ninety of them made it taller than the window.
+String _shortShas(List<RunCommit> commits, {int shown = 8}) {
+  final named = commits.take(shown).map((c) => c.shortSha).join(', ');
+  final rest = commits.length - shown;
+  return rest > 0 ? '$named and $rest more' : named;
 }
