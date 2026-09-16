@@ -6,6 +6,7 @@ import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/verification/application/evidence_reader.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
+import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:karmashala/src/features/verification/domain/verification_artifact.dart';
 import 'package:karmashala/src/features/verification/domain/verification_run.dart';
@@ -21,6 +22,7 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -184,6 +186,37 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
   }
+
+  testWidgets('a run being recorded is marked with the shared status dot', (
+    tester,
+  ) async {
+    final open = seed(id: 'run-live', title: 'still recording');
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(h.db),
+          verificationRootProvider.overrideWithValue(h.root),
+          verificationEvidenceReaderProvider.overrideWithValue(
+            const _SyncEvidenceReader(),
+          ),
+          verificationRootReadyProvider.overrideWith((ref) async => h.root),
+          verificationServiceProvider.overrideWithValue(
+            _Recording(open, h.service),
+          ),
+          verificationChangesProvider.overrideWithValue(h.changes),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const Scaffold(body: VerificationPane()),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('recording'), findsOneWidget);
+    expect(find.byType(StatusDot), findsOneWidget);
+  });
 
   testWidgets('a renamed session is renamed in the run it verified', (
     tester,
@@ -656,4 +689,21 @@ class _ManualEvidenceReader implements VerificationEvidenceReader {
     pending.add(completer);
     return completer.future;
   }
+}
+
+/// A service with a run open, and nothing else a list needs.
+class _Recording implements VerificationService {
+  _Recording(this.activeRun, this.delegate);
+
+  @override
+  final VerificationRun? activeRun;
+
+  final VerificationService delegate;
+
+  @override
+  List<VerificationRun> list({int limit = 50, String? sessionId}) =>
+      delegate.list(limit: limit, sessionId: sessionId);
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -8,6 +8,8 @@ import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala/src/features/flutter_apps/application/flutter_app_providers.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/flutter_apps/presentation/flutter_app_pane.dart';
+import 'package:karmashala/src/features/browser/presentation/pane_status_row.dart';
+import 'package:karmashala_ui/panes.dart';
 
 import '../../support/fakes.dart';
 import 'fake_vm_service.dart';
@@ -68,6 +70,15 @@ void main() {
     await tester.pumpAndSettle();
     return container;
   }
+
+  testWidgets('its status line is the shared one the browser pane uses', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.byType(PaneStatusRow), findsOneWidget);
+    expect(find.byType(StatusDot), findsOneWidget);
+    expect(find.byTooltip('Look again'), findsOneWidget);
+  });
 
   testWidgets('says nothing is running, and how to make one visible', (
     tester,

@@ -76,7 +76,12 @@ class _RunList extends ConsumerWidget {
               : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _Dot(colour: theme.colorScheme.primary),
+                    ExcludeSemantics(
+                      child: StatusDot(
+                        color: theme.colorScheme.primary,
+                        label: 'Recording',
+                      ),
+                    ),
                     const SizedBox(width: Insets.xs),
                     Text('recording', style: theme.textTheme.labelSmall),
                   ],
@@ -844,19 +849,6 @@ class _MetaRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Dot extends StatelessWidget {
-  const _Dot({required this.colour});
-
-  final Color colour;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 7,
-    height: 7,
-    decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
-  );
 }
 
 /// "12s", "3m 04s" — the same wording the report uses.

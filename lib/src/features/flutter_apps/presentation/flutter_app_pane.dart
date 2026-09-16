@@ -14,6 +14,7 @@ import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/android_app_discovery.dart';
 import '../application/attached_apps.dart';
 import '../application/flutter_app_ui_providers.dart';
+import '../../browser/presentation/pane_status_row.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 /// The debug console for the Flutter app under development, and the two buttons
@@ -91,35 +92,16 @@ class _StatusRow extends ConsumerWidget {
         ? null
         : describeAge(ref.watch(clockProvider).nowUtc().difference(registry.lookedAt!));
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Insets.sm,
-        vertical: Insets.xs,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: Text(
-              age == null
-                  ? describeRegistry(registry)
-                  : '${describeRegistry(registry)}  ·  checked $age',
-              style: theme.textTheme.bodySmall,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          IconButton(
-            onPressed: () => ref.read(attachedAppsProvider.notifier).look(),
-            icon: const Icon(AppIcons.arrowsClockwise, size: 14),
-            tooltip: 'Look again',
-            visualDensity: VisualDensity.compact,
-          ),
-        ],
+    return PaneStatusRow(
+      color: colour,
+      label: age == null
+          ? describeRegistry(registry)
+          : '${describeRegistry(registry)}  ·  checked $age',
+      action: IconButton(
+        onPressed: () => ref.read(attachedAppsProvider.notifier).look(),
+        icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.iconAction),
+        tooltip: 'Look again',
+        visualDensity: VisualDensity.compact,
       ),
     );
   }
