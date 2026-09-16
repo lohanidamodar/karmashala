@@ -26,9 +26,8 @@ class EditorSection extends ConsumerWidget {
       child: SettingsSwitchRow(
         label: 'Wrap long lines in the editor',
         help:
-            'Soft-wrap instead of scrolling sideways. Line numbers are hidden '
-            'while wrapping, because the gutter cannot line up with a wrapped '
-            'line.',
+            'Soft-wrap instead of scrolling sideways. Line numbers stay beside '
+            'the line they number, however many rows it wraps onto.',
         value: wrap,
         onChanged: controller.setEditorWordWrap,
       ),
