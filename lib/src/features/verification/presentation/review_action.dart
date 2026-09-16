@@ -96,21 +96,11 @@ class _ReviewActionState extends ConsumerState<ReviewAction> {
     ReviewTarget? preferred,
   ) async {
     if (usable.length == 1) return _start(usable.single);
-    final box = context.findRenderObject() as RenderBox?;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null) return _start(usable.first);
-    final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
-    final chosen = await showMenu<ReviewTarget>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        origin.dx,
-        origin.dy + box.size.height,
-        overlay.size.width - origin.dx - box.size.width,
-        0,
-      ),
+    if (context.findRenderObject() is! RenderBox) return _start(usable.first);
+    final chosen = await showDesktopMenuUnder<ReviewTarget>(
+      context,
       // First entry is the one worth pressing: a different model, if any.
-      items: [
+      [
         for (final target in [
           ?preferred,
           ...usable.where((t) => t != preferred),

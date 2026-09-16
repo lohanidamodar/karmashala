@@ -228,4 +228,108 @@ void main() {
       );
     });
   });
+
+  group('opening a menu from code', () {
+    List<PopupMenuEntry<String>> items() => [
+      DesktopMenuItem(value: 'one', label: 'One', icon: AppIcons.copy),
+      DesktopMenuItem(value: 'two', label: 'Two', icon: AppIcons.trash),
+    ];
+
+    /// Pumps a 1000x600 window with a button at [alignment] that runs [open].
+    Future<void> host(
+      WidgetTester tester,
+      Alignment alignment,
+      Future<void> Function(BuildContext context) open,
+    ) async {
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(1000, 600);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: Align(
+              alignment: alignment,
+              child: Builder(
+                builder: (context) => SizedBox(
+                  width: 120,
+                  height: 30,
+                  child: TextButton(
+                    onPressed: () => open(context),
+                    child: const Text('anchor'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('anchor'));
+      await tester.pumpAndSettle();
+    }
+
+    Rect menuRect(WidgetTester tester) =>
+        tester.getRect(find.byType(DesktopMenuItem<String>).first);
+
+    testWidgets('at a point opens from that point and returns the pick', (
+      tester,
+    ) async {
+      String? picked;
+      await host(tester, Alignment.center, (context) async {
+        picked = await showDesktopMenuAt(
+          context,
+          const Offset(200, 150),
+          items(),
+        );
+      });
+      final menu = menuRect(tester);
+      expect(menu.left, moreOrLessEquals(200, epsilon: 1));
+      expect(menu.top, greaterThanOrEqualTo(150));
+      expect(menu.top, lessThan(150 + Chrome.menuRow));
+
+      await tester.tap(find.text('Two'));
+      await tester.pumpAndSettle();
+      expect(picked, 'two');
+    });
+
+    testWidgets('a dismissed menu returns null', (tester) async {
+      String? picked = 'unset';
+      await host(tester, Alignment.center, (context) async {
+        picked = await showDesktopMenuAt(
+          context,
+          const Offset(10, 10),
+          items(),
+        );
+      });
+      await tester.tapAt(const Offset(900, 550));
+      await tester.pumpAndSettle();
+      expect(picked, isNull);
+    });
+
+    for (final (side, alignment) in [
+      ('left', Alignment(-0.6, -0.6)),
+      ('right', Alignment(0.6, -0.6)),
+    ]) {
+      testWidgets(
+        'under a widget in the $side half hangs from its $side edge',
+        (tester) async {
+          String? picked;
+          await host(tester, alignment, (context) async {
+            picked = await showDesktopMenuUnder(context, items());
+          });
+          final anchor = tester.getRect(find.byType(TextButton));
+          final menu = menuRect(tester);
+          expect(menu.top, greaterThanOrEqualTo(anchor.bottom));
+          if (side == 'left') {
+            expect(menu.left, moreOrLessEquals(anchor.left, epsilon: 1));
+          } else {
+            expect(menu.right, moreOrLessEquals(anchor.right, epsilon: 1));
+          }
+          await tester.tap(find.text('One'));
+          await tester.pumpAndSettle();
+          expect(picked, 'one');
+        },
+      );
+    }
+  });
 }

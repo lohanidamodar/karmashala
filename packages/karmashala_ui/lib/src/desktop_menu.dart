@@ -274,17 +274,7 @@ class ContextMenuRegion extends StatelessWidget {
   Future<void> _show(BuildContext context, Offset position) async {
     final items = itemBuilder();
     if (items.isEmpty) return;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (overlay == null) return;
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(position.dx, position.dy, 1, 1),
-        Offset.zero & overlay.size,
-      ),
-      items: items,
-    );
+    final selected = await showDesktopMenuAt(context, position, items);
     if (selected != null) onSelected(selected);
   }
 
@@ -293,5 +283,50 @@ class ContextMenuRegion extends StatelessWidget {
     behavior: HitTestBehavior.translucent,
     onSecondaryTapDown: (details) => _show(context, details.globalPosition),
     child: child,
+  );
+}
+
+/// Opens [items] at [position], in the overlay's coordinates — a pointer's
+/// global position under the app's root overlay. Null when nothing was picked
+/// or there is no overlay to open in.
+Future<T?> showDesktopMenuAt<T>(
+  BuildContext context,
+  Offset position,
+  List<PopupMenuEntry<T>> items,
+) async {
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+  if (overlay == null) return null;
+  return showMenu<T>(
+    context: context,
+    // A one-pixel anchor: the menu opens from the point, not over what was
+    // under it.
+    position: RelativeRect.fromRect(
+      Rect.fromLTWH(position.dx, position.dy, 1, 1),
+      Offset.zero & overlay.size,
+    ),
+    items: items,
+  );
+}
+
+/// Opens [items] under the widget [context] belongs to: from its left edge, or
+/// its right when it sits in the overlay's right half. Null when nothing was
+/// picked or that widget has not been laid out.
+Future<T?> showDesktopMenuUnder<T>(
+  BuildContext context,
+  List<PopupMenuEntry<T>> items,
+) async {
+  final box = context.findRenderObject() as RenderBox?;
+  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+  if (box == null || overlay == null || !box.hasSize) return null;
+  final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
+  return showMenu<T>(
+    context: context,
+    position: RelativeRect.fromLTRB(
+      origin.dx,
+      origin.dy + box.size.height,
+      overlay.size.width - origin.dx - box.size.width,
+      0,
+    ),
+    items: items,
   );
 }

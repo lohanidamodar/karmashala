@@ -46,8 +46,9 @@ class RowInteractionScope extends InheritedNotifier<RowInteraction> {
 
   /// The row's state, subscribing [context] to it. Null outside a
   /// [RowContextMenu] — a button used on its own is simply always drawn.
-  static RowInteraction? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<RowInteractionScope>()?.notifier;
+  static RowInteraction? maybeOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<RowInteractionScope>()
+      ?.notifier;
 }
 
 /// A row's actions are on the row: right-click, `Shift+F10`, the Menu key, a
@@ -118,14 +119,7 @@ class _RowContextMenuState extends State<RowContextMenu> {
       Offset(Insets.lg, box.size.height),
       ancestor: overlay,
     );
-    final selected = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(origin.dx, origin.dy, 1, 1),
-        Offset.zero & overlay.size,
-      ),
-      items: items,
-    );
+    final selected = await showDesktopMenuAt(context, origin, items);
     if (selected != null && mounted) widget.onSelected(selected);
   }
 

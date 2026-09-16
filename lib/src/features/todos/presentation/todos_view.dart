@@ -370,23 +370,14 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
   /// The "file under…" picker, anchored on the row rather than on a button: a
   /// right-click and `Shift+F10` reach it too and have no button to sit under.
   Future<void> _file() async {
-    final box = context.findRenderObject() as RenderBox?;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (box == null || overlay == null || !box.hasSize) return;
-    final origin = box.localToGlobal(Offset.zero, ancestor: overlay);
-    final chosen = await showMenu<ProjectScope>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        origin.dx,
-        origin.dy + box.size.height,
-        overlay.size.width - origin.dx - box.size.width,
-        0,
-      ),
-      items: projectPickerMenuItems(ref, selected: widget.todo.projectId),
+    final chosen = await showDesktopMenuUnder<ProjectScope>(
+      context,
+      projectPickerMenuItems(ref, selected: widget.todo.projectId),
     );
     if (chosen == null || !mounted) return;
-    ref.read(todosProvider.notifier).setProject(widget.todo.id, chosen.projectId);
+    ref
+        .read(todosProvider.notifier)
+        .setProject(widget.todo.id, chosen.projectId);
   }
 
   @override
