@@ -1,10 +1,9 @@
 /// The minimum-window and accessibility matrix.
 ///
-/// Karmashala supports a 720x560 window, and several dialogs ask for far more
-/// than that — the fan-out dialog asks for 1180x780. Flutter shrinks the outer
-/// box silently, so nothing tells you the contents no longer fit; the pane just
-/// clips, and the yellow-and-black stripes only appear if someone happens to
-/// run at that size. Text scaling does the same thing to fixed-height rows.
+/// Karmashala supports a 720x560 window, and a dialog or row designed wider or
+/// taller than that is shrunk silently: nothing tells you the contents no
+/// longer fit, and the yellow-and-black stripes only appear if someone happens
+/// to run at that size. Text scaling does the same thing to fixed-height rows.
 ///
 /// [expectSurvivesWindowMatrix] pumps one widget in every cell of the matrix and
 /// reports **all** of the findings together, rather than stopping at the first,
