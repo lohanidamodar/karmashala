@@ -91,88 +91,36 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
       settingsControllerProvider.select((s) => s.terminalChordOverrides),
     );
 
-    final paneWidget = GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onTapDown: (_) => _sessions.focusPane(paneId),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: showFocusRing
-              ? Border.all(
-                  color: focused
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                )
-              : null,
-        ),
-        child: Column(
-          children: [
-            // A pane with no process says so rather than presenting an old
-            // prompt as live. Its own `Consumer`, so an exit rebuilds only it.
-            Consumer(
-              builder: (context, ref, _) {
-                final liveness = ref.watch(
-                  terminalPaneLivenessProvider(paneId),
-                );
-                if (liveness.isLive) return const SizedBox.shrink();
-                // The pane's *current* instance: a restart replaces it, and a
-                // bar quoting the released one would name the directory of the
-                // session before last.
-                final live =
-                    ref.watch(terminalPaneInstanceProvider(paneId)) ?? instance;
-                return PaneStatusBar(
-                  liveness: liveness,
-                  workingDirectory: live.workingDirectory,
-                  resumes: shouldResumeRatherThanRestart(
-                    liveness: liveness,
-                    isAgentPane: live.agentLaunch != null,
-                  ),
-                  onStart: () => _actions.startOrResumePane(context, paneId),
-                );
-              },
+    final paneWidget = PaneFrame(
+      focused: focused,
+      showFocusRing: showFocusRing,
+      onTapDown: () => _sessions.focusPane(paneId),
+      child: Column(
+        children: [
+          PaneLivenessBar(
+            paneId: paneId,
+            fallback: instance,
+            onStart: () => _actions.startOrResumePane(context, paneId),
+          ),
+          PaneRecordingBar(
+            paneId: paneId,
+            onStop: () => _stopRecording(context, paneId),
+          ),
+          Expanded(
+            child: LiveTerminalPane(
+              paneId: paneId,
+              fallback: instance,
+              focused: focused,
+              fontSize: fontSize,
+              terminalTheme: terminalThemeFor(theme, _importedPalette()),
+              chordOverrides: chordOverrides,
+              onKeyEvent: _actions.onPaneKey,
+              // Right-click → copy selection / paste / end the session.
+              onSecondaryTapDown: (position, live) =>
+                  _terminalMenu(context, position, paneId, live),
             ),
-            // Its own `Consumer` over one bool. No elapsed clock and no byte count: one
-            // needs a ticker, the other rebuilds per chunk of output.
-            Consumer(
-              builder: (context, ref, _) {
-                final recording = ref.watch(
-                  terminalRecordingProvider.select(
-                    (s) => s.isRecording(paneId),
-                  ),
-                );
-                if (!recording) return const SizedBox.shrink();
-                return PaneRecordingBanner(
-                  onStop: () => _stopRecording(context, paneId),
-                );
-              },
-            ),
-            Expanded(
-              // Watches which object is behind this pane: `startPane`'s swap
-              // moves no tab, so the stack's own watch cannot see it.
-              child: Consumer(
-                builder: (context, ref, _) {
-                  final live =
-                      ref.watch(terminalPaneInstanceProvider(paneId)) ??
-                      instance;
-                  return TerminalPaneView(
-                    // Starting a pane swaps its instance in place; without the
-                    // key the element is reused with the disposed focus node.
-                    key: ObjectKey(live),
-                    instance: live,
-                    focused: focused,
-                    fontSize: fontSize,
-                    terminalTheme: terminalThemeFor(theme, _importedPalette()),
-                    chordOverrides: chordOverrides,
-                    onKeyEvent: _actions.onPaneKey,
-                    // Right-click → copy selection / paste / end the session.
-                    onSecondaryTapDown: (position) =>
-                        _terminalMenu(context, position, paneId, live),
-                    linkActions: ref.read(terminalLinkActionsProvider),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
 
