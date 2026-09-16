@@ -62,6 +62,11 @@ cp -R build/host-macos/bundle "$APP/Contents/MacOS/host"
 # Ask the thing itself rather than trusting that a file appeared: a bundle whose
 # dylib it cannot reach still has a binary in the right place.
 "$APP/Contents/MacOS/host/bin/karmashala_host" probe-store
+# And the pty layer, which `probe-store` never touches. Until 2026-09-16 the
+# host loaded `libc.so.6` on every POSIX machine, so every macOS release shipped
+# a host that could not start a single pane — and the store probe, the only one
+# run here, passed throughout.
+"$APP/Contents/MacOS/host/bin/karmashala_host" probe-pty
 
 # Re-sign after writing into the bundle: adding a file invalidates the seal
 # Flutter's own build applied, and an app with a broken signature is refused by
