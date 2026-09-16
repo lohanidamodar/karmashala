@@ -16,6 +16,7 @@ import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/session_defaults.dart';
 import '../application/session_launcher.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_session/launch.dart';
 import 'session_destination_picker.dart';
 
@@ -44,8 +45,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   final _titleController = TextEditingController(text: defaultSessionTitle);
   AgentInstallation? _installation;
 
-  /// Null until the first build resolves it, and null *after* that only when
-  /// the workspace has no projects at all.
+  /// Null only while the workspace has no projects at all.
   SessionDestination? _destination;
   bool _useWorktree = false;
   bool _external = false;
@@ -54,10 +54,43 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    // Taken once, never overwriting the picker's own choice — but still
+    // listened to, so a project added from the empty state below is picked up.
+    _destination = ref.read(defaultSessionDestinationProvider);
+    ref.listenManual(defaultSessionDestinationProvider, (_, next) {
+      if (_destination == null && next != null) {
+        setState(() => _destination = next);
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     super.dispose();
   }
+
+  /// The agent the dialog will start: the one picked, while it is still
+  /// installed where the session runs, else that checkout's default.
+  AgentInstallation? _agentFor(
+    Repository? checkout,
+    List<AgentInstallation> installations,
+  ) {
+    if (checkout == null || installations.isEmpty) return null;
+    final picked = _installation;
+    if (picked != null && installations.contains(picked)) return picked;
+    // The one definition of "which agent, here" — shared with the `+` button
+    // in the Explorer, which runs it without asking.
+    return ref.read(sessionDefaultsProvider).forCheckout(checkout).installation ??
+        installations.first;
+  }
+
+  /// The terminal an external session opens in: the one picked, while it is
+  /// still offered, else the first found.
+  SystemTerminal? _terminalFrom(List<SystemTerminal> terminals) =>
+      terminals.contains(_terminal) ? _terminal : terminals.firstOrNull;
 
   Future<void> _discoverAgents() async {
     setState(() => _busy = true);
@@ -72,17 +105,19 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     }
   }
 
-  Future<void> _create() async {
+  Future<void> _create(AgentInstallation? installation) async {
     final repo = _destination?.checkout;
-    final installation = _installation;
     if (repo == null || installation == null) return;
+    final terminal = _terminalFrom(
+      ref.read(availableSystemTerminalsProvider).asData?.value ?? const [],
+    );
 
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      if (_external && _terminal == null) {
+      if (_external && terminal == null) {
         setState(() => _error = 'Choose a terminal to launch in.');
         return;
       }
@@ -102,7 +137,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               useWorktree: _useWorktree,
               targetPaneId: widget.targetPaneId,
             ),
-            externalTerminal: _terminal,
+            externalTerminal: terminal,
           );
       // Now — and only now — the app follows, by the rule the Explorer uses
       // when a row is clicked. Only when the project differs: selecting scans.
@@ -136,11 +171,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
             child: Text('No external terminals were found on PATH.'),
           );
         }
-        _terminal ??= list.first;
         return Padding(
           padding: const EdgeInsets.only(top: Insets.md),
           child: DropdownButtonFormField<SystemTerminal>(
-            initialValue: list.contains(_terminal) ? _terminal : list.first,
+            initialValue: _terminalFrom(list),
             isExpanded: true,
             decoration: const InputDecoration(labelText: 'Terminal'),
             items: [
@@ -181,9 +215,6 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    // `??=`, so the picker's own choice is never overwritten — but still
-    // watched, so a project added from the empty state below is picked up.
-    _destination ??= ref.watch(defaultSessionDestinationProvider);
     final destination = _destination;
     final checkout = destination?.checkout;
 
@@ -195,15 +226,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
             for (final i in ref.watch(agentInstallationsControllerProvider))
               if (i.environmentId == checkout.path.environmentId) i,
           ];
-    if (checkout != null &&
-        installations.isNotEmpty &&
-        (_installation == null || !installations.contains(_installation))) {
-      // The one definition of "which agent, here" — shared with the `+` button
-      // in the Explorer, which runs it without asking.
-      _installation =
-          ref.read(sessionDefaultsProvider).forCheckout(checkout).installation ??
-          installations.first;
-    }
+    final installation = _agentFor(checkout, installations);
 
     return AlertDialog(
       title: const DesktopDialogTitle(
@@ -228,7 +251,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                     onChanged: (picked) => setState(() {
                       _destination = picked;
                       // The agent belongs to the environment we are leaving.
-                      // Cleared so the block above re-resolves the default.
+                      // Cleared so `_agentFor` re-resolves the default.
                       _installation = null;
                     }),
                   ),
@@ -262,7 +285,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                       key: ValueKey(
                         'agent-in-${checkout?.path.environmentId ?? ''}',
                       ),
-                      initialValue: _installation,
+                      initialValue: installation,
                       // Expanded and ellipsised: the label carries an id, an
                       // environment and a version, wider than the field at 200%.
                       isExpanded: true,
@@ -327,9 +350,9 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: (_busy || checkout == null || _installation == null)
+          onPressed: (_busy || checkout == null || installation == null)
               ? null
-              : _create,
+              : () => _create(installation),
           child: _busy
               ? const InlineSpinner(size: InlineSpinnerSize.medium)
               : const Text('Start'),

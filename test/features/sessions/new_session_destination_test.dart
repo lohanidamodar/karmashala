@@ -9,8 +9,12 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/presentation/new_session_dialog.dart';
+import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
+import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter/material.dart';
@@ -299,6 +303,43 @@ void main() {
     expect(SessionDao(db).getByRepository('r1').single.paneId, agentPane);
   });
 
+  testWidgets('an external session opens in the first terminal found', (
+    tester,
+  ) async {
+    const wezterm = SystemTerminal(
+      kind: SystemTerminalKind.wezterm,
+      label: 'WezTerm',
+      executable: 'wezterm',
+    );
+    const alacritty = SystemTerminal(
+      kind: SystemTerminalKind.alacritty,
+      label: 'Alacritty',
+      executable: 'alacritty',
+    );
+    late _RecordingLauncher launcher;
+    final container = ProviderContainer(
+      parent: containerFor(selected: 'r1'),
+      overrides: [
+        availableSystemTerminalsProvider.overrideWith(
+          (ref) async => const [wezterm, alacritty],
+        ),
+        sessionLauncherProvider.overrideWith(
+          (ref) => launcher = _RecordingLauncher(ref),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await open(tester, container);
+
+    await tester.tap(find.text('External terminal'));
+    await tester.pumpAndSettle();
+    await tester.tap(startButton());
+    await tester.pumpAndSettle();
+
+    // Nothing picked, so the terminal the dropdown shows is the one used.
+    expect(launcher.terminals, [wezterm]);
+  });
+
   group('a workspace with nothing to run in', () {
     testWidgets('says so instead of offering an empty dropdown', (
       tester,
@@ -331,4 +372,20 @@ void main() {
       expect(tester.widget<FilledButton>(startButton()).onPressed, isNull);
     });
   });
+}
+
+/// Records the terminal a launch was asked for, and launches nothing.
+class _RecordingLauncher extends SessionLauncher {
+  _RecordingLauncher(super.ref);
+
+  final terminals = <SystemTerminal?>[];
+
+  @override
+  Future<SessionLaunchResult> launch(
+    SessionLaunchRequest request, {
+    SystemTerminal? externalTerminal,
+  }) async {
+    terminals.add(externalTerminal);
+    throw StateError('recorded, not launched');
+  }
 }
