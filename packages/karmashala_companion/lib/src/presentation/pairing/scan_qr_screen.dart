@@ -94,51 +94,70 @@ class _ScanQrScreenState extends ConsumerState<ScanQrScreen> {
     return Scaffold(
       appBar: companionAppBar(context, title: const Text('Scan the QR code')),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(child: _scanner(context)),
-            if (_busy) const LinearProgressIndicator(minHeight: 2),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  Insets.lg,
-                  Insets.sm,
-                  Insets.lg,
-                  0,
+        child: LayoutBuilder(
+          // The words under the camera scroll within the other half, so no
+          // error or text scale can shrink the viewfinder to nothing.
+          builder: (context, constraints) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _scanner(context)),
+              if (_busy) const LinearProgressIndicator(minHeight: 2),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: constraints.maxHeight * (1 - _cameraShare),
                 ),
-                child: Text(
-                  _error!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: scheme.error,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (_error != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(
+                            Insets.lg,
+                            Insets.sm,
+                            Insets.lg,
+                            0,
+                          ),
+                          child: Text(
+                            _error!,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: scheme.error,
+                            ),
+                          ),
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.all(Insets.lg),
+                        child: Text(
+                          "Point the camera at the QR code in the desktop's "
+                          'Remote access settings.',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: Insets.sm),
+                        child: TextButton(
+                          onPressed: () => Navigator.of(context).pushReplacement(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const ShortCodeScreen(),
+                            ),
+                          ),
+                          child: const Text('Type the code instead'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            Padding(
-              padding: const EdgeInsets.all(Insets.lg),
-              child: Text(
-                "Point the camera at the QR code in the desktop's "
-                'Remote access settings.',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: Insets.sm),
-              child: TextButton(
-                onPressed: () => Navigator.of(context).pushReplacement(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const ShortCodeScreen(),
-                  ),
-                ),
-                child: const Text('Type the code instead'),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+  /// The least of the body the viewfinder keeps.
+  static const _cameraShare = 0.5;
 }
