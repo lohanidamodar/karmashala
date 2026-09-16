@@ -119,13 +119,21 @@ class _StatusBarItemState extends State<StatusBarItem> {
     if (onPressed == null) {
       body = Semantics(
         container: true,
-        label: label == null ? widget.tooltip : null,
+        // The sentence, not the word on the bar: "Checkpoints" alone would
+        // name the rail button that opens it, not this toggle.
+        label: widget.tooltip,
+        excludeSemantics: true,
         child: content,
       );
     } else {
       body = Semantics(
         button: true,
-        label: label == null ? widget.tooltip : null,
+        // The sentence, not the word on the bar: "Checkpoints" alone would
+        // name the rail button that opens it, not this toggle.
+        label: widget.tooltip,
+        excludeSemantics: true,
+        // Excluding the InkWell's semantics drops its tap; give it back.
+        onTap: onPressed,
         child: InkWell(
           onTap: onPressed,
           onFocusChange: (value) => setState(() => _focused = value),
