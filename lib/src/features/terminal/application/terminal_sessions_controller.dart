@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/scheduler.dart';
@@ -17,6 +18,7 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../ssh/application/host_session_providers.dart';
 import '../../ssh/application/ssh_providers.dart';
+import '../data/host_pane_link.dart';
 import '../data/host_terminal_instance.dart';
 import '../data/pty_launch.dart';
 import '../data/scrollback_codec.dart';
@@ -183,9 +185,19 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
     // The tree has to be in step with the restored tab list before the first
     // snapshot goes out.
     _reconcileWorkspace();
+    // After the snapshot, never inside `build`: asking the host is a socket
+    // round-trip, and a pane that reattaches publishes.
+    unawaited(_hostSurvivors = _reattachHostSurvivors());
     _autosave.start();
     return _snapshot();
   }
+
+  Future<void> _hostSurvivors = Future.value();
+
+  /// Completes once this run has asked the session host what survived and
+  /// reattached it — an event a test can wait on instead of a sleep.
+  @visibleForTesting
+  Future<void> get hostSurvivorsReattached => _hostSurvivors;
 
   /// Ends every pane's process and awaits the kills: `ref.onDispose` is
   /// synchronous, so `taskkill` was still in flight when the process ended.

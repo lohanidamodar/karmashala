@@ -23,6 +23,18 @@ import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 import 'terminal_instance.dart';
 
+/// The host session pane [paneId] owns: the app's own id rather than one the
+/// host invents, so the same pane finds the same session after the app restarts
+/// and an agent keeps its session across pane replacement. One function, because
+/// the restore asks the host which of these are still running before any pane
+/// exists to ask.
+String hostSessionIdFor({required String paneId, String? agentSessionId}) {
+  final raw = agentSessionId != null
+      ? 'karmashala_$agentSessionId'
+      : 'karmashala_local_$paneId';
+  return raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+}
+
 /// A pane whose process belongs to the **session host**, so it outlives the app
 /// a `flutter_pty` child would die with. No fallback: it says so and stays dead.
 class HostTerminalInstance
@@ -332,12 +344,8 @@ class HostTerminalInstance
   /// same session after the app restarts, and an agent must keep its session
   /// across pane replacement.
   @visibleForTesting
-  String get hostSessionId {
-    final raw = agentLaunch?.sessionId != null
-        ? 'karmashala_${agentLaunch!.sessionId}'
-        : 'karmashala_local_$id';
-    return raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
-  }
+  String get hostSessionId =>
+      hostSessionIdFor(paneId: id, agentSessionId: agentLaunch?.sessionId);
 
   void _onLinkClosed() {
     _lastOffset = _link?.lastOffset ?? _lastOffset;

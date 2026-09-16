@@ -78,6 +78,69 @@ extension TerminalLayoutRestore on TerminalSessionsController {
     }
   }
 
+  /// Reattaches every restored pane whose session is still running in the
+  /// local session host — in any tab, detached or not, agent panes included.
+  ///
+  /// The launch rule keeps a restore from *re-running* things: a shell in a tab
+  /// nobody is looking at, an agent whose conversation would replay. A session
+  /// the host kept alive re-runs nothing, so neither concern applies, and
+  /// leaving it as history was worse than idle: its Start button opens a second
+  /// shell beside the first, which stays running in the host with no pane.
+  ///
+  /// Asks with [LocalHostSessionAccess.observe], which starts nothing: a host
+  /// that is not running holds nothing that survived, and starting one to find
+  /// that out would launch a daemon on every app start.
+  Future<void> _reattachHostSurvivors() async {
+    // First, and with nothing read: most launches restore no history at all,
+    // and a controller with no settings store behind it must not be asked for
+    // one just to learn there was nothing to reattach.
+    final dormant = <String, String>{
+      for (final entry in _instances.entries)
+        if (entry.value case final DormantTerminalInstance pane)
+          hostSessionIdFor(
+            paneId: entry.key,
+            agentSessionId: pane.agentLaunch?.sessionId,
+          ): entry.key,
+    };
+    if (dormant.isEmpty) return;
+
+    HostPaneLink? link;
+    final List<String> running;
+    try {
+      if (!ref.read(hostBackedLocalPanesProvider)) return;
+      final access = ref.read(localHostSessionAccessProvider);
+      if (access == null) return;
+      final reading = await access.observe();
+      if (!reading.isReady || _disposed) return;
+      link = await HostPaneLink.open(
+        await access.exec('${reading.remotePath ?? ''} attach'),
+        clientId: 'restore',
+      );
+      running = [
+        for (final session in await link.listSessions())
+          if (!session.lifecycle.hasEnded) session.id,
+      ];
+    } catch (error, stack) {
+      // A host that cannot be asked leaves every pane as the history it
+      // already is — the state before this step existed, not a worse one.
+      _log.warning('Could not ask the session host what survived.', error, stack);
+      return;
+    } finally {
+      await link?.close();
+    }
+
+    for (final sessionId in running) {
+      if (_disposed) return;
+      final paneId = dormant[sessionId];
+      // Re-checked: the user may have closed or started it while we asked.
+      if (paneId == null || _instances[paneId] is! DormantTerminalInstance) {
+        continue;
+      }
+      // The Start button's own path, which attaches because the session exists.
+      startPane(paneId);
+    }
+  }
+
   /// Puts the tabs that came back into the groups they were in, pruned against
   /// the ones that actually rebuilt. A tree that will not parse is no tree,
   /// which costs one group — what a first run has.
