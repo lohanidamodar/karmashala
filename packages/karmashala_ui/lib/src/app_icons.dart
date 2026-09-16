@@ -618,4 +618,150 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// A recording in progress — [record] filled, drawn in the failure colour.
+  static const IconData recordFill = IconData(
+    0xe3ee,
+    fontFamily: 'PhosphorFill',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Stop recording: the solid square that pairs with [recordFill], never a
+  /// live view's or an app's stop.
+  static const IconData stopFill = IconData(
+    0xe46c,
+    fontFamily: 'PhosphorFill',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Take a screenshot.
+  static const IconData camera = IconData(
+    0xe10e,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Start watching a device: its live view.
+  static const IconData eye = IconData(
+    0xe220,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Stop the live view.
+  static const IconData eyeSlash = IconData(
+    0xe224,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Pause a stream that can pick up where it left off, such as logcat.
+  static const IconData pause = IconData(
+    0xe39e,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Launch an app.
+  static const IconData rocketLaunch = IconData(
+    0xe3fe,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Force-stop an app.
+  static const IconData prohibit = IconData(
+    0xe3de,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// A device's hardware Back — not [arrowLeft], which is navigation here.
+  static const IconData arrowUDownLeft = IconData(
+    0xe07e,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// A device's Recents / app overview. Not [stack], which is a context.
+  static const IconData squaresFour = IconData(
+    0xe464,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Lock a device screen — not [power], which shuts the device down.
+  static const IconData lockSimple = IconData(
+    0xe308,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Keyboard forwarding to a device.
+  static const IconData keyboard = IconData(
+    0xe2d8,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Send to a device from this computer; [downloadSimple] is the other way.
+  static const IconData uploadSimple = IconData(
+    0xe4c0,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Clear what is on screen without deleting anything — not [trash].
+  static const IconData broom = IconData(
+    0xec54,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Install a build (.apk / .app) on a device.
+  static const IconData package = IconData(
+    0xe390,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Pair with a numeric code.
+  static const IconData numpad = IconData(
+    0xe3c8,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// A plain file in a listing — not [note], which is a user note.
+  static const IconData file = IconData(
+    0xe230,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Restart / reload something running. [arrowsClockwise] refreshes a list,
+  /// [arrowCounterClockwise] undoes.
+  static const IconData arrowClockwise = IconData(
+    0xe036,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }
