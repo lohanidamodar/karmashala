@@ -61,9 +61,7 @@ class EmptyPaneRegion extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
+    final scheme = Theme.of(context).colorScheme;
     final sessions = ref.read(terminalSessionsControllerProvider.notifier);
     return DragTarget<TerminalDrag>(
       onWillAcceptWithDetails: (details) =>
@@ -105,92 +103,136 @@ class EmptyPaneRegion extends ConsumerWidget {
                     : scheme.outlineVariant,
               ),
             ),
-            child: Center(
-              // A region shrinks to 5% of the window (`kMinPaneWeight`) and
-              // buttons have a floor width, so the invitation is capped and
-              // scrolls both ways rather than overflowing at any size.
-              child: SingleChildScrollView(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.all(Insets.md),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 320),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          AppIcons.squareSplitHorizontal,
-                          size: Chrome.iconHero,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(height: Insets.sm),
-                        Text(
-                          title,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurface,
-                          ),
-                        ),
-                        const SizedBox(height: Insets.xs),
-                        Text(
-                          'Drag a tab here, or start something new.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: Insets.md),
-                        Wrap(
-                          alignment: WrapAlignment.center,
-                          spacing: Insets.sm,
-                          runSpacing: Insets.xs,
-                          children: [
-                            FilledButton.icon(
-                              // So a region made with Ctrl+Shift+D can be
-                              // filled with Enter.
-                              autofocus: focused,
-                              onPressed: onNewTerminal,
-                              icon: const Icon(
-                                AppIcons.plus,
-                                size: Chrome.icon,
-                              ),
-                              label: const Text('New terminal'),
-                            ),
-                            FilledButton.tonalIcon(
-                              onPressed: onNewSession,
-                              icon: const Icon(
-                                AppIcons.chatCircleDots,
-                                size: Chrome.icon,
-                              ),
-                              // Distinct from an agent pane's default title: a
-                              // fresh split must not print "New session" as
-                              // both content and action.
-                              label: const Text('New agent session'),
-                            ),
-                            // The keyboard half of the drag: a feature only
-                            // reachable by dragging is unreachable for some.
-                            TextButton.icon(
-                              onPressed: onMoveTabHere,
-                              icon: const Icon(
-                                AppIcons.listMagnifyingGlass,
-                                size: Chrome.icon,
-                              ),
-                              label: Text(moveLabel),
-                            ),
-                            TextButton(
-                              onPressed: onClose,
-                              child: Text(closeLabel),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+            child: LayoutBuilder(
+              builder: (context, box) => _invitation(context, box),
             ),
           ),
         );
       },
+    );
+  }
+
+  /// Below this width (at 1x text) the actions are icons with tooltips: their
+  /// labels would wrap a word to a line in a region this narrow.
+  static const _iconsBelowWidth = 240.0;
+
+  /// Below this height the glyph and the sentence go, so the actions and the
+  /// way out stay on screen without scrolling.
+  static const _plainBelowHeight = 280.0;
+
+  static const _maxWidth = 320.0;
+
+  Widget _invitation(BuildContext context, BoxConstraints box) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final scaler = MediaQuery.textScalerOf(context);
+    final iconsOnly =
+        box.maxWidth < WidthClass.scaleBreakpoint(_iconsBelowWidth, scaler);
+    final plain =
+        iconsOnly ||
+        box.maxHeight < WidthClass.scaleBreakpoint(_plainBelowHeight, scaler);
+    final width = (box.maxWidth - 2 * Insets.md).clamp(0.0, _maxWidth);
+
+    final actions = iconsOnly
+        ? [
+            IconButton.filled(
+              autofocus: focused,
+              tooltip: 'New terminal',
+              onPressed: onNewTerminal,
+              icon: const Icon(AppIcons.plus),
+            ),
+            IconButton.filledTonal(
+              tooltip: 'New agent session',
+              onPressed: onNewSession,
+              icon: const Icon(AppIcons.chatCircleDots),
+            ),
+            IconButton(
+              tooltip: moveLabel,
+              onPressed: onMoveTabHere,
+              icon: const Icon(AppIcons.listMagnifyingGlass),
+            ),
+            IconButton(
+              tooltip: closeLabel,
+              onPressed: onClose,
+              icon: const Icon(AppIcons.x),
+            ),
+          ]
+        : [
+            FilledButton.icon(
+              // So a region made with Ctrl+Shift+D can be filled with Enter.
+              autofocus: focused,
+              onPressed: onNewTerminal,
+              icon: const Icon(AppIcons.plus, size: Chrome.icon),
+              label: const Text('New terminal'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: onNewSession,
+              icon: const Icon(AppIcons.chatCircleDots, size: Chrome.icon),
+              // Distinct from an agent pane's default title: a fresh split must
+              // not print "New session" as both content and action.
+              label: const Text('New agent session'),
+            ),
+            // The keyboard half of the drag: a feature only reachable by
+            // dragging is unreachable for some.
+            TextButton.icon(
+              onPressed: onMoveTabHere,
+              icon: const Icon(AppIcons.listMagnifyingGlass, size: Chrome.icon),
+              label: Text(moveLabel),
+            ),
+            TextButton(onPressed: onClose, child: Text(closeLabel)),
+          ];
+
+    return Center(
+      // Vertical only: the width is capped to the region, so nothing needs to
+      // scroll sideways, and a region can still be shorter than its buttons.
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Insets.md),
+        child: SizedBox(
+          width: width,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!plain) ...[
+                Icon(
+                  AppIcons.squareSplitHorizontal,
+                  size: Chrome.iconHero,
+                  color: scheme.onSurfaceVariant,
+                ),
+                const SizedBox(height: Insets.sm),
+              ],
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurface,
+                ),
+              ),
+              if (!plain) ...[
+                const SizedBox(height: Insets.xs),
+                Text(
+                  // Null [accepts] is the region's rule, which takes panes; a
+                  // group supplies its own and takes tabs.
+                  accepts == null
+                      ? 'Drag a pane here, or start something new.'
+                      : 'Drag a tab here, or start something new.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              const SizedBox(height: Insets.md),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: Insets.sm,
+                runSpacing: Insets.xs,
+                children: actions,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

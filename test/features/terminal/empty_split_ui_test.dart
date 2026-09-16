@@ -121,14 +121,14 @@ void main() {
     );
   });
 
-  testWidgets('squeezed to a sliver, it scrolls instead of spilling', (
+  testWidgets('squeezed to a sliver, its actions stay inside it', (
     tester,
   ) async {
     // A divider can be dragged until a region is 5% of the window
-    // (`kMinPaneWeight`), which is narrower than a single button. `Wrap` does
-    // not report an overflow the way `Flex` does, so it would quietly paint
-    // its buttons outside the region and out of reach — the assertion is that
-    // the content becomes scrollable, not merely that nothing threw.
+    // (`kMinPaneWeight`), which is narrower than a single labelled button.
+    // `Wrap` does not report an overflow the way `Flex` does, so it would
+    // quietly paint its buttons outside the region and out of reach — the
+    // assertion is where they are, not merely that nothing threw.
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -151,23 +151,33 @@ void main() {
             widget.axisDirection == AxisDirection.right,
       ),
     );
-    expect(
-      tester.state<ScrollableState>(sideways).position.maxScrollExtent,
-      0,
-      reason: 'half a desktop window fits it, so there is nothing to scroll',
-    );
+    expect(sideways, findsNothing, reason: 'the width is capped, not scrolled');
 
     final tab = container.read(terminalSessionsControllerProvider).activeTab!;
     // Past the clamp on purpose: the region ends up at kMinPaneWeight.
     controller.resizePane(tab.id, (tab.layout.root as PaneSplit).id, 0, 1);
     await tester.pump();
 
-    expect(tester.getSize(find.byType(EmptyPaneRegion)).width, lessThan(80));
-    expect(
-      tester.state<ScrollableState>(sideways).position.maxScrollExtent,
-      greaterThan(0),
-      reason: 'the buttons stay reachable rather than painting outside',
-    );
+    final region = tester.getRect(find.byType(EmptyPaneRegion));
+    expect(region.width, lessThan(80));
+    for (final action in [
+      'New terminal',
+      'New agent session',
+      'Move a pane here…',
+      'Close split',
+    ]) {
+      final rect = tester.getRect(
+        find.descendant(
+          of: find.byType(EmptyPaneRegion),
+          matching: find.byTooltip(action),
+        ),
+      );
+      expect(
+        rect.left >= region.left && rect.right <= region.right,
+        isTrue,
+        reason: '$action at $rect stays inside $region',
+      );
+    }
   });
 
   testWidgets('a tab chip dragged onto the region is refused', (
