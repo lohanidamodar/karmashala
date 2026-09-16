@@ -50,9 +50,9 @@ void main() {
     'payload': {'type': 'agent_message', 'message': 'done'},
   };
 
-  Map<String, Object?> toolCall(String type) => {
+  Map<String, Object?> toolCall(String type, {String? name}) => {
     'type': 'response_item',
-    'payload': {'type': type, 'call_id': 'c1'},
+    'payload': {'type': type, 'name': ?name, 'call_id': 'c1'},
   };
 
   /// The cumulative usage record Codex writes after every model call.
@@ -63,6 +63,7 @@ void main() {
     int cacheWrite = 0,
     int reasoning = 0,
     int contextWindow = 258400,
+    int? lastInput,
     String? at,
   }) => {
     'timestamp': at,
@@ -78,6 +79,8 @@ void main() {
           'reasoning_output_tokens': reasoning,
           'total_tokens': input + output,
         },
+        if (lastInput != null)
+          'last_token_usage': {'input_tokens': lastInput, 'output_tokens': 1},
         'model_context_window': contextWindow,
       },
     },
@@ -122,7 +125,8 @@ void main() {
     expect(
       stats.tokens.total,
       990,
-      reason: '500 fresh + 400 cached + 90 out; reasoning is inside output, '
+      reason:
+          '500 fresh + 400 cached + 90 out; reasoning is inside output, '
           'not a fifth bucket',
     );
     expect(stats.contextWindow, 258400);
@@ -130,6 +134,42 @@ void main() {
     // the first prompt: the rollout's own first timestamp is when the CLI
     // opened the conversation.
     expect(stats.span, const Duration(minutes: 20, seconds: 10));
+  });
+
+  test('it names tool calls from the head and keeps the last prompt', () async {
+    write('r1', [
+      meta(),
+      userMessage(),
+      toolCall('function_call', name: 'shell'),
+      toolCall('function_call', name: 'shell'),
+      toolCall('custom_tool_call', name: 'apply_patch'),
+      toolCall('local_shell_call'),
+      // A name the record did not carry is not guessed.
+      toolCall('function_call'),
+      // A name past the classification window is not read, so not invented.
+      {
+        'type': 'response_item',
+        'payload': {
+          'type': 'function_call',
+          'call_id': 'c' * 300,
+          'name': 'too_far',
+        },
+      },
+      tokenCount(input: 900, cached: 400, output: 90, lastInput: 700),
+    ]);
+
+    final reader = CodexStatsReader(cache: CodexStatsCache());
+    final stats = (await reader.readSessionStats(rollout('r1')))!;
+
+    expect(stats.toolCalls, 6);
+    expect(stats.toolCallsByName, {
+      'shell': 2,
+      'apply_patch': 1,
+      'local_shell': 1,
+    });
+    expect(stats.lastPromptTokens, 700);
+    expect(stats.tokensByModel, isNull, reason: 'one running total, no split');
+    expect(stats.outputTokensPerTurn, isNull);
   });
 
   test('a rollout with no usage record reports no tokens', () async {
@@ -140,6 +180,7 @@ void main() {
 
     expect(stats.tokens.isUnknown, isTrue);
     expect(stats.contextWindow, isNull);
+    expect(stats.lastPromptTokens, isNull);
     expect(stats.turns, 1);
   });
 
@@ -190,7 +231,8 @@ void main() {
       File(rollout('r1')).writeAsStringSync(
         [
           line(userMessage()),
-          line(tokenCount(input: 99999, cached: 0, output: 1)),
+          line(toolCall('function_call', name: 'late_tool')),
+          line(tokenCount(input: 99999, cached: 0, output: 1, lastInput: 77)),
         ].join(),
         mode: FileMode.append,
       );
@@ -205,6 +247,13 @@ void main() {
       );
       expect(after.turns, before.turns! + 1);
       expect(after.tokens.input, 99999);
+      expect(after.lastPromptTokens, 77);
+      expect(after.toolCallsByName!['late_tool'], 1);
+      expect(
+        before.toolCallsByName!.containsKey('late_tool'),
+        isFalse,
+        reason: 'the cached counters were copied, not shared',
+      );
     });
 
     test('a record still being written is not resumed inside', () async {
@@ -272,7 +321,11 @@ void main() {
           toolCall('custom_tool_call'),
           {
             'type': 'response_item',
-            'payload': {'type': 'message', 'role': 'user', 'content': 'y' * 900},
+            'payload': {
+              'type': 'message',
+              'role': 'user',
+              'content': 'y' * 900,
+            },
           },
           tokenCount(input: 100 * (i + 1), cached: 0, output: 1),
         ],

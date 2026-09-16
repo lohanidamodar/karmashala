@@ -21,15 +21,15 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('karmashala_stats');
-    Directory(p.join(tmp.path, '.claude', 'projects', '-repo'))
-        .createSync(recursive: true);
+    Directory(
+      p.join(tmp.path, '.claude', 'projects', '-repo'),
+    ).createSync(recursive: true);
     home = p.join(tmp.path, '.claude');
   });
 
   tearDown(() => removeTempDirectory(tmp));
 
-  String pathFor(String id) =>
-      p.join(home, 'projects', '-repo', '$id.jsonl');
+  String pathFor(String id) => p.join(home, 'projects', '-repo', '$id.jsonl');
 
   String line(Map<String, Object?> json) => '${jsonEncode(json)}\n';
 
@@ -67,6 +67,7 @@ void main() {
     int output = 100,
     int cacheCreated = 20,
     int cacheRead = 300,
+    String? model,
   }) => {
     'type': 'assistant',
     'timestamp': at,
@@ -74,6 +75,7 @@ void main() {
     'message': {
       'id': messageId,
       'role': 'assistant',
+      'model': ?model,
       'content': [block],
       'usage': {
         'input_tokens': input,
@@ -98,10 +100,12 @@ void main() {
         'name': 'Read',
       }),
       toolResult(),
-      assistantBlock('msg_b', {
-        'type': 'text',
-        'text': 'done',
-      }, at: '2026-01-01T00:05:00.000Z', output: 50),
+      assistantBlock(
+        'msg_b',
+        {'type': 'text', 'text': 'done'},
+        at: '2026-01-01T00:05:00.000Z',
+        output: 50,
+      ),
     ]);
 
     final reader = ClaudeStoreReader(cache: ClaudeStoreCache());
@@ -141,6 +145,110 @@ void main() {
     expect(stats.toolCalls, 1);
   });
 
+  test(
+    'it splits tokens by model, calls by tool, and output by turn',
+    () async {
+      write('s1', [
+        user('plan it'),
+        assistantBlock(
+          'msg_a',
+          {'type': 'tool_use', 'id': 'tu_1', 'name': 'Read'},
+          model: 'claude-opus-4-1',
+          output: 40,
+        ),
+        assistantBlock(
+          'msg_a',
+          {'type': 'tool_use', 'id': 'tu_2', 'name': 'Read'},
+          model: 'claude-opus-4-1',
+          output: 40,
+        ),
+        toolResult(),
+        assistantBlock(
+          'msg_b',
+          {'type': 'tool_use', 'id': 'tu_3', 'name': 'Bash'},
+          model: 'claude-haiku-4-5',
+          input: 7,
+          output: 9,
+          cacheRead: 11,
+        ),
+        toolResult(),
+        user('now build it'),
+        assistantBlock(
+          'msg_c',
+          {'type': 'text', 'text': 'done'},
+          model: 'claude-opus-4-1',
+          input: 1,
+          output: 60,
+          cacheCreated: 2,
+          cacheRead: 900,
+        ),
+        // Claude Code's own stand-in for a failed call: not a model.
+        assistantBlock(
+          'msg_d',
+          {'type': 'text', 'text': 'API Error'},
+          model: '<synthetic>',
+          input: 0,
+          output: 0,
+          cacheCreated: 0,
+          cacheRead: 0,
+        ),
+      ]);
+
+      final reader = ClaudeStoreReader(cache: ClaudeStoreCache());
+      final stats = (await reader.readSessionStats(pathFor('s1')))!;
+
+      expect(stats.toolCallsByName, {'Read': 2, 'Bash': 1});
+      expect(stats.tokensByModel!.keys, {
+        'claude-opus-4-1',
+        'claude-haiku-4-5',
+      });
+      expect(
+        stats.tokensByModel!['claude-opus-4-1'],
+        const TokenTally(
+          input: 6,
+          output: 100,
+          cacheCreated: 22,
+          cacheRead: 1200,
+        ),
+        reason: 'msg_a once, not twice, plus msg_c',
+      );
+      expect(
+        stats.tokensByModel!['claude-haiku-4-5'],
+        const TokenTally(input: 7, output: 9, cacheCreated: 20, cacheRead: 11),
+      );
+      expect(stats.outputTokensPerTurn, [49, 60]);
+      expect(
+        stats.lastPromptTokens,
+        0,
+        reason: 'the newest call recorded is the synthetic one, and it sent 0',
+      );
+    },
+  );
+
+  test('the newest call\'s prompt is fresh input plus both caches', () async {
+    write('s1', [
+      user('go'),
+      assistantBlock('msg_a', {'type': 'text', 'text': 'a'}),
+      assistantBlock(
+        'msg_b',
+        {'type': 'text', 'text': 'b'},
+        input: 3,
+        cacheCreated: 40,
+        cacheRead: 5000,
+      ),
+    ]);
+
+    final reader = ClaudeStoreReader(cache: ClaudeStoreCache());
+    final stats = (await reader.readSessionStats(pathFor('s1')))!;
+
+    expect(stats.lastPromptTokens, 5043);
+    expect(
+      stats.contextWindow,
+      isNull,
+      reason: 'Claude Code does not write it',
+    );
+  });
+
   test('tokens are unknown, not zero, when nothing recorded them', () async {
     write('s1', [
       user('go'),
@@ -161,6 +269,9 @@ void main() {
     expect(stats.tokens.isUnknown, isTrue);
     expect(stats.tokens.total, isNull);
     expect(stats.replies, 1);
+    expect(stats.tokensByModel, isNull);
+    expect(stats.outputTokensPerTurn, isNull);
+    expect(stats.lastPromptTokens, isNull);
   });
 
   test('a delegated agent\'s records are not this session\'s turns', () async {
@@ -272,6 +383,8 @@ void main() {
       expect(after.turns, before.turns! + 1);
       expect(after.replies, before.replies! + 1);
       expect(after.tokens.output, before.tokens.output! + 100);
+      expect(after.outputTokensPerTurn, [...before.outputTokensPerTurn!, 100]);
+      expect(after.toolCallsByName, before.toolCallsByName);
     });
 
     test('a session rewritten from the top starts its counts over', () async {

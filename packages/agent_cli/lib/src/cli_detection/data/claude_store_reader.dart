@@ -352,6 +352,10 @@ class _ClaudeCounters {
   int cacheCreatedTokens = 0;
   int cacheReadTokens = 0;
   bool sawUsage = false;
+  final Map<String, int> toolCallsByName = {};
+  final Map<String, _ModelTally> byModel = {};
+  int? lastPromptTokens;
+  final List<int> outputPerTurn = [];
   DateTime? firstAt;
   DateTime? lastAt;
 
@@ -385,6 +389,7 @@ class _ClaudeCounters {
       }
     }
     turns++;
+    outputPerTurn.add(0);
   }
 
   /// One model reply, and the tool calls it made.
@@ -409,7 +414,13 @@ class _ClaudeCounters {
     final content = message['content'];
     if (content is List) {
       for (final block in content) {
-        if (block is Map && block['type'] == 'tool_use') toolCalls++;
+        if (block is Map && block['type'] == 'tool_use') {
+          toolCalls++;
+          final name = block['name'];
+          if (name is String && name.isNotEmpty) {
+            toolCallsByName[name] = (toolCallsByName[name] ?? 0) + 1;
+          }
+        }
       }
     }
 
@@ -422,10 +433,29 @@ class _ClaudeCounters {
     final usage = message['usage'];
     if (usage is! Map) return;
     sawUsage = true;
-    inputTokens += _int(usage['input_tokens']);
-    outputTokens += _int(usage['output_tokens']);
-    cacheCreatedTokens += _int(usage['cache_creation_input_tokens']);
-    cacheReadTokens += _int(usage['cache_read_input_tokens']);
+    final input = _int(usage['input_tokens']);
+    final output = _int(usage['output_tokens']);
+    final cacheCreated = _int(usage['cache_creation_input_tokens']);
+    final cacheRead = _int(usage['cache_read_input_tokens']);
+    inputTokens += input;
+    outputTokens += output;
+    cacheCreatedTokens += cacheCreated;
+    cacheReadTokens += cacheRead;
+    lastPromptTokens = input + cacheCreated + cacheRead;
+    if (outputPerTurn.isEmpty) outputPerTurn.add(0);
+    outputPerTurn[outputPerTurn.length - 1] += output;
+
+    // `<synthetic>` marks a reply Claude Code wrote itself (an API error), not
+    // a model call.
+    final model = message['model'];
+    if (model is String && model.isNotEmpty && model != '<synthetic>') {
+      (byModel[model] ??= _ModelTally()).add(
+        input,
+        output,
+        cacheCreated,
+        cacheRead,
+      );
+    }
   }
 
   static int _int(Object? value) => value is num ? value.toInt() : 0;
@@ -447,6 +477,36 @@ class _ClaudeCounters {
         : TokenTally.unknown,
     firstActivityAt: firstAt,
     lastActivityAt: lastAt,
+    toolCallsByName: Map.unmodifiable(toolCallsByName),
+    tokensByModel: sawUsage
+        ? {
+            for (final MapEntry(:key, :value) in byModel.entries)
+              key: value.toTally(),
+          }
+        : null,
+    lastPromptTokens: lastPromptTokens,
+    outputTokensPerTurn: sawUsage ? List.unmodifiable(outputPerTurn) : null,
+  );
+}
+
+class _ModelTally {
+  int input = 0;
+  int output = 0;
+  int cacheCreated = 0;
+  int cacheRead = 0;
+
+  void add(int input, int output, int cacheCreated, int cacheRead) {
+    this.input += input;
+    this.output += output;
+    this.cacheCreated += cacheCreated;
+    this.cacheRead += cacheRead;
+  }
+
+  TokenTally toTally() => TokenTally(
+    input: input,
+    output: output,
+    cacheCreated: cacheCreated,
+    cacheRead: cacheRead,
   );
 }
 

@@ -63,7 +63,10 @@ class TokenTally {
         cacheRead == null) {
       return null;
     }
-    return (input ?? 0) + (output ?? 0) + (cacheCreated ?? 0) + (cacheRead ?? 0);
+    return (input ?? 0) +
+        (output ?? 0) +
+        (cacheCreated ?? 0) +
+        (cacheRead ?? 0);
   }
 
   @override
@@ -105,6 +108,10 @@ class SessionStats {
     this.firstActivityAt,
     this.lastActivityAt,
     this.output,
+    this.toolCallsByName,
+    this.tokensByModel,
+    this.lastPromptTokens,
+    this.outputTokensPerTurn,
   });
 
   final SessionStatsSource source;
@@ -134,6 +141,23 @@ class SessionStats {
   /// Not parsed, on purpose: a TUI's layout changes with every release and a
   /// parser for it breaks on each one, while showing the frame cannot.
   final String? output;
+
+  /// [toolCalls] split by tool name, where the record names the tool. Null when
+  /// the route cannot tell; a call whose name was not recorded is left out, so
+  /// the values can add up to less than [toolCalls].
+  final Map<String, int>? toolCallsByName;
+
+  /// Tokens per model, where each reply names its model. Claude Code only:
+  /// Codex keeps one running total for the whole conversation.
+  final Map<String, TokenTally>? tokensByModel;
+
+  /// Everything the newest model call was sent — fresh input plus cache — which
+  /// is how full the context was at that call.
+  final int? lastPromptTokens;
+
+  /// Output tokens per prompt, oldest first. Only where each reply's usage is
+  /// written beside it; a cumulative total cannot be split after the fact.
+  final List<int>? outputTokensPerTurn;
 
   /// Between the first and last record — elapsed, **not** time spent working.
   /// A session resumed a month later spans a month.

@@ -261,10 +261,17 @@ class CodexStatsReader {
       return;
     }
     for (final marker in _toolCallMarkers) {
-      if (_containsIn(head, length, marker)) {
-        counters.toolCalls++;
-        return;
+      final at = _indexIn(head, length, marker);
+      if (at < 0) continue;
+      counters.toolCalls++;
+      final name =
+          _stringAfter(head, length, _nameMarker, from: at + marker.length) ??
+          (identical(marker, _toolCallMarkers.last) ? 'local_shell' : null);
+      if (name != null) {
+        counters.toolCallsByName[name] =
+            (counters.toolCallsByName[name] ?? 0) + 1;
       }
+      return;
     }
     if (decodeUsage && _containsIn(head, length, _usageMarker)) {
       _decodeUsage(Uint8List.sublistView(head, 0, length), counters);
@@ -285,16 +292,35 @@ class CodexStatsReader {
   }
 
   /// The envelope's own `timestamp`, read out of the head without decoding it.
-  static String? _timestampIn(Uint8List head, int length) {
-    final at = _indexIn(head, length, _timestampMarker);
+  static String? _timestampIn(Uint8List head, int length) =>
+      _stringAfter(head, length, _timestampMarker);
+
+  /// The string value that follows [marker], when it closes inside the head.
+  /// A value cut off by the prefix cap is not recorded rather than truncated.
+  static String? _stringAfter(
+    Uint8List head,
+    int length,
+    Uint8List marker, {
+    int from = 0,
+  }) {
+    var at = -1;
+    for (var i = from; i <= length - marker.length; i++) {
+      if (_matchesAt(head, marker, i)) {
+        at = i;
+        break;
+      }
+    }
     if (at < 0) return null;
-    final from = at + _timestampMarker.length;
-    var to = from;
+    final start = at + marker.length;
+    var to = start;
     while (to < length && head[to] != _quote) {
       to++;
     }
-    if (to <= from || to >= length) return null;
-    return String.fromCharCodes(head, from, to);
+    if (to <= start || to >= length) return null;
+    return utf8.decode(
+      Uint8List.sublistView(head, start, to),
+      allowMalformed: true,
+    );
   }
 }
 
@@ -328,6 +354,9 @@ final List<Uint8List> _toolCallMarkers = [
   _bytes('"payload":{"type":"local_shell_call"'),
 ];
 final Uint8List _timestampMarker = _bytes('"timestamp":"');
+
+/// Escaped inside `arguments`, so this only matches the record's own field.
+final Uint8List _nameMarker = _bytes('"name":"');
 
 Uint8List _bytes(String value) => Uint8List.fromList(utf8.encode(value));
 
@@ -367,6 +396,12 @@ void _readUsageInfo(Object? info, CodexStatsCounters counters) {
         _int(total['output_tokens']) ?? counters.outputTokens;
     counters.reasoningTokens =
         _int(total['reasoning_output_tokens']) ?? counters.reasoningTokens;
+  }
+  final last = info['last_token_usage'];
+  if (last is Map) {
+    // Codex's `input_tokens` already includes the cached part.
+    counters.lastPromptTokens =
+        _int(last['input_tokens']) ?? counters.lastPromptTokens;
   }
   counters.contextWindow =
       _int(info['model_context_window']) ?? counters.contextWindow;
@@ -435,6 +470,8 @@ class CodexStatsCounters {
   int? outputTokens;
   int? reasoningTokens;
   int? contextWindow;
+  int? lastPromptTokens;
+  Map<String, int> toolCallsByName = {};
 
   DateTime? firstAt;
   DateTime? lastAt;
@@ -449,6 +486,8 @@ class CodexStatsCounters {
     ..outputTokens = outputTokens
     ..reasoningTokens = reasoningTokens
     ..contextWindow = contextWindow
+    ..lastPromptTokens = lastPromptTokens
+    ..toolCallsByName = {...toolCallsByName}
     ..firstAt = firstAt
     ..lastAt = lastAt;
 
@@ -484,6 +523,8 @@ class CodexStatsCounters {
       contextWindow: contextWindow,
       firstActivityAt: firstAt,
       lastActivityAt: lastAt,
+      toolCallsByName: Map.unmodifiable(toolCallsByName),
+      lastPromptTokens: lastPromptTokens,
     );
   }
 }
