@@ -22,7 +22,7 @@ class StatTile extends StatelessWidget {
   final String? caption;
   final String unrecorded;
 
-  /// The exact figure behind a rounded [value], on hover.
+  /// More about the figure — what it measures, or its exact value — on hover.
   final String? tooltip;
 
   @override
@@ -47,8 +47,7 @@ class StatTile extends StatelessWidget {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontSize: 22,
+            style: theme.textTheme.titleLarge?.copyWith(
               height: 1.15,
               fontWeight: FontWeight.w600,
               color: scheme.onSurface,
