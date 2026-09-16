@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../../devices.dart';
 import 'device_touch_surface.dart';
 
@@ -17,69 +20,94 @@ class StreamStalledOverlay extends StatelessWidget {
   final bool exhausted;
   final VoidCallback onRestart;
 
+  /// Below this height (at 1x text) the explanation is dropped: in a picture a
+  /// side panel has squeezed, the way out matters more than the reason.
+  static const detailFrom = 220.0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final ink = theme.colorScheme.onInverseSurface;
     final ended = health.state == DeviceStreamState.ended;
+    final scaler = MediaQuery.textScalerOf(context);
     return ColoredBox(
       color: theme.colorScheme.scrim.withValues(alpha: 0.72),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final roomy =
+              constraints.maxHeight >=
+              WidthClass.scaleBreakpoint(detailFrom, scaler);
+          final padding = roomy ? Insets.lg : Insets.sm;
+          final column = Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                ended ? AppIcons.linkBreak : AppIcons.pauseCircle,
-                color: theme.colorScheme.onInverseSurface,
-              ),
-              const SizedBox(height: 8),
+              if (roomy) ...[
+                Icon(
+                  ended ? AppIcons.linkBreak : AppIcons.pauseCircle,
+                  color: ink,
+                ),
+                const SizedBox(height: Insets.sm),
+              ],
               Text(
                 ended ? 'Live view disconnected' : 'Live view frozen',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: theme.colorScheme.onInverseSurface,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                health.detail,
                 textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onInverseSurface,
-                ),
+                style: theme.textTheme.titleSmall?.copyWith(color: ink),
               ),
-              if (health.serverLog.isNotEmpty) ...[
-                const SizedBox(height: 4),
+              if (roomy) ...[
+                const SizedBox(height: Insets.xs),
                 Text(
-                  health.serverLog.last,
+                  health.detail,
                   textAlign: TextAlign.center,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onInverseSurface.withValues(
-                      alpha: 0.7,
+                  style: theme.textTheme.bodySmall?.copyWith(color: ink),
+                ),
+                if (health.serverLog.isNotEmpty) ...[
+                  const SizedBox(height: Insets.xs),
+                  Text(
+                    health.serverLog.last,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: ink.withValues(alpha: 0.7),
                     ),
                   ),
-                ),
+                ],
               ],
-              const SizedBox(height: 12),
+              SizedBox(height: roomy ? Insets.md : Insets.xs),
               FilledButton.icon(
                 onPressed: onRestart,
                 icon: const Icon(AppIcons.arrowCounterClockwise),
-                label: const Text('Restart live view'),
+                label: const Text(
+                  'Restart live view',
+                  textAlign: TextAlign.center,
+                ),
               ),
               if (!exhausted) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: Insets.xs),
                 Text(
                   'Reconnecting…',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onInverseSurface,
-                  ),
+                  style: theme.textTheme.labelSmall?.copyWith(color: ink),
                 ),
               ],
             ],
-          ),
-        ),
+          );
+          // The width is the box's, so the words wrap; whatever height that
+          // comes to is scaled down to fit rather than clipped — the button
+          // stays on screen and pressable in a picture of any size.
+          if (!constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
+            return Padding(padding: EdgeInsets.all(padding), child: column);
+          }
+          final width = math.max(0.0, constraints.maxWidth - padding * 2);
+          return Padding(
+            padding: EdgeInsets.all(padding),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: SizedBox(width: width, child: column),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
