@@ -190,9 +190,7 @@ void main() {
   ) async {
     await pumpSetup(
       tester,
-      extraOverrides: [
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-      ],
+      extraOverrides: [clockProvider.overrideWithValue(FixedClock(testTime))],
       usageFor: (_) => AgentUsage(
         windows: [
           UsageWindow(

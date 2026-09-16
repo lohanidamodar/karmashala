@@ -281,7 +281,8 @@ class _BranchAndRemote extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _KeyValue('Branch',
+        _KeyValue(
+          'Branch',
           branchText,
           // The branch name is what you paste into a `git checkout` or a PR body, and
           // selecting 12 characters of 12px mono with a mouse is a worse way to get it.
@@ -289,7 +290,8 @@ class _BranchAndRemote extends ConsumerWidget {
               ? _CopyButton(value: branchText, what: 'Branch')
               : null,
         ),
-        _KeyValue('Remote',
+        _KeyValue(
+          'Remote',
           remoteText,
           child: _RemoteValue(remote: remoteText),
         ),
@@ -364,7 +366,8 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
       ),
       // `.error` before the bare loading: a failure being retried is an
       // `AsyncLoading` carrying its error.
-      AsyncValue(:final error?) => _DimNote(gitTroubleLabel(gitTroubleOf(error)),
+      AsyncValue(:final error?) => _DimNote(
+        gitTroubleLabel(gitTroubleOf(error)),
       ),
       _ => const _DimNote('…'),
     };
@@ -572,7 +575,8 @@ class _WorktreeRow extends ConsumerWidget {
                   home: root,
                   worktree: worktree,
                 ),
-          child: _ListLine(worktree.label,
+          child: _ListLine(
+            worktree.label,
             isHome ? 'the selected checkout' : worktree.path.path,
             // Never colour alone: the row being read swaps its glyph too.
             icon: viewed ? AppIcons.check : AppIcons.gitBranch,
@@ -615,7 +619,8 @@ class _RecentCommits extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (final GitCommit c in list)
-                  _ListLine(shortSha(c.sha),
+                  _ListLine(
+                    shortSha(c.sha),
                     c.subject,
                     icon: AppIcons.gitDiff,
                     leadWidget: RemoteLink(

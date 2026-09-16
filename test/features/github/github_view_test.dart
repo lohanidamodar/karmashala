@@ -43,28 +43,29 @@ void main() {
     expect(find.text('ISSUES'), findsOneWidget);
   });
 
-  testWidgets('an empty section is a line in the list, not a pane placeholder', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          githubRepositoryProvider.overrideWith((ref) async => null),
-          githubPullRequestsProvider.overrideWith((ref) async => const []),
-          githubIssuesProvider.overrideWith((ref) async => const []),
-        ],
-        child: const MaterialApp(home: Scaffold(body: GitHubView())),
-      ),
-    );
-    await tester.pumpAndSettle();
+  testWidgets(
+    'an empty section is a line in the list, not a pane placeholder',
+    (tester) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            githubRepositoryProvider.overrideWith((ref) async => null),
+            githubPullRequestsProvider.overrideWith((ref) async => const []),
+            githubIssuesProvider.overrideWith((ref) async => const []),
+          ],
+          child: const MaterialApp(home: Scaffold(body: GitHubView())),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.byType(PanePlaceholder), findsNothing);
-    expect(find.text('No open issues.'), findsOneWidget);
-    // Close under its section header rather than centred in 24px of padding.
-    final header = tester.getRect(find.text('ISSUES'));
-    final line = tester.getRect(find.text('No open issues.'));
-    expect(line.top - header.bottom, lessThan(Insets.xl));
-  });
+      expect(find.byType(PanePlaceholder), findsNothing);
+      expect(find.text('No open issues.'), findsOneWidget);
+      // Close under its section header rather than centred in 24px of padding.
+      final header = tester.getRect(find.text('ISSUES'));
+      final line = tester.getRect(find.text('No open issues.'));
+      expect(line.top - header.bottom, lessThan(Insets.xl));
+    },
+  );
 
   testWidgets('waiting on gh is the house spinner', (tester) async {
     final never = Completer<List<PullRequest>>();
