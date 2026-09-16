@@ -10,6 +10,7 @@ import 'package:karmashala/src/features/checkpoints/application/checkpoint_provi
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
+import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -45,6 +46,26 @@ class _MemoryGitFiles implements GitFiles {
   Future<String?> readString(String path) async => written[path];
 }
 
+/// Counts the `git diff` a checkpoint's expansion costs.
+class _CountingService extends CheckpointService {
+  _CountingService({
+    required super.runnerFactory,
+    required super.environmentDao,
+    required super.dao,
+    required super.clock,
+    required super.newId,
+    super.files,
+  });
+
+  int diffs = 0;
+
+  @override
+  Future<String> diffOf(Checkpoint checkpoint) {
+    diffs++;
+    return super.diffOf(checkpoint);
+  }
+}
+
 /// **The two verbs the MCP tools had and the panel did not.**
 ///
 /// `checkpoint_capture` and `checkpoint_restore`'s `paths:` were reachable by
@@ -55,6 +76,7 @@ void main() {
   late ProviderContainer container;
   late FakeCommandRunner runner;
   late _MemoryGitFiles files;
+  late _CountingService service;
   late List<String> trees;
   late int ids;
 
@@ -129,7 +151,7 @@ void main() {
         checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         checkpointServiceProvider.overrideWithValue(
-          CheckpointService(
+          service = _CountingService(
             runnerFactory: FakeCommandRunnerFactory(fallback: runner),
             environmentDao: ExecutionEnvironmentDao(db),
             dao: CheckpointDao(db),
@@ -248,6 +270,30 @@ void main() {
       expect(apply, isNot(contains('--cached')));
       // And it says it restored one file, not every file that differs.
       expect(find.textContaining('Restored 1 file.'), findsOneWidget);
+    });
+  });
+
+  group('the expanded diff', () {
+    testWidgets('is read once, however often the panel rebuilds', (
+      tester,
+    ) async {
+      await pumpPanel(tester);
+      await tester.tap(find.byTooltip('Capture the working tree now'));
+      await settle(tester);
+      await clearSnackBar(tester);
+      await tester.tap(find.textContaining('Checkpoint #1'));
+      await settle(tester);
+
+      expect(service.diffs, 1);
+      expect(find.text('+after a'), findsOneWidget);
+
+      for (var i = 0; i < 3; i++) {
+        // ignore: invalid_use_of_protected_member
+        tester.state(find.byType(CheckpointsView)).setState(() {});
+        await settle(tester);
+      }
+
+      expect(service.diffs, 1);
     });
   });
 }

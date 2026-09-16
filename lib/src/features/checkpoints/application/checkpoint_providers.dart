@@ -4,6 +4,7 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../environments/application/environment_providers.dart';
+import '../../git/application/parsed_diff.dart';
 import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
@@ -54,3 +55,12 @@ final sessionCheckpointsProvider = Provider.autoDispose
           .reversed
           .toList();
     });
+
+/// What [checkpoint] changed, read from git once and parsed once. A future in
+/// `build` re-ran `git diff` on every rebuild of the expanded row.
+final checkpointDiffProvider = FutureProvider.autoDispose
+    .family<ParsedDiff, Checkpoint>(
+      (ref, checkpoint) async => ParsedDiff.parse(
+        await ref.read(checkpointServiceProvider).diffOf(checkpoint),
+      ),
+    );

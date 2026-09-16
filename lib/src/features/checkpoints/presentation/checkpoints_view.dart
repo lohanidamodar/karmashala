@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../explorer/application/session_context.dart';
+import '../../git/presentation/diff_line_tile.dart';
 import 'package:karmashala_git/git.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
@@ -109,11 +111,7 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
               onTap: () =>
                   setState(() => _expandedId = expanded ? null : checkpoint.id),
               trailing: _busyId == checkpoint.id
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const InlineSpinner(size: InlineSpinnerSize.medium)
                   : TextButton(
                       onPressed: () => _restore(checkpoint),
                       child: const Text('Restore'),
@@ -224,66 +222,94 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
   }
 }
 
-class _CheckpointDiff extends ConsumerWidget {
+class _CheckpointDiff extends ConsumerStatefulWidget {
   const _CheckpointDiff({required this.checkpoint});
 
   final Checkpoint checkpoint;
 
+  /// The most of the panel an expanded diff takes before it scrolls, so the
+  /// checkpoints under it stay reachable.
+  static const maxHeight = 320.0;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CheckpointDiff> createState() => _CheckpointDiffState();
+}
+
+class _CheckpointDiffState extends ConsumerState<_CheckpointDiff> {
+  final _vertical = ScrollController();
+  final _horizontal = ScrollController();
+
+  @override
+  void dispose() {
+    _vertical.dispose();
+    _horizontal.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // `Colors.green.shade700` / `.red.shade700` were the last `.shadeNNN` in
-    // `lib/`, and brightness-blind: both stayed dark-on-dark on the dark ramp.
-    final semantic = SemanticColors.of(context);
-    return FutureBuilder<String>(
-      future: ref.read(checkpointServiceProvider).diffOf(checkpoint),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Padding(
-            padding: const EdgeInsets.all(Insets.md),
-            child: Text('${snapshot.error}', style: theme.textTheme.bodySmall),
-          );
-        }
-        final diff = snapshot.data;
-        if (diff == null) {
-          return const Padding(
-            padding: EdgeInsets.all(Insets.md),
-            child: LinearProgressIndicator(),
-          );
-        }
-        if (diff.trim().isEmpty) {
+    final diff = ref.watch(checkpointDiffProvider(widget.checkpoint));
+    return diff.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.all(Insets.md),
+        child: LinearProgressIndicator(),
+      ),
+      error: (error, _) => Padding(
+        padding: const EdgeInsets.all(Insets.md),
+        child: Text('$error', style: theme.textTheme.bodySmall),
+      ),
+      data: (parsed) {
+        if (parsed.lines.isEmpty) {
           return Padding(
             padding: const EdgeInsets.all(Insets.md),
             child: Text('Nothing changed.', style: theme.textTheme.bodySmall),
           );
         }
+        final scaler = MediaQuery.textScalerOf(context);
+        final rowHeight = DiffLineTile.lineHeightOf(scaler);
+        final height = (parsed.lines.length * rowHeight + 2 * Insets.xs).clamp(
+          0.0,
+          _CheckpointDiff.maxHeight,
+        );
         return Container(
-          width: double.infinity,
+          height: height,
           color: theme.colorScheme.surfaceContainerLowest,
-          padding: const EdgeInsets.all(Insets.sm),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SelectionArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final line in parseUnifiedDiff(diff))
-                    Text(
-                      line.text,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: kMonoFamily,
-                        color: switch (line.kind) {
-                          DiffLineKind.added => semantic.diffAdded,
-                          DiffLineKind.removed => semantic.diffRemoved,
-                          DiffLineKind.meta || DiffLineKind.hunk =>
-                            theme.colorScheme.onSurfaceVariant,
-                          DiffLineKind.context => null,
-                        },
+          child: LayoutBuilder(
+            builder: (context, box) {
+              final width = DiffLineTile.textWidthOf(
+                parsed.widestLine,
+                scaler,
+              ) + DiffLineTile.leadingExtent;
+              // The vertical bar outside the sideways scroll, so it stays on
+              // screen however far the code is scrolled.
+              return SelectionArea(
+                child: Scrollbar(
+                  controller: _vertical,
+                  notificationPredicate: (n) => n.depth == 1,
+                  child: Scrollbar(
+                    controller: _horizontal,
+                    child: SingleChildScrollView(
+                      controller: _horizontal,
+                      scrollDirection: Axis.horizontal,
+                      child: SizedBox(
+                        width: width < box.maxWidth ? box.maxWidth : width,
+                        child: ListView.builder(
+                          controller: _vertical,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: Insets.xs,
+                          ),
+                          itemExtent: rowHeight,
+                          itemCount: parsed.lines.length,
+                          itemBuilder: (context, index) =>
+                              DiffLineTile(line: parsed.lines[index]),
+                        ),
                       ),
                     ),
-                ],
-              ),
-            ),
+                  ),
+                ),
+              );
+            },
           ),
         );
       },

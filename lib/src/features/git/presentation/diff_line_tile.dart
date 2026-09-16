@@ -38,6 +38,26 @@ class DiffLineTile extends StatelessWidget {
   /// The row's own chrome beside its text, for a caller sizing a scroll.
   static const leadingExtent = _accentWidth + Insets.xs;
 
+  static final _style = MonoStyles.body.copyWith(height: 1.4);
+
+  /// How wide [text] is drawn in a row, with a character to spare so the last
+  /// one is not flush against the edge — what a sideways scroll is sized from.
+  static double textWidthOf(String text, TextScaler textScaler) {
+    final painter = TextPainter(
+      text: TextSpan(text: '$text ', style: _style),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    painter.dispose();
+    return width;
+  }
+
+  /// A row's height with no trailing action: one line of [_style].
+  static double lineHeightOf(TextScaler textScaler) =>
+      textScaler.scale(_style.fontSize!) * _style.height!;
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -71,15 +91,13 @@ class DiffLineTile extends StatelessWidget {
       softWrap: false,
       overflow: TextOverflow.clip,
       maxLines: 1,
-      style: MonoStyles.body.copyWith(height: 1.4, color: foreground),
+      style: MonoStyles.body.copyWith(height: _style.height, color: foreground),
     );
     final scroll = this.scroll;
     // One text line tall, so the label has a place on screen to be read at.
     final gutter = SizedBox(
       width: Insets.xs,
-      height: MediaQuery.textScalerOf(
-        context,
-      ).scale(MonoStyles.body.fontSize! * 1.4),
+      height: lineHeightOf(MediaQuery.textScalerOf(context)),
     );
 
     return Container(

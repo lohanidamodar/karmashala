@@ -130,7 +130,10 @@ class _FileDiffViewState extends ConsumerState<FileDiffView> {
 
         return LayoutBuilder(
           builder: (context, box) {
-            final textWidth = _measure(parsed.widestLine, textScaler);
+            final textWidth = DiffLineTile.textWidthOf(
+              parsed.widestLine,
+              textScaler,
+            );
             final viewport =
                 box.maxWidth -
                 DiffLineTile.leadingExtent -
@@ -199,23 +202,6 @@ class _FileDiffViewState extends ConsumerState<FileDiffView> {
         );
       },
     );
-  }
-
-  /// The widest row's width in the diff's own style, with a character to
-  /// spare so the last one is not flush against the edge.
-  static double _measure(String text, TextScaler textScaler) {
-    final painter = TextPainter(
-      text: TextSpan(
-        text: '$text ',
-        style: MonoStyles.body.copyWith(height: 1.4),
-      ),
-      textDirection: TextDirection.ltr,
-      textScaler: textScaler,
-      maxLines: 1,
-    )..layout();
-    final width = painter.width;
-    painter.dispose();
-    return width;
   }
 }
 
