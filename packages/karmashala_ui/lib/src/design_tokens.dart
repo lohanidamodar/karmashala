@@ -369,6 +369,51 @@ enum UiDensity {
   }
 }
 
+/// The width class of a region, per PROJECT.md §6: the one place a layout asks
+/// "is this narrow?". Measured from the width the caller was *given* — its own
+/// constraints — never the window's: a 300px pane in a 1440px window is compact.
+enum WidthClass {
+  /// Under [mediumMin]: one column, stacked rows.
+  compact,
+
+  /// [mediumMin] up to [expandedMin]. §6: default to the compact layout here
+  /// unless the surface clearly gains from more.
+  medium,
+
+  /// [expandedMin] and up: side-by-side panes, rows with room for everything.
+  expanded;
+
+  /// Material's breakpoints, at 1x text. [mediumMin] is [UiDensity.compactWidth].
+  static const mediumMin = UiDensity.compactWidth;
+  static const expandedMin = 840.0;
+
+  /// The body text size a scaler is read at. A non-linear scaler (Android 14)
+  /// grows small text more than large, so the factor is taken where it matters.
+  static const _referenceFontSize = 14.0;
+
+  /// [breakpoint] grown with [textScaler]: at 2x text a row needs twice the
+  /// width to hold the same words. Never shrunk — smaller text does not earn a
+  /// layout more room than its design width.
+  static double scaleBreakpoint(double breakpoint, TextScaler textScaler) {
+    final factor =
+        textScaler.scale(_referenceFontSize) / _referenceFontSize;
+    return breakpoint * (factor < 1 ? 1 : factor);
+  }
+
+  /// The class of a region [width] logical pixels wide under [textScaler].
+  static WidthClass of(
+    double width, {
+    TextScaler textScaler = TextScaler.noScaling,
+  }) {
+    if (width < scaleBreakpoint(mediumMin, textScaler)) return compact;
+    if (width < scaleBreakpoint(expandedMin, textScaler)) return medium;
+    return expanded;
+  }
+
+  bool get isCompact => this == compact;
+  bool get isExpanded => this == expanded;
+}
+
 /// Declares the [UiDensity] for everything below it.
 class UiDensityScope extends InheritedWidget {
   const UiDensityScope({
