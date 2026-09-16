@@ -11,6 +11,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
+import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_tab.dart';
@@ -145,8 +146,12 @@ void main() {
     await tester.pump();
   }
 
-  String tooltipOf(WidgetTester tester) =>
-      tester.widget<Tooltip>(find.byType(Tooltip)).message ?? '';
+  /// The sentence behind the hover card — what a screen reader is given.
+  String tooltipOf(WidgetTester tester) {
+    final tip = tester.widget<Tooltip>(find.byType(Tooltip));
+    final card = (tip.richMessage! as WidgetSpan).child as UsageChipPopover;
+    return card.view.tooltip;
+  }
 
   Color? colourOf(WidgetTester tester, String label) =>
       tester.widget<Text>(find.text(label)).style?.color;

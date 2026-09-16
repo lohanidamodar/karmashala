@@ -10,6 +10,7 @@ import '../application/agent_usage_providers.dart';
 import '../application/usage_refresh_policy.dart';
 import '../domain/usage_pace.dart';
 import 'package:agent_cli/usage.dart';
+import 'usage_chip_popover.dart';
 
 export '../domain/usage_pace.dart'
     show kUsageWarningPercent, kUsageCriticalPercent;
@@ -47,7 +48,17 @@ class UsageChipView {
     required this.tone,
     this.longLabel,
     this.mark = UsageMark.live,
+    this.reading,
+    this.notes = const [],
   });
+
+  /// The reading the words were taken from — live or remembered — for the
+  /// hover card's meters. Null when nothing was observed.
+  final AgentUsage? reading;
+
+  /// The lines about the reading rather than its windows: the account, the
+  /// sign-in's lifetime, the reading's age and any failure.
+  final List<String> notes;
 
   /// The words on the chip; **always spells out the number**, because colour is
   /// a second signal. The **shorter** period when two are known.
@@ -88,18 +99,19 @@ UsageChipView usageChipViewFor(
 
   // Anything not confirmed by the current read: a failed refresh, or one still
   // in flight over a number we already had.
-  final mark = error != null || live == null
-      ? UsageMark.stale
-      : UsageMark.live;
+  final mark = error != null || live == null ? UsageMark.stale : UsageMark.live;
   final worst = _tightest(value.windows);
   final age = _ago(now.difference(value.fetchedAt));
   final expiry = value.tokenExpiresAt;
-  final detail = [
-    for (final w in value.windows) _windowLine(w, now),
+  final notes = [
     if (value.email != null) value.email!,
     if (expiry != null) _expiryLine(expiry, now),
     if (mark == UsageMark.stale) 'Last checked $age' else 'Checked $age',
     if (error != null) _failureLine(error),
+  ];
+  final detail = [
+    for (final w in value.windows) _windowLine(w, now),
+    ...notes,
   ].join('\n');
 
   if (worst == null) {
@@ -113,6 +125,8 @@ UsageChipView usageChipViewFor(
       tooltip: '$headline\n$detail',
       tone: UsageTone.muted,
       mark: UsageMark.unknown,
+      reading: value,
+      notes: notes,
     );
   }
 
@@ -125,6 +139,8 @@ UsageChipView usageChipViewFor(
     // screen — the chip never colours a fact it does not spell out.
     tone: _toneFor(worst.percent),
     mark: mark,
+    reading: value,
+    notes: notes,
   );
 }
 
@@ -336,8 +352,22 @@ class _UsageChipState extends ConsumerState<UsageChip> {
         policy.refresh();
         openSettingsTab(ref, anchor: SettingsAnchor.usage);
       },
-      child: Tooltip(
-        message: view.tooltip,
+      // The hover card is pictures; the plain sentence is what a screen reader
+      // is given instead.
+      child: Semantics(
+        tooltip: view.tooltip,
+        child: Tooltip(
+        excludeFromSemantics: true,
+        padding: EdgeInsets.zero,
+        decoration: const BoxDecoration(),
+        richMessage: WidgetSpan(
+          child: UsageChipPopover(
+            view: view,
+            accountKey: account,
+            agentId: installation.agentId,
+            environmentId: installation.environmentId,
+          ),
+        ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
           child: Row(
@@ -367,6 +397,7 @@ class _UsageChipState extends ConsumerState<UsageChip> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
