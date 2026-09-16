@@ -2137,31 +2137,32 @@ WorkbenchView
                                                             GestureDetector
                                                               RawGestureDetector
                                                                 Listener
-                                                                  Tooltip tooltip="5-hour · 62% · resets in 2h11m (11:00)\n7-day · 1% · resets in 3d (Mon 08:49)\nowner@example.com\nChecked just now"
-                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                      OverlayPortal
-                                                                        _OverlayPortal
-                                                                          Semantics
-                                                                            _ExclusiveMouseRegion
-                                                                              Listener
-                                                                                Semantics
-                                                                                  MouseRegion
-                                                                                    Padding
-                                                                                      Row
-                                                                                        Icon
-                                                                                          Semantics
-                                                                                            ExcludeSemantics
-                                                                                              SizedBox
-                                                                                                Center
-                                                                                                  RichText
-                                                                                        SizedBox
-                                                                                        Flexible
-                                                                                          Text text="62% · 2h11m"
-                                                                                            RichText
-                                                                                        SizedBox
-                                                                                        Flexible
-                                                                                          Text text="1% · 3d"
-                                                                                            RichText
+                                                                  Semantics
+                                                                    Tooltip
+                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                        OverlayPortal
+                                                                          _OverlayPortal
+                                                                            Semantics
+                                                                              _ExclusiveMouseRegion
+                                                                                Listener
+                                                                                  Semantics
+                                                                                    MouseRegion
+                                                                                      Padding
+                                                                                        Row
+                                                                                          Icon
+                                                                                            Semantics
+                                                                                              ExcludeSemantics
+                                                                                                SizedBox
+                                                                                                  Center
+                                                                                                    RichText
+                                                                                          SizedBox
+                                                                                          Flexible
+                                                                                            Text text="62% · 2h11m"
+                                                                                              RichText
+                                                                                          SizedBox
+                                                                                          Flexible
+                                                                                            Text text="1% · 3d"
+                                                                                              RichText
                           SessionNoticeLine
                             SizedBox
                           LayoutBuilder
@@ -4262,31 +4263,32 @@ WorkbenchView
                                                             GestureDetector
                                                               RawGestureDetector
                                                                 Listener
-                                                                  Tooltip tooltip="5-hour · 62% · resets in 2h11m (11:00)\n7-day · 1% · resets in 3d (Mon 08:49)\nowner@example.com\nChecked just now"
-                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                      OverlayPortal
-                                                                        _OverlayPortal
-                                                                          Semantics
-                                                                            _ExclusiveMouseRegion
-                                                                              Listener
-                                                                                Semantics
-                                                                                  MouseRegion
-                                                                                    Padding
-                                                                                      Row
-                                                                                        Icon
-                                                                                          Semantics
-                                                                                            ExcludeSemantics
-                                                                                              SizedBox
-                                                                                                Center
-                                                                                                  RichText
-                                                                                        SizedBox
-                                                                                        Flexible
-                                                                                          Text text="62% · 2h11m"
-                                                                                            RichText
-                                                                                        SizedBox
-                                                                                        Flexible
-                                                                                          Text text="1% · 3d"
-                                                                                            RichText
+                                                                  Semantics
+                                                                    Tooltip
+                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                        OverlayPortal
+                                                                          _OverlayPortal
+                                                                            Semantics
+                                                                              _ExclusiveMouseRegion
+                                                                                Listener
+                                                                                  Semantics
+                                                                                    MouseRegion
+                                                                                      Padding
+                                                                                        Row
+                                                                                          Icon
+                                                                                            Semantics
+                                                                                              ExcludeSemantics
+                                                                                                SizedBox
+                                                                                                  Center
+                                                                                                    RichText
+                                                                                          SizedBox
+                                                                                          Flexible
+                                                                                            Text text="62% · 2h11m"
+                                                                                              RichText
+                                                                                          SizedBox
+                                                                                          Flexible
+                                                                                            Text text="1% · 3d"
+                                                                                              RichText
                           SessionNoticeLine
                             SizedBox
                           LayoutBuilder
@@ -5043,31 +5045,32 @@ WorkbenchView
                                                             GestureDetector
                                                               RawGestureDetector
                                                                 Listener
-                                                                  Tooltip tooltip="5-hour · 62% · resets in 2h11m (11:00)\n7-day · 1% · resets in 3d (Mon 08:49)\nowner@example.com\nChecked just now"
-                                                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                                                      OverlayPortal
-                                                                        _OverlayPortal
-                                                                          Semantics
-                                                                            _ExclusiveMouseRegion
-                                                                              Listener
-                                                                                Semantics
-                                                                                  MouseRegion
-                                                                                    Padding
-                                                                                      Row
-                                                                                        Icon
-                                                                                          Semantics
-                                                                                            ExcludeSemantics
-                                                                                              SizedBox
-                                                                                                Center
-                                                                                                  RichText
-                                                                                        SizedBox
-                                                                                        Flexible
-                                                                                          Text text="62% · 2h11m"
-                                                                                            RichText
-                                                                                        SizedBox
-                                                                                        Flexible
-                                                                                          Text text="1% · 3d"
-                                                                                            RichText
+                                                                  Semantics
+                                                                    Tooltip
+                                                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                                                        OverlayPortal
+                                                                          _OverlayPortal
+                                                                            Semantics
+                                                                              _ExclusiveMouseRegion
+                                                                                Listener
+                                                                                  Semantics
+                                                                                    MouseRegion
+                                                                                      Padding
+                                                                                        Row
+                                                                                          Icon
+                                                                                            Semantics
+                                                                                              ExcludeSemantics
+                                                                                                SizedBox
+                                                                                                  Center
+                                                                                                    RichText
+                                                                                          SizedBox
+                                                                                          Flexible
+                                                                                            Text text="62% · 2h11m"
+                                                                                              RichText
+                                                                                          SizedBox
+                                                                                          Flexible
+                                                                                            Text text="1% · 3d"
+                                                                                              RichText
                           SessionNoticeLine
                             SizedBox
                           LayoutBuilder
