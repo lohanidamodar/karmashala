@@ -96,7 +96,7 @@ class UsageChipPopover extends ConsumerWidget {
           ],
         ),
         child: DefaultTextStyle(
-          style: small ?? const TextStyle(fontSize: 12),
+          style: small ?? const TextStyle(),
           child: Padding(
             padding: const EdgeInsets.all(Insets.md),
             child: Column(

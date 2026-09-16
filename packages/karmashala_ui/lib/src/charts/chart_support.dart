@@ -35,7 +35,7 @@ class ChartInk {
     final scheme = theme.colorScheme;
     return ChartInk(
       grid: scheme.outlineVariant.withValues(alpha: 0.6),
-      axisLabel: (theme.textTheme.labelSmall ?? const TextStyle(fontSize: 11))
+      axisLabel: (theme.textTheme.labelSmall ?? const TextStyle())
           .copyWith(
             color: scheme.onSurfaceVariant,
             letterSpacing: 0,
@@ -45,7 +45,7 @@ class ChartInk {
       marker: scheme.onSurfaceVariant.withValues(alpha: 0.7),
       tooltipBackground: scheme.surfaceContainerHigh,
       tooltipBorder: scheme.outlineVariant,
-      tooltipText: theme.textTheme.bodySmall ?? const TextStyle(fontSize: 12),
+      tooltipText: theme.textTheme.bodySmall ?? const TextStyle(),
       brightness: theme.brightness,
     );
   }
