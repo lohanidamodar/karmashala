@@ -80,106 +80,121 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
     final workspaces = ref.watch(workspacesControllerProvider);
     final counts = ref.watch(workspaceProjectCountsProvider);
 
-    return AlertDialog(
-      title: const DesktopDialogTitle(
-        icon: AppIcons.folder,
-        title: 'Contexts',
-        subtitle: 'Group projects by what they are for.',
-      ),
-      content: SizedBox(
-        // **Tight**, not a max: `AlertDialog` asks its content for an intrinsic
-        // width, and the scrolling list below cannot answer without building it all.
-        width: _contentWidth(context),
-        height: _contentHeight(context),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _newController,
-                    decoration: const InputDecoration(
-                      labelText: 'New context',
-                      hintText: 'Game dev',
-                      isDense: true,
+    // The route's own constraints, not MediaQuery: the dialog fits what it is
+    // given. A LayoutBuilder here rather than in the content, which AlertDialog
+    // sizes by intrinsics.
+    return LayoutBuilder(
+      builder: (context, constraints) => AlertDialog(
+        title: const DesktopDialogTitle(
+          icon: AppIcons.folder,
+          title: 'Contexts',
+          subtitle: 'Group projects by what they are for.',
+        ),
+        content: SizedBox(
+          // **Tight**, not a max: `AlertDialog` asks its content for an intrinsic
+          // width, and the scrolling list below cannot answer without building it all.
+          width: _contentWidth(constraints.maxWidth),
+          height: _contentHeight(
+            constraints.maxHeight,
+            MediaQuery.textScalerOf(context),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _newController,
+                      decoration: const InputDecoration(
+                        labelText: 'New context',
+                        hintText: 'Game dev',
+                        isDense: true,
+                      ),
+                      onSubmitted: (_) => _create(),
                     ),
-                    onSubmitted: (_) => _create(),
                   ),
-                ),
-                const SizedBox(width: Insets.sm),
-                OutlinedButton.icon(
-                  onPressed: _create,
-                  icon: const Icon(AppIcons.plus, size: Chrome.icon),
-                  label: const Text('Add'),
-                ),
+                  const SizedBox(width: Insets.sm),
+                  OutlinedButton.icon(
+                    onPressed: _create,
+                    icon: const Icon(AppIcons.plus, size: Chrome.icon),
+                    label: const Text('Add'),
+                  ),
+                ],
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: Insets.sm),
+                DesktopErrorBanner(_error!),
               ],
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: Insets.sm),
-              DesktopErrorBanner(_error!),
-            ],
-            const SizedBox(height: Insets.md),
-            Expanded(
-              child: workspaces.isEmpty
-                  ? Align(
-                      alignment: Alignment.topLeft,
-                      child: Text(
-                        'No contexts yet. Add one above, then put projects in '
-                        'it — a project can be in none, which is normal.',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    )
-                  // Every row built rather than a lazy `ListView`: a viewport that disposes
-                  // rows it scrolls past breaks Tab, and the ring stops closing.
-                  : SingleChildScrollView(
-                      primary: false,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (final workspace in workspaces)
-                            _workspaceRow(workspace, counts),
-                          const Divider(height: Insets.xl),
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: Insets.xs),
-                            child: Text(
-                              'Projects',
-                              style: theme.textTheme.labelLarge,
+              const SizedBox(height: Insets.md),
+              Expanded(
+                child: workspaces.isEmpty
+                    ? Align(
+                        alignment: Alignment.topLeft,
+                        child: Text(
+                          'No contexts yet. Add one above, then put projects in '
+                          'it — a project can be in none, which is normal.',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      )
+                    // Every row built rather than a lazy `ListView`: a viewport that disposes
+                    // rows it scrolls past breaks Tab, and the ring stops closing.
+                    : SingleChildScrollView(
+                        primary: false,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final workspace in workspaces)
+                              _workspaceRow(workspace, counts),
+                            const Divider(height: Insets.xl),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: Insets.xs),
+                              child: Text(
+                                'Projects',
+                                style: theme.textTheme.labelLarge,
+                              ),
                             ),
-                          ),
-                          // `const`, and that is the fix for the reported lag: a new context leaves
-                          // this instance identical, so the project rows are never asked to rebuild.
-                          const _ProjectsSection(),
-                        ],
+                            // `const`, and that is the fix for the reported lag: a new context leaves
+                            // this instance identical, so the project rows are never asked to rebuild.
+                            const _ProjectsSection(),
+                          ],
+                        ),
                       ),
-                    ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
-        ),
-      ],
     );
   }
 
-  /// The dialog's own insets take 80 of the width; the title and actions take
-  /// about 260 of the height at 1.0x, and more as text scales.
-  static double _contentWidth(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    return width - 96 < 460 ? (width - 96).clamp(200.0, 460.0) : 460.0;
-  }
+  static const _maxContentWidth = 460.0;
+  static const _minContentWidth = 200.0;
+  static const _maxContentHeight = 340.0;
+  static const _minContentHeight = 160.0;
 
-  static double _contentHeight(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final chrome = 200 * media.textScaler.scale(1);
-    return (media.size.height - chrome).clamp(160.0, 340.0);
-  }
+  /// AlertDialog's horizontal insets and content padding.
+  static const _horizontalChrome = 96.0;
+
+  /// The title and actions, at 1.0x text; scaled with it.
+  static const _verticalChrome = 200.0;
+
+  static double _contentWidth(double available) =>
+      (available - _horizontalChrome).clamp(_minContentWidth, _maxContentWidth);
+
+  static double _contentHeight(double available, TextScaler textScaler) =>
+      (available - textScaler.scale(_verticalChrome)).clamp(
+        _minContentHeight,
+        _maxContentHeight,
+      );
 
   Widget _workspaceRow(Workspace workspace, Map<String, int> counts) {
     final theme = Theme.of(context);

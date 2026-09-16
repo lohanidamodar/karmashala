@@ -228,6 +228,36 @@ void main() {
   });
 
   group('the window matrix', () {
+    testWidgets('the contexts dialog sizes to its box, not the screen', (
+      tester,
+    ) async {
+      seedProjects(31);
+      container.read(workspacesControllerProvider.notifier)
+        ..create('Personal')
+        ..create('PopupBits');
+      await expectSurvivesWindowMatrix(
+        tester,
+        // A 720x560 box on a 1440x900 screen.
+        matrix: const [desktopWindow, desktopLargeText],
+        build: () => UncontrolledProviderScope(
+          container: container,
+          child: const MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 720,
+                height: 560,
+                child: Scaffold(body: WorkspacesDialog()),
+              ),
+            ),
+          ),
+        ),
+        checkFocus: false,
+        because: 'MediaQuery said 1440x900 while the dialog had 720x560',
+      );
+    });
+
     testWidgets('the contexts dialog survives 720x560', (tester) async {
       seedProjects(1);
       final controller = container.read(workspacesControllerProvider.notifier)

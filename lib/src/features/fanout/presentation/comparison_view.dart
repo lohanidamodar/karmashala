@@ -59,31 +59,40 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
         Expanded(
           child: comparison.candidates.isEmpty
               ? const Center(child: Text('No candidates were recorded.'))
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (final candidate in comparison.candidates) ...[
-                        if (candidate.position > 0)
-                          const VerticalDivider(width: Insets.lg),
-                        SizedBox(
-                          width: 372,
-                          child: _CandidateColumn(
-                            comparison: comparison,
-                            candidate: candidate,
-                            result: results[candidate.id],
-                            diff: _diffs[candidate.id],
-                            busy: _busy == candidate.id,
-                            onRefresh: () => _refresh(candidate, results),
-                            onOpenSession: () => _openSession(candidate),
-                            onMarkWinner: () => _markWinner(candidate, results),
-                            onMerge: () => _merge(candidate, results),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = candidateColumnWidth(
+                      constraints.maxWidth,
+                      comparison.candidates.length,
+                    );
+                    return SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (final candidate in comparison.candidates) ...[
+                            if (candidate.position > 0)
+                              const VerticalDivider(width: Insets.lg),
+                            SizedBox(
+                              width: width,
+                              child: _CandidateColumn(
+                                comparison: comparison,
+                                candidate: candidate,
+                                result: results[candidate.id],
+                                diff: _diffs[candidate.id],
+                                busy: _busy == candidate.id,
+                                onRefresh: () => _refresh(candidate, results),
+                                onOpenSession: () => _openSession(candidate),
+                                onMarkWinner: () =>
+                                    _markWinner(candidate, results),
+                                onMerge: () => _merge(candidate, results),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
                 ),
         ),
         const Divider(height: Insets.lg),
@@ -379,6 +388,17 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
   }
 }
 
+/// Candidates share the width they are given, never narrower than
+/// [minCandidateColumnWidth]; past that the row scrolls sideways.
+const minCandidateColumnWidth = 300.0;
+
+double candidateColumnWidth(double available, int candidates) {
+  if (candidates <= 0) return minCandidateColumnWidth;
+  final dividers = Insets.lg * (candidates - 1);
+  final share = (available - dividers) / candidates;
+  return share < minCandidateColumnWidth ? minCandidateColumnWidth : share;
+}
+
 class _CandidateColumn extends ConsumerWidget {
   const _CandidateColumn({
     required this.comparison,
@@ -415,54 +435,79 @@ class _CandidateColumn extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              CandidateStateMark(candidate: candidate, isWinner: isWinner),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Text(
-                  candidate.agentId,
-                  style: theme.textTheme.titleSmall,
-                  overflow: TextOverflow.ellipsis,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Capped and scrolling: in a 300px column at 1.3x text the actions
+            // wrap to three rows, and the diff below must keep a share.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: constraints.maxHeight * 0.6,
+              ),
+              child: SingleChildScrollView(
+                primary: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        CandidateStateMark(
+                          candidate: candidate,
+                          isWinner: isWinner,
+                        ),
+                        const SizedBox(width: Insets.sm),
+                        Expanded(
+                          child: Text(
+                            candidate.agentId,
+                            style: theme.textTheme.titleSmall,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Re-read the diff',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: candidate.hasLiveWorktree && result != null
+                              ? onRefresh
+                              : null,
+                          icon: const Icon(
+                            AppIcons.arrowsClockwise,
+                            size: Chrome.icon,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      candidate.branch ?? 'no branch',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontFamily: kMonoFamily,
+                      ),
+                    ),
+                    const SizedBox(height: Insets.xs),
+                    DiffStatLine(stat: candidate.diff),
+                    if (evidence != null) ...[
+                      const SizedBox(height: Insets.xs),
+                      VerdictChip(
+                        evidence: evidence,
+                        attribution: evidence.attributionFor(
+                          candidate.sessionId,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: Insets.xs),
+                    _state(context),
+                    const SizedBox(height: Insets.sm),
+                    _actions(context),
+                  ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Re-read the diff',
-                visualDensity: VisualDensity.compact,
-                onPressed: candidate.hasLiveWorktree && result != null
-                    ? onRefresh
-                    : null,
-                icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.icon),
-              ),
-            ],
-          ),
-          Text(
-            candidate.branch ?? 'no branch',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelSmall?.copyWith(
-              fontFamily: kMonoFamily,
             ),
-          ),
-          const SizedBox(height: Insets.xs),
-          DiffStatLine(stat: candidate.diff),
-          if (evidence != null) ...[
-            const SizedBox(height: Insets.xs),
-            VerdictChip(
-              evidence: evidence,
-              attribution: evidence.attributionFor(candidate.sessionId),
-            ),
+            const SizedBox(height: Insets.sm),
+            Expanded(child: _diffBody(context)),
           ],
-          const SizedBox(height: Insets.xs),
-          _state(context),
-          const SizedBox(height: Insets.sm),
-          _actions(context),
-          const SizedBox(height: Insets.sm),
-          Expanded(child: _diffBody(context)),
-        ],
+        ),
       ),
     );
   }

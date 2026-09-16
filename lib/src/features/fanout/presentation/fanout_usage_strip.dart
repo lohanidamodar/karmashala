@@ -15,10 +15,23 @@ import '../../agents/presentation/usage_chip.dart';
 /// What the selected accounts have left, beside the button that spends it. It
 /// warns and never forbids, never blocks the dialog, and says "not recorded".
 class FanOutUsageStrip extends ConsumerWidget {
-  const FanOutUsageStrip({required this.installations, super.key});
+  const FanOutUsageStrip({
+    required this.installations,
+    this.maxHeight = defaultMaxHeight,
+    super.key,
+  });
+
+  static const defaultMaxHeight = 172.0;
+
+  /// On a short form the strip is the block that yields.
+  static const compactMaxHeight = 112.0;
 
   /// The installations this fan-out would start a session on — one each.
   final List<AgentInstallation> installations;
+
+  /// The most the account rows take before they scroll. The strip sits in a
+  /// Column and cannot measure the height it has, so its form decides.
+  final double maxHeight;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -49,9 +62,7 @@ class FanOutUsageStrip extends ConsumerWidget {
           // push the launch button out of a 720x560 window, and on a window
           // that short the strip is the block that yields.
           ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.sizeOf(context).height < 700 ? 112 : 172,
-            ),
+            constraints: BoxConstraints(maxHeight: maxHeight),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,

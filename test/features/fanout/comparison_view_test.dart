@@ -152,6 +152,51 @@ void main() {
     }
   });
 
+  group('candidate columns share the width they are given', () {
+    Rect columnOf(WidgetTester tester, String agent) => tester.getRect(
+      find
+          .ancestor(
+            of: find.text(agent),
+            matching: find.byWidgetPredicate(
+              (w) => w is SizedBox && (w.width ?? 0) >= 300,
+            ),
+          )
+          .first,
+    );
+
+    Future<void> pumpAt(WidgetTester tester, Size size) async {
+      final db = seedDatabase();
+      addTearDown(db.close);
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await pump(
+        tester,
+        db,
+        ComparisonView(comparisonId: 'cmp-1', onBack: () {}),
+      );
+    }
+
+    testWidgets('two whole columns at the minimum window', (tester) async {
+      await pumpAt(tester, const Size(720, 560));
+      expect(columnOf(tester, 'claudeCode').width, 300);
+      expect(
+        columnOf(tester, 'codex').right,
+        lessThanOrEqualTo(720),
+        reason: 'a fixed 372 left 1.8 columns visible at 720',
+      );
+    });
+
+    testWidgets('and all three fill a desktop window', (tester) async {
+      await pumpAt(tester, const Size(1440, 900));
+      final first = columnOf(tester, 'claudeCode');
+      final last = columnOf(tester, 'flakyCli');
+      expect(first.width, closeTo((1440 - 2 * 16) / 3, 0.01));
+      expect(last.right, closeTo(1440, 0.01));
+    });
+  });
+
   testWidgets('the list shows every comparison and opens one', (tester) async {
     final db = seedDatabase(merged: false);
     addTearDown(db.close);
