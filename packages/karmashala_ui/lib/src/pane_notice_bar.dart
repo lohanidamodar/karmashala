@@ -67,7 +67,7 @@ class PaneNoticeBar extends StatelessWidget {
       ),
       NoticeTone.attention => (
         Color.alphaBlend(
-          semantic.attention.withValues(alpha: 0.12),
+          semantic.attentionSurface,
           scheme.surfaceContainerLow,
         ),
         semantic.attention,

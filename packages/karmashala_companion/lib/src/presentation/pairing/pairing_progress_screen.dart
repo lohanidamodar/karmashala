@@ -138,9 +138,7 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
                       decoration: BoxDecoration(
                         // Tint plus words: the sentence carries the meaning and
                         // the colour only supports it.
-                        color: SemanticColors.of(
-                          context,
-                        ).failure.withValues(alpha: 0.12),
+                        color: SemanticColors.of(context).failureSurface,
                         borderRadius: BorderRadius.circular(Radii.md),
                       ),
                       child: Text(

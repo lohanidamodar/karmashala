@@ -47,6 +47,10 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     required this.diffAdded,
     required this.diffRemoved,
     required this.neutral,
+    required this.attentionSurface,
+    required this.failureSurface,
+    required this.workingSurface,
+    required this.unread,
   });
 
   /// An agent is mid-turn.
@@ -68,24 +72,51 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   /// "We could not tell" — an absence of signal, not a bad one.
   final Color neutral;
 
-  static const _light = SemanticColors(
-    working: Color(0xFF0E6E90),
-    idle: Color(0xFF1F7A3D),
-    attention: Color(0xFF9A5B00),
-    failure: Color(0xFFB3261E),
-    diffAdded: Color(0xFF1A7F37),
-    diffRemoved: Color(0xFFB92534),
-    neutral: Color(0xFF7C7C86),
+  /// Washes of the status hues, for a card or bar that carries that status.
+  /// Translucent, so they sit on whichever surface holds them.
+  final Color attentionSurface;
+  final Color failureSurface;
+  final Color workingSurface;
+
+  /// A session finished while nobody was looking.
+  final Color unread;
+
+  /// The edge a status surface is drawn with, over its own hue.
+  static const surfaceEdgeAlpha = 0.4;
+
+  static const _lightAttention = Color(0xFF9A5B00);
+  static const _lightFailure = Color(0xFFB3261E);
+  static const _lightWorking = Color(0xFF0E6E90);
+  static const _darkAttention = Color(0xFFE8B44A);
+  static const _darkFailure = Color(0xFFFF8A82);
+  static const _darkWorking = Color(0xFF56C0E8);
+
+  static final _light = SemanticColors(
+    working: _lightWorking,
+    idle: const Color(0xFF1F7A3D),
+    attention: _lightAttention,
+    failure: _lightFailure,
+    diffAdded: const Color(0xFF1A7F37),
+    diffRemoved: const Color(0xFFB92534),
+    neutral: const Color(0xFF7C7C86),
+    attentionSurface: _lightAttention.withValues(alpha: 0.08),
+    failureSurface: _lightFailure.withValues(alpha: 0.08),
+    workingSurface: _lightWorking.withValues(alpha: 0.08),
+    unread: const Color(0xFF1F7A3D),
   );
 
-  static const _dark = SemanticColors(
-    working: Color(0xFF56C0E8),
-    idle: Color(0xFF6BCF87),
-    attention: Color(0xFFE8B44A),
-    failure: Color(0xFFFF8A82),
-    diffAdded: Color(0xFF57C97A),
-    diffRemoved: Color(0xFFF07C86),
-    neutral: Color(0xFF8E8E99),
+  static final _dark = SemanticColors(
+    working: _darkWorking,
+    idle: const Color(0xFF6BCF87),
+    attention: _darkAttention,
+    failure: _darkFailure,
+    diffAdded: const Color(0xFF57C97A),
+    diffRemoved: const Color(0xFFF07C86),
+    neutral: const Color(0xFF8E8E99),
+    attentionSurface: _darkAttention.withValues(alpha: 0.16),
+    failureSurface: _darkFailure.withValues(alpha: 0.16),
+    workingSurface: _darkWorking.withValues(alpha: 0.14),
+    unread: const Color(0xFF6BCF87),
   );
 
   static SemanticColors of(BuildContext context) =>
@@ -103,6 +134,10 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
     Color? diffAdded,
     Color? diffRemoved,
     Color? neutral,
+    Color? attentionSurface,
+    Color? failureSurface,
+    Color? workingSurface,
+    Color? unread,
   }) {
     return SemanticColors(
       working: working ?? this.working,
@@ -112,6 +147,10 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       diffAdded: diffAdded ?? this.diffAdded,
       diffRemoved: diffRemoved ?? this.diffRemoved,
       neutral: neutral ?? this.neutral,
+      attentionSurface: attentionSurface ?? this.attentionSurface,
+      failureSurface: failureSurface ?? this.failureSurface,
+      workingSurface: workingSurface ?? this.workingSurface,
+      unread: unread ?? this.unread,
     );
   }
 
@@ -126,6 +165,14 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
       diffAdded: Color.lerp(diffAdded, other.diffAdded, t)!,
       diffRemoved: Color.lerp(diffRemoved, other.diffRemoved, t)!,
       neutral: Color.lerp(neutral, other.neutral, t)!,
+      attentionSurface: Color.lerp(
+        attentionSurface,
+        other.attentionSurface,
+        t,
+      )!,
+      failureSurface: Color.lerp(failureSurface, other.failureSurface, t)!,
+      workingSurface: Color.lerp(workingSurface, other.workingSurface, t)!,
+      unread: Color.lerp(unread, other.unread, t)!,
     );
   }
 }

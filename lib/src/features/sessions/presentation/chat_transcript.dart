@@ -738,10 +738,11 @@ class _ErrorMessageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final failure = SemanticColors.of(context).failure;
+    final semantic = SemanticColors.of(context);
+    final failure = semantic.failure;
     return TranscriptTurnFrame(
-      fill: failure.withValues(alpha: 0.08),
-      edge: failure.withValues(alpha: 0.4),
+      fill: semantic.failureSurface,
+      edge: failure.withValues(alpha: SemanticColors.surfaceEdgeAlpha),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

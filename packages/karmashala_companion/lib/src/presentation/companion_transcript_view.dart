@@ -333,8 +333,8 @@ CompanionTurnStyle companionTurnStyle(
     icon: AppIcons.warning,
     label: 'ERROR',
     colour: semantic.failure,
-    fill: semantic.failure.withValues(alpha: _errorFill),
-    edge: semantic.failure.withValues(alpha: _errorEdge),
+    fill: semantic.failureSurface,
+    edge: semantic.failure.withValues(alpha: SemanticColors.surfaceEdgeAlpha),
   ),
   _ => CompanionTurnStyle(
     icon: AppIcons.robot,
@@ -346,8 +346,6 @@ CompanionTurnStyle companionTurnStyle(
 };
 
 const _faintEdge = 0.35;
-const _errorFill = 0.08;
-const _errorEdge = 0.4;
 const _avatarRing = 0.4;
 
 /// One turn, at a thumb's sizes. Copying is a long press: a copy button at the
