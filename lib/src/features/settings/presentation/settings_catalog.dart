@@ -71,12 +71,6 @@ enum SettingsSectionId {
     SettingsGroup.workspace,
     'Environment variables every terminal Karmashala opens starts with.',
   ),
-  automations(
-    'Automations',
-    AppIcons.clockCounterClockwise,
-    SettingsGroup.workspace,
-    'Agent runs armed to start on a schedule, with nobody watching.',
-  ),
   agents(
     'Agents',
     AppIcons.robot,
@@ -96,6 +90,14 @@ enum SettingsSectionId {
     SettingsGroup.agents,
     'What each agent may do without asking, and what each project lets it '
         'do in the browser.',
+  ),
+  // An automation is an agent, a prompt and a permission mode armed in
+  // advance, so it follows the permissions it runs under.
+  automations(
+    'Automations',
+    AppIcons.clockCounterClockwise,
+    SettingsGroup.agents,
+    'Agent runs armed to start on a schedule, with nobody watching.',
   ),
   tools(
     'Tools',

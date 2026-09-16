@@ -226,6 +226,16 @@ void main() {
     );
   });
 
+  test('automations are agent runs, filed with the agents after the '
+      'permissions they run under', () {
+    final agents = SettingsGroup.agents.pages;
+    expect(SettingsSectionId.automations.group, SettingsGroup.agents);
+    expect(
+      agents.indexOf(SettingsSectionId.automations),
+      agents.indexOf(SettingsSectionId.permissions) + 1,
+    );
+  });
+
   test('a link naming the page a section used to be on still lands on it', () {
     final target = SettingsTarget(
       SettingsSectionId.tools,
