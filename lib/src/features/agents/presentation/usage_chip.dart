@@ -272,6 +272,17 @@ class _UsageChipState extends ConsumerState<UsageChip> {
   /// stopped from [dispose], where `ref` is no longer safe to read.
   UsageRefreshController? _policy;
 
+  /// Holds [policy] and lets go of the one held before, when they differ. The
+  /// hold moves when the chip's account does, not on every build: retaining on
+  /// each build and releasing only the latest policy kept a chip's first
+  /// account's timer running after its session moved to another.
+  void _hold(UsageRefreshController? policy) {
+    if (identical(policy, _policy)) return;
+    _policy?.release(this);
+    _policy = policy;
+    policy?.retain(this);
+  }
+
   @override
   void dispose() {
     // The only teardown hook that always runs. Released, not stopped: the timer
@@ -295,15 +306,16 @@ class _UsageChipState extends ConsumerState<UsageChip> {
     final installation = ref.watch(
       usageInstallationForSessionProvider(widget.sessionId),
     );
-    if (installation == null) return const SizedBox.shrink();
+    if (installation == null) {
+      _hold(null);
+      return const SizedBox.shrink();
+    }
 
-    // Keeps this **account's** timer alive while a chip on it is on screen, and
-    // re-arms the tick this widget's own teardown cancelled.
+    // Keeps this **account's** timer alive while a chip on it is on screen.
     final account = usageAccountKey(installation);
     ref.watch(usageRefreshProvider(account));
     final policy = ref.read(usageRefreshProvider(account).notifier);
-    _policy = policy;
-    policy.retain(this);
+    _hold(policy);
 
     final view = usageChipViewFor(
       ref.watch(agentUsageProvider(installation)),

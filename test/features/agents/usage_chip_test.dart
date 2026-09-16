@@ -5,6 +5,9 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_refresh_policy.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
@@ -87,8 +90,10 @@ void main() {
   ProviderContainer containerFor({
     String agentId = AgentIds.claudeCode,
     _Subscriptions? observer,
+    void Function(AppDatabase db)? seed,
   }) {
     final db = seedUsageDatabase(agentId: agentId);
+    seed?.call(db);
     addTearDown(db.close);
     final container = ProviderContainer(
       observers: [?observer],
@@ -857,6 +862,66 @@ void main() {
       );
       expect(view.label, '12%');
     });
+  });
+
+  testWidgets('a chip that moves to another account lets go of the first', (
+    tester,
+  ) async {
+    // Two chips on one account, and something else keeping that account's
+    // policy alive. When one chip's session moves to another account and the
+    // other chip leaves, nothing on screen speaks for the first account, so
+    // its timer must stop — a chip that retained on every build and only
+    // released its latest policy kept it running.
+    service.answer = usageSnapshot(percent: 62);
+    final container = containerFor(
+      seed: (db) {
+        AgentInstallationDao(
+          db,
+        ).insert(agentInstallation(id: 'a2', agentId: AgentIds.codex));
+        SessionDao(db)
+          ..insert(session(id: 's2', agentInstallationId: 'a2'))
+          ..insert(session(id: 's3'));
+      },
+    );
+    final keepAlive = container.listen(
+      usageRefreshProvider(_claudeAccount),
+      (_, _) {},
+    );
+    addTearDown(keepAlive.close);
+
+    Widget chips({required String first, required bool second}) =>
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Column(
+                children: [
+                  UsageChip(key: const ValueKey('first'), sessionId: first),
+                  if (second) const UsageChip(sessionId: 's3'),
+                ],
+              ),
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(chips(first: 's1', second: true));
+    await tester.pump();
+    final policy = container.read(
+      usageRefreshProvider(_claudeAccount).notifier,
+    );
+    expect(policy.isPolling, isTrue);
+
+    await tester.pumpWidget(chips(first: 's2', second: true));
+    await tester.pump();
+    await tester.pumpWidget(chips(first: 's2', second: false));
+    await tester.pump();
+
+    expect(
+      policy.isPolling,
+      isFalse,
+      reason: 'no chip on screen is on this account any more',
+    );
+    await quiesce(tester, container);
   });
 
   group('formatUsageDuration', () {
