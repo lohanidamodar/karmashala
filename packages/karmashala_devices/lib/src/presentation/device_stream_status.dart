@@ -136,26 +136,26 @@ class StreamIdleBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final ink = theme.colorScheme.onInverseSurface;
     final age = since;
     final uncertain = age != null && age >= kIdleUncertainAfter;
     return Padding(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(Insets.sm),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: theme.colorScheme.scrim.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(999),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: const EdgeInsets.symmetric(
+            horizontal: Insets.md,
+            vertical: Insets.xs,
+          ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                AppIcons.pauseCircle,
-                size: 14,
-                color: theme.colorScheme.onInverseSurface,
-              ),
-              const SizedBox(width: 6),
+              Icon(AppIcons.pauseCircle, size: Chrome.iconAction, color: ink),
+              const SizedBox(width: Insets.xs),
               Flexible(
                 child: Text(
                   uncertain
@@ -163,22 +163,32 @@ class StreamIdleBadge extends StatelessWidget {
                       : detail,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.onInverseSurface,
-                  ),
+                  style: theme.textTheme.labelSmall?.copyWith(color: ink),
                 ),
               ),
               if (onRestart != null) ...[
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: onRestart,
+                const SizedBox(width: Insets.xs),
+                // A real button: a tap target, a Tab stop and a "button" to a
+                // screen reader — a GestureDetector on a Text was none of them.
+                TextButton(
+                  onPressed: onRestart,
+                  style: TextButton.styleFrom(
+                    foregroundColor: ink,
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(0, Chrome.control),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Insets.xs,
+                    ),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   child: Text(
                     'Reconnect',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onInverseSurface,
+                    style: TextStyle(
                       decoration: TextDecoration.underline,
-                      decorationColor: theme.colorScheme.onInverseSurface,
-                      fontWeight: FontWeight.w600,
+                      decorationColor: ink,
                     ),
                   ),
                 ),

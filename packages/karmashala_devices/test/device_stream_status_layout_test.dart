@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_devices/widgets.dart';
@@ -58,5 +59,58 @@ void main() {
         expect(restarts, 1);
       });
     }
+  });
+
+  group('StreamIdleBadge Reconnect', () {
+    testWidgets('is a button a keyboard and a screen reader can reach', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      var restarts = 0;
+      await _pumpIn(
+        tester,
+        const Size(400, 60),
+        StreamIdleBadge(
+          detail: 'No screen changes for 20s.',
+          since: const Duration(seconds: 20),
+          onRestart: () => restarts += 1,
+        ),
+      );
+
+      // A GestureDetector on a Text: not a button to a screen reader, not a
+      // stop for Tab, and a 16px-tall target.
+      expect(
+        tester.getSemantics(find.text('Reconnect')),
+        matchesSemantics(
+          label: 'Reconnect',
+          isButton: true,
+          isFocusable: true,
+          hasEnabledState: true,
+          isEnabled: true,
+          hasTapAction: true,
+          hasFocusAction: true,
+        ),
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final focused = FocusManager.instance.primaryFocus?.context;
+      expect(focused, isNotNull);
+      expect(
+        find.ancestor(
+          of: find.text('Reconnect'),
+          matching: find.byWidgetPredicate(
+            (w) => identical(w, focused!.widget),
+          ),
+        ),
+        findsOneWidget,
+        reason: 'Tab lands on Reconnect',
+      );
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(restarts, 1);
+      semantics.dispose();
+    });
   });
 }
