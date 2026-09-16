@@ -17,6 +17,9 @@ environment:
   sdk: ^3.9.0
 
 dependencies:
+  # The sealed channel's key material. Already transitive through
+  # `karmashala_remote`; declared because this package names the type.
+  cryptography: ^2.9.0
   ffi: ^2.1.0
   # The app's schema, unchanged: the host owns sessions on a machine with no
   # GUI, so it carries the same ladder rather than a second one that could

@@ -23,6 +23,8 @@ export 'src/serve/session_store.dart';
 export 'src/companion/companion_bindings.dart';
 export 'src/companion/host_pairing_service.dart';
 export 'src/companion/companion_server.dart';
+export 'src/companion/companion_listener.dart';
+export 'src/companion/sealed_link.dart';
 export 'src/store/store_probe.dart';
 export 'src/transport/socket_transport.dart';
 export 'src/transport/transport.dart';
