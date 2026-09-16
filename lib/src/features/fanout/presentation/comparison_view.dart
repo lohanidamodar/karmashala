@@ -227,17 +227,18 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
     if (result == null) return;
     // The merge is the moment a verdict is acted on, so it is the moment worth
     // naming the verifier. Said, never enforced — a refusal would hide the fact.
-    final confirmed = await _confirm(
+    final confirmed = await showConfirmDialog(
+      context,
       title: 'Merge ${candidate.agentId}?',
-      body:
+      message:
           'Its worktree must be clean and its work committed. '
           '${candidate.branch ?? 'The session branch'} will be merged into the '
           'repository’s current branch.\n\n'
           'Verdict: '
           '${attributionShownFor(candidate, ref.read(candidateEvidenceProvider)).label}.',
-      action: 'Merge winner',
+      confirmLabel: 'Merge winner',
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     setState(() => _busy = candidate.id);
     try {
       await ref.read(fanOutServiceProvider).mergeWinner(result);
@@ -358,28 +359,6 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
     );
     return ok == true ? chosen : const {};
   }
-
-  Future<bool?> _confirm({
-    required String title,
-    required String body,
-    required String action,
-  }) => showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text(title),
-      content: Text(body),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(action),
-        ),
-      ],
-    ),
-  );
 
   void _say(String message) {
     if (!mounted) return;

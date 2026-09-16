@@ -84,8 +84,7 @@ class EnvSecretsPage extends ConsumerWidget {
             children: [
               _Fact(
                 icon: AppIcons.terminal,
-                text:
-                    'Windows shells and local terminals get them directly.',
+                text: 'Windows shells and local terminals get them directly.',
               ),
               _Fact(
                 icon: AppIcons.terminalWindow,
@@ -241,9 +240,10 @@ class _VariableCard extends ConsumerWidget {
       ],
       onSelected: (value) => switch (value) {
         'edit' => EnvVariableDialog.show(context, existing: variable),
-        'toggle' => ref
-            .read(envSecretsControllerProvider.notifier)
-            .setVariableEnabled(variable.id, !variable.enabled),
+        'toggle' =>
+          ref
+              .read(envSecretsControllerProvider.notifier)
+              .setVariableEnabled(variable.id, !variable.enabled),
         _ => _remove(context, ref),
       },
       builder: (context) => SettingsItemCard(
@@ -307,32 +307,19 @@ class _VariableCard extends ConsumerWidget {
   }
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Remove ${variable.name}?'),
-        content: Text(
-          variable.secret
-              ? 'The value is not shown anywhere and cannot be recovered from '
-                    'Karmashala afterwards — you would have to paste it again.'
-                    '\n\nTerminals already open keep it until they are closed.'
-              : 'New terminals will stop getting this variable. Terminals '
-                    'already open keep it until they are closed.',
-        ),
-        actions: [
-          TextButton(
-            autofocus: true,
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          DestructiveButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Remove ${variable.name}?',
+      message: variable.secret
+          ? 'The value is not shown anywhere and cannot be recovered from '
+                'Karmashala afterwards — you would have to paste it again.'
+                '\n\nTerminals already open keep it until they are closed.'
+          : 'New terminals will stop getting this variable. Terminals '
+                'already open keep it until they are closed.',
+      confirmLabel: 'Remove',
+      destructive: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     await ref.read(envSecretsControllerProvider.notifier).remove(variable.id);
   }
 }

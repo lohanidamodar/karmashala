@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
@@ -111,10 +112,7 @@ class _ArmButton extends ConsumerWidget {
         ),
     ],
     child: const Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: Insets.sm,
-        vertical: Insets.xs,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: Insets.sm, vertical: Insets.xs),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -176,7 +174,10 @@ class AutomationCard extends ConsumerWidget {
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: Insets.sm),
-        _Line(label: 'Runs', value: describeSchedule(automation, now: now)),
+        _Line(
+          label: 'Runs',
+          value: describeSchedule(automation, now: now),
+        ),
         _Line(label: 'Agent', value: agentName),
         _Line(label: 'Prompt', value: automation.prompt),
         if (refusal != null) ...[
@@ -229,28 +230,16 @@ Future<void> _confirmDelete(
   Automation automation,
 ) async {
   final controller = ref.read(automationControllerProvider);
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text('Delete ${automation.name}?'),
-      content: const Text(
+  final confirmed = await showConfirmDialog(
+    context,
+    title: 'Delete ${automation.name}?',
+    message:
         'It will not fire again, and its schedule and prompt are forgotten. '
         'To stop it for now and keep it, pause it instead.',
-      ),
-      actions: [
-        TextButton(
-          autofocus: true,
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
-        ),
-        DestructiveButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Delete'),
-        ),
-      ],
-    ),
+    confirmLabel: 'Delete',
+    destructive: true,
   );
-  if (confirmed == true) controller.delete(automation.id);
+  if (confirmed) controller.delete(automation.id);
 }
 
 /// What the card says about when this fires. Never "next run in 18 hours" for a
@@ -374,26 +363,18 @@ class _Line extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
+    return LabeledValueRow(
+      label: label,
+      labelWidth: 62,
+      labelStyle: theme.textTheme.bodySmall,
       padding: const EdgeInsets.only(top: 1),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 62,
-            child: Text(label, style: theme.textTheme.bodySmall),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface,
-              ),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+      value: Text(
+        value,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurface,
+        ),
+        maxLines: 3,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/primitives.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -204,7 +205,7 @@ class _GitDetails extends ConsumerWidget {
 }
 
 /// The GIT section when git has nothing to say. A wrapping paragraph rather
-/// than a [_kv] row: at 240px that row's label column leaves ~170px.
+/// than a [LabeledValueRow]: at 240px that row's label column leaves ~170px.
 class _GitTroubleNote extends StatelessWidget {
   const _GitTroubleNote({required this.report});
 
@@ -272,19 +273,18 @@ class _BranchAndRemote extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _KeyValue(
-          'Branch',
-          branchText,
+        LabeledValueRow(
+          label: 'Branch',
+          value: SelectableText(branchText, style: MonoStyles.body),
           // The branch name is what you paste into a `git checkout` or a PR body, and
           // selecting 12 characters of 12px mono with a mouse is a worse way to get it.
-          action: branch is AsyncData && branch.value != null
+          trailing: branch is AsyncData && branch.value != null
               ? _CopyButton(value: branchText, what: 'Branch')
               : null,
         ),
-        _KeyValue(
-          'Remote',
-          remoteText,
-          child: _RemoteValue(remote: remoteText),
+        LabeledValueRow(
+          label: 'Remote',
+          value: _RemoteValue(remote: remoteText),
         ),
       ],
     );
@@ -625,42 +625,6 @@ class _RecentCommits extends ConsumerWidget {
 }
 
 const _sectionLabelPadding = EdgeInsets.only(bottom: Insets.xs);
-
-/// A labelled value — the value selectable, or [child] in its place.
-class _KeyValue extends StatelessWidget {
-  const _KeyValue(this.label, this.value, {this.child, this.action});
-
-  final String label;
-  final String value;
-  final Widget? child;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Insets.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 64,
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          Expanded(
-            child: child ?? SelectableText(value, style: MonoStyles.body),
-          ),
-          ?action,
-        ],
-      ),
-    );
-  }
-}
 
 /// One row of a list: a glyph, a short mono lead, the rest, an action.
 class _ListLine extends StatelessWidget {

@@ -9,3 +9,4 @@ export 'src/linkable_text.dart';
 export 'src/qr_painter.dart';
 export 'src/reveal_on_focus.dart';
 export 'src/stack_when_narrow.dart';
+export 'src/labeled_value_row.dart';

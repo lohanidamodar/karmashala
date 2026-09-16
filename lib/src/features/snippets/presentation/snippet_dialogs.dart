@@ -59,9 +59,7 @@ class SnippetEditorDialog extends ConsumerStatefulWidget {
 }
 
 class _SnippetEditorDialogState extends ConsumerState<SnippetEditorDialog> {
-  late final _label = TextEditingController(
-    text: widget.existing?.label ?? '',
-  );
+  late final _label = TextEditingController(text: widget.existing?.label ?? '');
   late final _command = TextEditingController(
     text: widget.existing?.command ?? '',
   );
@@ -202,30 +200,15 @@ class _SnippetEditorDialogState extends ConsumerState<SnippetEditorDialog> {
 Future<bool> confirmSnippetDelete(
   BuildContext context,
   CommandSnippet snippet,
-) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text('Delete ${snippet.label}?'),
-      content: Text(
-        'The command itself is not going anywhere — this only forgets that you '
-        'saved it.\n\n${snippet.command}',
-      ),
-      actions: [
-        TextButton(
-          autofocus: true,
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
-        ),
-        DestructiveButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Delete'),
-        ),
-      ],
-    ),
-  );
-  return confirmed ?? false;
-}
+) => showConfirmDialog(
+  context,
+  title: 'Delete ${snippet.label}?',
+  message:
+      'The command itself is not going anywhere — this only forgets that you '
+      'saved it.\n\n${snippet.command}',
+  confirmLabel: 'Delete',
+  destructive: true,
+);
 
 /// The whole snippet library: what is saved, and how to add, edit or remove
 /// one. The *picking* surface is quick open; this is where things are kept.

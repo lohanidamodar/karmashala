@@ -130,6 +130,48 @@ class DestructiveButton extends StatelessWidget {
   }
 }
 
+/// Asks [title] with [message] under it, and returns whether [confirmLabel] was
+/// pressed — false for Cancel and for a dismissal. Cancel holds the focus, so
+/// Enter never confirms; [destructive] draws the confirm as a
+/// [DestructiveButton].
+Future<bool> showConfirmDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String confirmLabel,
+  String cancelLabel = 'Cancel',
+  bool destructive = false,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) {
+      void answer(bool value) => Navigator.of(dialogContext).pop(value);
+      return AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            autofocus: true,
+            onPressed: () => answer(false),
+            child: Text(cancelLabel),
+          ),
+          if (destructive)
+            DestructiveButton(
+              onPressed: () => answer(true),
+              child: Text(confirmLabel),
+            )
+          else
+            FilledButton(
+              onPressed: () => answer(true),
+              child: Text(confirmLabel),
+            ),
+        ],
+      );
+    },
+  );
+  return confirmed ?? false;
+}
+
 /// An error said inside a dialog, above the form it belongs to.
 class DesktopErrorBanner extends StatelessWidget {
   const DesktopErrorBanner(this.message, {this.onDismiss, super.key});

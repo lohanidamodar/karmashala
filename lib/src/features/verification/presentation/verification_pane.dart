@@ -301,27 +301,16 @@ class _RunActionsState extends ConsumerState<_RunActions> {
   }
 
   Future<void> _delete() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete this run?'),
-        content: Text(
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Delete this run?',
+      message:
           'Its steps, screenshots and log slice are deleted from disk. '
           '"${widget.run.title}" cannot be recovered.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          DestructiveButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Delete',
+      destructive: true,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     await ref.read(verificationServiceProvider).delete(widget.run.id);
     if (!mounted) return;
     ref.read(selectedVerificationRunProvider.notifier).select(null);
@@ -821,25 +810,11 @@ class _MetaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
+    return LabeledValueRow(
+      label: label,
+      labelStyle: theme.textTheme.labelSmall,
       padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 64,
-            child: Text(
-              label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          Expanded(
-            child: SelectableText(value, style: theme.textTheme.bodySmall),
-          ),
-        ],
-      ),
+      value: SelectableText(value, style: theme.textTheme.bodySmall),
     );
   }
 }
