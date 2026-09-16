@@ -12,12 +12,19 @@ import 'package:karmashala/src/features/verification/domain/verification_run.dar
 import 'package:karmashala/src/features/verification/domain/verification_step.dart';
 import 'package:karmashala/src/features/verification/domain/verification_target.dart';
 import 'package:karmashala/src/features/verification/presentation/verification_pane.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_signals.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 import 'verification_harness.dart';
 
@@ -177,6 +184,45 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
   }
+
+  testWidgets('a renamed session is renamed in the run it verified', (
+    tester,
+  ) async {
+    ExecutionEnvironmentDao(h.db).upsert(windowsEnv());
+    ProjectDao(h.db).insert(project());
+    RepositoryDao(h.db).insert(repository());
+    AgentInstallationDao(h.db).insert(agentInstallation());
+    SessionDao(h.db)
+      ..insert(session(id: 's-1', title: 'Before the rename'))
+      ..insert(session(id: 's-2', title: 'The verifier'));
+    seed(
+      id: 'run-rename',
+      title: 'a run about a session',
+      verdict: VerificationVerdict.pass,
+      sessionId: 's-1',
+      producedBySessionId: 's-2',
+    );
+    await pump(tester);
+    await tapAndSettle(tester, find.text('a run about a session'));
+    expect(find.text('Before the rename'), findsOneWidget);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(VerificationPane)),
+    );
+    SessionDao(h.db)
+      ..updateTitle('s-1', 'After the rename')
+      ..updateTitle('s-2', 'The renamed verifier');
+    container
+        .read(sessionsRevisionProvider.notifier)
+        .changed(const SessionChange.renamed('s-1'));
+    container
+        .read(sessionsRevisionProvider.notifier)
+        .changed(const SessionChange.renamed('s-2'));
+    await tester.pump();
+
+    expect(find.text('After the rename'), findsOneWidget);
+    expect(find.textContaining('The renamed verifier'), findsOneWidget);
+  });
 
   testWidgets('deleting a run asks, with a destructive confirm', (
     tester,

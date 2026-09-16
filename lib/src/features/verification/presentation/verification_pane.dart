@@ -367,6 +367,8 @@ class _SessionRow extends ConsumerWidget {
       return const _MetaRow(label: 'Session', value: 'not attached to one');
     }
     // A deleted session must not blank the row: the evidence outlives it.
+    // Watched through its signal, so a rename reaches this row.
+    ref.watchSession(id);
     final session = ref.read(sessionDaoProvider).getById(id);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -404,6 +406,7 @@ class _VerifierRow extends ConsumerWidget {
             'graded this run',
       );
     }
+    ref.watchSession(id);
     final session = ref.read(sessionDaoProvider).getById(id);
     return _MetaRow(
       label: 'Verifier',
