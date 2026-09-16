@@ -1,6 +1,8 @@
 import 'package:karmashala/src/app/companion/companion_shell.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_companion/pairing.dart';
+import 'package:karmashala_companion/widgets.dart' show companionAppBarHeight;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -163,4 +165,24 @@ void main() {
       );
     });
   }
+
+  // The shell built its own AppBar at Touch.appBarOf, so off a touch surface
+  // it was the one bar in the companion not sized like the rest.
+  testWidgets('the shell app bar is the companion app bar', (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await pumpPhone(
+        tester,
+        gateway: FakeCompanionGateway.paired(),
+        home: const CompanionShell(),
+      );
+      final bar = tester.widget<AppBar>(find.byType(AppBar));
+      expect(
+        bar.toolbarHeight,
+        companionAppBarHeight(tester.element(find.byType(AppBar))),
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }

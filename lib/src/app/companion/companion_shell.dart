@@ -6,7 +6,6 @@ import 'package:karmashala_companion/screens.dart';
 import 'package:karmashala_companion/widgets.dart';
 import 'package:karmashala_companion/pairing.dart';
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart';
 
 /// The phone shell: pairing until a host exists, then Projects, Inbox and
 /// Settings under a connection banner. Bottom navigation, no rail, no panes.
@@ -36,12 +35,7 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
 
     const inboxIcon = Icon(AppIcons.tray);
     return Scaffold(
-      appBar: AppBar(
-        // Grown with the text scale rather than fixed: a 200% title does not fit a
-        // 56px bar, and the screen's own name is the worst thing to clip.
-        toolbarHeight: Touch.appBarOf(context),
-        title: Text(_titles[_tab]),
-      ),
+      appBar: companionAppBar(context, title: Text(_titles[_tab])),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
