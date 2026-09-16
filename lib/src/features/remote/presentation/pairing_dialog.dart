@@ -123,13 +123,6 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     _begin();
   }
 
-  /// The 32 base32 characters as two typeable lines of four groups.
-  static String _typedCodeLines(List<int> typedSecret) {
-    final groups = PairingCode.groups(typedSecret);
-    final half = groups.length ~/ 2;
-    return '${groups.take(half).join('-')}\n${groups.skip(half).join('-')}';
-  }
-
   static String _label(Capability capability) => switch (capability) {
     Capability.viewSessions => 'View sessions',
     Capability.readTranscript => 'Read transcripts',
@@ -142,38 +135,24 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     Capability.sendAttachment => 'Send files',
   };
 
-  /// The local-vs-internet relay tabs. With one endpoint there is nothing to
-  /// choose, so no chrome at all — the dialog looks exactly as before.
-  Widget? _endpointTabs(List<PairingRelayEndpoint> endpoints) {
-    if (endpoints.length < 2) return null;
-    final selected = _endpoint.clamp(0, endpoints.length - 1);
-    return SegmentedButton<int>(
-      showSelectedIcon: false,
-      segments: [
-        for (var i = 0; i < endpoints.length; i++)
-          ButtonSegment<int>(
-            value: i,
-            icon: Icon(
-              endpoints[i].kind == PairingRelayKind.local
-                  ? AppIcons.linkSimple
-                  : AppIcons.globe,
-              size: Chrome.iconAction,
-            ),
-            label: Text(endpoints[i].label),
-          ),
-      ],
-      selected: {selected},
-      onSelectionChanged: (choice) {
-        setState(() => _endpoint = choice.first);
-        // The shown code names the old relay; root a fresh one here.
-        _begin();
-      },
-    );
+  void _selectEndpoint(int index) {
+    setState(() => _endpoint = index);
+    // The shown code names the old relay; root a fresh one here.
+    _begin();
+  }
+
+  Future<void> _copyPayload(PairingPayload payload) async {
+    await Clipboard.setData(ClipboardData(text: payload.encode()));
+    if (mounted) setState(() => _copied = true);
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final endpoints = ref.watch(pairingRelayEndpointsProvider);
+    final paired = _paired;
+    final error = _error;
+    final session = _session;
     return AlertDialog(
       title: Row(
         children: [
@@ -195,7 +174,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_paired == null) ...[
+            if (paired == null) ...[
               Text(
                 'The phone may only do what you grant here. Scan with the '
                 'Karmashala companion app, or type the code.',
@@ -217,104 +196,204 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
                 ],
               ),
               const SizedBox(height: Insets.md),
-              if (_endpointTabs(ref.watch(pairingRelayEndpointsProvider))
-                  case final tabs?) ...[
-                Center(child: tabs),
+              // With one endpoint there is nothing to choose, so no chrome.
+              if (endpoints.length > 1) ...[
+                Center(
+                  child: _RelayEndpointTabs(
+                    endpoints: endpoints,
+                    selected: _endpoint.clamp(0, endpoints.length - 1),
+                    onSelected: _selectEndpoint,
+                  ),
+                ),
                 const SizedBox(height: Insets.md),
               ],
             ],
-            Center(child: _body(theme)),
+            Center(
+              child: switch ((paired, error, session)) {
+                (final PairedDevice device, _, _) => _PairedView(
+                  name: device.name,
+                ),
+                (_, final String message, _) => _PairingError(
+                  message: message,
+                  onRetry: _begin,
+                ),
+                (_, _, null) => const Padding(
+                  padding: EdgeInsets.all(Insets.xl),
+                  child: InlineSpinner(size: InlineSpinnerSize.large),
+                ),
+                (_, _, final HostPairingSession session) => _PairingCodeView(
+                  payload: session.payload,
+                  showPayload: _showCode,
+                  copied: _copied,
+                  onTogglePayload: () =>
+                      setState(() => _showCode = !_showCode),
+                  onCopy: () => _copyPayload(session.payload),
+                ),
+              },
+            ),
           ],
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(_paired == null ? 'Cancel' : 'Done'),
+          child: Text(paired == null ? 'Cancel' : 'Done'),
         ),
       ],
     );
   }
+}
 
-  Widget _body(ThemeData theme) {
-    final paired = _paired;
-    if (paired != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              AppIcons.checkCircle,
-              size: Chrome.iconHero,
-              color: SemanticColors.of(context).idle,
+/// The local-vs-internet relay tabs, for a list of two or more.
+class _RelayEndpointTabs extends StatelessWidget {
+  const _RelayEndpointTabs({
+    required this.endpoints,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final List<PairingRelayEndpoint> endpoints;
+  final int selected;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<int>(
+      showSelectedIcon: false,
+      segments: [
+        for (var i = 0; i < endpoints.length; i++)
+          ButtonSegment<int>(
+            value: i,
+            icon: Icon(
+              endpoints[i].kind == PairingRelayKind.local
+                  ? AppIcons.linkSimple
+                  : AppIcons.globe,
+              size: Chrome.iconAction,
             ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              'Paired with ${paired.name}',
-              style: theme.textTheme.titleSmall,
-            ),
-          ],
-        ),
-      );
-    }
-    final error = _error;
-    if (error != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              AppIcons.warning,
-              size: Chrome.iconHero,
+            label: Text(endpoints[i].label),
+          ),
+      ],
+      selected: {selected},
+      onSelectionChanged: (choice) => onSelected(choice.first),
+    );
+  }
+}
+
+/// A phone proved the key and was stored.
+class _PairedView extends StatelessWidget {
+  const _PairedView({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Insets.lg),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            AppIcons.checkCircle,
+            size: Chrome.iconHero,
+            color: SemanticColors.of(context).idle,
+          ),
+          const SizedBox(height: Insets.sm),
+          Text('Paired with $name', style: theme.textTheme.titleSmall),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pairing could not start or was refused, with a way to try again.
+class _PairingError extends StatelessWidget {
+  const _PairingError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Insets.lg),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            AppIcons.warning,
+            size: Chrome.iconHero,
+            color: theme.colorScheme.error,
+          ),
+          const SizedBox(height: Insets.sm),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.error,
             ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              error,
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
-            const SizedBox(height: Insets.sm),
-            OutlinedButton(onPressed: _begin, child: const Text('Try again')),
-          ],
-        ),
-      );
-    }
-    final session = _session;
-    if (session == null) {
-      return const Padding(
-        padding: EdgeInsets.all(Insets.xl),
-        child: InlineSpinner(size: InlineSpinnerSize.large),
-      );
-    }
+          ),
+          const SizedBox(height: Insets.sm),
+          OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
+        ],
+      ),
+    );
+  }
+}
+
+/// The QR, the typeable code under it, and the full payload for a device that
+/// can paste.
+class _PairingCodeView extends StatelessWidget {
+  const _PairingCodeView({
+    required this.payload,
+    required this.showPayload,
+    required this.copied,
+    required this.onTogglePayload,
+    required this.onCopy,
+  });
+
+  final PairingPayload payload;
+  final bool showPayload;
+  final bool copied;
+  final VoidCallback onTogglePayload;
+  final VoidCallback onCopy;
+
+  /// The side of the QR. Fixed: a scanner wants it big, and the dialog's
+  /// narrow width holds it.
+  static const qrSize = 320.0;
+
+  /// The 32 base32 characters as two typeable lines of four groups.
+  static String _typedCodeLines(List<int> typedSecret) {
+    final groups = PairingCode.groups(typedSecret);
+    final half = groups.length ~/ 2;
+    return '${groups.take(half).join('-')}\n${groups.skip(half).join('-')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final encoded = payload.encode();
+    final muted = theme.textTheme.labelSmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // The QR stays black-on-white in both themes: scanners want contrast.
         CustomPaint(
-          size: const Size.square(320),
-          painter: QrPainter(session.payload.encode()),
+          size: const Size.square(qrSize),
+          painter: QrPainter(encoded),
         ),
         const SizedBox(height: Insets.sm),
         Text(
           'One phone, once — the code expires in '
           '${kPairingTtl.inMinutes} minutes.',
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+          style: muted,
         ),
-        if (session.payload.typedSecret case final typed?) ...[
+        if (payload.typedSecret case final typed?) ...[
           const SizedBox(height: Insets.md),
-          Text(
-            'No camera? Type this code on the phone:',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
+          Text('No camera? Type this code on the phone:', style: muted),
           const SizedBox(height: Insets.xs),
           Container(
             padding: const EdgeInsets.symmetric(
@@ -338,29 +417,24 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
           ),
         ],
         const SizedBox(height: Insets.sm),
-        // The full QR payload, for a device that can paste. A Wrap, not a Row:
-        // the two buttons overflow 340px in some locales and scales.
+        // A Wrap, not a Row: the two buttons overflow in some locales and
+        // scales.
         Wrap(
           alignment: WrapAlignment.center,
           spacing: Insets.xs,
           children: [
             TextButton(
-              onPressed: () => setState(() => _showCode = !_showCode),
-              child: Text(_showCode ? 'Hide payload' : 'Show full payload'),
+              onPressed: onTogglePayload,
+              child: Text(showPayload ? 'Hide payload' : 'Show full payload'),
             ),
             OutlinedButton.icon(
-              icon: Icon(_copied ? AppIcons.checkCircle : AppIcons.copy),
-              label: Text(_copied ? 'Copied' : 'Copy'),
-              onPressed: () async {
-                await Clipboard.setData(
-                  ClipboardData(text: session.payload.encode()),
-                );
-                if (mounted) setState(() => _copied = true);
-              },
+              icon: Icon(copied ? AppIcons.checkCircle : AppIcons.copy),
+              label: Text(copied ? 'Copied' : 'Copy'),
+              onPressed: onCopy,
             ),
           ],
         ),
-        if (_showCode) ...[
+        if (showPayload) ...[
           const SizedBox(height: Insets.xs),
           Container(
             padding: const EdgeInsets.all(Insets.sm),
@@ -369,7 +443,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
               borderRadius: BorderRadius.circular(Radii.sm),
             ),
             child: SelectableText(
-              session.payload.encode(),
+              encoded,
               style: theme.textTheme.bodySmall?.copyWith(
                 fontFamily: kMonoFamily,
               ),
