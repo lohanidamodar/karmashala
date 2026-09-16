@@ -55,9 +55,14 @@ class DesktopDialogTitle extends StatelessWidget {
   }
 }
 
+/// An error said inside a dialog, above the form it belongs to.
 class DesktopErrorBanner extends StatelessWidget {
-  const DesktopErrorBanner(this.message, {super.key});
+  const DesktopErrorBanner(this.message, {this.onDismiss, super.key});
   final String message;
+
+  /// Draws a close button when non-null — for an error that outlives the
+  /// attempt that raised it, where the next edit does not clear it.
+  final VoidCallback? onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +86,15 @@ class DesktopErrorBanner extends StatelessWidget {
               ).textTheme.bodySmall?.copyWith(color: scheme.onErrorContainer),
             ),
           ),
+          if (onDismiss != null)
+            IconButton(
+              tooltip: 'Dismiss',
+              visualDensity: VisualDensity.compact,
+              iconSize: Chrome.iconAction,
+              color: scheme.onErrorContainer,
+              icon: const Icon(AppIcons.x),
+              onPressed: onDismiss,
+            ),
         ],
       ),
     );
