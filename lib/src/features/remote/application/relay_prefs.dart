@@ -1,5 +1,6 @@
 /// The two-relay settings model: local and hosted are independent switches,
-/// persisted in `app_metadata`; the legacy mode seeds the first read.
+/// persisted in `app_metadata`. The retired either/or mode was carried over
+/// by the store's v50 upgrade.
 library;
 
 import 'dart:convert';
@@ -8,8 +9,6 @@ import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_store/database.dart';
 import '../../../core/database/database_providers.dart';
-import '../../settings/application/settings_controller.dart';
-import '../../settings/domain/relay_mode.dart';
 
 /// Where the prefs live in the `app_metadata` key/value table.
 const String kRelayPrefsMetadataKey = 'remote.relay_prefs.v1';
@@ -55,17 +54,12 @@ class RelayPrefsController extends Notifier<RelayPrefs> {
   @override
   RelayPrefs build() {
     final stored = readFrom(ref.watch(databaseProvider));
-    if (stored != null) return stored;
-    // First run after the upgrade: the old either/or mode says which single
-    // relay this setup was using, and that one stays on.
-    final legacy = ref.read(settingsControllerProvider).remoteRelayMode;
-    return legacy == RelayMode.local
-        ? const RelayPrefs(localEnabled: true, hostedEnabled: false)
-        : const RelayPrefs(localEnabled: false, hostedEnabled: true);
+    return stored ??
+        const RelayPrefs(localEnabled: false, hostedEnabled: true);
   }
 
-  /// The persisted prefs, or null when nothing was written yet — the legacy
-  /// mode then decides. Static, so a test can read what a fresh launch loads.
+  /// The persisted prefs, or null when nothing was written yet, which means
+  /// hosted only. Static, so a test can read what a fresh launch loads.
   static RelayPrefs? readFrom(AppDatabase db) {
     final raw = db.readMetadata(kRelayPrefsMetadataKey);
     if (raw == null) return null;

@@ -11,7 +11,6 @@ import 'package:karmashala/src/features/remote/relay_local/local_relay_providers
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/remote/relay_local/relay_endpoints.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/relay_mode.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -88,9 +87,12 @@ void main() {
 
   test('local mode with the relay running offers its primary LAN URL', () {
     final container = containerWith(_running);
-    container.read(settingsControllerProvider.notifier)
-      ..setRemoteAccessEnabled(true)
-      ..setRemoteRelayMode(RelayMode.local);
+    container
+        .read(settingsControllerProvider.notifier)
+        .setRemoteAccessEnabled(true);
+    container.read(relayPrefsProvider.notifier)
+      ..setLocalEnabled(true)
+      ..setHostedEnabled(false);
 
     expect(container.read(relayEndpointsProvider), [
       RelayEndpointOption(
@@ -112,9 +114,12 @@ void main() {
       const LocalRelayStatus(state: LocalRelayState.running, boundPort: 8787),
     ]) {
       final container = containerWith(status);
-      container.read(settingsControllerProvider.notifier)
-        ..setRemoteAccessEnabled(true)
-        ..setRemoteRelayMode(RelayMode.local);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setRemoteAccessEnabled(true);
+      container.read(relayPrefsProvider.notifier)
+        ..setLocalEnabled(true)
+        ..setHostedEnabled(false);
 
       expect(
         container.read(relayEndpointsProvider),

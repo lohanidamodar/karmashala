@@ -58,6 +58,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   47: _migrateToV47,
   48: _migrateToV48,
   49: _migrateToV49,
+  50: _migrateToV50,
 };
 
 /// Was this pane running when its row was written? `DEFAULT 0` is the honest
@@ -1252,5 +1253,40 @@ void _migrateToV49(Database db) {
   db.execute(
     'ALTER TABLE projects ADD COLUMN default_repository_id TEXT '
     'REFERENCES repositories (id) ON DELETE SET NULL;',
+  );
+}
+
+/// Retires `settings.v1`'s either/or `remoteRelayMode`: a setup that used the
+/// local relay and never wrote the side-by-side prefs gets them written, so
+/// the next settings save, which drops the key, cannot switch it back to
+/// hosted. `remote.relay_prefs.v1` is the app's `kRelayPrefsMetadataKey`.
+void _migrateToV50(Database db) {
+  const prefsKey = 'remote.relay_prefs.v1';
+  final existing = db.select(
+    'SELECT 1 FROM app_metadata WHERE key = ?;',
+    [prefsKey],
+  );
+  if (existing.isNotEmpty) return;
+  final settingsRows = db.select(
+    "SELECT value FROM app_metadata WHERE key = 'settings.v1';",
+  );
+  if (settingsRows.isEmpty) return;
+  try {
+    final decoded = jsonDecode(settingsRows.first['value'] as String);
+    // Hosted, junk or absent is what unset prefs already mean.
+    if (decoded is! Map<String, dynamic> ||
+        decoded['remoteRelayMode'] != 'local') {
+      return;
+    }
+  } on FormatException {
+    return;
+  }
+  db.execute(
+    'INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?);',
+    [
+      prefsKey,
+      jsonEncode({'local': true, 'hosted': false}),
+      DateTime.now().toUtc().toIso8601String(),
+    ],
   );
 }

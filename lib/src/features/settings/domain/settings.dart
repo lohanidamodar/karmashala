@@ -2,7 +2,6 @@ import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'app_theme_mode.dart';
 import 'diagnostics_settings.dart';
-import 'relay_mode.dart';
 
 /// Per-agent permission preferences in each agent's own vocabulary. Null means
 /// "use the mode that agent declares as its default", never "pass no flag".
@@ -90,7 +89,6 @@ class Settings {
     this.terminalThemeSource,
     this.remoteAccessEnabled = false,
     this.remoteRelayUrl,
-    this.remoteRelayMode = RelayMode.hosted,
     this.localRelayPort = 8787,
     this.uiTextScale = 1.0,
     this.terminalFontSize = defaultTerminalFontSize,
@@ -228,9 +226,6 @@ class Settings {
   /// The relay the host dials, or `null` for the PopupBits default.
   final String? remoteRelayUrl;
 
-  /// The embedded local relay or a hosted one; hosted by default.
-  final RelayMode remoteRelayMode;
-
   /// The embedded relay's port; the default matches the relay package's own.
   final int localRelayPort;
 
@@ -318,7 +313,6 @@ class Settings {
     bool? remoteAccessEnabled,
     String? remoteRelayUrl,
     bool clearRemoteRelayUrl = false,
-    RelayMode? remoteRelayMode,
     int? localRelayPort,
     double? uiTextScale,
     double? terminalFontSize,
@@ -385,7 +379,6 @@ class Settings {
     remoteRelayUrl: clearRemoteRelayUrl
         ? null
         : (remoteRelayUrl ?? this.remoteRelayUrl),
-    remoteRelayMode: remoteRelayMode ?? this.remoteRelayMode,
     localRelayPort: localRelayPort ?? this.localRelayPort,
     uiTextScale: uiTextScale ?? this.uiTextScale,
     terminalFontSize: terminalFontSize ?? this.terminalFontSize,
@@ -463,7 +456,6 @@ class Settings {
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
     'remoteAccessEnabled': remoteAccessEnabled,
     if (remoteRelayUrl != null) 'remoteRelayUrl': remoteRelayUrl,
-    'remoteRelayMode': remoteRelayMode.name,
     'localRelayPort': localRelayPort,
     'uiTextScale': uiTextScale,
     'terminalFontSize': terminalFontSize,
@@ -617,10 +609,6 @@ class Settings {
       remoteRelayUrl: json['remoteRelayUrl'] is String
           ? json['remoteRelayUrl'] as String
           : null,
-      remoteRelayMode: RelayMode.values.firstWhere(
-        (m) => m.name == json['remoteRelayMode'],
-        orElse: () => RelayMode.hosted,
-      ),
       localRelayPort: json['localRelayPort'] is int
           ? json['localRelayPort'] as int
           : 8787,
@@ -693,7 +681,6 @@ class Settings {
       other.terminalThemeSource == terminalThemeSource &&
       other.remoteAccessEnabled == remoteAccessEnabled &&
       other.remoteRelayUrl == remoteRelayUrl &&
-      other.remoteRelayMode == remoteRelayMode &&
       other.localRelayPort == localRelayPort &&
       other.uiTextScale == uiTextScale &&
       other.terminalFontSize == terminalFontSize &&
@@ -744,7 +731,6 @@ class Settings {
       terminalThemeSource,
       remoteAccessEnabled,
       remoteRelayUrl,
-      remoteRelayMode,
       localRelayPort,
       uiTextScale,
       terminalFontSize,

@@ -2,7 +2,6 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
-import 'package:karmashala/src/features/settings/domain/relay_mode.dart';
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,42 +43,34 @@ void main() {
       );
     });
 
-    test('the relay defaults to hosted mode on the standard port', () {
-      // Hosted is what existed before the choice did — nobody's setup moves.
-      expect(const Settings().remoteRelayMode, RelayMode.hosted);
+    test('the local relay defaults to the standard port', () {
       expect(const Settings().localRelayPort, 8787);
     });
 
-    test('mode and port survive a JSON round-trip', () {
-      const s = Settings(
-        remoteRelayMode: RelayMode.local,
-        localRelayPort: 9001,
-      );
+    test('the port survives a JSON round-trip', () {
+      const s = Settings(localRelayPort: 9001);
       final restored = Settings.fromJson(s.toJson());
-      expect(restored.remoteRelayMode, RelayMode.local);
       expect(restored.localRelayPort, 9001);
       expect(restored, s);
     });
 
-    test('absent or junk mode/port keys read back as the defaults', () {
-      final restored = Settings.fromJson(const {
-        'remoteRelayMode': 'teleport',
-        'localRelayPort': 'yes please',
-      });
-      expect(restored.remoteRelayMode, RelayMode.hosted);
+    test('a junk port reads back as the default', () {
+      final restored = Settings.fromJson(const {'localRelayPort': 'yes please'});
       expect(restored.localRelayPort, 8787);
-      expect(Settings.fromJson(const {}).remoteRelayMode, RelayMode.hosted);
     });
 
-    test('mode and port participate in equality', () {
-      expect(
-        const Settings(remoteRelayMode: RelayMode.local),
-        isNot(const Settings()),
-      );
+    test('the retired relay mode is neither read nor written', () {
+      // Carried into remote.relay_prefs.v1 by the store's v50 upgrade.
+      final restored = Settings.fromJson(const {'remoteRelayMode': 'local'});
+      expect(restored, const Settings());
+      expect(const Settings().toJson(), isNot(contains('remoteRelayMode')));
+    });
+
+    test('the port participates in equality', () {
       expect(const Settings(localRelayPort: 9001), isNot(const Settings()));
     });
 
-    test('the controller persists the mode and the port', () {
+    test('the controller persists the port', () {
       final db = AppDatabase.memory();
       addTearDown(db.close);
       final container = ProviderContainer(
@@ -88,11 +79,9 @@ void main() {
       addTearDown(container.dispose);
       final controller = container.read(settingsControllerProvider.notifier);
 
-      controller.setRemoteRelayMode(RelayMode.local);
       controller.setLocalRelayPort(9001);
 
       final stored = SettingsRepository(db).load();
-      expect(stored.remoteRelayMode, RelayMode.local);
       expect(stored.localRelayPort, 9001);
     });
 

@@ -1,15 +1,38 @@
 /// The two-relay settings model: independent switches, every combination
-/// legal, persisted, and seeded from the old either/or mode so an existing
-/// setup wakes up on the relay it was already using.
+/// legal, persisted, and seeded by the v50 upgrade from the retired either/or
+/// mode so an existing setup wakes up on the relay it was already using.
 library;
 
+import 'dart:convert';
+
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala_store/migrations.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
-import 'package:karmashala/src/features/settings/domain/relay_mode.dart';
+import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+/// A database as the release before v50 left it, with [settings] as its
+/// stored `settings.v1` and, optionally, relay prefs already written.
+Database _before50({Map<String, Object?>? settings, String? prefs}) {
+  final db = sqlite3.openInMemory();
+  final versions = schemaMigrations.keys.where((v) => v < 50).toList()
+    ..sort();
+  for (final version in versions) {
+    schemaMigrations[version]!(db);
+    db.execute('PRAGMA user_version = $version;');
+  }
+  void put(String key, String value) => db.execute(
+    'INSERT INTO app_metadata (key, value, updated_at) VALUES (?, ?, ?);',
+    [key, value, '2026-09-01T00:00:00.000Z'],
+  );
+  if (settings != null) put('settings.v1', jsonEncode(settings));
+  if (prefs != null) put(kRelayPrefsMetadataKey, prefs);
+  return db;
+}
 
 void main() {
   late AppDatabase db;
@@ -25,25 +48,95 @@ void main() {
     return container;
   }
 
-  test('nothing stored: the legacy hosted mode means hosted on, local off', () {
+  test('nothing stored: hosted on, local off', () {
     expect(
       open().read(relayPrefsProvider),
       const RelayPrefs(localEnabled: false, hostedEnabled: true),
     );
   });
 
-  test('a legacy local-mode setup wakes up with the local relay on', () {
-    final first = open();
-    first
-        .read(settingsControllerProvider.notifier)
-        .setRemoteRelayMode(RelayMode.local);
+  group('upgrading from the either/or relay mode', () {
+    ProviderContainer upgrade(Database raw) {
+      final upgraded = AppDatabase(raw);
+      addTearDown(upgraded.close);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(upgraded)],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
 
-    // A fresh container is a fresh launch reading the same database.
-    expect(
-      open().read(relayPrefsProvider),
-      const RelayPrefs(localEnabled: true, hostedEnabled: false),
-      reason: 'nobody who had local mode should find it switched off',
-    );
+    test('a local-mode setup wakes up with only the local relay on', () {
+      final container = upgrade(
+        _before50(settings: {'remoteRelayMode': 'local'}),
+      );
+
+      const local = RelayPrefs(localEnabled: true, hostedEnabled: false);
+      expect(
+        container.read(relayPrefsProvider),
+        local,
+        reason: 'nobody who had local mode should find it switched off',
+      );
+      // Written by the upgrade, so the next settings save — which no longer
+      // carries the old key — cannot take it away.
+      expect(
+        RelayPrefsController.readFrom(container.read(databaseProvider)),
+        local,
+      );
+    });
+
+    test('a hosted-mode, junk or mode-less setup stays on hosted', () {
+      for (final settings in <Map<String, Object?>?>[
+        {'remoteRelayMode': 'hosted'},
+        {'remoteRelayMode': 'teleport'},
+        {'remoteAccessEnabled': true},
+        null,
+      ]) {
+        final container = upgrade(_before50(settings: settings));
+        expect(
+          container.read(relayPrefsProvider),
+          const RelayPrefs(localEnabled: false, hostedEnabled: true),
+          reason: '$settings',
+        );
+      }
+    });
+
+    test('prefs already written win over the old mode', () {
+      final container = upgrade(
+        _before50(
+          settings: {'remoteRelayMode': 'local'},
+          prefs: jsonEncode({'local': false, 'hosted': false}),
+        ),
+      );
+
+      expect(
+        container.read(relayPrefsProvider),
+        const RelayPrefs(localEnabled: false, hostedEnabled: false),
+      );
+    });
+
+    test('settings that still carry the old key load and save', () {
+      final container = upgrade(
+        _before50(
+          settings: {
+            'remoteRelayMode': 'local',
+            'remoteAccessEnabled': true,
+            'localRelayPort': 9001,
+          },
+        ),
+      );
+      final db = container.read(databaseProvider);
+
+      final loaded = container.read(settingsControllerProvider);
+      expect(loaded.remoteAccessEnabled, isTrue);
+      expect(loaded.localRelayPort, 9001);
+
+      container
+          .read(settingsControllerProvider.notifier)
+          .setLocalRelayPort(9002);
+      expect(SettingsRepository(db).load().localRelayPort, 9002);
+      expect(RelayPrefsController.readFrom(db)?.localEnabled, isTrue);
+    });
   });
 
   test('every combination is legal and survives a relaunch', () {
@@ -91,17 +184,7 @@ void main() {
     );
   });
 
-  test('stored prefs beat the legacy mode — turning local off stays off', () {
-    final first = open();
-    first
-        .read(settingsControllerProvider.notifier)
-        .setRemoteRelayMode(RelayMode.local);
-    first.read(relayPrefsProvider.notifier).setLocalEnabled(false);
-
-    expect(open().read(relayPrefsProvider).localEnabled, isFalse);
-  });
-
-  test('unreadable stored prefs fall back to the legacy mode', () {
+  test('unreadable stored prefs fall back to hosted', () {
     db.writeMetadata(kRelayPrefsMetadataKey, '{not json');
 
     expect(RelayPrefsController.readFrom(db), isNull);

@@ -6,7 +6,6 @@ import '../../../core/logging/diagnostics_providers.dart';
 import '../data/settings_repository.dart';
 import '../domain/app_theme_mode.dart';
 import '../domain/diagnostics_settings.dart';
-import '../domain/relay_mode.dart';
 import '../domain/settings.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
@@ -372,11 +371,6 @@ class SettingsController extends Notifier<Settings> {
       remoteRelayUrl: url,
       clearRemoteRelayUrl: url == null,
     );
-    _save();
-  }
-
-  void setRemoteRelayMode(RelayMode mode) {
-    state = state.copyWith(remoteRelayMode: mode);
     _save();
   }
 
