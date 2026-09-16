@@ -10,6 +10,7 @@ export 'src/domain/session_lifecycle.dart';
 export 'src/domain/session_recorder.dart';
 export 'src/domain/session_registry.dart';
 export 'src/domain/write_token.dart';
+export 'src/companion/companion_port_number.dart';
 export 'src/host_version.dart';
 export 'src/protocol/frame.dart';
 export 'src/protocol/messages.dart';

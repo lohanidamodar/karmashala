@@ -6,13 +6,9 @@ import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 
 import '../domain/session_registry.dart';
+import 'companion_port_number.dart';
 import 'companion_server.dart';
 import 'sealed_link.dart';
-
-/// The port a host listens on for phones. Its own, not the desktop's: a box may
-/// run both, and two listeners on one port is a failure at bind time rather
-/// than a question anybody wants to debug later.
-const int kHostCompanionPort = 47_820;
 
 /// Accepts companion links and gives each one to whoever it is for.
 ///
