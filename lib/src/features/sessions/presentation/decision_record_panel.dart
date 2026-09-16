@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/dialogs.dart';
 
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -248,8 +249,8 @@ class _RecordDecisionDialogState extends State<_RecordDecisionDialog> {
     final canSave = _summary.text.trim().isNotEmpty;
     return AlertDialog(
       title: const Text('Record a decision'),
-      content: SizedBox(
-        width: 460,
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
