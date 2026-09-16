@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -828,8 +829,6 @@ class _FailedBadge extends StatelessWidget {
   }
 }
 
-/// Keeps this message as a note, in one tap: its own words, nothing summarised
-/// and no dialog — you were mid-thought. Titling lives in the Notes panel.
 /// A run of finished tool calls as one line, opening into the rows it stands
 /// for. Collapsed by default: between two of the model's sentences, twenty file
 /// reads are one step.
@@ -915,71 +914,91 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
   }
 }
 
-class _SaveNoteButton extends StatefulWidget {
+/// Keeps this message as a note, in one tap: its own words, nothing summarised
+/// and no dialog — you were mid-thought. Titling lives in the Notes panel.
+class _SaveNoteButton extends StatelessWidget {
   const _SaveNoteButton({required this.onSave});
   final VoidCallback onSave;
 
   @override
-  State<_SaveNoteButton> createState() => _SaveNoteButtonState();
-}
-
-class _SaveNoteButtonState extends State<_SaveNoteButton> {
-  bool _saved = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return IconButton(
-      tooltip: _saved ? 'Saved to Notes' : 'Save as note',
-      visualDensity: VisualDensity.compact,
-      iconSize: Chrome.iconSmall,
-      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-      padding: EdgeInsets.zero,
-      color: _saved ? SemanticColors.of(context).idle : scheme.onSurfaceVariant,
-      icon: Icon(_saved ? AppIcons.check : AppIcons.notePencil),
-      onPressed: () async {
-        widget.onSave();
-        if (!mounted) return;
-        setState(() => _saved = true);
-        await Future<void>.delayed(const Duration(seconds: 2));
-        if (mounted) setState(() => _saved = false);
-      },
-    );
-  }
+  Widget build(BuildContext context) => _ConfirmingIconButton(
+    icon: AppIcons.notePencil,
+    tooltip: 'Save as note',
+    confirmedTooltip: 'Saved to Notes',
+    onPressed: () async => onSave(),
+  );
 }
 
 /// A low-emphasis copy-to-clipboard button shown on each message.
-class _CopyButton extends StatefulWidget {
+class _CopyButton extends StatelessWidget {
   const _CopyButton({required this.text});
   final String text;
 
   @override
-  State<_CopyButton> createState() => _CopyButtonState();
+  Widget build(BuildContext context) => _ConfirmingIconButton(
+    icon: AppIcons.copySimple,
+    tooltip: 'Copy message',
+    confirmedTooltip: 'Copied',
+    onPressed: () => Clipboard.setData(ClipboardData(text: text)),
+  );
 }
 
-class _CopyButtonState extends State<_CopyButton> {
-  bool _copied = false;
+/// A row action that shows a check for a moment once [onPressed] has done its
+/// work. The moment ends with the row: a closed session leaves no timer.
+class _ConfirmingIconButton extends StatefulWidget {
+  const _ConfirmingIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.confirmedTooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final String confirmedTooltip;
+  final Future<void> Function() onPressed;
+
+  @override
+  State<_ConfirmingIconButton> createState() => _ConfirmingIconButtonState();
+}
+
+class _ConfirmingIconButtonState extends State<_ConfirmingIconButton> {
+  static const _confirmFor = Duration(seconds: 2);
+  Timer? _settle;
+
+  bool get _confirmed => _settle?.isActive ?? false;
+
+  @override
+  void dispose() {
+    _settle?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _press() async {
+    await widget.onPressed();
+    if (!mounted) return;
+    _settle?.cancel();
+    setState(() {
+      _settle = Timer(_confirmFor, () {
+        if (mounted) setState(() {});
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final confirmed = _confirmed;
     return IconButton(
-      tooltip: _copied ? 'Copied' : 'Copy message',
+      tooltip: confirmed ? widget.confirmedTooltip : widget.tooltip,
       visualDensity: VisualDensity.compact,
       iconSize: Chrome.iconSmall,
       constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
       padding: EdgeInsets.zero,
-      color: _copied
+      color: confirmed
           ? SemanticColors.of(context).idle
-          : scheme.onSurfaceVariant,
-      icon: Icon(_copied ? AppIcons.check : AppIcons.copySimple),
-      onPressed: () async {
-        await Clipboard.setData(ClipboardData(text: widget.text));
-        if (!mounted) return;
-        setState(() => _copied = true);
-        await Future<void>.delayed(const Duration(seconds: 2));
-        if (mounted) setState(() => _copied = false);
-      },
+          : Theme.of(context).colorScheme.onSurfaceVariant,
+      icon: Icon(confirmed ? AppIcons.check : widget.icon),
+      onPressed: _press,
     );
   }
 }
