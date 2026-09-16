@@ -114,9 +114,9 @@ class _DeviceList extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (devices.isNotEmpty || simulators.isNotEmpty) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: Insets.lg),
           const DeviceSectionHeader(title: 'Connected'),
-          const SizedBox(height: 4),
+          const SizedBox(height: Insets.xs),
           for (final simulator in simulators)
             DeviceActionRow(
               key: Key('simulator-${simulator.udid}'),
@@ -191,7 +191,7 @@ class _DeviceList extends ConsumerWidget {
             ),
         ],
         if (anyEmulator) ...[
-          const SizedBox(height: 16),
+          const SizedBox(height: Insets.lg),
           DeviceSectionHeader(
             title: 'Emulators',
             action: TextButton(
@@ -202,7 +202,12 @@ class _DeviceList extends ConsumerWidget {
           ),
           if (idle.isEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              padding: const EdgeInsets.fromLTRB(
+                Insets.lg,
+                Insets.xs,
+                Insets.lg,
+                0,
+              ),
               child: Text(
                 'Every emulator is running — they are listed above.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(

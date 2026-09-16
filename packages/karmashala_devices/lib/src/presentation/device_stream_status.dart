@@ -177,9 +177,7 @@ class StreamIdleBadge extends StatelessWidget {
                     foregroundColor: ink,
                     visualDensity: VisualDensity.compact,
                     minimumSize: const Size(0, Chrome.control),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: Insets.xs,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     textStyle: theme.textTheme.labelSmall?.copyWith(
                       fontWeight: FontWeight.w600,
@@ -238,7 +236,7 @@ class StreamReconnectingOverlay extends StatelessWidget {
       color: theme.colorScheme.scrim.withValues(alpha: 0.72),
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Insets.lg),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -246,14 +244,14 @@ class StreamReconnectingOverlay extends StatelessWidget {
                 size: InlineSpinnerSize.large,
                 color: theme.colorScheme.onInverseSurface,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: Insets.sm),
               Text(
                 'Reconnecting…',
                 style: theme.textTheme.titleSmall?.copyWith(
                   color: theme.colorScheme.onInverseSurface,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: Insets.xs),
               Text(
                 label == null
                     ? 'This is the last frame received, not a live picture.'
@@ -298,16 +296,19 @@ class TransportBanner extends StatelessWidget {
     final label = deviceLabel;
     final text = label == null ? transportText : '$label · $transportText';
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.md,
+        vertical: Insets.xs,
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
             transport?.isContinuous ?? false ? AppIcons.handTap : AppIcons.info,
-            size: 14,
+            size: Chrome.iconAction,
             color: theme.colorScheme.outline,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: Insets.xs),
           Flexible(
             child: Text(
               text,

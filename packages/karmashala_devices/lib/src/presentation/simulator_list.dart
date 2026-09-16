@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/primitives.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../application/device_ports.dart';
 import '../application/ios_device_providers.dart';
@@ -44,7 +45,7 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 16),
+        const SizedBox(height: Insets.lg),
         DeviceSectionHeader(
           title: 'iOS Simulators',
           action: TextButton(
@@ -55,7 +56,12 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
         ),
         if (startable.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+            padding: const EdgeInsets.fromLTRB(
+              Insets.lg,
+              Insets.sm,
+              Insets.sm,
+              0,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -81,7 +87,7 @@ class _SimulatorListState extends ConsumerState<SimulatorList> {
                     onChanged: (value) => setState(() => _picked = value),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: Insets.sm),
                 _StartButton(
                   // Booting is slow — ten seconds and up — and nothing else
                   // on screen changes, so the button has to say so itself.
@@ -142,7 +148,10 @@ class _SlimOnStart extends ConsumerWidget {
           key: const Key('slim-on-start'),
           dense: true,
           controlAffinity: ListTileControlAffinity.trailing,
-          contentPadding: const EdgeInsets.only(left: 16, right: 12),
+          contentPadding: const EdgeInsets.only(
+            left: Insets.lg,
+            right: Insets.md,
+          ),
           value: enabled,
           title: const Text('Slim on start'),
           subtitle: Text(
@@ -158,7 +167,12 @@ class _SlimOnStart extends ConsumerWidget {
         ),
         if (enabled && booted)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: const EdgeInsets.fromLTRB(
+              Insets.lg,
+              0,
+              Insets.lg,
+              Insets.sm,
+            ),
             child: Text(
               'A running simulator keeps the services it booted with. Stop and '
               'start it to slim it.',

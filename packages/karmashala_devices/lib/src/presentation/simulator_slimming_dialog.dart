@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/device_ports.dart';
 import '../application/ios_device_providers.dart';
@@ -35,66 +36,61 @@ class SimulatorSlimmingDialog extends ConsumerWidget {
 
     return AlertDialog(
       title: const Text('Simulator slimming'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SwitchListTile(
-                key: const Key('slimming-enabled'),
-                contentPadding: EdgeInsets.zero,
-                value: enabled,
-                title: const Text('Slim simulators when they start'),
-                subtitle: const Text(
-                  'A stock iOS simulator boots around 358 background services '
-                  'to serve a user who is not there. Switching off the ones '
-                  'below took memory from 3.1 GB to 0.9 GB and boot from 15.8s '
-                  'to 9.6s on an iPhone 17.',
-                ),
-                onChanged: controller.setSimulatorSlimming,
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SwitchListTile(
+              key: const Key('slimming-enabled'),
+              contentPadding: EdgeInsets.zero,
+              value: enabled,
+              title: const Text('Slim simulators when they start'),
+              subtitle: const Text(
+                'A stock iOS simulator boots around 358 background services '
+                'to serve a user who is not there. Switching off the ones '
+                'below took memory from 3.1 GB to 0.9 GB and boot from 15.8s '
+                'to 9.6s on an iPhone 17.',
               ),
-              const SizedBox(height: Insets.sm),
-              Text(
-                // The one thing about this that surprises people. launchd reads
-                // the file at boot, so nothing here can reach a running device.
-                'Applied when a simulator starts. A simulator that is already '
-                'running keeps the services it booted with — stop and start it '
-                'to slim it.',
+              onChanged: controller.setSimulatorSlimming,
+            ),
+            const SizedBox(height: Insets.sm),
+            Text(
+              // The one thing about this that surprises people. launchd reads
+              // the file at boot, so nothing here can reach a running device.
+              'Applied when a simulator starts. A simulator that is already '
+              'running keeps the services it booted with — stop and start it '
+              'to slim it.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const Divider(height: Insets.xl),
+            Text('Keep running', style: theme.textTheme.titleSmall),
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
+              child: Text(
+                'Ticked groups keep running. The three ticked by default are '
+                'the ones a Flutter app is most likely to need and whose '
+                'absence is hardest to diagnose — untick them if your app '
+                'has no push notifications, photo picker or universal links.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              const Divider(height: Insets.xl),
-              Text('Keep running', style: theme.textTheme.titleSmall),
-              Padding(
-                padding: const EdgeInsets.only(
-                  top: Insets.xs,
-                  bottom: Insets.sm,
-                ),
-                child: Text(
-                  'Ticked groups keep running. The three ticked by default are '
-                  'the ones a Flutter app is most likely to need and whose '
-                  'absence is hardest to diagnose — untick them if your app '
-                  'has no push notifications, photo picker or universal links.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
+            ),
+            for (final category in SlimmingCategory.values)
+              _CategoryTile(
+                category: category,
+                keep: kept.contains(category),
+                // Nothing is switched off at all while slimming is off, so
+                // offering the choice would be a lie about what will happen.
+                onChanged: enabled
+                    ? (keep) => setKept(category, keep: keep)
+                    : null,
               ),
-              for (final category in SlimmingCategory.values)
-                _CategoryTile(
-                  category: category,
-                  keep: kept.contains(category),
-                  // Nothing is switched off at all while slimming is off, so
-                  // offering the choice would be a lie about what will happen.
-                  onChanged: enabled
-                      ? (keep) => setKept(category, keep: keep)
-                      : null,
-                ),
-            ],
-          ),
+          ],
         ),
       ),
       actions: [

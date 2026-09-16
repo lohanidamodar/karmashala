@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:karmashala_ui/tokens.dart';
+
 /// The heading over one group of devices, with the one control that governs
 /// it. Shared, so three indents down one column do not read as three panels.
 class DeviceSectionHeader extends StatelessWidget {
@@ -15,7 +17,12 @@ class DeviceSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     // The right inset is smaller because a `TextButton` carries its own
     // padding; without that the action hangs further out than the rows.
-    padding: EdgeInsets.fromLTRB(16, 0, action == null ? 16 : 8, 0),
+    padding: EdgeInsets.fromLTRB(
+      Insets.lg,
+      0,
+      action == null ? Insets.lg : Insets.sm,
+      0,
+    ),
     child: Row(
       children: [
         Expanded(
