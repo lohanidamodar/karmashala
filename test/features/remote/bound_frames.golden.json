@@ -38,6 +38,7 @@
                       ],
                       "max": 12582912
                     },
+                    "environmentName": "Windows",
                     "environmentId": "windows",
                     "environmentKind": "windowsNative"
                   },
@@ -67,6 +68,7 @@
                       ],
                       "max": 12582912
                     },
+                    "environmentName": "Windows",
                     "environmentId": "windows",
                     "environmentKind": "windowsNative"
                   },
@@ -96,6 +98,7 @@
                       ],
                       "max": 12582912
                     },
+                    "environmentName": "Windows",
                     "environmentId": "windows",
                     "environmentKind": "windowsNative"
                   },
@@ -121,6 +124,7 @@
                       "max": 0,
                       "why": "This agent is not known to open a file named in a prompt."
                     },
+                    "environmentName": "Windows",
                     "environmentId": "windows",
                     "environmentKind": "windowsNative"
                   },
@@ -145,6 +149,7 @@
                       "max": 0,
                       "why": "This is imported history, read-only here — continue it in its own terminal to attach anything."
                     },
+                    "environmentName": "Windows",
                     "environmentId": "windows",
                     "environmentKind": "windowsNative"
                   },
@@ -175,6 +180,7 @@
                       "max": 12582912
                     },
                     "environmentBadge": "WSL · Ubuntu",
+                    "environmentName": "WSL · Ubuntu",
                     "environmentId": "wsl:Ubuntu",
                     "environmentKind": "wsl"
                   },
@@ -200,6 +206,7 @@
                       "why": "This is imported history, read-only here — continue it in its own terminal to attach anything."
                     },
                     "environmentBadge": "WSL · Ubuntu",
+                    "environmentName": "WSL · Ubuntu",
                     "environmentId": "wsl:Ubuntu",
                     "environmentKind": "wsl"
                   },
@@ -226,6 +233,7 @@
                       "why": "build-box runs on another machine — a file written here is not a file it can open."
                     },
                     "environmentBadge": "SSH · build-box",
+                    "environmentName": "SSH · build-box",
                     "environmentId": "ssh:build-box",
                     "environmentKind": "ssh"
                   }
@@ -277,6 +285,7 @@
                   ],
                   "max": 12582912
                 },
+                "environmentName": "Windows",
                 "environmentId": "windows",
                 "environmentKind": "windowsNative"
               }

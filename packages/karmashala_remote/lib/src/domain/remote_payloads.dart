@@ -36,6 +36,7 @@ class RemoteSessionSnapshot {
     this.branch,
     this.attachments,
     this.environmentBadge,
+    this.environmentName,
     this.environmentId,
     this.environmentKind,
   });
@@ -111,6 +112,18 @@ class RemoteSessionSnapshot {
   /// The badge on a non-local session card ("WSL · Ubuntu"); null for local.
   final String? environmentBadge;
 
+  /// What the desktop calls the machine this runs on — "macOS", "Windows",
+  /// "Ubuntu". Sent **because [environmentBadge] is deliberately null for the
+  /// local host**: a badge is what tells a session card apart from the host the
+  /// user is sitting at, but the phone is not sitting at it, and the machine
+  /// still needs a name there. Without this the machine list fell back to
+  /// [environmentId], whose value for the local host is the literal `windows`
+  /// on every platform — so a Mac appeared in the picker as "windows".
+  ///
+  /// Null from a desktop older than this field; the phone then shows what it
+  /// can and never invents a name.
+  final String? environmentName;
+
   /// The desktop's own id for the machine this runs on, and what kind it is.
   /// **Both null from a desktop older than this field** — the phone groups by
   /// name then and never invents an id, which would collide across desktops.
@@ -148,6 +161,7 @@ class RemoteSessionSnapshot {
         branch: branch,
         attachments: attachments,
         environmentBadge: environmentBadge ?? this.environmentBadge,
+        environmentName: environmentName,
         environmentId: environmentId,
         environmentKind: environmentKind,
       );
@@ -177,6 +191,7 @@ class RemoteSessionSnapshot {
     if (branch != null) 'branch': branch,
     if (attachments != null) 'attach': attachments!.toJson(),
     if (environmentBadge != null) 'environmentBadge': environmentBadge,
+    if (environmentName != null) 'environmentName': environmentName,
     if (environmentId != null) 'environmentId': environmentId,
     if (environmentKind != null) 'environmentKind': environmentKind,
   };
@@ -213,6 +228,7 @@ class RemoteSessionSnapshot {
       branch: str(json['branch']),
       attachments: RemoteAttachmentSupport.parse(json['attach']),
       environmentBadge: str(json['environmentBadge']),
+      environmentName: str(json['environmentName']),
       environmentId: str(json['environmentId']),
       environmentKind: str(json['environmentKind']),
     );
@@ -244,6 +260,7 @@ class RemoteSessionSnapshot {
       other.branch == branch &&
       other.attachments == attachments &&
       other.environmentBadge == environmentBadge &&
+      other.environmentName == environmentName &&
       other.environmentId == environmentId &&
       other.environmentKind == environmentKind;
 
@@ -273,6 +290,7 @@ class RemoteSessionSnapshot {
       branch,
       attachments,
       environmentBadge,
+      environmentName,
       environmentId,
       environmentKind,
     ),

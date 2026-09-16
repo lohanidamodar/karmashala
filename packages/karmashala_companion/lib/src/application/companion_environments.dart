@@ -69,7 +69,10 @@ List<CompanionEnvironment> companionEnvironments(
     final tally = byKey.putIfAbsent(
       key,
       () => _Tally(
-        label: session.environmentBadge ?? key,
+        // The name, before the id. `environmentBadge` is null for the local
+        // host by design, and the id it fell back to is the literal `windows`
+        // on every platform — so a Mac listed itself here as "windows".
+        label: session.environmentBadge ?? session.environmentName ?? key,
         kind: session.environmentKind,
       ),
     );

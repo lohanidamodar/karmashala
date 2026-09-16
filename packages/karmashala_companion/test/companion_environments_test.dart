@@ -37,6 +37,46 @@ void main() {
     expect(found.single.sessions, 3);
   });
 
+  test('the local host is named, never keyed', () {
+    // What the desktop really sends for the machine it runs on: NO badge — a
+    // badge is what tells a session card apart from the host you are sitting
+    // at, and `environmentBadge` is null for the local host by design — but a
+    // name. Every other fixture in this file sets a badge, which is why none of
+    // them caught this.
+    //
+    // Without the name the label fell back to the id, and the local host's id
+    // is the literal `windows` on every platform. A Mac listed itself as
+    // "windows", next to a row reading "do-box".
+    final found = companionEnvironments([
+      summary('a', environmentId: 'windows', environmentName: 'macOS',
+          environmentKind: 'localPosix', projectId: 'p1'),
+      summary('b', environmentId: 'ssh:h1', environmentBadge: 'do-box',
+          environmentKind: 'ssh', projectId: 'p2'),
+    ]);
+
+    expect([for (final e in found) e.label], ['macOS', 'do-box']);
+    expect(
+      found.first.label,
+      isNot('windows'),
+      reason: 'the database key is not a machine name',
+    );
+  });
+
+  test('a machine known only from sessions is still named', () {
+    // The timing case: sessions arrive before the workspace snapshot, so the
+    // project branch — which has always had a name to fall back on — has
+    // nothing to tally yet and the session branch names every machine.
+    final found = companionEnvironments(
+      [
+        summary('a', environmentId: 'windows', environmentName: 'macOS',
+            environmentKind: 'localPosix', projectId: 'p1'),
+      ],
+      projects: const [],
+    );
+
+    expect(found.single.label, 'macOS');
+  });
+
   test('two machines sharing a name stay two machines', () {
     final found = companionEnvironments([
       summary('a', environmentId: 'ssh:one', environmentBadge: 'build-box',

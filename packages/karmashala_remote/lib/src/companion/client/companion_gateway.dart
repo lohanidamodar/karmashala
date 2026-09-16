@@ -202,6 +202,7 @@ class CompanionSessionSummary {
     this.folderMissing = false,
     this.attachments,
     this.environmentBadge,
+    this.environmentName,
     this.environmentId,
     this.environmentKind,
   });
@@ -257,6 +258,14 @@ class CompanionSessionSummary {
   /// The badge on a non-local session card ("WSL · Ubuntu"); null for local.
   final String? environmentBadge;
 
+  /// What the desktop calls this machine — "macOS", "Windows", "Ubuntu".
+  ///
+  /// The machine list needs it precisely because [environmentBadge] is null for
+  /// the local host: without a name the list fell back to [environmentId], and
+  /// the local host's id is the literal `windows` on every platform, so a Mac
+  /// showed up in the picker as "windows". Null from an older desktop.
+  final String? environmentName;
+
   /// The desktop's own id for the machine this runs on, and what kind it is.
   /// **Null from a desktop older than these fields** — the phone groups by the
   /// badge then, and never invents an id.
@@ -290,6 +299,7 @@ class CompanionSessionSummary {
     folderMissing: folderMissing,
     attachments: attachments,
     environmentBadge: environmentBadge ?? this.environmentBadge,
+    environmentName: environmentName,
     environmentId: environmentId,
     environmentKind: environmentKind,
   );

@@ -34,6 +34,7 @@ CompanionSessionSummary summary(
   bool imported = false,
   RemoteAttachmentSupport? attachments,
   String? environmentBadge,
+  String? environmentName,
   String? environmentId,
   String? environmentKind,
 }) => CompanionSessionSummary(
@@ -55,6 +56,7 @@ CompanionSessionSummary summary(
   imported: imported,
   attachments: attachments,
   environmentBadge: environmentBadge,
+  environmentName: environmentName,
   environmentId: environmentId,
   environmentKind: environmentKind,
 );
