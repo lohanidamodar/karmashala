@@ -36,6 +36,13 @@ class SettingsScreen extends StatefulWidget {
   /// backs out — how [SettingsTabView] keeps the page outside a dropped `State`.
   final ValueChanged<SettingsSectionId?>? onSectionChanged;
 
+  /// The section list's width beside the page, in the two-column layout.
+  static const navWidth = 208.0;
+
+  /// The widest a section's page grows: a wide window adds margin, not
+  /// 900px-long switch rows.
+  static const contentMaxWidth = 720.0;
+
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
@@ -114,7 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     SizedBox(
-                      width: 208,
+                      width: SettingsScreen.navWidth,
                       child: FocusTraversalGroup(
                         child: SettingsNav(
                           selected: _selected,
@@ -155,7 +162,9 @@ class _SectionContent extends StatelessWidget {
       child: Align(
         alignment: Alignment.topLeft,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
+          constraints: const BoxConstraints(
+            maxWidth: SettingsScreen.contentMaxWidth,
+          ),
           child: _pageFor(section),
         ),
       ),

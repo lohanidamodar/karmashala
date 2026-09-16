@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
+import 'package:karmashala/src/core/apps/installed_application.dart';
+import 'package:karmashala/src/core/apps/installed_applications_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
@@ -23,6 +25,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/settings/presentation/choose_application_dialog.dart';
 import 'package:karmashala/src/features/settings/presentation/external_app_section.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
@@ -463,6 +466,43 @@ void main() {
         WindowCell('390x844 @ 1.3x', Size(390, 844), textScale: 1.3),
       ],
       because: 'settings also draw in a single narrow column',
+    );
+  });
+
+  testWidgets('the choose-application dialog with a long list', (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        ...noProcessOverrides(),
+        installedApplicationsProvider.overrideWith(
+          (ref) async => [
+            for (var i = 0; i < 40; i++)
+              InstalledApplication(
+                name: 'Application number $i with a descriptive name',
+                launchPath: '/Applications/Utilities/Application $i.app',
+                source: 'Applications',
+              ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => app(
+        container,
+        Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () =>
+                  chooseInstalledApplication(context, what: 'a terminal'),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      ),
+      warmUp: (tester) async => tester.tap(find.text('Open')),
+      matrix: settingsMatrix,
+      because: 'the list asks for 480x420 inside a 560px-tall window',
     );
   });
 }

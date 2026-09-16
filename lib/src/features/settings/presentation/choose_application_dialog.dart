@@ -29,6 +29,9 @@ class _ChooseApplicationDialog extends ConsumerStatefulWidget {
 
 class _ChooseApplicationDialogState
     extends ConsumerState<_ChooseApplicationDialog> {
+  /// The list's height at its tallest; the dialog shrinks it to the window.
+  static const _listHeight = 420.0;
+
   final _query = TextEditingController();
 
   @override
@@ -45,8 +48,8 @@ class _ChooseApplicationDialogState
     return AlertDialog(
       title: Text('Choose ${widget.what}'),
       content: SizedBox(
-        width: 480,
-        height: 420,
+        width: DialogWidth.regular,
+        height: _listHeight,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -24,6 +24,9 @@ class SettingsRow extends StatelessWidget {
   /// ~320; a switch takes what it takes.
   final double controlMaxWidth;
 
+  /// Below this width the control drops under its label.
+  static const stackBelow = 440.0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -42,7 +45,7 @@ class SettingsRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: Insets.xs + 2),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          if (constraints.maxWidth < 440) {
+          if (constraints.maxWidth < stackBelow) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

@@ -67,9 +67,39 @@ void main() {
     );
   });
 
+  // Sizes a token names. A 1 or 2px optical nudge stays a number; 4 and up
+  // is a step on the spacing scale.
+  final literalSize = RegExp(
+    r'SizedBox\((height|width): [0-9]|EdgeInsets\.\w+\([^)]*(?<![.\w])([4-9]|[1-9][0-9]+)(?![.\w])'
+    r'|TextStyle\(|maxWidth: [0-9]|maxWidth < [0-9]|width: [0-9]{3}',
+  );
+
+  test('the swept files use tokens, not size literals', () {
+    // Files cleared of literals, which may not take them back. Named sizes
+    // live as `static const` on their widget.
+    const swept = {
+      'lib/src/features/projects/presentation/new_project_dialog.dart',
+      'lib/src/features/cli_detection/presentation/detected_projects_view.dart',
+      'lib/src/features/settings/presentation/settings_row.dart',
+      'lib/src/features/settings/presentation/settings_screen.dart',
+      'lib/src/features/settings/presentation/choose_application_dialog.dart',
+    };
+    expect(
+      hits(literalSize).where((hit) => swept.contains(hit.split(':').first)),
+      isEmpty,
+      reason: 'use Insets, DialogWidth, a text theme style or a named const',
+    );
+  });
+
   test('the guards can fail', () {
     expect(card.hasMatch('return Card('), isTrue);
     expect(card.hasMatch('SettingsCard('), isFalse);
     expect(spinner.hasMatch('child: CircularProgressIndicator()'), isTrue);
+    expect(literalSize.hasMatch('const SizedBox(height: 12)'), isTrue);
+    expect(literalSize.hasMatch('EdgeInsets.fromLTRB(16, 12, 12, 8)'), isTrue);
+    expect(literalSize.hasMatch('EdgeInsets.only(top: 2)'), isFalse);
+    expect(literalSize.hasMatch('EdgeInsets.all(Insets.xl)'), isFalse);
+    expect(literalSize.hasMatch('if (constraints.maxWidth < 440) {'), isTrue);
+    expect(literalSize.hasMatch('width: 208,'), isTrue);
   });
 }

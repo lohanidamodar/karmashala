@@ -334,7 +334,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                 _suggestWorkspace();
               }),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: Insets.md),
             TextField(
               controller: _gitUrlController,
               decoration: const InputDecoration(
@@ -352,7 +352,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                 }
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: Insets.md),
             PathFieldRow.inDialog(
               controller: _folderController,
               label: isSsh
@@ -379,13 +379,13 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
             ),
             if (preview != null)
               Padding(
-                padding: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.only(top: Insets.xs),
                 child: Text(
                   'Stored as: $preview',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-            const SizedBox(height: 12),
+            const SizedBox(height: Insets.md),
             TextField(
               controller: _nameController,
               decoration: const InputDecoration(
@@ -393,10 +393,10 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                 hintText: 'Karmashala',
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: Insets.md),
             _workspaceField(workspaces),
             if (_error != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: Insets.md),
               DesktopErrorBanner(_error!),
             ],
           ],
@@ -435,7 +435,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: Insets.sm),
           IconButton(
             tooltip: 'Pick an existing context instead',
             icon: const Icon(AppIcons.x, size: Chrome.icon),
@@ -476,7 +476,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                   }),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: Insets.sm),
         IconButton(
           tooltip: 'New context',
           icon: const Icon(AppIcons.plus, size: Chrome.icon),

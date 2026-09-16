@@ -16,6 +16,30 @@ import 'package:agent_cli/read.dart';
 class DetectedProjectsView extends ConsumerWidget {
   const DetectedProjectsView({super.key});
 
+  /// The largest the view is drawn in its dialog; a smaller window shrinks it.
+  static const dialogMaxSize = Size(820, 680);
+
+  /// Starts a scan and opens the view in a dialog — the one way in, so the
+  /// app menu and the Explorer do not each size their own.
+  static Future<void> show(BuildContext context) {
+    ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(detectedProjectsControllerProvider.notifier).detect();
+    return showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: dialogMaxSize.width,
+            maxHeight: dialogMaxSize.height,
+          ),
+          child: const DetectedProjectsView(),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -26,11 +50,16 @@ class DetectedProjectsView extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 12, 8),
+          padding: const EdgeInsets.fromLTRB(
+            Insets.lg,
+            Insets.md,
+            Insets.md,
+            Insets.sm,
+          ),
           child: Row(
             children: [
               Icon(AppIcons.globe, color: theme.colorScheme.primary),
-              const SizedBox(width: 10),
+              const SizedBox(width: Insets.sm),
               Expanded(
                 child: Text(
                   'Detected sessions (Claude Code · Codex)',
@@ -73,17 +102,19 @@ class DetectedProjectsView extends ConsumerWidget {
             ),
             error: (e, _) => Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(Insets.xl),
                 child: Text(
                   '$e',
-                  style: TextStyle(color: theme.colorScheme.error),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
                 ),
               ),
             ),
             data: (projects) => projects.isEmpty
                 ? const Center(
                     child: Padding(
-                      padding: EdgeInsets.all(24),
+                      padding: EdgeInsets.all(Insets.xl),
                       child: Text(
                         'No sessions detected yet.\nPress Detect to scan the '
                         'Claude Code, Codex, and Antigravity stores (Windows + WSL).',
@@ -131,14 +162,17 @@ class _ProjectTile extends StatelessWidget {
             _Badge(agentId: AgentIds.antigravity, count: antigravity),
         ],
       ),
-      childrenPadding: const EdgeInsets.only(left: 8, bottom: 8),
+      childrenPadding: const EdgeInsets.only(
+        left: Insets.sm,
+        bottom: Insets.sm,
+      ),
       children: [
         for (final session in project.sessions) _SessionTile(session: session),
         if (project.subagentSessions.isNotEmpty)
           ExpansionTile(
             leading: const Icon(AppIcons.treeStructure),
             title: Text('Subagents (${project.subagentSessions.length})'),
-            childrenPadding: const EdgeInsets.only(left: 16),
+            childrenPadding: const EdgeInsets.only(left: Insets.lg),
             children: [
               for (final session in project.subagentSessions)
                 _SessionTile(session: session, subagent: true),
