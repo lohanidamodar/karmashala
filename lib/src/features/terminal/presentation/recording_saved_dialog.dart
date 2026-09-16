@@ -46,8 +46,8 @@ class _RecordingSavedDialog extends ConsumerWidget {
             '${_seconds(duration)} · ${saved.cast.events.length} chunks · '
             '${saved.cast.columns}x${saved.cast.rows}',
       ),
-      content: SizedBox(
-        width: 520,
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -173,6 +173,8 @@ class _FormatRow extends ConsumerWidget {
   final RecordingFormat format;
   final CastFrameStyle style;
 
+  static const _buttonColumn = 150.0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -180,8 +182,10 @@ class _FormatRow extends ConsumerWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(
-          width: 150,
+        // A floor rather than a width, so the three descriptions line up and a
+        // label grown by the text scale still fits its button.
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: _buttonColumn),
           child: OutlinedButton(
             onPressed: () => ref
                 .read(terminalRecordingProvider.notifier)
