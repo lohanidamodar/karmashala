@@ -373,10 +373,13 @@ but the analyzer ever compiles it. Three of its files carried 72 errors for a
 day in September 2026 because every analyze command in flight listed
 `lib test packages host` and left it out.
 
-`packages/` covers the standalone binaries too — `host`, `mcp_bridge` and
-`relay` are not workspace members (they resolve on their own lock files so
+`packages/` covers the standalone binaries too — `mcp_bridge` and `relay` are
+not workspace members (they resolve on their own lock files so
 `dart compile exe` can reach them), but they live under `packages/` like
-everything else, so naming the one directory analyzes them all. `mcp_bridge`
+everything else, so naming the one directory analyzes them all. **`host` joined
+the workspace on 2026-09-15**: it carries the app's store, `sqlite3` has a build
+hook, and `dart compile exe` refuses any target with one — so the exemption
+bought it nothing and it is built with `dart build cli` instead (§22). `mcp_bridge`
 sat outside it until 2026-09-15 and was therefore in no analyze command at all:
 the bridge every WSL session gets its tools through was compiled by the release
 recipe and analyzed by nothing. Membership is declared in a package's own
@@ -1158,3 +1161,41 @@ next function.
 
 **When trimming, a fact that is load-bearing and not already in `SETTLED.md`
 moves there in one sentence** rather than being deleted. Everything else goes.
+
+## 22. The session host is a bundle, and it is built where it runs
+
+`packages/host` carries the app's store (`packages/karmashala_store`), so it
+depends on `sqlite3`, which has a build hook. Two rules follow, and both bite
+silently if forgotten.
+
+**Build it with `dart build cli`, never `dart compile exe`.** `compile exe`
+refuses any target with a build hook — *"does not support build hooks. Packages
+with build hooks: sqlite3."* The output is a directory, not a file:
+
+```txt
+<out>/bundle/bin/karmashala_host[.exe]
+<out>/bundle/lib/libsqlite3.so   (sqlite3.dll on Windows)
+```
+
+Pass `-o <out>` so nothing has to know the `<os>_<arch>` directory name. The
+executable finds its SQLite at `../lib`, so **the bundle cannot be flattened** —
+not beside `karmashala.exe`, not into a remote `bin/`.
+
+**Build each platform's bundle on that platform.** A Linux bundle
+cross-compiled on Windows is a sound ELF next to a sound `.so` and still cannot
+load it: the library's relative path is written with the *building* machine's
+separator, so it looks for `..\lib\libsqlite3.so`. `karmashala_host probe-store`
+reports that as `STORE MISLINKED`. Linux bundles come from the
+`build-host-linux` job on `ubuntu-latest`; `tool/build_release.bat` builds only
+this machine's and downloads the rest.
+
+The deployed box needs **no `libsqlite3` of its own** — SQLite is bundled. The
+deployer uploads one tarball per target and unpacks it; `probe-store` says which
+of four things is wrong when a machine cannot hold a store.
+
+**In tests, never `dart run` the host.** Every spawn stages the bundled library
+into `.dart_tool/`, and parallel workers collide on the locked library. The live
+harnesses build once per isolate instead.
+
+The full reasoning, and what was measured, is in `docs/SETTLED.md` under *"The
+store became a package and the host stopped being one file"*.
