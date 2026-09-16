@@ -67,7 +67,7 @@ class _RunList extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Toolbar(
+        PaneSubToolbar(
           title: runs.isEmpty
               ? 'No runs'
               : '${runs.length} run${runs.length == 1 ? '' : 's'}',
@@ -87,7 +87,6 @@ class _RunList extends ConsumerWidget {
                   ],
                 ),
         ),
-        const Divider(height: 1),
         if (runs.isEmpty)
           const Expanded(
             child: PanePlaceholder(
@@ -182,7 +181,7 @@ class _RunDetail extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Toolbar(
+        PaneSubToolbar(
           leading: IconButton(
             iconSize: Chrome.icon,
             visualDensity: VisualDensity.compact,
@@ -194,7 +193,6 @@ class _RunDetail extends ConsumerWidget {
           title: run.title,
           trailing: _RunActions(run: run),
         ),
-        const Divider(height: 1),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(Insets.md),
@@ -762,37 +760,6 @@ class _VerdictChip extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Toolbar extends StatelessWidget {
-  const _Toolbar({required this.title, this.leading, this.trailing});
-
-  final String title;
-  final Widget? leading;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SizedBox(
-      height: Chrome.tabStrip,
-      child: Row(
-        children: [
-          if (leading != null) leading! else const SizedBox(width: Insets.md),
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall,
-            ),
-          ),
-          ?trailing,
-          const SizedBox(width: Insets.xs),
         ],
       ),
     );

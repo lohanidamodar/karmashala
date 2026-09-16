@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -139,6 +140,26 @@ void main() {
     expect(find.text('WSL'), findsNothing);
   });
 
+  testWidgets('an empty library is the house empty state, at its own height', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host((_) => const SnippetLibraryDialog()));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    final empty = find.byType(PanePlaceholder);
+    expect(empty, findsOneWidget);
+    expect(
+      find.descendant(
+        of: empty,
+        matching: find.textContaining('Nothing saved'),
+      ),
+      findsOneWidget,
+    );
+    // A dialog, not a pane: the empty state does not stretch it to the window.
+    expect(tester.getSize(empty).height, lessThan(300));
+  });
+
   testWidgets('the library lists what is saved and can remove one', (
     tester,
   ) async {
@@ -176,7 +197,8 @@ void main() {
       CommandSnippet(
         id: 'sn1',
         label: 'Run the tests on this machine only, excluding the live ones',
-        command: 'flutter test --exclude-tags=live-ssh,live-wsl --concurrency=4',
+        command:
+            'flutter test --exclude-tags=live-ssh,live-wsl --concurrency=4',
         submit: true,
         createdAt: testTime,
         updatedAt: testTime,
@@ -200,7 +222,9 @@ void main() {
           addTearDown(scope.dispose);
           return UncontrolledProviderScope(
             container: scope,
-            child: MaterialApp(home: Scaffold(body: Center(child: dialog))),
+            child: MaterialApp(
+              home: Scaffold(body: Center(child: dialog)),
+            ),
           );
         },
       );

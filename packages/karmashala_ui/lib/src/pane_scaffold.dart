@@ -101,6 +101,53 @@ class PaneHeader extends StatelessWidget {
   }
 }
 
+/// The strip under a [PaneHeader] for a level inside the pane — a list's count,
+/// or a back button and the item's title — with the surface's own [trailing]
+/// actions and a hairline. Never a close button: the header above owns that.
+class PaneSubToolbar extends StatelessWidget {
+  const PaneSubToolbar({
+    required this.title,
+    this.leading,
+    this.trailing,
+    super.key,
+  });
+
+  final String title;
+
+  /// Before the title, typically a back button. Null insets the title instead.
+  final Widget? leading;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(
+          height: Chrome.tabStripOf(context),
+          child: Row(
+            children: [
+              leading ?? const SizedBox(width: Insets.md),
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ),
+              ?trailing,
+              const SizedBox(width: Insets.xs),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+      ],
+    );
+  }
+}
+
 /// A consistent frame for a shell pane: a [PaneHeader] over a body. Flat, not a
 /// card — a desktop shell is one surface divided by hairlines.
 class PaneScaffold extends StatelessWidget {
@@ -151,6 +198,7 @@ class PanePlaceholder extends StatelessWidget {
     this.icon,
     this.iconColor,
     this.action,
+    this.fillHeight = true,
     super.key,
   });
 
@@ -166,11 +214,16 @@ class PanePlaceholder extends StatelessWidget {
   /// The way out of the empty state, when there is one.
   final Widget? action;
 
+  /// False sizes it to its content instead of filling the height it is given —
+  /// in a dialog, whose body would otherwise stretch to the window.
+  final bool fillHeight;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
     final content = Center(
+      heightFactor: fillHeight ? null : 1,
       child: Padding(
         padding: const EdgeInsets.all(Insets.xl),
         child: Column(
@@ -193,6 +246,7 @@ class PanePlaceholder extends StatelessWidget {
         ),
       ),
     );
+    if (!fillHeight) return content;
     // Centred while it fits, scrollable once it does not: a 240px side panel at
     // 1.3x text is shorter than the message, and the action is the way out.
     return LayoutBuilder(

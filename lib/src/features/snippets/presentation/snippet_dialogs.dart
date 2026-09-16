@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../terminal/application/terminal_profiles.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -271,14 +272,12 @@ class SnippetLibraryDialog extends ConsumerWidget {
       content: SizedBox(
         width: DialogWidth.regular,
         child: snippets.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.all(Insets.xl),
-                child: Text(
-                  'Nothing saved yet. A snippet is a command you keep so you '
-                  'can pick it instead of retyping it — in any terminal, from '
-                  'the palette or the toolbar.',
-                  style: theme.textTheme.bodySmall,
-                ),
+            ? const PanePlaceholder(
+                message:
+                    'Nothing saved yet. A snippet is a command you keep so you '
+                    'can pick it instead of retyping it — in any terminal, from '
+                    'the palette or the toolbar.',
+                fillHeight: false,
               )
             : ListView.builder(
                 shrinkWrap: true,
