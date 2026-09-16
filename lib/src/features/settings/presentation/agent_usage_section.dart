@@ -19,6 +19,7 @@ import 'agent_label.dart';
 import 'settings_catalog.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
+import 'usage_tokens_card.dart';
 
 /// Usage / limits per agent installation, fetched on demand from the vendor
 /// OAuth endpoints with the token each install already stores.
@@ -52,6 +53,7 @@ class _UsageSectionState extends ConsumerState<UsageSection> {
                     // A card's reading changes what the comparison shows.
                     onReading: () => setState(() {}),
                   ),
+                const UsageTokensCard(),
               ],
             ),
     );
