@@ -17,6 +17,58 @@ installs claim the same version name.
 
 ---
 
+## 1.25.0 — 2026-09-16 (build 44)
+
+**Browsing for a file is Karmashala's own job now, and a project can be
+edited.** Schema head moves to **v49**.
+
+- **The host's file dialog is gone from the desktop.** It had stopped drawing
+  at all in this process: measured on a hung app, `IFileDialog::Show` had been
+  entered and **no dialog window ever existed**, while the same dialog opened
+  in 2.1 s in a plain process on the same machine. Two shell lists were feeding
+  it `\\wsl.localhost` paths and both are now dropped before any dialog —
+  `LastVisitedPidlMRU`, which is keyed on the executable and so ours to delete,
+  and the WSL/UNC rows of `OpenSavePidlMRU`, which is keyed on the *extension*
+  and shared with every other application. That second one is the whole
+  difference between two pickers here: `*.exe` read a clean key and opened in
+  828 ms, `*.apk` found no key of its own, fell back to `*`, and bound the two
+  `wsl$` rows there.
+- **A browser that lists directories itself**, with `dart:io` — whose listing
+  is asynchronous, so a slow path costs a spinner rather than the window. It
+  browses every environment the workspace knows: this computer, a WSL
+  distribution over `\\wsl.localhost` (under a millisecond warm), and a host
+  over SFTP. Tap a folder to walk into it, Back and Forward, a typed path, and
+  one Hidden toggle — dot-files everywhere, plus the Windows hidden and system
+  attributes — now shared by the picker, the SSH browser and the device file
+  manager, which each answered that question differently before. Which dialog
+  opens is a setting: Karmashala's on Windows, the system's on macOS and Linux,
+  and a folder on another machine always uses ours because no local dialog can
+  reach one.
+- **A project can be edited rather than only made and deleted.** Its name, its
+  context, its root folder, and the checkout its one-click session runs in.
+  Moving a root reads the new folder before it writes anything, and rebases the
+  checkouts under it **in place, keeping their ids** — that id is what every
+  session, worktree and pinned default references. Anything that was not under
+  the old root is reported rather than guessed at.
+- **`project_add` and `project_update`** give an agent the same two doors
+  through the same controller the dialog uses, so adopting a folder or cloning
+  a repository does not depend on somebody opening a window.
+- **A session with a live pane sorts above everything but a pin** in the
+  Explorer.
+- **The phone is answered again.** `sessions.list` awaited a git probe once per
+  session, and that probe waits on a UI frame; a desktop that was not rendering
+  produced none, so the request was never answered and the phone sat on a link
+  it could prove was alive. The stage is read now, never waited for.
+- **Quick Open no longer red-screens a debug build.** Its cache was harvested
+  from `initState`, which modifies a provider during a widget life-cycle.
+- `host/` and `mcp_bridge/` moved under `packages/` beside `relay`, which was
+  already there. They are still not workspace members — they resolve on their
+  own lock files so `dart compile exe` can reach them — but naming `packages`
+  in the analyze gate now reaches all three, and `mcp_bridge` had been in no
+  analyze command at all.
+
+---
+
 ## 1.24.0 — 2026-09-14 (build 43)
 
 **Code is read and written in the app now.** Schema head is unchanged.
