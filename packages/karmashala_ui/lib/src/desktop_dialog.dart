@@ -95,6 +95,7 @@ class DestructiveButton extends StatelessWidget {
     required this.onPressed,
     required this.child,
     this.icon,
+    this.autofocus = false,
     super.key,
   });
 
@@ -102,6 +103,7 @@ class DestructiveButton extends StatelessWidget {
   final VoidCallback? onPressed;
   final Widget child;
   final Widget? icon;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -112,9 +114,15 @@ class DestructiveButton extends StatelessWidget {
     );
     final icon = this.icon;
     return icon == null
-        ? FilledButton(onPressed: onPressed, style: style, child: child)
+        ? FilledButton(
+            onPressed: onPressed,
+            autofocus: autofocus,
+            style: style,
+            child: child,
+          )
         : FilledButton.icon(
             onPressed: onPressed,
+            autofocus: autofocus,
             style: style,
             icon: icon,
             label: child,

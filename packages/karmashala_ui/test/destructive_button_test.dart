@@ -86,4 +86,39 @@ void main() {
       greaterThanOrEqualTo(Touch.target),
     );
   });
+
+  bool labelFocused(WidgetTester tester) =>
+      Focus.of(tester.element(find.text('Delete'))).hasPrimaryFocus;
+
+  for (final withIcon in [false, true]) {
+    testWidgets('autofocus takes focus on open '
+        '(${withIcon ? 'with' : 'without'} an icon)', (tester) async {
+      await pumpInBox(
+        tester,
+        width: 300,
+        child: Center(
+          child: DestructiveButton(
+            autofocus: true,
+            onPressed: () {},
+            icon: withIcon ? const Icon(AppIcons.trash) : null,
+            child: const Text('Delete'),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(labelFocused(tester), isTrue);
+    });
+  }
+
+  testWidgets('does not take focus unless asked', (tester) async {
+    await pumpInBox(
+      tester,
+      width: 300,
+      child: Center(
+        child: DestructiveButton(onPressed: () {}, child: const Text('Delete')),
+      ),
+    );
+    await tester.pump();
+    expect(labelFocused(tester), isFalse);
+  });
 }
