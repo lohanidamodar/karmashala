@@ -371,7 +371,10 @@ class _MessageTile extends StatelessWidget {
     );
     // A phone reads at arm's length, so message text takes the same step up
     // the ramp that `UiDensity.muted` takes for supporting lines.
-    final mono = theme.textTheme.bodyMedium?.copyWith(fontFamily: kMonoFamily);
+    final mono = theme.textTheme.bodyMedium?.copyWith(
+      fontFamily: kMonoFamily,
+      fontFamilyFallback: kMonoFallback,
+    );
     final (thinking, clean) = switch (message.role) {
       'user' || 'tool' || 'error' => (null, message.text),
       _ => splitThinking(message.text),

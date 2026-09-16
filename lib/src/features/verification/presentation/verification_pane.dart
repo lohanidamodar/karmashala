@@ -689,6 +689,7 @@ class _FileTileState extends ConsumerState<_FileTile> {
               _text ?? 'Reading ${widget.artifact.relativePath}…',
               style: theme.textTheme.labelSmall?.copyWith(
                 fontFamily: kMonoFamily,
+                fontFamilyFallback: kMonoFallback,
               ),
             ),
           ),

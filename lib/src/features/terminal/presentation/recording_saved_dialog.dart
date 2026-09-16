@@ -293,6 +293,7 @@ class _ExportProgress extends ConsumerWidget {
                   maxLines: 3,
                   style: theme.textTheme.bodySmall?.copyWith(
                     fontFamily: kMonoFamily,
+                    fontFamilyFallback: kMonoFallback,
                   ),
                 ),
               ),
@@ -333,6 +334,7 @@ class _PathRow extends ConsumerWidget {
                 maxLines: 2,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
                 ),
               ),
             ],

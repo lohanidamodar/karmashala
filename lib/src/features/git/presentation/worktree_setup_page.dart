@@ -270,6 +270,7 @@ class _Line extends StatelessWidget {
               value,
               style: theme.textTheme.bodySmall?.copyWith(
                 fontFamily: kMonoFamily,
+                fontFamilyFallback: kMonoFallback,
                 color: theme.colorScheme.onSurface,
               ),
             ),

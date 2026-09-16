@@ -349,6 +349,7 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
                     _preview!,
                     style: theme.textTheme.bodySmall?.copyWith(
                       fontFamily: kMonoFamily,
+                      fontFamilyFallback: kMonoFallback,
                     ),
                   ),
                 ),

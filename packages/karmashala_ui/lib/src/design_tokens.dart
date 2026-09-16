@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 /// Design tokens for Karmashala's desktop chrome. Neutral by decision: the app
@@ -739,29 +740,52 @@ class Chrome {
   ).scale(statusBar).clamp(statusBar, 38.0);
 }
 
-/// A monospace stack for the "ledger hand" — paths, ids, event types, diffs.
-const String kMonoFamily = 'monospace';
+/// The monospace family for the "ledger hand" — paths, ids, event types,
+/// diffs — on [platform]. A named face per OS, because a bare `monospace`
+/// resolves unpredictably off Linux; always paired with [monoFallbackFor].
+String monoFamilyFor(TargetPlatform platform) => switch (platform) {
+  TargetPlatform.macOS || TargetPlatform.iOS => 'Menlo',
+  TargetPlatform.windows => 'Cascadia Mono',
+  TargetPlatform.linux => 'DejaVu Sans Mono',
+  TargetPlatform.android || TargetPlatform.fuchsia => 'monospace',
+};
+
+/// What [monoFamilyFor] falls back to, ending in the generic `monospace`.
+List<String> monoFallbackFor(TargetPlatform platform) => switch (platform) {
+  TargetPlatform.macOS || TargetPlatform.iOS => const ['Monaco', 'monospace'],
+  TargetPlatform.windows => const ['Consolas', 'monospace'],
+  TargetPlatform.linux => const ['Liberation Mono', 'monospace'],
+  TargetPlatform.android || TargetPlatform.fuchsia => const ['monospace'],
+};
+
+/// The ledger hand on this platform. Set it with [kMonoFallback] beside it.
+String get kMonoFamily => monoFamilyFor(defaultTargetPlatform);
+List<String> get kMonoFallback => monoFallbackFor(defaultTargetPlatform);
+
+/// The UI sans on Linux, where the system default varies by distribution.
+/// Elsewhere the platform's own UI font is used as it is.
+List<String>? uiSansFallbackFor(TargetPlatform platform) =>
+    platform == TargetPlatform.linux
+    ? const ['Inter', 'Cantarell', 'Noto Sans']
+    : null;
 
 /// The ledger hand's text styles, in the theme layer where a size may be
 /// named. Feature widgets use these instead of their own `fontSize:`.
 class MonoStyles {
   const MonoStyles._();
 
-  /// Inline identifiers beside label-sized text (chips, badges).
-  static const TextStyle small = TextStyle(
+  static TextStyle _mono(double size) => TextStyle(
     fontFamily: kMonoFamily,
-    fontSize: 11,
+    fontFamilyFallback: kMonoFallback,
+    fontSize: size,
   );
+
+  /// Inline identifiers beside label-sized text (chips, badges).
+  static TextStyle get small => _mono(11);
 
   /// The default ledger hand: paths, ids, environment names.
-  static const TextStyle body = TextStyle(
-    fontFamily: kMonoFamily,
-    fontSize: 12,
-  );
+  static TextStyle get body => _mono(12);
 
   /// A ledger value promoted to sit beside body text (a hotkey combo).
-  static const TextStyle label = TextStyle(
-    fontFamily: kMonoFamily,
-    fontSize: 13,
-  );
+  static TextStyle get label => _mono(13);
 }

@@ -101,6 +101,7 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
                 // body step.
                 style: theme.textTheme.bodyLarge?.copyWith(
                   fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
                 ),
                 decoration: InputDecoration(
                   border: const OutlineInputBorder(),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -93,6 +94,41 @@ void main() {
     expect(Chrome.groupLabel.fontSize, 11);
     expect(Chrome.groupLabel.fontWeight, FontWeight.w600);
     expect(Chrome.groupLabel.letterSpacing, 0.6);
+  });
+
+  test('the mono stack is a named face per platform, ending in monospace', () {
+    expect(monoFamilyFor(TargetPlatform.macOS), 'Menlo');
+    expect(monoFallbackFor(TargetPlatform.macOS), ['Monaco', 'monospace']);
+    expect(monoFamilyFor(TargetPlatform.windows), 'Cascadia Mono');
+    expect(monoFallbackFor(TargetPlatform.windows), ['Consolas', 'monospace']);
+    expect(monoFamilyFor(TargetPlatform.linux), 'DejaVu Sans Mono');
+    expect(monoFallbackFor(TargetPlatform.linux), [
+      'Liberation Mono',
+      'monospace',
+    ]);
+    for (final platform in TargetPlatform.values) {
+      expect(monoFallbackFor(platform).last, 'monospace');
+    }
+  });
+
+  test('MonoStyles and the UI sans follow the running platform', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      expect(MonoStyles.body.fontFamily, 'Cascadia Mono');
+      expect(MonoStyles.body.fontFamilyFallback, ['Consolas', 'monospace']);
+      expect(MonoStyles.body.fontSize, 12);
+      expect(AppTheme.light().textTheme.bodyMedium?.fontFamilyFallback, isNull);
+
+      debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+      expect(kMonoFamily, 'DejaVu Sans Mono');
+      expect(AppTheme.light().textTheme.bodyMedium?.fontFamilyFallback, [
+        'Inter',
+        'Cantarell',
+        'Noto Sans',
+      ]);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   test('radii and elevation: a pill, low popups, a floating shadow', () {

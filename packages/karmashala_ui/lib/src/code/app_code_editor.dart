@@ -105,6 +105,7 @@ class _AppCodeEditorState extends State<AppCodeEditor> {
       style: CodeEditorStyle(
         fontSize: widget.fontSize,
         fontFamily: kMonoFamily,
+        fontFamilyFallback: kMonoFallback,
         fontHeight: kCodeLineHeight,
         textColor: scheme.onSurface,
         backgroundColor: Colors.transparent,

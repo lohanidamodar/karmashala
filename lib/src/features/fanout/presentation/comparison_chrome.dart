@@ -108,7 +108,10 @@ class DiffStatLine extends StatelessWidget {
     final semantic = SemanticColors.of(context);
     final base =
         (dense ? theme.textTheme.labelSmall : theme.textTheme.bodySmall)
-            ?.copyWith(fontFamily: kMonoFamily);
+            ?.copyWith(
+              fontFamily: kMonoFamily,
+              fontFamilyFallback: kMonoFallback,
+            );
     final value = stat;
     if (value == null) {
       return Text(
@@ -233,6 +236,7 @@ class OutcomeLabel extends ConsumerWidget {
           style: theme.textTheme.labelSmall?.copyWith(
             color: color,
             fontFamily: kMonoFamily,
+            fontFamilyFallback: kMonoFallback,
           ),
         ),
         if (attribution != null) ...[

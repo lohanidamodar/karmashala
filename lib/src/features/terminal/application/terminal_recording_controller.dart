@@ -231,16 +231,16 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
     required RecordingFormat format,
     required TerminalCast cast,
     TerminalTheme? theme,
-    String fontFamily = kMonoFamily,
+    String? fontFamily,
   }) => switch (format) {
     RecordingFormat.gif => CastFrameStyle.gif(
       theme: theme ?? TerminalThemes.defaultTheme,
-      fontFamily: fontFamily,
+      fontFamily: fontFamily ?? kMonoFamily,
       title: cast.title,
     ),
     RecordingFormat.mp4 || RecordingFormat.pngSequence => CastFrameStyle.fullHd(
       theme: theme ?? TerminalThemes.defaultTheme,
-      fontFamily: fontFamily,
+      fontFamily: fontFamily ?? kMonoFamily,
       title: cast.title,
     ),
   };

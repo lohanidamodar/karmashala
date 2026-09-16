@@ -719,7 +719,7 @@ class _RemoteValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const style = MonoStyles.body;
+    final style = MonoStyles.body;
     final url = webUrlForRemote(remote);
     if (url == null) return SelectableText(remote, style: style);
     return Row(

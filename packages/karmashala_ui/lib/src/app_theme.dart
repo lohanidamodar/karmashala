@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import 'design_tokens.dart';
@@ -90,7 +91,10 @@ class AppTheme {
 
   static ThemeData _build(Brightness brightness) {
     final scheme = _scheme(brightness);
-    final text = _textTheme(scheme);
+    final sansFallback = uiSansFallbackFor(defaultTargetPlatform);
+    final text = sansFallback == null
+        ? _textTheme(scheme)
+        : _textTheme(scheme).apply(fontFamilyFallback: sansFallback);
 
     return ThemeData(
       useMaterial3: true,
@@ -101,6 +105,7 @@ class AppTheme {
       scaffoldBackgroundColor: scheme.surface,
       textTheme: text,
       fontFamily: null,
+      fontFamilyFallback: sansFallback,
       extensions: [SemanticColors.forBrightness(brightness)],
       // A neutral chrome has no business tinting elevated surfaces towards the
       // accent; the ramp already says how high a surface is.

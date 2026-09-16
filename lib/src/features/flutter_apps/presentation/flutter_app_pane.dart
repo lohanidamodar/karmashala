@@ -566,6 +566,7 @@ class _ConsoleLine extends StatelessWidget {
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colour,
                 fontFamily: kMonoFamily,
+                fontFamilyFallback: kMonoFallback,
               ),
             ),
           ),

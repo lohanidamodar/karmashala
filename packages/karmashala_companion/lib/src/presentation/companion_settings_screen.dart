@@ -208,7 +208,10 @@ class _ThisConnectionCard extends StatelessWidget {
             const SizedBox(height: Insets.xs),
             Text(
               'Host id: $hostId',
-              style: muted?.copyWith(fontFamily: kMonoFamily),
+              style: muted?.copyWith(
+                fontFamily: kMonoFamily,
+                fontFamilyFallback: kMonoFallback,
+              ),
             ),
           ],
           const SizedBox(height: Insets.sm),
@@ -303,7 +306,10 @@ class _PairingRelayFieldState extends ConsumerState<_PairingRelayField> {
           textInputAction: TextInputAction.done,
           onSubmitted: _apply,
           onEditingComplete: () => _apply(_relay.text),
-          style: theme.textTheme.bodyMedium?.copyWith(fontFamily: kMonoFamily),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontFamily: kMonoFamily,
+            fontFamilyFallback: kMonoFallback,
+          ),
           decoration: InputDecoration(
             border: const OutlineInputBorder(),
             hintText: kDefaultCompanionRelayUrl,

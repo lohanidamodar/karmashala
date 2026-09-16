@@ -424,7 +424,7 @@ void main() {
       find.textContaining('TypeError: save is not a function'),
       findsOneWidget,
     );
-    // The house mono family, with no private fallback list of its own.
+    // The house mono family and the house fallback, not a private list.
     final evidence = tester.widget<SelectableText>(
       find.byWidgetPredicate(
         (w) =>
@@ -433,7 +433,7 @@ void main() {
       ),
     );
     expect(evidence.style?.fontFamily, kMonoFamily);
-    expect(evidence.style?.fontFamilyFallback, isNull);
+    expect(evidence.style?.fontFamilyFallback, kMonoFallback);
   });
 
   testWidgets('an evidence file is read off the frame, not during a build', (

@@ -187,6 +187,7 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
                 approval.evidence.join('\n'),
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
                 ),
               ),
             ),

@@ -137,6 +137,7 @@ class _SnippetEditorDialogState extends ConsumerState<SnippetEditorDialog> {
               ),
               style: TextStyle(
                 fontFamily: kMonoFamily,
+                fontFamilyFallback: kMonoFallback,
                 fontSize: theme.textTheme.bodyMedium?.fontSize,
               ),
               onSubmitted: (_) => _save(),
@@ -302,6 +303,7 @@ class SnippetLibraryDialog extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
                         fontFamily: kMonoFamily,
+                        fontFamilyFallback: kMonoFallback,
                       ),
                     ),
                     trailing: Row(

@@ -50,6 +50,7 @@ class KarmashalaAboutDialog extends StatelessWidget {
                 identity,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
                 ),
               ),
             ),

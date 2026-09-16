@@ -157,7 +157,10 @@ class _CandidateChip extends StatelessWidget {
           candidate.agentId,
           style: Theme.of(
             context,
-          ).textTheme.labelSmall?.copyWith(fontFamily: kMonoFamily),
+          ).textTheme.labelSmall?.copyWith(
+            fontFamily: kMonoFamily,
+            fontFamilyFallback: kMonoFallback,
+          ),
         ),
         const SizedBox(width: Insets.xs),
         DiffStatLine(stat: candidate.diff, dense: true),

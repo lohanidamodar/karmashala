@@ -463,6 +463,7 @@ class _CandidateColumn extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.labelSmall?.copyWith(
                         fontFamily: kMonoFamily,
+                        fontFamilyFallback: kMonoFallback,
                       ),
                     ),
                     const SizedBox(height: Insets.xs),
@@ -513,7 +514,10 @@ class _CandidateColumn extends ConsumerWidget {
       candidate.worktree?.path ?? 'no worktree',
       maxLines: 2,
       overflow: TextOverflow.ellipsis,
-      style: theme.textTheme.labelSmall?.copyWith(fontFamily: kMonoFamily),
+      style: theme.textTheme.labelSmall?.copyWith(
+        fontFamily: kMonoFamily,
+        fontFamilyFallback: kMonoFallback,
+      ),
     );
   }
 

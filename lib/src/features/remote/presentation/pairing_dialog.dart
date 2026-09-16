@@ -410,6 +410,7 @@ class _PairingCodeView extends StatelessWidget {
               textAlign: TextAlign.center,
               style: theme.textTheme.titleMedium?.copyWith(
                 fontFamily: kMonoFamily,
+                fontFamilyFallback: kMonoFallback,
                 letterSpacing: 1.5,
                 height: 1.4,
               ),
@@ -446,6 +447,7 @@ class _PairingCodeView extends StatelessWidget {
               encoded,
               style: theme.textTheme.bodySmall?.copyWith(
                 fontFamily: kMonoFamily,
+                fontFamilyFallback: kMonoFallback,
               ),
             ),
           ),

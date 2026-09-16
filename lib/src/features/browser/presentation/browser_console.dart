@@ -228,6 +228,7 @@ class _BrowserConsoleState extends ConsumerState<BrowserConsole> {
                 '— ${describeDriveAge(ref.watch(clockProvider).nowUtc().difference(answer.at))}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
                   color: answer.failed
                       ? semantic.attention
                       : theme.colorScheme.onSurfaceVariant,

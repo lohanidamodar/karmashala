@@ -84,6 +84,27 @@ void main() {
     );
   });
 
+  test('every mono family carries the mono fallback', () {
+    // A terminal grid and a rendered cast take a family name only; xterm and
+    // the renderer bring their own fallback lists.
+    const familyOnly = {
+      'lib/src/features/terminal/presentation/terminal_pane_view.dart',
+      'lib/src/features/terminal/application/terminal_recording_controller.dart',
+    };
+    final family = RegExp(r'fontFamily:\s*kMonoFamily');
+    final fallback = RegExp(r'fontFamilyFallback:\s*kMonoFallback');
+    final bare = <String>[];
+    sources().forEach((path, source) {
+      if (tokenLayer.contains(path) || familyOnly.contains(path)) return;
+      final families = family.allMatches(source).length;
+      if (families > fallback.allMatches(source).length) {
+        bare.add('$path: $families family, '
+            '${fallback.allMatches(source).length} fallback');
+      }
+    });
+    expect(bare, isEmpty, reason: 'add fontFamilyFallback: kMonoFallback');
+  });
+
   test('the guards can fail', () {
     expect(
       accentAlpha.hasMatch('scheme.primary.withValues(alpha: 0.12)'),

@@ -405,6 +405,7 @@ class QuickOpenButton extends StatelessWidget {
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: muted,
                           fontFamily: kMonoFamily,
+                          fontFamilyFallback: kMonoFallback,
                           letterSpacing: 0,
                         ),
                       ),

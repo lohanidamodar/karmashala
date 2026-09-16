@@ -88,6 +88,7 @@ class _CommandRow extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
                   color: block.command == null
                       ? scheme.onSurfaceVariant
                       : scheme.onSurface,

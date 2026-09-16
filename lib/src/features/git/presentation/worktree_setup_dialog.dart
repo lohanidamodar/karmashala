@@ -110,6 +110,7 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
                 ),
                 style: TextStyle(
                   fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
                   fontSize: theme.textTheme.bodyMedium?.fontSize,
                 ),
                 onSubmitted: (_) => _save(),
@@ -123,6 +124,7 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
                     : 'Will run: ${argv.map((a) => '[$a]').join(' ')}',
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
                 ),
               ),
               const SizedBox(height: Insets.lg),
@@ -137,6 +139,7 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
                 ),
                 style: TextStyle(
                   fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
                   fontSize: theme.textTheme.bodyMedium?.fontSize,
                 ),
               ),
