@@ -53,8 +53,9 @@ bool isMacApplicationBundle(String path) =>
 /// What a picker shows for a path the user chose by hand or in an earlier
 /// build — the file's own name, since nothing recorded a label.
 String applicationNameFor(String launchPath) {
-  final base = p.basename(launchPath);
-  final name = p.basenameWithoutExtension(launchPath);
+  // Either desktop's spelling: the windows context reads `/` and `\` alike.
+  final base = p.windows.basename(launchPath);
+  final name = p.windows.basenameWithoutExtension(launchPath);
   // `Code.exe` reads better as `Code`; a bundle keeps everything but `.app`.
   return name.isEmpty ? base : name;
 }

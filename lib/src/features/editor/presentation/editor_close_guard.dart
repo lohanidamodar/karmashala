@@ -22,7 +22,7 @@ Future<bool> confirmEditorsClosable(
   if (unsaved.isEmpty) return true;
   final choice = await confirmUnsavedClose(
     context,
-    files: [for (final path in unsaved) p.basename(path)],
+    files: [for (final path in unsaved) p.windows.basename(path)],
   );
   if (choice == null) return false;
   if (choice == UnsavedChoice.discard) return true;
@@ -37,7 +37,7 @@ Future<bool> confirmEditorsClosable(
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            outcome.message ?? 'Could not save ${p.basename(path)}.',
+            outcome.message ?? 'Could not save ${p.windows.basename(path)}.',
           ),
         ),
       );
