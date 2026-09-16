@@ -13,6 +13,7 @@ import '../relay_local/local_relay_providers.dart';
 import '../relay_local/local_relay_service.dart';
 import 'pairing_dialog.dart';
 import '../../settings/presentation/settings_notice.dart';
+import '../../settings/presentation/settings_row.dart';
 
 /// Settings → Remote access: the enable switch, the two independent relays, the
 /// paired devices with last-seen and revoke, and the pairing button.
@@ -104,31 +105,26 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
+          SettingsSwitchRow(
+            label: 'Remote access',
+            help:
+                'Let a paired phone view sessions, read transcripts, send '
+                'prompts and answer approvals. Everything is end-to-end '
+                'encrypted; the relay only forwards sealed frames.',
             value: settings.remoteAccessEnabled,
             onChanged: _setEnabled,
-            title: const Text('Remote access'),
-            subtitle: const Text(
-              'Let a paired phone view sessions, read transcripts, send '
-              'prompts and answer approvals. Everything is end-to-end '
-              'encrypted; the relay only forwards sealed frames.',
-            ),
           ),
           if (settings.remoteAccessEnabled) ...[
             const SizedBox(height: Insets.sm),
             // Two independent relays: any combination is legal, and a phone
             // is served on whichever one it was paired through.
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
+            SettingsSwitchRow(
+              label: 'Local relay (this computer)',
+              help:
+                  'Runs on this computer for phones on the same network. No '
+                  'server of your own, nothing leaves the house.',
               value: prefs.localEnabled,
               onChanged: _setLocalEnabled,
-              secondary: const Icon(AppIcons.terminalWindow),
-              title: const Text('Local relay (this computer)'),
-              subtitle: const Text(
-                'Runs on this computer for phones on the same network. No '
-                'server of your own, nothing leaves the house.',
-              ),
             ),
             if (prefs.localEnabled) ...[
               const _LocalRelayStatusRow(),
@@ -151,16 +147,13 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
               ),
             ],
             const SizedBox(height: Insets.sm),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
+            SettingsSwitchRow(
+              label: 'Hosted relay (internet)',
+              help:
+                  'Reaches a phone anywhere. The relay only forwards sealed '
+                  'frames — it can read nothing.',
               value: prefs.hostedEnabled,
               onChanged: _setHostedEnabled,
-              secondary: const Icon(AppIcons.globe),
-              title: const Text('Hosted relay (internet)'),
-              subtitle: const Text(
-                'Reaches a phone anywhere. The relay only forwards sealed '
-                'frames — it can read nothing.',
-              ),
             ),
             if (prefs.hostedEnabled)
               TextField(

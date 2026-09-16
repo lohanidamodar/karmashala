@@ -13,6 +13,7 @@ import 'package:karmashala/src/features/remote/presentation/remote_access_sectio
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -129,7 +130,7 @@ void main() {
 
   /// Flips one of the two relay switches by its own title.
   Future<void> toggleRelay(WidgetTester tester, String title) async {
-    await tester.tap(find.widgetWithText(SwitchListTile, title));
+    await tester.tap(find.widgetWithText(SettingsSwitchRow, title));
     await tester.pumpAndSettle();
   }
 
@@ -220,8 +221,8 @@ void main() {
     await tester.pumpWidget(app());
     await enableRemoteAccess(tester);
 
-    expect(find.widgetWithText(SwitchListTile, localTitle), findsOneWidget);
-    expect(find.widgetWithText(SwitchListTile, hostedTitle), findsOneWidget);
+    expect(find.widgetWithText(SettingsSwitchRow, localTitle), findsOneWidget);
+    expect(find.widgetWithText(SettingsSwitchRow, hostedTitle), findsOneWidget);
     // Hosted carries the advanced URL field; the local port field appears
     // only with the local relay switched on.
     expect(find.text('Relay URL'), findsOneWidget);
