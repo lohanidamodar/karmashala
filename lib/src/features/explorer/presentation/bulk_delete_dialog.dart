@@ -22,7 +22,6 @@ Future<bool?> confirmBulkSessionDelete(
   return showDialog<bool>(
     context: context,
     builder: (context) {
-      final theme = Theme.of(context);
       return StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           title: DesktopDialogTitle(
@@ -69,11 +68,7 @@ Future<bool?> confirmBulkSessionDelete(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Cancel'),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: theme.colorScheme.error,
-                foregroundColor: theme.colorScheme.onError,
-              ),
+            DestructiveButton(
               onPressed: () => Navigator.of(context).pop(deleteFromCli),
               child: Text(
                 count == 1 ? 'Delete 1 session' : 'Delete $count sessions',

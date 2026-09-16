@@ -582,11 +582,7 @@ Future<bool?> _confirmDelete(BuildContext context, String title) {
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
+          DestructiveButton(
             onPressed: () => Navigator.of(context).pop(deleteFromCli),
             child: const Text('Delete'),
           ),

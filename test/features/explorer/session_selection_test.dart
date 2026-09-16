@@ -14,6 +14,7 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/session_selection.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
@@ -420,8 +421,9 @@ void main() {
       expect(find.textContaining('"One"'), findsOneWidget);
       expect(find.textContaining('"Two"'), findsOneWidget);
       expect(
-        find.widgetWithText(FilledButton, 'Delete 2 sessions'),
+        find.widgetWithText(DestructiveButton, 'Delete 2 sessions'),
         findsOneWidget,
+        reason: 'drawn as the house confirm that cannot be taken back',
       );
 
       // Unticked by default, matching the single-session delete: the rows come

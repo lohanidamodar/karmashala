@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -292,7 +293,9 @@ void main() {
         expect(find.byType(Checkbox), findsNothing);
         // The verb is present and inert, so the count beside it is always the
         // count it would act on.
-        final button = tester.widget<FilledButton>(find.byType(FilledButton));
+        final button = tester.widget<DestructiveButton>(
+          find.byType(DestructiveButton),
+        );
         expect(button.onPressed, isNull);
       });
 

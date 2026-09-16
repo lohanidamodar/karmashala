@@ -131,11 +131,7 @@ class _UnresumableSessionsDialogState
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Done'),
         ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: Theme.of(context).colorScheme.error,
-            foregroundColor: Theme.of(context).colorScheme.onError,
-          ),
+        DestructiveButton(
           // Disabled at nothing ticked rather than hidden, so the count above
           // it is always the count this button acts on.
           onPressed: ticked.isEmpty

@@ -159,11 +159,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
             onPressed: () => Navigator.of(context).pop('reload'),
             child: const Text('Reload from disk'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: theme.colorScheme.error,
-              foregroundColor: theme.colorScheme.onError,
-            ),
+          DestructiveButton(
             onPressed: () => Navigator.of(context).pop('overwrite'),
             child: const Text('Overwrite'),
           ),
