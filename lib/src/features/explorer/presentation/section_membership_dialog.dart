@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../application/explorer_sections.dart';
 import '../domain/explorer_section.dart';
 
@@ -43,8 +44,8 @@ class SectionMembershipDialog extends ConsumerWidget {
         title: 'Add to section',
         subtitle: 'Sections you fill by hand.',
       ),
-      content: SizedBox(
-        width: 380,
+      content: BoundedDialogContent(
+        width: DialogWidth.narrow,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
