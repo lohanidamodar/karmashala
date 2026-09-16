@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io' show FileSystemEntityType;
 
+import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -71,7 +72,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   /// Which delegated agent hangs under which row, by the row's index in the
   /// whole transcript. Read back by [ChatTranscriptView.detailBuilder].
-  final _subagents = <int, SubagentRef>{};
+  var _subagents = <int, SubagentRef>{};
+
+  /// Replaced only when [_subagents] changes: the transcript's rows compare
+  /// their callbacks, and a fresh closure on every poll would rebuild them all.
+  late MessageDetailBuilder _detailBuilder = _subagentDetailFor(_subagents);
+
+  /// The resolver for [_resolverEnvironment], kept for the same reason.
+  String? Function(String)? _resolver;
+  String? _resolverEnvironment;
 
   /// Held rather than read in [dispose]: `ref` is unusable once the element is
   /// on its way out, and the draft has to be parked exactly then.
@@ -85,6 +94,15 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   void initState() {
     super.initState();
     _drafts = ref.read(composerDraftProvider.notifier);
+  }
+
+  @override
+  void didUpdateWidget(SessionTranscriptView old) {
+    super.didUpdateWidget(old);
+    if (old.sessionId != widget.sessionId) {
+      _footer = null;
+      _resolver = null;
+    }
   }
 
   @override
@@ -139,11 +157,26 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         .getById(session.agentInstallationId)
         ?.environmentId;
     if (environmentId == null) return null;
-    final editor = ref.read(editorActionsProvider);
-    return (path) => editor.windowsPathFor(
-      EnvironmentPath(environmentId: environmentId, path: path),
-    );
+    if (_resolver != null && _resolverEnvironment == environmentId) {
+      return _resolver;
+    }
+    _resolverEnvironment = environmentId;
+    return _resolver = (path) => ref
+        .read(editorActionsProvider)
+        .windowsPathFor(
+          EnvironmentPath(environmentId: environmentId, path: path),
+        );
   }
+
+  MessageDetailBuilder _subagentDetailFor(Map<int, SubagentRef> subagents) =>
+      (message, ordinal) {
+        final reference = subagents[ordinal];
+        if (reference == null) return null;
+        return SubagentTurnsTile(
+          reference: reference,
+          resolveHostPath: _hostPathResolver(),
+        );
+      };
 
   /// Where this session's agent was standing. Null means **unknown**, never
   /// "the repository root", so the fallback is made here and out loud.
@@ -259,25 +292,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     // A PTY-hosted session's conversation lives in the agent's own transcript
     // (see `SessionTranscriptLocator`): stdout carries no structured stream.
     final fromPty = session?.surface == SessionSurface.pane;
-    final transcript = fromPty
-        ? ref
-              .watch(sessionChatTranscriptProvider(widget.sessionId))
-              .whenData(_fromTranscript)
-        : ref
-              .watch(sessionTranscriptProvider(widget.sessionId))
-              .whenData(_toMessages);
-    final resolveHostPath = _hostPathResolver();
     final active =
         fromPty || ref.read(sessionEngineProvider).isActive(widget.sessionId);
-    // Whether a chat rendering is possible for **this session** — a reading,
-    // not a registry lookup; `reading.reason` says which nothing it is.
-    final reading = fromPty
-        ? sessionChatView(ref, widget.sessionId)
-        : const SessionChatView.unread(prior: true);
-    final chatAvailable = !fromPty || reading.hasChatView;
-    // Whether there is a terminal to point at. Nothing lands a session here on
-    // its own any more, but the user can switch, so the sentences must be true.
-    final hasTerminal = sessionTerminalPane(ref, widget.sessionId) != null;
+    final footer = _footerFor(active);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -321,16 +338,48 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                   ),
                   child: SessionRecapCard(sessionId: widget.sessionId),
                 ),
+                // Its own consumer: a poll of the transcript redraws the
+                // conversation, not the header, the recap or the composer.
                 Expanded(
-                  child: _conversation(
-                    transcript: transcript,
-                    resolveHostPath: resolveHostPath,
-                    notesEnabled: notesEnabled,
-                    active: active,
-                    chatAvailable: chatAvailable,
-                    reading: reading,
-                    fromPty: fromPty,
-                    hasTerminal: hasTerminal,
+                  child: Consumer(
+                    builder: (context, ref, _) {
+                      final transcript = fromPty
+                          ? ref
+                                .watch(
+                                  sessionChatTranscriptProvider(
+                                    widget.sessionId,
+                                  ),
+                                )
+                                .whenData(_fromTranscript)
+                          : ref
+                                .watch(
+                                  sessionTranscriptProvider(widget.sessionId),
+                                )
+                                .whenData(_toMessages);
+                      // Whether a chat rendering is possible for **this
+                      // session** — a reading, not a registry lookup.
+                      final reading = fromPty
+                          ? sessionChatView(ref, widget.sessionId)
+                          : const SessionChatView.unread(prior: true);
+                      return _conversation(
+                        transcript: transcript,
+                        resolveHostPath: _hostPathResolver(),
+                        notesEnabled: notesEnabled,
+                        active:
+                            fromPty ||
+                            ref
+                                .read(sessionEngineProvider)
+                                .isActive(widget.sessionId),
+                        chatAvailable: !fromPty || reading.hasChatView,
+                        reading: reading,
+                        fromPty: fromPty,
+                        // Whether there is a terminal to point at: the user
+                        // can switch, so the sentences must be true.
+                        hasTerminal:
+                            sessionTerminalPane(ref, widget.sessionId) != null,
+                        footer: footer,
+                      );
+                    },
                   ),
                 ),
               ],
@@ -350,11 +399,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     required SessionChatView reading,
     required bool fromPty,
     required bool hasTerminal,
+    required Widget footer,
   }) {
     return transcript.when(
-      loading: () => const Center(
-        child: InlineSpinner(size: InlineSpinnerSize.large),
-      ),
+      loading: () =>
+          const Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
       error: (e, _) => Center(child: Text('$e')),
       data: (messages) => ChatTranscriptView(
         messages: messages,
@@ -364,20 +413,34 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         onPathTap: _openPath,
         // What the parent's `Task(…)` row never showed. Collapsed and
         // unread until opened — one session's turns came to 1,485 MiB.
-        detailBuilder: (message, ordinal) {
-          final reference = _subagents[ordinal];
-          if (reference == null) return null;
-          return SubagentTurnsTile(
-            reference: reference,
-            resolveHostPath: resolveHostPath,
-          );
-        },
+        detailBuilder: _detailBuilder,
         // Null when Notes is off: the transcript never learns the
         // feature exists, so there is nothing left behind to hide.
         onSaveNote: notesEnabled ? _saveNote : null,
+        footer: footer,
+        emptyHint: _emptyHint(
+          chatAvailable: chatAvailable,
+          reading: reading,
+          fromPty: fromPty,
+          active: active,
+          hasTerminal: hasTerminal,
+        ),
+      ),
+    );
+  }
+
+  Widget? _footer;
+  bool? _footerActive;
+
+  /// The strips and the composer, built once per [active]: the same instance
+  /// every poll, so a new transcript never rebuilds the box being typed in.
+  Widget _footerFor(bool active) {
+    if (_footer != null && _footerActive == active) return _footer!;
+    _footerActive = active;
+    return _footer =
         // The delivery strip sits on the composer's channel: its prompt
         // actions send through `continueSession`.
-        footer: LayoutBuilder(
+        LayoutBuilder(
           builder: (context, box) => Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -435,16 +498,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
               ),
             ],
           ),
-        ),
-        emptyHint: _emptyHint(
-          chatAvailable: chatAvailable,
-          reading: reading,
-          fromPty: fromPty,
-          active: active,
-          hasTerminal: hasTerminal,
-        ),
-      ),
-    );
+        );
   }
 
   /// What to say when there is nothing to render. Each branch reads the same
@@ -481,8 +535,13 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
   /// The agent's own transcript as chat messages. The subagent a row spawned
   /// travels beside them, not inside [ChatMessage], which has no room for it.
   List<ChatMessage> _fromTranscript(List<TranscriptMessage> messages) {
-    _subagents.clear();
-    return chatMessagesFromTranscript(messages, subagents: _subagents);
+    final subagents = <int, SubagentRef>{};
+    final out = chatMessagesFromTranscript(messages, subagents: subagents);
+    if (!mapEquals(subagents, _subagents)) {
+      _subagents = subagents;
+      _detailBuilder = _subagentDetailFor(subagents);
+    }
+    return out;
   }
 
   /// Maps the persisted event log to displayable chat messages, dropping
@@ -558,9 +617,7 @@ class _RecapButton extends ConsumerWidget {
       tooltip: running
           ? 'Writing a recap…'
           : 'Recap — ask this session\'s CLI what it concluded',
-      icon: running
-          ? const InlineSpinner()
-          : const Icon(AppIcons.article),
+      icon: running ? const InlineSpinner() : const Icon(AppIcons.article),
       onPressed: running
           ? null
           : () => requestSessionRecap(context, ref, sessionId),

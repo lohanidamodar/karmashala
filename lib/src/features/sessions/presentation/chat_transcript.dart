@@ -38,6 +38,34 @@ class ChatMessage {
 
   /// When the message was written.
   final DateTime? at;
+
+  /// By value: a live transcript is re-parsed whole on every poll, and an equal
+  /// message is what lets its row skip the rebuild.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ChatMessage &&
+          other.role == role &&
+          other.at == at &&
+          other.thinking == thinking &&
+          _sameTool(other.tool, tool) &&
+          other.text == text;
+
+  @override
+  int get hashCode => Object.hash(role, text, thinking, at, tool?.name);
+}
+
+/// [ToolActivity] has no equality of its own; these are every field it draws.
+bool _sameTool(ToolActivity? a, ToolActivity? b) {
+  if (identical(a, b)) return true;
+  if (a == null || b == null) return false;
+  return a.name == b.name &&
+      a.subject == b.subject &&
+      a.imagePath == b.imagePath &&
+      a.output == b.output &&
+      a.outputTruncated == b.outputTruncated &&
+      a.isError == b.isError &&
+      a.plan == b.plan;
 }
 
 /// How many finished, uneventful tool calls in a row become one line. Three,
@@ -155,6 +183,11 @@ class ChatTranscriptView extends StatefulWidget {
   /// What, if anything, hangs under a given row — see [MessageDetailBuilder].
   final MessageDetailBuilder? detailBuilder;
 
+  /// Builds of a message row, counted so a cost test can prove a new or
+  /// streaming message redraws itself and not the rows above it.
+  @visibleForTesting
+  static int debugMessageBuildCount = 0;
+
   @override
   State<ChatTranscriptView> createState() => _ChatTranscriptViewState();
 }
@@ -212,6 +245,22 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     final start = math.max(0, total - _shown);
     final visible = widget.messages.sublist(start);
     final rows = transcriptRows(visible);
+    final lead = start > 0 ? 1 : 0;
+    // Rows are keyed by their ordinal in the whole transcript, so loading an
+    // older page shifts indices without handing one row's element to another.
+    final indexOfOrdinal = <int, int>{
+      for (var i = 0; i < rows.length; i++) start + rows[i].from: i + lead,
+    };
+
+    Widget rowAt(int offset) => _MessageRow(
+      key: ValueKey<int>(start + offset),
+      message: visible[offset],
+      ordinal: start + offset,
+      onSaveNote: widget.onSaveNote,
+      resolveHostPath: widget.resolveHostPath,
+      onPathTap: widget.onPathTap,
+      detailBuilder: widget.detailBuilder,
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) => Column(
@@ -228,54 +277,48 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                         constraints: const BoxConstraints(
                           maxWidth: Chrome.readableWidth,
                         ),
-                        child: ListView.builder(
-                          controller: _scroll,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: Insets.md,
-                            vertical: Insets.sm,
+                        child: _TranscriptNow(
+                          now: DateTime.now(),
+                          child: ListView.builder(
+                            controller: _scroll,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: Insets.md,
+                              vertical: Insets.sm,
+                            ),
+                            itemCount: rows.length + lead,
+                            findChildIndexCallback: (key) =>
+                                key is ValueKey<int>
+                                ? indexOfOrdinal[key.value]
+                                : null,
+                            itemBuilder: (context, index) {
+                              if (lead == 1 && index == 0) {
+                                return Center(
+                                  child: TextButton.icon(
+                                    onPressed: () => setState(
+                                      () => _shown = math.min(
+                                        _shown + _page,
+                                        total,
+                                      ),
+                                    ),
+                                    icon: const Icon(AppIcons.caretUp),
+                                    label: Text(
+                                      'Load $start earlier message'
+                                      '${start == 1 ? '' : 's'}',
+                                    ),
+                                  ),
+                                );
+                              }
+                              final row = rows[index - lead];
+                              if (!row.isBatch) return rowAt(row.from);
+                              return _ToolBatchTile(
+                                key: ValueKey<int>(start + row.from),
+                                // The run itself, so the line can name the calls.
+                                messages: visible.sublist(row.from, row.to),
+                                rowAt: rowAt,
+                                from: row.from,
+                              );
+                            },
                           ),
-                          itemCount: rows.length + (start > 0 ? 1 : 0),
-                          itemBuilder: (context, index) {
-                            if (start > 0 && index == 0) {
-                              return Center(
-                                child: TextButton.icon(
-                                  onPressed: () => setState(
-                                    () => _shown = math.min(_shown + _page, total),
-                                  ),
-                                  icon: const Icon(AppIcons.caretUp),
-                                  label: Text(
-                                    'Load $start earlier message'
-                                    '${start == 1 ? '' : 's'}',
-                                  ),
-                                ),
-                              );
-                            }
-                            final row = rows[index - (start > 0 ? 1 : 0)];
-                            Widget tileAt(int offset) {
-                              final message = visible[offset];
-                              return _ChatMessageTile(
-                                message: message,
-                                resolveHostPath: widget.resolveHostPath,
-                                onPathTap: widget.onPathTap,
-                                detail: widget.detailBuilder?.call(
-                                  message,
-                                  start + offset,
-                                ),
-                                onSaveNote: widget.onSaveNote == null
-                                    ? null
-                                    : () =>
-                                          widget.onSaveNote!(message, start + offset),
-                              );
-                            }
-  
-                            if (!row.isBatch) return tileAt(row.from);
-                            return _ToolBatchTile(
-                              // The run itself, so the line can name the calls.
-                              messages: visible.sublist(row.from, row.to),
-                              tileAt: tileAt,
-                              from: row.from,
-                            );
-                          },
                         ),
                       ),
                     ),
@@ -316,9 +359,9 @@ final _thinkingTag = RegExp(
   final match = _thinkingTag.firstMatch(rawText);
   if (match != null) {
     final thought = match.group(1)?.trim();
-    final clean = (rawText.substring(0, match.start) +
-            rawText.substring(match.end))
-        .trim();
+    final clean =
+        (rawText.substring(0, match.start) + rawText.substring(match.end))
+            .trim();
     return (thought, clean);
   }
   return (null, rawText);
@@ -407,7 +450,9 @@ class _ChatEmptyState extends StatelessWidget {
               Icon(
                 isTerminalNotice ? AppIcons.terminal : AppIcons.robot,
                 size: Chrome.iconHero,
-                color: isTerminalNotice ? scheme.onSurfaceVariant : scheme.primary,
+                color: isTerminalNotice
+                    ? scheme.onSurfaceVariant
+                    : scheme.primary,
               ),
               const SizedBox(height: Insets.sm),
               if (!isTerminalNotice) ...[
@@ -429,6 +474,96 @@ class _ChatEmptyState extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The instant every age in one build of the list is measured from. Only the
+/// age labels depend on it, so a poll re-ages them without rebuilding a row.
+class _TranscriptNow extends InheritedWidget {
+  const _TranscriptNow({required this.now, required super.child});
+
+  final DateTime now;
+
+  static DateTime of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_TranscriptNow>()?.now ??
+      DateTime.now();
+
+  @override
+  bool updateShouldNotify(_TranscriptNow oldWidget) => oldWidget.now != now;
+}
+
+/// How long ago a message was written, as of the list's last build.
+class _MessageAge extends StatelessWidget {
+  const _MessageAge({required this.at});
+
+  final DateTime at;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    compactAge(_TranscriptNow.of(context).difference(at)),
+    maxLines: 1,
+    softWrap: false,
+    overflow: TextOverflow.ellipsis,
+    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    ),
+  );
+}
+
+/// One message's row, built once per distinct input. The list rebuilds every
+/// item on each poll; handing back the *same* tile instance is what stops an
+/// unchanged message from building again. Callbacks are compared as given, so
+/// a host passes stable ones (tear-offs) or pays for every row.
+class _MessageRow extends StatefulWidget {
+  const _MessageRow({
+    required this.message,
+    required this.ordinal,
+    required this.onSaveNote,
+    required this.resolveHostPath,
+    required this.onPathTap,
+    required this.detailBuilder,
+    super.key,
+  });
+
+  final ChatMessage message;
+  final int ordinal;
+  final SaveNoteCallback? onSaveNote;
+  final String? Function(String path)? resolveHostPath;
+  final PathLinkCallback? onPathTap;
+  final MessageDetailBuilder? detailBuilder;
+
+  @override
+  State<_MessageRow> createState() => _MessageRowState();
+}
+
+class _MessageRowState extends State<_MessageRow> {
+  Widget? _tile;
+
+  @override
+  void didUpdateWidget(_MessageRow old) {
+    super.didUpdateWidget(old);
+    if (old.message != widget.message ||
+        old.ordinal != widget.ordinal ||
+        old.onSaveNote != widget.onSaveNote ||
+        old.resolveHostPath != widget.resolveHostPath ||
+        old.onPathTap != widget.onPathTap ||
+        old.detailBuilder != widget.detailBuilder) {
+      _tile = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final message = widget.message;
+    final ordinal = widget.ordinal;
+    final save = widget.onSaveNote;
+    return _tile ??= _ChatMessageTile(
+      message: message,
+      resolveHostPath: widget.resolveHostPath,
+      onPathTap: widget.onPathTap,
+      detail: widget.detailBuilder?.call(message, ordinal),
+      onSaveNote: save == null ? null : () => save(message, ordinal),
     );
   }
 }
@@ -455,6 +590,7 @@ class _ChatMessageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    ChatTranscriptView.debugMessageBuildCount++;
     return Padding(
       padding: _tileMargin,
       child: switch (message.role) {
@@ -552,17 +688,7 @@ class _MessageHeader extends StatelessWidget {
               ],
               if (at != null) ...[
                 const SizedBox(width: Insets.sm),
-                Flexible(
-                  child: Text(
-                    compactAge(DateTime.now().difference(at)),
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
+                Flexible(child: _MessageAge(at: at)),
               ],
             ],
           ),
@@ -752,7 +878,9 @@ class _ToolMessageCard extends StatelessWidget {
             ? scheme.surfaceContainerLowest
             : scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: isToolError ? failure : scheme.outlineVariant),
+        border: Border.all(
+          color: isToolError ? failure : scheme.outlineVariant,
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(Radii.md),
@@ -835,12 +963,13 @@ class _FailedBadge extends StatelessWidget {
 class _ToolBatchTile extends StatefulWidget {
   const _ToolBatchTile({
     required this.messages,
-    required this.tileAt,
+    required this.rowAt,
     required this.from,
+    super.key,
   });
 
   final List<ChatMessage> messages;
-  final Widget Function(int offset) tileAt;
+  final Widget Function(int offset) rowAt;
   final int from;
 
   @override
@@ -907,7 +1036,7 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
             ),
           ),
           if (_open)
-            for (var i = 0; i < count; i++) widget.tileAt(widget.from + i),
+            for (var i = 0; i < count; i++) widget.rowAt(widget.from + i),
         ],
       ),
     );
