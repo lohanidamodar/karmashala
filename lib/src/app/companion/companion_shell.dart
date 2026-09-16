@@ -21,6 +21,9 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
 
   static const _titles = ['Projects', 'Inbox', 'Settings'];
 
+  /// The most of the body the banner and desktop strip take before scrolling.
+  static const _chromeShare = 0.5;
+
   @override
   Widget build(BuildContext context) {
     final pairing = ref.watch(companionPairingProvider);
@@ -34,29 +37,46 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
     if (pairing.asData?.value == null) return const PairingScreen();
 
     const inboxIcon = Icon(AppIcons.tray);
+    // Gives way to the search field the keyboard came up for.
+    final showSwitcher = _tab == 0 && !companionKeyboardSqueezed(context);
     return Scaffold(
       appBar: companionAppBar(context, title: Text(_titles[_tab])),
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Which desktop these sessions belong to, below the outage banner — an
-            // unreachable host is the more urgent fact of the two.
-            const LinkBanner(),
-            // Gives way to the search field the keyboard came up for.
-            if (_tab == 0 && !companionKeyboardSqueezed(context))
-              const HostSwitcherBar(),
-            Expanded(
-              child: IndexedStack(
-                index: _tab,
-                children: const [
-                  SessionListScreen(),
-                  InboxScreen(),
-                  CompanionSettingsScreen(),
-                ],
+        child: LayoutBuilder(
+          builder: (context, constraints) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // The chrome above the tab scrolls within a share of the body,
+              // so an outage at 200% text cannot push the tab off a landscape
+              // phone.
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: constraints.maxHeight * _chromeShare,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Which desktop these sessions belong to, below the
+                      // outage banner: an unreachable host is more urgent.
+                      const LinkBanner(),
+                      if (showSwitcher) const HostSwitcherBar(),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
+              Expanded(
+                child: IndexedStack(
+                  index: _tab,
+                  children: const [
+                    SessionListScreen(),
+                    InboxScreen(),
+                    CompanionSettingsScreen(),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: NavigationBar(
