@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -82,13 +83,9 @@ class PaneGroupStrip extends ConsumerWidget {
                       ),
                   ];
                   // A region shrinks to `kMinPaneWeight` of the tab, so the
-                  // chips may not fit. Scrolling rather than the workbench
-                  // strip's picker, because these are *this* region's tabs.
+                  // chips may not fit: they scroll, and a menu names them all.
                   return metrics.overflowing
-                      ? SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(children: chips),
-                        )
+                      ? _CrowdedChips(group: group, chips: chips)
                       : Row(children: chips);
                 },
               ),
@@ -96,6 +93,86 @@ class PaneGroupStrip extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// More chips than the header holds: a row that scrolls — a plain mouse wheel
+/// included, since it is the only wheel most mice have — and a menu of every
+/// pane in the region, so the ones scrolled out of sight are one click away.
+class _CrowdedChips extends ConsumerStatefulWidget {
+  const _CrowdedChips({required this.group, required this.chips});
+
+  final PaneGroup group;
+  final List<Widget> chips;
+
+  @override
+  ConsumerState<_CrowdedChips> createState() => _CrowdedChipsState();
+}
+
+class _CrowdedChipsState extends ConsumerState<_CrowdedChips> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_scroll.hasClients) return;
+    final delta = event.scrollDelta.dx != 0
+        ? event.scrollDelta.dx
+        : event.scrollDelta.dy;
+    final position = _scroll.position;
+    final target = (position.pixels + delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    if (target == position.pixels) return;
+    GestureBinding.instance.pointerSignalResolver.register(
+      event,
+      (_) => _scroll.jumpTo(target),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sessions = ref.read(terminalSessionsControllerProvider.notifier);
+    final group = widget.group;
+    return Row(
+      children: [
+        Expanded(
+          child: Listener(
+            onPointerSignal: _onPointerSignal,
+            child: SingleChildScrollView(
+              controller: _scroll,
+              scrollDirection: Axis.horizontal,
+              child: Row(children: widget.chips),
+            ),
+          ),
+        ),
+        PopupMenuButton<String>(
+          tooltip: 'Every pane in this region',
+          padding: EdgeInsets.zero,
+          iconSize: Chrome.iconSmall,
+          style: IconButton.styleFrom(
+            minimumSize: Size.zero,
+            fixedSize: const Size.square(Chrome.paneStrip),
+          ),
+          icon: const Icon(AppIcons.caretDown),
+          itemBuilder: (context) => [
+            for (final paneId in group.panes)
+              DesktopMenuItem(
+                value: paneId,
+                label: sessions.titleForPane(paneId),
+                icon: AppIcons.terminal,
+                selected: paneId == group.activePaneId,
+              ),
+          ],
+          onSelected: sessions.focusPane,
+        ),
+      ],
     );
   }
 }
