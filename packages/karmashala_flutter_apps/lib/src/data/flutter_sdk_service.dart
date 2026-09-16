@@ -46,14 +46,18 @@ class FlutterSdkService {
       return _readHandSet(now, handSet);
     }
 
+    // Through [locateOnPath], which asks the interactive shell when the login
+    // shell finds nothing: `flutter` is usually on PATH via `~/.zshrc`, which a
+    // login shell never reads, so an app launched from Finder reported
+    // `notFound` for an SDK the owner's terminal runs every day. Measured
+    // 2026-09-16 on this machine: `bash -lc 'command -v flutter'` exits 1.
     final name = flutterExecutableFor(_kind);
-    final CommandResult located;
+    final String? path;
     try {
-      located = await runner.run(locateRequest(_kind, name));
+      path = await locateOnPath(runner, _kind, [name]);
     } on CommandException catch (error) {
       return _unreachable(now, error.message);
     }
-    final path = located.ok ? firstNonEmptyLine(located.stdout) : null;
     if (path == null || path.isEmpty) {
       return FlutterSdkReading.refused(
         environmentId: environment.id,

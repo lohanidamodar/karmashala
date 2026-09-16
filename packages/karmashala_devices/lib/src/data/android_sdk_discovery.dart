@@ -1,3 +1,4 @@
+import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import '../domain/android_device.dart';
 
@@ -92,8 +93,14 @@ const kEnvMarker = '__karmashala_env:';
 /// Command that prints every one of [names] with its value, in **one** shell.
 /// One, not one per variable: on POSIX this is a *login* shell, and asking
 /// separately cost 190 ms of the device pane's first open.
-CommandRequest environmentRequest(EnvironmentKind kind, List<String> names) =>
-    switch (kind) {
+///
+/// [loginShell] overrides the local host's shell, so the branch is testable
+/// without depending on the shell of whoever runs the suite.
+CommandRequest environmentRequest(
+  EnvironmentKind kind,
+  List<String> names, {
+  String? loginShell,
+}) => switch (kind) {
       // `echo %VAR%` prints the literal `%VAR%` when unset; the caller treats
       // that as empty. No space before `&`, or the value gains a trailing one.
       EnvironmentKind.windowsNative => CommandRequest(
@@ -103,9 +110,21 @@ CommandRequest environmentRequest(EnvironmentKind kind, List<String> names) =>
           [for (final n in names) 'echo $kEnvMarker$n=%$n%'].join('&'),
         ],
       ),
-      EnvironmentKind.localPosix ||
-      EnvironmentKind.wsl ||
-      EnvironmentKind.ssh => CommandRequest(
+      // The **owner's** shell on the local host, `bash` elsewhere. On a Mac
+      // that is zsh, and `bash -l` there reads `~/.bash_profile` and never
+      // `~/.zprofile`, so a hardcoded bash could not see an `ANDROID_HOME` the
+      // user's terminal shows them. Still a login shell rather than an
+      // interactive one: this runs on every device probe, and the miss it
+      // cannot cover — a variable set only in `~/.zshrc` — is covered by the
+      // `adb` lookup, which does take the interactive second look.
+      EnvironmentKind.localPosix => CommandRequest(
+        executable: loginShell ?? localLoginShell(),
+        arguments: [
+          '-lc',
+          [for (final n in names) 'echo "$kEnvMarker$n=\$$n"'].join('; '),
+        ],
+      ),
+      EnvironmentKind.wsl || EnvironmentKind.ssh => CommandRequest(
         executable: 'bash',
         arguments: [
           '-lc',
@@ -143,22 +162,6 @@ const List<String> kAdbVersionFlag = ['--version'];
 
 /// Version flag that makes `emulator` exit 0.
 const List<String> kEmulatorVersionFlag = ['-version'];
-
-/// Command that locates `adb` on the PATH.
-CommandRequest adbOnPathRequest(EnvironmentKind kind) => switch (kind) {
-  EnvironmentKind.windowsNative => const CommandRequest(
-    executable: 'where',
-    arguments: ['adb'],
-  ),
-  // A login shell so PATH additions from ~/.profile are visible, matching how
-  // agent CLIs are discovered.
-  EnvironmentKind.localPosix ||
-  EnvironmentKind.wsl ||
-  EnvironmentKind.ssh => const CommandRequest(
-    executable: 'bash',
-    arguments: ['-lc', 'command -v adb'],
-  ),
-};
 
 /// Locates the Android SDK in one execution environment: `ANDROID_HOME`,
 /// `ANDROID_SDK_ROOT`, the default location, then `adb` on the PATH. Everything
@@ -229,14 +232,26 @@ class AndroidSdkDiscoveryService {
     }
   }
 
+  /// `adb` wherever the owner's own terminal would find it.
+  ///
+  /// Through [locateOnPath] rather than a bare login shell: the Android SDK's
+  /// `platform-tools` is almost always added to PATH in `~/.zshrc`, which a
+  /// login shell never reads, so an app launched from Finder — inheriting
+  /// launchd's four-entry PATH — found no `adb` on this machine at all while it
+  /// worked perfectly in the owner's terminal. Measured 2026-09-16:
+  /// `bash -lc 'command -v adb'` exits 1, the interactive probe answers
+  /// `~/Library/Android/sdk/platform-tools/adb`.
+  ///
+  /// An unreachable environment reads as "no SDK here", the same rule
+  /// [_runOrNull] applies to every other probe in this service — [locateOnPath]
+  /// raises instead of deciding that, because a toolchain panel has to tell the
+  /// two apart and this does not.
   Future<String?> _adbOnPath() async {
-    final output = await _runOrNull(adbOnPathRequest(_kind));
-    if (output == null) return null;
-    for (final line in output.split(RegExp(r'[\r\n]+'))) {
-      final trimmed = line.trim();
-      if (trimmed.isNotEmpty) return trimmed;
+    try {
+      return await locateOnPath(runner, _kind, const ['adb']);
+    } on CommandException {
+      return null;
     }
-    return null;
   }
 
   /// Runs [request], returning stdout on success and `null` on any failure —

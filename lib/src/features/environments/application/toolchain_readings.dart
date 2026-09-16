@@ -1,4 +1,4 @@
-import 'package:agent_cli/discovery.dart' show locateRequest;
+import 'package:agent_cli/discovery.dart' show locateOnPath;
 import 'package:agent_cli/process.dart';
 import 'package:riverpod/riverpod.dart';
 
@@ -124,12 +124,16 @@ class ToolchainReadings
     // Located before it is run, the way agent discovery already locates a CLI.
     // Running the bare name would answer "missing" for anything Windows
     // resolves through PATHEXT — `flutter.bat` above all (CLAUDE.md §17).
+    //
+    // Through [locateOnPath] rather than a bare [locateRequest]: it asks the
+    // interactive shell when the login shell comes back empty. Toolchains live
+    // on PATH via `~/.zshrc` as often as agent CLIs do, and a login shell never
+    // reads it — so from a Finder launch this panel reported every toolchain
+    // "missing" on a machine that has them all.
     final name = toolchain.executableFor(environment.kind);
     try {
-      final located = await runner.run(
-        locateRequest(environment.kind, name),
-      );
-      if (!located.ok || (firstLineOf(located.stdout) ?? '').isEmpty) {
+      final located = await locateOnPath(runner, environment.kind, [name]);
+      if ((located ?? '').isEmpty) {
         return ToolchainReading(
           toolchain: toolchain,
           status: ToolchainStatus.missing,

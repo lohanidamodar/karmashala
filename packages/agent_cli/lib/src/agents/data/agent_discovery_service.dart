@@ -93,6 +93,63 @@ CommandRequest interactiveLocateRequest(
   timeout: kProbeTimeout,
 );
 
+/// Locates the first of [names] that exists, the way the machine's owner would
+/// find it in their own terminal.
+///
+/// **Use this rather than a bare `locateRequest`.** Every name is tried through
+/// the login shell first; only if none of them was found, and only on the local
+/// POSIX host, is the interactive shell asked. A machine whose PATH a login
+/// shell can already see therefore pays nothing for the second look, and WSL
+/// and SSH never take it — they are configured through their profile files, and
+/// starting an interactive shell down a remote connection is a different kind
+/// of expensive.
+///
+/// The two-step exists because a login shell reads `~/.zprofile` and
+/// `~/.zshenv` and **never** `~/.zshrc`, which is where most Macs put their
+/// PATH. Launched from Finder an app inherits launchd's PATH — `/usr/bin:/bin:
+/// /usr/sbin:/sbin` — so a one-step lookup finds nothing that lives in
+/// `~/.local/bin`, `/opt/homebrew/bin` or an Android SDK directory. Started
+/// from a terminal the same code looks fine, because the shell it spawns
+/// inherits the terminal's already-built PATH. That asymmetry has now produced
+/// the same bug four times: agent CLIs, `adb`, `flutter` and the toolchain
+/// readings. It is a shared function so the fifth caller inherits the remedy
+/// instead of rediscovering the fault.
+///
+/// A [CommandException] — the environment could not be reached at all — is
+/// **raised, not swallowed**. "I looked and it is not there" and "I could not
+/// look" are different facts, and only the caller knows which of them its
+/// surface is allowed to report: agent discovery treats an unreachable machine
+/// as having no agents, while a toolchain reading must say `unknown` rather
+/// than claim an absence nobody measured.
+Future<String?> locateOnPath(
+  CommandRunner runner,
+  EnvironmentKind kind,
+  Iterable<String> names, {
+  String? loginShell,
+}) async {
+  for (final name in names) {
+    final located = await runner.run(
+      locateRequest(kind, name, loginShell: loginShell),
+    );
+    if (!located.ok) continue;
+    final path = firstNonEmptyLine(located.stdout);
+    if (path != null) return path;
+  }
+  if (kind != EnvironmentKind.localPosix) return null;
+
+  for (final name in names) {
+    final located = await runner.run(
+      interactiveLocateRequest(name, loginShell: loginShell),
+    );
+    // The exit code is deliberately not consulted: an interactive shell can
+    // exit non-zero over something in a plugin that has nothing to do with the
+    // lookup. The marker's presence is the result.
+    final path = markedPath(located.stdout);
+    if (path != null) return path;
+  }
+  return null;
+}
+
 /// The path an [interactiveLocateRequest] reported, or `null` if it reported
 /// none — whatever else the shell's startup files printed around it.
 String? markedPath(String stdout) {
@@ -336,44 +393,21 @@ class AgentDiscoveryService {
   }
 
   /// Tries each declared binary name in order and returns the first hit.
+  ///
+  /// An unreachable environment is treated as "not installed" *here*, which is
+  /// this service's own rule rather than [locateOnPath]'s: a probe that could
+  /// not run tells us nothing, and `probeEnvironment` already reports
+  /// reachability separately so a sweep never deletes on this answer.
   Future<String?> _locateOnPath(AgentDescriptor descriptor) async {
-    for (final name in descriptor.binaries.forKind(environment.kind)) {
-      final CommandResult located;
-      try {
-        located = await runner.run(locateRequest(environment.kind, name));
-      } on CommandException {
-        return null; // Environment unavailable — treat as "not installed".
-      }
-      if (!located.ok) continue;
-      final path = firstNonEmptyLine(located.stdout);
-      if (path != null) return path;
+    try {
+      return await locateOnPath(
+        runner,
+        environment.kind,
+        descriptor.binaries.forKind(environment.kind),
+      );
+    } on CommandException {
+      return null;
     }
-    return _locateInInteractiveShell(descriptor);
-  }
-
-  /// The second look, through an interactive login shell.
-  ///
-  /// Only for the **local POSIX host**, and only after the login shell came
-  /// back empty, so a machine whose PATH is set where a login shell can see it
-  /// pays nothing for this. WSL and SSH keep their `bash -lc`: those are
-  /// configured through their profile files, and starting an interactive shell
-  /// over a remote connection is a different kind of expensive.
-  ///
-  /// See [interactiveLocateRequest] for why the login shell misses agents that
-  /// the user's own terminal finds instantly.
-  Future<String?> _locateInInteractiveShell(AgentDescriptor descriptor) async {
-    if (environment.kind != EnvironmentKind.localPosix) return null;
-    for (final name in descriptor.binaries.forKind(environment.kind)) {
-      final CommandResult located;
-      try {
-        located = await runner.run(interactiveLocateRequest(name));
-      } on CommandException {
-        return null; // Environment unavailable — treat as "not installed".
-      }
-      final path = markedPath(located.stdout);
-      if (path != null) return path;
-    }
-    return null;
   }
 
   /// Tries the descriptor's declared Windows install locations.

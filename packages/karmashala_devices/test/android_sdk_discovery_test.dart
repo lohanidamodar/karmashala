@@ -1,8 +1,17 @@
+import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/src/data/android_sdk_discovery.dart';
 import 'package:test/test.dart';
 
 import './support/fake_command_runner.dart';
+
+/// The local POSIX host — a Mac, where the owner's PATH lives in `~/.zshrc`.
+ExecutionEnvironment _posix() => ExecutionEnvironment(
+  id: 'windows',
+  kind: EnvironmentKind.localPosix,
+  name: 'macOS',
+  createdAt: DateTime.utc(2026),
+);
 
 ExecutionEnvironment _windows() => ExecutionEnvironment(
   id: 'windows',
@@ -92,20 +101,40 @@ void main() {
 
   group('reading the environment', () {
     test('asks one shell for every variable, not one shell each', () {
-      final request = environmentRequest(EnvironmentKind.localPosix, const [
-        'ANDROID_HOME',
-        'ANDROID_SDK_ROOT',
-        'HOME',
-      ]);
+      final request = environmentRequest(
+        EnvironmentKind.localPosix,
+        const ['ANDROID_HOME', 'ANDROID_SDK_ROOT', 'HOME'],
+        loginShell: '/bin/zsh',
+      );
 
       // A login shell is 63ms on the owner's Mac and three of them were 190ms
       // of the device pane's first open, for three values one shell can print.
-      expect(request.executable, 'bash');
+      //
+      // And it is the **owner's** shell, not a hardcoded `bash`. This assertion
+      // read `'bash'` until 2026-09-16, which is the same mistake agent CLI
+      // discovery was fixed for: on a Mac `bash -l` reads `~/.bash_profile` and
+      // never `~/.zprofile`, so an `ANDROID_HOME` the user's terminal shows
+      // them was invisible here. It passed only because `$SHELL` is unset on
+      // the Windows machine this suite usually runs on.
+      expect(request.executable, '/bin/zsh');
       expect(request.arguments.first, '-lc');
       final script = request.arguments.last;
       expect(script, contains(r'$ANDROID_HOME'));
       expect(script, contains(r'$ANDROID_SDK_ROOT'));
       expect(script, contains(r'$HOME'));
+    });
+
+    test('a remote environment keeps bash, whatever this machine runs', () {
+      // WSL and SSH are configured through their profile files and bash is what
+      // is guaranteed to be installed there; the owner's shell is a fact about
+      // the desktop, not about the far end.
+      for (final kind in [EnvironmentKind.wsl, EnvironmentKind.ssh]) {
+        expect(
+          environmentRequest(kind, const ['HOME']).executable,
+          'bash',
+          reason: '$kind must not inherit the desktop owner\'s shell',
+        );
+      }
     });
 
     test('a profile that prints things cannot shift a value', () {
@@ -225,6 +254,49 @@ void main() {
         expect(sdk.root.path, r'C:\tools\sdk');
       },
     );
+
+    test('finds adb the way the owner\'s terminal does, not just a login shell', () async {
+      // The bug this is written for, measured on the owner's Mac 2026-09-16:
+      // `bash -lc 'command -v adb'` exits 1 under launchd's PATH, while the
+      // interactive probe answers
+      // `~/Library/Android/sdk/platform-tools/adb`. The SDK's platform-tools
+      // is added in `~/.zshrc`, which a login shell never reads, so an app
+      // launched from Finder found no Android SDK at all while `adb` worked
+      // perfectly in the terminal beside it.
+      var interactiveProbes = 0;
+      final runner = FakeCommandRunner(
+        responder: (request) {
+          final joined = '${request.executable} ${request.arguments.join(' ')}';
+          if (joined.contains(kEnvMarker)) return _env(const {});
+          if (request.arguments.contains('-ilc')) {
+            interactiveProbes++;
+            return const CommandResult(
+              exitCode: 0,
+              stdout:
+                  '$kAgentPathMarker/Users/d/Library/Android/sdk/'
+                  'platform-tools/adb\n',
+              stderr: '',
+            );
+          }
+          // Everything a login shell is asked — and every well-known path —
+          // comes back empty, exactly as it does from a Finder launch.
+          return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+        },
+      );
+
+      final sdk = await AndroidSdkDiscoveryService(
+        runner: runner,
+        environment: _posix(),
+      ).discover();
+
+      expect(sdk, isNotNull, reason: 'the interactive probe found adb');
+      expect(
+        sdk!.adb.path,
+        '/Users/d/Library/Android/sdk/platform-tools/adb',
+      );
+      expect(sdk.root.path, '/Users/d/Library/Android/sdk');
+      expect(interactiveProbes, greaterThan(0));
+    });
 
     test('returns null when there is no SDK anywhere', () async {
       final runner = FakeCommandRunner(
