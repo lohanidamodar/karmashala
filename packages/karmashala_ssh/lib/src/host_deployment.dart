@@ -113,9 +113,16 @@ class HostBinary {
     required this.version,
     required this.source,
     this.candidates = 1,
+    this.isBundleArchive = false,
   });
 
   final Uint8List bytes;
+
+  /// Whether [bytes] are a gzipped tar of a `dart build cli` bundle rather than
+  /// an executable. A bundle cannot be flattened: the executable finds the
+  /// SQLite it was built with at `../lib`, so it is unpacked, never chmod-ed in
+  /// place. False is a host from before the store, which is still one file.
+  final bool isBundleArchive;
 
   /// Taken from the filename, which the build script stamps. It is compared
   /// against what the *remote* binary answers, never trusted on its own.

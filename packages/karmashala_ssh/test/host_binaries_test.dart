@@ -33,6 +33,47 @@ void main() {
     );
   }
 
+  group('a bundle tarball, which is what every current build ships', () {
+    test('it is matched, and says it needs unpacking', () async {
+      give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 30);
+
+      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+
+      expect(binary, isNotNull);
+      expect(binary!.version, '1.21.0');
+      expect(binary.isBundleArchive, isTrue);
+      expect(binary.source, endsWith('.tar.gz'));
+    });
+
+    test('the suffix is not mistaken for part of the architecture', () async {
+      give(release, 'karmashala_host-1.21.0-linux-arm64.tar.gz');
+
+      expect(await DirectoryHostBinaries([release]).binaryFor(machine('linux-arm64')), isNotNull);
+      expect(await DirectoryHostBinaries([release]).availableTargets(), ['linux-arm64']);
+    });
+
+    test('at one version the bundle beats the bare file, which has no sqlite', () async {
+      give(release, 'karmashala_host-1.21.0-linux-x64', bytes: 10);
+      give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 20);
+
+      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+
+      expect(binary!.isBundleArchive, isTrue);
+      expect(binary.bytes, hasLength(20));
+    });
+
+    test('a newer bare file still wins on version', () async {
+      // Version first, then shape: an older bundle is still the older host.
+      give(release, 'karmashala_host-1.20.0-linux-x64.tar.gz', bytes: 20);
+      give(release, 'karmashala_host-1.21.0-linux-x64', bytes: 10);
+
+      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+
+      expect(binary!.version, '1.21.0');
+      expect(binary.isBundleArchive, isFalse);
+    });
+  });
+
   group('picking a binary', () {
     test('the newer of two versions is taken, and the older is left where it is', () async {
       give(release, 'karmashala_host-1.20.0-linux-x64', bytes: 10);
@@ -99,10 +140,7 @@ void main() {
       give(release, 'karmashala_host-1.20.1-linux-x64');
       give(build, 'karmashala_host-2.0.0-linux-x64');
 
-      final binary = await DirectoryHostBinaries([
-        release,
-        build,
-      ]).binaryFor(machine('linux-x64'));
+      final binary = await DirectoryHostBinaries([release, build]).binaryFor(machine('linux-x64'));
 
       expect(binary!.version, '1.20.1');
     });

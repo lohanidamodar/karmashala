@@ -44,8 +44,8 @@ class HostDeployer {
         observedAt: _now(),
         platform: platform,
         reason:
-            '${target.address} runs musl libc. The host binaries are glibc-linked ELF '
-            'cross-compiled from the Windows Dart SDK, so there is nothing to send.',
+            '${target.address} runs musl libc. The host bundles are glibc-linked ELF, '
+            'so there is nothing to send.',
       );
     }
     if (!platform.isLinux) {
@@ -54,8 +54,9 @@ class HostDeployer {
         observedAt: _now(),
         platform: platform,
         reason:
-            '${target.address} runs ${platform.operatingSystem}; the host is built for Linux '
-            'only. The Windows Dart SDK cannot cross-compile for macOS at all.',
+            '${target.address} runs ${platform.operatingSystem}; the host is published for '
+            'Linux only'
+            '${platform.operatingSystem == 'darwin' ? ', and no macOS bundle is built yet' : ''}.',
       );
     }
 
@@ -90,9 +91,15 @@ class HostDeployer {
       );
     }
     final remoteDirectory = '$home/$remoteHomeSubdirectory/bin';
-    final remotePath = '$remoteDirectory/karmashala_host-${binary.version}-${platform.targetKey}';
+    final stem = 'karmashala_host-${binary.version}-${platform.targetKey}';
+    // A bundle is unpacked into a directory of its own and run from inside it,
+    // so the executable keeps `../lib` — the SQLite it was built with — beside
+    // it. A bare file from before the store is still run where it lands.
+    final remotePath = binary.isBundleArchive
+        ? '$remoteDirectory/$stem.d/bin/karmashala_host'
+        : '$remoteDirectory/$stem';
     try {
-      await _install(remoteDirectory, remotePath, binary);
+      await _install(remoteDirectory, remotePath, binary, stem);
     } on HostInstallException catch (e) {
       return HostDeployment(
         status: HostDeploymentStatus.cannotInstall,
@@ -244,15 +251,26 @@ class HostDeployer {
     return home.length > 1 && home.endsWith('/') ? home.substring(0, home.length - 1) : home;
   }
 
-  /// Uploads unless the remote file is already this size. Size, not a checksum:
+  /// Uploads unless what is already there is this size. Size, not a checksum:
   /// the version is in the filename, and hashing megabytes per open costs more.
-  Future<void> _install(String remoteDirectory, String remotePath, HostBinary binary) async {
+  /// For a bundle the size measured is the *uploaded archive's*, which is still
+  /// beside the directory it was unpacked into for exactly this reason.
+  Future<void> _install(
+    String remoteDirectory,
+    String remotePath,
+    HostBinary binary,
+    String stem,
+  ) async {
+    final uploadPath = binary.isBundleArchive ? '$remoteDirectory/$stem.tar.gz' : remotePath;
     final existing = await target.run(
-      'mkdir -p ${_quote(remoteDirectory)} && wc -c < ${_quote(remotePath)} 2>/dev/null || echo missing',
+      'mkdir -p ${_quote(remoteDirectory)} && wc -c < ${_quote(uploadPath)} 2>/dev/null || echo missing',
     );
     final reported = existing.stdout.trim();
-    if (reported == '${binary.bytes.length}') {
-      _logger.debug('$remotePath is already ${binary.bytes.length} bytes; skipping the upload.');
+    // The archive being the right size does not mean it was ever unpacked, so
+    // the executable is asked for separately.
+    if (reported == '${binary.bytes.length}' &&
+        (!binary.isBundleArchive || await _isExecutable(remotePath))) {
+      _logger.debug('$uploadPath is already ${binary.bytes.length} bytes; skipping the upload.');
       // Still make sure it can run: a file restored from a backup is the size
       // it should be and is not executable.
       await target.run('chmod +x ${_quote(remotePath)}');
@@ -264,13 +282,14 @@ class HostDeployer {
       );
     }
     try {
-      await target.upload(remotePath, binary.bytes);
+      await target.upload(uploadPath, binary.bytes);
     } on Object catch (e) {
       throw HostInstallException(
-        'Could not write $remotePath on ${target.address} ($e). A read-only home '
+        'Could not write $uploadPath on ${target.address} ($e). A read-only home '
         'directory or a full disk would look like this.',
       );
     }
+    if (binary.isBundleArchive) await _unpack(remoteDirectory, uploadPath, stem);
     final chmod = await target.run(
       'chmod +x ${_quote(remotePath)} && test -x ${_quote(remotePath)}',
     );
@@ -279,6 +298,26 @@ class HostDeployer {
         '$remotePath was uploaded to ${target.address} but cannot be executed '
         '(${chmod.output.isEmpty ? 'exit ${chmod.exitCode}' : chmod.output}). '
         'A noexec home directory looks like this.',
+      );
+    }
+  }
+
+  Future<bool> _isExecutable(String path) async => (await target.run('test -x ${_quote(path)}')).ok;
+
+  /// Unpacks the bundle into a directory of its own, replacing whatever was
+  /// there: a half-extracted tree from an interrupted deploy is the one state
+  /// that would otherwise survive and look installed.
+  Future<void> _unpack(String remoteDirectory, String archivePath, String stem) async {
+    final into = '$remoteDirectory/$stem.d';
+    final result = await target.run(
+      'rm -rf ${_quote(into)} && mkdir -p ${_quote(into)} && '
+      'tar -xzf ${_quote(archivePath)} -C ${_quote(into)}',
+    );
+    if (!result.ok) {
+      throw HostInstallException(
+        'Could not unpack $archivePath on ${target.address} '
+        '(${result.output.isEmpty ? 'exit ${result.exitCode}' : result.output}). '
+        'A machine with no `tar` looks like this.',
       );
     }
   }
