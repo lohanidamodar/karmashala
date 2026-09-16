@@ -118,7 +118,9 @@ class _Running extends ConsumerWidget {
             child: Padding(
               padding: const EdgeInsets.all(Insets.sm),
               child: screen == null
-                  ? _video(view)
+                  // No size from the backend, so no input — but still the
+                  // picture's own shape, never the pane's.
+                  ? Center(child: _video(view, shaped: true))
                   : AspectRatio(
                       // The touch surface treats its box **as** the picture,
                       // so it must be that, not the letterbox around it.
@@ -305,25 +307,41 @@ class _SimulatorControlsState extends ConsumerState<_SimulatorControls> {
   }
 }
 
+/// The shape a simulator's picture is given before anything says otherwise:
+/// an iPhone's, the same default the Android picture uses.
+const double _defaultSimulatorAspect = 9 / 19.5;
+
 /// Paints the newest decoded frame with a plain [RawImage]: media_kit's libmpv
 /// has no `mpjpeg` demuxer, so WebDriverAgent's stream is decoded in Dart.
-Widget _video(SimulatorLiveView view) => ValueListenableBuilder<ui.Image?>(
-  valueListenable: view.frames.image,
-  builder: (context, image, _) {
-    if (image == null) {
-      // Until the first frame decodes, which is a fraction of a second after
-      // the stream opens.
-      return const ColoredBox(color: Colors.black);
-    }
-    return RawImage(
-      image: image,
-      fit: BoxFit.fill,
-      // The frames are already device pixels. Leaving this at the window's
-      // ratio would ask Flutter to shrink them again on a Retina display.
-      scale: 1,
-      // Bilinear, not `medium`: `medium` builds mipmaps, and every frame here
-      // is a *new* image — thirty regenerations a second.
-      filterQuality: FilterQuality.low,
+///
+/// [shaped] is for when no screen size is known: the frame's own proportions,
+/// or [_defaultSimulatorAspect] until one arrives, instead of `BoxFit.fill`
+/// into whatever box the pane has.
+Widget _video(SimulatorLiveView view, {bool shaped = false}) =>
+    ValueListenableBuilder<ui.Image?>(
+      valueListenable: view.frames.image,
+      builder: (context, image, _) {
+        final Widget picture = image == null
+            // Until the first frame decodes, which is a fraction of a second
+            // after the stream opens.
+            ? const ColoredBox(color: Colors.black)
+            : RawImage(
+                image: image,
+                fit: BoxFit.fill,
+                // The frames are already device pixels. Leaving this at the
+                // window's ratio would ask Flutter to shrink them again on a
+                // Retina display.
+                scale: 1,
+                // Bilinear, not `medium`: `medium` builds mipmaps, and every
+                // frame here is a *new* image — thirty regenerations a second.
+                filterQuality: FilterQuality.low,
+              );
+        if (!shaped) return picture;
+        return AspectRatio(
+          aspectRatio: image == null || image.height == 0
+              ? _defaultSimulatorAspect
+              : image.width / image.height,
+          child: picture,
+        );
+      },
     );
-  },
-);
