@@ -80,9 +80,11 @@ class FakeTarget implements HostDeployTarget {
     if (command.contains('wc -c <')) {
       return RemoteRun(0, existingSize < 0 ? 'missing\n' : '$existingSize\n', '');
     }
-    // Only the bare question, never the `chmod … && test -x` that follows an
-    // install: the deploy asks this one about an archive it did not upload.
-    if (command.startsWith('test -x')) {
+    // Only the "is what is already here runnable" question — `chmod …; test -x`
+    // — never the `chmod … && test -x` that verifies a fresh install. The two
+    // are told apart by the separator, which is the whole difference between
+    // asking and asserting.
+    if (command.contains('2>/dev/null; test -x')) {
       return RemoteRun(executableInstalled ? 0 : 1, '', '');
     }
     return const RemoteRun(0, '', '');
@@ -187,12 +189,20 @@ class FakeBinaries implements HostBinarySource {
   /// What every current build ships; false is a host from before the store.
   final bool isBundleArchive;
 
+  /// How many times the artifact's bytes were actually read off disk.
+  var reads = 0;
+
   @override
   Future<HostBinary?> binaryFor(HostPlatform platform) async {
     final size = targets[platform.targetKey];
     if (size == null) return null;
     return HostBinary(
-      bytes: Uint8List(size),
+      length: size,
+      // Counted, so a test can prove the skip path never reads the file.
+      readBytes: () async {
+        reads++;
+        return Uint8List(size);
+      },
       version: '0.1.0',
       isBundleArchive: isBundleArchive,
       source:
@@ -406,6 +416,20 @@ void main() {
       await deployerFor(target, binaries: bundled()).deploy();
 
       expect(target.commands.any((c) => c.contains('tar -xzf')), isTrue);
+    });
+
+    test('an already-installed host is never read off disk', () async {
+      final target = FakeTarget()
+        ..home = '/home/dlohani'
+        ..existingSize = 1024;
+      final binaries = bundled();
+
+      final deployment = await deployerFor(target, binaries: binaries).deploy();
+
+      expect(deployment.status, HostDeploymentStatus.ready);
+      expect(target.uploads, isEmpty);
+      // The bytes are a whole bundle; the size is all the skip needs.
+      expect(binaries.reads, 0);
     });
 
     test('a bare binary from before the store is still installed in place', () async {

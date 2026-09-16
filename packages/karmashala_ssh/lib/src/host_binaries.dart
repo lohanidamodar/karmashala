@@ -55,18 +55,26 @@ class DirectoryHostBinaries implements HostBinarySource {
         candidates.add((match.group(1), match.group(4) != null, entity));
       }
       if (candidates.isEmpty) continue;
-      // Every version ever installed accumulates here, so the newest is what
-      // this build means; a stale pick reads as `protocolMismatch`. At one
-      // version the bundle wins: a bare file of the same version is a host from
-      // before the store and cannot open one.
+      // **Shape first, then version.** Every version ever installed accumulates
+      // here — the installer deletes nothing — so a release whose Linux bundles
+      // were not published yet leaves only a *bare* file from an older install,
+      // and ranking by version would deploy a pre-store host that answers
+      // `hello` and reads as `ready`. A bundle at any version can hold a store
+      // and a bare file at any version cannot, so the bundle wins outright; the
+      // newest of the same shape wins after that.
       candidates.sort((a, b) {
-        final byVersion = compareFilenameVersions(b.$1, a.$1);
-        if (byVersion != 0) return byVersion;
-        return (b.$2 ? 1 : 0) - (a.$2 ? 1 : 0);
+        final byShape = (b.$2 ? 1 : 0) - (a.$2 ? 1 : 0);
+        if (byShape != 0) return byShape;
+        return compareFilenameVersions(b.$1, a.$1);
       });
       final (version, isArchive, file) = candidates.first;
       return HostBinary(
-        bytes: await file.readAsBytes(),
+        // The size, not the bytes: the deployer compares it against the remote
+        // `wc -c` and returns without uploading when they match, which is the
+        // steady state. Reading tens of megabytes to discard them is the cost
+        // of every deploy and every reconnect.
+        length: file.lengthSync(),
+        readBytes: file.readAsBytes,
         version: version ?? 'unversioned',
         source: file.path,
         isBundleArchive: isArchive,

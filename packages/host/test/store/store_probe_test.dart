@@ -23,19 +23,10 @@ void main() {
 
     test('one directory up from bin/, then into lib/', () {
       final library = bundledLibrary(
-        executable: [
-          '',
-          'opt',
-          'karmashala',
-          'bin',
-          'karmashala_host',
-        ].join(sep),
+        executable: ['', 'opt', 'karmashala', 'bin', 'karmashala_host'].join(sep),
       );
 
-      expect(
-        library.path,
-        ['', 'opt', 'karmashala', 'lib', bundledLibraryName].join(sep),
-      );
+      expect(library.path, ['', 'opt', 'karmashala', 'lib', bundledLibraryName].join(sep));
     });
 
     test('the name is this platform\'s, not one baked in', () {
@@ -73,10 +64,7 @@ void main() {
       await runStoreProbe(out: _Lines(), directory: where);
 
       expect(where.existsSync(), isTrue);
-      expect(
-        where.listSync().map((e) => e.uri.pathSegments.last),
-        contains('karmashala.sqlite'),
-      );
+      expect(where.listSync().map((e) => e.uri.pathSegments.last), contains('karmashala.sqlite'));
     });
   });
 
@@ -123,22 +111,36 @@ void main() {
         r"/opt/karmashala/bin/..\lib\libsqlite3.so: cannot open shared object "
         r'file: No such file or directory.';
 
-    test('a foreign separator is the build, not the machine', () {
-      // The file is present, which is exactly why this must not read as the
-      // machine refusing it.
+    // The library really is there; the binary is asking for somewhere else.
+    final present = File('${Directory.systemTemp.createTempSync('lib').path}/l');
+    setUpAll(() => present.writeAsStringSync('a library'));
+    tearDownAll(() => present.parent.deleteSync(recursive: true));
+
+    test('a path that is not the one we computed is the build, not the machine', () {
       expect(
-        classifyOpenFailure(crossCompiled, libraryPresent: true),
-        Platform.pathSeparator == '/'
-            ? StoreVerdict.mislinked
-            : StoreVerdict.unloadable,
+        classifyOpenFailure(crossCompiled, wanted: present),
+        StoreVerdict.mislinked,
+        reason: 'the file is present, so this must not read as a refusal',
       );
     });
 
+    test('and it reads the same in the other direction', () {
+      // A Windows bundle cross-built on Linux bakes the other separator. The
+      // phenomenon is symmetric, so the classifier must be too.
+      const builtOnLinuxForWindows =
+          r"Invalid argument(s): Failed to load dynamic library "
+          r"'../lib/sqlite3.dll' relative to 'C:\karmashala\bin\karmashala_host.exe'";
+
+      expect(classifyOpenFailure(builtOnLinuxForWindows, wanted: present), StoreVerdict.mislinked);
+    });
+
     test('an absent library is another deploy', () {
+      final absent = File('${present.parent.path}/not-here');
+
       expect(
         classifyOpenFailure(
           'cannot open shared object file: No such file or directory',
-          libraryPresent: false,
+          wanted: absent,
         ),
         StoreVerdict.missing,
       );
@@ -146,18 +148,23 @@ void main() {
 
     test('a present library the loader rejected is the machine\'s', () {
       expect(
-        classifyOpenFailure(
-          "wrong ELF class: ELFCLASS32",
-          libraryPresent: true,
-        ),
+        classifyOpenFailure('wrong ELF class: ELFCLASS32', wanted: present),
         StoreVerdict.unloadable,
       );
       expect(
+        classifyOpenFailure("version `GLIBC_2.34' not found", wanted: present),
+        StoreVerdict.unloadable,
+      );
+    });
+
+    test('the very path we asked for is the machine refusing it', () {
+      expect(
         classifyOpenFailure(
-          "version `GLIBC_2.34' not found",
-          libraryPresent: true,
+          "Failed to load dynamic library '${present.path}': wrong ELF class",
+          wanted: present,
         ),
         StoreVerdict.unloadable,
+        reason: 'same path, so the build is not what is wrong',
       );
     });
   });

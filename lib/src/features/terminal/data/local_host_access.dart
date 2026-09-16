@@ -334,20 +334,23 @@ class LocalHostExecutable {
   static String get fileName =>
       Platform.isWindows ? 'karmashala_host.exe' : 'karmashala_host';
 
-  List<String> _candidates() {
+  /// Lazy on purpose: the last-but-one entry lists a directory, and an
+  /// installed app matches the first and never pays for it.
+  Iterable<String> _candidates() sync* {
     final beside = executableDirectory ?? File(Platform.resolvedExecutable).parent.path;
     final root = repositoryRoot ?? Directory.current.path;
-    return [
-      // The bundle `dart build cli` writes: the executable finds its SQLite at
-      // `../lib`, so it cannot be flattened into the app's own directory.
-      '$beside/host/bin/$fileName',
-      // An install from before the host carried a store. It still serves panes,
-      // which is all the local host is asked for; `probe-store` is what says so
-      // if it is ever asked for more.
-      '$beside/$fileName',
-      // A debug run, whichever target was built into the package.
-      for (final directory in _builtBundles(root)) '$directory/$fileName',
-    ];
+    // The bundle `dart build cli` writes: the executable finds its SQLite at
+    // `../lib`, so it cannot be flattened into the app's own directory.
+    yield '$beside/host/bin/$fileName';
+    // A debug run, whichever target was built into the package.
+    for (final directory in _builtBundles(root)) {
+      yield '$directory/$fileName';
+    }
+    // Last: an install from before the host carried a store, left behind by an
+    // in-place upgrade — the installer deletes nothing. It still serves panes,
+    // which is all the local host is asked for today, but it cannot hold a
+    // store, so anything that can is preferred to it.
+    yield '$beside/$fileName';
   }
 
   /// `packages/host/build/cli/<os>_<arch>/bundle/bin`, listed rather than spelled:

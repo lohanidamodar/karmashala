@@ -23,8 +23,6 @@ import 'package:test/test.dart';
 /// suites that need a host, and races with nothing.
 final Future<String> _host = _buildHost();
 
-Future<String> hostExecutable() => _host;
-
 Future<String> _buildHost() async {
   // Unique per isolate, not per process: isolates sharing a process share a
   // pid and would land on the same directory (see `WslHarness.runSync`).
@@ -62,7 +60,7 @@ class LocalHost {
 
   static Future<LocalHost> start(Directory home) async {
     final process = await Process.start(
-      await hostExecutable(),
+      await _host,
       ['serve'],
       environment: {'USERPROFILE': home.path, 'HOME': home.path},
       workingDirectory: Directory.current.path,

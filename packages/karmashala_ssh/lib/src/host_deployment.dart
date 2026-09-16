@@ -109,14 +109,21 @@ class HostDeployment {
 @immutable
 class HostBinary {
   const HostBinary({
-    required this.bytes,
+    required this.length,
+    required this.readBytes,
     required this.version,
     required this.source,
     this.candidates = 1,
     this.isBundleArchive = false,
   });
 
-  final Uint8List bytes;
+  /// How big it is, which is all the deployer needs to decide whether the
+  /// machine already has it. Kept separate from [readBytes] so the common case —
+  /// already installed — never reads the file.
+  final int length;
+
+  /// The contents, read only once an upload is actually going to happen.
+  final Future<Uint8List> Function() readBytes;
 
   /// Whether [bytes] are a gzipped tar of a `dart build cli` bundle rather than
   /// an executable. A bundle cannot be flattened: the executable finds the
