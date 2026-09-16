@@ -1,3 +1,4 @@
+import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -122,6 +123,27 @@ void main() {
       UsageChip.debugBuildCount,
       0,
       reason: 'and the quota has followed it out of this row entirely',
+    );
+    await quiesce(tester, container);
+  });
+
+  testWidgets('closing the side panel redraws only the panel item', (
+    tester,
+  ) async {
+    service.answer = usageSnapshot(percent: 62);
+    final container = barContainer();
+    await tester.pumpWidget(bar(container));
+    await tester.pump();
+
+    ShellStatusBar.debugItemBuildCount = 0;
+    container.read(sidePanelProvider.notifier).collapse();
+    await tester.pump();
+
+    expect(find.text('Panel closed'), findsOneWidget);
+    expect(
+      ShellStatusBar.debugItemBuildCount,
+      1,
+      reason: 'the repository, branch and tab count do not read the panel',
     );
     await quiesce(tester, container);
   });
