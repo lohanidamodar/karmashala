@@ -36,6 +36,7 @@ void main() {
   SshCompanionSetup setupWith(_Box box, List<bool> dials) => SshCompanionSetup(
     host: host,
     target: box,
+    remotePath: '/home/x/.karmashala/bin/karmashala_host-1.0.0-linux-x64.d/bin/karmashala_host',
     ports: CompanionPortSetup(
       target: box,
       clock: () => DateTime.utc(2026, 9, 16),

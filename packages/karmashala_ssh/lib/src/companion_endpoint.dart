@@ -1,6 +1,7 @@
 import 'package:karmashala_host/protocol.dart';
 
 import 'companion_port.dart';
+import 'remote_pairing.dart';
 import 'host_deploy_target.dart';
 import 'ssh_host.dart';
 
@@ -54,14 +55,24 @@ class SshCompanionSetup {
   SshCompanionSetup({
     required this.host,
     required this.target,
+    required this.remotePath,
     CompanionPortSetup? ports,
+    RemotePairing? pairing,
     this.port = kHostCompanionPort,
-  }) : _ports = ports ?? CompanionPortSetup(target: target);
+  }) : _ports = ports ?? CompanionPortSetup(target: target),
+       _pairing =
+           pairing ?? RemotePairing(target: target, remotePath: remotePath);
 
   final SshHost host;
   final HostDeployTarget target;
+
+  /// The executable `HostDeployment.remotePath` named — the one a pane runs, so
+  /// a pairing cannot land on a different host than the sessions.
+  final String remotePath;
+
   final int port;
   final CompanionPortSetup _ports;
+  final RemotePairing _pairing;
 
   /// The host must already be deployed and serving: a dial at a port nothing
   /// listens on says "shut" about something that was never going to answer.
@@ -76,5 +87,21 @@ class SshCompanionSetup {
           ? opening.reason
           : '${opening.reason} Run: ${opening.command}',
     );
+  }
+
+  /// Everything a person needs in one go: where the phone should dial, and the
+  /// code to type there.
+  ///
+  /// The port is opened **before** the window, because a code that expires
+  /// while somebody fixes a firewall is a code they have to fetch again. An
+  /// unreachable port does not stop it: the phone may sit somewhere this
+  /// desktop does not, and the endpoint says what it knows either way.
+  Future<({CompanionEndpoint endpoint, PairingWindow window})> invite({
+    required int capabilities,
+    String relay = '',
+  }) async {
+    final endpoint = await prepare();
+    final window = await _pairing.open(capabilities: capabilities, relay: relay);
+    return (endpoint: endpoint, window: window);
   }
 }

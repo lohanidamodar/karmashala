@@ -5,6 +5,7 @@ library;
 
 export 'src/companion_endpoint.dart';
 export 'src/companion_port.dart';
+export 'src/remote_pairing.dart';
 export 'src/host_binaries.dart';
 export 'src/host_deploy_target.dart';
 export 'src/host_deployer.dart';

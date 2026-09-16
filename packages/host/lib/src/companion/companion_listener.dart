@@ -39,6 +39,12 @@ class CompanionListener {
 
   final void Function(String message)? onLog;
 
+  /// How long a link has to say who it is. A dialer that opens a socket and
+  /// then says nothing costs a connection for as long as it likes otherwise,
+  /// and on a public address that is the cheapest thing an outsider can do.
+  /// The real phone sends its hello immediately.
+  static const Duration helloDeadline = Duration(seconds: 10);
+
   LanTransportServer? _server;
   StreamSubscription<LanLink>? _links;
 
@@ -82,11 +88,20 @@ class CompanionListener {
     final waiting = <Uint8List>[];
     late final StreamSubscription<Uint8List> frames;
 
+    var owned = false;
     void refuse(String why) {
       onLog?.call(why);
       frames.cancel();
       link.close();
     }
+
+    // A link that never says who it is is closed rather than held. `maxLinks`
+    // caps how many an outsider can hold at once; this caps how long, which is
+    // the other half and the one a public address makes matter.
+    final deadline = Timer(helloDeadline, () {
+      if (owned) return;
+      refuse('a link said nothing for ${helloDeadline.inSeconds}s');
+    });
 
     frames = link.frames.listen((frame) {
       final decided = route;
@@ -102,22 +117,25 @@ class CompanionListener {
       if (hello == null) {
         // Not even a hello. Nothing is owed to a dialer that opened with
         // something else, and holding the socket is what it would cost us.
+        deadline.cancel();
         refuse('a link opened with something other than a hello');
         return;
       }
       resolving = true;
       _routeHello(link, hello).then((forward) {
+        deadline.cancel();
         if (forward == null) {
           refuse('a link asked for a rendezvous nobody here answers');
           return;
         }
+        owned = true;
         route = forward;
         for (final held in waiting) {
           forward(held);
         }
         waiting.clear();
       });
-    });
+    }, onDone: deadline.cancel);
   }
 
   /// Who this rendezvous belongs to, or null for nobody. The hello itself is

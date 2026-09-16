@@ -142,6 +142,30 @@ void main() {
     expect(logs, contains(contains('other than a hello')));
   });
 
+  test('a link that says nothing is not held for ever', () async {
+    // `maxLinks` caps how many an outsider holds at once; this caps how long.
+    // On a public address, opening a socket and saying nothing is the cheapest
+    // thing anybody can do, so it has to cost them the connection.
+    final silent = CompanionListener(
+      registry: registry,
+      hostName: 'do-box',
+      devices: PairedDeviceDao(database).getActive,
+      onLog: logs.add,
+    );
+    await silent.start(address: '127.0.0.1', port: 0);
+    addTearDown(silent.stop);
+
+    final lurker = LanTransport(host: '127.0.0.1', port: silent.port)..start();
+    addTearDown(lurker.close);
+
+    await Future.doWhile(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      return !logs.any((l) => l.contains('said nothing'));
+    }).timeout(CompanionListener.helloDeadline + const Duration(seconds: 10));
+
+    expect(logs, contains(contains('said nothing')));
+  }, timeout: const Timeout(Duration(seconds: 40)));
+
   test('a frame sealed with the wrong key is refused, and the link survives', () async {
     final phone = await dialAsPhone();
     addTearDown(phone.link.close);
