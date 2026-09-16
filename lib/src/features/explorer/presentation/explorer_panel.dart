@@ -15,7 +15,6 @@ import 'package:karmashala_ui/picking.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../../cli_detection/application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/detected_projects_view.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -153,19 +152,6 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) settle();
     });
-  }
-
-  void _showDetected() {
-    ref.read(detectedProjectsControllerProvider.notifier).detect();
-    showDialog<void>(
-      context: context,
-      builder: (context) => Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720, maxHeight: 600),
-          child: const DetectedProjectsView(),
-        ),
-      ),
-    );
   }
 
   void _say(String message) {
@@ -600,7 +586,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
               // Not `globe`, which is the Browser surface's glyph; imported
               // cards already use this one for "an agent already wrote this".
               icon: const Icon(AppIcons.clockCounterClockwise),
-              onPressed: _showDetected,
+              onPressed: () => DetectedProjectsView.show(context),
             ),
             IconButton(
               // The dialog asks where; nothing has to be selected for it to.
