@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -58,7 +59,7 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
         const Divider(height: Insets.lg),
         Expanded(
           child: comparison.candidates.isEmpty
-              ? const Center(child: Text('No candidates were recorded.'))
+              ? const PanePlaceholder(message: 'No candidates were recorded.')
               : LayoutBuilder(
                   builder: (context, constraints) {
                     final width = candidateColumnWidth(

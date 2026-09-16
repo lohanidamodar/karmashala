@@ -8,6 +8,7 @@ import 'package:karmashala/src/features/fanout/presentation/comparison_list.dart
 import 'package:karmashala/src/features/fanout/presentation/comparison_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -195,6 +196,36 @@ void main() {
       expect(first.width, closeTo((1440 - 2 * 16) / 3, 0.01));
       expect(last.right, closeTo(1440, 0.01));
     });
+  });
+
+  testWidgets('an empty list and an empty comparison are pane placeholders', (
+    tester,
+  ) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    await pump(tester, db, ComparisonList(onOpen: (_) {}, onNew: () {}));
+    expect(find.byType(PanePlaceholder), findsOneWidget);
+    expect(find.textContaining('No comparisons yet'), findsOneWidget);
+
+    final seeded = seedDatabase();
+    addTearDown(seeded.close);
+    ComparisonDao(seeded).insert(
+      Comparison(
+        id: 'cmp-empty',
+        repositoryId: 'r1',
+        prompt: 'Nobody answered',
+        createdAt: testTime,
+        outcome: ComparisonOutcome.pending,
+        candidates: const [],
+      ),
+    );
+    await pump(
+      tester,
+      seeded,
+      ComparisonView(comparisonId: 'cmp-empty', onBack: () {}),
+    );
+    expect(find.byType(PanePlaceholder), findsOneWidget);
+    expect(find.text('No candidates were recorded.'), findsOneWidget);
   });
 
   testWidgets('the list shows every comparison and opens one', (tester) async {

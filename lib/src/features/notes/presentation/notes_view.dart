@@ -88,8 +88,6 @@ class _EmptyNotes extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     if (filtered) {
       return PanePlaceholder(
         icon: AppIcons.note,
@@ -98,52 +96,21 @@ class _EmptyNotes extends ConsumerWidget {
             'to see the rest.',
       );
     }
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(Insets.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              AppIcons.note,
-              size: Touch.icon,
-              color: scheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              'No notes yet.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              'A note keeps an idea you had mid-conversation without acting '
-              'on it. Use the note button under any message to save what was '
-              'said, word for word.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              'When you are ready to work on one, send it back: its text is '
-              'offered to that session for you to check before it goes.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: Insets.md),
-            // The way out of the empty state, named. An icon-only **+** is how the owner
-            // ended up asking "where can we add notes?" while looking at the feature.
-            FilledButton.icon(
-              onPressed: () => showNewNoteDialog(context, ref),
-              icon: const Icon(AppIcons.notePencil, size: Chrome.icon),
-              label: const Text('Write a note'),
-            ),
-          ],
-        ),
+    return PanePlaceholder(
+      icon: AppIcons.note,
+      message:
+          'No notes yet.\n\n'
+          'A note keeps an idea you had mid-conversation without acting on '
+          'it. Use the note button under any message to save what was said, '
+          'word for word.\n\n'
+          'When you are ready to work on one, send it back: its text is '
+          'offered to that session for you to check before it goes.',
+      // The way out of the empty state, named. An icon-only **+** is how the
+      // owner ended up asking "where can we add notes?" while looking at it.
+      action: FilledButton.icon(
+        onPressed: () => showNewNoteDialog(context, ref),
+        icon: const Icon(AppIcons.notePencil, size: Chrome.icon),
+        label: const Text('Write a note'),
       ),
     );
   }

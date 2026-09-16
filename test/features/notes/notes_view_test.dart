@@ -13,6 +13,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -112,7 +113,8 @@ void main() {
   ) async {
     await pump(tester);
 
-    expect(find.text('No notes yet.'), findsOneWidget);
+    expect(find.textContaining('No notes yet.'), findsOneWidget);
+    expect(find.byType(PanePlaceholder), findsOneWidget);
     expect(find.textContaining('without acting on it'), findsOneWidget);
     expect(find.textContaining('note button under any message'), findsOneWidget);
     // And what happens next, which is the half that makes it a feature.
@@ -200,7 +202,7 @@ void main() {
 
     expect(container.read(notesProvider), isEmpty);
     expect(container.read(noteDaoProvider).list(), isEmpty);
-    expect(find.text('No notes yet.'), findsOneWidget);
+    expect(find.textContaining('No notes yet.'), findsOneWidget);
   });
 
   testWidgets('sending back queues the note for its own session, unsent', (

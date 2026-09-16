@@ -153,7 +153,7 @@ void main() {
     container.read(sidePanelProvider.notifier).select(SidePanelSurface.notes);
     await settle(tester);
 
-    expect(find.text('No notes yet.'), findsOneWidget);
+    expect(find.textContaining('No notes yet.'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Write a note'));
     await settle(tester);
 

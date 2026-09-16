@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
@@ -32,7 +33,17 @@ class SessionMediaList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (items.isEmpty) return const _NoMedia();
+    // Says what would put something here, because "nothing yet" on a panel
+    // nobody has used before reads as "this is broken".
+    if (items.isEmpty) {
+      return const PanePlaceholder(
+        icon: AppIcons.image,
+        message:
+            'No images in this session yet.\n\n'
+            'Pictures you paste, files an agent reads and screenshots a tool '
+            'takes all land here.',
+      );
+    }
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
       itemCount: items.length,
@@ -172,49 +183,6 @@ class _Problem extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// The empty state. Says what would put something here, because "nothing yet"
-/// on a panel nobody has used before reads as "this is broken".
-class _NoMedia extends StatelessWidget {
-  const _NoMedia();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              AppIcons.image,
-              size: Chrome.iconHero,
-              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
-            ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              'No images in this session yet.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: Insets.xs),
-            Text(
-              'Pictures you paste, files an agent reads and screenshots a tool '
-              'takes all land here.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

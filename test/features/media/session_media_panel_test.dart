@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 import 'package:karmashala/src/features/media/presentation/session_media_list.dart';
@@ -246,6 +247,7 @@ void main() {
 
     expect(find.byType(TranscriptImagePreview), findsNothing);
     expect(find.textContaining('No images'), findsOneWidget);
+    expect(find.byType(PanePlaceholder), findsOneWidget);
   });
 
   testWidgets('the list survives the window matrix', (tester) async {

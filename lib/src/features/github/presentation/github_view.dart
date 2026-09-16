@@ -103,7 +103,7 @@ class _RepoHeader extends StatelessWidget {
       if (repo.defaultBranch != null) 'default: ${repo.defaultBranch}',
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 6),
+      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, Insets.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -134,7 +134,7 @@ class _RepoHeader extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 6),
+          const SizedBox(height: Insets.xs),
           Text(
             meta.join('  ·  '),
             style: theme.textTheme.labelSmall?.copyWith(
@@ -156,7 +156,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, 6),
+      padding: const EdgeInsets.fromLTRB(Insets.md, Insets.sm, Insets.md, Insets.xs),
       child: Row(
         children: [
           Icon(icon, size: Chrome.icon, color: theme.colorScheme.primary),
@@ -204,8 +204,23 @@ class _AsyncList<T> extends StatelessWidget {
         padding: const EdgeInsets.all(Insets.md),
         child: DesktopErrorBanner('$e'),
       ),
+      // A line in the list, not a PanePlaceholder: this is one section of a
+      // scrolling pane, and a centred empty state belongs to a whole pane.
       data: (items) => items.isEmpty
-          ? PanePlaceholder(message: empty)
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Insets.md,
+                0,
+                Insets.md,
+                Insets.sm,
+              ),
+              child: Text(
+                empty,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            )
           : Column(children: [for (final item in items) itemBuilder(item)]),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -55,15 +56,11 @@ class ComparisonList extends ConsumerWidget {
         const Divider(height: Insets.lg),
         Expanded(
           child: comparisons.isEmpty
-              ? Center(
-                  child: Text(
-                    onNew == null
-                        ? 'Select a repository to start a fan-out.'
-                        : 'No comparisons yet. Run one prompt on several '
-                              'agents and they collect here.',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall,
-                  ),
+              ? PanePlaceholder(
+                  message: onNew == null
+                      ? 'Select a repository to start a fan-out.'
+                      : 'No comparisons yet. Run one prompt on several '
+                            'agents and they collect here.',
                 )
               : ListView.separated(
                   itemCount: comparisons.length,
