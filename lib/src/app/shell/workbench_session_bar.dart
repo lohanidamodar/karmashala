@@ -1,5 +1,20 @@
 part of 'workbench.dart';
 
+/// The width, at 1x text, a bar needs for its third control: the model chip in
+/// the action row, the stats button in the facts line. At 720px the action row
+/// is already 14px over without it, and 23px at the 1.3x text step.
+const double _sessionBarThirdControlWidth = 820;
+
+/// Below this, at 1x text, the action row scrolls instead of wrapping: a
+/// two-way split leaves a group 363px.
+const double _sessionBarNarrowWidth = 560;
+
+/// Below this the facts line scrolls rather than being squeezed illegible.
+const double _sessionFactsScrollWidth = 240;
+
+/// The most a model name may take before it ends.
+const double _sessionModelLabelWidth = 72;
+
 /// The chrome under the surface: what belongs to the session on screen. It
 /// speaks for the *focused pane's* session, never the Explorer's selection.
 class _SessionBar extends ConsumerWidget {
@@ -45,6 +60,15 @@ class _SessionBar extends ConsumerWidget {
           ).select((d) => d.isLoading && !d.hasValue),
         );
 
+    final textScaler = MediaQuery.textScalerOf(context);
+    final thirdControl = WidthClass.scaleBreakpoint(
+      _sessionBarThirdControlWidth,
+      textScaler,
+    );
+    final narrowBelow = WidthClass.scaleBreakpoint(
+      _sessionBarNarrowWidth,
+      textScaler,
+    );
     final scheme = Theme.of(context).colorScheme;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -66,53 +90,18 @@ class _SessionBar extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Full width and above everything, so the facts read as a caption
-                // over the row rather than as the first item in it.
+                // Full width and above everything, so the facts read as a
+                // caption over the row rather than as the first item in it.
                 if (sessionId != null) ...[
+                  // The bar's own width: a `LayoutBuilder` inside the row would
+                  // read infinity for a non-flexible child.
                   LayoutBuilder(
-                    builder: (context, constraints) {
-                      // The bar's own width. A `LayoutBuilder` *inside* the row
-                      // would read infinity: a non-flexible child of a `Row` is
-                      // measured unbounded along the main axis.
-                      final scale =
-                          MediaQuery.textScalerOf(context).scale(14) / 14;
-                      // The same width the action row buys its third control
-                      // at — a group too narrow for the model chip is too
-                      // narrow for this, and the usage chip beside it overflows
-                      // by 11px before it yields.
-                      final roomForStats = constraints.maxWidth >= 820 * scale;
-                      return Row(
-                    children: [
-                      Expanded(
-                        // Scrolled rather than squeezed: under 240px, sharing
-                        // the pixels out leaves none of them legible.
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final line = DeliveryStateLine(
-                              sessionId: sessionId,
-                            );
-                            return constraints.maxWidth < 240
-                                ? SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: line,
-                                  )
-                                : line;
-                          },
-                        ),
-                      ),
-                      // In the facts line and not the action row: a quota is not
-                      // a control and must not compete for those pixels. What
-                      // this session cost is the same kind of thing, and the
-                      // action row has none to give — a fixed child there takes
-                      // them from the model chip, which then overflows.
-                      if (roomForStats) ...[
-                        SessionStatsButton(sessionId: sessionId),
-                        const SizedBox(width: Insets.xs),
-                      ],
-                      Flexible(child: UsageChip(sessionId: sessionId)),
-                    ],
-                      );
-                    },
+                    builder: (context, constraints) => _SessionFactsRow(
+                      sessionId: sessionId,
+                      // The width the action row buys its third control at —
+                      // narrower, and the usage chip beside it overflows.
+                      roomForStats: constraints.maxWidth >= thirdControl,
+                    ),
                   ),
                   // Whatever this session has just been told, over the chips
                   // that post it.
@@ -120,91 +109,19 @@ class _SessionBar extends ConsumerWidget {
                 ],
                 LayoutBuilder(
                   builder: (context, constraints) {
-                    // Whether a third control fits, measured: at 720px the row
-                    // is already 14px over, and 23px at the 1.3x text step.
-                    final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
-                    final roomForModel = constraints.maxWidth > 820 * scale;
-                    // A group is a fraction of the window — a two-way split
-                    // leaves 363px. Below this the row scrolls instead.
-                    final narrow = constraints.maxWidth < 560 * scale;
-                    final toggle = selected == null
-                        ? null
-                        : _ViewToggle(
-                            onTerminal: onTerminal,
-                            onChat: onChat,
-                            onTerminalView: onTerminalView,
-                            compact: narrow,
-                          );
-                    if (narrow) {
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: sessionId == null
-                                ? const SizedBox.shrink()
-                                : SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        PermissionModeChip(
-                                          sessionId: sessionId,
-                                        ),
-                                        const SizedBox(width: Insets.xs),
-                                        // Unbounded, so the `Wrap` lays out in
-                                        // one run and the bar keeps one height.
-                                        DeliveryStrip(
-                                          sessionId: sessionId,
-                                          hostedOnTerminal: true,
-                                          compact: true,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                          ),
-                          if (toggle != null) ...[
-                            const SizedBox(width: Insets.sm),
-                            toggle,
-                          ],
-                        ],
-                      );
-                    }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (sessionId == null)
-                          const Spacer()
-                        else ...[
-                          PermissionModeChip(sessionId: sessionId),
-                          const SizedBox(width: Insets.xs),
-                          // Flexible, and the only control that is: a model
-                          // name is the one label whose width is unpredictable.
-                          if (roomForModel) ...[
-                            Flexible(
-                              child: SessionModelChip(
-                                sessionId: sessionId,
-                                maxLabelWidth: 72,
-                              ),
+                    final narrow = constraints.maxWidth < narrowBelow;
+                    return _SessionActionRow(
+                      sessionId: sessionId,
+                      narrow: narrow,
+                      roomForModel: constraints.maxWidth > thirdControl,
+                      toggle: selected == null
+                          ? null
+                          : _ViewToggle(
+                              onTerminal: onTerminal,
+                              onChat: onChat,
+                              onTerminalView: onTerminalView,
+                              compact: narrow,
                             ),
-                            const SizedBox(width: Insets.sm),
-                          ],
-                          // The delivery actions take the room the other two do
-                          // not, and wrap *within* this box.
-                          Expanded(
-                            flex: 8,
-                            child: DeliveryStrip(
-                              sessionId: sessionId,
-                              hostedOnTerminal: true,
-                            ),
-                          ),
-                        ],
-                        if (toggle != null) ...[
-                          const SizedBox(width: Insets.sm),
-                          toggle,
-                        ],
-                      ],
                     );
                   },
                 ),
@@ -212,6 +129,124 @@ class _SessionBar extends ConsumerWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// The caption over the action row: the delivery state, and the usage (and at
+/// width the stats) of the session.
+class _SessionFactsRow extends StatelessWidget {
+  const _SessionFactsRow({required this.sessionId, required this.roomForStats});
+
+  final String sessionId;
+  final bool roomForStats;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        // Scrolled rather than squeezed: under the floor, sharing the pixels
+        // out leaves none of them legible.
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final line = DeliveryStateLine(sessionId: sessionId);
+            return constraints.maxWidth < _sessionFactsScrollWidth
+                ? SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: line,
+                  )
+                : line;
+          },
+        ),
+      ),
+      // In the facts line and not the action row: a quota is not a control and
+      // must not compete for those pixels, and neither is what a session cost.
+      if (roomForStats) ...[
+        SessionStatsButton(sessionId: sessionId),
+        const SizedBox(width: Insets.xs),
+      ],
+      Flexible(child: UsageChip(sessionId: sessionId)),
+    ],
+  );
+}
+
+/// The session's controls — permission mode, model, delivery — and the view
+/// toggle. [narrow] scrolls the controls in one run instead of wrapping them.
+class _SessionActionRow extends StatelessWidget {
+  const _SessionActionRow({
+    required this.sessionId,
+    required this.toggle,
+    required this.narrow,
+    required this.roomForModel,
+  });
+
+  final String? sessionId;
+  final Widget? toggle;
+  final bool narrow;
+  final bool roomForModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final sessionId = this.sessionId;
+    final toggle = this.toggle;
+    if (narrow) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: sessionId == null
+                ? const SizedBox.shrink()
+                : SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PermissionModeChip(sessionId: sessionId),
+                        const SizedBox(width: Insets.xs),
+                        // Unbounded, so the `Wrap` lays out in one run and the
+                        // bar keeps one height.
+                        DeliveryStrip(
+                          sessionId: sessionId,
+                          hostedOnTerminal: true,
+                          compact: true,
+                        ),
+                      ],
+                    ),
+                  ),
+          ),
+          if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (sessionId == null)
+          const Spacer()
+        else ...[
+          PermissionModeChip(sessionId: sessionId),
+          const SizedBox(width: Insets.xs),
+          // Flexible, and the only control that is: a model name is the one
+          // label whose width is unpredictable.
+          if (roomForModel) ...[
+            Flexible(
+              child: SessionModelChip(
+                sessionId: sessionId,
+                maxLabelWidth: _sessionModelLabelWidth,
+              ),
+            ),
+            const SizedBox(width: Insets.sm),
+          ],
+          // The delivery actions take the room the other two do not, and wrap
+          // *within* this box.
+          Expanded(
+            flex: 8,
+            child: DeliveryStrip(sessionId: sessionId, hostedOnTerminal: true),
+          ),
+        ],
+        if (toggle != null) ...[const SizedBox(width: Insets.sm), toggle],
       ],
     );
   }
@@ -301,55 +336,7 @@ class _ViewToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    Widget half(
-      IconData icon,
-      String label,
-      String tip,
-      bool selected,
-      VoidCallback onTap,
-    ) {
-      final colour = selected ? scheme.primary : scheme.onSurfaceVariant;
-      return Tooltip(
-        message: tip,
-        child: Semantics(
-          button: true,
-          selected: selected,
-          label: tip,
-          child: InkWell(
-            onTap: onTap,
-            child: Container(
-              // Padded rather than fixed at 22px: the halves must grow with the
-              // ambient text scale or the row loses its shared centre-line.
-              padding: const EdgeInsets.symmetric(
-                horizontal: Insets.sm,
-                vertical: kBarControlPad,
-              ),
-              color: selected
-                  ? scheme.primary.withValues(alpha: 0.14)
-                  : Colors.transparent,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, size: Chrome.iconSmall, color: colour),
-                  if (!compact) ...[
-                    const SizedBox(width: Insets.xs),
-                    Text(
-                      label,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: colour,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
+    final scheme = Theme.of(context).colorScheme;
     // No padding of its own: the bar spaces its own row. The border is on the
     // decoration, which reserves its pixel where a `ClipRRect` would not.
     return Container(
@@ -361,15 +348,86 @@ class _ViewToggle extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          half(
-            AppIcons.terminal,
-            'Terminal',
-            'Terminal view',
-            onTerminal,
-            onTerminalView,
+          _ViewToggleHalf(
+            icon: AppIcons.terminal,
+            label: 'Terminal',
+            tooltip: 'Terminal view',
+            selected: onTerminal,
+            compact: compact,
+            onTap: onTerminalView,
           ),
-          half(AppIcons.chatCircle, 'Chat', 'Chat view', !onTerminal, onChat),
+          _ViewToggleHalf(
+            icon: AppIcons.chatCircle,
+            label: 'Chat',
+            tooltip: 'Chat view',
+            selected: !onTerminal,
+            compact: compact,
+            onTap: onChat,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// One side of [_ViewToggle].
+class _ViewToggleHalf extends StatelessWidget {
+  const _ViewToggleHalf({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.selected,
+    required this.compact,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+
+  /// Also the semantics label, which a [compact] half still needs.
+  final String tooltip;
+  final bool selected;
+  final bool compact;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final colour = selected ? scheme.primary : scheme.onSurfaceVariant;
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: tooltip,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            // Padded rather than fixed at 22px: the halves must grow with the
+            // ambient text scale or the row loses its shared centre-line.
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: kBarControlPad,
+            ),
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.14)
+                : Colors.transparent,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: Chrome.iconSmall, color: colour),
+                if (!compact) ...[
+                  const SizedBox(width: Insets.xs),
+                  Text(
+                    label,
+                    style: theme.textTheme.labelSmall?.copyWith(color: colour),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
