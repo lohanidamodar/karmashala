@@ -42,6 +42,7 @@ import '../../features/terminal/presentation/terminal_panel.dart';
 import 'quick_open/quick_open_item.dart';
 import 'quick_open/quick_open_list.dart';
 import 'tab_picker.dart';
+import 'workbench_conversation.dart';
 import 'workbench_tabs.dart';
 import 'tab_strip_metrics.dart';
 

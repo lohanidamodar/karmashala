@@ -19,10 +19,6 @@ class _WorkspaceGroup extends ConsumerStatefulWidget {
 }
 
 class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
-  /// The session whose **conversation** is mounted, or null when none is. Built
-  /// only once asked for: an [IndexedStack] mounts every child, transcript and all.
-  String? _conversationFor;
-
   /// Wired to the labelled Chat half of the bar's toggle. No *ordinary* tap
   /// opens the conversation — every writer of `false` is a deliberate request.
   void _showChat() {
@@ -63,14 +59,10 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
         groupId == null ||
         session == null ||
         ref.watch(terminalVisibleInGroupProvider(groupId));
-    // Asked for, or let go of — see [_conversationFor]. Written here because
-    // both inputs are read here and neither is a provider this may write to.
-    if (!onTerminal) {
-      _conversationFor = session.id;
-    } else if (_conversationFor != session?.id) {
-      _conversationFor = null;
-    }
-    final conversationMounted = session != null && _conversationFor != null;
+    // Asked for, or let go of — see [workspaceGroupConversationProvider]. Derived
+    // here from both inputs, and written back after the frame.
+    final conversationFor = _settleConversation(session?.id, onTerminal);
+    final conversationMounted = session != null && conversationFor != null;
 
     return Listener(
       // A press anywhere in the group hands it the keyboard. Translucent, so
@@ -131,6 +123,33 @@ class _WorkspaceGroupState extends ConsumerState<_WorkspaceGroup> {
         ],
       ),
     );
+  }
+
+  /// The conversation this group keeps mounted now. A provider may not be
+  /// written while building, so the stored value catches up after the frame.
+  String? _settleConversation(String? sessionId, bool onTerminal) {
+    final groupId = widget.groupId;
+    final provider = groupId == null
+        ? null
+        : workspaceGroupConversationProvider(groupId);
+    // Listened, not watched: this build already knows the answer, and keeping
+    // the provider alive is all the listener is for.
+    if (provider != null) ref.listen(provider, (_, _) {});
+    final current = provider == null ? null : ref.read(provider);
+    final next = nextMountedConversation(
+      current: current,
+      sessionId: sessionId,
+      onTerminal: onTerminal,
+    );
+    if (provider != null && next != current) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ref
+            .read(provider.notifier)
+            .settle(sessionId: sessionId, onTerminal: onTerminal);
+      });
+    }
+    return next;
   }
 
   /// The session this group is about: **this group's own active tab**, and a
