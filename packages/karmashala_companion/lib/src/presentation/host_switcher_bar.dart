@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
+import 'companion_route.dart';
 import 'pairing/pairing_screen.dart';
 
 /// The strip above the session list that names the desktop being shown and
@@ -55,7 +56,7 @@ class HostSwitcherBar extends ConsumerWidget {
     if (picked.isEmpty) {
       await Navigator.of(
         context,
-      ).push(MaterialPageRoute<void>(builder: (_) => const PairingScreen()));
+      ).push(companionRoute<void>(context, (_) => const PairingScreen()));
       return;
     }
     await ref.read(companionSwitchingProvider.notifier).switchTo(picked);

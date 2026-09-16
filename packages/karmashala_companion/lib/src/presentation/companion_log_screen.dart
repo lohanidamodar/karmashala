@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_core/logging.dart';
 import '../application/companion_runtime.dart';
 import 'companion_chrome.dart';
+import 'companion_route.dart';
 
 /// The companion's own log, on the phone that produced it — Copy is the real
 /// feature, since app-support is unreachable on Android. Not a live tail.
@@ -16,7 +17,7 @@ class CompanionLogScreen extends ConsumerStatefulWidget {
 
   static Future<void> show(BuildContext context) => Navigator.of(
     context,
-  ).push(MaterialPageRoute<void>(builder: (_) => const CompanionLogScreen()));
+  ).push(companionRoute<void>(context, (_) => const CompanionLogScreen()));
 
   @override
   ConsumerState<CompanionLogScreen> createState() => _CompanionLogScreenState();

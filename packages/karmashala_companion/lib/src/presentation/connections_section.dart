@@ -9,6 +9,7 @@ import 'package:karmashala_ui/rows.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
+import 'companion_route.dart';
 import 'companion_states.dart';
 import 'pairing/pairing_screen.dart';
 
@@ -53,8 +54,9 @@ class ConnectionsSection extends ConsumerWidget {
             onPressed: switching != null
                 ? null
                 : () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const PairingScreen(),
+                    companionRoute<void>(
+                      context,
+                      (_) => const PairingScreen(),
                     ),
                   ),
             icon: const Icon(AppIcons.plus),

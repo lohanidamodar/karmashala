@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import '../companion_chrome.dart';
+import '../companion_route.dart';
 import '../companion_states.dart';
 import 'add_machine_screen.dart';
 import 'scan_qr_screen.dart';
@@ -34,16 +35,16 @@ class PairingScreen extends StatelessWidget {
           actionLabel: 'Scan the QR code',
           onAction: () => Navigator.of(
             context,
-          ).push(MaterialPageRoute<void>(builder: (_) => const ScanQrScreen())),
+          ).push(companionRoute<void>(context, (_) => const ScanQrScreen())),
           secondaryLabel: 'Paste the code instead',
           onSecondary: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const ShortCodeScreen()),
+            companionRoute<void>(context, (_) => const ShortCodeScreen()),
           ),
           // A box is never found by searching, so it gets its own way in
           // rather than a code field that quietly does not work for it.
           tertiaryLabel: 'Add a machine by address',
           onTertiary: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const AddMachineScreen()),
+            companionRoute<void>(context, (_) => const AddMachineScreen()),
           ),
         ),
       ),

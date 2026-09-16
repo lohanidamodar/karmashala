@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import '../../application/companion_providers.dart';
 import '../companion_chrome.dart';
+import '../companion_route.dart';
 import '../companion_states.dart';
 import 'pairing_progress_screen.dart';
 import 'short_code_screen.dart';
@@ -41,8 +42,9 @@ class _ScanQrScreenState extends ConsumerState<ScanQrScreen> {
         _error = null;
       });
       await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => PairingProgressScreen(
+        companionRoute<void>(
+          context,
+          (_) => PairingProgressScreen(
             attempt: (gateway) => gateway.pairWithQr(payload),
           ),
         ),
@@ -135,11 +137,13 @@ class _ScanQrScreenState extends ConsumerState<ScanQrScreen> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: Insets.sm),
                         child: TextButton(
-                          onPressed: () => Navigator.of(context).pushReplacement(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const ShortCodeScreen(),
-                            ),
-                          ),
+                          onPressed: () =>
+                              Navigator.of(context).pushReplacement(
+                                companionRoute<void>(
+                                  context,
+                                  (_) => const ShortCodeScreen(),
+                                ),
+                              ),
                           child: const Text('Type the code instead'),
                         ),
                       ),

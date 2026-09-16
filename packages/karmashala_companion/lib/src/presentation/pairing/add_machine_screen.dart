@@ -7,6 +7,7 @@ import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../companion_chrome.dart';
+import '../companion_route.dart';
 import '../companion_states.dart';
 import 'pairing_progress_screen.dart';
 
@@ -67,8 +68,9 @@ class _AddMachineScreenState extends ConsumerState<AddMachineScreen> {
       return;
     }
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => PairingProgressScreen(
+      companionRoute<void>(
+        context,
+        (_) => PairingProgressScreen(
           attempt: (gateway) => gateway.pairWithCode(code, at: endpoint),
         ),
       ),

@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import '../../application/companion_providers.dart';
 import '../companion_chrome.dart';
+import '../companion_route.dart';
 import 'pairing_progress_screen.dart';
 
 /// The QR fallback: type the code shown under the desktop's QR, or paste the
@@ -35,8 +36,9 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
       // A real code or payload: leave the input and narrate the attempt.
       setState(() => _error = null);
       await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => PairingProgressScreen(
+        companionRoute<void>(
+          context,
+          (_) => PairingProgressScreen(
             attempt: (gateway) => gateway.pairWithCode(code),
           ),
         ),
