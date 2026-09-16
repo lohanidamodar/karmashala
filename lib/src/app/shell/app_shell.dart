@@ -208,7 +208,7 @@ class _CompactPaneSelector extends ConsumerWidget {
     final controller = ref.read(shellControllerProvider.notifier);
     final scheme = Theme.of(context).colorScheme;
     return Container(
-      height: Chrome.tabStrip + Insets.sm,
+      height: Chrome.tabStripOf(context) + Insets.sm,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,

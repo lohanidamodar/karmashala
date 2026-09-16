@@ -136,6 +136,18 @@ void main() {
     });
   }
 
+  testWidgets('the compact pane selector grows with the text', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpAt(tester, const Size(640, 900));
+
+    final selector = find.byType(SegmentedButton<ShellPane>);
+    expect(selector, findsOneWidget);
+    // A fixed 38px bar squeezed the buttons until their labels hung out.
+    final label = tester.getRect(find.text('Workbench'));
+    expect(label.bottom, lessThanOrEqualTo(tester.getRect(selector).bottom));
+  });
+
   testWidgets('the minimum window with the widest saved panel does not '
       'overflow', (tester) async {
     final errors = await pumpAt(
