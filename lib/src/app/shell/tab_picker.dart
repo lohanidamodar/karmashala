@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
@@ -146,39 +145,15 @@ class _TabPickerState extends ConsumerState<TabPicker> {
     setState(() {});
   }
 
-  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    final control = HardwareKeyboard.instance.isControlPressed;
-    final key = event.logicalKey;
-    // The same bindings quick open has: this is the shell's second filtered
-    // list, not a surface with a vocabulary of its own.
-    if (key == LogicalKeyboardKey.arrowDown ||
-        (control && key == LogicalKeyboardKey.keyN)) {
-      _select(_selected + 1);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp ||
-        (control && key == LogicalKeyboardKey.keyP)) {
-      _select(_selected - 1);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.home) {
-      _select(0);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.end) {
-      _select(_rows.length - 1);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter) {
-      _activate();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
+  /// The same bindings quick open has: this is the shell's second filtered
+  /// list, not a surface with a vocabulary of its own.
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) => handleListNavigation(
+    event,
+    onMove: (delta) => _select(_selected + delta),
+    onHome: () => _select(0),
+    onEnd: () => _select(_rows.length - 1),
+    onActivate: _activate,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -196,46 +171,36 @@ class _TabPickerState extends ConsumerState<TabPicker> {
       _selected = _rows.isEmpty ? 0 : _rows.length - 1;
     }
 
-    return Dialog(
-      alignment: Alignment.topCenter,
-      insetPadding: const EdgeInsets.only(top: 64, left: 24, right: 24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 460),
-        child: Focus(
-          onKeyEvent: _onKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              QuickOpenSearchField(
-                controller: _query,
-                onChanged: _onQueryChanged,
-                hintText: 'Filter tabs by name, session or directory',
+    final count = _rows.length;
+    return QuickOpenFrame(
+      maxWidth: 560,
+      maxHeight: 460,
+      onKey: _onKey,
+      searchField: QuickOpenSearchField(
+        controller: _query,
+        onChanged: _onQueryChanged,
+        hintText: 'Filter tabs by name, session or directory',
+      ),
+      body: _rows.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.all(Insets.xl),
+              child: Text(
+                'No tab matches.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
-              const Divider(height: 1),
-              Flexible(
-                child: _rows.isEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.all(Insets.xl),
-                        child: Text(
-                          'No tab matches.',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: _scroll,
-                        padding: EdgeInsets.zero,
-                        itemExtent: quickOpenRowHeightOf(context),
-                        itemCount: _rows.length,
-                        itemBuilder: (context, index) => _row(index),
-                      ),
-              ),
-              const Divider(height: 1),
-              _Footer(count: _rows.length),
-            ],
-          ),
-        ),
+            )
+          : ListView.builder(
+              controller: _scroll,
+              padding: EdgeInsets.zero,
+              itemExtent: quickOpenRowHeightOf(context),
+              itemCount: _rows.length,
+              itemBuilder: (context, index) => _row(index),
+            ),
+      footer: QuickOpenFooter(
+        leading: Text('$count tab${count == 1 ? '' : 's'}'),
+        hint: '↑↓ move   ·   Enter switch   ·   Esc close',
       ),
     );
   }
@@ -278,40 +243,6 @@ class _TabPickerState extends ConsumerState<TabPicker> {
               icon: const Icon(AppIcons.x),
               onPressed: () => _close(entry),
             ),
-    );
-  }
-}
-
-class _Footer extends StatelessWidget {
-  const _Footer({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      height: Chrome.statusBar + Insets.xs,
-      padding: const EdgeInsets.symmetric(horizontal: Insets.md),
-      alignment: Alignment.centerLeft,
-      child: DefaultTextStyle.merge(
-        style: theme.textTheme.labelSmall!.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-        child: Row(
-          children: [
-            Text('$count tab${count == 1 ? '' : 's'}'),
-            const Spacer(),
-            const Flexible(
-              child: Text(
-                '↑↓ move   ·   Enter switch   ·   Esc close',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

@@ -199,6 +199,40 @@ void main() {
     expect(switchedTo, isEmpty);
   });
 
+  testWidgets('it opens in the frame quick open does, not a fixed inset', (
+    tester,
+  ) async {
+    // The smallest window: quick open's inset follows the window's height, and
+    // the picker kept a desktop 64px that the window does not have to spare.
+    tester.view.physicalSize = const Size(720, 560);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await open(tester);
+
+    final top = tester
+        .getTopLeft(
+          find
+              .descendant(
+                of: find.byType(Dialog),
+                matching: find.byType(Material),
+              )
+              .first,
+        )
+        .dy;
+    expect(top, closeTo(560 * 0.09, 0.5));
+  });
+
+  testWidgets('Page Down moves the cursor as in quick open', (tester) async {
+    tabs = [for (var i = 0; i < 20; i++) 'tab-$i'];
+    active = 'tab-0';
+    await open(tester);
+
+    await press(tester, LogicalKeyboardKey.pageDown);
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(switchedTo, ['tab-8']);
+  });
+
   testWidgets('a hundred tabs stay findable', (tester) async {
     tabs = [for (var i = 0; i < 100; i++) 'tab-$i'];
     active = 'tab-0';

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -35,6 +36,133 @@ double? revealOffset({
       : (leading < current ? leading : null);
   if (target == null) return null;
   return target.clamp(0.0, position.maxScrollExtent);
+}
+
+/// How far Page Up and Page Down move a filtered list's cursor.
+const int _pageStep = 8;
+
+/// The keys every filtered list in the shell shares: the arrows and Ctrl+N/P,
+/// Page Up/Down, Home/End and Enter. Home/End drive the list, not the caret.
+KeyEventResult handleListNavigation(
+  KeyEvent event, {
+  required ValueChanged<int> onMove,
+  required VoidCallback onHome,
+  required VoidCallback onEnd,
+  required VoidCallback onActivate,
+}) {
+  if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+    return KeyEventResult.ignored;
+  }
+  final control = HardwareKeyboard.instance.isControlPressed;
+  final key = event.logicalKey;
+  // Ctrl+N/Ctrl+P as well as the arrows: a list driven from the home row.
+  if (key == LogicalKeyboardKey.arrowDown ||
+      (control && key == LogicalKeyboardKey.keyN)) {
+    onMove(1);
+  } else if (key == LogicalKeyboardKey.arrowUp ||
+      (control && key == LogicalKeyboardKey.keyP)) {
+    onMove(-1);
+  } else if (key == LogicalKeyboardKey.pageDown) {
+    onMove(_pageStep);
+  } else if (key == LogicalKeyboardKey.pageUp) {
+    onMove(-_pageStep);
+  } else if (key == LogicalKeyboardKey.home) {
+    onHome();
+  } else if (key == LogicalKeyboardKey.end) {
+    onEnd();
+  } else if (key == LogicalKeyboardKey.enter ||
+      key == LogicalKeyboardKey.numpadEnter) {
+    onActivate();
+  } else {
+    return KeyEventResult.ignored;
+  }
+  return KeyEventResult.handled;
+}
+
+/// The dialog a filtered list opens in: pinned near the top, a search field,
+/// the [body], and a [footer]. [onKey] sees every key the field does not use.
+class QuickOpenFrame extends StatelessWidget {
+  const QuickOpenFrame({
+    required this.maxWidth,
+    required this.maxHeight,
+    required this.onKey,
+    required this.searchField,
+    required this.body,
+    required this.footer,
+    super.key,
+  });
+
+  final double maxWidth;
+  final double maxHeight;
+  final FocusOnKeyEventCallback onKey;
+  final Widget searchField;
+  final Widget body;
+  final Widget footer;
+
+  @override
+  Widget build(BuildContext context) {
+    // Scaled to the window, not fixed: at 720x560 with text at 1.3x, a 72px
+    // desktop inset overflowed the column.
+    final height = MediaQuery.sizeOf(context).height;
+    final topInset = (height * 0.09).clamp(Insets.lg, 72.0);
+    return Dialog(
+      alignment: Alignment.topCenter,
+      insetPadding: EdgeInsets.only(
+        top: topInset,
+        left: Insets.xl,
+        right: Insets.xl,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: maxHeight),
+        child: Focus(
+          onKeyEvent: onKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              searchField,
+              const Divider(height: 1),
+              Flexible(child: body),
+              const Divider(height: 1),
+              footer,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The line under a filtered list: what it holds on the left, the keys it
+/// answers to on the right. The hint ends first when the row is short.
+class QuickOpenFooter extends StatelessWidget {
+  const QuickOpenFooter({required this.leading, required this.hint, super.key});
+
+  final Widget leading;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      height: Chrome.statusBar + Insets.xs,
+      padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+      alignment: Alignment.centerLeft,
+      child: DefaultTextStyle.merge(
+        style: theme.textTheme.labelSmall!.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        child: Row(
+          children: [
+            leading,
+            const Spacer(),
+            Flexible(
+              child: Text(hint, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// The search box above a filtered list.

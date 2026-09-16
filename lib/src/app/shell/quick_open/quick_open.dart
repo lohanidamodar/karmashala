@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../features/cli_detection/application/cli_detection_providers.dart';
@@ -264,96 +263,50 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     _flat[_selected].item.onSelect();
   }
 
-  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    final control = HardwareKeyboard.instance.isControlPressed;
-    final key = event.logicalKey;
-
-    // Ctrl+N/Ctrl+P move as well as the arrows: this is a list that is driven
-    // while both hands are on the home row.
-    if (key == LogicalKeyboardKey.arrowDown ||
-        (control && key == LogicalKeyboardKey.keyN)) {
-      _move(1);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.arrowUp ||
-        (control && key == LogicalKeyboardKey.keyP)) {
-      _move(-1);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.pageDown) {
-      _move(8);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.pageUp) {
-      _move(-8);
-      return KeyEventResult.handled;
-    }
-    // Home/End drive the list, not the caret: the query is a short phrase in a
-    // single-line box, and the ends of a result list are worth reaching.
-    if (key == LogicalKeyboardKey.home) {
-      _selectRow(0);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.end) {
-      _selectRow(_flat.length - 1);
-      return KeyEventResult.handled;
-    }
-    if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.numpadEnter) {
-      _activate();
-      return KeyEventResult.handled;
-    }
-    return KeyEventResult.ignored;
-  }
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) => handleListNavigation(
+    event,
+    onMove: _move,
+    onHome: () => _selectRow(0),
+    onEnd: () => _selectRow(_flat.length - 1),
+    onActivate: _activate,
+  );
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    // Scaled to the window, not fixed: at 720x560 with text at 1.3x, a 72px
-    // desktop inset overflowed the column.
-    final height = MediaQuery.sizeOf(context).height;
-    final topInset = (height * 0.09).clamp(16.0, 72.0);
-    return Dialog(
-      alignment: Alignment.topCenter,
-      insetPadding: EdgeInsets.only(top: topInset, left: 24, right: 24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720, maxHeight: 520),
-        child: Focus(
-          onKeyEvent: _onKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              QuickOpenSearchField(
-                controller: _controller,
-                onChanged: _onQueryChanged,
-                hintText:
-                    'Go to a session, file or branch — or search what was '
-                    'said',
-              ),
-              const Divider(height: 1),
-              Flexible(
-                child: _flat.isEmpty
-                    ? _Empty(query: _query)
-                    : ListView.builder(
-                        controller: _scroll,
-                        padding: EdgeInsets.zero,
-                        itemCount: _rows.length,
-                        itemBuilder: (context, index) => _rows[index],
-                      ),
-              ),
-              const Divider(height: 1),
-              _Footer(
-                count: _flat.length,
-                indexing: _walking != null && !_indexed,
-                colour: scheme.onSurfaceVariant,
-              ),
+    final count = _flat.length;
+    return QuickOpenFrame(
+      maxWidth: 720,
+      maxHeight: 520,
+      onKey: _onKey,
+      searchField: QuickOpenSearchField(
+        controller: _controller,
+        onChanged: _onQueryChanged,
+        hintText: 'Go to a session, file or branch — or search what was said',
+      ),
+      body: _flat.isEmpty
+          ? _Empty(query: _query)
+          : ListView.builder(
+              controller: _scroll,
+              padding: EdgeInsets.zero,
+              itemCount: _rows.length,
+              itemBuilder: (context, index) => _rows[index],
+            ),
+      footer: QuickOpenFooter(
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$count result${count == 1 ? '' : 's'}'),
+            if (_walking != null && !_indexed) ...[
+              const SizedBox(width: Insets.sm),
+              const Text('· indexing files…'),
             ],
-          ),
+          ],
         ),
+        // The sigils are a hint, not a control: at a narrow width they
+        // ellipsise rather than push the result count off the row.
+        hint:
+            r'>  commands   ·   #  sessions   ·   ?  conversations   ·   '
+            r'/  files   ·   $  snippets   ·   ~  presets',
       ),
     );
   }
@@ -506,51 +459,6 @@ class _Empty extends StatelessWidget {
             : 'Nothing in ${group.label.toLowerCase()} matches.',
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}
-
-class _Footer extends StatelessWidget {
-  const _Footer({
-    required this.count,
-    required this.indexing,
-    required this.colour,
-  });
-
-  final int count;
-  final bool indexing;
-  final Color colour;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      height: Chrome.statusBar + Insets.xs,
-      padding: const EdgeInsets.symmetric(horizontal: Insets.md),
-      alignment: Alignment.centerLeft,
-      child: DefaultTextStyle.merge(
-        style: theme.textTheme.labelSmall!.copyWith(color: colour),
-        child: Row(
-          children: [
-            Text('$count result${count == 1 ? '' : 's'}'),
-            if (indexing) ...[
-              const SizedBox(width: Insets.sm),
-              const Text('· indexing files…'),
-            ],
-            const Spacer(),
-            // The sigils are a hint, not a control: at a narrow width they
-            // ellipsise rather than push the result count off the row.
-            const Flexible(
-              child: Text(
-                r'>  commands   ·   #  sessions   ·   ?  conversations   ·   '
-                r'/  files   ·   $  snippets   ·   ~  presets',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
         ),
       ),
     );
