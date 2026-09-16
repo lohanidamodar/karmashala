@@ -97,95 +97,91 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
     final label = agentLabel(widget.installation.agentId);
     final usage = _usage;
     final failure = _failure;
-    return Card(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$label · '
+                  '${ref.watch(environmentLabelForIdProvider(widget.installation.environmentId))}',
+                  style: MonoStyles.body,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (_loading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                TextButton.icon(
+                  onPressed: _fetch,
+                  icon: const Icon(
+                    AppIcons.arrowsClockwise,
+                    size: Chrome.iconAction,
+                  ),
+                  label: Text(usage == null ? 'Check usage' : 'Refresh'),
+                ),
+            ],
+          ),
+          if (usage?.email != null) ...[
+            const SizedBox(height: Insets.xs),
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    '$label · '
-                    '${ref.watch(environmentLabelForIdProvider(widget.installation.environmentId))}',
-                    style: MonoStyles.body,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                Icon(
+                  AppIcons.userCircle,
+                  size: 13,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                if (_loading)
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  TextButton.icon(
-                    onPressed: _fetch,
-                    icon: const Icon(
-                      AppIcons.arrowsClockwise,
-                      size: Chrome.iconAction,
-                    ),
-                    label: Text(usage == null ? 'Check usage' : 'Refresh'),
-                  ),
-              ],
-            ),
-            if (usage?.email != null) ...[
-              const SizedBox(height: Insets.xs),
-              Row(
-                children: [
-                  Icon(
-                    AppIcons.userCircle,
-                    size: 13,
+                const SizedBox(width: Insets.xs),
+                Text(
+                  usage!.email!,
+                  style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(width: Insets.xs),
-                  Text(
-                    usage!.email!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+                ),
+              ],
+            ),
+          ],
+          if (failure != null) ...[
+            const SizedBox(height: Insets.xs),
+            _FailureLine(failure: failure),
+          ],
+          if (usage != null) ...[
+            const SizedBox(height: Insets.xs),
+            // The age, always, not only on failure: a reading that is not
+            // live must not look live.
+            Text(
+              'Checked ${describeAge(ref.read(clockProvider).nowUtc().difference(usage.fetchedAt))}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: SemanticColors.of(context).neutral,
               ),
-            ],
-            if (failure != null) ...[
-              const SizedBox(height: Insets.xs),
-              _FailureLine(failure: failure),
-            ],
-            if (usage != null) ...[
-              const SizedBox(height: Insets.xs),
-              // The age, always, not only on failure: a reading that is not
-              // live must not look live.
+            ),
+            // The sign-in's own lifetime, never dressed as a quota reset.
+            if (usage.tokenExpiresAt case final expiry?)
               Text(
-                'Checked ${describeAge(ref.read(clockProvider).nowUtc().difference(usage.fetchedAt))}',
+                _signInLine(
+                  expiry,
+                  ref.read(clockProvider).nowUtc(),
+                ),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: SemanticColors.of(context).neutral,
                 ),
               ),
-              // The sign-in's own lifetime, never dressed as a quota reset.
-              if (usage.tokenExpiresAt case final expiry?)
-                Text(
-                  _signInLine(
-                    expiry,
-                    ref.read(clockProvider).nowUtc(),
-                  ),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: SemanticColors.of(context).neutral,
-                  ),
-                ),
-              const SizedBox(height: Insets.sm),
-              if (usage.isEmpty)
-                Text(
-                  'No usage windows reported.',
-                  style: theme.textTheme.bodySmall,
-                )
-              else
-                for (final window in usage.windows) _UsageBar(window: window),
-            ],
+            const SizedBox(height: Insets.sm),
+            if (usage.isEmpty)
+              Text(
+                'No usage windows reported.',
+                style: theme.textTheme.bodySmall,
+              )
+            else
+              for (final window in usage.windows) _UsageBar(window: window),
           ],
-        ),
+        ],
       ),
     );
   }

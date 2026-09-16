@@ -58,65 +58,61 @@ class _ModelCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final blocked = modelNotSettableReason(descriptor);
-    return Card(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    agentLabel(descriptor.id),
-                    style: theme.textTheme.titleSmall,
-                  ),
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  agentLabel(descriptor.id),
+                  style: theme.textTheme.titleSmall,
                 ),
-                ModelPicker(
-                  options: modelOptionsFor(descriptor),
-                  selected: selected,
-                  onChanged: onChanged,
-                ),
-              ],
-            ),
-            const SizedBox(height: Insets.xs),
-            // Says which way the precedence runs, exactly as the permission
-            // card does: this is where a session starts **until it chooses**.
-            Text(
-              'The model new sessions start on, for sessions that have not '
-              'chosen one of their own. A model picked on a session keeps that '
-              'session, even after this changes.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
               ),
+              ModelPicker(
+                options: modelOptionsFor(descriptor),
+                selected: selected,
+                onChanged: onChanged,
+              ),
+            ],
+          ),
+          const SizedBox(height: Insets.xs),
+          // Says which way the precedence runs, exactly as the permission
+          // card does: this is where a session starts **until it chooses**.
+          Text(
+            'The model new sessions start on, for sessions that have not '
+            'chosen one of their own. A model picked on a session keeps that '
+            'session, even after this changes.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            // Said on the card and not only inside the menu: a default this CLI
-            // can never be told would otherwise look like it was in force.
-            if (blocked != null)
-              Padding(
-                padding: const EdgeInsets.only(top: Insets.sm),
-                child: Row(
-                  children: [
-                    Icon(
-                      AppIcons.warningCircle,
-                      size: Chrome.icon,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    Expanded(
-                      child: Text(
-                        blocked,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
+          ),
+          // Said on the card and not only inside the menu: a default this CLI
+          // can never be told would otherwise look like it was in force.
+          if (blocked != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.sm),
+              child: Row(
+                children: [
+                  Icon(
+                    AppIcons.warningCircle,
+                    size: Chrome.icon,
+                    color: theme.colorScheme.error,
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  Expanded(
+                    child: Text(
+                      blocked,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }

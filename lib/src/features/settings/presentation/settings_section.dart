@@ -37,3 +37,20 @@ class SettingsSection extends StatelessWidget {
     );
   }
 }
+
+/// One card on a settings page — an installation, an environment, a host.
+/// Every settings card is this one, so none drifts to its own margin or
+/// padding.
+class SettingsCard extends StatelessWidget {
+  const SettingsCard({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: Insets.sm),
+      child: Padding(padding: const EdgeInsets.all(Insets.md), child: child),
+    );
+  }
+}

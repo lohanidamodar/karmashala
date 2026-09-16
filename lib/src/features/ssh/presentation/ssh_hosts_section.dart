@@ -124,117 +124,113 @@ class _HostCard extends ConsumerWidget {
         'pair_phone' => PairPhoneDialog.show(context, host: host),
         _ => _remove(context, ref),
       },
-      builder: (context) => Card(
-        margin: const EdgeInsets.only(bottom: Insets.sm),
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    AppIcons.globe,
-                    size: Chrome.iconTitle,
-                    color: theme.colorScheme.tertiary,
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    child: Row(
-                      children: [
-                        // The name gives way; the count beside it does not.
-                        Flexible(
+      builder: (context) => SettingsCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  AppIcons.globe,
+                  size: Chrome.iconTitle,
+                  color: theme.colorScheme.tertiary,
+                ),
+                const SizedBox(width: Insets.sm),
+                Expanded(
+                  child: Row(
+                    children: [
+                      // The name gives way; the count beside it does not.
+                      Flexible(
+                        child: Text(
+                          host.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall,
+                        ),
+                      ),
+                      if (projects.isNotEmpty) ...[
+                        const SizedBox(width: Insets.xs),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Insets.xs,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(Radii.md),
+                          ),
                           child: Text(
-                            host.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall,
+                            '${projects.length} project${projects.length == 1 ? '' : 's'}',
+                            style: theme.textTheme.labelSmall,
                           ),
                         ),
-                        if (projects.isNotEmpty) ...[
-                          const SizedBox(width: Insets.xs),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: Insets.xs,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(Radii.md),
-                            ),
-                            child: Text(
-                              '${projects.length} project${projects.length == 1 ? '' : 's'}',
-                              style: theme.textTheme.labelSmall,
-                            ),
-                          ),
-                        ],
                       ],
-                    ),
+                    ],
                   ),
-                  SshConnectionStatusChip(hostId: host.id, showError: false),
-                ],
-              ),
-              const SizedBox(height: Insets.xs),
-              Text(
-                host.address,
-                style: MonoStyles.body,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: Insets.xs),
-              Text(
-                switch (host.authMethod) {
-                  SshAuthMethod.password => 'Password (asked each connection)',
-                  SshAuthMethod.privateKey =>
-                    'Key: ${key?.path ?? '—'} (${key?.environmentId ?? '—'})',
-                },
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                SshConnectionStatusChip(hostId: host.id, showError: false),
+              ],
+            ),
+            const SizedBox(height: Insets.xs),
+            Text(
+              host.address,
+              style: MonoStyles.body,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: Insets.xs),
+            Text(
+              switch (host.authMethod) {
+                SshAuthMethod.password => 'Password (asked each connection)',
+                SshAuthMethod.privateKey =>
+                  'Key: ${key?.path ?? '—'} (${key?.environmentId ?? '—'})',
+              },
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(height: Insets.sm),
-              Wrap(
-                spacing: Insets.xs,
-                runSpacing: Insets.xs,
-                children: [
-                  FilledButton.tonalIcon(
-                    onPressed: openTerminal,
-                    icon: const Icon(AppIcons.terminal),
-                    label: const Text('Terminal'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: Insets.sm),
+            Wrap(
+              spacing: Insets.xs,
+              runSpacing: Insets.xs,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: openTerminal,
+                  icon: const Icon(AppIcons.terminal),
+                  label: const Text('Terminal'),
+                ),
+                TextButton.icon(
+                  onPressed: () => NewProjectDialog.show(
+                    context,
+                    initialEnvironmentId: host.environmentId,
                   ),
-                  TextButton.icon(
-                    onPressed: () => NewProjectDialog.show(
-                      context,
-                      initialEnvironmentId: host.environmentId,
-                    ),
-                    icon: const Icon(AppIcons.folderPlus),
-                    label: const Text('New project'),
+                  icon: const Icon(AppIcons.folderPlus),
+                  label: const Text('New project'),
+                ),
+                TextButton.icon(
+                  onPressed: () =>
+                      RemoteFileBrowserDialog.show(context, host: host),
+                  icon: const Icon(AppIcons.folderOpen),
+                  label: const Text('Browse files'),
+                ),
+                TextButton.icon(
+                  onPressed: () => SshHostDialog.show(context, existing: host),
+                  icon: const Icon(AppIcons.pencilSimple),
+                  label: const Text('Edit'),
+                ),
+                TextButton.icon(
+                  onPressed: () => _remove(context, ref),
+                  icon: const Icon(AppIcons.trash),
+                  label: const Text('Remove'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: theme.colorScheme.error,
                   ),
-                  TextButton.icon(
-                    onPressed: () =>
-                        RemoteFileBrowserDialog.show(context, host: host),
-                    icon: const Icon(AppIcons.folderOpen),
-                    label: const Text('Browse files'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => SshHostDialog.show(context, existing: host),
-                    icon: const Icon(AppIcons.pencilSimple),
-                    label: const Text('Edit'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _remove(context, ref),
-                    icon: const Icon(AppIcons.trash),
-                    label: const Text('Remove'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: theme.colorScheme.error,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

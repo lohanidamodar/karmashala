@@ -4,6 +4,8 @@ import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import 'settings_section.dart';
+
 // The parts the Claude and Codex account sections share. Pure: each takes
 // what it shows and the callbacks it fires, and the sections keep only their
 // provider reads.
@@ -42,54 +44,50 @@ class AgentAccountCardFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(AppIcons.robot, size: Chrome.iconTitle),
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: MonoStyles.body,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(AppIcons.robot, size: Chrome.iconTitle),
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: Text(
+                  title,
+                  style: MonoStyles.body,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                if (busy)
-                  const InlineSpinner()
-                else
-                  IconButton(
-                    tooltip: refreshTooltip,
-                    visualDensity: VisualDensity.compact,
-                    onPressed: onRefresh,
-                    icon: const Icon(AppIcons.arrowsClockwise),
-                  ),
-              ],
-            ),
-            const SizedBox(height: Insets.sm),
-            current,
-            const SizedBox(height: Insets.sm),
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: Insets.xs,
-              runSpacing: Insets.xs,
-              children: [
-                TextButton.icon(
-                  onPressed: onCapture,
-                  icon: const Icon(AppIcons.downloadSimple),
-                  label: const Text('Capture current'),
+              ),
+              if (busy)
+                const InlineSpinner()
+              else
+                IconButton(
+                  tooltip: refreshTooltip,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onRefresh,
+                  icon: const Icon(AppIcons.arrowsClockwise),
                 ),
-                ?switchMenu,
-              ],
-            ),
-          ],
-        ),
+            ],
+          ),
+          const SizedBox(height: Insets.sm),
+          current,
+          const SizedBox(height: Insets.sm),
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: Insets.xs,
+            runSpacing: Insets.xs,
+            children: [
+              TextButton.icon(
+                onPressed: onCapture,
+                icon: const Icon(AppIcons.downloadSimple),
+                label: const Text('Capture current'),
+              ),
+              ?switchMenu,
+            ],
+          ),
+        ],
       ),
     );
   }

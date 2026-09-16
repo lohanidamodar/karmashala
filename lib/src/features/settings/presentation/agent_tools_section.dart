@@ -50,7 +50,8 @@ class _Family extends StatelessWidget {
       // so it read that view's saved *offset* as its expanded flag: a `double`
       // cast to `bool?` in initState, which rendered the page as nothing.
       key: PageStorageKey<String>('agent-tools:${category.label}'),
-      // The settings page has no cards; this tile's would be the only one.
+      // No border: the page's cards are `SettingsCard`s, and a bordered tile
+      // would read as one more.
       shape: const Border(),
       collapsedShape: const Border(),
       tilePadding: EdgeInsets.zero,

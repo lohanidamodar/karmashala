@@ -86,105 +86,101 @@ class _EnvironmentCard extends ConsumerWidget {
     ref.watch(environmentScanControllerProvider);
     final isSsh = environment.kind == EnvironmentKind.ssh;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  _iconFor(environment.kind),
-                  size: Chrome.iconTitle,
-                  color: theme.colorScheme.tertiary,
-                ),
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: Text(
-                    environment.name,
-                    style: theme.textTheme.titleSmall,
-                  ),
-                ),
-                Text(
-                  _kindLabel(environment.kind),
-                  style: theme.textTheme.labelSmall,
-                ),
-              ],
-            ),
-            // The address, when there is one. Never the id: it is a database key, and the
-            // local host's is the literal `windows` under a heading reading "macOS".
-            if (host != null) ...[
-              const SizedBox(height: Insets.xs),
-              Text(host!.address, style: MonoStyles.small),
-            ],
-            if (isSsh && host != null) ...[
-              const SizedBox(height: Insets.sm),
-              SshConnectionStatusChip(hostId: host!.id),
-            ],
-            const SizedBox(height: Insets.sm),
-            if (installations.isEmpty)
-              Text(
-                scan.found == null
-                    ? 'Not scanned yet.'
-                    : 'No agents found here.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              )
-            else
-              for (final installation in installations)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Row(
-                    children: [
-                      const Icon(AppIcons.robot, size: Chrome.iconAction),
-                      const SizedBox(width: Insets.sm),
-                      Text(
-                        AgentRegistry.builtIn.displayNameFor(
-                          installation.agentId,
-                        ),
-                        style: theme.textTheme.bodySmall,
-                      ),
-                      const SizedBox(width: Insets.sm),
-                      Expanded(
-                        child: Text(
-                          '${installation.version == null ? '' : 'v${installation.version} · '}'
-                          '${installation.executable.path}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: MonoStyles.small,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            if (scan.error != null) ...[
-              const SizedBox(height: Insets.sm),
-              DesktopErrorBanner(scan.error!),
-            ],
-            const SizedBox(height: Insets.xs),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: scan.busy
-                    ? null
-                    : () => ref
-                          .read(environmentScanControllerProvider.notifier)
-                          .scan(environment),
-                icon: scan.busy
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(AppIcons.magnifyingGlass),
-                label: Text(isSsh ? 'Connect and find agents' : 'Find agents'),
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _iconFor(environment.kind),
+                size: Chrome.iconTitle,
+                color: theme.colorScheme.tertiary,
               ),
-            ),
+              const SizedBox(width: Insets.sm),
+              Expanded(
+                child: Text(
+                  environment.name,
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              Text(
+                _kindLabel(environment.kind),
+                style: theme.textTheme.labelSmall,
+              ),
+            ],
+          ),
+          // The address, when there is one. Never the id: it is a database key, and the
+          // local host's is the literal `windows` under a heading reading "macOS".
+          if (host != null) ...[
+            const SizedBox(height: Insets.xs),
+            Text(host!.address, style: MonoStyles.small),
           ],
-        ),
+          if (isSsh && host != null) ...[
+            const SizedBox(height: Insets.sm),
+            SshConnectionStatusChip(hostId: host!.id),
+          ],
+          const SizedBox(height: Insets.sm),
+          if (installations.isEmpty)
+            Text(
+              scan.found == null
+                  ? 'Not scanned yet.'
+                  : 'No agents found here.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            )
+          else
+            for (final installation in installations)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Row(
+                  children: [
+                    const Icon(AppIcons.robot, size: Chrome.iconAction),
+                    const SizedBox(width: Insets.sm),
+                    Text(
+                      AgentRegistry.builtIn.displayNameFor(
+                        installation.agentId,
+                      ),
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(width: Insets.sm),
+                    Expanded(
+                      child: Text(
+                        '${installation.version == null ? '' : 'v${installation.version} · '}'
+                        '${installation.executable.path}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: MonoStyles.small,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          if (scan.error != null) ...[
+            const SizedBox(height: Insets.sm),
+            DesktopErrorBanner(scan.error!),
+          ],
+          const SizedBox(height: Insets.xs),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: scan.busy
+                  ? null
+                  : () => ref
+                        .read(environmentScanControllerProvider.notifier)
+                        .scan(environment),
+              icon: scan.busy
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(AppIcons.magnifyingGlass),
+              label: Text(isSsh ? 'Connect and find agents' : 'Find agents'),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -57,89 +57,85 @@ class _PermissionCard extends StatelessWidget {
     final dangerous =
         support.isDangerous(newSelection) ||
         support.isDangerous(existingSelection);
-    return Card(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      child: Padding(
-        padding: const EdgeInsets.all(Insets.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(descriptor.displayName, style: theme.textTheme.titleSmall),
-            const SizedBox(height: Insets.sm),
-            if (!support.isKnown)
-              // An agent whose modes are unestablished offers no dropdowns.
-              Text(
-                unknownAgentReason(descriptor.displayName),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              )
-            else ...[
-              // One picker per axis per purpose: Codex's four do not fit a Row.
-              for (final (label, selection, onChanged) in [
-                ('New sessions', newSelection, onNew),
-                ('Existing sessions', existingSelection, onExisting),
-              ]) ...[
-                Text(label, style: theme.textTheme.labelSmall),
-                const SizedBox(height: Insets.xs),
-                Wrap(
-                  spacing: Insets.md,
-                  runSpacing: Insets.sm,
-                  children: [
-                    for (final axis in permissionAxisOptionsFor(
-                      descriptor,
-                      selection: selection,
-                    ))
-                      SizedBox(
-                        width: 260,
-                        child: _axisDropdown(
-                          axis,
-                          selection,
-                          support,
-                          onChanged,
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: Insets.sm),
-              ],
-            ],
-            const SizedBox(height: Insets.xs),
-            // Which way precedence runs: a session that chose keeps its own.
+    return SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(descriptor.displayName, style: theme.textTheme.titleSmall),
+          const SizedBox(height: Insets.sm),
+          if (!support.isKnown)
+            // An agent whose modes are unestablished offers no dropdowns.
             Text(
-              'Defaults for sessions that have not chosen a mode of their own. '
-              'A mode picked on a session keeps that session, even after this '
-              'changes.',
+              unknownAgentReason(descriptor.displayName),
               style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+                color: theme.colorScheme.error,
+              ),
+            )
+          else ...[
+            // One picker per axis per purpose: Codex's four do not fit a Row.
+            for (final (label, selection, onChanged) in [
+              ('New sessions', newSelection, onNew),
+              ('Existing sessions', existingSelection, onExisting),
+            ]) ...[
+              Text(label, style: theme.textTheme.labelSmall),
+              const SizedBox(height: Insets.xs),
+              Wrap(
+                spacing: Insets.md,
+                runSpacing: Insets.sm,
+                children: [
+                  for (final axis in permissionAxisOptionsFor(
+                    descriptor,
+                    selection: selection,
+                  ))
+                    SizedBox(
+                      width: 260,
+                      child: _axisDropdown(
+                        axis,
+                        selection,
+                        support,
+                        onChanged,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: Insets.sm),
+            ],
+          ],
+          const SizedBox(height: Insets.xs),
+          // Which way precedence runs: a session that chose keeps its own.
+          Text(
+            'Defaults for sessions that have not chosen a mode of their own. '
+            'A mode picked on a session keeps that session, even after this '
+            'changes.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (dangerous)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.sm),
+              child: Row(
+                children: [
+                  Icon(
+                    AppIcons.warning,
+                    size: Chrome.icon,
+                    color: theme.colorScheme.error,
+                  ),
+                  const SizedBox(width: Insets.xs),
+                  Expanded(
+                    child: Text(
+                      'This default lets ${descriptor.displayName} act with '
+                      'nothing in the way. Use it only in trusted '
+                      'repositories.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            if (dangerous)
-              Padding(
-                padding: const EdgeInsets.only(top: Insets.sm),
-                child: Row(
-                  children: [
-                    Icon(
-                      AppIcons.warning,
-                      size: Chrome.icon,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    Expanded(
-                      child: Text(
-                        'This default lets ${descriptor.displayName} act with '
-                        'nothing in the way. Use it only in trusted '
-                        'repositories.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
