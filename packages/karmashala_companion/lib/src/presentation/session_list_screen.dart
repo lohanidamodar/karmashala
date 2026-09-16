@@ -221,11 +221,8 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
         const EdgeInsets.only(bottom: companionFabGutter),
       ),
       itemCount: groups.length + offset,
-      separatorBuilder: (context, index) => Divider(
-        height: 1,
-        thickness: 1,
-        color: Theme.of(context).colorScheme.outlineVariant,
-      ),
+      separatorBuilder: (context, index) =>
+          const CompanionRowDivider(indent: 0),
       itemBuilder: (context, index) {
         if (index < offset) return header!;
         final group = groups[index - offset];
@@ -368,43 +365,24 @@ class _BackToMachines extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
-    return InkWell(
+    return CompanionTouchRow(
       onTap: onBack,
-      child: Container(
-        constraints: density.isTouch
-            ? const BoxConstraints(minHeight: Touch.target)
-            : null,
-        padding: EdgeInsets.symmetric(
-          horizontal: density.padX,
-          vertical: density.padY,
-        ),
-        child: Row(
-          children: [
-            Icon(
-              AppIcons.caretLeft,
-              size: density.icon,
-              color: scheme.onSurfaceVariant,
-            ),
-            SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: density.title(theme),
-              ),
-            ),
-            SizedBox(width: density.glyphGap),
-            Flexible(
-              child: Text(
-                'All machines',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: density.muted(theme),
-              ),
-            ),
-          ],
-        ),
+      leading: Icon(
+        AppIcons.caretLeft,
+        size: density.icon,
+        color: scheme.onSurfaceVariant,
+      ),
+      title: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: density.title(theme),
+      ),
+      trailing: Text(
+        'All machines',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: density.muted(theme),
       ),
     );
   }

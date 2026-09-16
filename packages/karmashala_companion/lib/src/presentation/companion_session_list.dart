@@ -39,7 +39,6 @@ class CompanionSessionList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.read(companionClockProvider).nowUtc();
-    final scheme = Theme.of(context).colorScheme;
     final offset = header == null ? 0 : 1;
     return ListView.separated(
       padding: companionListInsets(
@@ -47,12 +46,8 @@ class CompanionSessionList extends ConsumerWidget {
         EdgeInsets.only(bottom: bottomInset),
       ),
       itemCount: sessions.length + offset,
-      separatorBuilder: (context, index) => Divider(
-        height: 1,
-        thickness: 1,
-        color: scheme.outlineVariant,
-        indent: index < offset ? 0 : Insets.lg,
-      ),
+      separatorBuilder: (context, index) =>
+          CompanionRowDivider(indent: index < offset ? 0 : Insets.lg),
       itemBuilder: (context, index) {
         if (index < offset) return header!;
         return CompanionSessionRow(session: sessions[index - offset], now: now);

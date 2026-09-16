@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
@@ -76,60 +77,52 @@ class HostSwitcherBar extends ConsumerWidget {
 
     return Material(
       color: scheme.surfaceContainerLow,
-      child: InkWell(
+      child: CompanionTouchRow(
         onTap: switching != null
             ? null
             : () => _choose(context, ref, connections),
-        child: Container(
-          constraints: density.isTouch
-              ? const BoxConstraints(minHeight: Touch.target)
-              : null,
-          padding: companionListInsets(
-            context,
-            EdgeInsets.symmetric(
-              horizontal: density.padX,
-              vertical: density.padY,
-            ),
+        padding: companionListInsets(
+          context,
+          EdgeInsets.symmetric(
+            horizontal: density.padX,
+            vertical: density.padY,
           ),
-          child: Row(
-            children: [
-              if (switching != null)
-                SizedBox(
-                  width: density.icon,
-                  height: density.icon,
-                  child: const CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                Icon(
-                  AppIcons.deviceMobile,
-                  size: density.icon,
-                  color: scheme.onSurfaceVariant,
-                ),
-              SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
-              Expanded(
-                child: Text(
-                  switching != null
-                      ? 'Switching desktop…'
-                      : active?.name ?? 'No desktop',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: density.title(theme),
-                ),
-              ),
-              if (connections.length > 1) ...[
-                Text(
-                  '${connections.length} saved',
-                  style: density.muted(theme),
-                ),
-                const SizedBox(width: Insets.xs),
-              ],
-              Icon(
-                AppIcons.caretDown,
-                size: density.iconSmall,
+        ),
+        leading: switching != null
+            ? const InlineSpinner(size: InlineSpinnerSize.medium)
+            : Icon(
+                AppIcons.deviceMobile,
+                size: density.icon,
                 color: scheme.onSurfaceVariant,
               ),
+        title: Text(
+          switching != null
+              ? 'Switching desktop…'
+              : active?.name ?? 'No desktop',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: density.title(theme),
+        ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (connections.length > 1) ...[
+              Flexible(
+                child: Text(
+                  '${connections.length} saved',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: density.muted(theme),
+                ),
+              ),
+              const SizedBox(width: Insets.xs),
             ],
-          ),
+            Icon(
+              AppIcons.caretDown,
+              size: density.iconSmall,
+              color: scheme.onSurfaceVariant,
+            ),
+          ],
         ),
       ),
     );

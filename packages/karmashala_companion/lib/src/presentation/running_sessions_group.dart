@@ -47,7 +47,6 @@ class RunningSessionsGroup extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (sessions.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final now = ref.read(companionClockProvider).nowUtc();
     // The age of the snapshot membership came from, not of this frame
     // (CLAUDE.md §19).
@@ -87,13 +86,7 @@ class RunningSessionsGroup extends ConsumerWidget {
           ),
         ),
         for (var index = 0; index < sessions.length; index++) ...[
-          if (index > 0)
-            Divider(
-              height: 1,
-              thickness: 1,
-              color: scheme.outlineVariant,
-              indent: Insets.lg,
-            ),
+          if (index > 0) const CompanionRowDivider(),
           CompanionSessionRow(
             session: sessions[index],
             now: now,

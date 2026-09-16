@@ -23,7 +23,6 @@ class InboxScreen extends ConsumerWidget {
     final sessions = ref.watch(companionSessionsProvider);
     final waiting = ref.watch(companionInboxProvider);
     final now = ref.read(companionClockProvider).nowUtc();
-    final scheme = Theme.of(context).colorScheme;
 
     return companionAsync(
       sessions,
@@ -50,12 +49,8 @@ class InboxScreen extends ConsumerWidget {
                 const EdgeInsets.only(bottom: Insets.xl),
               ),
               itemCount: waiting.length,
-              separatorBuilder: (context, index) => Divider(
-                height: 1,
-                thickness: 1,
-                indent: Insets.lg,
-                color: scheme.outlineVariant,
-              ),
+              separatorBuilder: (context, index) =>
+                  const CompanionRowDivider(),
               itemBuilder: (context, index) =>
                   _InboxRow(session: waiting[index], now: now),
             ),
@@ -89,61 +84,44 @@ class _InboxRow extends StatelessWidget {
       CompanionAttentionKind.finished => (AppIcons.checkCircle, semantic.idle),
     };
 
-    return InkWell(
+    return CompanionTouchRow(
       onTap: () => Navigator.of(context).push(
         companionRoute<void>(
           context,
           (_) => SessionViewScreen(sessionId: session.id),
         ),
       ),
-      child: Container(
-        constraints: density.isTouch
-            ? const BoxConstraints(minHeight: Touch.target)
-            : null,
-        padding: EdgeInsets.symmetric(
-          horizontal: density.padX,
-          vertical: density.padY,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              // An optical nudge, so the glyph sits on the title's first line
-              // rather than on the top of its box.
-              padding: EdgeInsets.only(top: density.lineGap / 2),
-              child: Icon(icon, size: density.icon, color: colour),
-            ),
-            SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    session.title,
-                    maxLines: density.isTouch ? 2 : 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: density.title(theme),
-                  ),
-                  SizedBox(height: density.lineGap),
-                  Text(
-                    '${attention.kind.label}  ·  '
-                    '${session.projectName}  ·  '
-                    '${describeAge(now.difference(attention.at))}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: density.muted(theme),
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(width: density.glyphGap),
-            Icon(
-              AppIcons.caretRight,
-              size: density.icon,
-              color: scheme.onSurfaceVariant,
-            ),
-          ],
-        ),
+      alignTop: true,
+      leading: Padding(
+        // An optical nudge, so the glyph sits on the title's first line rather
+        // than on the top of its box.
+        padding: EdgeInsets.only(top: density.lineGap / 2),
+        child: Icon(icon, size: density.icon, color: colour),
+      ),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            session.title,
+            maxLines: density.isTouch ? 2 : 1,
+            overflow: TextOverflow.ellipsis,
+            style: density.title(theme),
+          ),
+          SizedBox(height: density.lineGap),
+          Text(
+            '${attention.kind.label}  ·  '
+            '${session.projectName}  ·  '
+            '${describeAge(now.difference(attention.at))}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: density.muted(theme),
+          ),
+        ],
+      ),
+      trailing: Icon(
+        AppIcons.caretRight,
+        size: density.icon,
+        color: scheme.onSurfaceVariant,
       ),
     );
   }

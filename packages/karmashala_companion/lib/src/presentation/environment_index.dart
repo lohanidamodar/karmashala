@@ -24,7 +24,6 @@ class EnvironmentIndex extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final offset = header == null ? 0 : 1;
-    final scheme = Theme.of(context).colorScheme;
     return ListView.separated(
       padding: companionListInsets(
         context,
@@ -32,7 +31,7 @@ class EnvironmentIndex extends StatelessWidget {
       ),
       itemCount: environments.length + offset,
       separatorBuilder: (context, index) =>
-          Divider(height: 1, thickness: 1, color: scheme.outlineVariant),
+          const CompanionRowDivider(indent: 0),
       itemBuilder: (context, index) {
         if (index < offset) return header!;
         final environment = environments[index - offset];
@@ -60,41 +59,37 @@ class EnvironmentRow extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
-    return InkWell(
+    return CompanionTouchRow(
       onTap: onTap,
-      child: Container(
-        constraints: density.isTouch
-            ? const BoxConstraints(minHeight: Touch.target)
-            : null,
-        padding: EdgeInsets.symmetric(
-          horizontal: density.padX,
-          vertical: density.padY,
-        ),
-        child: Row(
-          children: [
-            Icon(
-              environmentGlyphFor(environment.kind),
-              size: density.icon,
-              color: scheme.onSurfaceVariant,
+      leading: Icon(
+        environmentGlyphFor(environment.kind),
+        size: density.icon,
+        color: scheme.onSurfaceVariant,
+      ),
+      title: Text(
+        environment.label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: density.title(theme),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              describeEnvironmentHolding(environment),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: density.muted(theme),
             ),
-            SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
-            Expanded(
-              child: Text(
-                environment.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: density.title(theme),
-              ),
-            ),
-            Text(describeEnvironmentHolding(environment), style: density.muted(theme)),
-            const SizedBox(width: Insets.xs),
-            Icon(
-              AppIcons.caretRight,
-              size: density.iconSmall,
-              color: scheme.onSurfaceVariant,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: Insets.xs),
+          Icon(
+            AppIcons.caretRight,
+            size: density.iconSmall,
+            color: scheme.onSurfaceVariant,
+          ),
+        ],
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_runtime.dart';
 import 'package:karmashala_ui/rows.dart';
@@ -97,13 +98,14 @@ class _Saved extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          for (final connection in list)
+          for (final connection in list) ...[
+            if (connection != list.first) const CompanionRowDivider(indent: 0),
             _ConnectionRow(
               connection: connection,
               busy: switching == connection.hostId,
               anyBusy: switching != null,
-              last: connection == list.last,
             ),
+          ],
         ],
       ),
     );
@@ -117,13 +119,11 @@ class _ConnectionRow extends ConsumerWidget {
     required this.connection,
     required this.busy,
     required this.anyBusy,
-    required this.last,
   });
 
   final CompanionConnection connection;
   final bool busy;
   final bool anyBusy;
-  final bool last;
 
   Future<void> _forget(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
@@ -179,82 +179,58 @@ class _ConnectionRow extends ConsumerWidget {
     return Semantics(
       button: !connection.active,
       selected: connection.active,
-      child: InkWell(
+      child: CompanionTouchRow(
         onTap: connection.active || anyBusy
             ? null
             : () => ref
                   .read(companionSwitchingProvider.notifier)
                   .switchTo(connection.hostId),
-        child: Container(
-          constraints: density.isTouch
-              ? const BoxConstraints(minHeight: Touch.target)
-              : null,
-          // Less on the right: the trailing icon button brings its own 48dp
-          // box, and a full gutter would push the glyph in from the edge.
-          padding: EdgeInsets.fromLTRB(
-            density.padX,
-            density.padY,
-            Insets.sm,
-            density.padY,
-          ),
-          decoration: last
-              ? null
-              : BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: scheme.outlineVariant),
+        // Less on the right: the trailing icon button brings its own 48dp box,
+        // and a full gutter would push the glyph in from the edge.
+        padding: EdgeInsets.fromLTRB(
+          density.padX,
+          density.padY,
+          Insets.sm,
+          density.padY,
+        ),
+        leading: busy
+            ? const InlineSpinner(size: InlineSpinnerSize.medium)
+            : Icon(
+                AppIcons.deviceMobile,
+                size: density.icon,
+                color: connection.active
+                    ? semantic.idle
+                    : scheme.onSurfaceVariant,
+              ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    connection.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: density.title(theme),
                   ),
                 ),
-          child: Row(
-            children: [
-              if (busy)
-                SizedBox(
-                  width: density.icon,
-                  height: density.icon,
-                  child: const CircularProgressIndicator(strokeWidth: 2),
-                )
-              else
-                Icon(
-                  AppIcons.deviceMobile,
-                  size: density.icon,
-                  color: connection.active
-                      ? semantic.idle
-                      : scheme.onSurfaceVariant,
-                ),
-              SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            connection.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: density.title(theme),
-                          ),
-                        ),
-                        if (connection.active) ...[
-                          const SizedBox(width: Insets.sm),
-                          const _ActiveBadge(),
-                        ],
-                      ],
-                    ),
-                    Text(subtitle, style: density.muted(theme)),
-                  ],
-                ),
-              ),
-              IconButton(
-                onPressed: anyBusy ? null : () => _forget(context, ref),
-                icon: const Icon(AppIcons.linkBreak),
-                tooltip: 'Forget ${connection.name}',
-                visualDensity: density.isTouch
-                    ? VisualDensity.standard
-                    : VisualDensity.compact,
-              ),
-            ],
-          ),
+                if (connection.active) ...[
+                  const SizedBox(width: Insets.sm),
+                  const _ActiveBadge(),
+                ],
+              ],
+            ),
+            Text(subtitle, style: density.muted(theme)),
+          ],
+        ),
+        trailing: IconButton(
+          onPressed: anyBusy ? null : () => _forget(context, ref),
+          icon: const Icon(AppIcons.linkBreak),
+          tooltip: 'Forget ${connection.name}',
+          visualDensity: density.isTouch
+              ? VisualDensity.standard
+              : VisualDensity.compact,
         ),
       ),
     );

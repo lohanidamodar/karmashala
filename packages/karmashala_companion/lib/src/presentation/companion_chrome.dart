@@ -189,3 +189,89 @@ class CompanionPrimaryButton extends StatelessWidget {
     ),
   );
 }
+
+/// The companion's one tappable row: a leading glyph, a title that takes the
+/// free width, and an optional trailing part that gives way before it
+/// overflows. [Touch.target] tall at least on a touch surface.
+class CompanionTouchRow extends StatelessWidget {
+  const CompanionTouchRow({
+    required this.leading,
+    required this.title,
+    this.trailing,
+    this.onTap,
+    this.padding,
+    this.alignTop = false,
+    super.key,
+  });
+
+  final Widget leading;
+  final Widget title;
+  final Widget? trailing;
+
+  /// Null draws the row as a statement, not a control.
+  final VoidCallback? onTap;
+
+  /// The density's own padding unless a row needs its edge elsewhere — a
+  /// tablet gutter, or a trailing button that brings its own box.
+  final EdgeInsetsGeometry? padding;
+
+  /// Top-align a multi-line title with its glyph instead of centring.
+  final bool alignTop;
+
+  @override
+  Widget build(BuildContext context) {
+    final density = UiDensity.of(context);
+    final trailing = this.trailing;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        constraints: BoxConstraints(minHeight: density.minRow),
+        padding:
+            padding ??
+            EdgeInsets.symmetric(
+              horizontal: density.padX,
+              vertical: density.padY,
+            ),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            crossAxisAlignment: alignTop
+                ? CrossAxisAlignment.start
+                : CrossAxisAlignment.center,
+            children: [
+              leading,
+              SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
+              Expanded(child: title),
+              if (trailing != null) ...[
+                SizedBox(width: density.glyphGap),
+                // Its own width, but never more than half the row: a count
+                // or a label at 200% text gives way instead of overflowing.
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth / 2,
+                  ),
+                  child: trailing,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The hairline between two rows of a companion list.
+class CompanionRowDivider extends StatelessWidget {
+  const CompanionRowDivider({this.indent = Insets.lg, super.key});
+
+  /// From the leading edge; zero for a full-width rule between cards.
+  final double indent;
+
+  @override
+  Widget build(BuildContext context) => Divider(
+    height: 1,
+    thickness: 1,
+    indent: indent,
+    color: Theme.of(context).colorScheme.outlineVariant,
+  );
+}
