@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/primitives.dart';
 import '../../../core/util/clock_provider.dart';
 import '../application/session_changed_files_providers.dart';
 import 'package:karmashala_session/delivery.dart';
@@ -35,20 +36,20 @@ class SessionChangedFilesDialog extends ConsumerWidget {
             ? (async.hasError ? 'Could not be read' : 'Reading…')
             : (report.agentName.isEmpty ? null : report.agentName),
       ),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
-          child: switch (async) {
-            AsyncValue(hasError: true, :final error) => DesktopErrorBanner(
-              'This session’s changes could not be read: $error',
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
+        child: switch (async) {
+          AsyncValue(hasError: true, :final error) => DesktopErrorBanner(
+            'This session’s changes could not be read: $error',
+          ),
+          AsyncValue(:final value?) => _Body(report: value),
+          _ => const Padding(
+            padding: EdgeInsets.symmetric(vertical: Insets.xl),
+            child: Center(
+              child: InlineSpinner(size: InlineSpinnerSize.large),
             ),
-            AsyncValue(:final value?) => _Body(report: value),
-            _ => const Padding(
-              padding: EdgeInsets.symmetric(vertical: Insets.xl),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          },
-        ),
+          ),
+        },
       ),
       actionsPadding: const EdgeInsets.fromLTRB(
         Insets.lg,
@@ -101,46 +102,55 @@ class _Body extends ConsumerWidget {
         ],
         if (report.files.isNotEmpty) ...[
           const SizedBox(height: Insets.md),
-          for (final file in report.files) _FileRow(file: file),
+          _FileTable(files: report.files),
         ],
       ],
     );
   }
 }
 
-/// One path, with the change type in words beside it — never carried by colour
-/// alone (CLAUDE.md §5).
-class _FileRow extends StatelessWidget {
-  const _FileRow({required this.file});
+/// Each path with the change type in words beside it — never carried by colour
+/// alone (CLAUDE.md §5). The word column is as wide as its longest word at the
+/// current text size, so no word breaks and the paths still line up.
+class _FileTable extends StatelessWidget {
+  const _FileTable({required this.files});
 
-  final SessionChangedFile file;
+  final List<SessionChangedFile> files;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final movedTo = file.movedTo;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 64,
-            child: Text(
-              file.kind.label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+    return Table(
+      columnWidths: const {
+        0: IntrinsicColumnWidth(),
+        1: FlexColumnWidth(),
+      },
+      children: [
+        for (final file in files)
+          TableRow(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 2, Insets.sm, 2),
+                child: Text(
+                  file.kind.label,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
               ),
-            ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: SelectableText(
+                  switch (file.movedTo) {
+                    null => file.display,
+                    final movedTo => '${file.display} → $movedTo',
+                  },
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: SelectableText(
-              movedTo == null ? file.display : '${file.display} → $movedTo',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
