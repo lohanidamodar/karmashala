@@ -32,8 +32,9 @@ class AgentHookInstaller {
   });
 
   /// Whether a config rewrite stats the file before its read and again before
-  /// its rename, retrying from a fresh read when the CLI saved in between. Off
-  /// by default: the app's install-cost suite pins the exact I/O call count.
+  /// its rename, retrying from a fresh read when the CLI saved in between. On
+  /// by default; the app's install-cost suite pins the I/O call count with it
+  /// on, so turning it off changes that count.
   final bool checkForConcurrentSaves;
 
   /// How staged content is moved onto the real config. Injectable because a

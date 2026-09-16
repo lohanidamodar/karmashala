@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
@@ -10,6 +12,10 @@ import 'package:karmashala_devices/dialogs.dart';
 
 import 'support/fake_command_runner.dart';
 import 'fake_scrcpy_control_channel.dart';
+
+// A temp root this host could hand the staging code, which joins with the
+// host's own separator.
+final _temp = Platform.isWindows ? r'C:\Temp' : '/tmp';
 
 /// The device file browser as a surface: copy, cut, paste, the two clipboards
 /// kept apart, and a drag that lands where the pointer is.
@@ -107,7 +113,7 @@ Future<void> _pump(
           body: DeviceFilesDialog(
             device: _device,
             host: host,
-            temporaryDirectory: r'C:\Temp',
+            temporaryDirectory: _temp,
             // A real `Directory.create` never completes inside a widget test's
             // FakeAsync zone, and the symptom is `pumpAndSettle timed out`
             // rather than anything about the filesystem.
@@ -287,12 +293,10 @@ void main() {
     await tester.tap(find.text('Copy for this computer'));
     await tester.pumpAndSettle();
 
-    expect(made.single, r'C:\Temp\karmashala-device-files\emulator-5554');
+    final staged = p.join(_temp, 'karmashala-device-files', 'emulator-5554');
+    expect(made.single, staged);
     expect(host.filesWritten, hasLength(1));
-    expect(
-      host.filesWritten.single.single,
-      r'C:\Temp\karmashala-device-files\emulator-5554\a.txt',
-    );
+    expect(host.filesWritten.single.single, p.join(staged, 'a.txt'));
     expect(find.textContaining('paste it anywhere'), findsOneWidget);
   });
 

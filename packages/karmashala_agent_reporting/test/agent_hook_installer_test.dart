@@ -578,6 +578,10 @@ void main() {
       final warnings = <String>[];
       final racing = AgentHookInstaller(
         checkForConcurrentSaves: true,
+        // Granted, so the one warning counted is the retry and not an ACL
+        // verdict that differs by host: `icacls` answers on Windows, and
+        // elsewhere a `windowsNative` store is "not this platform's to close".
+        restrict: (_, _) async => true,
         beforeCommit: (config) async {
           if (landed) return;
           landed = true;

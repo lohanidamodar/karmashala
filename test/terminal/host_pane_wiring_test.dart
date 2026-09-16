@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
@@ -57,8 +59,12 @@ void main() {
     addTearDown(pane.dispose);
     expect(pane, isA<HostTerminalInstance>());
     // The launch is the one a flutter_pty pane would have spawned: the profile
-    // decides the command, and the setting decides only whose child it is.
-    expect((pane as HostTerminalInstance).launch.executable, 'cmd.exe');
+    // decides the command, and the setting decides only whose child it is. Off
+    // Windows a Command Prompt profile opens the login shell, as it always has.
+    expect(
+      (pane as HostTerminalInstance).launch.executable,
+      Platform.isWindows ? 'cmd.exe' : Platform.environment['SHELL'] ?? '/bin/bash',
+    );
   });
 
   test('with the setting on and no host to reach, nothing changes either', () {

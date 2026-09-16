@@ -7,6 +7,8 @@ import 'package:karmashala/src/features/devices/application/device_bindings.dart
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
+import 'package:karmashala/src/core/media/video_support_provider.dart';
+import 'package:karmashala_media/media.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_devices/pane.dart';
@@ -133,6 +135,16 @@ Future<void> _pump(
           simulatorBackend ? _StubSimulatorBackend() : null,
         ),
         deviceRecordingProvider.overrideWith(() => _StubRecorder(recording)),
+        // Pinned to the Windows answers the golden was cut with, so every host
+        // renders the same tree: MP4 support is probed for real and exists only
+        // on Windows (without it the "Record .ts" button is not drawn), and the
+        // no-SDK hint is chosen by the host's environment kind.
+        videoSupportProvider.overrideWithValue(
+          const VideoSupport.available('pinned for the golden'),
+        ),
+        deviceEnvironmentProvider.overrideWithValue(
+          windowsHostEnvironment(DateTime.utc(2026)),
+        ),
         // Pinned to Windows so "can this path be shown" is the same answer on
         // every host the suite runs on.
         revealInFileManagerProvider.overrideWithValue(

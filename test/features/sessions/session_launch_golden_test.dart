@@ -35,6 +35,11 @@
 /// KARMASHALA_WRITE_LAUNCH_GOLDEN=1 flutter test \
 ///   test/features/sessions/session_launch_golden_test.dart
 /// ```
+///
+/// Windows only: the matrix is a Windows host's (cmd.exe, `C:\` paths, WSL
+/// environments reached through `/mnt/c`), and the packet directory is a real
+/// temp folder, so its separator and its WSL spelling are the machine's.
+@TestOn('windows')
 library;
 
 import 'dart:convert';

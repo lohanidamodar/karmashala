@@ -60,10 +60,12 @@ void main() {
     });
     tearDown(() => removeTempDirectory(home));
 
-    // The real `restrict` shells out to `icacls`/`chmod`. Refused here so the
-    // count is about file operations and nothing else; `localPosix` on Windows
-    // takes that branch anyway.
-    final installer = AgentHookInstaller(restrict: (_, _) async => false);
+    // The real `restrict` shells out to `icacls`/`chmod`. Faked so the count is
+    // about file operations and nothing else — and faked as *granted*: where
+    // this host can harden `localPosix` (macOS, Linux) a refusal is fatal and
+    // the install stops before the operations being counted. On Windows the two
+    // answers walk the same file operations, so the counts do not move.
+    final installer = AgentHookInstaller(restrict: (_, _) async => true);
 
     Future<bool> install() => installer.install(
       descriptor: claude,

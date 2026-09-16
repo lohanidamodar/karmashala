@@ -432,8 +432,13 @@ void main() {
         deviceId: 'emulator-5554',
       );
       final run = outcome.run!;
-      final path = hostSpellingOfOutFile(run.vmServiceOutFile ?? '');
-      if (path == null) return; // No file on this host; the pane is the route.
+      // No file on this host — a WSL run cannot spell a posix temp directory —
+      // so the pane is the route. `?? ''` used to hide that: an empty path is
+      // not null, and the write below then threw on `File('')`.
+      final outFile = run.vmServiceOutFile;
+      if (outFile == null) return;
+      final path = hostSpellingOfOutFile(outFile);
+      if (path == null) return;
       File(path).writeAsStringSync(wsAddress);
 
       final refreshed = await loop().refresh(run.paneId);

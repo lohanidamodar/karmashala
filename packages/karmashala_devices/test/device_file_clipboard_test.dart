@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 import 'package:karmashala_devices/src/application/device_file_staging.dart';
 import 'package:karmashala_devices/src/domain/android_device.dart';
@@ -156,7 +159,13 @@ void main() {
   });
 
   group('the host staging path', () {
-    const temp = r'C:\Users\x\AppData\Local\Temp';
+    // The staging code joins with this host's separator, so the temp root has to
+    // be one this host could hand it. The colon rule is still checked here: the
+    // id is flattened on every platform, not only where a colon would hurt.
+    final temp = Platform.isWindows
+        ? r'C:\Users\x\AppData\Local\Temp'
+        : '/Users/x/Library/Caches/TemporaryItems';
+    final sep = p.separator;
 
     test('a cabled serial is used as it stands', () {
       expect(
@@ -164,8 +173,7 @@ void main() {
           target: _target('F6IZLV6LMFT4U4ZT'),
           temporaryDirectory: temp,
         ),
-        r'C:\Users\x\AppData\Local\Temp\karmashala-device-files'
-        r'\F6IZLV6LMFT4U4ZT',
+        '$temp${sep}karmashala-device-files${sep}F6IZLV6LMFT4U4ZT',
       );
     });
 
@@ -177,9 +185,9 @@ void main() {
         temporaryDirectory: temp,
         name: 'a.jpg',
       );
-      expect(path, endsWith(r'192.168.1.24-37129\a.jpg'));
-      // Only the drive letter's colon survives, and that one is legal.
-      expect(path.substring(2), isNot(contains(':')));
+      expect(path, endsWith('192.168.1.24-37129${sep}a.jpg'));
+      // Nothing below the temp root carries a colon; a drive letter's is legal.
+      expect(path.substring(temp.length), isNot(contains(':')));
     });
 
     test('an mDNS id is flattened too, dots and all kept', () {
@@ -189,9 +197,9 @@ void main() {
       );
       expect(
         path,
-        endsWith(r'\adb-2B071FDH300JJ9-zcg43M._adb-tls-connect._tcp'),
+        endsWith('${sep}adb-2B071FDH300JJ9-zcg43M._adb-tls-connect._tcp'),
       );
-      expect(path.substring(2), isNot(contains(':')));
+      expect(path.substring(temp.length), isNot(contains(':')));
     });
 
     test('two devices get two directories, so names cannot collide', () {
@@ -220,7 +228,7 @@ void main() {
           temporaryDirectory: temp,
           name: 'नेपाली.txt',
         ),
-        endsWith(r'\नेपाली.txt'),
+        endsWith('$sepनेपाली.txt'),
       );
     });
   });

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
@@ -15,7 +17,9 @@ import 'fake_scrcpy_control_channel.dart';
 /// six files moved when two did — and the host paths, which is where a device
 /// id turning into a filename goes wrong on Windows.
 const _serial = 'emulator-5554';
-const _temp = r'C:\Temp';
+// A temp root this host could hand the staging code, which joins with the
+// host's own separator.
+final _temp = Platform.isWindows ? r'C:\Temp' : '/tmp';
 
 AndroidSdk _sdk() => const AndroidSdk(
   root: EnvironmentPath(environmentId: 'windows', path: r'C:\sdk'),
@@ -203,10 +207,16 @@ void main() {
       // The one assertion this whole path exists for: no colon in the host
       // path, because on Windows a colon opens an alternate data stream and
       // the pull then reports success having written nothing readable.
-      expect(made.single, endsWith(r'\192.168.1.24-37129'));
-      expect(made.single.substring(2), isNot(contains(':')));
-      expect(host.filesWritten.single.single, endsWith(r'-37129\a.txt'));
-      expect(host.filesWritten.single.single.substring(2), isNot(contains(':')));
+      expect(made.single, endsWith('${p.separator}192.168.1.24-37129'));
+      expect(made.single.substring(_temp.length), isNot(contains(':')));
+      expect(
+        host.filesWritten.single.single,
+        endsWith('-37129${p.separator}a.txt'),
+      );
+      expect(
+        host.filesWritten.single.single.substring(_temp.length),
+        isNot(contains(':')),
+      );
     });
 
     test('a directory is refused rather than walked', () async {
@@ -239,7 +249,10 @@ void main() {
         makeDirectory: (_) async {},
       );
       expect(report.message, contains('would not take the files'));
-      expect(report.message, contains(r'C:\Temp\karmashala-device-files'));
+      expect(
+        report.message,
+        contains(p.join(_temp, 'karmashala-device-files')),
+      );
     });
 
     test('a pull that fails is reported as itself', () async {
