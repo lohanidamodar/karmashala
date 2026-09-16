@@ -35,9 +35,17 @@ class PermissionChoice {
 }
 
 class PermissionModeChip extends ConsumerWidget {
-  const PermissionModeChip({required this.sessionId, super.key});
+  const PermissionModeChip({
+    required this.sessionId,
+    this.maxLabelWidth = 160,
+    super.key,
+  });
 
   final String sessionId;
+
+  /// How much room the mode's name may take before it ellipsises. A width the
+  /// host picks, as `ModelChip`'s is; never a share of the window.
+  final double maxLabelWidth;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -134,11 +142,6 @@ class PermissionModeChip extends ConsumerWidget {
             horizontal: Insets.sm,
             vertical: 3,
           ),
-          // The composer bar's one flexible cell is the delivery strip, not
-          // this, so an unbounded chip overflows the row at the minimum window.
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(context).width / 3,
-          ),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(Radii.sm),
             border: Border.all(color: scheme.outlineVariant),
@@ -157,14 +160,19 @@ class PermissionModeChip extends ConsumerWidget {
               ),
               const SizedBox(width: Insets.xs),
               // The mode's own name is what the chip is for, so it gives up its
-              // tail before the row does. Codex's two axes make it long.
+              // tail before the row does. Codex's two axes make it long, and
+              // the composer bar's one flexible cell is not this chip.
               Flexible(
-                child: Text(
-                  label,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: foreground,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxLabelWidth),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: foreground,
+                    ),
                   ),
                 ),
               ),
