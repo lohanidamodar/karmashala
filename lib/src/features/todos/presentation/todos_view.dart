@@ -101,7 +101,7 @@ class _TodosViewState extends ConsumerState<TodosView> {
                 iconSize: Chrome.icon,
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(AppIcons.trash),
-                onPressed: () => _clearDone(context),
+                onPressed: () => _clearDone(done, scope),
               ),
           ],
         ),
@@ -150,16 +150,19 @@ class _TodosViewState extends ConsumerState<TodosView> {
     _composer.clear();
   }
 
-  void _clearDone(BuildContext context) {
-    final removed = ref.read(todosProvider.notifier).clearDone();
-    if (removed == 0) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(
-          'Cleared $removed finished todo${removed == 1 ? '' : 's'}.',
-        ),
-      ),
+  /// Asks first; the dialog names the count, so nothing reports it again after.
+  Future<void> _clearDone(int count, ProjectScope scope) async {
+    final noun = 'finished todo${count == 1 ? '' : 's'}';
+    final confirmed = await showConfirmDialog(
+      context,
+      title: 'Clear $count $noun?',
+      message:
+          '${count == 1 ? 'It is' : 'They are'} deleted for good. There is no undo.',
+      confirmLabel: 'Clear',
+      destructive: true,
     );
+    if (!confirmed || !mounted) return;
+    ref.read(todosProvider.notifier).clearDone(scope: scope);
   }
 }
 

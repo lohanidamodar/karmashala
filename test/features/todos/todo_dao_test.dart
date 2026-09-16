@@ -127,6 +127,16 @@ void main() {
     expect(dao.deleteDone(), 0);
   });
 
+  test('deleteDone with ids removes only those finished ones', () {
+    dao.insert(todoFixture(id: 'open'));
+    dao.insert(todoFixture(id: 'done-1', position: 1, doneAt: testTime));
+    dao.insert(todoFixture(id: 'done-2', position: 2, doneAt: testTime));
+
+    expect(dao.deleteDone(ids: ['done-2', 'open']), 1);
+    expect(dao.list().map((t) => t.id), unorderedEquals(['open', 'done-1']));
+    expect(dao.deleteDone(ids: []), 0);
+  });
+
   test('a deleted todo is gone and the rest are not', () {
     dao.insert(todoFixture());
     dao.insert(todoFixture(id: 't2', position: 1));

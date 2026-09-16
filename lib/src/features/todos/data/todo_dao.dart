@@ -50,13 +50,22 @@ class TodoDao {
     });
   }
 
-  void delete(String id) => _db.execute('DELETE FROM todos WHERE id = ?;', [id]);
+  void delete(String id) =>
+      _db.execute('DELETE FROM todos WHERE id = ?;', [id]);
 
-  /// Removes every todo that is already done. The panel's one bulk action.
-  int deleteDone() {
-    final done = _db.query('SELECT id FROM todos WHERE done_at IS NOT NULL;');
-    _db.execute('DELETE FROM todos WHERE done_at IS NOT NULL;');
-    return done.length;
+  /// Removes every todo that is already done, or only those of [ids] when
+  /// given. The panel's one bulk action.
+  int deleteDone({Iterable<String>? ids}) {
+    final only = ids?.toList();
+    if (only != null && only.isEmpty) return 0;
+    final where = only == null
+        ? 'done_at IS NOT NULL'
+        : 'done_at IS NOT NULL AND id IN (${List.filled(only.length, '?').join(', ')})';
+    return _db.transaction(() {
+      final done = _db.query('SELECT id FROM todos WHERE $where;', only ?? []);
+      _db.execute('DELETE FROM todos WHERE $where;', only ?? []);
+      return done.length;
+    });
   }
 
   /// Open todos first in the user's order, then the done ones most recently

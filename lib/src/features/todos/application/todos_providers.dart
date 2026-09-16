@@ -80,9 +80,15 @@ class TodosController extends Notifier<List<Todo>> {
     _reload();
   }
 
-  /// Removes everything already ticked off. Returns how many went.
-  int clearDone() {
-    final removed = _dao.deleteDone();
+  /// Removes what is ticked off in [scope] — the finished rows the panel shows,
+  /// so a filtered panel never clears another project's. Returns how many went.
+  int clearDone({ProjectScope scope = ProjectScope.all}) {
+    final removed = _dao.deleteDone(
+      ids: [
+        for (final todo in state)
+          if (todo.isDone && scope.contains(todo.projectId)) todo.id,
+      ],
+    );
     _reload();
     return removed;
   }

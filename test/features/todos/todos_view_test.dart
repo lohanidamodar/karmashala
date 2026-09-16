@@ -199,7 +199,34 @@ void main() {
     expect(find.text('DONE'), findsNothing);
   });
 
-  testWidgets('clearing the finished ones takes only those', (tester) async {
+  testWidgets('clearing the finished ones asks first, and Cancel keeps them', (
+    tester,
+  ) async {
+    final container = await pump(tester);
+    final todos = container.read(todosProvider.notifier);
+    todos.add(body: 'still open');
+    for (final body in ['done one', 'done two', 'done three']) {
+      todos.setDone(todos.add(body: body).id, true);
+    }
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Clear 3 finished todos'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Clear 3 finished todos?'), findsOneWidget);
+    expect(find.textContaining('There is no undo.'), findsOneWidget);
+    expect(container.read(todosProvider), hasLength(4));
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(container.read(todosProvider), hasLength(4));
+    expect(find.text('done two'), findsOneWidget);
+  });
+
+  testWidgets('clearing the finished ones takes only those, once confirmed', (
+    tester,
+  ) async {
     final container = await pump(tester);
     final todos = container.read(todosProvider.notifier);
     todos.add(body: 'still open');
@@ -209,10 +236,49 @@ void main() {
 
     await tester.tap(find.byTooltip('Clear 1 finished todo'));
     await tester.pumpAndSettle();
+    expect(find.text('Clear 1 finished todo?'), findsOneWidget);
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Clear'),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     expect(find.text('already done'), findsNothing);
     expect(find.text('still open'), findsOneWidget);
     expect(container.read(todosProvider).single.body, 'still open');
+    // The dialog already named the count; a second report would repeat it.
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('under a project, clearing takes only the finished ones shown', (
+    tester,
+  ) async {
+    final container = await pump(tester);
+    final todos = container.read(todosProvider.notifier);
+    todos.setDone(todos.add(body: 'done here', projectId: 'p2').id, true);
+    todos.setDone(todos.add(body: 'done elsewhere', projectId: 'p1').id, true);
+    todos.setDone(todos.add(body: 'done unfiled').id, true);
+    container
+        .read(todoScopeProvider.notifier)
+        .select(const ProjectScope.project('p2'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Clear 1 finished todo'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Clear'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      container.read(todosProvider).map((t) => t.body),
+      unorderedEquals(['done elsewhere', 'done unfiled']),
+    );
   });
 
   testWidgets('a tap on the line edits it in place', (tester) async {
