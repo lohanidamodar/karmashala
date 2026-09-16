@@ -106,6 +106,7 @@ class _AccountUsage extends ConsumerWidget {
         '${ref.watch(environmentLabelForIdProvider(installation.environmentId))}';
     final usage = ref.watch(agentUsageProvider(installation));
     final error = usage.error;
+    final now = ref.watch(clockProvider).nowUtc();
 
     // **The value first, and never `when`.** A failed lookup carries the value it
     // had; reading the error first printed "not recorded" over a held number.
@@ -117,11 +118,10 @@ class _AccountUsage extends ConsumerWidget {
       // dialog's problem. Deliberately plain text and not a spinner: this row
       // must never be the thing that keeps the surface animating.
       return error == null
-          ? _line(context, account, 'checking…')
-          : _notRecorded(
-              context,
-              account,
-              error is UsageException ? error.message : '$error',
+          ? _UsageLine(account: account, value: 'checking…')
+          : _UsageUnavailable(
+              account: account,
+              reason: error is UsageException ? error.message : '$error',
             );
     }
     final reading = _tightest(value);
@@ -129,34 +129,53 @@ class _AccountUsage extends ConsumerWidget {
     // account is: no windows at all, or windows the endpoint named and reported
     // no quota against — every Antigravity tier. Neither is 0%.
     if (reading == null) {
-      return _notRecorded(
-        context,
-        account,
-        value.isEmpty
+      return _UsageUnavailable(
+        account: account,
+        reason: value.isEmpty
             ? 'No usage windows reported.'
             : 'No quota reported for this account.',
       );
     }
-    return _measured(
-      context,
-      account,
-      reading,
+    return _UsageMeter(
+      account: account,
+      reading: reading,
+      now: now,
+      sessions: sessions,
+      totalSessions: totalSessions,
       // A number that could not be confirmed says so, and says how old it is —
       // never silently, which would make a stale figure look live.
       note: error == null
           ? null
           : 'Last checked '
-                '${describeAge(ref.read(clockProvider).nowUtc().difference(value.fetchedAt))}'
+                '${describeAge(now.difference(value.fetchedAt))}'
                 '${error is UsageException ? ' · ${usageFailureHeadline(error.kind)}' : ''}',
     );
   }
+}
 
-  Widget _measured(
-    BuildContext context,
-    String account,
-    ({UsageWindow window, double percent}) reading, {
-    String? note,
-  }) {
+/// A measured window: the account, the percentage and reset, a bar, and a
+/// warning once it is nearly spent.
+class _UsageMeter extends StatelessWidget {
+  const _UsageMeter({
+    required this.account,
+    required this.reading,
+    required this.now,
+    required this.sessions,
+    required this.totalSessions,
+    this.note,
+  });
+
+  final String account;
+  final ({UsageWindow window, double percent}) reading;
+
+  /// From `clockProvider`, so the reset reads against the app's clock.
+  final DateTime now;
+  final int sessions;
+  final int totalSessions;
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     final window = reading.window;
@@ -168,8 +187,8 @@ class _AccountUsage extends ConsumerWidget {
         : theme.colorScheme.primary;
     final reset = window.resetsAt == null
         ? ''
-        : ' · resets ${_relativeReset(window.resetsAt!)}'
-              ' (${formatResetClock(window.resetsAt!, DateTime.now())})';
+        : ' · resets ${relativeReset(window.resetsAt!, now)}'
+              ' (${formatResetClock(window.resetsAt!, now)})';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
       child: Column(
@@ -200,11 +219,11 @@ class _AccountUsage extends ConsumerWidget {
               color: color,
             ),
           ),
-          if (note != null)
+          if (note case final note?)
             Text(
               note,
               style: theme.textTheme.bodySmall?.copyWith(
-                color: SemanticColors.of(context).neutral,
+                color: semantic.neutral,
               ),
             ),
           if (percent >= 80) ...[
@@ -216,7 +235,7 @@ class _AccountUsage extends ConsumerWidget {
                 const SizedBox(width: Insets.xs),
                 Expanded(
                   child: Text(
-                    _warning(account, reading),
+                    _warning(),
                     style: theme.textTheme.bodySmall?.copyWith(color: color),
                   ),
                 ),
@@ -231,10 +250,7 @@ class _AccountUsage extends ConsumerWidget {
   /// What is left, beside what this fan-out spends on it. Both halves are
   /// measured — how much a session *consumes* is not, so nothing here projects
   /// a total.
-  String _warning(
-    String account,
-    ({UsageWindow window, double percent}) reading,
-  ) {
+  String _warning() {
     final label = reading.window.label;
     final head = reading.percent >= 100
         ? 'No $label limit left on $account'
@@ -252,13 +268,22 @@ class _AccountUsage extends ConsumerWidget {
     return '$sessions of the $totalSessions sessions '
         '${sessions == 1 ? 'runs' : 'run'} on it.';
   }
+}
 
-  Widget _notRecorded(BuildContext context, String account, String reason) {
+/// An account whose usage could not be read, and why.
+class _UsageUnavailable extends StatelessWidget {
+  const _UsageUnavailable({required this.account, required this.reason});
+
+  final String account;
+  final String reason;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _line(context, account, 'not recorded'),
+        _UsageLine(account: account, value: 'not recorded'),
         Padding(
           padding: const EdgeInsets.only(bottom: Insets.xs),
           child: Text(
@@ -271,9 +296,17 @@ class _AccountUsage extends ConsumerWidget {
       ],
     );
   }
+}
 
-  /// An account row with a word where the percentage would be.
-  Widget _line(BuildContext context, String account, String value) {
+/// An account row with a word where the percentage would be.
+class _UsageLine extends StatelessWidget {
+  const _UsageLine({required this.account, required this.value});
+
+  final String account;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: Insets.xs),
@@ -313,8 +346,8 @@ class _AccountUsage extends ConsumerWidget {
 }
 
 /// A short relative reset time, in the settings page's words.
-String _relativeReset(DateTime when) {
-  final diff = when.difference(DateTime.now());
+String relativeReset(DateTime when, DateTime now) {
+  final diff = when.difference(now);
   if (diff.isNegative) return 'soon';
   if (diff.inDays >= 1) return 'in ${diff.inDays}d';
   if (diff.inHours >= 1) return 'in ${diff.inHours}h';

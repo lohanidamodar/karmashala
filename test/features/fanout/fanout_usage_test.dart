@@ -185,6 +185,29 @@ void main() {
     expectLaunchStillOffered(tester);
   });
 
+  testWidgets('a reset is read against the app clock, not the wall clock', (
+    tester,
+  ) async {
+    await pumpSetup(
+      tester,
+      extraOverrides: [
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+      ],
+      usageFor: (_) => AgentUsage(
+        windows: [
+          UsageWindow(
+            label: '5-hour',
+            percent: 40,
+            resetsAt: testTime.add(const Duration(hours: 3, minutes: 1)),
+          ),
+        ],
+        fetchedAt: testTime,
+      ),
+    );
+
+    expect(find.textContaining('40% · resets in 3h'), findsWidgets);
+  });
+
   testWidgets('an unreadable account says so — not 0%, not 100%', (
     tester,
   ) async {
