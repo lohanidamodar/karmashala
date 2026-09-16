@@ -369,7 +369,7 @@ class QuickOpenButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(Radii.sm),
             onTap: () => QuickOpen.show(context),
             child: Container(
-              height: 24,
+              height: Chrome.control,
               padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(Radii.sm),

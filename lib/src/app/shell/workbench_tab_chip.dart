@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/tokens.dart';
 
+import 'tab_strip_metrics.dart';
+
 /// The shared chip shape for everything in the workbench tab strip, so a
 /// session tab and a terminal tab are visibly the same kind of thing.
 class WorkbenchTabChip extends StatelessWidget {
@@ -62,7 +64,7 @@ class WorkbenchTabChip extends StatelessWidget {
           onSecondaryTapDown: onSecondaryTapDown,
           child: Container(
             height: dense ? Chrome.paneStrip : Chrome.tabStrip,
-            constraints: const BoxConstraints(maxWidth: 220),
+            constraints: const BoxConstraints(maxWidth: kMaxTabWidth),
             padding: EdgeInsets.only(
               left: dense ? Insets.xs : Insets.sm,
               right: trailing == null ? Insets.sm : 2,

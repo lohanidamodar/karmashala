@@ -494,8 +494,8 @@ class _ChromeToggle extends StatelessWidget {
           borderRadius: BorderRadius.circular(Radii.sm),
           onTap: onPressed,
           child: Container(
-            width: 26,
-            height: 24,
+            width: Chrome.control,
+            height: Chrome.control,
             decoration: BoxDecoration(
               color: selected
                   ? scheme.primary.withValues(alpha: 0.12)
@@ -528,7 +528,7 @@ class _DesktopMenuBar extends ConsumerWidget {
           ? scheme.onSurface
           : scheme.onSurfaceVariant,
     ),
-    minimumSize: const WidgetStatePropertyAll(Size(0, 24)),
+    minimumSize: const WidgetStatePropertyAll(Size(0, Chrome.control)),
     padding: const WidgetStatePropertyAll(
       EdgeInsets.symmetric(horizontal: Insets.sm),
     ),
@@ -556,8 +556,8 @@ class _DesktopMenuBar extends ConsumerWidget {
           title: 'Rebuild workspace from CLI sessions?',
           subtitle: 'All current project entries will be replaced.',
         ),
-        content: const SizedBox(
-          width: 440,
+        content: const BoundedDialogContent(
+          width: DialogWidth.narrow,
           child: Text(
             'This clears projects and sessions from Karmashala, then scans '
             'Claude Code and Codex stores and imports everything it finds. '
@@ -569,10 +569,10 @@ class _DesktopMenuBar extends ConsumerWidget {
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
-          FilledButton.icon(
+          DestructiveButton(
             icon: const Icon(AppIcons.arrowsClockwise),
             onPressed: () => Navigator.of(context).pop(true),
-            label: const Text('Clear and re-import'),
+            child: const Text('Clear and re-import'),
           ),
         ],
       ),

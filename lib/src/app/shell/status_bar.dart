@@ -165,7 +165,7 @@ class _Item extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: Chrome.iconSmall, color: colour),
-          const SizedBox(width: 5),
+          const SizedBox(width: Insets.xs),
           Flexible(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 260),
