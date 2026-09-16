@@ -12,6 +12,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/host_session_providers.dart';
+import '../../settings/presentation/settings_notice.dart';
 
 /// Invites a phone to one machine: opens the port, asks the host for a code,
 /// and shows both halves of what the phone needs.
@@ -199,24 +200,12 @@ class _Note extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: Insets.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            ok ? AppIcons.checkCircle : AppIcons.warningCircle,
-            size: Chrome.iconSmall,
-            color: ok
-                ? theme.colorScheme.onSurfaceVariant
-                : theme.colorScheme.error,
-          ),
-          const SizedBox(width: Insets.xs),
-          Expanded(
-            child: Text(text, style: theme.textTheme.bodySmall),
-          ),
-        ],
+      child: SettingsNotice(
+        tone: ok ? SettingsNoticeTone.neutral : SettingsNoticeTone.danger,
+        icon: ok ? AppIcons.checkCircle : AppIcons.warningCircle,
+        message: text,
       ),
     );
   }

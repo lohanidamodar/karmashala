@@ -13,6 +13,7 @@ import 'package:karmashala_session/resume.dart' show describeAge;
 import 'agent_label.dart';
 import 'path_field_row.dart';
 import 'settings_section.dart';
+import 'settings_notice.dart';
 
 /// Settings → Agents: each agent's executable, whether it still opens, and a
 /// field to repoint it. "Not found" and "cannot be reached" are separate
@@ -181,25 +182,11 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
           if (status != null)
             Padding(
               padding: const EdgeInsets.only(top: Insets.xs),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Not colour alone: the sentence says it too.
-                  Icon(
-                    AppIcons.warning,
-                    size: Chrome.icon,
-                    color: theme.colorScheme.error,
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Expanded(
-                    child: Text(
-                      status,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
-                      ),
-                    ),
-                  ),
-                ],
+              // Not colour alone: the sentence says it too.
+              child: SettingsNotice(
+                tone: SettingsNoticeTone.danger,
+                icon: AppIcons.warning,
+                message: status,
               ),
             ),
         ],

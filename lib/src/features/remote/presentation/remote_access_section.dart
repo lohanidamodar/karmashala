@@ -12,6 +12,7 @@ import 'package:karmashala_remote/remote.dart';
 import '../relay_local/local_relay_providers.dart';
 import '../relay_local/local_relay_service.dart';
 import 'pairing_dialog.dart';
+import '../../settings/presentation/settings_notice.dart';
 
 /// Settings → Remote access: the enable switch, the two independent relays, the
 /// paired devices with last-seen and revoke, and the pairing button.
@@ -179,23 +180,12 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
             if (!prefs.anyEnabled)
               Padding(
                 padding: const EdgeInsets.only(top: Insets.xs),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      AppIcons.warningCircle,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    Expanded(
-                      child: Text(
-                        'No relay is switched on, so remote access is idle: '
-                        'paired phones can only reach this computer over the '
-                        'local network, and no new device can be paired.',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
+                child: SettingsNotice(
+                  tone: SettingsNoticeTone.danger,
+                  message:
+                      'No relay is switched on, so remote access is idle: '
+                      'paired phones can only reach this computer over the '
+                      'local network, and no new device can be paired.',
                 ),
               ),
             const SizedBox(height: Insets.md),
@@ -253,29 +243,30 @@ class _LocalRelayStatusRow extends ConsumerWidget {
     final status = ref.watch(localRelayStatusProvider);
     final primary = status.primaryUrl;
 
-    final (IconData icon, Color color, String message) = switch (status.state) {
-      LocalRelayState.running when primary != null => (
-        AppIcons.checkCircle,
-        scheme.primary,
-        'Relay running at $primary',
-      ),
-      LocalRelayState.running => (
-        AppIcons.warningCircle,
-        scheme.error,
-        'Relay running on port ${status.boundPort}, but this computer has no '
-            'local network address a phone could dial.',
-      ),
-      LocalRelayState.error => (
-        AppIcons.warningCircle,
-        scheme.error,
-        'Local relay: ${status.error}',
-      ),
-      LocalRelayState.stopped => (
-        AppIcons.pauseCircle,
-        scheme.onSurfaceVariant,
-        'Local relay is starting…',
-      ),
-    };
+    final (IconData icon, SettingsNoticeTone tone, String message) =
+        switch (status.state) {
+          LocalRelayState.running when primary != null => (
+            AppIcons.checkCircle,
+            SettingsNoticeTone.positive,
+            'Relay running at $primary',
+          ),
+          LocalRelayState.running => (
+            AppIcons.warningCircle,
+            SettingsNoticeTone.danger,
+            'Relay running on port ${status.boundPort}, but this computer has '
+                'no local network address a phone could dial.',
+          ),
+          LocalRelayState.error => (
+            AppIcons.warningCircle,
+            SettingsNoticeTone.danger,
+            'Local relay: ${status.error}',
+          ),
+          LocalRelayState.stopped => (
+            AppIcons.pauseCircle,
+            SettingsNoticeTone.neutral,
+            'Local relay is starting…',
+          ),
+        };
 
     final others = [
       for (final endpoint in status.endpoints)
@@ -285,19 +276,17 @@ class _LocalRelayStatusRow extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color),
-            const SizedBox(width: Insets.xs),
-            Expanded(child: Text(message, style: theme.textTheme.bodySmall)),
-            if (status.state == LocalRelayState.error)
-              TextButton(
-                onPressed: () =>
-                    ref.read(remoteAccessControllerProvider).sync(),
-                child: const Text('Retry'),
-              ),
-          ],
+        SettingsNotice(
+          tone: tone,
+          icon: icon,
+          message: message,
+          action: status.state == LocalRelayState.error
+              ? TextButton(
+                  onPressed: () =>
+                      ref.read(remoteAccessControllerProvider).sync(),
+                  child: const Text('Retry'),
+                )
+              : null,
         ),
         if (others.isNotEmpty)
           Padding(

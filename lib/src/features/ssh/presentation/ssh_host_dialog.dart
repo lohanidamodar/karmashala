@@ -17,6 +17,7 @@ import '../application/ssh_providers.dart';
 import '../data/environment_key_reader.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'host_key_changed_alert.dart';
+import '../../settings/presentation/settings_notice.dart';
 
 /// Adds or edits one remote host. The form stores *where* a key is, never a key
 /// or a password: `ssh_hosts` has no column for one, and a test asserts it.
@@ -388,20 +389,13 @@ class _ProbeResult extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!probe.connected) return DesktopErrorBanner(probe.message);
-    final theme = Theme.of(context);
     final elapsed = probe.elapsed;
-    return Row(
-      children: [
-        Icon(AppIcons.checkCircle, color: theme.colorScheme.primary),
-        const SizedBox(width: Insets.sm),
-        Expanded(
-          child: Text(
-            'Connected${elapsed == null ? '' : ' in ${elapsed.inMilliseconds} ms'}'
-            ' — ${probe.message}',
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-      ],
+    return SettingsNotice(
+      tone: SettingsNoticeTone.positive,
+      message:
+          'Connected'
+          '${elapsed == null ? '' : ' in ${elapsed.inMilliseconds} ms'}'
+          ' — ${probe.message}',
     );
   }
 }

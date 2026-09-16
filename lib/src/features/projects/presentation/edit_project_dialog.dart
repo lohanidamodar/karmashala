@@ -16,6 +16,7 @@ import '../../workspaces/application/workspaces_controller.dart';
 import '../application/project_service.dart';
 import '../application/projects_controller.dart';
 import '../domain/project.dart';
+import '../../settings/presentation/settings_notice.dart';
 
 /// Edits a project already in the workspace: its name, where its root folder
 /// is, the context it is filed under, and the checkout its one-click session
@@ -299,30 +300,13 @@ class _MoveNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          AppIcons.info,
-          size: Chrome.icon,
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: Insets.sm),
-        Expanded(
-          child: Text(
-            count == 0
-                ? 'The new folder is read before anything is saved; one that '
-                      'cannot be read changes nothing.'
-                : '$count checkout(s) under the old root will be rewritten '
-                      'under the new one, keeping their sessions. Anything '
-                      'that was not under it is left where it is.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ],
+    return SettingsNotice(
+      message: count == 0
+          ? 'The new folder is read before anything is saved; one that '
+                'cannot be read changes nothing.'
+          : '$count checkout(s) under the old root will be rewritten '
+                'under the new one, keeping their sessions. Anything '
+                'that was not under it is left where it is.',
     );
   }
 }

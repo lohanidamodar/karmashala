@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/model_picker.dart';
 import '../application/settings_controller.dart';
 import 'agent_label.dart';
 import 'settings_section.dart';
+import 'settings_notice.dart';
 
 /// Settings → Agents → DEFAULT MODEL: the model new sessions on each agent
 /// start on, read live so a session that never chose moves when this moves.
@@ -93,23 +93,9 @@ class _ModelCard extends StatelessWidget {
           if (blocked != null)
             Padding(
               padding: const EdgeInsets.only(top: Insets.sm),
-              child: Row(
-                children: [
-                  Icon(
-                    AppIcons.warningCircle,
-                    size: Chrome.icon,
-                    color: theme.colorScheme.error,
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Expanded(
-                    child: Text(
-                      blocked,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
-                      ),
-                    ),
-                  ),
-                ],
+              child: SettingsNotice(
+                tone: SettingsNoticeTone.danger,
+                message: blocked,
               ),
             ),
         ],

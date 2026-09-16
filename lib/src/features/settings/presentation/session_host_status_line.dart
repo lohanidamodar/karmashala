@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ssh/host.dart';
 import '../../terminal/application/local_host_providers.dart';
 import '../../terminal/presentation/session_status.dart';
+import 'settings_notice.dart';
 
 /// What the session host on this machine is doing, beside the switch that uses
 /// it. Per §19 the reading carries its age and nothing polls; `observe` starts
@@ -29,32 +30,20 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final reading = ref.watch(localHostStatusProvider);
     final available = ref.watch(localHostSessionAccessProvider) != null;
     if (!available) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(_iconFor(reading), color: _colourFor(reading, theme)),
-          const SizedBox(width: Insets.xs),
-          Expanded(
-            child: Text(
-              sessionHostStatusText(reading),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-          const SizedBox(width: Insets.xs),
-          TextButton(
-            onPressed: () => ref.read(localHostStatusProvider.notifier).refresh(),
-            child: const Text('Check'),
-          ),
-        ],
+      child: SettingsNotice(
+        tone: _toneFor(reading),
+        icon: _iconFor(reading),
+        message: sessionHostStatusText(reading),
+        action: TextButton(
+          onPressed: () => ref.read(localHostStatusProvider.notifier).refresh(),
+          child: const Text('Check'),
+        ),
       ),
     );
   }
@@ -65,11 +54,11 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
     _ => AppIcons.warningCircle,
   };
 
-  Color _colourFor(HostDeployment? reading, ThemeData theme) =>
+  SettingsNoticeTone _toneFor(HostDeployment? reading) =>
       switch (reading?.status) {
-        HostDeploymentStatus.ready => theme.colorScheme.primary,
-        null || HostDeploymentStatus.unknown => theme.colorScheme.onSurfaceVariant,
-        _ => theme.colorScheme.error,
+        HostDeploymentStatus.ready => SettingsNoticeTone.positive,
+        null || HostDeploymentStatus.unknown => SettingsNoticeTone.neutral,
+        _ => SettingsNoticeTone.danger,
       };
 }
 

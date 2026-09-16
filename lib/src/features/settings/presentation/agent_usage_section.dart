@@ -13,6 +13,7 @@ import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_session/resume.dart';
 import 'agent_label.dart';
 import 'settings_section.dart';
+import 'settings_notice.dart';
 
 /// Usage / limits per agent installation, fetched on demand from the vendor
 /// OAuth endpoints with the token each install already stores.
@@ -193,43 +194,37 @@ class _FailureLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final semantic = SemanticColors.of(context);
-    final (icon, colour) = switch (failure.kind) {
+    final (icon, tone) = switch (failure.kind) {
       // A pause, not a fault: nothing is broken and nothing needs fixing.
       UsageFailureKind.rateLimited => (
         AppIcons.pauseCircle,
-        semantic.attention,
+        SettingsNoticeTone.attention,
       ),
       // Not red either: the vendor is unwell and the app is waiting it out.
       UsageFailureKind.serverBusy => (
         AppIcons.warningCircle,
-        semantic.attention,
+        SettingsNoticeTone.attention,
       ),
-      UsageFailureKind.auth => (AppIcons.userCircle, semantic.failure),
-      UsageFailureKind.unreachable => (AppIcons.linkBreak, semantic.neutral),
-      UsageFailureKind.unusable => (AppIcons.warningCircle, semantic.failure),
-      UsageFailureKind.notAsked => (AppIcons.question, semantic.neutral),
+      UsageFailureKind.auth => (AppIcons.userCircle, SettingsNoticeTone.danger),
+      UsageFailureKind.unreachable => (
+        AppIcons.linkBreak,
+        SettingsNoticeTone.neutral,
+      ),
+      UsageFailureKind.unusable => (
+        AppIcons.warningCircle,
+        SettingsNoticeTone.danger,
+      ),
+      UsageFailureKind.notAsked => (
+        AppIcons.question,
+        SettingsNoticeTone.neutral,
+      ),
     };
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: Chrome.iconSmall, color: colour),
-        const SizedBox(width: Insets.xs),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                usageFailureHeadline(failure.kind),
-                style: theme.textTheme.bodySmall?.copyWith(color: colour),
-              ),
-              // The service's own sentence: it is the half that says what to do.
-              Text(failure.message, style: theme.textTheme.bodySmall),
-            ],
-          ),
-        ),
-      ],
+    return SettingsNotice(
+      tone: tone,
+      icon: icon,
+      message: usageFailureHeadline(failure.kind),
+      // The service's own sentence: it is the half that says what to do.
+      detail: failure.message,
     );
   }
 }

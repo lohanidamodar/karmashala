@@ -30,6 +30,7 @@ import 'agent_tools_section.dart';
 import 'external_app_section.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
+import 'settings_notice.dart';
 
 /// Settings → Tools: the external apps sessions are handed to, and the MCP
 /// bridge that lets an agent drive Karmashala back.
@@ -165,23 +166,9 @@ class McpBridgeSection extends ConsumerWidget {
           // hardening failure withholds privileged RPC, silently.
           if (control.failedClosed) ...[
             const SizedBox(height: Insets.xs),
-            Row(
-              children: [
-                Icon(
-                  AppIcons.warningCircle,
-                  size: Chrome.icon,
-                  color: theme.colorScheme.error,
-                ),
-                const SizedBox(width: Insets.xs),
-                Expanded(
-                  child: Text(
-                    control.message,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ),
-              ],
+            SettingsNotice(
+              tone: SettingsNoticeTone.danger,
+              message: control.message,
             ),
             if (control.failureDetail case final detail?)
               Padding(
@@ -242,28 +229,12 @@ class _HookNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final color = _unknown
-        ? healthColor(context, HealthLevel.unknown)
-        : theme.colorScheme.error;
     return Padding(
       padding: const EdgeInsets.only(bottom: Insets.xs),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            _unknown ? healthIcon(HealthLevel.unknown) : AppIcons.warningCircle,
-            size: Chrome.icon,
-            color: color,
-          ),
-          const SizedBox(width: Insets.xs),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(color: color),
-            ),
-          ),
-        ],
+      child: SettingsNotice(
+        tone: _unknown ? SettingsNoticeTone.neutral : SettingsNoticeTone.danger,
+        icon: _unknown ? healthIcon(HealthLevel.unknown) : null,
+        message: text,
       ),
     );
   }

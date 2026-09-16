@@ -7,6 +7,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import 'settings_section.dart';
+import 'settings_notice.dart';
 
 /// Settings → Permissions: per-agent preferences for new and existing sessions.
 class PermissionsPage extends ConsumerWidget {
@@ -114,25 +115,13 @@ class _PermissionCard extends StatelessWidget {
           if (dangerous)
             Padding(
               padding: const EdgeInsets.only(top: Insets.sm),
-              child: Row(
-                children: [
-                  Icon(
-                    AppIcons.warning,
-                    size: Chrome.icon,
-                    color: theme.colorScheme.error,
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Expanded(
-                    child: Text(
-                      'This default lets ${descriptor.displayName} act with '
-                      'nothing in the way. Use it only in trusted '
-                      'repositories.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
-                      ),
-                    ),
-                  ),
-                ],
+              child: SettingsNotice(
+                tone: SettingsNoticeTone.danger,
+                icon: AppIcons.warning,
+                message:
+                    'This default lets ${descriptor.displayName} act with '
+                    'nothing in the way. Use it only in trusted '
+                    'repositories.',
               ),
             ),
         ],
