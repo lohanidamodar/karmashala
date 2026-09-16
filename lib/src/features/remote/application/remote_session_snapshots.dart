@@ -27,16 +27,14 @@ import 'package:karmashala_remote/remote.dart';
 import 'remote_attachment_bindings.dart';
 import 'remote_binding_support.dart';
 
-/// The delivery-stage lookup, split out so tests can stub the one binding whose
-/// production path costs a git/gh probe.
+/// Uses the latest delivery reading without making the phone wait for git/gh.
 final remoteDeliveryStageProvider =
     Provider<Future<String?> Function(String sessionId)>((ref) {
       return (sessionId) async {
         try {
-          final delivery = await ref.read(
-            sessionDeliveryProvider(sessionId).future,
-          );
-          return delivery.stage.name;
+          final provider = sessionDeliveryProvider(sessionId);
+          if (!ref.exists(provider)) return null;
+          return ref.read(provider).value?.stage.name;
         } on Object {
           return null;
         }
