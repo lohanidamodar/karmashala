@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/permission_mode_picker.dart';
 import '../application/session_handoff_service.dart';
+import 'tool_activity_row.dart' show kExpandedOutputMaxHeight;
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/launch.dart';
 
@@ -205,154 +207,154 @@ class _ContinueWithDialogState extends ConsumerState<ContinueWithDialog> {
 
     return AlertDialog(
       title: const Text('Continue with…'),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SegmentedButton<_Mode>(
-                segments: const [
-                  ButtonSegment(
-                    value: _Mode.handoff,
-                    label: Text('Another agent'),
-                    icon: Icon(
-                      AppIcons.arrowBendDownRight,
-                      size: Chrome.iconAction,
-                    ),
+      content: BoundedDialogContent(
+        width: DialogWidth.wide,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SegmentedButton<_Mode>(
+              segments: const [
+                ButtonSegment(
+                  value: _Mode.handoff,
+                  label: Text('Another agent'),
+                  icon: Icon(
+                    AppIcons.arrowBendDownRight,
+                    size: Chrome.iconAction,
                   ),
-                  ButtonSegment(
-                    value: _Mode.fork,
-                    label: Text('Fork this one'),
-                    icon: Icon(AppIcons.gitBranch, size: Chrome.iconAction),
-                  ),
-                ],
-                selected: {_mode},
-                onSelectionChanged: (s) => setState(() {
-                  _mode = s.first;
+                ),
+                ButtonSegment(
+                  value: _Mode.fork,
+                  label: Text('Fork this one'),
+                  icon: Icon(AppIcons.gitBranch, size: Chrome.iconAction),
+                ),
+              ],
+              selected: {_mode},
+              onSelectionChanged: (s) => setState(() {
+                _mode = s.first;
+                _preview = null;
+              }),
+            ),
+            const SizedBox(height: Insets.md),
+            if (_mode == _Mode.handoff)
+              _TargetPicker(
+                targets: targets,
+                selected: target,
+                permissionFor: _permissionFor,
+                onChanged: (t) => setState(() {
+                  _targetInstallationId = t.installation.id;
                   _preview = null;
                 }),
-              ),
-              const SizedBox(height: Insets.md),
-              if (_mode == _Mode.handoff)
-                _TargetPicker(
-                  targets: targets,
-                  selected: target,
-                  permissionFor: _permissionFor,
-                  onChanged: (t) => setState(() {
-                    _targetInstallationId = t.installation.id;
-                    _preview = null;
-                  }),
-                )
-              else
-                _PlanNote(plan: plan),
-              if (permission != null && focus != null) ...[
-                const SizedBox(height: Insets.sm),
-                _PermissionRow(
-                  permission: permission,
-                  descriptor: focus.descriptor,
-                  followsDefault: focus.followsDefault,
-                  agentName: focus.agentName,
-                  onChanged: (mode) => setState(() => _chosenMode = mode),
-                ),
-              ],
-              const SizedBox(height: Insets.md),
-              TextField(
-                controller: _instruction,
-                minLines: 2,
-                maxLines: 4,
-                autofocus: true,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'What should the next agent do?',
-                  helperText:
-                      'The packet carries the conversation. This is the part '
-                      'only you can write.',
-                  border: OutlineInputBorder(),
-                ),
-              ),
+              )
+            else
+              _PlanNote(plan: plan),
+            if (permission != null && focus != null) ...[
               const SizedBox(height: Insets.sm),
-              TextField(
-                controller: _tasks,
-                minLines: 1,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Still open (one per line, optional)',
-                  border: OutlineInputBorder(),
+              _PermissionRow(
+                permission: permission,
+                descriptor: focus.descriptor,
+                followsDefault: focus.followsDefault,
+                agentName: focus.agentName,
+                onChanged: (mode) => setState(() => _chosenMode = mode),
+              ),
+            ],
+            const SizedBox(height: Insets.md),
+            TextField(
+              controller: _instruction,
+              minLines: 2,
+              maxLines: 4,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'What should the next agent do?',
+                helperText:
+                    'The packet carries the conversation. This is the part '
+                    'only you can write.',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: Insets.sm),
+            TextField(
+              controller: _tasks,
+              minLines: 1,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Still open (one per line, optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _askSource,
+              onChanged: _busy
+                  ? null
+                  : (v) => setState(() {
+                      _askSource = v ?? false;
+                      _preview = null;
+                    }),
+              title: Text('Ask $sourceName to write the brief first'),
+              subtitle: Text(
+                _sourceBrief?.notWritten != null
+                    ? 'It did not: ${_sourceBrief!.notWritten}'
+                    : 'Costs $sourceName one turn. The packet is assembled '
+                          'from files either way; this adds that agent\'s '
+                          'own account beside them, marked as its words.',
+              ),
+            ),
+            CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _newWorktree,
+              onChanged: (v) => setState(() => _newWorktree = v ?? false),
+              title: const Text('Start in a new worktree'),
+              subtitle: const Text(
+                'Off: continues in the same directory and on the same '
+                'branch, so the next agent sees the work the recap '
+                'describes.',
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: Insets.sm),
+              Text(
+                _error!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
                 ),
               ),
-              CheckboxListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _askSource,
-                onChanged: _busy
-                    ? null
-                    : (v) => setState(() {
-                        _askSource = v ?? false;
-                        _preview = null;
-                      }),
-                title: Text('Ask $sourceName to write the brief first'),
-                subtitle: Text(
-                  _sourceBrief?.notWritten != null
-                      ? 'It did not: ${_sourceBrief!.notWritten}'
-                      : 'Costs $sourceName one turn. The packet is assembled '
-                            'from files either way; this adds that agent\'s '
-                            'own account beside them, marked as its words.',
-                ),
+            ],
+            if (_preview != null) ...[
+              const SizedBox(height: Insets.md),
+              Text(
+                // Not "as its first message": an agent that takes a
+                // system-prompt file gets the packet as one.
+                'This is exactly what the next agent is told:',
+                style: theme.textTheme.labelSmall,
               ),
-              CheckboxListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _newWorktree,
-                onChanged: (v) => setState(() => _newWorktree = v ?? false),
-                title: const Text('Start in a new worktree'),
-                subtitle: const Text(
-                  'Off: continues in the same directory and on the same '
-                  'branch, so the next agent sees the work the recap '
-                  'describes.',
+              const SizedBox(height: Insets.xs),
+              Container(
+                constraints: const BoxConstraints(
+                  maxHeight: kExpandedOutputMaxHeight,
                 ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: Insets.sm),
-                Text(
-                  _error!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
+                width: double.infinity,
+                padding: const EdgeInsets.all(Insets.sm),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(Radii.sm),
+                  border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
-              ],
-              if (_preview != null) ...[
-                const SizedBox(height: Insets.md),
-                Text(
-                  // Not "as its first message": an agent that takes a
-                  // system-prompt file gets the packet as one.
-                  'This is exactly what the next agent is told:',
-                  style: theme.textTheme.labelSmall,
-                ),
-                const SizedBox(height: Insets.xs),
-                Container(
-                  constraints: const BoxConstraints(maxHeight: 260),
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(Insets.sm),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(Radii.sm),
-                    border: Border.all(color: theme.colorScheme.outlineVariant),
-                  ),
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      _preview!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontFamily: kMonoFamily,
-                      ),
+                child: SingleChildScrollView(
+                  primary: false,
+                  child: SelectableText(
+                    _preview!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: kMonoFamily,
                     ),
                   ),
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
       actions: [
