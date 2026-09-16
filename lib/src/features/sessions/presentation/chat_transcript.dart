@@ -320,6 +320,15 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
   return (null, rawText);
 }
 
+/// `mcp__server__tool` as `server · tool`; any other name as it came.
+String toolDisplayName(String name) {
+  if (!name.startsWith('mcp__')) return name;
+  final rest = name.substring('mcp__'.length);
+  final split = rest.indexOf('__');
+  if (split <= 0 || split + 2 >= rest.length) return name;
+  return '${rest.substring(0, split)} · ${rest.substring(split + 2)}';
+}
+
 /// Selects an appropriate category glyph for a tool name.
 IconData _toolIcon(String? name) {
   final lower = name?.toLowerCase() ?? '';
@@ -654,11 +663,24 @@ class _ChatMessageTile extends StatelessWidget {
                       color: isToolError ? failure : scheme.tertiary,
                     ),
                     const SizedBox(width: Insets.xs),
-                    Text(
-                      eyebrow.toUpperCase(),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: isToolError ? failure : scheme.tertiary,
-                        fontWeight: FontWeight.w700,
+                    // Gives way first: an MCP name is wider than a narrow pane,
+                    // and the row's actions must stay on it.
+                    Flexible(
+                      child: Tooltip(
+                        message: eyebrow,
+                        // The text already names the row to a screen reader;
+                        // a second name would merge into the row's controls.
+                        excludeFromSemantics: true,
+                        child: Text(
+                          toolDisplayName(eyebrow).toUpperCase(),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: isToolError ? failure : scheme.tertiary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
                     if (isToolError) ...[
