@@ -43,7 +43,7 @@ void main() {
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
     expect(db.schemaVersion, schemaMigrations.length);
-    expect(db.schemaVersion, 50);
+    expect(db.schemaVersion, 51);
   });
 
   test('v34 adds todos and the notes filing, and touches nothing else', () {

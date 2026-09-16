@@ -1,10 +1,10 @@
 import 'package:karmashala_store/database.dart';
 import 'package:test/test.dart';
 
-/// Schema v50: the usage history table. Kept to one migration so it can be
+/// Schema v51: the usage history table. Kept to one migration so it can be
 /// renumbered at a merge without touching anything else.
 void main() {
-  test('v50 creates usage_samples with its recorded_at index', () {
+  test('v51 creates usage_samples with its recorded_at index', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
 

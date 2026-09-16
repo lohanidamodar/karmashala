@@ -2,7 +2,7 @@ import 'package:karmashala_store/database.dart';
 
 import '../domain/usage_sample.dart';
 
-/// Data-access for the usage history (schema v50).
+/// Data-access for the usage history (schema v51).
 class UsageSampleDao {
   UsageSampleDao(this._db);
 
