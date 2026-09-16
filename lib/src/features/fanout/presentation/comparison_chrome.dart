@@ -5,6 +5,8 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../verification/domain/verdict_attribution.dart';
 import '../../verification/presentation/attribution_mark.dart';
+import '../../verification/domain/verification_run.dart';
+import '../../verification/presentation/verdict_appearance.dart';
 import '../application/comparison_providers.dart';
 import '../domain/comparison.dart';
 
@@ -166,12 +168,14 @@ class VerdictChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final semantic = SemanticColors.of(context);
-    final (color, icon) = switch (evidence.verdict) {
-      EvidenceVerdict.passed => (semantic.idle, AppIcons.checkCircle),
-      EvidenceVerdict.failed => (semantic.failure, AppIcons.xCircle),
-      EvidenceVerdict.inconclusive => (semantic.neutral, AppIcons.question),
-    };
+    final (:icon, :color, label: _) = verdictAppearance(
+      switch (evidence.verdict) {
+        EvidenceVerdict.passed => VerificationVerdict.pass,
+        EvidenceVerdict.failed => VerificationVerdict.fail,
+        EvidenceVerdict.inconclusive => VerificationVerdict.inconclusive,
+      },
+      SemanticColors.of(context),
+    );
     final labelStyle = Theme.of(context).textTheme.labelSmall;
     return Row(
       mainAxisSize: MainAxisSize.min,

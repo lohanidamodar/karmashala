@@ -20,6 +20,7 @@ import '../domain/verification_run.dart';
 import '../domain/verification_step.dart';
 import 'attribution_mark.dart';
 import 'review_action.dart';
+import 'verdict_appearance.dart';
 
 /// The verification pane: the runs recorded, and what each proved. Master and
 /// detail in place — a split at 360 px is two unreadable columns.
@@ -696,8 +697,9 @@ class _FileTileState extends ConsumerState<_FileTile> {
   }
 }
 
-/// The verdict, who graded it, then [child] taking the rest. The mark is capped
-/// at a third of the row: "unattributed" at 1.3x text is most of a 240px panel.
+/// The verdict, who graded it, then [child] taking the rest. The chip and the
+/// mark take a third of the row each at most: "unattributed" at 1.3x text is
+/// most of a 240px panel.
 class _VerdictLine extends StatelessWidget {
   const _VerdictLine({required this.run, required this.child});
 
@@ -708,7 +710,10 @@ class _VerdictLine extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) => Row(
       children: [
-        _VerdictChip(run: run),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: constraints.maxWidth / 3),
+          child: _VerdictChip(run: run),
+        ),
         const SizedBox(width: Insets.xs),
         ConstrainedBox(
           constraints: BoxConstraints(maxWidth: constraints.maxWidth / 3),
@@ -729,25 +734,30 @@ class _VerdictChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final semantic = SemanticColors.of(context);
-    final (colour, label) = switch (run.verdict) {
-      VerificationVerdict.pass => (semantic.idle, 'PASS'),
-      VerificationVerdict.fail => (semantic.failure, 'FAIL'),
-      VerificationVerdict.inconclusive => (semantic.attention, '?'),
-      null => (semantic.working, 'OPEN'),
-    };
+    final look = verdictAppearance(run.verdict, SemanticColors.of(context));
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.sm, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: 1),
       decoration: BoxDecoration(
-        color: colour.withValues(alpha: 0.14),
+        color: look.color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(Radii.sm),
       ),
-      child: Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: colour,
-          fontWeight: FontWeight.w600,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(look.icon, size: Chrome.iconSmall, color: look.color),
+          const SizedBox(width: Insets.xs),
+          Flexible(
+            child: Text(
+              look.label.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: look.color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

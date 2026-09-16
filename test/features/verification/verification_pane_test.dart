@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/verification/application/evidence_reader.dart';
@@ -286,6 +287,8 @@ void main() {
     await tapAndSettle(tester, find.text('a run with a failure'));
 
     expect(find.text('FAIL'), findsWidgets);
+    // The same glyph a fan-out candidate and a session mark draw for a fail.
+    expect(find.byIcon(AppIcons.xCircle), findsWidgets);
     expect(find.textContaining('Click'), findsOneWidget);
     expect(find.text('a cookie banner covered it'), findsOneWidget);
   });
