@@ -204,7 +204,12 @@ class _Toolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.sm, 2, Insets.xs),
+      padding: const EdgeInsets.fromLTRB(
+        Insets.sm,
+        Insets.sm,
+        Insets.xs / 2,
+        Insets.xs,
+      ),
       child: Row(
         children: [
           Expanded(
@@ -328,33 +333,53 @@ class _LogRow extends StatelessWidget {
     final dim = MonoStyles.small.copyWith(color: scheme.onSurfaceVariant);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Insets.md, vertical: 1),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(entry.timestamp, style: dim),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(text: '${entry.channel}  ', style: dim),
-                  TextSpan(
-                    text: entry.message,
-                    style: MonoStyles.small.copyWith(color: color),
-                  ),
-                  if (entry.error != null)
-                    TextSpan(
-                      text: '  ${entry.error}',
-                      style: MonoStyles.small.copyWith(color: semantic.failure),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) =>
+            _cells(constraints.maxWidth, dim, color, semantic),
       ),
     );
   }
+
+  Widget _cells(
+    double width,
+    TextStyle dim,
+    Color color,
+    SemanticColors semantic,
+  ) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // At most half the row: a narrow panel at a large text size ends
+      // the timestamp rather than pushing the row out of the panel.
+      ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: width / 2),
+        child: Text(
+          entry.timestamp,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: dim,
+        ),
+      ),
+      const SizedBox(width: Insets.sm),
+      Expanded(
+        child: Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: '${entry.channel}  ', style: dim),
+              TextSpan(
+                text: entry.message,
+                style: MonoStyles.small.copyWith(color: color),
+              ),
+              if (entry.error != null)
+                TextSpan(
+                  text: '  ${entry.error}',
+                  style: MonoStyles.small.copyWith(color: semantic.failure),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 class _StatusLine extends StatelessWidget {
@@ -382,11 +407,16 @@ class _StatusLine extends StatelessWidget {
     return Container(
       // The panel's own footer is a status bar, and the window already has a
       // token for how tall one of those is; 22 was that number, unnamed.
-      height: Chrome.statusBar,
+      height: Chrome.statusBarOf(context),
       padding: const EdgeInsets.symmetric(horizontal: Insets.md),
       color: theme.colorScheme.surfaceContainerLowest,
       alignment: Alignment.centerLeft,
-      child: Text(parts.join('  ·  '), style: theme.textTheme.labelSmall),
+      child: Text(
+        parts.join('  ·  '),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.labelSmall,
+      ),
     );
   }
 }

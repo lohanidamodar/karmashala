@@ -223,6 +223,43 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
   });
 
+  testWidgets('the narrowest panel at twice the text clips nothing silently', (
+    tester,
+  ) async {
+    AppLogger.named('sessions').info('created session s-1');
+    tester.view.physicalSize = const Size(240, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final errors = <String>[];
+    final previousOnError = FlutterError.onError;
+    FlutterError.onError = (details) => errors.add('${details.exception}');
+    addTearDown(() => FlutterError.onError = previousOnError);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [diagnosticsProvider.overrideWithValue(diagnostics)],
+        child: const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: MaterialApp(home: Scaffold(body: LogsPanel())),
+        ),
+      ),
+    );
+    await tester.pump();
+    FlutterError.onError = previousOnError;
+
+    final rowOverflow = errors.where((e) => e.contains('overflowed'));
+    expect(rowOverflow, isEmpty);
+    final footer = tester.widget<Container>(
+      find
+          .ancestor(
+            of: find.textContaining('shown'),
+            matching: find.byType(Container),
+          )
+          .first,
+    );
+    expect(footer.constraints?.maxHeight, greaterThan(Chrome.statusBar));
+    await tester.pump(const Duration(milliseconds: 200));
+  });
+
   test('the surface is hidden unless debug mode is on', () {
     expect(
       SidePanelSurface.offered(debugMode: false),
