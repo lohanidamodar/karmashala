@@ -37,6 +37,32 @@ flutter pub get --directory packages/mcp_bridge
 dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart \
   -o "$APP/Contents/MacOS/karmashala_mcp"
 
+# The session host for *this* machine, which is the local stage: the app starts
+# it when a pane needs one and finds none running. `build_release.bat` has built
+# it since 2026-09-15 and this recipe did not, so every macOS release shipped an
+# app whose `LocalHostExecutable.locate()` could only ever return null.
+#
+# `dart build cli`, not `compile exe`: the host carries the app's store, so it
+# depends on `sqlite3`, and `compile exe` refuses any target with a build hook.
+# No `pub get` — `packages/host` is a workspace member and the root resolution
+# covers it.
+#
+# The output is a bundle and keeps its shape: the executable finds its SQLite at
+# `../lib` and cannot be flattened beside the app binary. `Contents/MacOS/host`
+# is the first place `LocalHostExecutable` looks.
+#
+# Only this machine's host is built here. The ones deployed to other machines
+# are Linux bundles, built on Linux by the `build-host-linux` job — a bundle
+# cross-compiled from the wrong OS writes the bundled library's relative path
+# with the building machine's separator and cannot open a store on the far end.
+echo "=== SESSION HOST (this machine) ==="
+rm -rf build/host-macos "$APP/Contents/MacOS/host"
+dart build cli -t packages/host/bin/karmashala_host.dart -o build/host-macos
+cp -R build/host-macos/bundle "$APP/Contents/MacOS/host"
+# Ask the thing itself rather than trusting that a file appeared: a bundle whose
+# dylib it cannot reach still has a binary in the right place.
+"$APP/Contents/MacOS/host/bin/karmashala_host" probe-store
+
 # Re-sign after writing into the bundle: adding a file invalidates the seal
 # Flutter's own build applied, and an app with a broken signature is refused by
 # Gatekeeper with a message that names nothing useful. Ad-hoc (`-`) is what an
