@@ -587,4 +587,26 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  static const IconData house = IconData(
+    0xe2c2,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  /// Start recording — the filled dot inside a ring, not [circle].
+  static const IconData record = IconData(
+    0xe3ee,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
+
+  static const IconData fileVideo = IconData(
+    0xea22,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }
