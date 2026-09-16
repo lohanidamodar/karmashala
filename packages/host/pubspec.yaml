@@ -22,6 +22,11 @@ dependencies:
   # GUI, so it carries the same ladder rather than a second one that could
   # drift. SQLite itself is bundled by the build hook, so the machine needs no
   # libsqlite3 of its own.
+  # The companion's own frame protocol and the api that answers it. Pure Dart
+  # and Flutter-free, which is what lets a host on a headless machine speak the
+  # same wire the desktop does instead of inventing a second one.
+  karmashala_remote:
+    path: ../karmashala_remote
   karmashala_store:
     path: ../karmashala_store
 
