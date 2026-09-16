@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 /// What the window shows when the bootstrap threw before the shell could run.
 /// A process that exits with nothing is the alternative.
@@ -31,7 +32,7 @@ class BootstrapFailureApp extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 640),
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(Insets.xl),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,15 +41,27 @@ class BootstrapFailureApp extends StatelessWidget {
                     'Karmashala could not start',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(height: 12),
-                  SelectableText('$error'),
-                  if (logDirectory != null) ...[
-                    const SizedBox(height: 12),
-                    SelectableText('Log: ${logDirectory!.path}'),
-                  ],
-                  const SizedBox(height: 20),
+                  const SizedBox(height: Insets.md),
+                  // The error scrolls and the buttons stay: an error of any
+                  // length must still leave "Copy details" in the window.
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SelectableText('$error'),
+                          if (logDirectory != null) ...[
+                            const SizedBox(height: Insets.md),
+                            SelectableText('Log: ${logDirectory!.path}'),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: Insets.lg),
                   Wrap(
-                    spacing: 12,
+                    spacing: Insets.md,
+                    runSpacing: Insets.sm,
                     children: [
                       FilledButton(
                         onPressed: () => Clipboard.setData(
