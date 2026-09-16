@@ -18,7 +18,6 @@ import '../../core/database/database_providers.dart';
 import '../../features/automations/application/automation_runner.dart';
 import '../../features/automations/application/automation_scheduler.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
-import '../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../features/cli_detection/presentation/detected_projects_view.dart';
 import '../../features/flutter_apps/application/flutter_gate_observer.dart';
 import '../../features/git/application/worktree_setup_providers.dart';
@@ -534,19 +533,6 @@ class _DesktopMenuBar extends ConsumerWidget {
     ),
   );
 
-  void _showDetected(BuildContext context, WidgetRef ref) {
-    ref.read(detectedProjectsControllerProvider.notifier).detect();
-    showDialog<void>(
-      context: context,
-      builder: (context) => Dialog(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 820, maxHeight: 680),
-          child: const DetectedProjectsView(),
-        ),
-      ),
-    );
-  }
-
   Future<void> _clearAndReimport(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -637,7 +623,7 @@ class _DesktopMenuBar extends ConsumerWidget {
               leadingIcon: const Icon(AppIcons.listMagnifyingGlass),
               // No chord: this is the scan you run a handful of times in a
               // workspace's life, and every chord left is one a shell can use.
-              onPressed: () => _showDetected(context, ref),
+              onPressed: () => DetectedProjectsView.show(context),
               child: const Text('Detect CLI sessions'),
             ),
             MenuItemButton(
