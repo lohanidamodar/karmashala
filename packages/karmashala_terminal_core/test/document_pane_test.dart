@@ -109,4 +109,19 @@ void main() {
       expect(isDocumentPane('shell:1'), isFalse);
     });
   });
+  group('a note pane id', () {
+    test('round-trips the note id and is a document pane', () {
+      const id = 'note-1700000000000000-3';
+      expect(notePaneNoteId(notePaneId(id)), id);
+      expect(isNotePane(notePaneId(id)), isTrue);
+      expect(isDocumentPane(notePaneId(id)), isTrue);
+      expect(isEditorPane(notePaneId(id)), isFalse);
+    });
+
+    test('names no note when the id is not one', () {
+      expect(notePaneNoteId(kSettingsPaneId), isNull);
+      expect(notePaneNoteId(kNotePanePrefix), isNull);
+      expect(isNotePane(editorPaneId('/a/b.md')), isFalse);
+    });
+  });
 }

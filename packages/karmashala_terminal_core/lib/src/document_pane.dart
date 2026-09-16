@@ -38,6 +38,23 @@ String? editorPanePath(String paneId) {
 /// Whether [paneId] is an open file.
 bool isEditorPane(String paneId) => editorPanePath(paneId) != null;
 
+/// The prefix a note's pane id carries. The note id follows it, so restore
+/// reopens the note by reading it from the store.
+const String kNotePanePrefix = '${kDocumentPanePrefix}note:';
+
+/// The pane id for the note [noteId].
+String notePaneId(String noteId) => '$kNotePanePrefix$noteId';
+
+/// The note [paneId] shows, or null when it is not a note pane.
+String? notePaneNoteId(String paneId) {
+  if (!paneId.startsWith(kNotePanePrefix)) return null;
+  final id = paneId.substring(kNotePanePrefix.length);
+  return id.isEmpty ? null : id;
+}
+
+/// Whether [paneId] is a note.
+bool isNotePane(String paneId) => notePaneNoteId(paneId) != null;
+
 /// The prefix a diff document's pane id carries. A diff names three things —
 /// which machine, which checkout, and which file inside it — so restore can
 /// re-run the diff without asking anything else.
