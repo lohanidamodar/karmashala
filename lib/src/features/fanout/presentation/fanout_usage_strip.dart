@@ -11,6 +11,9 @@ import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_session/resume.dart';
 import '../../agents/presentation/usage_chip.dart';
+import '../../agents/domain/usage_pace.dart';
+import '../../agents/presentation/usage_window_meter.dart';
+import 'package:karmashala_ui/charts.dart';
 
 /// What the selected accounts have left, beside the button that spends it. It
 /// warns and never forbids, never blocks the dialog, and says "not recorded".
@@ -140,6 +143,7 @@ class _AccountUsage extends ConsumerWidget {
       account: account,
       reading: reading,
       now: now,
+      readAt: value.fetchedAt,
       sessions: sessions,
       totalSessions: totalSessions,
       // A number that could not be confirmed says so, and says how old it is —
@@ -160,6 +164,7 @@ class _UsageMeter extends StatelessWidget {
     required this.account,
     required this.reading,
     required this.now,
+    required this.readAt,
     required this.sessions,
     required this.totalSessions,
     this.note,
@@ -170,6 +175,9 @@ class _UsageMeter extends StatelessWidget {
 
   /// From `clockProvider`, so the reset reads against the app's clock.
   final DateTime now;
+
+  /// When the percentage was measured, for the pace tick.
+  final DateTime readAt;
   final int sessions;
   final int totalSessions;
   final String? note;
@@ -180,11 +188,7 @@ class _UsageMeter extends StatelessWidget {
     final semantic = SemanticColors.of(context);
     final window = reading.window;
     final percent = reading.percent;
-    final color = percent >= 95
-        ? semantic.failure
-        : percent >= 80
-        ? semantic.attention
-        : theme.colorScheme.primary;
+    final color = usageSeverityColor(context, usageSeverityFor(percent));
     final reset = window.resetsAt == null
         ? ''
         : ' · resets ${relativeReset(window.resetsAt!, now)}'
@@ -210,14 +214,12 @@ class _UsageMeter extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 2),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(Radii.sm),
-            child: LinearProgressIndicator(
-              value: (percent / 100).clamp(0.0, 1.0),
-              minHeight: 6,
-              backgroundColor: theme.colorScheme.surfaceContainerHighest,
-              color: color,
-            ),
+          LinearMeter(
+            value: percent / 100,
+            marker: usagePace(window, readAt).elapsed,
+            color: color,
+            semanticsLabel: '$account · ${window.label}: '
+                '${percent.toStringAsFixed(0)}% used$reset',
           ),
           if (note case final note?)
             Text(
