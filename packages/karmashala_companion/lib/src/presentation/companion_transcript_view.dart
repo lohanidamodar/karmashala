@@ -511,7 +511,7 @@ class _CompanionEmptyState extends StatelessWidget {
             _HeroGlyph(
               icon: AppIcons.robot,
               fill: scheme.primaryContainer.withValues(alpha: 0.4),
-              edge: scheme.primary.withValues(alpha: 0.2),
+              edge: StateLayers.selectedFocused(scheme),
               tint: scheme.primary,
             ),
             const SizedBox(height: Insets.md),

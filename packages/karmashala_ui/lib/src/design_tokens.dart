@@ -145,15 +145,56 @@ class Insets {
   static const xxl = 32.0;
 }
 
-/// Washes of the accent a surface is marked with.
-class Tints {
-  const Tints._();
+/// The washes an interactive surface is marked with. The one place an
+/// accent or ink alpha is chosen; every hover, selection and drop reads here.
+class StateLayers {
+  const StateLayers._();
 
-  /// Over [ColorScheme.primary]: a selected row, tab or destination.
-  static const selectionAlpha = 0.14;
+  static const hoverAlpha = 0.06;
+  static const pressedAlpha = 0.10;
+  static const selectedAlpha = 0.12;
+  static const selectedFocusedAlpha = 0.18;
+  static const dropTargetAlpha = 0.15;
+  static const subtleAlpha = 0.08;
+  static const textSelectionAlpha = 0.30;
+  static const linkUnderlineAlpha = 0.40;
+  static const focusRingAlpha = 0.6;
 
-  static Color selection(ColorScheme scheme) =>
-      scheme.primary.withValues(alpha: selectionAlpha);
+  /// A pointer over something interactive. Ink, not the accent.
+  static Color hover(ColorScheme scheme) =>
+      scheme.onSurface.withValues(alpha: hoverAlpha);
+
+  static Color pressed(ColorScheme scheme) =>
+      scheme.onSurface.withValues(alpha: pressedAlpha);
+
+  /// A selected row, tab or destination.
+  static Color selected(ColorScheme scheme) =>
+      scheme.primary.withValues(alpha: selectedAlpha);
+
+  /// A selection that also holds keyboard focus.
+  static Color selectedFocused(ColorScheme scheme) =>
+      scheme.primary.withValues(alpha: selectedFocusedAlpha);
+
+  /// Where a drag will land.
+  static Color dropTarget(ColorScheme scheme) =>
+      scheme.primary.withValues(alpha: dropTargetAlpha);
+
+  /// A group or strip that owns focus, or will take a drop somewhere inside it.
+  static Color subtle(ColorScheme scheme) =>
+      scheme.primary.withValues(alpha: subtleAlpha);
+
+  static Color textSelection(ColorScheme scheme) =>
+      scheme.primary.withValues(alpha: textSelectionAlpha);
+
+  static Color linkUnderline(ColorScheme scheme) =>
+      scheme.primary.withValues(alpha: linkUnderlineAlpha);
+
+  /// Keyboard focus: a 1px inset ring rather than a second stacked fill, which
+  /// vanished against a selected row on a light surface.
+  static Color focusRing(ColorScheme scheme) =>
+      scheme.primary.withValues(alpha: focusRingAlpha);
+
+  static const focusRingWidth = 1.0;
 }
 
 /// Corner radii.
@@ -361,7 +402,7 @@ enum UiDensity {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scheme.surfaceContainerLow,
-        indicatorColor: Tints.selection(scheme),
+        indicatorColor: StateLayers.selected(scheme),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,

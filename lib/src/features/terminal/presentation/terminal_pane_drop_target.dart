@@ -124,7 +124,7 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
                   child: IgnorePointer(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.18),
+                        color: StateLayers.dropTarget(theme.colorScheme),
                         border: Border.all(
                           color: theme.colorScheme.primary,
                           width: 2,

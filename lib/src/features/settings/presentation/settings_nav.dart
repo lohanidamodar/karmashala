@@ -279,7 +279,7 @@ class _NavRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
             decoration: BoxDecoration(
               color: selected
-                  ? scheme.primary.withValues(alpha: 0.10)
+                  ? StateLayers.selected(scheme)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(Radii.sm),
             ),

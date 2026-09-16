@@ -46,7 +46,7 @@ class PaneGroupStrip extends ConsumerWidget {
             ? scheme.surfaceContainerLow
             // The same wash the empty region uses, so "this will land here"
             // reads the same wherever a drag is over.
-            : scheme.primary.withValues(alpha: 0.08),
+            : StateLayers.subtle(scheme),
         child: Row(
           children: [
             // What the row is, before the first name on it. Not a control:

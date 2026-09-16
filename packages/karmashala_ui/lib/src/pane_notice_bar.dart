@@ -77,7 +77,7 @@ class PaneNoticeBar extends StatelessWidget {
       // would be a second accent.
       NoticeTone.positive => (
         Color.alphaBlend(
-          scheme.primary.withValues(alpha: 0.12),
+          StateLayers.selected(scheme),
           scheme.surfaceContainerLow,
         ),
         scheme.primary,

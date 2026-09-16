@@ -251,7 +251,7 @@ class QuickOpenRow extends StatelessWidget {
           // stay readable and the accent is the only colour in the palette.
           decoration: BoxDecoration(
             color: selected
-                ? scheme.primary.withValues(alpha: 0.10)
+                ? StateLayers.selected(scheme)
                 : Colors.transparent,
             border: Border(
               left: BorderSide(

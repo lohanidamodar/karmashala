@@ -108,7 +108,7 @@ class _AppCodeEditorState extends State<AppCodeEditor> {
         fontHeight: kCodeLineHeight,
         textColor: scheme.onSurface,
         backgroundColor: Colors.transparent,
-        selectionColor: scheme.primary.withValues(alpha: 0.30),
+        selectionColor: StateLayers.textSelection(scheme),
         cursorColor: scheme.primary,
         cursorLineColor: scheme.onSurface.withValues(alpha: 0.04),
         chunkIndicatorColor: scheme.onSurfaceVariant,

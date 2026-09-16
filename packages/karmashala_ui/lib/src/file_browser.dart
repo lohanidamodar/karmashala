@@ -754,7 +754,7 @@ class _EntryRow extends StatelessWidget {
     return ListTile(
       dense: true,
       selected: selected,
-      selectedTileColor: scheme.primary.withValues(alpha: 0.12),
+      selectedTileColor: StateLayers.selected(scheme),
       leading: Icon(
         entry.isDirectory ? AppIcons.folder : AppIcons.article,
         size: Chrome.icon,

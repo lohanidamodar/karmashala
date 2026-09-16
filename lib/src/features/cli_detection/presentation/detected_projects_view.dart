@@ -319,7 +319,7 @@ class _Badge extends StatelessWidget {
         vertical: Insets.xs,
       ),
       decoration: BoxDecoration(
-        color: scheme.primary.withValues(alpha: 0.12),
+        color: StateLayers.selected(scheme),
         borderRadius: BorderRadius.circular(Radii.sm),
       ),
       child: Text(

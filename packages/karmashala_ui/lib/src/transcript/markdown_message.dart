@@ -19,7 +19,7 @@ typedef PathLinkCallback = void Function(String path);
 TextStyle pathLinkStyle(ColorScheme scheme) => TextStyle(
   color: scheme.primary,
   decoration: TextDecoration.underline,
-  decorationColor: scheme.primary.withValues(alpha: 0.4),
+  decorationColor: StateLayers.linkUnderline(scheme),
 );
 
 /// Renders an agent/user message as Markdown. Paths become links through an

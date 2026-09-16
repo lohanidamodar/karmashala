@@ -95,7 +95,7 @@ class EmptyPaneRegion extends ConsumerWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: hovering
-                  ? scheme.primary.withValues(alpha: 0.08)
+                  ? StateLayers.subtle(scheme)
                   : scheme.surfaceContainerLowest,
               border: Border.all(
                 color: hovering || focused

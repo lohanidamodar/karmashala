@@ -106,6 +106,7 @@ class AppTheme {
       // accent; the ramp already says how high a surface is.
       applyElevationOverlayColor: false,
       splashFactory: InkSparkle.splashFactory,
+      hoverColor: StateLayers.hover(scheme),
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant,
         thickness: 1,
@@ -139,7 +140,7 @@ class AppTheme {
       ),
       listTileTheme: ListTileThemeData(
         selectedColor: scheme.primary,
-        selectedTileColor: scheme.primary.withValues(alpha: 0.10),
+        selectedTileColor: StateLayers.selected(scheme),
         iconColor: scheme.onSurfaceVariant,
         // Material's default title is `bodyLarge`, larger than the `bodyMedium` a
         // dialog's own content is set in, so a tile shouted over its explanation.

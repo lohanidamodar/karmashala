@@ -27,7 +27,7 @@ Widget _markedForJoin(
         child: IgnorePointer(
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: scheme.primary.withValues(alpha: 0.15),
+              color: StateLayers.dropTarget(scheme),
               border: Border.all(color: scheme.primary, width: 2),
               borderRadius: BorderRadius.circular(Radii.sm),
             ),

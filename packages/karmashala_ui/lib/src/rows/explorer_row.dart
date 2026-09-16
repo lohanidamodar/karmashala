@@ -186,21 +186,25 @@ class _ExplorerRowFill extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final interaction = RowInteractionScope.maybeOf(context);
     // Resting tone, then the states, in the order they compose: what is
-    // selected stays selected while it is hovered.
+    // selected stays selected while it is hovered. Focus is a ring, not a fill.
     var color = kind.surface(scheme);
     if (selected) {
-      color = Color.alphaBlend(Tints.selection(scheme), color);
-    }
-    if (interaction?.focused ?? false) {
-      color = Color.alphaBlend(scheme.primary.withValues(alpha: 0.10), color);
+      color = Color.alphaBlend(StateLayers.selected(scheme), color);
     }
     if (interaction?.hovered ?? false) {
-      color = Color.alphaBlend(scheme.onSurface.withValues(alpha: 0.06), color);
+      color = Color.alphaBlend(StateLayers.hover(scheme), color);
     }
+    final focused = interaction?.focused ?? false;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color,
         borderRadius: ExplorerRow._radius,
+        border: focused
+            ? Border.all(
+                color: StateLayers.focusRing(scheme),
+                width: StateLayers.focusRingWidth,
+              )
+            : null,
       ),
       child: child,
     );

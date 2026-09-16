@@ -309,7 +309,7 @@ class FileRowTile extends StatelessWidget {
       onTap: onTap,
       child: Container(
         color: selected
-            ? theme.colorScheme.primary.withValues(alpha: 0.14)
+            ? StateLayers.selected(theme.colorScheme)
             : null,
         padding: EdgeInsets.only(
           left: _indentFor(depth),

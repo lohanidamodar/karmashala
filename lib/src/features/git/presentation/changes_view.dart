@@ -336,7 +336,7 @@ class _ChangedFileRow extends ConsumerWidget {
       child: InkWell(
         onTap: () => ref.read(diffTabActionsProvider).open(file.path),
         child: Container(
-          color: selected ? scheme.primary.withValues(alpha: 0.14) : null,
+          color: selected ? StateLayers.selected(scheme) : null,
           padding: const EdgeInsets.fromLTRB(Insets.sm, 3, Insets.xs, 3),
           child: Row(
             children: [

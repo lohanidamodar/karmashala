@@ -245,7 +245,7 @@ class _RailButton extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
             decoration: BoxDecoration(
               color: selected
-                  ? scheme.primary.withValues(alpha: 0.12)
+                  ? StateLayers.selected(scheme)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(Radii.sm),
             ),

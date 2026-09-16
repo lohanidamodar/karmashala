@@ -288,7 +288,7 @@ class _WorktreeChip extends StatelessWidget {
           : path,
       child: Material(
         color: selected
-            ? scheme.primary.withValues(alpha: 0.14)
+            ? StateLayers.selected(scheme)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(Radii.sm),
         child: InkWell(

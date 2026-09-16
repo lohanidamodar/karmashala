@@ -56,7 +56,7 @@ class _TabStrip extends ConsumerWidget {
         height: Chrome.tabStrip,
         color: candidate.isEmpty
             ? scheme.surfaceContainerLow
-            : scheme.primary.withValues(alpha: 0.08),
+            : StateLayers.subtle(scheme),
         child: Row(
           children: [
             Expanded(

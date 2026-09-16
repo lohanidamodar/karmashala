@@ -75,7 +75,7 @@ class DiffLineTile extends StatelessWidget {
             semantic.diffRemoved,
           ),
           DiffLineKind.hunk => (
-            scheme.primary.withValues(alpha: 0.10),
+            StateLayers.subtle(scheme),
             scheme.primary,
             scheme.primary,
           ),

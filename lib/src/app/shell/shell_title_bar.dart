@@ -292,7 +292,7 @@ class _ChromeToggle extends StatelessWidget {
             height: Chrome.control,
             decoration: BoxDecoration(
               color: selected
-                  ? scheme.primary.withValues(alpha: 0.12)
+                  ? StateLayers.selected(scheme)
                   : Colors.transparent,
               borderRadius: BorderRadius.circular(Radii.sm),
             ),
