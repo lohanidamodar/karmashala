@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,9 +16,12 @@ import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
+import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
+import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
 import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../support/fake_command_runner.dart';
@@ -198,4 +203,107 @@ void main() {
       );
     });
   });
+
+  group('PairPhoneDialog', () {
+    final host = SshHost(
+      id: 'h1',
+      name: 'build-box-in-the-basement-with-a-long-name',
+      host: 'build-server-01.internal.corp.example.popupbits.com',
+      port: 22,
+      username: 'dlohani',
+      authMethod: SshAuthMethod.password,
+      createdAt: testTime,
+    );
+
+    Widget opener(ProviderContainer container) => app(
+      container,
+      Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => PairPhoneDialog.show(context, host: host),
+            child: const Text('Open'),
+          ),
+        ),
+      ),
+    );
+
+    Future<void> open(WidgetTester tester) async {
+      await tester.tap(find.text('Open'));
+    }
+
+    testWidgets('while it asks the host for a code', (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          ...noProcessOverrides(),
+          sshCompanionSetupProvider.overrideWith(
+            (ref, host) => Completer<Never>().future,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => opener(container),
+        warmUp: open,
+        matrix: settingsMatrix,
+        because: 'the busy line is a sentence beside a spinner',
+      );
+    });
+
+    testWidgets('with an address and a code to copy', (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          ...noProcessOverrides(),
+          sshCompanionSetupProvider.overrideWith(
+            (ref, host) async => _InvitingSetup(host),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => opener(container),
+        warmUp: open,
+        matrix: settingsMatrix,
+        because:
+            'the address is the host name the user typed, and two notes sit '
+            'under it',
+      );
+    });
+  });
+}
+
+/// A companion setup that answers at once with a long address and an open
+/// window, so the dialog's loaded state can be measured without a host.
+class _InvitingSetup implements SshCompanionSetup {
+  _InvitingSetup(this.host);
+
+  @override
+  final SshHost host;
+
+  @override
+  Future<({CompanionEndpoint endpoint, PairingWindow window})> invite({
+    required int capabilities,
+    String relay = '',
+  }) async => (
+    endpoint: CompanionEndpoint(
+      address: host.host,
+      port: 7422,
+      hostName: host.name,
+      reachable: false,
+      reason:
+          'Nothing answered on port 7422 from this desktop. Open it in the '
+          "host's firewall, or pair from a network that can reach it.",
+    ),
+    window: PairingWindow(
+      status: PairingRequestStatus.open,
+      observedAt: testTime,
+      reason: 'Open.',
+      code: 'K7QM-3X2W-9PLA',
+      expiresAt: testTime.add(const Duration(minutes: 10)),
+    ),
+  );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

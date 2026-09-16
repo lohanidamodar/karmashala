@@ -7,7 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/host_session_providers.dart';
 
@@ -71,8 +73,8 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
     final invitation = _invitation;
     return AlertDialog(
       title: Text('Pair a phone with ${widget.host.name}'),
-      content: SizedBox(
-        width: 460,
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,13 +84,13 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
                 padding: EdgeInsets.symmetric(vertical: Insets.lg),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
+                    InlineSpinner(size: InlineSpinnerSize.medium),
                     SizedBox(width: Insets.sm),
-                    Text('Opening the port and asking the host for a code…'),
+                    Expanded(
+                      child: Text(
+                        'Opening the port and asking the host for a code…',
+                      ),
+                    ),
                   ],
                 ),
               )
@@ -158,12 +160,19 @@ class _Copyable extends StatelessWidget {
   final String label;
   final String value;
 
+  /// The label column at 1x text; it grows with the text so "Address" still
+  /// fits on its line when the user has made text bigger.
+  static const labelWidth = 72.0;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Row(
       children: [
-        SizedBox(width: 72, child: Text(label, style: theme.textTheme.labelMedium)),
+        SizedBox(
+          width: MediaQuery.textScalerOf(context).scale(labelWidth),
+          child: Text(label, style: theme.textTheme.labelMedium),
+        ),
         Expanded(
           child: SelectableText(
             value,
