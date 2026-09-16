@@ -2009,12 +2009,13 @@ TerminalTabChip
                                                                                   Listener
                                                                                     Semantics
                                                                                       MouseRegion
-                                                                                        Icon icon=IconData(U+0E4E2)
-                                                                                          Semantics
-                                                                                            ExcludeSemantics
-                                                                                              SizedBox
-                                                                                                Center
-                                                                                                  RichText
+                                                                                        StatusGlyph
+                                                                                          Icon icon=IconData(U+0E4E2)
+                                                                                            Semantics
+                                                                                              ExcludeSemantics
+                                                                                                SizedBox
+                                                                                                  Center
+                                                                                                    RichText
                                                                   Expanded
                                                                     Text text="claude"
                                                                       RichText

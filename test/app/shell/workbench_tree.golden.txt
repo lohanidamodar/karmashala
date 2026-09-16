@@ -1838,12 +1838,13 @@ WorkbenchView
                                                                                                                                                                                     Listener
                                                                                                                                                                                       Semantics
                                                                                                                                                                                         MouseRegion
-                                                                                                                                                                                          Icon
-                                                                                                                                                                                            Semantics
-                                                                                                                                                                                              ExcludeSemantics
-                                                                                                                                                                                                SizedBox
-                                                                                                                                                                                                  Center
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                                          StatusGlyph
+                                                                                                                                                                                            Icon
+                                                                                                                                                                                              Semantics
+                                                                                                                                                                                                ExcludeSemantics
+                                                                                                                                                                                                  SizedBox
+                                                                                                                                                                                                    Center
+                                                                                                                                                                                                      RichText
                                                                                                                                                                     Expanded
                                                                                                                                                                       Text text="PowerShell"
                                                                                                                                                                         RichText
@@ -2659,12 +2660,13 @@ WorkbenchView
                                                                                                                                                                                     Listener
                                                                                                                                                                                       Semantics
                                                                                                                                                                                         MouseRegion
-                                                                                                                                                                                          Icon
-                                                                                                                                                                                            Semantics
-                                                                                                                                                                                              ExcludeSemantics
-                                                                                                                                                                                                SizedBox
-                                                                                                                                                                                                  Center
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                                          StatusGlyph
+                                                                                                                                                                                            Icon
+                                                                                                                                                                                              Semantics
+                                                                                                                                                                                                ExcludeSemantics
+                                                                                                                                                                                                  SizedBox
+                                                                                                                                                                                                    Center
+                                                                                                                                                                                                      RichText
                                                                                                                                                                     Expanded
                                                                                                                                                                       Text text="PowerShell"
                                                                                                                                                                         RichText
@@ -2854,12 +2856,13 @@ WorkbenchView
                                                     MouseRegion
                                                       Semantics
                                                         Row
-                                                          Icon
-                                                            Semantics
-                                                              ExcludeSemantics
-                                                                SizedBox
-                                                                  Center
-                                                                    RichText
+                                                          StatusGlyph
+                                                            Icon
+                                                              Semantics
+                                                                ExcludeSemantics
+                                                                  SizedBox
+                                                                    Center
+                                                                      RichText
                                                           SizedBox
                                                           Text text="Idle"
                                                             RichText
@@ -4785,12 +4788,13 @@ WorkbenchView
                                                                                                                                                                                     Listener
                                                                                                                                                                                       Semantics
                                                                                                                                                                                         MouseRegion
-                                                                                                                                                                                          Icon
-                                                                                                                                                                                            Semantics
-                                                                                                                                                                                              ExcludeSemantics
-                                                                                                                                                                                                SizedBox
-                                                                                                                                                                                                  Center
-                                                                                                                                                                                                    RichText
+                                                                                                                                                                                          StatusGlyph
+                                                                                                                                                                                            Icon
+                                                                                                                                                                                              Semantics
+                                                                                                                                                                                                ExcludeSemantics
+                                                                                                                                                                                                  SizedBox
+                                                                                                                                                                                                    Center
+                                                                                                                                                                                                      RichText
                                                                                                                                                                     Expanded
                                                                                                                                                                       Text text="PowerShell"
                                                                                                                                                                         RichText
