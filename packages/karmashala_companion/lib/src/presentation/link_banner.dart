@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
@@ -51,48 +52,67 @@ class LinkBanner extends ConsumerWidget {
           density.isTouch ? Insets.sm : Insets.xs,
           density.isTouch ? Insets.sm : Insets.xs,
         ),
-        child: Row(
-          children: [
-            Icon(
-              connecting ? AppIcons.arrowsClockwise : AppIcons.linkBreak,
-              size: density.icon,
-              color: tone,
-            ),
-            SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    headline,
-                    style: (density.isTouch
-                        ? theme.textTheme.bodyMedium
-                        : theme.textTheme.bodySmall)?.copyWith(
-                      color: scheme.onSurface,
-                    ),
-                  ),
-                  // The gateway's own sentence: a relay that hung up saying
-                  // nobody was there is not a broken network.
-                  if (detail != null)
+        // Retry drops under the words once they would be squeezed to a column
+        // a few letters wide, and the words stop at two lines each: the banner
+        // sits above every screen and must not become the screen.
+        child: StackWhenNarrow(
+          breakpoint: _sideBySideWidth,
+          spacing: Insets.xs,
+          runSpacing: 0,
+          stackedAlignment: CrossAxisAlignment.end,
+          leading: Row(
+            children: [
+              Icon(
+                connecting ? AppIcons.arrowsClockwise : AppIcons.linkBreak,
+                size: density.icon,
+                color: tone,
+              ),
+              SizedBox(width: density.isTouch ? Insets.md : Insets.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      detail,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                      headline,
+                      maxLines: _maxLines,
+                      overflow: TextOverflow.ellipsis,
+                      style: (density.isTouch
+                          ? theme.textTheme.bodyMedium
+                          : theme.textTheme.bodySmall)?.copyWith(
+                        color: scheme.onSurface,
                       ),
                     ),
-                ],
+                    // The gateway's own sentence: a relay that hung up saying
+                    // nobody was there is not a broken network.
+                    if (detail != null)
+                      Text(
+                        detail,
+                        maxLines: _maxLines,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            // Offered while dialling too: a phone stuck on "connecting" needs a
-            // way to start over as much as one that gave up.
-            TextButton(
-              onPressed: () => ref.read(companionGatewayProvider).reconnect(),
-              child: const Text('Retry'),
-            ),
-          ],
+            ],
+          ),
+          // Offered while dialling too: a phone stuck on "connecting" needs a
+          // way to start over as much as one that gave up.
+          trailing: TextButton(
+            onPressed: () => ref.read(companionGatewayProvider).reconnect(),
+            child: const Text('Retry'),
+          ),
         ),
       ),
     );
   }
+
+  /// The narrowest banner, at 1x text, that still gives the words a readable
+  /// column beside Retry.
+  static const _sideBySideWidth = 280.0;
+
+  static const _maxLines = 2;
 }
