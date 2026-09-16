@@ -59,6 +59,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   48: _migrateToV48,
   49: _migrateToV49,
   50: _migrateToV50,
+  51: _migrateToV51,
 };
 
 /// Was this pane running when its row was written? `DEFAULT 0` is the honest
@@ -1288,5 +1289,25 @@ void _migrateToV50(Database db) {
       jsonEncode({'local': true, 'hosted': false}),
       DateTime.now().toUtc().toIso8601String(),
     ],
+  );
+}
+
+/// Usage history: one row per measured quota window per fresh reading. Pruned
+/// and downsampled by its writer, so the table stays small without a job.
+void _migrateToV51(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS usage_samples (
+      account_key  TEXT NOT NULL,
+      window_label TEXT NOT NULL,
+      span_seconds INTEGER,
+      percent      REAL NOT NULL,
+      resets_at    TEXT,
+      recorded_at  TEXT NOT NULL,
+      PRIMARY KEY (account_key, window_label, recorded_at)
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_usage_samples_recorded '
+    'ON usage_samples (recorded_at);',
   );
 }

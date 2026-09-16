@@ -9,14 +9,23 @@ import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'agent_installations_controller.dart';
+import 'usage_history.dart';
 
-/// Fetches live usage/limits for an agent installation.
-final agentUsageServiceProvider = Provider<AgentUsageService>(
-  (ref) => AgentUsageService(
+/// Fetches live usage/limits for an agent installation. Every fresh reading is
+/// written to the usage history.
+final agentUsageServiceProvider = Provider<AgentUsageService>((ref) {
+  final service = AgentUsageService(
     storeLocator: ref.watch(cliStoreLocatorProvider),
     clock: ref.watch(agentCliClockProvider),
-  ),
-);
+  );
+  // Read lazily: the store is only needed once a reading actually arrives.
+  service.addReadingListener(
+    (installation, usage) => ref
+        .read(usageHistoryRecorderProvider)
+        .record(usageAccountKey(installation), usage),
+  );
+  return service;
+});
 
 /// Live usage for one installation, on demand. **Retry is off**: it would be a
 /// second polling loop, 401ing with an expired token while nobody is there.

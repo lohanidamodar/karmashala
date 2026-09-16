@@ -18,6 +18,10 @@ import './claude_auth_service.dart';
 import './usage_throttle.dart';
 import '../../environments/environment_label.dart';
 
+/// Told about a fresh reading — see [AgentUsageService.addReadingListener].
+typedef UsageReadingListener =
+    void Function(AgentInstallation installation, AgentUsage usage);
+
 /// Raised when a usage lookup cannot complete.
 ///
 /// [kind] is what the surfaces switch on: a rate limit, an expired token and an
@@ -180,6 +184,7 @@ class AgentUsageService {
     try {
       final usage = await fetchFresh(installation, environments);
       _throttle.recordSuccess(installation, usage);
+      _announce(installation, usage);
       return usage;
     } on UsageException catch (e) {
       if (!_worthWaitingOut(e.kind)) rethrow;
@@ -194,6 +199,27 @@ class AgentUsageService {
           retryAfter: e.retryIn,
         ),
       );
+    }
+  }
+
+  final _readingListeners = <UsageReadingListener>[];
+
+  /// Called with every reading that came off the wire — never with one served
+  /// from memory inside the floor, so a history built on it records each
+  /// request once and costs no request of its own.
+  void addReadingListener(UsageReadingListener listener) =>
+      _readingListeners.add(listener);
+
+  void removeReadingListener(UsageReadingListener listener) =>
+      _readingListeners.remove(listener);
+
+  void _announce(AgentInstallation installation, AgentUsage usage) {
+    for (final listener in [..._readingListeners]) {
+      try {
+        listener(installation, usage);
+      } on Object {
+        // A listener's failure is its own; the reading still stands.
+      }
     }
   }
 
