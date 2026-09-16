@@ -155,6 +155,21 @@ class Radii {
   static const Radius card = Radius.circular(md);
 }
 
+/// A dialog body's design width, for `BoundedDialogContent`. Three steps
+/// rather than the nine hand-picked widths the dialogs had drifted to.
+class DialogWidth {
+  const DialogWidth._();
+
+  /// A confirmation or a short form. Was 340, 380, 400 and 420.
+  static const narrow = 420.0;
+
+  /// An ordinary form or a list to pick from. Was 460, 480 and 520.
+  static const regular = 520.0;
+
+  /// A body with a table, a preview or two columns. Was 560 and 620.
+  static const wide = 620.0;
+}
+
 /// What a finger needs, where [Chrome] says what a pointer needs.
 class Touch {
   const Touch._();

@@ -55,6 +55,39 @@ class DesktopDialogTitle extends StatelessWidget {
   }
 }
 
+/// A dialog's `content`: [width] wide when the window has room and narrower
+/// when it does not, scrolling when taller than the window, with its own
+/// [FocusTraversalGroup] so Tab finishes the body before reaching the actions.
+///
+/// Use it for a dialog with a fixed design width — pass a [DialogWidth]. Use
+/// `AlertDialog(scrollable: true)` instead only when the title should scroll
+/// away with the body; never both, or there are two scroll views.
+class BoundedDialogContent extends StatelessWidget {
+  const BoundedDialogContent({
+    required this.width,
+    required this.child,
+    super.key,
+  });
+
+  /// The design width, clamped to what the dialog is given.
+  final double width;
+
+  /// The body. Must not scroll vertically itself.
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return FocusTraversalGroup(
+      // A SizedBox rather than a LayoutBuilder: AlertDialog sizes its body by
+      // intrinsics, which a LayoutBuilder cannot answer.
+      child: SizedBox(
+        width: width,
+        child: SingleChildScrollView(primary: false, child: child),
+      ),
+    );
+  }
+}
+
 /// An error said inside a dialog, above the form it belongs to.
 class DesktopErrorBanner extends StatelessWidget {
   const DesktopErrorBanner(this.message, {this.onDismiss, super.key});

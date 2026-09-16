@@ -1,4 +1,5 @@
-/// A dialog's own chrome: the titled header and the error banner under it.
+/// A dialog's own chrome: the titled header, the error banner under it, and
+/// the body that fits the window at a [DialogWidth].
 library;
 
 export 'src/desktop_dialog.dart';
