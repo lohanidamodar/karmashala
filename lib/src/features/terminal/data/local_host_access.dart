@@ -338,11 +338,26 @@ class LocalHostExecutable {
     final beside = executableDirectory ?? File(Platform.resolvedExecutable).parent.path;
     final root = repositoryRoot ?? Directory.current.path;
     return [
+      // The bundle `dart build cli` writes: the executable finds its SQLite at
+      // `../lib`, so it cannot be flattened into the app's own directory.
+      '$beside/host/bin/$fileName',
+      // An install from before the host carried a store. It still serves panes,
+      // which is all the local host is asked for; `probe-store` is what says so
+      // if it is ever asked for more.
       '$beside/$fileName',
-      // A debug run: `dart compile exe` writes here, and the release script
-      // puts the cross-compiled ones beside it.
-      '$root/host/build/$fileName',
+      // A debug run, whichever target was built into the package.
+      for (final directory in _builtBundles(root)) '$directory/$fileName',
     ];
+  }
+
+  /// `packages/host/build/cli/<os>_<arch>/bundle/bin`, listed rather than spelled:
+  /// the target directory's name is the building machine's, not ours to predict.
+  static Iterable<String> _builtBundles(String root) sync* {
+    final built = Directory('$root/packages/host/build/cli');
+    if (!built.existsSync()) return;
+    for (final target in built.listSync().whereType<Directory>()) {
+      yield '${target.path}/bundle/bin';
+    }
   }
 
   File? locate() {

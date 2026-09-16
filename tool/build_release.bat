@@ -46,36 +46,45 @@ if errorlevel 1 goto :fail
 "%DARTEXE%" compile exe packages\mcp_bridge\bin\karmashala_mcp.dart -o "%RELEASE%\karmashala_mcp.exe" >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
 
-rem The session host, cross-compiled for the machines it gets deployed to.
-rem Measured 2026-09-08 on Dart 3.13.2 (windows_x64): `compile exe` accepts
-rem --target-os=linux for arm, arm64, riscv64 and x64 and produces glibc-linked
-rem ELF binaries; the x64 one ran unmodified inside WSL. It refuses macOS
-rem outright ("Unsupported target platform macos_arm64"), so macOS hosts fall
-rem back to tmux and HostDeployer says so. musl hosts are out of scope for the
-rem same reason: these are glibc-linked.
-rem
-rem They land in the Release directory beside karmashala_mcp.exe, which the
-rem installer copies wholesale, so no installer change is needed. The version
-rem is in the filename because HostDeployer compares it against what the remote
-rem binary reports rather than trusting the name.
-echo === SESSION HOST (linux x64, arm64, and this machine) === >> "%LOG%"
-call "%FLUTTER%" pub get --directory packages\host >> "%LOG%" 2>&1
-if errorlevel 1 goto :fail
-"%DARTEXE%" compile exe packages\host\bin\karmashala_host.dart --target-os=linux --target-arch=x64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-x64" >> "%LOG%" 2>&1
-if errorlevel 1 goto :fail
-"%DARTEXE%" compile exe packages\host\bin\karmashala_host.dart --target-os=linux --target-arch=arm64 -o "%RELEASE%\karmashala_host-!APPVERSHORT!-linux-arm64" >> "%LOG%" 2>&1
-if errorlevel 1 goto :fail
-
-rem And the same host for *this* machine, which is the local stage: the app
+rem The session host for *this* machine, which is the local stage: the app
 rem starts it when a pane needs one and finds none running.
 rem
-rem Deliberately named without the `-<os>-<arch>` suffix the deployed ones
-rem carry, because DirectoryHostBinaries matches on exactly that pattern and
-rem this binary must never be uploaded to somebody else's machine — it is a
-rem Windows PE. LocalHostExecutable looks for this name beside the app, the way
-rem karmashala_mcp.exe is found, so the installer needs no change.
-"%DARTEXE%" compile exe packages\host\bin\karmashala_host.dart -o "%RELEASE%\karmashala_host.exe" >> "%LOG%" 2>&1
+rem `dart build cli`, not `compile exe`, since 2026-09-15: the host carries the
+rem app's store, so it depends on sqlite3, and `compile exe` refuses any target
+rem with a build hook ("does not support build hooks"). No `pub get` here either
+rem — packages\host is a workspace member now and the root resolution covers it.
+rem
+rem The output is a bundle, so it keeps its shape: the executable finds its
+rem SQLite at ..\lib and cannot be flattened beside karmashala.exe. It lands in
+rem Release\host\, which the installer copies wholesale
+rem (karmashala.iss recurses subdirectories), and LocalHostExecutable looks
+rem there first.
+echo === SESSION HOST (this machine) === >> "%LOG%"
+if exist "%RELEASE%\host" rmdir /s /q "%RELEASE%\host"
+"%DARTEXE%" build cli -t packages\host\bin\karmashala_host.dart -o build\host-windows >> "%LOG%" 2>&1
 if errorlevel 1 goto :fail
+xcopy /e /i /y "build\host-windows\bundle" "%RELEASE%\host" >> "%LOG%" 2>&1
+if errorlevel 1 goto :fail
+
+rem The hosts that get deployed to other machines are NOT built here.
+rem
+rem Measured 2026-09-15: a Linux bundle cross-compiled on Windows writes the
+rem bundled library's relative path with *this* machine's separator, so it hunts
+rem for `..\lib\libsqlite3.so` on the far end and cannot open a store. The ELF
+rem and the .so are both fine — only the path is wrong — so there is nothing to
+rem patch around, and `karmashala_host probe-store` reports it as
+rem STORE MISLINKED. Linux bundles are therefore built on Linux, by the
+rem `build-host-linux` job in .github/workflows/release-build.yml, and collected
+rem from the release here.
+rem
+rem The version is in the filename because HostDeployer compares it against what
+rem the remote binary reports rather than trusting the name.
+echo === SESSION HOST (linux, from the release) === >> "%LOG%"
+gh release download v!APPVERSHORT! -p "karmashala_host-*-linux-*" -D "%RELEASE%" >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     no linux host bundles on release v!APPVERSHORT! yet - SSH deploy will report noBinary
+  echo no linux host bundles on release v!APPVERSHORT! >> "%LOG%"
+)
 
 echo === INSTALLER === >> "%LOG%"
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" /DMyAppVersion=!APPVERSHORT! windows\installer\karmashala.iss >> "%LOG%" 2>&1
