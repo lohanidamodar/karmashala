@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import 'package:karmashala_ui/tokens.dart';
+import 'design_tokens.dart';
 
-/// One saved thing on a settings page — a variable, a snippet, an automation:
-/// a header, what it is, and its worded verbs. The three pages drew three
-/// near-copies of this.
-class SettingsItemCard extends StatelessWidget {
-  const SettingsItemCard({
+/// One saved thing in a list — a variable, a snippet, an automation on their
+/// settings pages: a header, what it is, and its worded verbs. The three pages
+/// drew three near-copies of this.
+class ItemCard extends StatelessWidget {
+  const ItemCard({
     required this.title,
     this.icon,
     this.trailing,

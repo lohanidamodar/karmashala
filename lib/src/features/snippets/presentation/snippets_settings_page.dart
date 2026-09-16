@@ -4,10 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/primitives.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/snippet_providers.dart';
 import '../domain/command_snippet.dart';
-import '../../env_secrets/presentation/settings_item_card.dart';
 import 'snippet_dialogs.dart';
 
 /// Settings → Snippets: the saved commands, somewhere a person looks for them.
@@ -95,7 +95,7 @@ class _SnippetCard extends ConsumerWidget {
       onSelected: (value) => value == 'edit'
           ? _editSnippet(context, ref, snippet)
           : _deleteSnippet(context, ref, snippet),
-      builder: (context) => SettingsItemCard(
+      builder: (context) => ItemCard(
         icon: AppIcons.bookBookmark,
         title: Text(
           snippet.label,

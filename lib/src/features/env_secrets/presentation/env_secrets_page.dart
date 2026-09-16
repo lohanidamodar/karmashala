@@ -5,12 +5,12 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/primitives.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/env_secrets_controller.dart';
 import '../domain/env_variable.dart';
 import 'env_variable_dialog.dart';
-import 'settings_item_card.dart';
 
 /// The environment-variables settings page. The honesty copy is the first
 /// thing on it: "an agent can print these" must be met before the first token.
@@ -246,7 +246,7 @@ class _VariableCard extends ConsumerWidget {
               .setVariableEnabled(variable.id, !variable.enabled),
         _ => _remove(context, ref),
       },
-      builder: (context) => SettingsItemCard(
+      builder: (context) => ItemCard(
         icon: variable.secret ? AppIcons.warningCircle : AppIcons.code,
         title: Text(variable.name, style: MonoStyles.label),
         trailing: Switch(

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
-import 'package:karmashala/src/features/env_secrets/presentation/settings_item_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_store/database.dart';
@@ -18,6 +17,7 @@ import 'package:karmashala/src/features/snippets/data/command_snippet_dao.dart';
 import 'package:karmashala/src/features/snippets/domain/command_snippet.dart';
 import 'package:karmashala/src/features/snippets/presentation/snippet_dialogs.dart';
 import 'package:karmashala/src/features/snippets/presentation/snippets_settings_page.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
@@ -127,7 +127,7 @@ void main() {
     expect(find.text('Tail the log'), findsOneWidget);
     expect(find.text('WSL · typed at the prompt'), findsOneWidget);
     // The card the environment-variable and automations pages draw.
-    expect(find.byType(SettingsItemCard), findsOneWidget);
+    expect(find.byType(ItemCard), findsOneWidget);
   });
 
   testWidgets('the page adds, edits and deletes through the same editor', (

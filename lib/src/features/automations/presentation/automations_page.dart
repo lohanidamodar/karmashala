@@ -21,7 +21,6 @@ import '../domain/automation.dart';
 import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 import '../domain/cron_schedule.dart';
-import '../../env_secrets/presentation/settings_item_card.dart';
 import 'automation_dialog.dart';
 import 'automation_undo_dialog.dart';
 import 'project_checks_section.dart';
@@ -153,7 +152,7 @@ class AutomationCard extends ConsumerWidget {
         ? 'an agent that is no longer installed'
         : ref.watch(agentRegistryProvider).displayNameFor(installation.agentId);
 
-    return SettingsItemCard(
+    return ItemCard(
       title: Wrap(
         crossAxisAlignment: WrapCrossAlignment.center,
         spacing: Insets.sm,
