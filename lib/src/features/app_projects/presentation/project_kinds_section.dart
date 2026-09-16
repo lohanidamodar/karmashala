@@ -53,10 +53,13 @@ class _KindRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // A Wrap: at phone width and 1.3x text the tag drops under the name
+          // instead of pushing past the edge.
+          Wrap(
+            spacing: Insets.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(kind.label, style: theme.textTheme.titleSmall),
-              const SizedBox(width: Insets.sm),
               if (descriptor == null || !descriptor!.canBuild)
                 Semantics(
                   label: '${kind.label}: detection only',
