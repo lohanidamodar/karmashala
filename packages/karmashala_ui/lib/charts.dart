@@ -7,5 +7,6 @@ export 'src/charts/bar_chart.dart';
 export 'src/charts/chart_support.dart'
     show ChartInk, chartMotion, kChartCompactWidth;
 export 'src/charts/meters.dart';
+export 'src/charts/number_format.dart';
 export 'src/charts/sparkline.dart';
 export 'src/charts/time_series_chart.dart';

@@ -84,6 +84,15 @@ void main() {
     expect(formatTokenCount(42000000), '42M');
   });
 
+  test('formatTokenCount never rounds a count up into the next unit', () {
+    // 999,950 rounds to 1000k and 9,999 to 10.0k: the unit has to step up
+    // with the rounding, not before it.
+    expect(formatTokenCount(999950), '1M');
+    expect(formatTokenCount(999499), '999k');
+    expect(formatTokenCount(9999), '10k');
+    expect(formatTokenCount(1000), '1k');
+  });
+
   group('the card', () {
     final totals = aggregateTokenTotals([
       row('karmashala-app with a long project name', 'Claude Code', 1250000),

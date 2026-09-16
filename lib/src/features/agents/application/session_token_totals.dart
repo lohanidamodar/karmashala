@@ -1,4 +1,5 @@
 import 'package:agent_cli/descriptors.dart';
+import 'package:karmashala_ui/charts.dart' show formatCompactCount;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
@@ -86,17 +87,7 @@ TokenTotals aggregateTokenTotals(
 }
 
 /// `1.2M`, `340k`, `812` — a token count the width of a label.
-String formatTokenCount(int tokens) {
-  if (tokens >= 1000000) {
-    final m = tokens / 1000000;
-    return '${m.toStringAsFixed(m >= 10 ? 0 : 1)}M';
-  }
-  if (tokens >= 1000) {
-    final k = tokens / 1000;
-    return '${k.toStringAsFixed(k >= 10 ? 0 : 1)}k';
-  }
-  return '$tokens';
-}
+String formatTokenCount(int tokens) => formatCompactCount(tokens);
 
 /// Reads each recent session's own counts and totals them. On demand only:
 /// nothing calls this but a person pressing the button.
