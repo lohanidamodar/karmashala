@@ -10,9 +10,6 @@ import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_skill_installation_service.dart';
 import '../../browser/application/browser_consent_providers.dart';
 import 'package:karmashala_browser/browser.dart';
-import '../../../core/apps/installed_application.dart';
-import '../../editor/application/code_editor_providers.dart';
-import 'choose_application_dialog.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
@@ -27,9 +24,9 @@ import '../../mcp/control_server_restart.dart';
 import '../../mcp/control_server_status.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../projects/application/projects_controller.dart';
-import '../../terminal/application/system_terminal_providers.dart';
 import '../application/settings_controller.dart';
 import 'agent_tools_section.dart';
+import 'external_app_section.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
@@ -58,8 +55,8 @@ class ToolsPage extends StatelessWidget {
               'The programs Karmashala hands a session or a folder to when you '
               'open one outside it.',
           children: [
-            TerminalAppSection(),
-            CodeEditorSection(),
+            ExternalAppSection(kind: ExternalAppKind.terminal),
+            ExternalAppSection(kind: ExternalAppKind.editor),
             FilePickerSection(),
           ],
         ),
@@ -134,286 +131,6 @@ class ToolsCategory extends StatelessWidget {
         const Divider(height: Insets.lg),
         ...children,
       ],
-    );
-  }
-}
-
-/// The external terminal sessions resume in: a detected one, or a custom path.
-class TerminalAppSection extends ConsumerStatefulWidget {
-  const TerminalAppSection({super.key});
-
-  @override
-  ConsumerState<TerminalAppSection> createState() => _TerminalAppSectionState();
-}
-
-class _TerminalAppSectionState extends ConsumerState<TerminalAppSection> {
-  final _path = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _path.text = ref.read(settingsControllerProvider).customTerminalPath ?? '';
-  }
-
-  @override
-  void dispose() {
-    _path.dispose();
-    super.dispose();
-  }
-
-  Future<void> _browse() async {
-    final file = await pickOneFile(
-      context: context,
-      what: 'a terminal program',
-      startNear: _path.text,
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'Executables', extensions: ['exe']),
-      ],
-    );
-    if (file == null) return;
-    _use(file.path);
-  }
-
-  Future<void> _choose() async {
-    final app = await chooseInstalledApplication(
-      context,
-      what: 'a terminal application',
-    );
-    if (app == null) return;
-    _use(app.launchPath);
-  }
-
-  void _use(String path) {
-    _path.text = path;
-    ref.read(settingsControllerProvider.notifier).setCustomTerminalPath(path);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final settings = ref.watch(settingsControllerProvider);
-    final controller = ref.read(settingsControllerProvider.notifier);
-    final detected =
-        ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
-    // Clamp to a valid option: the saved terminal can be absent from
-    // `detected` while the probe loads, and DropdownButtonFormField throws.
-    final validIds = <String>{for (final t in detected) t.id, 'custom'};
-    final saved = settings.defaultSystemTerminalId;
-    final current = (saved != null && validIds.contains(saved))
-        ? saved
-        : (detected.isNotEmpty ? detected.first.id : 'custom');
-    final isCustom = current == 'custom';
-
-    return SettingsSection(
-      title: 'TERMINAL APP (resumes sessions)',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SettingsRow(
-            label: 'Open sessions in',
-            control: DropdownButtonFormField<String>(
-              initialValue: current,
-              isExpanded: true,
-              items: [
-                for (final t in detected)
-                  DropdownMenuItem(value: t.id, child: Text(t.label)),
-                DropdownMenuItem(
-                  value: 'custom',
-                  child: Text(_customLabel(settings.customTerminalPath)),
-                ),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                if (v == 'custom') {
-                  controller.setCustomTerminalPath(_path.text.trim());
-                } else {
-                  controller.setDefaultSystemTerminal(v);
-                }
-              },
-            ),
-          ),
-          if (isCustom) ...[
-            const SizedBox(height: Insets.sm),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _path,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: 'Terminal executable path',
-                      hintText: _hostPathHint('terminal'),
-                    ),
-                    onChanged: (v) =>
-                        controller.setCustomTerminalPath(v.trim()),
-                  ),
-                ),
-                const SizedBox(width: Insets.sm),
-                OutlinedButton.icon(
-                  onPressed: _choose,
-                  icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
-                  label: const Text('Choose app'),
-                ),
-                const SizedBox(width: Insets.sm),
-                OutlinedButton.icon(
-                  onPressed: _browse,
-                  icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),
-                  label: const Text('Browse'),
-                ),
-              ],
-            ),
-            const SizedBox(height: Insets.xs),
-            Text(
-              'The session\'s agent runs in this app (cwd set to the repo); '
-              'flags vary by terminal, so it is best-effort.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// What the dropdown's last entry says: the application already chosen, by
-/// name, or the invitation to choose one. "Custom executable…" read as the
-/// only way in even once something was set.
-String _customLabel(String? path) {
-  final chosen = (path ?? '').trim();
-  return chosen.isEmpty
-      ? 'Another application…'
-      : '${applicationNameFor(chosen)} (chosen)';
-}
-
-/// The editor "open in editor" uses: a detected one, or a custom path.
-class CodeEditorSection extends ConsumerStatefulWidget {
-  const CodeEditorSection({super.key});
-
-  @override
-  ConsumerState<CodeEditorSection> createState() => _CodeEditorSectionState();
-}
-
-class _CodeEditorSectionState extends ConsumerState<CodeEditorSection> {
-  final _path = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _path.text = ref.read(settingsControllerProvider).customEditorPath ?? '';
-  }
-
-  @override
-  void dispose() {
-    _path.dispose();
-    super.dispose();
-  }
-
-  Future<void> _browse() async {
-    final file = await pickOneFile(
-      context: context,
-      what: 'an editor program',
-      startNear: _path.text,
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'Executables', extensions: ['exe']),
-      ],
-    );
-    if (file == null) return;
-    _use(file.path);
-  }
-
-  Future<void> _choose() async {
-    final app = await chooseInstalledApplication(
-      context,
-      what: 'an editor application',
-    );
-    if (app == null) return;
-    _use(app.launchPath);
-  }
-
-  void _use(String path) {
-    _path.text = path;
-    ref.read(settingsControllerProvider.notifier).setCustomEditorPath(path);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final settings = ref.watch(settingsControllerProvider);
-    final controller = ref.read(settingsControllerProvider.notifier);
-    final detected =
-        ref.watch(availableCodeEditorsProvider).asData?.value ?? const [];
-    final isCustom = settings.defaultCodeEditorId == 'custom';
-    final current = settings.defaultCodeEditorId == null && detected.isEmpty
-        ? 'custom'
-        : (settings.defaultCodeEditorId ??
-              (detected.isNotEmpty ? detected.first.id : 'custom'));
-
-    return SettingsSection(
-      title: 'CODE EDITOR (open in editor)',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SettingsRow(
-            label: 'Open folders in',
-            control: DropdownButtonFormField<String>(
-              initialValue: current,
-              isExpanded: true,
-              items: [
-                for (final e in detected)
-                  DropdownMenuItem(value: e.id, child: Text(e.label)),
-                DropdownMenuItem(
-                  value: 'custom',
-                  child: Text(_customLabel(settings.customEditorPath)),
-                ),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                if (v == 'custom') {
-                  controller.setCustomEditorPath(_path.text.trim());
-                } else {
-                  controller.setDefaultCodeEditor(v);
-                }
-              },
-            ),
-          ),
-          if (isCustom) ...[
-            const SizedBox(height: Insets.sm),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _path,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      labelText: 'Editor executable path',
-                      hintText: _hostPathHint('editor'),
-                    ),
-                    onChanged: (v) => controller.setCustomEditorPath(v.trim()),
-                  ),
-                ),
-                const SizedBox(width: Insets.sm),
-                OutlinedButton.icon(
-                  onPressed: _choose,
-                  icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
-                  label: const Text('Choose app'),
-                ),
-                const SizedBox(width: Insets.sm),
-                OutlinedButton.icon(
-                  onPressed: _browse,
-                  icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),
-                  label: const Text('Browse'),
-                ),
-              ],
-            ),
-            const SizedBox(height: Insets.xs),
-            Text(
-              'The editor opens with the folder path as its argument '
-              '(e.g. `editor.exe <folder>`).',
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
     );
   }
 }
@@ -646,12 +363,6 @@ class _BridgeVerdict extends ConsumerWidget {
 }
 
 /// An example path in this host's shape — `C:\path\to\...` is wrong on a Mac.
-String _hostPathHint(String what) {
-  if (Platform.isWindows) return r'C:\path\to\' '$what.exe';
-  if (Platform.isMacOS) return '/Applications/My$what.app/Contents/MacOS/$what';
-  return '/usr/local/bin/$what';
-}
-
 /// Settings → Tools → Browser: a per-project consent switch rather than a
 /// prompt on first `browser_evaluate` — the agent may run with nobody there.
 class BrowserConsentSection extends ConsumerWidget {

@@ -8,6 +8,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
+import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -22,6 +23,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/settings/presentation/external_app_section.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
@@ -29,6 +31,7 @@ import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.da
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala/src/features/ssh/application/host_sessions.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
+import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_remote/pairing.dart';
@@ -398,6 +401,68 @@ void main() {
       because:
           'a phone names itself at pairing, and the header row puts a label '
           'beside a button in the narrow two-column layout',
+    );
+  });
+
+  testWidgets('Tools section with a custom terminal and editor', (
+    tester,
+  ) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        ...noProcessOverrides(),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        discoveredTerminalThemesProvider.overrideWithValue(const []),
+        availableSystemTerminalsProvider.overrideWith((ref) async => const []),
+        availableCodeEditorsProvider.overrideWith((ref) async => const []),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(settingsControllerProvider.notifier)
+      ..setCustomTerminalPath(
+        '/Applications/Utilities/Terminal Emulators/WezTerm Nightly.app',
+      )
+      ..setCustomEditorPath('/Applications/Visual Studio Code - Insiders.app');
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => app(
+        container,
+        const SettingsScreen(initialSection: SettingsSectionId.tools),
+      ),
+      matrix: settingsMatrix,
+      because:
+          'a custom path row puts a field and two buttons on one line, which '
+          'the narrow two-column layout and bigger text cannot hold',
+    );
+
+    // The two sections on their own at a phone's width, where a field and two
+    // buttons cannot share a line at all. (The rest of the Tools page is not
+    // theirs to answer for: `ProjectKindsSection` overflows there too.)
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => app(
+        container,
+        const Scaffold(
+          body: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ExternalAppSection(kind: ExternalAppKind.terminal),
+                ExternalAppSection(kind: ExternalAppKind.editor),
+              ],
+            ),
+          ),
+        ),
+      ),
+      matrix: const [
+        WindowCell('390x844 (phone width)', Size(390, 844)),
+        WindowCell('390x844 @ 1.3x', Size(390, 844), textScale: 1.3),
+      ],
+      because: 'settings also draw in a single narrow column',
     );
   });
 }

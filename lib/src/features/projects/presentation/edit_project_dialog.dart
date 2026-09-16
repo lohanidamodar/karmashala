@@ -8,6 +8,7 @@ import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../environments/application/environments_controller.dart';
+import '../../settings/presentation/path_field_row.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../repositories/data/repository_discovery_service.dart';
 import '../../workspaces/application/workspaces_controller.dart';
@@ -187,19 +188,11 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
                   : (value) => setState(() => _targetId = value ?? _targetId),
             ),
             const SizedBox(height: Insets.md),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _folder,
-                    decoration: const InputDecoration(
-                      labelText: 'Root folder',
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
-                const SizedBox(width: Insets.sm),
+            PathFieldRow.inDialog(
+              controller: _folder,
+              label: 'Root folder',
+              onChanged: (_) => setState(() {}),
+              actions: [
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _browse,
                   icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),

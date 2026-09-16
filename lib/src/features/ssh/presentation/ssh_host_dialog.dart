@@ -7,6 +7,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../settings/presentation/path_field_row.dart';
 import 'package:agent_cli/process.dart';
 import '../application/ssh_connection_providers.dart';
 import '../application/ssh_failure.dart';
@@ -303,20 +304,13 @@ class _SshHostDialogState extends ConsumerState<SshHostDialog> {
                   },
                 ),
                 const SizedBox(height: Insets.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _keyPath,
-                        decoration: InputDecoration(
-                          labelText: 'Private key path',
-                          hintText: keyEnvironment?.kind == EnvironmentKind.wsl
-                              ? '/home/you/.ssh/id_ed25519'
-                              : r'C:\Users\you\.ssh\id_ed25519',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: Insets.sm),
+                PathFieldRow.inDialog(
+                  controller: _keyPath,
+                  label: 'Private key path',
+                  hint: keyEnvironment?.kind == EnvironmentKind.wsl
+                      ? '/home/you/.ssh/id_ed25519'
+                      : r'C:\Users\you\.ssh\id_ed25519',
+                  actions: [
                     OutlinedButton.icon(
                       onPressed: _browseForKey,
                       icon: const Icon(AppIcons.folderOpen),

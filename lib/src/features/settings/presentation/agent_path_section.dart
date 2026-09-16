@@ -11,6 +11,7 @@ import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'agent_label.dart';
+import 'path_field_row.dart';
 import 'settings_section.dart';
 
 /// Settings → Agents: each agent's executable, whether it still opens, and a
@@ -159,49 +160,23 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
           ),
           const SizedBox(height: Insets.xs),
           // A field and two buttons do not fit a phone width or 150% text.
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final field = TextField(
-                controller: _path,
-                decoration: InputDecoration(
-                  isDense: true,
-                  labelText: 'Executable path',
-                  errorText: _error,
-                ),
-                onSubmitted: _save,
-              );
-              final buttons = [
-                OutlinedButton.icon(
-                  onPressed: () => _save(_path.text),
-                  icon: const Icon(AppIcons.check, size: Chrome.icon),
-                  label: const Text('Save'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _browse,
-                  icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),
-                  label: const Text('Browse'),
-                ),
-              ];
-              if (constraints.maxWidth < 520) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    field,
-                    const SizedBox(height: Insets.xs),
-                    Wrap(spacing: Insets.xs, children: buttons),
-                  ],
-                );
-              }
-              return Row(
-                children: [
-                  Expanded(child: field),
-                  const SizedBox(width: Insets.sm),
-                  buttons.first,
-                  const SizedBox(width: Insets.xs),
-                  buttons.last,
-                ],
-              );
-            },
+          PathFieldRow(
+            controller: _path,
+            label: 'Executable path',
+            errorText: _error,
+            onSubmitted: _save,
+            actions: [
+              OutlinedButton.icon(
+                onPressed: () => _save(_path.text),
+                icon: const Icon(AppIcons.check, size: Chrome.icon),
+                label: const Text('Save'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _browse,
+                icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),
+                label: const Text('Browse'),
+              ),
+            ],
           ),
           if (status != null)
             Padding(

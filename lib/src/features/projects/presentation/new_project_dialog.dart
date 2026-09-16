@@ -10,6 +10,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../settings/presentation/path_field_row.dart';
 import '../../repositories/data/repository_discovery_service.dart';
 import '../../workspaces/application/workspace_suggestion.dart';
 import '../../workspaces/application/workspaces_controller.dart';
@@ -351,38 +352,26 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
               },
             ),
             const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _folderController,
-                    decoration: InputDecoration(
-                      labelText: isSsh
-                          ? (hasGit
-                              ? 'Remote folder path (optional)'
-                              : 'Remote folder path')
-                          : (hasGit
-                              ? 'Destination folder path'
-                              : 'Folder path'),
-                      hintText: isSsh
-                          ? (hasGit
-                              ? '~/karmashala/<repo>'
-                              : '/home/user/project')
-                          : (Platform.isWindows
-                              ? r'C:\src\karmashala'
-                              : '~/src/karmashala'),
-                      helperText: isSsh && hasGit
-                          ? 'Defaults to ~/karmashala/<repo> on remote host'
-                          : null,
-                    ),
-                    onChanged: (_) => setState(_suggestWorkspace),
-                  ),
-                ),
-                const SizedBox(width: 8),
+            PathFieldRow.inDialog(
+              controller: _folderController,
+              label: isSsh
+                  ? (hasGit
+                        ? 'Remote folder path (optional)'
+                        : 'Remote folder path')
+                  : (hasGit ? 'Destination folder path' : 'Folder path'),
+              hint: isSsh
+                  ? (hasGit ? '~/karmashala/<repo>' : '/home/user/project')
+                  : (Platform.isWindows
+                        ? r'C:\src\karmashala'
+                        : '~/src/karmashala'),
+              helper: isSsh && hasGit
+                  ? 'Defaults to ~/karmashala/<repo> on remote host'
+                  : null,
+              onChanged: (_) => setState(_suggestWorkspace),
+              actions: [
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _browse,
-                  icon: const Icon(AppIcons.folderOpen, size: 18),
+                  icon: const Icon(AppIcons.folderOpen, size: Chrome.icon),
                   label: const Text('Browse'),
                 ),
               ],
