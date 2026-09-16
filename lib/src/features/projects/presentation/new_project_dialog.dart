@@ -394,7 +394,25 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
               ),
             ),
             const SizedBox(height: Insets.md),
-            _workspaceField(workspaces),
+            _ContextField(
+              workspaces: workspaces,
+              selectedId: _workspaceId,
+              naming: _namingWorkspace,
+              newName: _newWorkspaceController,
+              enabled: !_busy,
+              onSelected: (value) => setState(() {
+                _workspaceId = value;
+                _workspaceChosen = true;
+              }),
+              onStartNaming: () => setState(() {
+                _namingWorkspace = true;
+                _workspaceChosen = true;
+              }),
+              onStopNaming: () => setState(() {
+                _namingWorkspace = false;
+                _newWorkspaceController.clear();
+              }),
+            ),
             if (_error != null) ...[
               const SizedBox(height: Insets.md),
               DesktopErrorBanner(_error!),
@@ -416,18 +434,42 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       ],
     );
   }
+}
 
-  /// The context picker: which of the user's four or five contexts this project
-  /// belongs to. Prefilled from the folder, and a plain "None" is a complete
-  /// answer — an unassigned project is an ordinary project.
-  Widget _workspaceField(List<Workspace> workspaces) {
-    if (_namingWorkspace) {
+/// The context picker: which of the user's four or five contexts this project
+/// belongs to. Prefilled from the folder, and a plain "None" is a complete
+/// answer — an unassigned project is an ordinary project. [naming] swaps the
+/// dropdown for a field that names a new context.
+class _ContextField extends StatelessWidget {
+  const _ContextField({
+    required this.workspaces,
+    required this.selectedId,
+    required this.naming,
+    required this.newName,
+    required this.enabled,
+    required this.onSelected,
+    required this.onStartNaming,
+    required this.onStopNaming,
+  });
+
+  final List<Workspace> workspaces;
+  final String? selectedId;
+  final bool naming;
+  final TextEditingController newName;
+  final bool enabled;
+  final ValueChanged<String?> onSelected;
+  final VoidCallback onStartNaming;
+  final VoidCallback onStopNaming;
+
+  @override
+  Widget build(BuildContext context) {
+    if (naming) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: TextField(
-              controller: _newWorkspaceController,
+              controller: newName,
               autofocus: true,
               decoration: const InputDecoration(
                 labelText: 'New context',
@@ -439,12 +481,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
           IconButton(
             tooltip: 'Pick an existing context instead',
             icon: const Icon(AppIcons.x, size: Chrome.icon),
-            onPressed: _busy
-                ? null
-                : () => setState(() {
-                    _namingWorkspace = false;
-                    _newWorkspaceController.clear();
-                  }),
+            onPressed: enabled ? onStopNaming : null,
           ),
         ],
       );
@@ -454,7 +491,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       children: [
         Expanded(
           child: DropdownButtonFormField<String?>(
-            initialValue: _workspaceId,
+            initialValue: selectedId,
             isExpanded: true,
             decoration: const InputDecoration(
               labelText: 'Context',
@@ -468,24 +505,14 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
                   child: _Choice(workspace.name),
                 ),
             ],
-            onChanged: _busy
-                ? null
-                : (value) => setState(() {
-                    _workspaceId = value;
-                    _workspaceChosen = true;
-                  }),
+            onChanged: enabled ? onSelected : null,
           ),
         ),
         const SizedBox(width: Insets.sm),
         IconButton(
           tooltip: 'New context',
           icon: const Icon(AppIcons.plus, size: Chrome.icon),
-          onPressed: _busy
-              ? null
-              : () => setState(() {
-                  _namingWorkspace = true;
-                  _workspaceChosen = true;
-                }),
+          onPressed: enabled ? onStartNaming : null,
         ),
       ],
     );
