@@ -22,7 +22,7 @@ class AttentionInboxView extends ConsumerWidget {
     final theme = Theme.of(context);
     final inbox = ref.watch(attentionInboxProvider);
     final controller = ref.read(attentionInboxProvider.notifier);
-    final now = ref.read(clockProvider).nowUtc();
+    final now = ref.watch(clockProvider).nowUtc();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -96,6 +96,36 @@ class _ContinueAction extends StatelessWidget {
   }
 }
 
+/// The glyph and colour an inbox kind is drawn with. Two failure kinds share
+/// the failure colour; nothing else carries it.
+({IconData icon, Color color}) inboxKindAppearance(
+  InboxItemKind kind,
+  SemanticColors semantic,
+) => switch (kind) {
+  InboxItemKind.needsApproval => (
+    icon: AppIcons.question,
+    color: semantic.attention,
+  ),
+  InboxItemKind.failed => (
+    icon: AppIcons.warningCircle,
+    color: semantic.failure,
+  ),
+  InboxItemKind.finished => (icon: AppIcons.checkCircle, color: semantic.idle),
+  InboxItemKind.checksFailed => (
+    icon: AppIcons.warningCircle,
+    color: semantic.failure,
+  ),
+  InboxItemKind.changesRequested => (
+    icon: AppIcons.chatCircleDots,
+    color: semantic.attention,
+  ),
+  InboxItemKind.readyToMerge => (icon: AppIcons.gitMerge, color: semantic.idle),
+  InboxItemKind.followUp => (
+    icon: AppIcons.clockCounterClockwise,
+    color: semantic.attention,
+  ),
+};
+
 /// One waiting thing, and the two verbs it is for. No `⋮`: every action this
 /// row has is already a visible verb, and [RowContextMenu] adds the keyboard.
 class _InboxRow extends ConsumerWidget {
@@ -113,27 +143,6 @@ class _InboxRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final semantic = SemanticColors.of(context);
-    final (icon, colour) = switch (item.kind) {
-      InboxItemKind.needsApproval => (AppIcons.question, semantic.attention),
-      InboxItemKind.failed => (AppIcons.warningCircle, semantic.failure),
-      InboxItemKind.finished => (AppIcons.checkCircle, semantic.idle),
-      InboxItemKind.checksFailed => (AppIcons.warningCircle, semantic.failure),
-      InboxItemKind.changesRequested => (
-        AppIcons.chatCircleDots,
-        semantic.attention,
-      ),
-      InboxItemKind.readyToMerge => (AppIcons.gitMerge, semantic.idle),
-      InboxItemKind.followUp => (
-        AppIcons.clockCounterClockwise,
-        semantic.attention,
-      ),
-    };
-    // Seen items stay in the list but stop shouting — an approval you have
-    // read is still an approval you have not answered.
-    final muted = item.seen;
     // Read on follow-up rows and nowhere else; see [_ContinueAction].
     final canContinue =
         item.kind == InboxItemKind.followUp &&
@@ -169,74 +178,109 @@ class _InboxRow extends ConsumerWidget {
       },
       builder: (context) => InkWell(
         onTap: onOpen,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Insets.md, 6, Insets.xs, 6),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Icon(
-                  icon,
-                  size: Chrome.icon,
-                  color: muted ? scheme.onSurfaceVariant : colour,
-                ),
-              ),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
-                        color: muted ? scheme.onSurfaceVariant : scheme.onSurface,
-                      ),
-                    ),
-                    Text(
-                      '${item.kind.label}  ·  '
-                      '${describeAge(now.difference(item.at))}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        letterSpacing: 0,
-                      ),
-                    ),
-                    // The source's own words, when it gave any. Two lines:
-                    // enough to decide without opening the session.
-                    if (item.detail case final detail?)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          detail,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              // Only a follow-up: every other kind belongs to a session still
-              // there to be talked to, so opening the row deals with it.
-              if (canContinue)
-                _ContinueAction(sessionId: item.session.openId),
-              IconButton(
-                tooltip: 'Dismiss',
-                iconSize: Chrome.iconAction,
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(AppIcons.x),
-                onPressed: onDismiss,
-              ),
-            ],
-          ),
+        child: _InboxRowContent(
+          item: item,
+          now: now,
+          canContinue: canContinue,
+          onDismiss: onDismiss,
         ),
+      ),
+    );
+  }
+}
+
+/// What the row draws, with every decision already made.
+class _InboxRowContent extends StatelessWidget {
+  const _InboxRowContent({
+    required this.item,
+    required this.now,
+    required this.canContinue,
+    required this.onDismiss,
+  });
+
+  final InboxItem item;
+  final DateTime now;
+  final bool canContinue;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final look = inboxKindAppearance(item.kind, SemanticColors.of(context));
+    // Seen items stay in the list but stop shouting — an approval you have
+    // read is still an approval you have not answered.
+    final muted = item.seen;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        Insets.md,
+        Insets.xs,
+        Insets.xs,
+        Insets.xs,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              look.icon,
+              size: Chrome.icon,
+              color: muted ? scheme.onSurfaceVariant : look.color,
+            ),
+          ),
+          const SizedBox(width: Insets.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: muted ? FontWeight.w400 : FontWeight.w600,
+                    color: muted ? scheme.onSurfaceVariant : scheme.onSurface,
+                  ),
+                ),
+                Text(
+                  '${item.kind.label}  ·  '
+                  '${describeAge(now.difference(item.at))}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    letterSpacing: 0,
+                  ),
+                ),
+                // The source's own words, when it gave any. Two lines:
+                // enough to decide without opening the session.
+                if (item.detail case final detail?)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      detail,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Only a follow-up: every other kind belongs to a session still
+          // there to be talked to, so opening the row deals with it.
+          if (canContinue) _ContinueAction(sessionId: item.session.openId),
+          IconButton(
+            tooltip: 'Dismiss',
+            iconSize: Chrome.iconAction,
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(AppIcons.x),
+            onPressed: onDismiss,
+          ),
+        ],
       ),
     );
   }
