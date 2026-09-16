@@ -20,11 +20,23 @@ class HostServer {
     required this.ptyLibrary,
     DateTime Function()? clock,
     this.hostVersion = kHostVersion,
+    this.openPairing,
   }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)();
 
   final SessionRegistry registry;
   final String ptyLibrary;
+
+  /// Opens a pairing window and answers the typed code and its deadline.
+  ///
+  /// Injected rather than built here, because pairing needs a store and a
+  /// listener and this class needs neither — and a `serve` that was started
+  /// without them must refuse rather than pretend. Null is that refusal.
+  final Future<({String code, DateTime expiresAt})> Function(
+    int capabilities,
+    String relay,
+  )?
+  openPairing;
   final String hostVersion;
   final DateTime Function() _now;
   final DateTime startedAt;
@@ -222,6 +234,8 @@ class _ClientSession {
         _onRelease(message);
       case CloseMessage():
         await _onClose(message);
+      case PairMessage():
+        await _onPair(message);
       default:
         _send(
           ErrorMessage(
@@ -230,6 +244,41 @@ class _ClientSession {
             '${frame.type.name} is a host-to-client message',
           ),
         );
+    }
+  }
+
+  Future<void> _onPair(PairMessage message) async {
+    final open = _server.openPairing;
+    if (open == null) {
+      _send(
+        ErrorMessage(
+          message.requestId,
+          ProtocolErrorCode.badRequest,
+          'this host is serving sessions but cannot pair: it was started '
+          'without a store to keep a pairing in',
+        ),
+      );
+      return;
+    }
+    try {
+      final window = await open(message.capabilities, message.relay);
+      _send(
+        PairedMessage(
+          requestId: message.requestId,
+          code: window.code,
+          expiresAt: window.expiresAt,
+        ),
+      );
+    } on Object catch (error) {
+      // Named, not swallowed: a person is waiting to type a code, and "nothing
+      // happened" is the one answer that leaves them with nothing to do.
+      _send(
+        ErrorMessage(
+          message.requestId,
+          ProtocolErrorCode.internal,
+          'could not open a pairing window: $error',
+        ),
+      );
     }
   }
 

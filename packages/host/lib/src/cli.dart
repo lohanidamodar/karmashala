@@ -12,6 +12,7 @@ const _usage = '''
 karmashala_host $kHostVersion — Karmashala's session host.
 
   karmashala_host serve         own sessions on this machine until told to stop
+                                --companion-port=<n> to move the phone listener
   karmashala_host attach        proxy stdio to the running host's socket
   karmashala_host list          what this machine's host is holding
   karmashala_host end <id>      end one session (see `list` for ids)

@@ -598,6 +598,89 @@ class ErrorMessage extends HostMessage {
   }
 }
 
+/// Asks a running host to open a pairing window and say the code.
+///
+/// The host is the peer a phone pairs with, so the ceremony has to start on the
+/// host — and `serve` is the only process holding the listener the phone's link
+/// will arrive on. A deploy asks over the channel it already has.
+class PairMessage extends HostMessage {
+  const PairMessage({
+    required this.requestId,
+    required this.capabilities,
+    this.relay = '',
+  });
+
+  final int requestId;
+
+  /// The grant, as a capability bitset. Whatever the person offered — a host
+  /// that widened it would be granting what nobody chose.
+  final int capabilities;
+
+  /// Where a phone that cannot reach this machine directly would meet it.
+  /// Empty for a box with an address of its own, which is most of them.
+  final String relay;
+
+  @override
+  Frame toFrame() => Frame(
+    MessageType.pair,
+    0,
+    (WireWriter()
+          ..u32(requestId)
+          ..u32(capabilities)
+          ..str(relay))
+        .take(),
+  );
+
+  static PairMessage decode(Frame frame) {
+    final r = WireReader(frame.payload);
+    return PairMessage(
+      requestId: r.u32(),
+      capabilities: r.u32(),
+      relay: r.str(),
+    );
+  }
+}
+
+/// The open window: what to type into the phone, and how long it lasts.
+///
+/// Only the typed code, because it carries the whole secret — the rendezvous
+/// and the keys are derived from it — so there is nothing else for the host to
+/// explain and nothing else to keep in step.
+class PairedMessage extends HostMessage {
+  const PairedMessage({
+    required this.requestId,
+    required this.code,
+    required this.expiresAt,
+  });
+
+  final int requestId;
+
+  /// Grouped for reading: `K7QM-3X2W-…`.
+  final String code;
+
+  final DateTime expiresAt;
+
+  @override
+  Frame toFrame() => Frame(
+    MessageType.paired,
+    0,
+    (WireWriter()
+          ..u32(requestId)
+          ..str(code)
+          ..str(expiresAt.toUtc().toIso8601String()))
+        .take(),
+  );
+
+  static PairedMessage decode(Frame frame) {
+    final r = WireReader(frame.payload);
+    return PairedMessage(
+      requestId: r.u32(),
+      code: r.str(),
+      expiresAt: DateTime.parse(r.str()),
+    );
+  }
+}
+
 void _writeLifecycle(WireWriter w, SessionLifecycle lifecycle) {
   switch (lifecycle) {
     case SessionRunning():
@@ -649,4 +732,6 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.release => ReleaseMessage.decode(frame),
   MessageType.claimed => ClaimedMessage.decode(frame),
   MessageType.error => ErrorMessage.decode(frame),
+  MessageType.pair => PairMessage.decode(frame),
+  MessageType.paired => PairedMessage.decode(frame),
 };

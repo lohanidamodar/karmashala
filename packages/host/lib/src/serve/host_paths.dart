@@ -33,6 +33,11 @@ class HostPaths {
   /// as the socket — scrollback is as sensitive as the channel carrying it.
   String get sessionsDirectory => '${directory.path}/sessions';
 
+  /// Where the store lives: this host's own pairings, and the schema it shares
+  /// with the desktop. A directory rather than a file, because `AppDatabase`
+  /// names the file inside one.
+  Directory get storeDirectory => directory;
+
   void ensureDirectory() {
     if (!directory.existsSync()) directory.createSync(recursive: true);
   }

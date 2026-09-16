@@ -61,7 +61,9 @@ class LocalHost {
   static Future<LocalHost> start(Directory home) async {
     final process = await Process.start(
       await _host,
-      ['serve'],
+      // Port 0: several test hosts run at once and the real default is a fixed
+      // port, so they would fight over it and each blame the other.
+      ['serve', '--companion-port=0'],
       environment: {'USERPROFILE': home.path, 'HOME': home.path},
       workingDirectory: Directory.current.path,
     );
