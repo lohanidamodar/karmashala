@@ -109,16 +109,21 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final repository = widget.repository!;
+    // Resolved once and handed down, so every field below is a pure widget.
+    final registry = ref.watch(agentRegistryProvider);
+    final preflight = ref.watch(unattendedPreflightProvider);
     final installations = _installations;
     final candidate = _candidate;
-    final refusal = candidate == null
-        ? null
-        : ref.read(unattendedPreflightProvider).refusalFor(candidate);
+    final refusal = candidate == null ? null : preflight.refusalFor(candidate);
     final scheduleRefusal = _recurring
         ? cronRefusal(_cron.text)
         : _once == null
         ? 'A one-shot needs a moment to fire at.'
         : null;
+    final selected = installations
+        .where((i) => i.id == _installationId)
+        .firstOrNull;
+    final descriptor = selected == null ? null : registry.byId(selected.agentId);
 
     return AlertDialog(
       title: Text(
@@ -142,86 +147,34 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
               ),
             ),
             const SizedBox(height: Insets.sm),
-            // A segmented control rather than two radios: `RadioListTile`'s
-            // `groupValue` is deprecated in this SDK.
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('Repeating')),
-                ButtonSegment(value: false, label: Text('Once')),
-              ],
-              selected: {_recurring},
-              onSelectionChanged: (selection) =>
-                  setState(() => _recurring = selection.first),
+            _ScheduleFields(
+              recurring: _recurring,
+              cronController: _cron,
+              once: _once,
+              refusal: scheduleRefusal,
+              onRecurringChanged: (value) =>
+                  setState(() => _recurring = value),
+              onCronChanged: () => setState(() {}),
+              onPickMoment: _pickMoment,
             ),
-            if (_recurring)
-              TextField(
-                controller: _cron,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
-                  labelText: 'Schedule',
-                  hintText: '0 3 * * *',
-                  helperText: 'minute hour day-of-month month day-of-week, '
-                      'in this machine\'s own time',
-                ),
-              )
-            else
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _once == null
-                          ? 'No moment picked yet.'
-                          : 'At ${_once!.toLocal()}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _pickMoment,
-                    child: const Text('Pick a moment'),
-                  ),
-                ],
-              ),
-            if (scheduleRefusal != null)
-              Padding(
-                padding: const EdgeInsets.only(top: Insets.xs),
-                child: Text(
-                  scheduleRefusal,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ),
             const SizedBox(height: Insets.sm),
-            if (installations.isEmpty)
-              Text(
-                'No agent is installed in this checkout\'s environment, so '
-                'there is nothing here to start.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              )
-            else
-              DropdownButtonFormField<String>(
-                initialValue: _installationId,
-                decoration: const InputDecoration(labelText: 'Agent'),
-                items: [
-                  for (final installation in installations)
-                    DropdownMenuItem(
-                      value: installation.id,
-                      child: Text(
-                        ref
-                            .read(agentRegistryProvider)
-                            .displayNameFor(installation.agentId),
-                      ),
-                    ),
-                ],
-                onChanged: (value) => setState(() {
-                  _installationId = value;
-                  _mode = null;
-                }),
-              ),
+            _AgentField(
+              installations: installations,
+              selectedId: _installationId,
+              displayNameFor: registry.displayNameFor,
+              onChanged: (value) => setState(() {
+                _installationId = value;
+                _mode = null;
+              }),
+            ),
             const SizedBox(height: Insets.sm),
-            _modePicker(installations),
+            if (selected != null)
+              _PermissionModeField(
+                agentName: descriptor?.displayName ?? selected.agentId,
+                support: descriptor?.launch.permission,
+                value: _mode,
+                onChanged: (value) => setState(() => _mode = value),
+              ),
             const SizedBox(height: Insets.sm),
             TextField(
               controller: _prompt,
@@ -255,52 +208,6 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
           child: Text(widget.existing == null ? 'Arm' : 'Save'),
         ),
       ],
-    );
-  }
-
-  /// The agent's own modes, flat and safest first. Whole selections rather than
-  /// a picker per axis, because the gate reads the whole selection's rung.
-  Widget _modePicker(List<AgentInstallation> installations) {
-    final theme = Theme.of(context);
-    final installationId = _installationId;
-    if (installationId == null) return const SizedBox.shrink();
-    final installation = installations.where((i) => i.id == installationId);
-    if (installation.isEmpty) return const SizedBox.shrink();
-    final descriptor = ref
-        .read(agentRegistryProvider)
-        .byId(installation.first.agentId);
-    final support = descriptor?.launch.permission;
-    if (support == null || !support.isKnown) {
-      return Text(
-        unknownAgentReason(descriptor?.displayName ?? installation.first.agentId),
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.error,
-        ),
-      );
-    }
-    final selections = support.selections();
-    final resolved = support.normalise(_mode).canonical;
-    return DropdownButtonFormField<String>(
-      initialValue: selections.any((s) => s.canonical == resolved)
-          ? resolved
-          : null,
-      decoration: const InputDecoration(
-        labelText: 'Permission mode',
-        helperText: 'A mode that stops to ask is refused: nobody would be '
-            'there to answer.',
-      ),
-      items: [
-        for (final selection in selections)
-          DropdownMenuItem(
-            value: selection.canonical,
-            // Whole selections rather than axes, so the familiar name is the
-            // composed rung's — the one the unattended gate reads.
-            child: Text(describeSelectionFamiliar(support, selection)),
-          ),
-      ],
-      onChanged: (value) => setState(
-        () => _mode = value == null ? null : PermissionSelection.parse(value),
-      ),
     );
   }
 
@@ -351,5 +258,185 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
           : candidate.copyWith(armedAt: controller.now()),
     );
     Navigator.of(context).pop();
+  }
+}
+
+/// Repeating or once, and when.
+class _ScheduleFields extends StatelessWidget {
+  const _ScheduleFields({
+    required this.recurring,
+    required this.cronController,
+    required this.once,
+    required this.refusal,
+    required this.onRecurringChanged,
+    required this.onCronChanged,
+    required this.onPickMoment,
+  });
+
+  final bool recurring;
+  final TextEditingController cronController;
+  final DateTime? once;
+
+  /// Why the schedule cannot be armed as written, or null.
+  final String? refusal;
+  final ValueChanged<bool> onRecurringChanged;
+  final VoidCallback onCronChanged;
+  final VoidCallback onPickMoment;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final at = once;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // A segmented control rather than two radios: `RadioListTile`'s
+        // `groupValue` is deprecated in this SDK.
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: true, label: Text('Repeating')),
+            ButtonSegment(value: false, label: Text('Once')),
+          ],
+          selected: {recurring},
+          onSelectionChanged: (selection) =>
+              onRecurringChanged(selection.first),
+        ),
+        if (recurring)
+          TextField(
+            controller: cronController,
+            onChanged: (_) => onCronChanged(),
+            decoration: const InputDecoration(
+              labelText: 'Schedule',
+              hintText: '0 3 * * *',
+              helperText:
+                  'minute hour day-of-month month day-of-week, '
+                  'in this machine\'s own time',
+            ),
+          )
+        else
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  at == null ? 'No moment picked yet.' : 'At ${at.toLocal()}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              TextButton(
+                onPressed: onPickMoment,
+                child: const Text('Pick a moment'),
+              ),
+            ],
+          ),
+        if (refusal case final refusal?)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Text(
+              refusal,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Which installed agent runs it — or why there is none to pick.
+class _AgentField extends StatelessWidget {
+  const _AgentField({
+    required this.installations,
+    required this.selectedId,
+    required this.displayNameFor,
+    required this.onChanged,
+  });
+
+  final List<AgentInstallation> installations;
+  final String? selectedId;
+  final String Function(String agentId) displayNameFor;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (installations.isEmpty) {
+      return Text(
+        'No agent is installed in this checkout\'s environment, so '
+        'there is nothing here to start.',
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.error,
+        ),
+      );
+    }
+    return DropdownButtonFormField<String>(
+      initialValue: selectedId,
+      decoration: const InputDecoration(labelText: 'Agent'),
+      items: [
+        for (final installation in installations)
+          DropdownMenuItem(
+            value: installation.id,
+            child: Text(displayNameFor(installation.agentId)),
+          ),
+      ],
+      onChanged: onChanged,
+    );
+  }
+}
+
+/// The agent's own modes, flat and safest first. Whole selections rather than
+/// a picker per axis, because the gate reads the whole selection's rung.
+class _PermissionModeField extends StatelessWidget {
+  const _PermissionModeField({
+    required this.agentName,
+    required this.support,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String agentName;
+
+  /// Null, or not known, when the modes of this agent were never established.
+  final AgentPermissionSupport? support;
+  final PermissionSelection? value;
+  final ValueChanged<PermissionSelection?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final support = this.support;
+    if (support == null || !support.isKnown) {
+      return Text(
+        unknownAgentReason(agentName),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.error,
+        ),
+      );
+    }
+    final selections = support.selections();
+    final resolved = support.normalise(value).canonical;
+    return DropdownButtonFormField<String>(
+      initialValue: selections.any((s) => s.canonical == resolved)
+          ? resolved
+          : null,
+      decoration: const InputDecoration(
+        labelText: 'Permission mode',
+        helperText:
+            'A mode that stops to ask is refused: nobody would be '
+            'there to answer.',
+      ),
+      items: [
+        for (final selection in selections)
+          DropdownMenuItem(
+            value: selection.canonical,
+            // Whole selections rather than axes, so the familiar name is the
+            // composed rung's — the one the unattended gate reads.
+            child: Text(describeSelectionFamiliar(support, selection)),
+          ),
+      ],
+      onChanged: (value) =>
+          onChanged(value == null ? null : PermissionSelection.parse(value)),
+    );
   }
 }
