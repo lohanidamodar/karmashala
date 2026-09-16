@@ -335,7 +335,7 @@ class _UsageChipState extends ConsumerState<UsageChip> {
     return InkWell(
       onTap: () {
         policy.refresh();
-        openSettingsTab(ref, section: SettingsSectionId.agents);
+        openSettingsTab(ref, anchor: SettingsAnchor.usage);
       },
       child: Tooltip(
         message: view.tooltip,

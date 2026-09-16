@@ -10,13 +10,15 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import 'session_host_status_line.dart';
+import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 import '../../terminal/application/terminal_profiles.dart';
 
-/// Settings → Terminal: default shell, font size, themes, contested chords.
-class TerminalPage extends ConsumerWidget {
-  const TerminalPage({super.key});
+/// Settings → Terminal → Default terminal: the shell, and what comes back at
+/// launch.
+class DefaultTerminalSection extends ConsumerWidget {
+  const DefaultTerminalSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -27,83 +29,95 @@ class TerminalPage extends ConsumerWidget {
       settings.defaultTerminalProfileId,
       profiles,
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SettingsSection(
-          title: 'DEFAULT TERMINAL',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SettingsRow(
-                label: 'Shell new terminals open with',
-                control: DropdownButtonFormField<String>(
-                  initialValue: current.id,
-                  // Long profile labels otherwise overflow at large text.
-                  isExpanded: true,
-                  items: [
-                    for (final profile in profiles)
-                      DropdownMenuItem(
-                        value: profile.id,
-                        child: Text(profile.label),
-                      ),
-                  ],
-                  onChanged: (id) {
-                    if (id != null) controller.setDefaultTerminalProfile(id);
-                  },
-                ),
-              ),
-              SettingsSwitchRow(
-                label: 'Shell integration',
-                help:
-                    'Mark where each command starts and ends, so the '
-                    'terminal can show exit codes and durations and jump '
-                    'between commands. PowerShell, and bash or zsh in a WSL pane; '
-                    'never cmd, which has no hook for a command’s end. Set up at launch — '
-                    'your profile is never modified — and applies to new '
-                    'terminals.',
-                value: settings.shellIntegrationEnabled,
-                onChanged: controller.setShellIntegrationEnabled,
-              ),
-              SettingsSwitchRow(
-                label: 'Run local terminals in the session host',
-                help:
-                    'A pane\'s shell is started by karmashala_host instead of '
-                    'by this app, so it survives a crash or a restart and '
-                    'reopening the pane resumes it where it left off. Applies '
-                    'to new terminals. Off by default: the host path carries no '
-                    'shell integration, so command blocks and terminal_run exit '
-                    'codes are not available in a pane that uses it.',
-                value: settings.hostBackedLocalPanes,
-                onChanged: controller.setHostBackedLocalPanes,
-              ),
-              // Under the switch either way: it is what the decision needs.
-              const SessionHostStatusLine(),
-              SettingsSwitchRow(
-                label: 'Resume running panes on launch',
-                help:
-                    'Panes that had something running when the app last '
-                    'closed start again, in the tab that was in front. Other '
-                    'tabs, and any pane running an agent CLI, come back as '
-                    'history with a Start button — starting an agent would '
-                    're-run its conversation unasked.',
-                value: settings.restoreLivePanes,
-                onChanged: controller.setRestoreLivePanes,
-              ),
-            ],
+    return SettingsSection(
+      title: SettingsAnchor.defaultTerminal.heading,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsRow(
+            label: 'Shell new terminals open with',
+            control: DropdownButtonFormField<String>(
+              initialValue: current.id,
+              // Long profile labels otherwise overflow at large text.
+              isExpanded: true,
+              items: [
+                for (final profile in profiles)
+                  DropdownMenuItem(
+                    value: profile.id,
+                    child: Text(profile.label),
+                  ),
+              ],
+              onChanged: (id) {
+                if (id != null) controller.setDefaultTerminalProfile(id);
+              },
+            ),
           ),
-        ),
-        const _TerminalFontSection(),
-        const TerminalThemeSection(),
-        const TerminalChordsSection(),
-      ],
+          SettingsSwitchRow(
+            label: 'Resume running panes on launch',
+            help:
+                'Panes that had something running when the app last '
+                'closed start again, in the tab that was in front. Other '
+                'tabs, and any pane running an agent CLI, come back as '
+                'history with a Start button — starting an agent would '
+                're-run its conversation unasked.',
+            value: settings.restoreLivePanes,
+            onChanged: controller.setRestoreLivePanes,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Settings → Terminal → Shell integration & session host: the two switches
+/// that change what a new pane can report, so they sit last.
+class TerminalAdvancedSection extends ConsumerWidget {
+  const TerminalAdvancedSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsControllerProvider);
+    final controller = ref.read(settingsControllerProvider.notifier);
+    return SettingsSection(
+      title: SettingsAnchor.terminalAdvanced.heading,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsSwitchRow(
+            label: 'Shell integration',
+            help:
+                'Mark where each command starts and ends, so the '
+                'terminal can show exit codes and durations and jump '
+                'between commands. PowerShell, and bash or zsh in a WSL pane; '
+                'never cmd, which has no hook for a command’s end. Set up at launch — '
+                'your profile is never modified — and applies to new '
+                'terminals.',
+            value: settings.shellIntegrationEnabled,
+            onChanged: controller.setShellIntegrationEnabled,
+          ),
+          SettingsSwitchRow(
+            label: 'Run local terminals in the session host',
+            help:
+                'A pane\'s shell is started by karmashala_host instead of '
+                'by this app, so it survives a crash or a restart and '
+                'reopening the pane resumes it where it left off. Applies '
+                'to new terminals. Off by default: the host path carries no '
+                'shell integration, so command blocks and terminal_run exit '
+                'codes are not available in a pane that uses it.',
+            value: settings.hostBackedLocalPanes,
+            onChanged: controller.setHostBackedLocalPanes,
+          ),
+          // Under the switch either way: it is what the decision needs.
+          const SessionHostStatusLine(),
+        ],
+      ),
     );
   }
 }
 
 /// The terminal's font size — separate from the UI text scale on purpose.
-class _TerminalFontSection extends ConsumerWidget {
-  const _TerminalFontSection();
+class TerminalFontSection extends ConsumerWidget {
+  const TerminalFontSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -113,7 +127,7 @@ class _TerminalFontSection extends ConsumerWidget {
     final controller = ref.read(settingsControllerProvider.notifier);
     final isDefault = size == Settings.defaultTerminalFontSize;
     return SettingsSection(
-      title: 'FONT',
+      title: SettingsAnchor.terminalFont.heading,
       child: SettingsRow(
         label: 'Terminal font size',
         help:
@@ -187,7 +201,7 @@ class TerminalThemeSection extends ConsumerWidget {
     final value = selected != null && ids.contains(selected) ? selected : null;
 
     return SettingsSection(
-      title: 'TERMINAL THEME',
+      title: SettingsAnchor.terminalTheme.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -261,7 +275,7 @@ class TerminalChordsSection extends ConsumerWidget {
     final contested = shellChords.where((c) => c.contested).toList();
 
     return SettingsSection(
-      title: 'TERMINAL CHORDS',
+      title: SettingsAnchor.terminalChords.heading,
       trailing: overrides.isEmpty
           ? null
           : TextButton(

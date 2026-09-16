@@ -13,6 +13,7 @@ import '../application/settings_controller.dart';
 import '../domain/settings.dart';
 import 'choose_application_dialog.dart';
 import 'path_field_row.dart';
+import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
@@ -21,7 +22,7 @@ import 'settings_section.dart';
 enum ExternalAppKind {
   /// The terminal a session resumes in.
   terminal(
-    title: 'TERMINAL APP (resumes sessions)',
+    anchor: SettingsAnchor.externalTerminal,
     rowLabel: 'Open sessions in',
     pathLabel: 'Terminal executable path',
     program: 'terminal',
@@ -33,7 +34,7 @@ enum ExternalAppKind {
 
   /// The editor "open in editor" hands a folder to.
   editor(
-    title: 'CODE EDITOR (open in editor)',
+    anchor: SettingsAnchor.externalEditor,
     rowLabel: 'Open folders in',
     pathLabel: 'Editor executable path',
     program: 'editor',
@@ -44,7 +45,7 @@ enum ExternalAppKind {
   );
 
   const ExternalAppKind({
-    required this.title,
+    required this.anchor,
     required this.rowLabel,
     required this.pathLabel,
     required this.program,
@@ -52,7 +53,7 @@ enum ExternalAppKind {
     required this.note,
   });
 
-  final String title;
+  final SettingsAnchor anchor;
   final String rowLabel;
   final String pathLabel;
 
@@ -175,7 +176,7 @@ class _ExternalAppSectionState extends ConsumerState<ExternalAppSection> {
         : (detected.isNotEmpty ? detected.first.id : _custom);
 
     return SettingsSection(
-      title: _kind.title,
+      title: _kind.anchor.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

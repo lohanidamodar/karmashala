@@ -407,7 +407,7 @@ void main() {
     );
   });
 
-  testWidgets('Tools section with a custom terminal and editor', (
+  testWidgets('Editor & files page with a custom terminal and editor', (
     tester,
   ) async {
     final db = AppDatabase.memory();
@@ -434,7 +434,7 @@ void main() {
       tester,
       build: () => app(
         container,
-        const SettingsScreen(initialSection: SettingsSectionId.tools),
+        const SettingsScreen(initialSection: SettingsSectionId.editorFiles),
       ),
       matrix: settingsMatrix,
       because:
@@ -443,8 +443,7 @@ void main() {
     );
 
     // The two sections on their own at a phone's width, where a field and two
-    // buttons cannot share a line at all. (The rest of the Tools page is not
-    // theirs to answer for: `ProjectKindsSection` overflows there too.)
+    // buttons cannot share a line at all.
     await expectSurvivesWindowMatrix(
       tester,
       build: () => app(

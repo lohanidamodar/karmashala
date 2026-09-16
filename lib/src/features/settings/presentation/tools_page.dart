@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,10 +7,9 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/agent_hook_installation_service.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_skill_installation_service.dart';
+import '../../../core/util/clock_provider.dart';
 import '../../browser/application/browser_consent_providers.dart';
 import 'package:karmashala_browser/browser.dart';
-import '../../../core/util/clock_provider.dart';
-import 'package:karmashala_ui/picking.dart';
 import '../../environments/application/environments_controller.dart';
 import '../../environments/application/environment_health.dart'
     show HealthLevel;
@@ -20,122 +17,14 @@ import '../../environments/application/system_health.dart';
 import '../../environments/application/system_health_service.dart';
 import '../../environments/presentation/environment_health_dialog.dart'
     show healthColor, healthIcon;
-import '../../app_projects/presentation/project_kinds_section.dart';
 import '../../mcp/control_server_restart.dart';
 import '../../mcp/control_server_status.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../projects/application/projects_controller.dart';
-import '../application/settings_controller.dart';
-import 'agent_tools_section.dart';
-import 'external_app_section.dart';
+import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
-
-/// Settings → Tools: the external apps sessions are handed to, and the MCP
-/// bridge that lets an agent drive Karmashala back.
-class ToolsPage extends StatelessWidget {
-  const ToolsPage({super.key});
-
-  /// The band headings, in order — named here so a test can hold the page.
-  static const List<String> categories = [
-    'External apps',
-    'Agent access',
-    'Agent tools',
-    'What can be built',
-    'Consent',
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ToolsCategory(
-          title: 'External apps',
-          blurb:
-              'The programs Karmashala hands a session or a folder to when you '
-              'open one outside it.',
-          children: [
-            ExternalAppSection(kind: ExternalAppKind.terminal),
-            ExternalAppSection(kind: ExternalAppKind.editor),
-            FilePickerSection(),
-          ],
-        ),
-        ToolsCategory(
-          title: 'Agent access',
-          blurb:
-              'Whether an agent pointed at Karmashala can actually reach it — '
-              'measured, not assumed.',
-          children: [McpBridgeSection()],
-        ),
-        ToolsCategory(
-          title: 'Agent tools',
-          blurb:
-              'What it can call once it is in. Static: this is the catalogue '
-              'the bridge serves, not a reading.',
-          children: [AgentToolsSection(), AgentSkillsSection()],
-        ),
-        ToolsCategory(
-          // Not "App projects": the tool catalogue above already has a
-          // category by that name, on this same page.
-          title: 'What can be built',
-          blurb:
-              'What a checkout is detected as, and what would be built from '
-              'it. Static, like the tool catalogue above: what each *machine* '
-              'can build with is measured under Environments.',
-          children: [ProjectKindsSection()],
-        ),
-        ToolsCategory(
-          title: 'Consent',
-          blurb:
-              'What an agent may do only because somebody handed it over, and '
-              'can take back here.',
-          children: [BrowserConsentSection()],
-        ),
-      ],
-    );
-  }
-}
-
-/// One band of the Tools page, headed heavier than [SettingsSection]'s label.
-class ToolsCategory extends StatelessWidget {
-  const ToolsCategory({
-    required this.title,
-    required this.blurb,
-    required this.children,
-    super.key,
-  });
-
-  final String title;
-  final String blurb;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Semantics(
-          header: true,
-          child: Text(title, style: theme.textTheme.titleSmall),
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Text(
-            blurb,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: SemanticColors.of(context).neutral,
-            ),
-          ),
-        ),
-        const Divider(height: Insets.lg),
-        ...children,
-      ],
-    );
-  }
-}
 
 /// The MCP bridge status: can an agent drive Karmashala, and with what.
 class McpBridgeSection extends ConsumerWidget {
@@ -149,7 +38,7 @@ class McpBridgeSection extends ConsumerWidget {
     final control = ref.watch(controlServerStatusProvider);
     final hooks = ref.watch(agentHookInstallationReportProvider);
     return SettingsSection(
-      title: 'MCP BRIDGE',
+      title: SettingsAnchor.mcpBridge.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -214,7 +103,6 @@ class McpBridgeSection extends ConsumerWidget {
     );
   }
 }
-
 
 /// One line about the hook sweep. A constructor per claim, not a colour (§19).
 class _HookNote extends StatelessWidget {
@@ -289,9 +177,7 @@ class _BridgeVerdict extends ConsumerWidget {
                   ),
                   if (current != null && checkedAt != null)
                     Text(
-                      'Checked ${describeAge(
-                        ref.read(clockProvider).nowUtc().difference(checkedAt),
-                      )}.',
+                      'Checked ${describeAge(ref.read(clockProvider).nowUtc().difference(checkedAt))}.',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: semantic.neutral,
                       ),
@@ -330,84 +216,6 @@ class _BridgeVerdict extends ConsumerWidget {
   }
 }
 
-/// An example path in this host's shape — `C:\path\to\...` is wrong on a Mac.
-/// Settings → Tools → Browser: a per-project consent switch rather than a
-/// prompt on first `browser_evaluate` — the agent may run with nobody there.
-class BrowserConsentSection extends ConsumerWidget {
-  const BrowserConsentSection({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final projects = ref.watch(projectsControllerProvider);
-    final store = ref.watch(browserConsentStoreProvider);
-    // The store reads storage per call, so there is nothing to watch.
-    ref.watch(browserConsentRevisionProvider);
-
-    return SettingsSection(
-      title: 'BROWSER',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: Insets.sm),
-            child: Text(
-              'browser_evaluate runs whatever JavaScript an agent composes '
-              'inside a page you are already logged in to, so it can read '
-              'cookies and stored tokens as easily as it reads the DOM — and '
-              'nothing about it shows in the browser pane. It is refused until '
-              'you allow it, per project. Finding, capturing and screenshotting '
-              'a page never need this.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          if (projects.isEmpty)
-            Text(
-              'No projects yet. Add one and it will be listed here.',
-              style: theme.textTheme.bodySmall,
-            )
-          else
-            for (final project in projects)
-              Builder(
-                builder: (context) {
-                  final grant = store.grantFor(
-                    project.id,
-                    BrowserCapability.evaluate,
-                  );
-                  return SettingsSwitchRow(
-                    label: 'Run JavaScript in the page — ${project.name}',
-                    // The date is why a grant is a record, not a boolean.
-                    help: grant == null
-                        ? 'Not allowed. Agents working in this project cannot '
-                              'call browser_evaluate.'
-                        : 'Allowed since '
-                              '${grant.grantedAt.toLocal()} '
-                              '(${grant.grantedBy}).',
-                    value: grant != null,
-                    onChanged: (allow) {
-                      if (allow) {
-                        store.grant(
-                          project.id,
-                          BrowserCapability.evaluate,
-                          grantedBy: 'Settings → Tools → Browser',
-                        );
-                      } else {
-                        store.revoke(project.id, BrowserCapability.evaluate);
-                      }
-                      ref
-                          .read(browserConsentRevisionProvider.notifier)
-                          .bump();
-                    },
-                  );
-                },
-              ),
-        ],
-      ),
-    );
-  }
-}
-
-
 /// The skills written into the agent CLIs here, read off disk by the
 /// once-a-launch sweep and shown with the age of that reading (§19).
 class AgentSkillsSection extends ConsumerWidget {
@@ -419,7 +227,7 @@ class AgentSkillsSection extends ConsumerWidget {
     final report = ref.watch(agentSkillInstallationReportProvider);
     final registry = ref.watch(agentRegistryProvider);
     return SettingsSection(
-      title: 'SKILLS',
+      title: SettingsAnchor.skills.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -504,7 +312,6 @@ class AgentSkillsSection extends ConsumerWidget {
   }
 }
 
-
 /// **Rebinds this app's own control server**, and says what that did.
 ///
 /// Only this app's endpoint: the bridge an agent session spawns is the CLI's
@@ -580,86 +387,74 @@ class _ControlServerRestartRowState
   }
 }
 
-/// What the file-picker choice means on *this* desktop. A machine with no WSL
-/// is not told about one, and only Windows has seen the host dialog fail.
-String _blurbFor(bool inApp) {
-  if (inApp) {
-    return Platform.isWindows
-        ? 'Karmashala lists folders itself. It can also browse a WSL '
-              'distribution or a host over SSH, which the system dialog '
-              'cannot.'
-        : 'Karmashala lists folders itself. It can also browse a host over '
-              'SSH, which the system dialog cannot.';
-  }
-  return Platform.isWindows
-      ? "Your desktop's own dialog. On Windows it has been seen not to open at "
-            'all in this app; if Browse stops responding, switch back.'
-      : "Your desktop's own dialog. It cannot reach a host over SSH — a "
-            'Browse pointed at one still uses Karmashala’s.';
-}
-
-/// Which dialog every "Browse…" opens.
-///
-/// A setting rather than a rule because the two hosts differ: Windows' own
-/// dialog was measured failing to draw at all in this process, and macOS and
-/// Linux have given no such trouble. A folder on another machine ignores this
-/// either way — no local dialog can reach one.
-class FilePickerSection extends ConsumerWidget {
-  const FilePickerSection({super.key});
+/// Settings → Tools → Browser: a per-project consent switch rather than a
+/// prompt on first `browser_evaluate` — the agent may run with nobody there.
+class BrowserConsentSection extends ConsumerWidget {
+  const BrowserConsentSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final chosen = ref.watch(
-      settingsControllerProvider.select((s) => s.useInAppFilePicker),
-    );
-    final controller = ref.read(settingsControllerProvider.notifier);
-    final inApp = chosen ?? FilePickerChoice.platformDefault;
+    final projects = ref.watch(projectsControllerProvider);
+    final store = ref.watch(browserConsentStoreProvider);
+    // The store reads storage per call, so there is nothing to watch.
+    ref.watch(browserConsentRevisionProvider);
 
     return SettingsSection(
-      title: 'FILE PICKER',
+      title: SettingsAnchor.browser.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(
-                value: true,
-                icon: Icon(AppIcons.folderOpen, size: Chrome.icon),
-                label: Text('Karmashala'),
-              ),
-              ButtonSegment(
-                value: false,
-                icon: Icon(AppIcons.stack, size: Chrome.icon),
-                label: Text('System dialog'),
-              ),
-            ],
-            selected: {inApp},
-            onSelectionChanged: (values) =>
-                controller.setUseInAppFilePicker(values.first),
-            showSelectedIcon: false,
-          ),
-          const SizedBox(height: Insets.sm),
-          Text(
-            _blurbFor(inApp),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: SemanticColors.of(context).neutral,
+          Padding(
+            padding: const EdgeInsets.only(bottom: Insets.sm),
+            child: Text(
+              'browser_evaluate runs whatever JavaScript an agent composes '
+              'inside a page you are already logged in to, so it can read '
+              'cookies and stored tokens as easily as it reads the DOM — and '
+              'nothing about it shows in the browser pane. It is refused until '
+              'you allow it, per project. Finding, capturing and screenshotting '
+              'a page never need this.',
+              style: theme.textTheme.bodySmall,
             ),
           ),
-          if (chosen != null) ...[
-            const SizedBox(height: Insets.xs),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: () => controller.setUseInAppFilePicker(null),
-                child: Text(
-                  FilePickerChoice.platformDefault
-                      ? 'Use what this platform defaults to (Karmashala)'
-                      : 'Use what this platform defaults to (system dialog)',
-                ),
+          if (projects.isEmpty)
+            Text(
+              'No projects yet. Add one and it will be listed here.',
+              style: theme.textTheme.bodySmall,
+            )
+          else
+            for (final project in projects)
+              Builder(
+                builder: (context) {
+                  final grant = store.grantFor(
+                    project.id,
+                    BrowserCapability.evaluate,
+                  );
+                  return SettingsSwitchRow(
+                    label: 'Run JavaScript in the page — ${project.name}',
+                    // The date is why a grant is a record, not a boolean.
+                    help: grant == null
+                        ? 'Not allowed. Agents working in this project cannot '
+                              'call browser_evaluate.'
+                        : 'Allowed since '
+                              '${grant.grantedAt.toLocal()} '
+                              '(${grant.grantedBy}).',
+                    value: grant != null,
+                    onChanged: (allow) {
+                      if (allow) {
+                        store.grant(
+                          project.id,
+                          BrowserCapability.evaluate,
+                          grantedBy: 'Settings → Tools → Browser',
+                        );
+                      } else {
+                        store.revoke(project.id, BrowserCapability.evaluate);
+                      }
+                      ref.read(browserConsentRevisionProvider.notifier).bump();
+                    },
+                  );
+                },
               ),
-            ),
-          ],
         ],
       ),
     );

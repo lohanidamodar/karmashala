@@ -116,7 +116,7 @@ void main() {
     });
   });
 
-  group('Settings → Notes', () {
+  group('Settings → General → Notes', () {
     testWidgets('is reachable and drives the controller', (tester) async {
       final db = AppDatabase.memory();
       addTearDown(db.close);
@@ -132,7 +132,7 @@ void main() {
         UncontrolledProviderScope(
           container: container,
           child: const MaterialApp(
-            home: SettingsScreen(initialSection: SettingsSectionId.notes),
+            home: SettingsScreen(initialAnchor: SettingsAnchor.notes),
           ),
         ),
       );
@@ -153,8 +153,8 @@ void main() {
     testWidgets('the section is findable by searching for "notes"', (
       tester,
     ) async {
-      expect(SettingsSectionId.notes.matches('notes'), isTrue);
-      expect(SettingsSectionId.notes.matches('idea'), isTrue);
+      expect(SettingsSectionId.general.matches('notes'), isTrue);
+      expect(SettingsSectionId.general.matches('idea'), isTrue);
     });
   });
 }

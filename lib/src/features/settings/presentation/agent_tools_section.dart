@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_mcp/catalogue.dart';
+import 'settings_catalog.dart';
 import 'settings_section.dart';
 
 /// Every tool the MCP bridge serves, grouped and described from
@@ -14,7 +15,7 @@ class AgentToolsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SettingsSection(
-      title: 'WHAT AN AGENT CAN CALL',
+      title: SettingsAnchor.toolCatalogue.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

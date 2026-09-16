@@ -151,7 +151,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(DiagnosticsPage), findsOneWidget);
+      expect(find.byType(DebugModeSection), findsOneWidget);
       final before = container.read(settingsControllerProvider).debugMode;
       await tester.tap(find.text('Debug mode'));
       await tester.pump();

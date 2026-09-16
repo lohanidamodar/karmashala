@@ -6,6 +6,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../agents/presentation/model_picker.dart';
 import '../application/settings_controller.dart';
 import 'agent_label.dart';
+import 'settings_catalog.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
 
@@ -27,7 +28,7 @@ class DefaultModelSection extends ConsumerWidget {
     ];
     if (descriptors.isEmpty) return const SizedBox.shrink();
     return SettingsSection(
-      title: 'DEFAULT MODEL',
+      title: SettingsAnchor.defaultModel.heading,
       child: Column(
         children: [
           for (final descriptor in descriptors)

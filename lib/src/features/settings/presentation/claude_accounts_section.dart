@@ -10,6 +10,7 @@ import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
 import 'agent_account_widgets.dart';
+import 'settings_catalog.dart';
 import 'settings_section.dart';
 
 /// Per-Claude-installation account management: one card per install, plus a
@@ -26,7 +27,7 @@ class ClaudeAccountsSection extends ConsumerWidget {
     final controller = ref.read(claudeAccountsControllerProvider.notifier);
 
     return SettingsSection(
-      title: 'CLAUDE ACCOUNTS',
+      title: SettingsAnchor.claudeAccounts.heading,
       child: installations.isEmpty
           ? Text(
               'No Claude Code installation identified. Press Discover under '

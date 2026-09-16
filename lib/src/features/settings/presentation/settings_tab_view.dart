@@ -18,9 +18,10 @@ class SettingsTabView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     debugBuildCount++;
-    final section = ref.watch(settingsTabSectionProvider);
+    final target = ref.watch(settingsTabSectionProvider);
     return SettingsScreen(
-      initialSection: section,
+      initialSection: target?.page,
+      initialAnchor: target?.anchor,
       onSectionChanged: (next) =>
           ref.read(settingsTabSectionProvider.notifier).select(next),
     );

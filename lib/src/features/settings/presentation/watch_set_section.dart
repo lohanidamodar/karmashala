@@ -5,6 +5,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/session_status_registry.dart';
 import 'settings_row.dart';
+import 'settings_catalog.dart';
 import 'settings_section.dart';
 
 /// How much of the watch set the status registry reaches, as the last cycle
@@ -28,7 +29,7 @@ class WatchSetSection extends ConsumerWidget {
     final coverage = ref.watch(sessionStatusCoverageProvider).asData?.value;
 
     return SettingsSection(
-      title: 'SESSION WATCHING',
+      title: SettingsAnchor.sessionWatching.heading,
       child: coverage == null
           ? Text(
               'Nothing measured yet. The status watcher starts with the app '

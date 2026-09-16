@@ -12,6 +12,7 @@ import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_session/resume.dart';
 import 'agent_label.dart';
+import 'settings_catalog.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
 
@@ -26,7 +27,7 @@ class UsageSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return SettingsSection(
-      title: 'USAGE & LIMITS',
+      title: SettingsAnchor.usage.heading,
       child: installations.isEmpty
           ? Text(
               'No Claude, Codex, or Antigravity installation identified.',

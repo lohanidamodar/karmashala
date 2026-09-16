@@ -87,17 +87,17 @@ void main() {
   ) async {
     await pump(tester);
 
-    // Lands on Appearance, with the nav alongside.
+    // Lands on General, the first page, with the nav alongside.
     expect(find.byType(SettingsNav), findsOneWidget);
-    expect(find.text('APPEARANCE'), findsOneWidget);
-    expect(find.text('UI text size'), findsOneWidget);
+    expect(find.text('STARTUP & WINDOW'), findsOneWidget);
+    expect(find.text('Start at login'), findsOneWidget);
 
     await tester.tap(find.text('Terminal'));
     await tester.pumpAndSettle();
 
     expect(find.text('DEFAULT TERMINAL'), findsOneWidget);
     expect(find.text('TERMINAL CHORDS'), findsOneWidget);
-    expect(find.text('APPEARANCE'), findsNothing);
+    expect(find.text('STARTUP & WINDOW'), findsNothing);
     // The nav stays put after the switch — master-detail, not navigation.
     expect(find.byType(SettingsNav), findsOneWidget);
   });
@@ -108,9 +108,14 @@ void main() {
     await pump(tester);
     await focusANavRow(tester);
 
+    // Across a group heading as if it were not there.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
-    expect(find.text('SYSTEM'), findsOneWidget);
+    expect(find.text('THEME & TEXT'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    await tester.pumpAndSettle();
+    expect(find.text('IN-APP EDITOR'), findsOneWidget);
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.pumpAndSettle();
@@ -118,7 +123,7 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
     await tester.pumpAndSettle();
-    expect(find.text('SYSTEM'), findsOneWidget);
+    expect(find.text('IN-APP EDITOR'), findsOneWidget);
   });
 
   testWidgets('the filter narrows the nav to matching sections', (
@@ -142,8 +147,7 @@ void main() {
   testWidgets('a deep link lands on the requested section', (tester) async {
     await pump(tester, section: SettingsSectionId.agents);
     expect(find.text('DEFAULT AGENT'), findsOneWidget);
-    expect(find.text('CLAUDE ACCOUNTS'), findsOneWidget);
-    expect(find.text('APPEARANCE'), findsNothing);
+    expect(find.text('STARTUP & WINDOW'), findsNothing);
   });
 
   testWidgets('phone: the nav is the page, sections drill in and back out', (
@@ -151,9 +155,10 @@ void main() {
   ) async {
     await pump(tester, size: const Size(390, 844));
 
-    // The list first — no section content yet.
-    expect(find.text('APPEARANCE'), findsNothing);
+    // The list first, grouped — no section content yet.
+    expect(find.text('STARTUP & WINDOW'), findsNothing);
     expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('WORKSPACE'), findsOneWidget);
 
     await tester.tap(find.text('Terminal'));
     await tester.pumpAndSettle();

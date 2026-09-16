@@ -23,9 +23,18 @@ void activateTerminalTab(WidgetRef ref, String tabId) {
 }
 
 /// Opens Settings as a workbench tab, or brings the open one forward, landing it
-/// on [section]. Asking twice focuses that tab rather than opening a second.
-void openSettingsTab(WidgetRef ref, {SettingsSectionId? section}) {
-  if (section != null) {
+/// on [section] — scrolled to [anchor] when one is given. Asking twice focuses
+/// that tab rather than opening a second.
+void openSettingsTab(
+  WidgetRef ref, {
+  SettingsSectionId? section,
+  SettingsAnchor? anchor,
+}) {
+  if (anchor != null) {
+    ref
+        .read(settingsTabSectionProvider.notifier)
+        .reveal(SettingsTarget.anchor(anchor));
+  } else if (section != null) {
     ref.read(settingsTabSectionProvider.notifier).select(section);
   }
   final tabId = ref

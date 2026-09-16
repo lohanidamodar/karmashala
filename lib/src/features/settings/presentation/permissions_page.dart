@@ -6,19 +6,21 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';
+import 'settings_catalog.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
 
-/// Settings → Permissions: per-agent preferences for new and existing sessions.
-class PermissionsPage extends ConsumerWidget {
-  const PermissionsPage({super.key});
+/// Settings → Permissions → Permission modes: per-agent defaults for new and
+/// existing sessions.
+class PermissionModesSection extends ConsumerWidget {
+  const PermissionModesSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
     return SettingsSection(
-      title: 'PERMISSIONS',
+      title: SettingsAnchor.permissionModes.heading,
       child: Column(
         children: [
           for (final descriptor in AgentRegistry.builtIn.descriptors)

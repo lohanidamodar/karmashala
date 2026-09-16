@@ -1,36 +1,28 @@
 import 'package:flutter/material.dart';
 
-import '../../automations/presentation/automations_page.dart';
 import '../../../app/shell/app_shell.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../env_secrets/presentation/env_secrets_page.dart';
-import '../../environments/presentation/environments_section.dart';
-import '../../environments/presentation/toolchains_section.dart';
-import '../../flutter_apps/presentation/flutter_sdk_section.dart';
-import '../../git/presentation/worktree_setup_page.dart';
-import '../../notes/presentation/notes_settings_section.dart';
-import '../../remote/presentation/remote_access_section.dart';
-import '../../snippets/presentation/snippets_settings_page.dart';
-import '../../ssh/presentation/known_hosts_section.dart';
-import '../../ssh/presentation/ssh_hosts_section.dart';
-import 'agents_pages.dart';
-import 'diagnostics_page.dart';
-import 'general_pages.dart';
-import 'permissions_page.dart';
 import 'settings_nav.dart';
-import 'terminal_pages.dart';
-import 'tools_page.dart';
+import 'settings_page_body.dart';
 
 /// Settings as a master-detail page, drilling down to one section at compact
 /// widths. Mounted as a workbench tab ([SettingsTabView]), never pushed: a
 /// route would cover the menu bar, the tab strip and the panes it configures.
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({this.initialSection, this.onSectionChanged, super.key});
+  const SettingsScreen({
+    this.initialSection,
+    this.initialAnchor,
+    this.onSectionChanged,
+    super.key,
+  });
 
-  /// The section to land on — how menu items and quick open deep-link. Changing
-  /// it moves a Settings tab that is already open onto that section.
+  /// The page to land on — how menu items and quick open deep-link. Changing
+  /// it moves a Settings tab that is already open onto that page.
   final SettingsSectionId? initialSection;
+
+  /// The section of [initialSection] to scroll to, or null for the page's top.
+  final SettingsAnchor? initialAnchor;
 
   /// Told which section the user moved to, and `null` when a compact window
   /// backs out — how [SettingsTabView] keeps the page outside a dropped `State`.
@@ -49,27 +41,86 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late SettingsSectionId _selected =
-      widget.initialSection ?? SettingsSectionId.appearance;
+      widget.initialAnchor?.page ??
+      widget.initialSection ??
+      SettingsSectionId.values.first;
 
-  /// Whether the compact layout shows a section; a deep link opens into one.
-  late bool _openOnCompact = widget.initialSection != null;
+  /// Whether the compact layout shows a page; a deep link opens into one.
+  late bool _openOnCompact =
+      widget.initialSection != null || widget.initialAnchor != null;
+
+  /// One key per section of the page on screen, handed out by
+  /// [SettingsAnchorScope]; replaced with the page.
+  var _anchorKeys = <SettingsAnchor, GlobalKey>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _revealAfterBuild(widget.initialAnchor);
+  }
 
   @override
   void didUpdateWidget(SettingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.initialSection == oldWidget.initialSection) return;
+    if (widget.initialSection == oldWidget.initialSection &&
+        widget.initialAnchor == oldWidget.initialAnchor) {
+      return;
+    }
     // A deep link at a screen already up; null is the compact list.
-    _selected = widget.initialSection ?? _selected;
-    _openOnCompact = widget.initialSection != null;
+    final page = widget.initialAnchor?.page ?? widget.initialSection;
+    if (page != _selected) _anchorKeys = {};
+    _selected = page ?? _selected;
+    _openOnCompact = page != null;
+    _revealAfterBuild(widget.initialAnchor);
   }
 
-  void _select(SettingsSectionId section) {
+  void _select(SettingsSectionId section) => _go(SettingsTarget(section));
+
+  void _go(SettingsTarget target) {
     setState(() {
-      _selected = section;
+      if (target.page != _selected) _anchorKeys = {};
+      _selected = target.page;
       _openOnCompact = true;
     });
-    widget.onSectionChanged?.call(section);
+    widget.onSectionChanged?.call(target.page);
+    _revealAfterBuild(target.anchor);
   }
+
+  SettingsAnchor? _pendingReveal;
+  double? _lastRevealTop;
+  int _revealFrames = 0;
+
+  /// Scrolls [anchor]'s section to the top once the page holding it is built,
+  /// and again on later frames until it stops moving: sections that load
+  /// asynchronously grow above it after the first scroll. A scroll by the
+  /// user ends it.
+  void _revealAfterBuild(SettingsAnchor? anchor) {
+    if (anchor == null) return;
+    _pendingReveal = anchor;
+    _lastRevealTop = null;
+    _revealFrames = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(anchor));
+  }
+
+  void _reveal(SettingsAnchor anchor) {
+    if (!mounted || _pendingReveal != anchor) return;
+    final context = _anchorKeys[anchor]?.currentContext;
+    final box = context?.findRenderObject();
+    if (context == null || box is! RenderBox || !box.attached) {
+      _pendingReveal = null;
+      return;
+    }
+    Scrollable.ensureVisible(context);
+    final top = box.localToGlobal(Offset.zero).dy;
+    if (top == _lastRevealTop || ++_revealFrames >= _maxRevealFrames) {
+      _pendingReveal = null;
+      return;
+    }
+    _lastRevealTop = top;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(anchor));
+  }
+
+  static const _maxRevealFrames = 30;
 
   void _backToList() {
     setState(() => _openOnCompact = false);
@@ -114,8 +165,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
           body: compact
               ? FocusTraversalGroup(
                   child: showingSection
-                      ? _SectionContent(section: _selected)
-                      : SettingsNav(selected: null, onSelect: _select),
+                      ? _page()
+                      : SettingsNav(
+                          selected: null,
+                          onSelect: _select,
+                          onOpen: _go,
+                        ),
                 )
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -126,21 +181,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: SettingsNav(
                           selected: _selected,
                           onSelect: _select,
+                          onOpen: _go,
                         ),
                       ),
                     ),
                     const VerticalDivider(width: 1),
-                    Expanded(
-                      child: FocusTraversalGroup(
-                        child: _SectionContent(section: _selected),
-                      ),
-                    ),
+                    Expanded(child: FocusTraversalGroup(child: _page())),
                   ],
                 ),
         );
       },
     );
   }
+
+  Widget _page() => NotificationListener<UserScrollNotification>(
+    onNotification: (_) {
+      _pendingReveal = null;
+      return false;
+    },
+    child: SettingsAnchorScope(
+      keys: _anchorKeys,
+      child: _SectionContent(section: _selected),
+    ),
+  );
 }
 
 /// The selected section's page, held to a readable width — a wide window adds
@@ -165,39 +228,9 @@ class _SectionContent extends StatelessWidget {
           constraints: const BoxConstraints(
             maxWidth: SettingsScreen.contentMaxWidth,
           ),
-          child: _pageFor(section),
+          child: SettingsPageBody(page: section),
         ),
       ),
     );
   }
-
-  Widget _pageFor(SettingsSectionId section) => switch (section) {
-    SettingsSectionId.appearance => const AppearancePage(),
-    SettingsSectionId.system => const SystemPage(),
-    SettingsSectionId.terminal => const TerminalPage(),
-    SettingsSectionId.snippets => const SnippetsSettingsPage(),
-    SettingsSectionId.tools => const ToolsPage(),
-    SettingsSectionId.agents => const AgentsPage(),
-    SettingsSectionId.permissions => const PermissionsPage(),
-    // Agents list under their environment: one CLI on two hosts is two.
-    SettingsSectionId.automations => const AutomationsPage(),
-    SettingsSectionId.worktrees => const WorktreeSetupPage(),
-    // Two blocks: what was found, and what a person may have to say.
-    // An SSH host *is* an `ssh:<id>` environment, so the hosts belong with the
-    // places they are. Known hosts and keys follow as SSH plumbing, not places.
-    SettingsSectionId.environments => const Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        EnvironmentsSection(),
-        SshHostsSection(),
-        FlutterSdkSection(),
-        ToolchainsSection(),
-        KnownHostsSection(),
-      ],
-    ),
-    SettingsSectionId.environmentVariables => const EnvSecretsPage(),
-    SettingsSectionId.remote => const RemoteAccessSection(),
-    SettingsSectionId.notes => const NotesSettingsSection(),
-    SettingsSectionId.diagnostics => const DiagnosticsPage(),
-  };
 }

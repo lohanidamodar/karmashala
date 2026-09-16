@@ -12,6 +12,7 @@ import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'agent_label.dart';
 import 'path_field_row.dart';
+import 'settings_catalog.dart';
 import 'settings_section.dart';
 import 'settings_notice.dart';
 
@@ -34,7 +35,7 @@ class AgentPathSection extends ConsumerWidget {
     };
 
     return SettingsSection(
-      title: 'EXECUTABLES',
+      title: SettingsAnchor.executables.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

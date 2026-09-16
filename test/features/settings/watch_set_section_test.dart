@@ -3,7 +3,8 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala/src/core/logging/diagnostics_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala/src/features/settings/presentation/diagnostics_page.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_catalog.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_page_body.dart';
 import 'package:karmashala/src/features/settings/presentation/watch_set_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,7 +53,9 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
-          home: Scaffold(body: SingleChildScrollView(child: DiagnosticsPage())),
+          home: Scaffold(body: SingleChildScrollView(
+            child: SettingsPageBody(page: SettingsSectionId.diagnostics),
+          )),
         ),
       ),
     );

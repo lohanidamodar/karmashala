@@ -631,10 +631,9 @@ void main() {
     expect(service.calls.length, before + 1, reason: 'a click is a refresh');
     // Settings is a workbench tab now, so the click asks for a **page**
     // rather than pushing a route: it writes the section and opens the tab.
-    expect(
-      container.read(settingsTabSectionProvider),
-      SettingsSectionId.agents,
-    );
+    final target = container.read(settingsTabSectionProvider);
+    expect(target?.page, SettingsSectionId.accounts);
+    expect(target?.anchor, SettingsAnchor.usage);
     // What that page then draws, mounted the way the tab draws it. The
     // workbench around it is `settings_tab_test`'s subject, not this file's.
     await tester.pumpWidget(

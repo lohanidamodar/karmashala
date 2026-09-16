@@ -12,15 +12,15 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../application/settings_controller.dart';
 import '../domain/diagnostics_settings.dart';
+import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
-import 'watch_set_section.dart';
 
-/// Settings → Diagnostics: the debug-mode switch, and what happens to the log.
+/// Settings → Diagnostics → Debug mode.
 /// `AppLogger.debug` is `Logger.fine`, below the root's `INFO` floor, so the
 /// switch drops the root to `ALL` rather than revealing an empty panel.
-class DiagnosticsPage extends ConsumerWidget {
-  const DiagnosticsPage({super.key});
+class DebugModeSection extends ConsumerWidget {
+  const DebugModeSection({super.key});
 
   /// The buffer sizes offered; anything is storable, these are the three asked.
   static const _bufferSizes = [1000, kDefaultLogBufferCapacity, 20000];
@@ -29,95 +29,98 @@ class DiagnosticsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
+    return SettingsSection(
+      title: SettingsAnchor.debugMode.heading,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsSwitchRow(
+            label: 'Debug mode',
+            help:
+                'Records fine-grained detail and adds a Logs panel to the '
+                'side rail. Detail starts from when you turn it on; '
+                'warnings and errors are always recorded.',
+            value: settings.debugMode,
+            onChanged: controller.setDebugMode,
+          ),
+          SettingsRow(
+            label: 'Lines kept in memory',
+            help:
+                'The tail the Logs panel shows. Older lines are dropped as '
+                'new ones arrive.',
+            control: DropdownButtonFormField<int>(
+              initialValue: _bufferSizes.contains(settings.logBufferSize)
+                  ? settings.logBufferSize
+                  : kDefaultLogBufferCapacity,
+              isExpanded: true,
+              items: [
+                for (final size in _bufferSizes)
+                  DropdownMenuItem(value: size, child: Text('$size lines')),
+              ],
+              onChanged: (value) =>
+                  value == null ? null : controller.setLogBufferSize(value),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Settings → Diagnostics → Log file: whether one is written, how much, and
+/// where.
+class LogFileSection extends ConsumerWidget {
+  const LogFileSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsControllerProvider);
+    final controller = ref.read(settingsControllerProvider.notifier);
     final diagnostics = ref.watch(diagnosticsProvider);
     final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SettingsSection(
-          title: 'DEBUG MODE',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SettingsSwitchRow(
-                label: 'Debug mode',
-                help:
-                    'Records fine-grained detail and adds a Logs panel to the '
-                    'side rail. Detail starts from when you turn it on; '
-                    'warnings and errors are always recorded.',
-                value: settings.debugMode,
-                onChanged: controller.setDebugMode,
-              ),
-              SettingsRow(
-                label: 'Lines kept in memory',
-                help:
-                    'The tail the Logs panel shows. Older lines are dropped as '
-                    'new ones arrive.',
-                control: DropdownButtonFormField<int>(
-                  initialValue: _bufferSizes.contains(settings.logBufferSize)
-                      ? settings.logBufferSize
-                      : kDefaultLogBufferCapacity,
-                  isExpanded: true,
-                  items: [
-                    for (final size in _bufferSizes)
-                      DropdownMenuItem(value: size, child: Text('$size lines')),
-                  ],
-                  onChanged: (value) =>
-                      value == null ? null : controller.setLogBufferSize(value),
-                ),
-              ),
-            ],
+    return SettingsSection(
+      title: SettingsAnchor.logFile.heading,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsSwitchRow(
+            label: 'Write a log file',
+            help:
+                'Survives a crash and a restart — the thing to attach to a '
+                'bug report. Tokens, keys and your user name are removed '
+                'before anything is written.',
+            value: settings.logToFile,
+            onChanged: controller.setLogToFile,
           ),
-        ),
-        SettingsSection(
-          title: 'LOG FILE',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SettingsSwitchRow(
-                label: 'Write a log file',
-                help:
-                    'Survives a crash and a restart — the thing to attach to a '
-                    'bug report. Tokens, keys and your user name are removed '
-                    'before anything is written.',
-                value: settings.logToFile,
-                onChanged: controller.setLogToFile,
-              ),
-              SettingsRow(
-                label: 'What to write',
-                control: DropdownButtonFormField<LogVerbosity>(
-                  initialValue: settings.logVerbosity,
-                  isExpanded: true,
-                  items: [
-                    for (final verbosity in LogVerbosity.values)
-                      DropdownMenuItem(
-                        value: verbosity,
-                        child: Text(verbosity.label),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      value == null ? null : controller.setLogVerbosity(value),
-                ),
-              ),
-              const _LogFolderRow(),
-              if (diagnostics.file?.lastError case final error?)
-                Padding(
-                  padding: const EdgeInsets.only(top: Insets.sm),
-                  child: Text(
-                    'The last write failed: $error',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
+          SettingsRow(
+            label: 'What to write',
+            control: DropdownButtonFormField<LogVerbosity>(
+              initialValue: settings.logVerbosity,
+              isExpanded: true,
+              items: [
+                for (final verbosity in LogVerbosity.values)
+                  DropdownMenuItem(
+                    value: verbosity,
+                    child: Text(verbosity.label),
                   ),
-                ),
-            ],
+              ],
+              onChanged: (value) =>
+                  value == null ? null : controller.setLogVerbosity(value),
+            ),
           ),
-        ),
-        const _PersistenceSection(),
-        // Last: the one section that reads rather than sets.
-        const WatchSetSection(),
-      ],
+          const _LogFolderRow(),
+          if (diagnostics.file?.lastError case final error?)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.sm),
+              child: Text(
+                'The last write failed: $error',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -125,21 +128,20 @@ class DiagnosticsPage extends ConsumerWidget {
 /// Whether terminal scrollback is written as fast as it is produced. Sampled
 /// on build, like [WatchSetSection] reads: the dirty set moves on the
 /// terminal's hot path, so watching it repaints behind every notification.
-class _PersistenceSection extends ConsumerWidget {
-  const _PersistenceSection();
+class ScrollbackPersistenceSection extends ConsumerWidget {
+  const ScrollbackPersistenceSection({super.key});
 
-  static String _age(Duration d) => d.inSeconds >= 1
-      ? '${d.inSeconds}s'
-      : '${d.inMilliseconds}ms';
+  static String _age(Duration d) =>
+      d.inSeconds >= 1 ? '${d.inSeconds}s' : '${d.inMilliseconds}ms';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Never *creates* the controller: that would restore a whole layout.
     final container = ProviderScope.containerOf(context, listen: false);
     if (!container.exists(terminalSessionsControllerProvider)) {
-      return const SettingsSection(
-        title: 'SCROLLBACK PERSISTENCE',
-        child: Text('The terminal has not been opened this run.'),
+      return SettingsSection(
+        title: SettingsAnchor.scrollbackPersistence.heading,
+        child: const Text('The terminal has not been opened this run.'),
       );
     }
     final telemetry = container
@@ -148,7 +150,7 @@ class _PersistenceSection extends ConsumerWidget {
     final write = telemetry.lastWrite;
 
     return SettingsSection(
-      title: 'SCROLLBACK PERSISTENCE',
+      title: SettingsAnchor.scrollbackPersistence.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

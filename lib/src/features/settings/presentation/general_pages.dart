@@ -10,12 +10,13 @@ import '../../system/native_status.dart';
 import '../application/settings_controller.dart';
 import '../domain/app_theme_mode.dart';
 import 'native_setting_status_line.dart';
+import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
 
-/// Settings → Appearance: theme, UI text size, density.
-class AppearancePage extends ConsumerWidget {
-  const AppearancePage({super.key});
+/// Settings → Appearance → Theme & text: theme, UI text size, density.
+class ThemeTextSection extends ConsumerWidget {
+  const ThemeTextSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -28,137 +29,118 @@ class AppearancePage extends ConsumerWidget {
           ? a
           : b,
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SettingsSection(
-          title: 'APPEARANCE',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SettingsRow(
-                label: 'Theme',
-                controlMaxWidth: 400,
-                control: SegmentedButton<AppThemeMode>(
-                  segments: const [
-                    ButtonSegment(
-                      value: AppThemeMode.system,
-                      icon: Icon(AppIcons.circleHalf, size: Chrome.icon),
-                      label: Text('System'),
-                    ),
-                    ButtonSegment(
-                      value: AppThemeMode.light,
-                      icon: Icon(AppIcons.sun, size: Chrome.icon),
-                      label: Text('Light'),
-                    ),
-                    ButtonSegment(
-                      value: AppThemeMode.dark,
-                      icon: Icon(AppIcons.moon, size: Chrome.icon),
-                      label: Text('Dark'),
-                    ),
-                  ],
-                  selected: {settings.themeMode},
-                  onSelectionChanged: (s) => controller.setThemeMode(s.first),
+    return SettingsSection(
+      title: SettingsAnchor.themeText.heading,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsRow(
+            label: 'Theme',
+            controlMaxWidth: 400,
+            control: SegmentedButton<AppThemeMode>(
+              segments: const [
+                ButtonSegment(
+                  value: AppThemeMode.system,
+                  icon: Icon(AppIcons.circleHalf, size: Chrome.icon),
+                  label: Text('System'),
                 ),
-              ),
-              SettingsRow(
-                label: 'UI text size',
-                help:
-                    'Scales every label, menu, dialog and tooltip. The '
-                    'terminal has its own font size under Terminal.',
-                controlMaxWidth: 160,
-                control: DropdownButtonFormField<double>(
-                  initialValue: scale,
-                  items: [
-                    for (final option in uiTextScaleOptions)
-                      DropdownMenuItem(
-                        value: option,
-                        child: Text('${(option * 100).round()}%'),
-                      ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) controller.setUiTextScale(value);
-                  },
+                ButtonSegment(
+                  value: AppThemeMode.light,
+                  icon: Icon(AppIcons.sun, size: Chrome.icon),
+                  label: Text('Light'),
                 ),
-              ),
-              SettingsSwitchRow(
-                label: 'Compact density',
-                help: 'Denser lists and controls. Turn off for a roomier '
-                    'layout.',
-                value: settings.compactDensity,
-                onChanged: controller.setCompactDensity,
-              ),
-              SettingsSwitchRow(
-                label: 'Wrap long lines in the editor',
-                help: 'Soft-wrap instead of scrolling sideways. Line numbers '
-                    'are hidden while wrapping, because the gutter cannot line '
-                    'up with a wrapped line.',
-                value: settings.editorWordWrap,
-                onChanged: controller.setEditorWordWrap,
-              ),
-            ],
+                ButtonSegment(
+                  value: AppThemeMode.dark,
+                  icon: Icon(AppIcons.moon, size: Chrome.icon),
+                  label: Text('Dark'),
+                ),
+              ],
+              selected: {settings.themeMode},
+              onSelectionChanged: (s) => controller.setThemeMode(s.first),
+            ),
           ),
-        ),
-      ],
+          SettingsRow(
+            label: 'UI text size',
+            help:
+                'Scales every label, menu, dialog and tooltip. The '
+                'terminal has its own font size under Terminal.',
+            controlMaxWidth: 160,
+            control: DropdownButtonFormField<double>(
+              initialValue: scale,
+              items: [
+                for (final option in uiTextScaleOptions)
+                  DropdownMenuItem(
+                    value: option,
+                    child: Text('${(option * 100).round()}%'),
+                  ),
+              ],
+              onChanged: (value) {
+                if (value != null) controller.setUiTextScale(value);
+              },
+            ),
+          ),
+          SettingsSwitchRow(
+            label: 'Compact density',
+            help: 'Denser lists and controls. Turn off for a roomier layout.',
+            value: settings.compactDensity,
+            onChanged: controller.setCompactDensity,
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// Settings → System: OS integrations, and the global launcher hotkey.
-class SystemPage extends ConsumerWidget {
-  const SystemPage({super.key});
+/// Settings → General → Startup & window: how the app starts, closes and
+/// keeps the machine awake.
+class StartupSection extends ConsumerWidget {
+  const StartupSection({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsControllerProvider);
     final controller = ref.read(settingsControllerProvider.notifier);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SettingsSection(
-          title: 'SYSTEM',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SettingsSwitchRow(
-                label: 'Keep system awake',
-                help:
-                    'Prevent the display and system from sleeping while '
-                    'Karmashala is running.',
-                value: settings.keepAwake,
-                onChanged: controller.setKeepAwake,
-              ),
-              NativeSettingStatusLine(
-                NativeSetting.keepAwake,
-                enabled: settings.keepAwake,
-              ),
-              SettingsSwitchRow(
-                label: 'Close to tray',
-                help:
-                    'Hide to the system tray when the window is closed '
-                    'instead of quitting.',
-                value: settings.closeToTray,
-                onChanged: controller.setCloseToTray,
-              ),
-              NativeSettingStatusLine(
-                NativeSetting.closeToTray,
-                enabled: settings.closeToTray,
-              ),
-              SettingsSwitchRow(
-                label: 'Start at login',
-                help: 'Launch Karmashala automatically when you sign in.',
-                value: settings.autoStart,
-                onChanged: controller.setAutoStart,
-              ),
-              NativeSettingStatusLine(
-                NativeSetting.autoStart,
-                enabled: settings.autoStart,
-              ),
-            ],
+    return SettingsSection(
+      title: SettingsAnchor.startup.heading,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsSwitchRow(
+            label: 'Start at login',
+            help: 'Launch Karmashala automatically when you sign in.',
+            value: settings.autoStart,
+            onChanged: controller.setAutoStart,
           ),
-        ),
-        const LauncherHotkeySection(),
-      ],
+          NativeSettingStatusLine(
+            NativeSetting.autoStart,
+            enabled: settings.autoStart,
+          ),
+          SettingsSwitchRow(
+            label: 'Close to tray',
+            help:
+                'Hide to the system tray when the window is closed '
+                'instead of quitting.',
+            value: settings.closeToTray,
+            onChanged: controller.setCloseToTray,
+          ),
+          NativeSettingStatusLine(
+            NativeSetting.closeToTray,
+            enabled: settings.closeToTray,
+          ),
+          SettingsSwitchRow(
+            label: 'Keep system awake',
+            help:
+                'Prevent the display and system from sleeping while '
+                'Karmashala is running.',
+            value: settings.keepAwake,
+            onChanged: controller.setKeepAwake,
+          ),
+          NativeSettingStatusLine(
+            NativeSetting.keepAwake,
+            enabled: settings.keepAwake,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -177,7 +159,7 @@ class LauncherHotkeySection extends ConsumerWidget {
     final enabled = settings.launcherHotkeyEnabled;
 
     return SettingsSection(
-      title: 'LAUNCHER HOTKEY',
+      title: SettingsAnchor.launcherHotkey.heading,
       trailing: Switch(
         value: enabled,
         onChanged: controller.setLauncherHotkeyEnabled,

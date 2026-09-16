@@ -19,7 +19,7 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
-/// Settings → Worktrees: where the setting is written, and where its verdict
+/// Settings → Projects → Worktree setup: where the setting is written, and where its verdict
 /// is read.
 ///
 /// The two are on one page on purpose. A setup runs unattended for a worktree
@@ -234,7 +234,7 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
-          home: SettingsScreen(initialSection: SettingsSectionId.worktrees),
+          home: SettingsScreen(initialSection: SettingsSectionId.projects),
         ),
       ),
     );

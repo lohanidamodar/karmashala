@@ -10,6 +10,7 @@ import 'package:agent_cli/usage.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
 import 'agent_account_widgets.dart';
+import 'settings_catalog.dart';
 import 'settings_section.dart';
 
 /// The active Codex identity per installation and explicitly captured accounts.
@@ -25,7 +26,7 @@ class CodexAccountsSection extends ConsumerWidget {
     final accounts = ref.watch(codexAccountsControllerProvider);
     final controller = ref.read(codexAccountsControllerProvider.notifier);
     return SettingsSection(
-      title: 'CODEX ACCOUNTS',
+      title: SettingsAnchor.codexAccounts.heading,
       child: installations.isEmpty
           ? Text(
               'No Codex installation identified. Press Discover under '

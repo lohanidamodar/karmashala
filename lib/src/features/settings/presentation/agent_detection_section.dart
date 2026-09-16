@@ -8,6 +8,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import '../../agents/application/agent_redetect_controller.dart';
 import 'package:agent_cli/discovery.dart';
 import 'agent_label.dart';
+import 'settings_catalog.dart';
 import 'settings_section.dart';
 
 /// Settings → Agents: run agent detection again, and say what it did — a
@@ -22,7 +23,7 @@ class AgentDetectionSection extends ConsumerWidget {
     final state = ref.watch(agentRedetectControllerProvider);
 
     return SettingsSection(
-      title: 'DETECTION',
+      title: SettingsAnchor.detection.heading,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -486,13 +486,13 @@ void main() {
       return container;
     }
 
-    testWidgets('the default landing (nav plus Appearance)', (tester) async {
+    testWidgets('the default landing (nav plus General)', (tester) async {
       await expectSurvivesWindowMatrix(
         tester,
         build: () => app(prepared(), const SettingsScreen()),
         matrix: const [...windowMatrix, desktopLargeText],
         because:
-            'the nav rail, the filter and the appearance rows must hold at '
+            'the grouped rail, the search box and the general rows must hold at '
             'the minimum window and at 125% text',
       );
     });

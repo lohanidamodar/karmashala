@@ -19,7 +19,7 @@ void main() {
         ],
         child: const MaterialApp(
           home: Scaffold(
-            body: SingleChildScrollView(child: PermissionsPage()),
+            body: SingleChildScrollView(child: PermissionModesSection()),
           ),
         ),
       ),
@@ -45,7 +45,7 @@ void main() {
         ],
         child: const MaterialApp(
           home: Scaffold(
-            body: SingleChildScrollView(child: PermissionsPage()),
+            body: SingleChildScrollView(child: PermissionModesSection()),
           ),
         ),
       ),
