@@ -571,7 +571,10 @@ abstract interface class CompanionGateway {
 
   /// Pairs from what the user typed or pasted: the grouped base32 code or the
   /// full JSON payload, sniffed apart here. Adds a connection, like [pairWithQr].
-  Future<CompanionPairing> pairWithCode(String shortCode);
+  /// [at] is `host:port` for a peer with an address of its own — a session
+  /// host on a box. It is never discovered: the person typed it to reach the
+  /// machine, and a box cannot read its own public address.
+  Future<CompanionPairing> pairWithCode(String shortCode, {String? at});
 
   /// Stage-by-stage news about the pairing attempt in flight. Events only —
   /// no current value is replayed; listen before calling a pairing verb.

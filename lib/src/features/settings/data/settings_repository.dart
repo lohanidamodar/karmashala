@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../../../core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import '../domain/settings.dart';
 
 /// Persists [Settings] in the `app_metadata` key/value table (as JSON).

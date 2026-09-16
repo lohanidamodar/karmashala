@@ -92,6 +92,46 @@ jobs:
             windows/installer/output/Karmashala-Setup-${{ env.VERSION }}.exe
             build/artifacts/Karmashala-windows-portable.zip
 
+  # The hosts deployed to other machines, built on the platform they run on.
+  #
+  # Not cross-compiled from Windows, measured 2026-09-15: `dart build cli
+  # --target-os=linux` there bakes the bundled library's relative path with the
+  # *building* machine's separator, so the binary hunts for
+  # `..\lib\libsqlite3.so` and cannot open a store. `dart compile exe` is not an
+  # option either — it refuses any target with a build hook, and sqlite3 has one.
+  #
+  # Each target ships as one tarball of its bundle, so the executable keeps the
+  # SQLite it was built with beside it and the machine needs no libsqlite3.
+  build-host-linux:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - name: Build the session host bundles
+        run: |
+          set -euo pipefail
+          mkdir -p build/artifacts
+          for arch in x64 arm64; do
+            dart build cli \
+              -t packages/host/bin/karmashala_host.dart \
+              --target-os=linux --target-arch="$arch" \
+              -o "build/host-linux-$arch"
+            tar -czf "build/artifacts/karmashala_host-$VERSION-linux-$arch.tar.gz" \
+              -C "build/host-linux-$arch/bundle" .
+          done
+      - name: Upload the host bundles to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: build/artifacts/karmashala_host-*-linux-*.tar.gz
+
   build-linux:
     needs: prepare
     runs-on: ubuntu-latest

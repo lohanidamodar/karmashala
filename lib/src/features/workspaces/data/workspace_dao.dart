@@ -1,5 +1,4 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import '../domain/workspace.dart';
 
 /// Data-access for [Workspace] rows. Hand-written SQL, no codegen.

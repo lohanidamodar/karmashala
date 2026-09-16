@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../probe_report.dart';
 import 'conpty.dart';
 import 'posix_pty.dart';
 import 'pty.dart';
@@ -16,7 +17,7 @@ Future<int> runPtyProbe({IOSink? out}) async {
   var failures = 0;
   void step(String name, bool ok, [String detail = '']) {
     if (!ok) failures++;
-    sink.writeln('${ok ? 'ok  ' : 'FAIL'} $name${detail.isEmpty ? '' : '  $detail'}');
+    sink.writeln(probeStep(name, ok, detail));
   }
 
   final PtyPlatform platform;
@@ -26,7 +27,7 @@ Future<int> runPtyProbe({IOSink? out}) async {
     sink.writeln('FAIL pty layer  ${e.message}');
     return 1;
   }
-  sink.writeln('host      ${Platform.operatingSystem} ${_arch()}');
+  sink.writeln(probeHeader());
   sink.writeln('pty-lib   ${platform.library}');
 
   final launcher = platform.launcher;
@@ -131,12 +132,6 @@ _ProbeShell _probeShell() {
     expectedSize: '30 100',
     exitCommand: 'exit 7\n',
   );
-}
-
-String _arch() {
-  final v = Platform.version;
-  final match = RegExp(r'"[a-z]+_([a-z0-9]+)"').firstMatch(v);
-  return match?.group(1) ?? 'unknown';
 }
 
 Uint8List _ascii(String s) => Uint8List.fromList(utf8.encode(s));

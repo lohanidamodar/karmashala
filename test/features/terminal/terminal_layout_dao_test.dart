@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_layout_dao.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:flutter_test/flutter_test.dart';

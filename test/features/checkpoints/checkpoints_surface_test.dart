@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';

@@ -1,5 +1,5 @@
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/presentation/notes_settings_section.dart';

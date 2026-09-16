@@ -1,5 +1,4 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_session/events.dart';
 
 /// Data-access for the **append-only** session event log. No update or delete

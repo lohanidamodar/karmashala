@@ -6,16 +6,19 @@ import 'pty/pty_probe.dart';
 import 'serve/attach_command.dart';
 import 'serve/client_command.dart';
 import 'serve/serve_command.dart';
+import 'store/store_probe.dart';
 
 const _usage = '''
 karmashala_host $kHostVersion — Karmashala's session host.
 
   karmashala_host serve         own sessions on this machine until told to stop
+                                --companion-port=<n> to move the phone listener
   karmashala_host attach        proxy stdio to the running host's socket
   karmashala_host list          what this machine's host is holding
   karmashala_host end <id>      end one session (see `list` for ids)
   karmashala_host stop          stop the host itself; --force takes sessions with it
   karmashala_host probe-pty     prove the pty layer works on this machine
+  karmashala_host probe-store   prove this machine can hold a store
   karmashala_host version       print the host and protocol versions
 ''';
 
@@ -36,6 +39,8 @@ Future<int> runHostCli(List<String> args, {IOSink? out, IOSink? err}) async {
       return runStop(args.skip(1).toList(), out: sink, err: errSink);
     case 'probe-pty':
       return runPtyProbe(out: sink);
+    case 'probe-store':
+      return runStoreProbe(out: sink);
     case 'version':
       // Both numbers, because the deployer compares them separately: a host
       // can be new enough to run and still speak a protocol the app does not.

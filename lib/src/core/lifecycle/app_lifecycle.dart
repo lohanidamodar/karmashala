@@ -21,9 +21,9 @@ import '../../features/ssh/application/ssh_providers.dart';
 import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
-import '../database/app_database.dart';
 import '../database/database_providers.dart';
 import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_store/database.dart';
 
 /// The deadline for the whole ordered shutdown, after which the app closes
 /// regardless. The sum of the per-step caps: one hang cannot starve the rest.

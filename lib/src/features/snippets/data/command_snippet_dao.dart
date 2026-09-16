@@ -1,5 +1,4 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import '../domain/command_snippet.dart';
 
 /// Data-access for the `command_snippets` table (v32). Hand-written SQL, no

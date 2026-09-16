@@ -1,5 +1,5 @@
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';

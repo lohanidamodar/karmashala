@@ -33,6 +33,68 @@ void main() {
     );
   }
 
+  group('a bundle tarball, which is what every current build ships', () {
+    test('it is matched, and says it needs unpacking', () async {
+      give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 30);
+
+      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+
+      expect(binary, isNotNull);
+      expect(binary!.version, '1.21.0');
+      expect(binary.isBundleArchive, isTrue);
+      expect(binary.source, endsWith('.tar.gz'));
+    });
+
+    test('the suffix is not mistaken for part of the architecture', () async {
+      give(release, 'karmashala_host-1.21.0-linux-arm64.tar.gz');
+
+      expect(await DirectoryHostBinaries([release]).binaryFor(machine('linux-arm64')), isNotNull);
+      expect(await DirectoryHostBinaries([release]).availableTargets(), ['linux-arm64']);
+    });
+
+    test('at one version the bundle beats the bare file, which has no sqlite', () async {
+      give(release, 'karmashala_host-1.21.0-linux-x64', bytes: 10);
+      give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 20);
+
+      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+
+      expect(binary!.isBundleArchive, isTrue);
+      expect(binary.length, 20);
+    });
+
+    test('an older bundle beats a newer bare file, which has no sqlite', () async {
+      // Shape before version, and this upgrade is why: the installer deletes
+      // nothing, so a bare file from an earlier release outlives it. Ranking by
+      // version would deploy a pre-store host that answers `hello` and reads as
+      // `ready` while being unable to hold a store at all.
+      give(release, 'karmashala_host-1.20.0-linux-x64.tar.gz', bytes: 20);
+      give(release, 'karmashala_host-1.21.0-linux-x64', bytes: 10);
+
+      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+
+      expect(binary!.isBundleArchive, isTrue);
+      expect(binary.version, '1.20.0');
+    });
+
+    test('the newest still wins among bundles', () async {
+      give(release, 'karmashala_host-1.20.0-linux-x64.tar.gz', bytes: 10);
+      give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 20);
+
+      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+
+      expect(binary!.version, '1.21.0');
+    });
+
+    test('the bytes are read only when asked for', () async {
+      give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 30);
+
+      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+
+      expect(binary!.length, 30, reason: 'the size comes from a stat');
+      expect(await binary.readBytes(), hasLength(30));
+    });
+  });
+
   group('picking a binary', () {
     test('the newer of two versions is taken, and the older is left where it is', () async {
       give(release, 'karmashala_host-1.20.0-linux-x64', bytes: 10);
@@ -42,7 +104,7 @@ void main() {
 
       expect(binary!.version, '1.20.1');
       expect(binary.source, endsWith('karmashala_host-1.20.1-linux-x64'));
-      expect(binary.bytes, hasLength(20));
+      expect(binary.length, 20);
       expect(binary.candidates, 2);
       // The installer copies the Release directory wholesale; nothing here is
       // entitled to prune it.
@@ -99,10 +161,7 @@ void main() {
       give(release, 'karmashala_host-1.20.1-linux-x64');
       give(build, 'karmashala_host-2.0.0-linux-x64');
 
-      final binary = await DirectoryHostBinaries([
-        release,
-        build,
-      ]).binaryFor(machine('linux-x64'));
+      final binary = await DirectoryHostBinaries([release, build]).binaryFor(machine('linux-x64'));
 
       expect(binary!.version, '1.20.1');
     });

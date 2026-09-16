@@ -1,4 +1,4 @@
-import '../../../core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 
 /// Roles a repository can play within a session.
 class SessionRepositoryRole {

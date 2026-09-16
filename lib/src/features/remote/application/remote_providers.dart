@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import '../../../core/database/database_providers.dart';
 import '../data/companion_attachment_store.dart';
-import '../data/paired_device_dao.dart';
+import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 
 /// Data access for the paired-device store.

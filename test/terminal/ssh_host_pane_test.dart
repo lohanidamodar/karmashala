@@ -2,7 +2,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala_terminal_core/profiles.dart';

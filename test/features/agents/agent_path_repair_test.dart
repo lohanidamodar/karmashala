@@ -1,4 +1,4 @@
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/discovery.dart' show ExecutableReachability;
 import 'package:karmashala_core/paths.dart' show PathProbe;

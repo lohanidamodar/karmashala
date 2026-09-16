@@ -1,4 +1,4 @@
-import '../../../core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_browser/browser.dart';
 
 /// Browser consent grants in the `app_metadata` key/value table — deliberately

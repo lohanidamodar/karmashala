@@ -1,5 +1,4 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_git/git.dart';
 
 /// Data access for review threads and their comments (schema v30). Anchors are

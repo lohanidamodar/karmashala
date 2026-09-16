@@ -87,6 +87,10 @@ class HostPairingSession {
 
   bool get isExpired => !_now().isBefore(_deadline);
 
+  /// When this window shuts. Shown to whoever is typing the code, so it comes
+  /// from the session's own clock rather than being recomputed beside it.
+  DateTime get deadline => _deadline;
+
   /// Listens for pairing frames on [transport] and answers on it.
   void attach(RemoteTransport transport) {
     if (_spent) return;

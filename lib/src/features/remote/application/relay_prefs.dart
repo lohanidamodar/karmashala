@@ -6,7 +6,7 @@ import 'dart:convert';
 
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import '../../../core/database/database_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/relay_mode.dart';

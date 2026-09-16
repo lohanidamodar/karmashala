@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';

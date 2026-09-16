@@ -44,8 +44,8 @@ class HostDeployer {
         observedAt: _now(),
         platform: platform,
         reason:
-            '${target.address} runs musl libc. The host binaries are glibc-linked ELF '
-            'cross-compiled from the Windows Dart SDK, so there is nothing to send.',
+            '${target.address} runs musl libc. The host bundles are glibc-linked ELF, '
+            'so there is nothing to send.',
       );
     }
     if (!platform.isLinux) {
@@ -54,8 +54,9 @@ class HostDeployer {
         observedAt: _now(),
         platform: platform,
         reason:
-            '${target.address} runs ${platform.operatingSystem}; the host is built for Linux '
-            'only. The Windows Dart SDK cannot cross-compile for macOS at all.',
+            '${target.address} runs ${platform.operatingSystem}; the host is published for '
+            'Linux only'
+            '${platform.operatingSystem == 'darwin' ? ', and no macOS bundle is built yet' : ''}.',
       );
     }
 
@@ -90,9 +91,10 @@ class HostDeployer {
       );
     }
     final remoteDirectory = '$home/$remoteHomeSubdirectory/bin';
-    final remotePath = '$remoteDirectory/karmashala_host-${binary.version}-${platform.targetKey}';
+    final layout = _RemoteLayout.of(remoteDirectory, binary, platform);
+    final remotePath = layout.executable;
     try {
-      await _install(remoteDirectory, remotePath, binary);
+      await _install(remoteDirectory, layout, binary);
     } on HostInstallException catch (e) {
       return HostDeployment(
         status: HostDeploymentStatus.cannotInstall,
@@ -244,18 +246,20 @@ class HostDeployer {
     return home.length > 1 && home.endsWith('/') ? home.substring(0, home.length - 1) : home;
   }
 
-  /// Uploads unless the remote file is already this size. Size, not a checksum:
+  /// Uploads unless what is already there is this size. Size, not a checksum:
   /// the version is in the filename, and hashing megabytes per open costs more.
-  Future<void> _install(String remoteDirectory, String remotePath, HostBinary binary) async {
+  /// For a bundle the size measured is the *uploaded archive's*, which is still
+  /// beside the directory it was unpacked into for exactly this reason.
+  Future<void> _install(String remoteDirectory, _RemoteLayout layout, HostBinary binary) async {
     final existing = await target.run(
-      'mkdir -p ${_quote(remoteDirectory)} && wc -c < ${_quote(remotePath)} 2>/dev/null || echo missing',
+      'mkdir -p ${_quote(remoteDirectory)} && wc -c < ${_quote(layout.upload)} 2>/dev/null || echo missing',
     );
     final reported = existing.stdout.trim();
-    if (reported == '${binary.bytes.length}') {
-      _logger.debug('$remotePath is already ${binary.bytes.length} bytes; skipping the upload.');
-      // Still make sure it can run: a file restored from a backup is the size
-      // it should be and is not executable.
-      await target.run('chmod +x ${_quote(remotePath)}');
+    // The right size does not mean it can run: for a bundle nothing may have
+    // unpacked the archive, and a bare file restored from a backup is the size
+    // it should be and is not executable.
+    if (reported == '${binary.length}' && await _isRunnable(layout.executable)) {
+      _logger.debug('${layout.upload} is already ${binary.length} bytes; skipping the upload.');
       return;
     }
     if (!existing.ok && reported != 'missing') {
@@ -264,21 +268,48 @@ class HostDeployer {
       );
     }
     try {
-      await target.upload(remotePath, binary.bytes);
+      // Read only now. The skip above is the steady state, and these bytes are
+      // a whole bundle.
+      await target.upload(layout.upload, await binary.readBytes());
     } on Object catch (e) {
       throw HostInstallException(
-        'Could not write $remotePath on ${target.address} ($e). A read-only home '
+        'Could not write ${layout.upload} on ${target.address} ($e). A read-only home '
         'directory or a full disk would look like this.',
       );
     }
+    final unpackInto = layout.unpackInto;
+    if (unpackInto != null) await _unpack(layout.upload, unpackInto);
     final chmod = await target.run(
-      'chmod +x ${_quote(remotePath)} && test -x ${_quote(remotePath)}',
+      'chmod +x ${_quote(layout.executable)} && test -x ${_quote(layout.executable)}',
     );
     if (!chmod.ok) {
       throw HostInstallException(
-        '$remotePath was uploaded to ${target.address} but cannot be executed '
+        '${layout.executable} was uploaded to ${target.address} but cannot be executed '
         '(${chmod.output.isEmpty ? 'exit ${chmod.exitCode}' : chmod.output}). '
         'A noexec home directory looks like this.',
+      );
+    }
+  }
+
+  /// Whether what is already on the machine can run. The `chmod` rides along
+  /// rather than costing a second round trip, and is allowed to fail — the
+  /// `test -x` is the answer.
+  Future<bool> _isRunnable(String path) async =>
+      (await target.run('chmod +x ${_quote(path)} 2>/dev/null; test -x ${_quote(path)}')).ok;
+
+  /// Unpacks the bundle into a directory of its own, replacing whatever was
+  /// there: a half-extracted tree from an interrupted deploy is the one state
+  /// that would otherwise survive and look installed.
+  Future<void> _unpack(String archivePath, String into) async {
+    final result = await target.run(
+      'rm -rf ${_quote(into)} && mkdir -p ${_quote(into)} && '
+      'tar -xzf ${_quote(archivePath)} -C ${_quote(into)}',
+    );
+    if (!result.ok) {
+      throw HostInstallException(
+        'Could not unpack $archivePath on ${target.address} '
+        '(${result.output.isEmpty ? 'exit ${result.exitCode}' : result.output}). '
+        'A machine with no `tar` looks like this.',
       );
     }
   }
@@ -446,6 +477,42 @@ class HostDeployer {
   /// For the shell commands this class builds. The remote home is the machine's
   /// word, not ours, so it is quoted rather than trusted to be one word.
   static String _quote(String value) => "'${value.replaceAll("'", r"'\''")}'";
+}
+
+/// Where one artifact goes on the far end. Every path is derived here, so the
+/// `.d` convention is stated once: `deploy()` reports [executable] and
+/// `_install` writes [upload], and the two cannot drift into disagreeing about
+/// what a bundle looks like once it is unpacked.
+class _RemoteLayout {
+  const _RemoteLayout({required this.upload, required this.executable, required this.unpackInto});
+
+  /// A bundle is unpacked into a directory of its own and run from inside it,
+  /// so the executable keeps `../lib` — the SQLite it was built with — beside
+  /// it. A bare file from before the store is uploaded straight to where it runs.
+  factory _RemoteLayout.of(String directory, HostBinary binary, HostPlatform platform) {
+    final stem = 'karmashala_host-${binary.version}-${platform.targetKey}';
+    if (!binary.isBundleArchive) {
+      return _RemoteLayout(
+        upload: '$directory/$stem',
+        executable: '$directory/$stem',
+        unpackInto: null,
+      );
+    }
+    final into = '$directory/$stem.d';
+    return _RemoteLayout(
+      // The archive stays beside the directory: its size is what the next
+      // deploy compares against to decide it has nothing to do.
+      upload: '$directory/$stem.tar.gz',
+      executable: '$into/bin/karmashala_host',
+      unpackInto: into,
+    );
+  }
+
+  final String upload;
+  final String executable;
+
+  /// Null for an artifact that is already what it runs as.
+  final String? unpackInto;
 }
 
 class HostInstallException implements Exception {

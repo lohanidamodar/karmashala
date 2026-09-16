@@ -1,4 +1,4 @@
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
 import 'package:karmashala/src/features/follow_ups/domain/session_ending.dart';

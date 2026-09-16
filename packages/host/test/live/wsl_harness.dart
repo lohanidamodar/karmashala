@@ -4,10 +4,16 @@ import 'dart:math';
 /// Shared plumbing for the `live-wsl` tests: the pty layer is FFI to a libc that
 /// does not exist on the machine running the gate, so nothing can stand in.
 class WslHarness {
-  WslHarness._(this.distribution, this.binary);
+  WslHarness._(this.distribution, this.bundle);
 
   final String distribution;
-  final File binary;
+
+  /// The `bundle/` directory `dart build cli` writes: `bin/` beside `lib/`.
+  /// A directory rather than a file since 2026-09-15 — see [prepare].
+  final Directory bundle;
+
+  /// The executable inside an installed bundle rooted at [target].
+  static String executableIn(String target) => '$target/bin/karmashala_host';
 
   static const _distribution = 'archlinux';
 
@@ -21,24 +27,31 @@ class WslHarness {
     return null;
   }
 
-  /// `dart compile exe` is the only route: the Flutter cache carries no Linux
-  /// `dartaotruntime`.
+  /// `dart build cli`, not `dart compile exe`: the host depends on `sqlite3`,
+  /// whose build hook `dart compile` refuses outright. The output is a bundle —
+  /// the executable beside the SQLite it was built with.
+  ///
+  /// **A bundle cross-compiled here cannot open a store**, measured 2026-09-15:
+  /// the bundled library's relative path is written with the *building*
+  /// machine's separator, so a Linux binary built on Windows hunts for
+  /// `..\lib\libsqlite3.so` and `probe-store` answers `STORE MISLINKED`. The pty
+  /// layer these tests exercise never touches SQLite, so it is unaffected — but
+  /// nothing here may assume a cross-compiled host can hold sessions.
   static WslHarness prepare() {
-    final out = File('build/karmashala_host-linux-x64');
-    if (!out.existsSync()) {
-      out.parent.createSync(recursive: true);
-      final dart = Platform.resolvedExecutable;
-      final result = Process.runSync(dart, [
-        'compile',
-        'exe',
+    final out = Directory('build/cli/linux_x64/bundle');
+    if (!File(executableIn(out.path)).existsSync()) {
+      final result = Process.runSync(Platform.resolvedExecutable, [
+        'build',
+        'cli',
+        '-t',
         'bin/karmashala_host.dart',
         '--target-os=linux',
         '--target-arch=x64',
-        '-o',
-        out.path,
       ]);
       if (result.exitCode != 0) {
-        throw StateError('cross-compile failed: ${result.stdout}${result.stderr}');
+        throw StateError(
+          'cross-build failed: ${result.stdout}${result.stderr}',
+        );
       }
     }
     return WslHarness._(_distribution, out.absolute);
@@ -52,12 +65,14 @@ class WslHarness {
     return '/mnt/${drive.group(1)!.toLowerCase()}/${normalised.substring(3)}';
   }
 
-  /// Copied into the distribution's own filesystem first: DrvFs cannot carry
-  /// the execute bit.
+  /// Installs the whole bundle under [target], so `bin/` keeps `lib/` beside it
+  /// and the executable can find the library it was built with. Copied into the
+  /// distribution's own filesystem first: DrvFs cannot carry the execute bit.
   String installScript(String target) => '''
-mkdir -p "\$(dirname $target)"
-cp ${toWslPath(binary.path)} $target
-chmod +x $target
+rm -rf $target
+mkdir -p $target
+cp -r ${toWslPath(bundle.path)}/. $target/
+chmod +x ${executableIn(target)}
 ''';
 
   /// Scripts travel as a file, never as `sh -c`: a multi-line script with quotes
@@ -65,7 +80,7 @@ chmod +x $target
   /// unique across isolates — pid plus a static counter collides, silently.
   ProcessResult runSync(String script) {
     final tag = '${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 32)}';
-    final file = File('${binary.parent.path}/wsl-script-$tag.sh')
+    final file = File('${bundle.parent.path}/wsl-script-$tag.sh')
       ..writeAsStringSync(script.replaceAll('\r\n', '\n'));
     final result = Process.runSync('wsl.exe', ['-d', distribution, '--', 'sh', toWslPath(file.path)]);
     file.deleteSync();

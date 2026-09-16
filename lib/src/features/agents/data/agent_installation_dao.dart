@@ -1,7 +1,6 @@
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/discovery.dart';
 

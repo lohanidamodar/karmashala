@@ -10,7 +10,7 @@ import 'src/app/bootstrap_failure_app.dart';
 import 'src/app/karmashala_app.dart';
 import 'src/app/companion/companion_bootstrap.dart';
 import 'src/app/companion/companion_mode.dart';
-import 'src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'src/core/database/database_providers.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
 import 'src/core/lifecycle/uncaught_errors.dart';

@@ -20,7 +20,15 @@ enum MessageType {
   claim(0x0e),
   release(0x0f),
   claimed(0x10),
-  error(0x11);
+  error(0x11),
+  // Added 2026-09-16 **without** bumping `kProtocolVersion`, on purpose.
+  // `fromCode` answers null for a type it does not know and the server replies
+  // `badRequest`, so an older host refuses these cleanly rather than breaking —
+  // and a `badRequest` to `pair` means exactly "this host predates pairing".
+  // Bumping instead would make every already-deployed host a `protocolMismatch`
+  // until it is replaced, which BACKLOG §1 says is the thing nothing does yet.
+  pair(0x12),
+  paired(0x13);
 
   const MessageType(this.code);
   final int code;

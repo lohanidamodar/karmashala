@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/database/migrations.dart';
+import 'package:karmashala_store/database.dart';
+import 'package:karmashala_store/migrations.dart';
 import 'package:sqlite3/sqlite3.dart';
 
 /// Benchmark — NOT part of `flutter test`'s default run. Run it on demand:

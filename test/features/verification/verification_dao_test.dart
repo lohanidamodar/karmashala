@@ -1,4 +1,4 @@
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/verification/data/verification_dao.dart';
 import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:karmashala/src/features/verification/domain/verification_artifact.dart';

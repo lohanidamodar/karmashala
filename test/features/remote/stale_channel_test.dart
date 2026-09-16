@@ -26,10 +26,10 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
 import 'package:karmashala_remote/client.dart';
-import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';

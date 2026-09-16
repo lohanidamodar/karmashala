@@ -1,5 +1,4 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/read.dart';
 
 /// Data-access for imported CLI sessions. A conversation a native `sessions`

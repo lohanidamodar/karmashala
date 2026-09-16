@@ -6,7 +6,7 @@
 /// so a list that reads top-to-bottom on the desktop arrived shuffled.
 library;
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';

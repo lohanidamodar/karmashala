@@ -7,11 +7,31 @@ description: >-
   sessions survive an app crash — see lib/src/transport/transport.dart.
 publish_to: none
 
+# The app's pub workspace resolves this member. It is built with `dart build
+# cli`, not `dart compile exe`, which cannot reach a target with a build hook —
+# and `sqlite3`, under `karmashala_store`, has one. The output is a bundle
+# (`bin/karmashala_host` beside `lib/libsqlite3.so`), not a single file.
+resolution: workspace
+
 environment:
   sdk: ^3.9.0
 
 dependencies:
+  # The sealed channel's key material. Already transitive through
+  # `karmashala_remote`; declared because this package names the type.
+  cryptography: ^2.9.0
   ffi: ^2.1.0
+  # The app's schema, unchanged: the host owns sessions on a machine with no
+  # GUI, so it carries the same ladder rather than a second one that could
+  # drift. SQLite itself is bundled by the build hook, so the machine needs no
+  # libsqlite3 of its own.
+  # The companion's own frame protocol and the api that answers it. Pure Dart
+  # and Flutter-free, which is what lets a host on a headless machine speak the
+  # same wire the desktop does instead of inventing a second one.
+  karmashala_remote:
+    path: ../karmashala_remote
+  karmashala_store:
+    path: ../karmashala_store
 
 dev_dependencies:
   lints: ^6.0.0

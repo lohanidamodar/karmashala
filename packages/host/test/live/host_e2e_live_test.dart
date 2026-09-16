@@ -28,9 +28,7 @@ void main() {
     harness.runOrThrow('''
 pkill -f karmashala-host-live/.karmashala/bin/karmashala_host || true
 rm -rf $root
-mkdir -p $root/.karmashala/bin
-cp ${WslHarness.toWslPath(harness.binary.path)} $root/.karmashala/bin/karmashala_host
-chmod +x $root/.karmashala/bin/karmashala_host
+${harness.installScript('$root/.karmashala')}
 printf '%s\\n' '#!/bin/sh' 'unset XDG_RUNTIME_DIR' 'export HOME=$root' \\
   'exec \$HOME/.karmashala/bin/karmashala_host "\$@"' > $root/kh
 chmod +x $root/kh

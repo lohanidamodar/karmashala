@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../../../core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import '../domain/notification_settings.dart';
 
 /// Persists [NotificationSettings] in the `app_metadata` table, under its own

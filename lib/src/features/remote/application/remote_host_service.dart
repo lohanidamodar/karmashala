@@ -8,7 +8,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
-import '../data/paired_device_dao.dart';
+import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/push.dart';

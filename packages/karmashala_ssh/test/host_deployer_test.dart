@@ -48,6 +48,10 @@ class FakeTarget implements HostDeployTarget {
   int existingSize = -1;
   var execCount = 0;
 
+  /// Whether an already-present bundle was ever unpacked. False is the state a
+  /// size check alone reads as installed: the archive arrived, nothing extracted.
+  var executableInstalled = true;
+
   /// How many sessions the running host reports when asked. Null refuses to
   /// say, which is a third answer and not zero.
   int? heldSessions = 0;
@@ -75,6 +79,13 @@ class FakeTarget implements HostDeployTarget {
     if (command.contains(r'echo "$HOME"')) return RemoteRun(0, '${home ?? ''}\n', '');
     if (command.contains('wc -c <')) {
       return RemoteRun(0, existingSize < 0 ? 'missing\n' : '$existingSize\n', '');
+    }
+    // Only the "is what is already here runnable" question — `chmod …; test -x`
+    // — never the `chmod … && test -x` that verifies a fresh install. The two
+    // are told apart by the separator, which is the whole difference between
+    // asking and asserting.
+    if (command.contains('2>/dev/null; test -x')) {
+      return RemoteRun(executableInstalled ? 0 : 1, '', '');
     }
     return const RemoteRun(0, '', '');
   }
@@ -171,18 +182,32 @@ class FakeChannel implements RemoteChannel {
 }
 
 class FakeBinaries implements HostBinarySource {
-  FakeBinaries({this.targets = const {'linux-x64': 1024}});
+  FakeBinaries({this.targets = const {'linux-x64': 1024}, this.isBundleArchive = false});
 
   final Map<String, int> targets;
+
+  /// What every current build ships; false is a host from before the store.
+  final bool isBundleArchive;
+
+  /// How many times the artifact's bytes were actually read off disk.
+  var reads = 0;
 
   @override
   Future<HostBinary?> binaryFor(HostPlatform platform) async {
     final size = targets[platform.targetKey];
     if (size == null) return null;
     return HostBinary(
-      bytes: Uint8List(size),
+      length: size,
+      // Counted, so a test can prove the skip path never reads the file.
+      readBytes: () async {
+        reads++;
+        return Uint8List(size);
+      },
       version: '0.1.0',
-      source: 'fake/karmashala_host-0.1.0-${platform.targetKey}',
+      isBundleArchive: isBundleArchive,
+      source:
+          'fake/karmashala_host-0.1.0-${platform.targetKey}'
+          '${isBundleArchive ? '.tar.gz' : ''}',
     );
   }
 
@@ -235,9 +260,7 @@ void main() {
     });
 
     test('a libc it could not read is unknown rather than assumed glibc', () async {
-      final platform = await deployerFor(
-        FakeTarget(uname: 'Linux\nx86_64\n'),
-      ).measurePlatform();
+      final platform = await deployerFor(FakeTarget(uname: 'Linux\nx86_64\n')).measurePlatform();
       expect(platform!.libc, HostLibc.unknown);
     });
   });
@@ -254,7 +277,7 @@ void main() {
       expect(target.uploads, isEmpty);
     });
 
-    test('macOS is refused, and the message says the SDK cannot build for it', () async {
+    test('macOS is refused, and the message says no bundle is built for it', () async {
       final target = FakeTarget(uname: 'Darwin\narm64\n');
       final deployment = await deployerFor(target).deploy();
 
@@ -287,7 +310,10 @@ void main() {
         target.uploads.single.$1,
         '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
       );
-      expect(deployment.remotePath, '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64');
+      expect(
+        deployment.remotePath,
+        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+      );
       expect(
         target.commands.where((c) => c.contains(r'$HOME')),
         // The one place `$HOME` is allowed is the question that resolves it.
@@ -332,6 +358,90 @@ void main() {
       final deployment = await deployerFor(target).deploy();
 
       expect(deployment.remotePath, startsWith('/home/dlohani/.karmashala/bin/'));
+    });
+  });
+
+  group('a bundle, which is what every current build ships', () {
+    FakeBinaries bundled() => FakeBinaries(isBundleArchive: true);
+
+    test('the archive is uploaded and the executable is run from inside it', () async {
+      final target = FakeTarget()..home = '/home/dlohani';
+
+      final deployment = await deployerFor(target, binaries: bundled()).deploy();
+
+      expect(deployment.status, HostDeploymentStatus.ready);
+      // The tarball lands beside the directory, not on top of the executable.
+      expect(
+        target.uploads.single.$1,
+        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.tar.gz',
+      );
+      // `../lib` has to resolve, so the executable cannot be flattened.
+      expect(
+        deployment.remotePath,
+        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.d/bin/karmashala_host',
+      );
+    });
+
+    test('it is unpacked into a directory of its own, replacing what was there', () async {
+      final target = FakeTarget()..home = '/home/dlohani';
+
+      await deployerFor(target, binaries: bundled()).deploy();
+
+      final unpack = target.commands.firstWhere((c) => c.contains('tar -xzf'));
+      // An interrupted deploy leaves a half-extracted tree that looks installed.
+      expect(unpack, contains('rm -rf'));
+      expect(
+        unpack,
+        contains("-C '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.d'"),
+      );
+    });
+
+    test('a machine with no tar says so rather than failing at the handshake', () async {
+      final target = FakeTarget()..home = '/home/dlohani';
+      target.scripted['tar -xzf'] = const RemoteRun(127, '', 'sh: tar: not found');
+
+      final deployment = await deployerFor(target, binaries: bundled()).deploy();
+
+      expect(deployment.status, HostDeploymentStatus.cannotInstall);
+      expect(deployment.reason, contains('tar'));
+    });
+
+    test('an archive already the right size is still unpacked if nothing was', () async {
+      final target = FakeTarget()
+        ..home = '/home/dlohani'
+        ..existingSize = 1024
+        // The archive arrived once and was never extracted.
+        ..executableInstalled = false;
+
+      await deployerFor(target, binaries: bundled()).deploy();
+
+      expect(target.commands.any((c) => c.contains('tar -xzf')), isTrue);
+    });
+
+    test('an already-installed host is never read off disk', () async {
+      final target = FakeTarget()
+        ..home = '/home/dlohani'
+        ..existingSize = 1024;
+      final binaries = bundled();
+
+      final deployment = await deployerFor(target, binaries: binaries).deploy();
+
+      expect(deployment.status, HostDeploymentStatus.ready);
+      expect(target.uploads, isEmpty);
+      // The bytes are a whole bundle; the size is all the skip needs.
+      expect(binaries.reads, 0);
+    });
+
+    test('a bare binary from before the store is still installed in place', () async {
+      final target = FakeTarget()..home = '/home/dlohani';
+
+      final deployment = await deployerFor(target, binaries: FakeBinaries()).deploy();
+
+      expect(
+        deployment.remotePath,
+        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+      );
+      expect(target.commands.any((c) => c.contains('tar -xzf')), isFalse);
     });
   });
 

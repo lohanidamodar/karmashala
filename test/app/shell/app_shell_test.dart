@@ -8,7 +8,7 @@ import 'package:karmashala/src/app/shell/side_panel_state.dart';
 import 'package:karmashala/src/app/shell/status_bar.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';

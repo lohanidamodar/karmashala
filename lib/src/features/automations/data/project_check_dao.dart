@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import '../domain/project_check.dart';
 
 /// The per-checkout verification the unattended gate refuses without: whether

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/migrations.dart';
+import 'package:karmashala_store/migrations.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:sqlite3/sqlite3.dart';
 

@@ -5,14 +5,14 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
 import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
 import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/push.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';

@@ -115,12 +115,14 @@ extension _GatewayPairing on RemoteCompanionGateway {
     attempt,
     required Uri relay,
     required RendezvousId rendezvous,
+    String? at,
   }) async {
     try {
       return await _pairOverAnyPath(
         attempt: attempt,
         relay: relay,
         rendezvous: rendezvous,
+        at: at,
       );
     } on PairingException catch (error) {
       _emitPairing(CompanionPairingStage.failed, message: error.message);
@@ -144,12 +146,16 @@ extension _GatewayPairing on RemoteCompanionGateway {
     attempt,
     required Uri relay,
     required RendezvousId rendezvous,
+    String? at,
   }) async {
+    final endpoint = parseLanHint(at);
     final scout = lan;
     _ensureLanScout();
     _emitPairing(
       CompanionPairingStage.searching,
-      detail: scout == null
+      detail: endpoint != null
+          ? 'at ${endpoint.host}:${endpoint.port}'
+          : scout == null
           ? 'over the relay'
           : 'on this network and over the relay',
     );
@@ -158,6 +164,7 @@ extension _GatewayPairing on RemoteCompanionGateway {
     var cancelled = false;
     String? relayNote;
     String? lanNote;
+    String? directNote;
     // A refusal with a story of its own (wrong protocol version, a desktop
     // too old for typed codes) beats the generic connectivity sentence.
     CompanionPairingException? sharp;
@@ -196,6 +203,38 @@ extension _GatewayPairing on RemoteCompanionGateway {
         relayNote = everConnected
             ? 'the relay was reached but the desktop never answered there'
             : 'no relay was reachable';
+      } finally {
+        await states.cancel();
+        await closeTransport(transport);
+      }
+    }
+
+    /// The address somebody typed. A session host on a box is never on the
+    /// beacon and usually has no relay, so without this leg there is no way to
+    /// reach one at all — and unlike the other two, it is aimed rather than
+    /// searched, so a single refusal is the whole answer.
+    Future<void> directLeg() async {
+      if (endpoint == null) return;
+      final transport = _directDialer(endpoint.host, endpoint.port);
+      open.add(transport);
+      var everConnected = false;
+      final states = transport.states.listen((state) {
+        if (state == TransportState.connected) everConnected = true;
+      });
+      try {
+        final record = await attempt(transport).timeout(pairingTimeout);
+        if (!outcome.isCompleted) outcome.complete(record);
+      } on CompanionPairingException catch (error) {
+        onLog?.call('direct pairing leg failed: $error');
+        if (isSharp(error)) sharp ??= error;
+        directNote = everConnected
+            ? '${endpoint.host}:${endpoint.port} answered but did not accept the code'
+            : 'nothing answered at ${endpoint.host}:${endpoint.port}';
+      } on Object catch (error) {
+        onLog?.call('direct pairing leg failed: $error');
+        directNote = everConnected
+            ? '${endpoint.host}:${endpoint.port} answered but did not accept the code'
+            : 'nothing answered at ${endpoint.host}:${endpoint.port}';
       } finally {
         await states.cancel();
         await closeTransport(transport);
@@ -256,11 +295,23 @@ extension _GatewayPairing on RemoteCompanionGateway {
     }
 
     unawaited(
-      Future.wait([relayLeg(), lanLeg()]).then((_) {
+      Future.wait([relayLeg(), lanLeg(), directLeg()]).then((_) {
         if (outcome.isCompleted) return;
         final specific = sharp;
         if (specific != null) {
           outcome.completeError(PairingException(specific.message));
+          return;
+        }
+        // An aimed attempt gets its own sentence. Telling somebody who typed an
+        // address that no desktop was found on their network would be answering
+        // a question they did not ask.
+        if (directNote != null) {
+          outcome.completeError(
+            PairingException(
+              'Could not pair — $directNote. Check the address and port, that '
+              'the host is running there, and that the code has not expired.',
+            ),
+          );
           return;
         }
         outcome.completeError(

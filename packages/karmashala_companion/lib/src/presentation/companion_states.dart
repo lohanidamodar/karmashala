@@ -112,6 +112,8 @@ class CompanionNotice extends StatelessWidget {
     this.onAction,
     this.secondaryLabel,
     this.onSecondary,
+    this.tertiaryLabel,
+    this.onTertiary,
     super.key,
   });
 
@@ -161,6 +163,12 @@ class CompanionNotice extends StatelessWidget {
   final VoidCallback? onAction;
   final String? secondaryLabel;
   final VoidCallback? onSecondary;
+
+  /// A third way forward, for a screen that genuinely has one. Rare on purpose:
+  /// the pairing screen has it because a machine with its own address cannot be
+  /// reached by either of the other two.
+  final String? tertiaryLabel;
+  final VoidCallback? onTertiary;
 
   @override
   Widget build(BuildContext context) {
@@ -224,6 +232,13 @@ class CompanionNotice extends StatelessWidget {
                 TextButton(
                   onPressed: onSecondary,
                   child: Text(secondaryLabel!),
+                ),
+              ],
+              if (tertiaryLabel != null) ...[
+                const SizedBox(height: Insets.sm),
+                TextButton(
+                  onPressed: onTertiary,
+                  child: Text(tertiaryLabel!),
                 ),
               ],
             ],

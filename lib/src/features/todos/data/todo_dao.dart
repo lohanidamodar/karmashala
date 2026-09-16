@@ -1,5 +1,4 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import '../domain/todo.dart';
 
 /// Data-access for the `todos` table (v33). Hand-written SQL, no codegen.

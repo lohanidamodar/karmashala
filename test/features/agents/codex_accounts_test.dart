@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/discovery.dart' show SystemClock;
 import 'package:karmashala/src/features/agents/data/codex_account_dao.dart';
 import 'package:agent_cli/usage.dart';
