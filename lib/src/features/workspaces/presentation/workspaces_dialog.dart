@@ -197,86 +197,155 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
       );
 
   Widget _workspaceRow(Workspace workspace, Map<String, int> counts) {
-    final theme = Theme.of(context);
     if (_editingId == workspace.id) {
-      // Name and description stacked rather than side by side: at the 200px this
-      // dialog squeezes to, two fields on one row are two nobody can read.
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _nameController,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Name',
-                      isDense: true,
-                    ),
-                    onSubmitted: (_) => _commitEdit(workspace.id),
-                  ),
-                ),
-                const SizedBox(width: Insets.sm),
-                IconButton(
-                  tooltip: 'Save context',
-                  icon: const Icon(AppIcons.check, size: Chrome.icon),
-                  onPressed: () => _commitEdit(workspace.id),
-                ),
-                IconButton(
-                  tooltip: 'Cancel edit',
-                  icon: const Icon(AppIcons.x, size: Chrome.icon),
-                  onPressed: () => setState(() => _editingId = null),
-                ),
-              ],
-            ),
-            const SizedBox(height: Insets.xs),
-            TextField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(
-                labelText: 'Description',
-                hintText: 'What this context is for. Optional.',
-                isDense: true,
-              ),
-              onSubmitted: (_) => _commitEdit(workspace.id),
-            ),
-          ],
-        ),
+      return _WorkspaceEditRow(
+        nameController: _nameController,
+        descriptionController: _descriptionController,
+        onSave: () => _commitEdit(workspace.id),
+        onCancel: () => setState(() => _editingId = null),
       );
     }
-
     if (_confirmingDeleteId == workspace.id) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Delete "${workspace.name}"? Its projects stay, with no '
-                'context.',
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-            TextButton(
-              onPressed: () => setState(() => _confirmingDeleteId = null),
-              child: const Text('Cancel'),
-            ),
-            DestructiveButton(
-              onPressed: () {
-                ref
-                    .read(workspacesControllerProvider.notifier)
-                    .delete(workspace.id);
-                setState(() => _confirmingDeleteId = null);
-              },
-              child: const Text('Delete'),
-            ),
-          ],
-        ),
+      return _WorkspaceDeleteConfirmRow(
+        name: workspace.name,
+        onCancel: () => setState(() => _confirmingDeleteId = null),
+        onDelete: () {
+          ref.read(workspacesControllerProvider.notifier).delete(workspace.id);
+          setState(() => _confirmingDeleteId = null);
+        },
       );
     }
+    return _WorkspaceRow(
+      workspace: workspace,
+      projectCount: counts[workspace.id] ?? 0,
+      onEdit: () => setState(() {
+        _editingId = workspace.id;
+        _confirmingDeleteId = null;
+        _nameController.text = workspace.name;
+        _descriptionController.text = workspace.description ?? '';
+      }),
+      onDelete: () => setState(() {
+        _confirmingDeleteId = workspace.id;
+        _editingId = null;
+      }),
+    );
+  }
+}
 
+/// A context being renamed and described.
+class _WorkspaceEditRow extends StatelessWidget {
+  const _WorkspaceEditRow({
+    required this.nameController,
+    required this.descriptionController,
+    required this.onSave,
+    required this.onCancel,
+  });
+
+  final TextEditingController nameController;
+  final TextEditingController descriptionController;
+  final VoidCallback onSave;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    // Name and description stacked rather than side by side: at the 200px this
+    // dialog squeezes to, two fields on one row are two nobody can read.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: nameController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => onSave(),
+                ),
+              ),
+              const SizedBox(width: Insets.sm),
+              IconButton(
+                tooltip: 'Save context',
+                icon: const Icon(AppIcons.check, size: Chrome.icon),
+                onPressed: onSave,
+              ),
+              IconButton(
+                tooltip: 'Cancel edit',
+                icon: const Icon(AppIcons.x, size: Chrome.icon),
+                onPressed: onCancel,
+              ),
+            ],
+          ),
+          const SizedBox(height: Insets.xs),
+          TextField(
+            controller: descriptionController,
+            decoration: const InputDecoration(
+              labelText: 'Description',
+              hintText: 'What this context is for. Optional.',
+              isDense: true,
+            ),
+            onSubmitted: (_) => onSave(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Deleting a context, confirmed in place.
+class _WorkspaceDeleteConfirmRow extends StatelessWidget {
+  const _WorkspaceDeleteConfirmRow({
+    required this.name,
+    required this.onCancel,
+    required this.onDelete,
+  });
+
+  final String name;
+  final VoidCallback onCancel;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Delete "$name"? Its projects stay, with no context.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          TextButton(onPressed: onCancel, child: const Text('Cancel')),
+          DestructiveButton(onPressed: onDelete, child: const Text('Delete')),
+        ],
+      ),
+    );
+  }
+}
+
+/// A context at rest: its name, what is in it, and the two verbs.
+class _WorkspaceRow extends StatelessWidget {
+  const _WorkspaceRow({
+    required this.workspace,
+    required this.projectCount,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final Workspace workspace;
+  final int projectCount;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
       child: Row(
@@ -299,10 +368,7 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
                   style: theme.textTheme.bodyMedium,
                 ),
                 Text(
-                  describeWorkspace(
-                    workspace,
-                    projectCount: counts[workspace.id] ?? 0,
-                  ),
+                  describeWorkspace(workspace, projectCount: projectCount),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -315,20 +381,12 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
           IconButton(
             tooltip: 'Edit ${workspace.name}',
             icon: const Icon(AppIcons.pencilSimple, size: Chrome.icon),
-            onPressed: () => setState(() {
-              _editingId = workspace.id;
-              _confirmingDeleteId = null;
-              _nameController.text = workspace.name;
-              _descriptionController.text = workspace.description ?? '';
-            }),
+            onPressed: onEdit,
           ),
           IconButton(
             tooltip: 'Delete ${workspace.name}',
             icon: const Icon(AppIcons.trash, size: Chrome.icon),
-            onPressed: () => setState(() {
-              _confirmingDeleteId = workspace.id;
-              _editingId = null;
-            }),
+            onPressed: onDelete,
           ),
         ],
       ),
