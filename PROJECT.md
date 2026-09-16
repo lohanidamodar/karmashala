@@ -629,7 +629,47 @@ things outside this app.
 | `live-wsl` | `test/features/agents/live_wsl_hook_test.dart`, `test/terminal/live_wsl_pane_test.dart`, `test/terminal/live_wsl_prompt_test.dart`, `test/terminal/live_pane_resize_test.dart`, `test/terminal/live_wsl_detach_test.dart`, `test/terminal/live_wsl_input_boundary_test.dart`, `test/terminal/live_wsl_osc133_test.dart` | Windows + a WSL distro; `curl` in it for the `/mcp` measurement, `python3` in it for the input-boundary read, `flutter_pty` for the pane tests | there is no WSL, no `python3` in it, or no `flutter_pty.dll` to spawn a ConPTY with |
 | `live-ssh` | `test/features/ssh/live_ssh_test.dart`, `test/features/ssh/live_ssh_ui_test.dart` | `KARMASHALA_SSH_HOST`, `KARMASHALA_SSH_USER`, `KARMASHALA_SSH_KEY` (and `KARMASHALA_SSH_PORT` if not 22); the session-host deploy case also needs `KARMASHALA_HOST_BINARIES`, the directory holding `karmashala_host-<version>-linux-*` | those variables are unset |
 
-A WSL distribution running `sshd` on a spare port is a good SSH target.
+A WSL distribution running `sshd` on a spare port is a good SSH target. The
+recipe, run 2026-09-16 and green on all 21 cases:
+
+```bash
+# In WSL. sshd runs as the ordinary user, so it can only ever let that user in.
+mkdir -p ~/live-ssh-test && cd ~/live-ssh-test
+ssh-keygen -t ed25519 -f hostkey -N '' -q
+ssh-keygen -t ed25519 -f /mnt/c/kw/live-ssh/id_ed25519 -N '' -q   # the client key
+cp /mnt/c/kw/live-ssh/id_ed25519.pub authorized_keys
+chmod 700 ~/live-ssh-test && chmod 600 hostkey authorized_keys
+/usr/sbin/sshd -f ~/live-ssh-test/sshd_config -D -e &   # Port 2222, ListenAddress 127.0.0.1
+```
+
+**The server's key material must live on the WSL filesystem, not `/mnt/c`.**
+DrvFs reports 0777 whatever `chmod` says, and `StrictModes` refuses it. The
+*client* key is the exception: it belongs on a Windows path because the test
+process is Windows, and `dartssh2` reads the file itself rather than judging its
+mode — the OpenSSH client would refuse the same file.
+
+**`WSLENV` is what makes the variables cross, and forgetting it reads as a
+pass.** A Windows process launched from WSL does **not** inherit the Linux
+environment, so without it the suite self-skipped and `dart test` still exited
+**0** — the precise failure this section's "a green run whose prerequisites were
+absent" warning is about. Name every variable:
+
+```bash
+WSLENV=KARMASHALA_SSH_HOST:KARMASHALA_SSH_PORT:KARMASHALA_SSH_USER:KARMASHALA_SSH_KEY:KARMASHALA_HOST_BINARIES \
+KARMASHALA_SSH_HOST=127.0.0.1 KARMASHALA_SSH_PORT=2222 KARMASHALA_SSH_USER=<you> \
+KARMASHALA_SSH_KEY='C:\kw\live-ssh\id_ed25519' \
+KARMASHALA_HOST_BINARIES='C:\kw\live-ssh\binaries' \
+  <dart.exe> … test test/features/ssh/live_ssh_test.dart
+```
+
+No path-translation flags: the two path values are already spelled for Windows.
+**Read the reporter's last line, never the exit code** — `All tests skipped` and
+`All tests passed` both exit 0.
+
+`KARMASHALA_HOST_BINARIES` wants a directory holding
+`karmashala_host-<version>-linux-<arch>.tar.gz` (§22). One built on Windows
+deploys and serves panes but answers `probe-store` with `STORE MISLINKED`, so it
+is fine for exercising the deploy and useless for a store.
 
 `live_wsl_detach_test.dart` answers a question no *unit* test can: whether
 closing an **empty** WSL shell ends it. `shouldDetachOnClose` has to guess
