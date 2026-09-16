@@ -168,7 +168,7 @@ class PanePlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
-    return Center(
+    final content = Center(
       child: Padding(
         padding: const EdgeInsets.all(Insets.xl),
         child: Column(
@@ -190,6 +190,20 @@ class PanePlaceholder extends StatelessWidget {
           ],
         ),
       ),
+    );
+    // Centred while it fits, scrollable once it does not: a 240px side panel at
+    // 1.3x text is shorter than the message, and the action is the way out.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (!constraints.hasBoundedHeight) return content;
+        return SingleChildScrollView(
+          primary: false,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: content,
+          ),
+        );
+      },
     );
   }
 }
