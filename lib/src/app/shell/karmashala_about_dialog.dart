@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -24,8 +25,8 @@ class KarmashalaAboutDialog extends StatelessWidget {
     final identity = buildIdentity();
     return AlertDialog(
       title: const Text('About Karmashala'),
-      content: SizedBox(
-        width: 520,
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
