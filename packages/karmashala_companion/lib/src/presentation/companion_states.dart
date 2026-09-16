@@ -43,26 +43,38 @@ String companionGrantsSentence(CapabilitySet capabilities) => capabilities
     .map((c) => c.wire.replaceAll('_', ' '))
     .join(', ');
 
-/// A block the size and shape of text that has not arrived yet.
+/// A block the size and shape of text that has not arrived yet: a title or
+/// muted line at the reader's text scale, so 200% text loads 200% bones.
 class _Bone extends StatelessWidget {
-  const _Bone({required this.width, this.height = 12});
+  const _Bone({required this.width, this.title = false});
 
   /// A fraction of the available width, 0–1.
   final double width;
-  final double height;
+
+  /// A title line rather than a muted one.
+  final bool title;
+
+  /// Faint enough to read as "not here yet" rather than as content.
+  static const _alpha = 0.07;
 
   @override
-  Widget build(BuildContext context) => FractionallySizedBox(
-    alignment: Alignment.centerLeft,
-    widthFactor: width,
-    child: Container(
-      height: height,
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(Insets.xs),
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final density = UiDensity.of(context);
+    final style = title ? density.title(theme) : density.muted(theme);
+    final size = style?.fontSize ?? Insets.md;
+    return FractionallySizedBox(
+      alignment: Alignment.centerLeft,
+      widthFactor: width,
+      child: Container(
+        height: MediaQuery.textScalerOf(context).scale(size),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.onSurface.withValues(alpha: _alpha),
+          borderRadius: BorderRadius.circular(Insets.xs),
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 /// Rows the shape of the list that is loading. Deliberately still: a repeating
@@ -95,7 +107,7 @@ class CompanionSkeletonList extends StatelessWidget {
             children: [
               const _Bone(width: 0.34),
               const SizedBox(height: Insets.sm),
-              const _Bone(width: 0.72, height: 14),
+              const _Bone(width: 0.72, title: true),
               if (lines > 2) ...[
                 const SizedBox(height: Insets.sm),
                 const _Bone(width: 0.5),

@@ -55,6 +55,9 @@ class CompanionComposer extends StatefulWidget {
 }
 
 class _CompanionComposerState extends State<CompanionComposer> {
+  /// The pill's edge, faded so the box reads as part of the bar under it.
+  static const _pillEdgeAlpha = 0.6;
+
   late TextEditingController _input;
 
   /// Held so the box can be focused again after a send: `TextInputAction.send`
@@ -264,7 +267,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
               // one line and becomes a rounded card as the text grows.
               borderRadius: BorderRadius.circular(Touch.target / 2),
               border: Border.all(
-                color: scheme.outlineVariant.withValues(alpha: 0.6),
+                color: scheme.outlineVariant.withValues(alpha: _pillEdgeAlpha),
               ),
             ),
             padding: const EdgeInsets.only(

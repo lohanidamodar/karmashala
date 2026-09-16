@@ -91,6 +91,14 @@ AppBar companionAppBar(
   actions: actions,
 );
 
+/// The most of the screen a companion sheet covers: enough to scroll a long
+/// list, short of hiding what the sheet was opened from.
+const double companionSheetMaxShare = 0.85;
+
+/// A thin band of ground above and below a badge's word, under the 4-pt scale
+/// so a badge does not grow the line it sits in.
+const double companionBadgeHairline = 1;
+
 /// A titled bottom sheet that can always be read to the end: scroll-controlled
 /// and capped against the viewport, because Material's default half-height is
 /// shorter than a list of desktops at 200% text.
@@ -102,7 +110,7 @@ Future<T?> companionSheet<T>(
   context: context,
   isScrollControlled: true,
   constraints: BoxConstraints(
-    maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+    maxHeight: MediaQuery.sizeOf(context).height * companionSheetMaxShare,
   ),
   builder: (context) => SafeArea(
     top: false,

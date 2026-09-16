@@ -413,7 +413,7 @@ class _PathLine extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: Insets.xs,
-                    vertical: _badgeHairline,
+                    vertical: companionBadgeHairline,
                   ),
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest,
@@ -457,7 +457,4 @@ class _PathLine extends StatelessWidget {
     );
   }
 
-  /// A hairline of ground above and below the word, under the 4-pt scale so
-  /// the badge does not grow the line.
-  static const _badgeHairline = 1.0;
 }

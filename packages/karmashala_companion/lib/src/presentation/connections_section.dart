@@ -248,7 +248,10 @@ class _ActiveBadge extends StatelessWidget {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: Insets.xs, vertical: 1),
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.xs,
+        vertical: companionBadgeHairline,
+      ),
       decoration: BoxDecoration(
         color: semantic.idle.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(Radii.sm),
