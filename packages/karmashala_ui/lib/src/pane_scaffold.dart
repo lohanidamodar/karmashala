@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'app_icons.dart';
@@ -26,8 +28,9 @@ class PaneCloseAction extends InheritedWidget {
       tooltip != oldWidget.tooltip || onClose != oldWidget.onClose;
 }
 
-/// The header a shell pane wears — a [Chrome.tabStrip] row, a glyph, the title,
-/// the surface's own actions, and the hairline a site could otherwise forget.
+/// The header a shell pane wears — a [Chrome.tabStripOf] row, a glyph, the
+/// title, the surface's own actions, and the hairline a site could otherwise
+/// forget.
 class PaneHeader extends StatelessWidget {
   const PaneHeader({
     required this.title,
@@ -57,12 +60,17 @@ class PaneHeader extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final ink = focused ? scheme.onSurface : scheme.onSurfaceVariant;
+    // A thumb's header is as tall as its close button's target, or the button
+    // is squeezed to the row and a 30px target is a miss.
+    final height = UiDensity.of(context).isTouch
+        ? math.max(Chrome.tabStripOf(context), Touch.target)
+        : Chrome.tabStripOf(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          height: Chrome.tabStrip,
+          height: height,
           color: scheme.surfaceContainerLow,
           padding: const EdgeInsets.only(left: Insets.md, right: 2),
           child: Row(

@@ -19,6 +19,7 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
     final lines = widget.thinking.split('\n').length;
     final summary = lines <= 1 ? 'Thought' : 'Thought for $lines lines';
 
@@ -35,33 +36,43 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
             borderRadius: BorderRadius.circular(Radii.sm),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Insets.sm,
-                vertical: Insets.xs,
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    AppIcons.chatCircleDots,
-                    size: Chrome.iconAction,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: Insets.xs),
-                  Text(
-                    summary,
-                    style: theme.textTheme.labelSmall?.copyWith(
+            child: ConstrainedBox(
+              // A 24px header is a pointer's target; a thumb needs the floor.
+              constraints: BoxConstraints(minHeight: density.minRow),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: Insets.sm,
+                  vertical: Insets.xs,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      AppIcons.chatCircleDots,
+                      size: Chrome.iconAction,
                       color: scheme.onSurfaceVariant,
-                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    _expanded ? AppIcons.caretDown : AppIcons.caretRight,
-                    size: Chrome.iconAction,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ],
+                    const SizedBox(width: Insets.xs),
+                    // Expanded, not a Text beside a Spacer: the summary is the
+                    // one thing in this row that can give way.
+                    Expanded(
+                      child: Text(
+                        summary,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      _expanded ? AppIcons.caretDown : AppIcons.caretRight,
+                      size: Chrome.iconAction,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

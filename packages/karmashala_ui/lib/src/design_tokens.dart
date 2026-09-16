@@ -461,6 +461,12 @@ class Chrome {
     context,
   ).scale(titleBar).clamp(titleBar, 52.0);
 
+  /// [tabStrip], same treatment, for a row whose label follows the text scale —
+  /// a pane header's eyebrow does; a tab chip's [tabLabel] deliberately does not.
+  static double tabStripOf(BuildContext context) => MediaQuery.textScalerOf(
+    context,
+  ).scale(tabStrip).clamp(tabStrip, 52.0);
+
   /// [statusBar], same treatment.
   static double statusBarOf(BuildContext context) => MediaQuery.textScalerOf(
     context,

@@ -174,28 +174,32 @@ class DesktopMenuDetailRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Row(
+              // A Wrap rather than a Row: the badge drops under the label when
+              // both cannot fit, where two Flexibles would halve the label even
+              // when there was room. A popup menu sizes by intrinsics, which a
+              // Wrap answers and a LayoutBuilder cannot.
+              Wrap(
+                spacing: Insets.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: color,
-                        fontWeight: selected ? FontWeight.w600 : null,
-                      ),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: color,
+                      fontWeight: selected ? FontWeight.w600 : null,
                     ),
                   ),
-                  if (badge != null) ...[
-                    const SizedBox(width: Insets.xs),
+                  if (badge != null)
                     Text(
                       badge!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.labelSmall?.copyWith(
                         color: badgeColor ?? scheme.onSurfaceVariant,
                       ),
                     ),
-                  ],
                 ],
               ),
               Text(
