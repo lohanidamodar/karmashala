@@ -12,6 +12,7 @@ import '../../todos/presentation/project_menu.dart';
 import '../application/composer_draft.dart';
 import '../application/notes_providers.dart';
 import '../domain/note.dart';
+import 'note_delete.dart';
 import 'note_edit_dialog.dart';
 import 'package:karmashala_ui/primitives.dart';
 
@@ -73,7 +74,6 @@ class NotesView extends ConsumerWidget {
       ],
     );
   }
-
 }
 
 /// What an empty Notes panel says. The feature is invisible until someone taps
@@ -250,16 +250,17 @@ class _NoteCard extends ConsumerWidget {
       case 'edit':
         await _edit(context, ref);
       case 'delete':
+        if (!await confirmNoteDelete(context, note) || !context.mounted) {
+          return;
+        }
         ref.read(notesProvider.notifier).delete(note.id);
     }
   }
 
   /// Where the note is filed and where it came from, in the words of what is
   /// still true: a deleted session is said to be gone rather than dropped.
-  String _origin(String? sessionTitle, String? projectName) => <String>[
-    ?projectName,
-    _provenance(sessionTitle),
-  ].join('  ·  ');
+  String _origin(String? sessionTitle, String? projectName) =>
+      <String>[?projectName, _provenance(sessionTitle)].join('  ·  ');
 
   String _provenance(String? sessionTitle) {
     if (note.sourceSessionId == null) return 'Written here';

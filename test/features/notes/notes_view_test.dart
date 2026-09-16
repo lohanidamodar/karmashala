@@ -82,6 +82,12 @@ void main() {
     return container;
   }
 
+  /// The destructive button of the confirm dialog a delete raises.
+  final confirmDelete = find.descendant(
+    of: find.byType(AlertDialog),
+    matching: find.text('Delete'),
+  );
+
   /// Puts a mouse on [finder] and leaves it there.
   Future<TestGesture> hover(WidgetTester tester, Finder finder) async {
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -116,7 +122,10 @@ void main() {
     expect(find.textContaining('No notes yet.'), findsOneWidget);
     expect(find.byType(PanePlaceholder), findsOneWidget);
     expect(find.textContaining('without acting on it'), findsOneWidget);
-    expect(find.textContaining('note button under any message'), findsOneWidget);
+    expect(
+      find.textContaining('note button under any message'),
+      findsOneWidget,
+    );
     // And what happens next, which is the half that makes it a feature.
     expect(find.textContaining('send it back'), findsOneWidget);
   });
@@ -193,12 +202,33 @@ void main() {
     expect(stored.sourceSessionId, 's1');
   });
 
-  testWidgets('a note can be deleted', (tester) async {
+  testWidgets('deleting a note asks first, and Cancel keeps it', (
+    tester,
+  ) async {
     final container = await pump(tester);
     container.read(notesProvider.notifier).capture(body: 'never mind');
     await tester.pumpAndSettle();
 
     await pickFromRowMenu(tester, 'never mind', 'Delete note');
+
+    // A note can hold a long thought; losing one to a stray click is not
+    // recoverable, so the menu asks first — and Cancel keeps it.
+    expect(find.text('Delete note?'), findsOneWidget);
+    expect(container.read(notesProvider), hasLength(1));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(container.read(notesProvider), hasLength(1));
+    expect(container.read(noteDaoProvider).list(), hasLength(1));
+  });
+
+  testWidgets('a note is deleted once the delete is confirmed', (tester) async {
+    final container = await pump(tester);
+    container.read(notesProvider.notifier).capture(body: 'never mind');
+    await tester.pumpAndSettle();
+
+    await pickFromRowMenu(tester, 'never mind', 'Delete note');
+    await tester.tap(confirmDelete);
+    await tester.pumpAndSettle();
 
     expect(container.read(notesProvider), isEmpty);
     expect(container.read(noteDaoProvider).list(), isEmpty);
@@ -238,9 +268,7 @@ void main() {
 
     expect(find.text('Written here'), findsOneWidget);
     // Generic on purpose: the card cannot name a session it never read.
-    await tester.tap(
-      find.byTooltip('Send to the active session'),
-    );
+    await tester.tap(find.byTooltip('Send to the active session'));
     await tester.pumpAndSettle();
 
     expect(
@@ -294,9 +322,7 @@ void main() {
 
     container.read(notesProvider.notifier).capture(body: 'written here');
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byTooltip('Send to the active session'),
-    );
+    await tester.tap(find.byTooltip('Send to the active session'));
     await tester.pumpAndSettle();
 
     // The bytes the pane would have handed its process: the note, and no
@@ -339,9 +365,7 @@ void main() {
 
     container.read(notesProvider.notifier).capture(body: 'written here');
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byTooltip('Send to the active session'),
-    );
+    await tester.tap(find.byTooltip('Send to the active session'));
     await tester.pumpAndSettle();
 
     expect(
@@ -404,10 +428,7 @@ void main() {
           .capture(body: 'at rest', sourceSessionId: 's1');
       await tester.pumpAndSettle();
 
-      expect(
-        find.byTooltip('Send to Toolbar rework'),
-        findsOneWidget,
-      );
+      expect(find.byTooltip('Send to Toolbar rework'), findsOneWidget);
       expect(find.byTooltip('Actions for “at rest”'), findsNothing);
 
       await hover(tester, find.text('at rest').first);
@@ -441,9 +462,7 @@ void main() {
       container.read(notesProvider.notifier).capture(body: 'keyboard only');
       await tester.pumpAndSettle();
 
-      Focus.of(
-        tester.element(find.text('keyboard only').first),
-      ).requestFocus();
+      Focus.of(tester.element(find.text('keyboard only').first)).requestFocus();
       await tester.pumpAndSettle();
 
       await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
@@ -487,12 +506,11 @@ void main() {
         expect(find.text('Delete note'), findsOneWidget);
         // The menu is worded exactly as the button beside it — one verb, one
         // reading, whichever of the four ways in the user took.
-        expect(
-          find.text('Send to the active session'),
-          findsOneWidget,
-        );
+        expect(find.text('Send to the active session'), findsOneWidget);
 
         await tester.tap(find.text('Delete note'));
+        await tester.pumpAndSettle();
+        await tester.tap(confirmDelete);
         await tester.pumpAndSettle();
         expect(container.read(notesProvider), isEmpty);
       },
@@ -507,11 +525,7 @@ void main() {
           .capture(body: 'from the menu', sourceSessionId: 's1');
       await tester.pumpAndSettle();
 
-      await pickFromRowMenu(
-        tester,
-        'from the menu',
-        'Send to Toolbar rework',
-      );
+      await pickFromRowMenu(tester, 'from the menu', 'Send to Toolbar rework');
 
       expect(
         container.read(composerDraftProvider),
@@ -534,6 +548,8 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Delete note'));
+      await tester.pumpAndSettle();
+      await tester.tap(confirmDelete);
       await tester.pumpAndSettle();
 
       expect(container.read(notesProvider), isEmpty);
@@ -562,9 +578,6 @@ void main() {
 
     // Once as the note's name (its first line), once as its preview.
     expect(find.text('outlives its session'), findsNWidgets(2));
-    expect(
-      find.textContaining('From a session that is gone'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('From a session that is gone'), findsOneWidget);
   });
 }

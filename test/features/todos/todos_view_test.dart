@@ -79,6 +79,12 @@ void main() {
     return container;
   }
 
+  /// The destructive button of the confirm dialog a delete raises.
+  final confirmDelete = find.descendant(
+    of: find.byType(AlertDialog),
+    matching: find.text('Delete'),
+  );
+
   /// Puts a mouse on [finder] and leaves it there.
   Future<TestGesture> hover(WidgetTester tester, Finder finder) async {
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
@@ -264,13 +270,32 @@ void main() {
     expect(find.text('Karmashala'), findsOneWidget);
   });
 
-  testWidgets('the row menu deletes one', (tester) async {
+  testWidgets('the row menu asks before deleting one', (tester) async {
     final container = await pump(tester);
     container.read(todosProvider.notifier).add(body: 'temporary');
     await tester.pumpAndSettle();
 
     await openRowMenu(tester, 'temporary');
     await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    // Asked first, and Cancel keeps it.
+    expect(find.text('Delete todo?'), findsOneWidget);
+    expect(container.read(todosProvider), hasLength(1));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(container.read(todosProvider), hasLength(1));
+  });
+
+  testWidgets('the row menu deletes one once confirmed', (tester) async {
+    final container = await pump(tester);
+    container.read(todosProvider.notifier).add(body: 'temporary');
+    await tester.pumpAndSettle();
+
+    await openRowMenu(tester, 'temporary');
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(confirmDelete);
     await tester.pumpAndSettle();
 
     expect(container.read(todosProvider), isEmpty);
@@ -387,6 +412,8 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(confirmDelete);
       await tester.pumpAndSettle();
 
       expect(container.read(todosProvider), isEmpty);
@@ -532,15 +559,12 @@ void main() {
             overrides: [databaseProvider.overrideWithValue(db)],
           );
           addTearDown(container.dispose);
-          container.read(todosProvider.notifier).add(
-            body: longTodo,
-            projectId: 'p1',
-          );
+          container
+              .read(todosProvider.notifier)
+              .add(body: longTodo, projectId: 'p1');
           return UncontrolledProviderScope(
             container: container,
-            child: const MaterialApp(
-              home: Scaffold(body: TodosView()),
-            ),
+            child: const MaterialApp(home: Scaffold(body: TodosView())),
           );
         },
       );

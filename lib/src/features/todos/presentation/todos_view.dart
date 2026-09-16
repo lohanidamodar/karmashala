@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -339,6 +340,15 @@ class _TodoRowState extends ConsumerState<_TodoRow> {
       case 'down':
         todos.move(widget.todo.id, up: false);
       case 'delete':
+        final confirmed = await showConfirmDialog(
+          context,
+          title: 'Delete todo?',
+          message:
+              '“${widget.todo.body}” is deleted for good. There is no undo.',
+          confirmLabel: 'Delete',
+          destructive: true,
+        );
+        if (!confirmed || !mounted) return;
         todos.delete(widget.todo.id);
       case 'send':
         _send();
