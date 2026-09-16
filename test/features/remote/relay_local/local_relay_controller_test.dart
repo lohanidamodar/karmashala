@@ -11,7 +11,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';

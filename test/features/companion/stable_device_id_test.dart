@@ -18,7 +18,7 @@ import 'package:karmashala/src/features/companion/client/secure_companion_store.
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
 import 'package:karmashala_remote/client.dart'
     as stored;
-import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';

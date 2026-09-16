@@ -28,7 +28,7 @@ import 'package:karmashala/src/features/repositories/application/repository_disc
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
-import 'package:karmashala/src/features/remote/data/paired_device_dao.dart';
+import 'package:karmashala_store/devices.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';

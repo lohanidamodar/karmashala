@@ -20,6 +20,11 @@ dependencies:
   # bundles the native library for Flutter targets, and a standalone binary
   # links the system libsqlite3 instead.
   path: ^1.9.1
+  # `PairedDevice` — the value the `paired_devices` table holds. A wire type
+  # rather than a second copy of it, so the host and the desktop store the same
+  # rows. No cycle: `karmashala_remote` depends on nothing of ours.
+  karmashala_remote:
+    path: ../karmashala_remote
   sqlite3: ^3.3.3
 
 dev_dependencies:

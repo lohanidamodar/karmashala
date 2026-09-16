@@ -21,6 +21,7 @@ export 'src/serve/client_command.dart';
 export 'src/serve/host_server.dart';
 export 'src/serve/session_store.dart';
 export 'src/companion/companion_bindings.dart';
+export 'src/companion/host_pairing_service.dart';
 export 'src/companion/companion_server.dart';
 export 'src/store/store_probe.dart';
 export 'src/transport/socket_transport.dart';
