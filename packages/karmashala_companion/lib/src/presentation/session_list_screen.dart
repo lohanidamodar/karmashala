@@ -152,7 +152,12 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
             ? null
             : machines.firstWhere((m) => m.key == active);
 
-        final metadata = projects.asData?.value;
+        // Scoped like the sessions above, and by the same key: an unfiltered
+        // list here put every machine's projects behind every machine's row.
+        final allProjects = projects.asData?.value;
+        final metadata = allProjects == null || active == null
+            ? allProjects
+            : projectsOnEnvironment(allProjects, active);
         final groups = metadata == null
             ? groupByProject(scoped)
             : mergeProjectsAndSessions(metadata, scoped);

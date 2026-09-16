@@ -105,6 +105,18 @@ List<CompanionSessionSummary> sessionsOnEnvironment(
     if ((session.environmentId ?? session.environmentBadge) == key) session,
 ];
 
+/// The projects on one machine, by the same key [companionEnvironments] groups
+/// on — the sibling of [sessionsOnEnvironment], and needed for the same reason:
+/// the machine step is decorative if the list behind it still names every
+/// project the desktop holds.
+List<RemoteWorkspaceProject> projectsOnEnvironment(
+  List<RemoteWorkspaceProject> projects,
+  String key,
+) => [
+  for (final project in projects)
+    if ((project.environmentId ?? project.environmentBadge) == key) project,
+];
+
 /// Local, then WSL, then SSH, then a machine whose kind the desktop did not
 /// say — the order the desktop's own Explorer uses.
 int _rank(String? kind) => switch (kind) {
