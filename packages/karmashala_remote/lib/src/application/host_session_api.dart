@@ -342,17 +342,13 @@ class HostSessionApi {
         case FrameType.projectsList:
           await _result(envelope.id, {
             'projects': [
+              // Encoded whole, then the one field this list does not carry is
+              // removed. Naming the fields to keep is what silently dropped
+              // `environmentId` and `environmentKind` when they were added —
+              // the phone then keyed projects by badge and sessions by id, and
+              // drew one machine as two.
               for (final project in bindings.listProjects())
-                {
-                  ...RemoteWorkspaceProject(
-                    projectId: project.projectId,
-                    name: project.name,
-                    path: project.path,
-                    environmentName: project.environmentName,
-                    environmentBadge: project.environmentBadge,
-                  ).toJson()
-                    ..remove('checkouts'),
-                },
+                project.toJson()..remove('checkouts'),
             ],
           });
         case FrameType.projectAdd:

@@ -714,21 +714,27 @@
                     "projectId": "p1",
                     "name": "Proj",
                     "path": "C:\\work",
-                    "environmentName": "Windows"
+                    "environmentName": "Windows",
+                    "environmentId": "windows",
+                    "environmentKind": "windowsNative"
                   },
                   {
                     "projectId": "p2",
                     "name": "Api",
                     "path": "/home/dev/work",
                     "environmentName": "WSL · Ubuntu",
-                    "environmentBadge": "WSL · Ubuntu"
+                    "environmentBadge": "WSL · Ubuntu",
+                    "environmentId": "wsl:Ubuntu",
+                    "environmentKind": "wsl"
                   },
                   {
                     "projectId": "p3",
                     "name": "Farm",
                     "path": "/srv/farm",
                     "environmentName": "SSH · build-box",
-                    "environmentBadge": "SSH · build-box"
+                    "environmentBadge": "SSH · build-box",
+                    "environmentId": "ssh:build-box",
+                    "environmentKind": "ssh"
                   }
                 ]
               }
