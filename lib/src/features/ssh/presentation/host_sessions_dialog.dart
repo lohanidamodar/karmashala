@@ -31,6 +31,10 @@ class HostSessionsDialog extends ConsumerStatefulWidget {
 }
 
 class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
+  /// The tallest the list grows before it scrolls; a dialog also shrinks it to
+  /// what the window leaves.
+  static const _listMaxHeight = 420.0;
+
   List<SessionSummary>? _sessions;
   String? _error;
   var _busy = true;
@@ -91,7 +95,7 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
         subtitle: 'The host keeps these running whether this app is open or not.',
       ),
       content: SizedBox(
-        width: 620,
+        width: DialogWidth.wide,
         child: switch ((_busy, _error, sessions)) {
           (true, _, null) => const Padding(
             padding: EdgeInsets.all(Insets.lg),
@@ -109,15 +113,19 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
             ),
           ),
           (_, _, final List<SessionSummary> found) => ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 420),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: found.length,
-              itemBuilder: (context, i) => _SessionRow(
-                session: found[i],
-                hostId: widget.host.id,
-                onEnd: () => _end(found[i]),
-                onAttach: (paneId) => _attach(found[i], paneId),
+            constraints: const BoxConstraints(maxHeight: _listMaxHeight),
+            // Its own traversal group: without one, Tab left the list for the
+            // actions part-way down and came back to rows it had visited.
+            child: FocusTraversalGroup(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: found.length,
+                itemBuilder: (context, i) => _SessionRow(
+                  session: found[i],
+                  hostId: widget.host.id,
+                  onEnd: () => _end(found[i]),
+                  onAttach: (paneId) => _attach(found[i], paneId),
+                ),
               ),
             ),
           ),

@@ -11,15 +11,23 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/projects/presentation/edit_project_dialog.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
+import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
+import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
+import 'package:karmashala/src/features/remote/presentation/pairing_dialog.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
+import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
+import 'package:karmashala/src/features/ssh/application/host_sessions.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
+import 'package:karmashala_host/protocol.dart';
+import 'package:karmashala_remote/pairing.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_store/database.dart';
@@ -271,6 +279,76 @@ void main() {
       );
     });
   });
+
+  group('dialogs whose content scrolls keep one tab ring', () {
+    testWidgets('PairingDialog with two relays to choose between', (
+      tester,
+    ) async {
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => ProviderScope(
+          overrides: [
+            remoteAccessControllerProvider.overrideWith(_PairingAccess.new),
+            pairingRelayEndpointsProvider.overrideWith(
+              (ref) => [
+                PairingRelayEndpoint(
+                  label: 'Internet',
+                  url: Uri.parse('wss://relay.popupbits.com'),
+                  kind: PairingRelayKind.internet,
+                ),
+                PairingRelayEndpoint(
+                  label: 'Local network',
+                  url: Uri.parse('ws://192.168.1.20:7011'),
+                  kind: PairingRelayKind.local,
+                ),
+              ],
+            ),
+          ],
+          child: const MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: Scaffold(body: PairingDialog()),
+          ),
+        ),
+        matrix: settingsMatrix,
+        because:
+            'nine capability chips, two relay tabs and a QR scroll inside '
+            'the dialog, and Tab must visit each stop once',
+      );
+    });
+
+    testWidgets('HostSessionsDialog with enough sessions to scroll', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          ...noProcessOverrides(),
+          hostSessionsServiceProvider.overrideWithValue(_ListingSessions(12)),
+        ],
+      );
+      addTearDown(container.dispose);
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(
+          container,
+          HostSessionsDialog(
+            host: SshHost(
+              id: 'h1',
+              name: 'build-box',
+              host: 'build.example.internal',
+              port: 22,
+              username: 'dlohani',
+              authMethod: SshAuthMethod.password,
+              createdAt: testTime,
+            ),
+          ),
+        ),
+        matrix: settingsMatrix,
+        because:
+            'the session list scrolls under the dialog actions, and Tab must '
+            'visit each row once before it reaches them',
+      );
+    });
+  });
 }
 
 /// A companion setup that answers at once with a long address and an open
@@ -306,4 +384,65 @@ class _InvitingSetup implements SshCompanionSetup {
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// Answers `beginPairing` with a real code, and opens nothing.
+class _PairingAccess extends RemoteAccessController {
+  _PairingAccess(super.ref);
+
+  HostPairingSession? _last;
+
+  @override
+  Future<HostPairingSession> beginPairing({
+    required CapabilitySet capabilities,
+    Uri? relay,
+    bool relayIsLocal = false,
+  }) async {
+    final session = HostPairingSession(
+      payload: await PairingPayload.generateWithCode(
+        relay: relay ?? Uri.parse('wss://relay.example.com'),
+        hostId: DeviceId.parse('11111111222222223333333344444444'),
+        capabilities: capabilities,
+      ),
+      hostName: 'Desk',
+      persist: (_) async {},
+    );
+    return _last = session;
+  }
+
+  @override
+  Future<void> cancelPairing() async {
+    await _last?.close();
+    _last = null;
+  }
+}
+
+/// A host holding [count] running sessions: every other one a bare shell that
+/// can be reattached, the rest agent sessions that cannot.
+class _ListingSessions implements HostSessionsService {
+  _ListingSessions(this.count);
+
+  final int count;
+
+  @override
+  Future<List<SessionSummary>> list(SshHost host) async => [
+    for (var i = 0; i < count; i++)
+      SessionSummary(
+        id: i.isEven ? 'karmashala_${host.id}_pane-$i' : 'agent-$i',
+        argv: ['/bin/zsh', '-l', '--session', '$i'],
+        workingDirectory: '/home/dlohani/src/project-$i',
+        pid: 1000 + i,
+        columns: 120,
+        rows: 40,
+        startedAt: testTime,
+        observedAt: testTime,
+        totalBytes: 4096 * i,
+        firstAvailableOffset: 0,
+        lifecycle: const SessionRunning(),
+        writeHolder: null,
+      ),
+  ];
+
+  @override
+  Future<void> end(SshHost host, String sessionId) async {}
 }

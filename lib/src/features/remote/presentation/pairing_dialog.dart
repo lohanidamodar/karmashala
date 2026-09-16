@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -185,46 +186,45 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
           const Text('Pair a device'),
         ],
       ),
-      // Scrolls rather than overflowing: a QR plus five chips is taller than
-      // a small window's dialog.
-      content: SizedBox(
-        width: 340,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_paired == null) ...[
-                Text(
-                  'The phone may only do what you grant here. Scan with the '
-                  'Karmashala companion app, or type the code.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+      // Scrolls rather than overflowing: a QR plus nine chips is taller than
+      // a small window's dialog. Its own traversal group, so Tab walks the
+      // chips, the tabs and the QR's buttons once before reaching Cancel.
+      content: BoundedDialogContent(
+        width: DialogWidth.narrow,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (_paired == null) ...[
+              Text(
+                'The phone may only do what you grant here. Scan with the '
+                'Karmashala companion app, or type the code.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                const SizedBox(height: Insets.sm),
-                Wrap(
-                  spacing: Insets.xs,
-                  runSpacing: Insets.xs,
-                  children: [
-                    for (final capability in Capability.values)
-                      FilterChip(
-                        label: Text(_label(capability)),
-                        selected: _granted.contains(capability),
-                        onSelected: (value) => _toggle(capability, value),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: Insets.md),
-                if (_endpointTabs(ref.watch(pairingRelayEndpointsProvider))
-                    case final tabs?) ...[
-                  Center(child: tabs),
-                  const SizedBox(height: Insets.md),
+              ),
+              const SizedBox(height: Insets.sm),
+              Wrap(
+                spacing: Insets.xs,
+                runSpacing: Insets.xs,
+                children: [
+                  for (final capability in Capability.values)
+                    FilterChip(
+                      label: Text(_label(capability)),
+                      selected: _granted.contains(capability),
+                      onSelected: (value) => _toggle(capability, value),
+                    ),
                 ],
+              ),
+              const SizedBox(height: Insets.md),
+              if (_endpointTabs(ref.watch(pairingRelayEndpointsProvider))
+                  case final tabs?) ...[
+                Center(child: tabs),
+                const SizedBox(height: Insets.md),
               ],
-              Center(child: _body(theme)),
             ],
-          ),
+            Center(child: _body(theme)),
+          ],
         ),
       ),
       actions: [
