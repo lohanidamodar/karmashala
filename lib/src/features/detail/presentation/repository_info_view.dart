@@ -189,12 +189,11 @@ class _GitDetails extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final trouble = ref.watch(selectedCheckoutGitTroubleProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _label(theme, 'GIT'),
+        const _SectionLabel('GIT'),
         if (trouble != null)
           _GitTroubleNote(report: trouble)
         else ...[
@@ -202,7 +201,7 @@ class _GitDetails extends ConsumerWidget {
           const SizedBox(height: Insets.md),
           const _Worktrees(),
           const SizedBox(height: Insets.md),
-          _label(theme, 'RECENT COMMITS'),
+          const _SectionLabel('RECENT COMMITS'),
           const _RecentCommits(),
         ],
       ],
@@ -262,7 +261,6 @@ class _BranchAndRemote extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final branch = ref.watch(currentBranchProvider);
     final remote = ref.watch(repoRemoteUrlProvider);
 
@@ -280,9 +278,7 @@ class _BranchAndRemote extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _kv(
-          theme,
-          'Branch',
+        _KeyValue('Branch',
           branchText,
           // The branch name is what you paste into a `git checkout` or a PR body, and
           // selecting 12 characters of 12px mono with a mouse is a worse way to get it.
@@ -290,9 +286,7 @@ class _BranchAndRemote extends ConsumerWidget {
               ? _CopyButton(value: branchText, what: 'Branch')
               : null,
         ),
-        _kv(
-          theme,
-          'Remote',
+        _KeyValue('Remote',
           remoteText,
           child: _RemoteValue(remote: remoteText),
         ),
@@ -322,7 +316,6 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final worktrees = ref.watch(repoWorktreesProvider);
     final repositoryId = ref.watch(selectedRepositoryIdProvider);
     final home = ref.watch(selectedCheckoutPathProvider);
@@ -340,7 +333,7 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
     );
 
     final body = switch (worktrees) {
-      AsyncData(:final value) when value.isEmpty => _dim(theme, 'none'),
+      AsyncData(:final value) when value.isEmpty => const _DimNote('none'),
       AsyncData(:final value) when !open => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -368,11 +361,9 @@ class _WorktreesState extends ConsumerState<_Worktrees> {
       ),
       // `.error` before the bare loading: a failure being retried is an
       // `AsyncLoading` carrying its error.
-      AsyncValue(:final error?) => _dim(
-        theme,
-        gitTroubleLabel(gitTroubleOf(error)),
+      AsyncValue(:final error?) => _DimNote(gitTroubleLabel(gitTroubleOf(error)),
       ),
-      _ => _dim(theme, '…'),
+      _ => const _DimNote('…'),
     };
 
     return Column(
@@ -578,9 +569,7 @@ class _WorktreeRow extends ConsumerWidget {
                   home: root,
                   worktree: worktree,
                 ),
-          child: _line(
-            theme,
-            worktree.label,
+          child: _ListLine(worktree.label,
             isHome ? 'the selected checkout' : worktree.path.path,
             // Never colour alone: the row being read swaps its glyph too.
             icon: viewed ? AppIcons.check : AppIcons.gitBranch,
@@ -607,7 +596,6 @@ class _RecentCommits extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final commits = ref.watch(recentCommitsProvider);
     final repoIdForLinks = ref.watch(selectedRepositoryIdProvider);
     // Commits link to the forge when the remote is known (owner request).
@@ -616,17 +604,15 @@ class _RecentCommits extends ConsumerWidget {
         : ref.watch(repositoryRemoteProvider(repoIdForLinks));
 
     return commits.when(
-      loading: () => _dim(theme, '…'),
-      error: (e, _) => _dim(theme, gitTroubleLabel(gitTroubleOf(e))),
+      loading: () => const _DimNote('…'),
+      error: (e, _) => _DimNote(gitTroubleLabel(gitTroubleOf(e))),
       data: (list) => list.isEmpty
-          ? _dim(theme, 'none')
+          ? const _DimNote('none')
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (final GitCommit c in list)
-                  _line(
-                    theme,
-                    shortSha(c.sha),
+                  _ListLine(shortSha(c.sha),
                     c.subject,
                     icon: AppIcons.gitDiff,
                     leadWidget: RemoteLink(
@@ -641,98 +627,137 @@ class _RecentCommits extends ConsumerWidget {
   }
 }
 
-Widget _label(ThemeData theme, String text) => Padding(
-  padding: const EdgeInsets.only(bottom: 4),
-  child: Text(text, style: theme.textTheme.labelSmall),
-);
+/// A section's eyebrow.
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
 
-Widget _kv(
-  ThemeData theme,
-  String key,
-  String value, {
-  Widget? child,
-  Widget? action,
-}) => Padding(
-  padding: const EdgeInsets.only(bottom: 4),
-  child: Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(
-        width: 64,
-        child: Text(
-          key,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-      Expanded(
-        child:
-            child ??
-            SelectableText(
-              value,
-              style: MonoStyles.body,
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: Insets.xs),
+    child: Text(text, style: Theme.of(context).textTheme.labelSmall),
+  );
+}
+
+/// A labelled value — the value selectable, or [child] in its place.
+class _KeyValue extends StatelessWidget {
+  const _KeyValue(this.label, this.value, {this.child, this.action});
+
+  final String label;
+  final String value;
+  final Widget? child;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.xs),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 64,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
+          ),
+          Expanded(
+            child: child ?? SelectableText(value, style: MonoStyles.body),
+          ),
+          ?action,
+        ],
       ),
-      ?action,
-    ],
-  ),
-);
+    );
+  }
+}
 
-Widget _line(
-  ThemeData theme,
-  String lead,
-  String rest, {
-  required IconData icon,
-  Color? iconColor,
-  Widget? action,
-  Widget? leadWidget,
-}) => Padding(
-  padding: const EdgeInsets.only(bottom: 4),
-  child: Row(
-    children: [
-      Icon(
-        icon,
-        size: Chrome.iconSmall,
-        color: iconColor ?? theme.colorScheme.onSurfaceVariant,
-      ),
-      const SizedBox(width: 6),
-      // Flexible, because a worktree branch is as long as an agent's name in a
-      // 200px row: it ellipsises rather than pushing the path off the edge.
-      Flexible(
-        child:
-            leadWidget ??
-            Text(
-              lead,
+/// One row of a list: a glyph, a short mono lead, the rest, an action.
+class _ListLine extends StatelessWidget {
+  const _ListLine(
+    this.lead,
+    this.rest, {
+    required this.icon,
+    this.iconColor,
+    this.action,
+    this.leadWidget,
+  });
+
+  final String lead;
+  final String rest;
+  final IconData icon;
+  final Color? iconColor;
+  final Widget? action;
+
+  /// Drawn in [lead]'s place — a link, say.
+  final Widget? leadWidget;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.xs),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            size: Chrome.iconSmall,
+            color: iconColor ?? theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: Insets.xs),
+          // Flexible, because a worktree branch is as long as an agent's name
+          // in a 200px row: it ellipsises rather than pushing the path off.
+          Flexible(
+            child:
+                leadWidget ??
+                Text(
+                  lead,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: MonoStyles.small,
+                ),
+          ),
+          const SizedBox(width: Insets.sm),
+          Expanded(
+            child: Text(
+              rest,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: MonoStyles.small,
+              style: theme.textTheme.bodySmall,
             ),
+          ),
+          ?action,
+        ],
       ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: Text(
-          rest,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodySmall,
+    );
+  }
+}
+
+/// A muted aside: "none", "…", or why a reading could not be taken.
+class _DimNote extends StatelessWidget {
+  const _DimNote(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.xs),
+      child: Text(
+        text,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontStyle: FontStyle.italic,
         ),
       ),
-      ?action,
-    ],
-  ),
-);
-
-Widget _dim(ThemeData theme, String text) => Padding(
-  padding: const EdgeInsets.only(bottom: 4),
-  child: Text(
-    text,
-    style: theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-      fontStyle: FontStyle.italic,
-    ),
-  ),
-);
+    );
+  }
+}
 
 /// The remote, as a link when it names a host a browser can reach and as plain
 /// text when it does not.
