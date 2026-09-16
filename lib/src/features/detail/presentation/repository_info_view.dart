@@ -121,7 +121,6 @@ class _Field extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: Insets.md),
       child: Column(
@@ -129,20 +128,12 @@ class _Field extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  label.toUpperCase(),
-                  style: theme.textTheme.labelSmall,
-                ),
-              ),
+              Expanded(child: EyebrowLabel(label)),
               if (path != null) _RevealButton(path: path!),
             ],
           ),
           const SizedBox(height: 2),
-          SelectableText(
-            value,
-            style: MonoStyles.body,
-          ),
+          SelectableText(value, style: MonoStyles.body),
         ],
       ),
     );
@@ -196,7 +187,7 @@ class _GitDetails extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionLabel('GIT'),
+        const EyebrowLabel('Git', padding: _sectionLabelPadding),
         if (trouble != null)
           _GitTroubleNote(report: trouble)
         else ...[
@@ -204,7 +195,7 @@ class _GitDetails extends ConsumerWidget {
           const SizedBox(height: Insets.md),
           const _Worktrees(),
           const SizedBox(height: Insets.md),
-          const _SectionLabel('RECENT COMMITS'),
+          const EyebrowLabel('Recent commits', padding: _sectionLabelPadding),
           const _RecentCommits(),
         ],
       ],
@@ -433,7 +424,7 @@ class _WorktreesHeader extends StatelessWidget {
                 color: muted,
               ),
               const SizedBox(width: 2),
-              Text('WORKTREES', style: theme.textTheme.labelSmall),
+              const EyebrowLabel('Worktrees'),
               Expanded(
                 child: viewing == null
                     ? const SizedBox.shrink()
@@ -466,9 +457,7 @@ class _WorktreesHeader extends StatelessWidget {
                     child: Icon(
                       AppIcons.plus,
                       size: Chrome.iconSmall,
-                      color: onCreate == null
-                          ? theme.disabledColor
-                          : muted,
+                      color: onCreate == null ? theme.disabledColor : muted,
                     ),
                   ),
                 ),
@@ -635,18 +624,7 @@ class _RecentCommits extends ConsumerWidget {
   }
 }
 
-/// A section's eyebrow.
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: Insets.xs),
-    child: Text(text, style: Theme.of(context).textTheme.labelSmall),
-  );
-}
+const _sectionLabelPadding = EdgeInsets.only(bottom: Insets.xs);
 
 /// A labelled value — the value selectable, or [child] in its place.
 class _KeyValue extends StatelessWidget {

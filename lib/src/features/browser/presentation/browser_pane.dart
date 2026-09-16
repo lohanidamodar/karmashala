@@ -402,10 +402,7 @@ class _CapturePreview extends ConsumerWidget {
         const SizedBox(height: Insets.sm),
         SelectableText(capture.description, style: theme.textTheme.titleSmall),
         const SizedBox(height: 2),
-        SelectableText(
-          capture.selector,
-          style: MonoStyles.small,
-        ),
+        SelectableText(capture.selector, style: MonoStyles.small),
         const SizedBox(height: 2),
         Text(
           '${capture.box} · ${capture.computedStyles.length} computed '
@@ -457,7 +454,7 @@ class _CapturePreview extends ConsumerWidget {
         const SizedBox(height: Insets.sm),
         const Divider(height: 1),
         const SizedBox(height: Insets.sm),
-        Text('WHAT WILL BE SENT', style: theme.textTheme.labelSmall),
+        const EyebrowLabel('What will be sent'),
         const SizedBox(height: Insets.xs),
         SelectableText(
           ref.read(browserPaneControllerProvider.notifier).capturePrompt() ??

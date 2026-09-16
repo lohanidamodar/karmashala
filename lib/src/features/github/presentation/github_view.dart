@@ -171,16 +171,8 @@ class _SectionHeader extends StatelessWidget {
         children: [
           Icon(icon, size: Chrome.icon, color: theme.colorScheme.primary),
           const SizedBox(width: Insets.sm),
-          // `labelSmall`, like every other section header: `labelLarge` read as a
-          // second title under the pane's own. Expanded because the pane is 240px.
-          Expanded(
-            child: Text(
-              label.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall,
-            ),
-          ),
+          // Expanded because the pane is 240px.
+          Expanded(child: EyebrowLabel(label, maxLines: 1)),
         ],
       ),
     );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'app_icons.dart';
 import 'design_tokens.dart';
+import 'eyebrow_label.dart';
 
 /// The close button every [PaneHeader] in this subtree wears. Handed *down*, so
 /// a surface that draws its own header still gets one.
@@ -81,14 +82,7 @@ class PaneHeader extends StatelessWidget {
               ],
               // Expanded rather than a Spacer: the title is the only thing in
               // this row that can give way, and at 200px the actions are wider.
-              Expanded(
-                child: Text(
-                  title.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(color: ink),
-                ),
-              ),
+              Expanded(child: EyebrowLabel(title, maxLines: 1, color: ink)),
               ...actions,
               // Last, so a surface's own actions keep their order and the way
               // out is always in the same corner.

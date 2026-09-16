@@ -49,6 +49,7 @@ class ProjectCard extends StatelessWidget {
   final VoidCallback? onNewSession;
 
   final VoidCallback? onTogglePin;
+
   /// Called when the menu opens, and not before — see `RowMenuItemBuilder`.
   final RowMenuItemBuilder menuItemsBuilder;
   final ValueChanged<String> onMenu;
@@ -98,7 +99,7 @@ class ProjectCard extends StatelessWidget {
                       roomy: width >= badgeWidth,
                     ),
                     SizedBox(height: density.lineGap),
-                    _line2(context, muted, density),
+                    _line2(density),
                   ],
                 );
               },
@@ -202,7 +203,7 @@ class ProjectCard extends StatelessWidget {
         // still gets the line when there is an environment to name.
         if (path.isNotEmpty || missing || environmentBadge != null) ...[
           SizedBox(height: density.lineGap),
-          Padding(padding: indent, child: _pathLine(context, muted, density)),
+          Padding(padding: indent, child: _pathLine),
         ],
       ],
     );
@@ -342,14 +343,42 @@ class ProjectCard extends StatelessWidget {
 
   /// The path hangs under the **name**, not the caret: the two glyphs and their
   /// gaps, measured, so the lines share a left edge at any density.
-  Widget _line2(BuildContext context, TextStyle? muted, UiDensity density) =>
-      Padding(
-        padding: EdgeInsets.only(left: density.icon * 2 + 2 + density.glyphGap),
-        child: _pathLine(context, muted, density),
-      );
+  Widget _line2(UiDensity density) => Padding(
+    padding: EdgeInsets.only(left: density.icon * 2 + 2 + density.glyphGap),
+    child: _pathLine,
+  );
 
-  Widget _pathLine(BuildContext context, TextStyle? muted, UiDensity density) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget get _pathLine => ProjectPathLine(
+    path: path,
+    missing: missing,
+    environmentBadge: environmentBadge,
+  );
+}
+
+/// A project's second line: its environment badge, a missing-folder mark and
+/// the path, in the muted ink of the density it is drawn at. The badge takes
+/// half the line at most and gives way before the path does.
+class ProjectPathLine extends StatelessWidget {
+  const ProjectPathLine({
+    required this.path,
+    this.missing = false,
+    this.environmentBadge,
+    super.key,
+  });
+
+  /// Empty when none was recorded.
+  final String path;
+
+  /// Whether the folder is gone — said here, once, in place of the path.
+  final bool missing;
+  final String? environmentBadge;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final muted = density.muted(theme);
     // A missing folder is said once, in the place the path would have been —
     // not as a second warning icon competing with the name.
     final text = missing

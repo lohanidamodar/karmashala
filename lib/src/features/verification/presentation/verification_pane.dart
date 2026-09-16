@@ -227,7 +227,10 @@ class _RunDetail extends ConsumerWidget {
                 ),
               ],
               const SizedBox(height: Insets.lg),
-              _SectionTitle('Steps (${run.steps.length})'),
+              EyebrowLabel(
+                'Steps (${run.steps.length})',
+                padding: _sectionTitlePadding,
+              ),
               if (run.steps.isEmpty)
                 Text(
                   'Nothing was recorded.',
@@ -239,13 +242,19 @@ class _RunDetail extends ConsumerWidget {
                 for (final step in run.steps) _StepTile(run: run, step: step),
               if (images.isNotEmpty) ...[
                 const SizedBox(height: Insets.lg),
-                _SectionTitle('Screenshots (${images.length})'),
+                EyebrowLabel(
+                  'Screenshots (${images.length})',
+                  padding: _sectionTitlePadding,
+                ),
                 for (final image in images)
                   _ScreenshotTile(run: run, artifact: image),
               ],
               if (files.isNotEmpty) ...[
                 const SizedBox(height: Insets.lg),
-                _SectionTitle('Evidence (${files.length})'),
+                EyebrowLabel(
+                  'Evidence (${files.length})',
+                  padding: _sectionTitlePadding,
+                ),
                 for (final file in files) _FileTile(run: run, artifact: file),
               ],
               const SizedBox(height: Insets.xl),
@@ -403,7 +412,8 @@ class _VerifierRow extends ConsumerWidget {
     if (id == null) {
       return _MetaRow(
         label: 'Verifier',
-        value: '${VerdictAttribution.notRecorded.label} — nobody said who '
+        value:
+            '${VerdictAttribution.notRecorded.label} — nobody said who '
             'graded this run',
       );
     }
@@ -800,22 +810,7 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: Insets.sm),
-    child: Text(
-      text.toUpperCase(),
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
-      ),
-    ),
-  );
-}
+const _sectionTitlePadding = EdgeInsets.only(bottom: Insets.sm);
 
 class _MetaRow extends StatelessWidget {
   const _MetaRow({required this.label, required this.value});
