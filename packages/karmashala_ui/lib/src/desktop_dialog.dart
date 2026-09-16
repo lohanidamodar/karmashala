@@ -88,6 +88,40 @@ class BoundedDialogContent extends StatelessWidget {
   }
 }
 
+/// The confirm button of an action that cannot be taken back: a filled button
+/// in the error colours. Pair it with a plain `TextButton` to cancel.
+class DestructiveButton extends StatelessWidget {
+  const DestructiveButton({
+    required this.onPressed,
+    required this.child,
+    this.icon,
+    super.key,
+  });
+
+  /// Null disables it, in the theme's disabled colours rather than red.
+  final VoidCallback? onPressed;
+  final Widget child;
+  final Widget? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final style = FilledButton.styleFrom(
+      backgroundColor: scheme.error,
+      foregroundColor: scheme.onError,
+    );
+    final icon = this.icon;
+    return icon == null
+        ? FilledButton(onPressed: onPressed, style: style, child: child)
+        : FilledButton.icon(
+            onPressed: onPressed,
+            style: style,
+            icon: icon,
+            label: child,
+          );
+  }
+}
+
 /// An error said inside a dialog, above the form it belongs to.
 class DesktopErrorBanner extends StatelessWidget {
   const DesktopErrorBanner(this.message, {this.onDismiss, super.key});
