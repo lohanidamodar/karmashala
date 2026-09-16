@@ -20,6 +20,20 @@ import 'companion_status_badge.dart';
 import 'companion_transcript_view.dart';
 import 'link_banner.dart';
 
+/// Whether the session view offers Resume for [session]: an imported session,
+/// or one that is not working. Never before the session list is known, and
+/// never for a session the list no longer has.
+bool companionOffersResume(
+  CompanionSessionSummary? session, {
+  required bool listKnown,
+}) =>
+    listKnown &&
+    session != null &&
+    (session.imported ||
+        session.status == CompanionSessionStatus.idle ||
+        session.status == CompanionSessionStatus.failed ||
+        session.status == CompanionSessionStatus.unknown);
+
 /// One session's transcript on the phone: the desktop chat's shapes drawn
 /// bottom-up by [CompanionTranscriptView], with the composer reduced to what
 /// the protocol lets a phone do — send a prompt, answer an approval.
@@ -65,11 +79,45 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     super.dispose();
   }
 
+  void _retryTranscript() {
+    ref.read(companionGatewayProvider).reconnect();
+    ref.invalidate(companionTranscriptProvider(widget.sessionId));
+  }
+
+  void _suggest(String prompt) {
+    _composer.text = prompt;
+    _composer.selection = TextSelection.collapsed(offset: prompt.length);
+  }
+
+  Future<void> _send(
+    String text, {
+    CompanionOutgoingAttachment? attachment,
+    void Function(int sent, int total)? onProgress,
+    String? requestId,
+  }) async {
+    final delivery = await ref.read(companionGatewayProvider).sendPrompt(
+      widget.sessionId,
+      text,
+      attachment: attachment,
+      onProgress: onProgress,
+      requestId: requestId,
+    );
+    if (delivery == RemotePromptDelivery.offered && mounted) {
+      // The file lands in the desktop's message box, so this must not read as
+      // though the agent already had it.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Waiting in the desktop\'s message box — send it from there.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessionId = widget.sessionId;
-    final theme = Theme.of(context);
-    final density = UiDensity.of(context);
     final gateway = ref.read(companionGatewayProvider);
     final sessions = ref.watch(companionSessionsProvider);
     final session = ref.watch(companionSessionProvider(sessionId));
@@ -88,143 +136,100 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text(resolution.outcome.sentence)));
     });
-    final canPrompt = gateway.capabilities.has(Capability.sendPrompt);
-    final canApprove = gateway.capabilities.has(Capability.approve);
-    final canAttach = gateway.capabilities.has(Capability.sendAttachment);
+    final capabilities = gateway.capabilities;
+    final canPrompt = capabilities.has(Capability.sendPrompt);
+    final canResume = capabilities.has(Capability.startSession);
     // A null summary is normal while sessions.list is arriving; once the list
     // has a value it is authoritative and the controls must go.
     final sessionGone = sessions.hasValue && session == null;
     final imported = session?.imported ?? false;
-    final resumeOffer = !sessionGone &&
-        session != null &&
-        (imported ||
-            session.status == CompanionSessionStatus.idle ||
-            session.status == CompanionSessionStatus.failed ||
-            session.status == CompanionSessionStatus.unknown);
-    final keyboardSqueezed = companionKeyboardSqueezed(context);
 
-    // Hoisted out so the readable-width wrapper below stays one line.
     final pane = sessionGone
         ? CompanionNotice(
             icon: AppIcons.folder,
             title: 'Session no longer available',
-            body: _resumeFailure ??
+            body:
+                _resumeFailure ??
                 'The desktop no longer lists this session. Go back and '
                     'choose another session.',
             tone: NoticeTone.attention,
           )
+        // NOT `AsyncValue.when`: a provider being retried is `AsyncLoading`
+        // *carrying* its error, so `when` takes the loading branch and this
+        // screen spins for ever.
         : companionAsync(
-      transcript,
-      loading: () => link == CompanionLinkState.connected
-          ? const Center(child: CircularProgressIndicator())
-          // No link to carry anything, so a skeleton would be a promise the
-          // phone cannot keep.
-          : CompanionNotice(
-              icon: AppIcons.linkBreak,
-              title: 'Waiting for your desktop',
-              body:
-                  "This session's messages arrive as soon as the link is "
-                  'back.',
-              tone: NoticeTone.attention,
-              actionLabel: 'Try again',
-              onAction: () {
-                gateway.reconnect();
-                ref.invalidate(companionTranscriptProvider(sessionId));
-              },
+            transcript,
+            loading: () => link == CompanionLinkState.connected
+                ? const Center(child: CircularProgressIndicator())
+                // No link to carry anything, so a skeleton would be a promise
+                // the phone cannot keep.
+                : CompanionNotice(
+                    icon: AppIcons.linkBreak,
+                    title: 'Waiting for your desktop',
+                    body:
+                        "This session's messages arrive as soon as the link "
+                        'is back.',
+                    tone: NoticeTone.attention,
+                    actionLabel: 'Try again',
+                    onAction: _retryTranscript,
+                  ),
+            error: (e) =>
+                CompanionNotice.failure(error: e, onRetry: _retryTranscript),
+            data: (messages) => CompanionTranscriptView(
+              messages: messages,
+              // Two nothings the phone cannot tell apart: an agent that keeps
+              // no readable transcript, and a session that has not spoken yet.
+              emptyHint:
+                  'No transcript to show. Some agents keep none we can read — '
+                  'their terminal is the session — and a session that has '
+                  'just started has nothing in it yet.',
+              // Starter prompts are onboarding, which is only true of a
+              // session that has not started — and never of a phone that may
+              // not send one.
+              onSuggestionTap:
+                  canPrompt && session?.status != CompanionSessionStatus.working
+                  ? _suggest
+                  : null,
+              footer: SessionFooter(
+                sessionId: sessionId,
+                approval: imported ? null : approval,
+                canApprove: capabilities.has(Capability.approve),
+                onAnswer: (decision) => approval == null
+                    ? Future<void>.value()
+                    : gateway.answerApproval(sessionId, approval.id, decision),
+                showActivity: !imported,
+                resume:
+                    companionOffersResume(session, listKnown: sessions.hasValue)
+                    ? _ResumePanel(
+                        busy: _resuming,
+                        failure: _resumeFailure,
+                        enabled:
+                            canResume && link == CompanionLinkState.connected,
+                        disabledLabel: canResume
+                            ? 'Connect to resume'
+                            : 'Resume permission not granted',
+                        onResume: () => _resume(sessionId),
+                      )
+                    : null,
+              ),
+              composer: imported
+                  ? null
+                  : CompanionComposer(
+                      controller: _composer,
+                      enabled: canPrompt,
+                      hintText: canPrompt
+                          ? 'Send a message…'
+                          : 'This phone was not granted prompt rights.',
+                      // Straight off the row, so the picker appears only where
+                      // the host has said what it would take.
+                      attachments: capabilities.has(Capability.sendAttachment)
+                          ? session?.attachments
+                          : null,
+                      newRequestId: _newRequestId,
+                      onSend: _send,
+                    ),
             ),
-      error: (e) => CompanionNotice.failure(
-        error: e,
-        onRetry: () {
-          gateway.reconnect();
-          ref.invalidate(companionTranscriptProvider(sessionId));
-        },
-      ),
-      data: (messages) => CompanionTranscriptView(
-        messages: messages,
-        // Two nothings the phone cannot tell apart: an agent that keeps no
-        // readable transcript, and a session that has not spoken yet.
-        emptyHint:
-            'No transcript to show. Some agents keep none we can read — '
-            'their terminal is the session — and a session that has just '
-            'started has nothing in it yet.',
-        // Starter prompts are onboarding, which is only true of a session that
-        // has not started — and never of a phone that may not send one.
-        onSuggestionTap:
-            canPrompt && session?.status != CompanionSessionStatus.working
-            ? (prompt) {
-                _composer.text = prompt;
-                _composer.selection = TextSelection.collapsed(
-                  offset: prompt.length,
-                );
-              }
-            : null,
-        footer: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Above the composer, because nothing typed is read until the
-            // prompt is answered.
-            if (!sessionGone && approval != null && !imported)
-              CompanionApprovalCard(
-                approval: approval,
-                canAnswer: canApprove,
-                onAnswer: (decision) =>
-                    gateway.answerApproval(sessionId, approval.id, decision),
-              ),
-            // Directly above the composer, as the desktop puts it: the
-            // transcript's tail could only answer "what now" by not moving.
-            if (!sessionGone && !imported)
-              CompanionActivityStrip(sessionId: sessionId),
-            if (resumeOffer)
-              _ResumePanel(
-                busy: _resuming,
-                failure: _resumeFailure,
-                enabled: gateway.capabilities.has(Capability.startSession) &&
-                    link == CompanionLinkState.connected,
-                disabledLabel: !gateway.capabilities.has(Capability.startSession)
-                    ? 'Resume permission not granted'
-                    : 'Connect to resume',
-                onResume: () => _resume(sessionId),
-              ),
-          ],
-        ),
-        composer: sessionGone || imported
-            ? null
-            : CompanionComposer(
-                controller: _composer,
-                enabled: canPrompt && !imported,
-                hintText: canPrompt
-                    ? 'Send a message…'
-                    : 'This phone was not granted prompt rights.',
-                // Straight off the row, so the picker appears only where the
-                // host has said what it would take.
-                attachments: canAttach ? session?.attachments : null,
-                newRequestId: _newRequestId,
-                onSend: (text, {attachment, onProgress, requestId}) async {
-                  final delivery = await gateway.sendPrompt(
-                    sessionId,
-                    text,
-                    attachment: attachment,
-                    onProgress: onProgress,
-                    requestId: requestId,
-                  );
-                  if (delivery == RemotePromptDelivery.offered &&
-                      context.mounted) {
-                    // The file lands in the desktop's message box, so this must
-                    // not read as though the agent already had it.
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Waiting in the desktop\'s message box — send it '
-                          'from there.',
-                        ),
-                      ),
-                    );
-                  }
-                },
-              ),
-      ),
-    );
+          );
 
     return Scaffold(
       appBar: companionAppBar(
@@ -246,50 +251,20 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
             // Everything below is content and keeps a phone's measure past the
             // compact breakpoint (CLAUDE.md §6). The status line gives way to
             // the composer when the keyboard leaves too little height for both.
-            if (!keyboardSqueezed) ...[
+            if (!companionKeyboardSqueezed(context)) ...[
               CompanionReadable(
-                child: Padding(
-                  // What only this session can answer: its status, and where it
-                  // is.
-                  padding: EdgeInsets.symmetric(
-                    horizontal: density.padX,
-                    vertical: density.isTouch ? Insets.sm : Insets.xs,
-                  ),
-                  child: Row(
-                    children: [
-                      if (session != null)
-                        CompanionStatusBadge(
-                          status: session.status,
-                          showLabel: true,
-                        ),
-                      const SizedBox(width: Insets.sm),
-                      Expanded(
-                        child: Text(
-                          [
-                            if (session?.agentLabel != null)
-                              session!.agentLabel,
-                            if (session?.whereabouts != null)
-                              session!.whereabouts!,
-                            if (session?.deliveryStage != null)
-                              SessionViewScreen._stageLabel(
-                                session!.deliveryStage!,
-                              ),
-                          ].join('  ·  '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                          style: density.muted(theme),
-                        ),
-                      ),
-                    ],
-                  ),
+                child: SessionStatusStrip(
+                  status: session?.status,
+                  agentLabel: session?.agentLabel,
+                  whereabouts: session?.whereabouts,
+                  stageLabel: switch (session?.deliveryStage) {
+                    final stage? => SessionViewScreen._stageLabel(stage),
+                    null => null,
+                  },
                 ),
               ),
               const CompanionReadable(child: Divider(height: 1)),
             ],
-            // NOT `AsyncValue.when`: a provider being retried is
-            // `AsyncLoading` *carrying* its error, so `when` takes the loading
-            // branch and this screen spins for ever.
             Expanded(child: CompanionReadable(child: pane)),
           ],
         ),
@@ -328,6 +303,101 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     } finally {
       if (mounted) setState(() => _resuming = false);
     }
+  }
+}
+
+/// What only this session can answer, above its transcript: its status, and
+/// the agent, where it is open and its delivery stage in one muted line.
+class SessionStatusStrip extends StatelessWidget {
+  const SessionStatusStrip({
+    this.status,
+    this.agentLabel,
+    this.whereabouts,
+    this.stageLabel,
+    super.key,
+  });
+
+  /// Null while the session list is still arriving: no badge, not a guess.
+  final CompanionSessionStatus? status;
+  final String? agentLabel;
+  final String? whereabouts;
+  final String? stageLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final density = UiDensity.of(context);
+    final status = this.status;
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: density.padX,
+        vertical: density.isTouch ? Insets.sm : Insets.xs,
+      ),
+      child: Row(
+        children: [
+          if (status != null)
+            CompanionStatusBadge(status: status, showLabel: true),
+          const SizedBox(width: Insets.sm),
+          Expanded(
+            child: Text(
+              [?agentLabel, ?whereabouts, ?stageLabel].join('  ·  '),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: density.muted(Theme.of(context)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Between the transcript and the composer: the pending approval, what the
+/// session is running, and the offer to resume it — in that order.
+class SessionFooter extends StatelessWidget {
+  const SessionFooter({
+    required this.sessionId,
+    required this.onAnswer,
+    this.approval,
+    this.canApprove = false,
+    this.showActivity = true,
+    this.resume,
+    super.key,
+  });
+
+  final String sessionId;
+
+  /// Drawn above everything else, because nothing typed is read until the
+  /// prompt is answered.
+  final CompanionApproval? approval;
+
+  /// Whether this phone holds the `approve` capability.
+  final bool canApprove;
+  final Future<void> Function(CompanionApprovalDecision decision) onAnswer;
+
+  /// The activity strip, directly above the composer as the desktop puts it.
+  final bool showActivity;
+
+  /// The resume panel, when the session offers one.
+  final Widget? resume;
+
+  @override
+  Widget build(BuildContext context) {
+    final approval = this.approval;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (approval != null)
+          CompanionApprovalCard(
+            approval: approval,
+            canAnswer: canApprove,
+            onAnswer: onAnswer,
+          ),
+        if (showActivity) CompanionActivityStrip(sessionId: sessionId),
+        ?resume,
+      ],
+    );
   }
 }
 
