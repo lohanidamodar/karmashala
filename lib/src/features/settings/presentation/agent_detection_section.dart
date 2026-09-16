@@ -51,15 +51,23 @@ class AgentDetectionSection extends ConsumerWidget {
                   : state.report!.summary,
               style: theme.textTheme.bodySmall,
             ),
-          ?_details(context, state.report),
+          if (state.report case final report?
+              when report.environments.isNotEmpty)
+            _DetectionBreakdown(report: report),
         ],
       ),
     );
   }
+}
 
-  /// The per-environment breakdown, shown only once there is one to show.
-  Widget? _details(BuildContext context, AgentDiscoveryReport? report) {
-    if (report == null || report.environments.isEmpty) return null;
+/// The per-environment breakdown, shown only once there is one to show.
+class _DetectionBreakdown extends StatelessWidget {
+  const _DetectionBreakdown({required this.report});
+
+  final AgentDiscoveryReport report;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: Insets.sm),
