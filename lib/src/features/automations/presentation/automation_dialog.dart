@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/discovery.dart';
@@ -126,8 +127,9 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
     final descriptor = selected == null ? null : registry.byId(selected.agentId);
 
     return AlertDialog(
-      title: Text(
-        widget.existing == null
+      title: DesktopDialogTitle(
+        icon: AppIcons.robot,
+        title: widget.existing == null
             ? 'Arm an automation in ${repository.name}'
             : 'Edit "${widget.existing!.name}"',
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/automations/application/automation_undo.dart';
@@ -51,6 +52,7 @@ void main() {
       ),
       warmUp: (tester) async {
         expect(find.textContaining('and 82 more'), findsOneWidget);
+        expect(find.byType(DesktopDialogTitle), findsOneWidget);
       },
     );
   });
@@ -88,6 +90,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('Add a check'));
         await tester.pumpAndSettle();
+        expect(find.byType(DesktopDialogTitle), findsOneWidget);
         await tester.enterText(
           find.byType(TextField).last,
           [

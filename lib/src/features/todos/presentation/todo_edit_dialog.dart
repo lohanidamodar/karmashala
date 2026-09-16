@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/todos_providers.dart';
 import '../domain/todo.dart';
@@ -98,7 +99,10 @@ class _TodoEditDialogState extends ConsumerState<TodoEditDialog> {
     final theme = Theme.of(context);
     final joined = widget.joinedLines;
     return AlertDialog(
-      title: const Text('New todo'),
+      title: const DesktopDialogTitle(
+        icon: AppIcons.listChecks,
+        title: 'New todo',
+      ),
       content: BoundedDialogContent(
         width: DialogWidth.wide,
         child: Column(

@@ -101,6 +101,27 @@ void main() {
     );
   });
 
+  testWidgets('both dialogs wear the house title, with a way out', (
+    tester,
+  ) async {
+    await openEditor(tester);
+    expect(
+      tester.widget<DesktopDialogTitle>(find.byType(DesktopDialogTitle)).title,
+      'New command snippet',
+    );
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SnippetEditorDialog), findsNothing);
+
+    await tester.pumpWidget(host((_) => const SnippetLibraryDialog()));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<DesktopDialogTitle>(find.byType(DesktopDialogTitle)).title,
+      'Command snippets',
+    );
+  });
+
   testWidgets('the shell picker offers only shells this machine has', (
     tester,
   ) async {

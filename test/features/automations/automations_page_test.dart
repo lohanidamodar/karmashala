@@ -143,6 +143,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(
+      tester.widget<DesktopDialogTitle>(find.byType(DesktopDialogTitle)).title,
+      'Edit "Nightly sweep"',
+    );
+
     // The mode dropdown, not the agent one above it.
     await tester.tap(find.byType(DropdownButtonFormField<String>).last);
     await tester.pumpAndSettle();

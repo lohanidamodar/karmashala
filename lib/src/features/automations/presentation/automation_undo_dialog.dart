@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../checkpoints/application/checkpoint_service.dart';
 import '../application/automation_undo.dart';
@@ -53,7 +54,10 @@ class _AutomationUndoDialogState extends ConsumerState<AutomationUndoDialog> {
     final refusal = commits == null ? null : undoCommitsRefusal(commits);
 
     return AlertDialog(
-      title: const Text('Undo this run'),
+      title: const DesktopDialogTitle(
+        icon: AppIcons.arrowCounterClockwise,
+        title: 'Undo this run',
+      ),
       content: BoundedDialogContent(
         width: DialogWidth.regular,
         child: Column(

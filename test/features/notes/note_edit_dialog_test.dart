@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -12,6 +13,30 @@ import '../../support/fixtures.dart';
 import '../../support/window_matrix.dart';
 
 void main() {
+  testWidgets('a note being written is titled as new, in the house title', (
+    tester,
+  ) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    final at = DateTime.utc(2026, 9, 16);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [databaseProvider.overrideWithValue(db)],
+        child: MaterialApp(
+          home: NoteEditDialog(
+            note: Note(id: '', body: '', createdAt: at, updatedAt: at),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<DesktopDialogTitle>(find.byType(DesktopDialogTitle)).title,
+      'New note',
+    );
+  });
+
   testWidgets('a long note keeps the whole field inside the window', (
     tester,
   ) async {

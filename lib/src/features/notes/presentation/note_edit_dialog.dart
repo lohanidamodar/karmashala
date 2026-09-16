@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../todos/presentation/project_menu.dart';
@@ -133,7 +134,10 @@ class _NoteEditDialogState extends ConsumerState<NoteEditDialog> {
       // A note being written for the first time has no id yet. Saying "Edit
       // note" over an empty box is the kind of small lie that makes somebody
       // wonder whether they are in the right place.
-      title: Text(widget.note.id.isEmpty ? 'New note' : 'Edit note'),
+      title: DesktopDialogTitle(
+        icon: AppIcons.note,
+        title: widget.note.id.isEmpty ? 'New note' : 'Edit note',
+      ),
       content: BoundedDialogContent(
         width: DialogWidth.wide,
         child: Column(

@@ -212,7 +212,10 @@ class _AddCheckDialogState extends State<_AddCheckDialog> {
         projectCheckNameRefusal(_name.text) ??
         projectCheckCommandRefusal(command);
     return AlertDialog(
-      title: Text('A check for ${widget.checkoutName}'),
+      title: DesktopDialogTitle(
+        icon: AppIcons.listChecks,
+        title: 'A check for ${widget.checkoutName}',
+      ),
       content: BoundedDialogContent(
         width: DialogWidth.narrow,
         child: Column(

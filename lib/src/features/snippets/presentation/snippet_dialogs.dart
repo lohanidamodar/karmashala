@@ -109,8 +109,9 @@ class _SnippetEditorDialogState extends ConsumerState<SnippetEditorDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: Text(
-        widget.existing == null ? 'New command snippet' : 'Edit snippet',
+      title: DesktopDialogTitle(
+        icon: AppIcons.bookBookmark,
+        title: widget.existing == null ? 'New command snippet' : 'Edit snippet',
       ),
       content: BoundedDialogContent(
         width: DialogWidth.regular,
@@ -279,7 +280,10 @@ class SnippetLibraryDialog extends ConsumerWidget {
     final theme = Theme.of(context);
     final snippets = ref.watch(commandSnippetsProvider);
     return AlertDialog(
-      title: const Text('Command snippets'),
+      title: const DesktopDialogTitle(
+        icon: AppIcons.bookBookmark,
+        title: 'Command snippets',
+      ),
       contentPadding: const EdgeInsets.symmetric(vertical: Insets.sm),
       content: SizedBox(
         width: DialogWidth.regular,
