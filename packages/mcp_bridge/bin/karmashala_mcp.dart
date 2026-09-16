@@ -219,7 +219,7 @@ class _Bridge {
       // than failing on a cast.
       throw StateError(
         'Karmashala is running but its agent tools are switched off: the '
-        'owner-only channel could not be secured. Open Settings → MCP Bridge '
+        'owner-only channel could not be secured. Open Settings → Tools → MCP bridge '
         'for the reason.',
       );
     }
