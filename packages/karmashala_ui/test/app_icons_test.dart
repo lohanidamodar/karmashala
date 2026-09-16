@@ -9,6 +9,7 @@ void main() {
     'house': (AppIcons.house, 0xe2c2),
     'record': (AppIcons.record, 0xe3ee),
     'fileVideo': (AppIcons.fileVideo, 0xea22),
+    'dotsThree': (AppIcons.dotsThree, 0xe1fe),
   };
 
   expected.forEach((name, entry) {
@@ -22,5 +23,9 @@ void main() {
 
   test('record is its own glyph, not the plain circle', () {
     expect(AppIcons.record, isNot(AppIcons.circle));
+  });
+
+  test('dotsThree is the horizontal glyph, not the vertical one', () {
+    expect(AppIcons.dotsThree, isNot(AppIcons.dotsThreeVertical));
   });
 }

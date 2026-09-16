@@ -609,4 +609,13 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// A horizontal "more": an overflow in a row, where [dotsThreeVertical]
+  /// would read as a row's own menu.
+  static const IconData dotsThree = IconData(
+    0xe1fe,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }
