@@ -91,7 +91,6 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final settings = ref.watch(settingsControllerProvider);
     final prefs = ref.watch(relayPrefsProvider);
     final devices = ref.watch(pairedDevicesProvider);
@@ -117,110 +116,174 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
           ),
           if (settings.remoteAccessEnabled) ...[
             const SizedBox(height: Insets.sm),
-            // Two independent relays: any combination is legal, and a phone
-            // is served on whichever one it was paired through.
-            SettingsSwitchRow(
-              label: 'Local relay (this computer)',
-              help:
-                  'Runs on this computer for phones on the same network. No '
-                  'server of your own, nothing leaves the house.',
-              value: prefs.localEnabled,
-              onChanged: _setLocalEnabled,
+            _RelaySwitches(
+              prefs: prefs,
+              port: _port,
+              relay: _relay,
+              onLocalChanged: _setLocalEnabled,
+              onHostedChanged: _setHostedEnabled,
+              onPortDone: _applyPort,
+              onRelayEdited: _saveRelay,
+              onRelayDone: _applyRelay,
             ),
-            if (prefs.localEnabled) ...[
-              const _LocalRelayStatusRow(),
-              const SizedBox(height: Insets.sm),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 120,
-                    child: TextField(
-                      controller: _port,
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        labelText: 'Port',
-                      ),
-                      onSubmitted: (_) => _applyPort(),
-                      onEditingComplete: _applyPort,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            const SizedBox(height: Insets.sm),
-            SettingsSwitchRow(
-              label: 'Hosted relay (internet)',
-              help:
-                  'Reaches a phone anywhere. The relay only forwards sealed '
-                  'frames — it can read nothing.',
-              value: prefs.hostedEnabled,
-              onChanged: _setHostedEnabled,
-            ),
-            if (prefs.hostedEnabled)
-              TextField(
-                controller: _relay,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  labelText: 'Relay URL',
-                  hintText: kDefaultRelayUrl,
-                  helperText:
-                      'Leave empty for the PopupBits relay, or point it at '
-                      'your own.',
-                ),
-                onChanged: _saveRelay,
-                onSubmitted: (_) => _applyRelay(),
-                onEditingComplete: _applyRelay,
-              ),
-            if (!prefs.anyEnabled)
-              Padding(
-                padding: const EdgeInsets.only(top: Insets.xs),
-                child: SettingsNotice(
-                  tone: SettingsNoticeTone.danger,
-                  message:
-                      'No relay is switched on, so remote access is idle: '
-                      'paired phones can only reach this computer over the '
-                      'local network, and no new device can be paired.',
-                ),
-              ),
             const SizedBox(height: Insets.md),
-            // A Wrap, not a Row with a Spacer: at the narrowest two-column
-            // window with bigger text the button goes under the label.
-            Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: Insets.sm,
-              runSpacing: Insets.xs,
-              children: [
-                Text('Paired devices', style: theme.textTheme.labelMedium),
-                FilledButton.icon(
-                  onPressed: () => PairingDialog.show(context),
-                  icon: const Icon(AppIcons.deviceMobile, size: Chrome.icon),
-                  label: const Text('Pair a device'),
-                ),
-              ],
+            _PairedDevicesList(
+              devices: devices,
+              parkedOf: (device) => device.pairedViaLocalRelay
+                  ? !localLive
+                  : !prefs.hostedEnabled,
             ),
-            const SizedBox(height: Insets.xs),
-            if (devices.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: Insets.sm),
-                child: Text(
-                  'No paired devices yet.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              )
-            else
-              for (final device in devices)
-                _DeviceRow(
-                  device: device,
-                  parked: device.pairedViaLocalRelay
-                      ? !localLive
-                      : !prefs.hostedEnabled,
-                ),
           ],
         ],
       ),
+    );
+  }
+}
+
+/// The two independent relays: any combination is legal, and a phone is
+/// served on whichever one it was paired through.
+class _RelaySwitches extends StatelessWidget {
+  const _RelaySwitches({
+    required this.prefs,
+    required this.port,
+    required this.relay,
+    required this.onLocalChanged,
+    required this.onHostedChanged,
+    required this.onPortDone,
+    required this.onRelayEdited,
+    required this.onRelayDone,
+  });
+
+  final RelayPrefs prefs;
+  final TextEditingController port;
+  final TextEditingController relay;
+  final ValueChanged<bool> onLocalChanged;
+  final ValueChanged<bool> onHostedChanged;
+  final VoidCallback onPortDone;
+  final ValueChanged<String> onRelayEdited;
+  final VoidCallback onRelayDone;
+
+  /// A port is five digits; the field need not be wider.
+  static const portFieldWidth = 120.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SettingsSwitchRow(
+          label: 'Local relay (this computer)',
+          help:
+              'Runs on this computer for phones on the same network. No '
+              'server of your own, nothing leaves the house.',
+          value: prefs.localEnabled,
+          onChanged: onLocalChanged,
+        ),
+        if (prefs.localEnabled) ...[
+          const _LocalRelayStatusRow(),
+          const SizedBox(height: Insets.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: portFieldWidth,
+              child: TextField(
+                controller: port,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  labelText: 'Port',
+                ),
+                onSubmitted: (_) => onPortDone(),
+                onEditingComplete: onPortDone,
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: Insets.sm),
+        SettingsSwitchRow(
+          label: 'Hosted relay (internet)',
+          help:
+              'Reaches a phone anywhere. The relay only forwards sealed '
+              'frames — it can read nothing.',
+          value: prefs.hostedEnabled,
+          onChanged: onHostedChanged,
+        ),
+        if (prefs.hostedEnabled)
+          TextField(
+            controller: relay,
+            decoration: const InputDecoration(
+              isDense: true,
+              labelText: 'Relay URL',
+              hintText: kDefaultRelayUrl,
+              helperText:
+                  'Leave empty for the PopupBits relay, or point it at '
+                  'your own.',
+            ),
+            onChanged: onRelayEdited,
+            onSubmitted: (_) => onRelayDone(),
+            onEditingComplete: onRelayDone,
+          ),
+        if (!prefs.anyEnabled)
+          const Padding(
+            padding: EdgeInsets.only(top: Insets.xs),
+            child: SettingsNotice(
+              tone: SettingsNoticeTone.danger,
+              message:
+                  'No relay is switched on, so remote access is idle: '
+                  'paired phones can only reach this computer over the '
+                  'local network, and no new device can be paired.',
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The paired devices under their heading, with the way to pair another.
+class _PairedDevicesList extends StatelessWidget {
+  const _PairedDevicesList({required this.devices, required this.parkedOf});
+
+  final List<PairedDevice> devices;
+
+  /// Whether the relay [device] was paired through is switched off.
+  final bool Function(PairedDevice device) parkedOf;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // A Wrap, not a Row with a Spacer: at the narrowest two-column
+        // window with bigger text the button goes under the label.
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: Insets.sm,
+          runSpacing: Insets.xs,
+          children: [
+            Text('Paired devices', style: theme.textTheme.labelMedium),
+            FilledButton.icon(
+              onPressed: () => PairingDialog.show(context),
+              icon: const Icon(AppIcons.deviceMobile, size: Chrome.icon),
+              label: const Text('Pair a device'),
+            ),
+          ],
+        ),
+        const SizedBox(height: Insets.xs),
+        if (devices.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+            child: Text(
+              'No paired devices yet.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          )
+        else
+          for (final device in devices)
+            _DeviceRow(device: device, parked: parkedOf(device)),
+      ],
     );
   }
 }
