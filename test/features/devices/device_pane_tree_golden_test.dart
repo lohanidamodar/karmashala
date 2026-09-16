@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/devices/application/device_bindings.dart
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/media/video_support_provider.dart';
 import 'package:karmashala_media/media.dart';
 import 'package:karmashala_devices/providers.dart';
@@ -14,6 +15,7 @@ import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_devices/pane.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fakes.dart';
 
 /// The pane's rendered widget tree, frozen for its main states.
 ///
@@ -116,6 +118,12 @@ Future<void> _pump(
         // The app's half of `karmashala_devices`: its clock, its runner
         // factory, its settings and its shell, behind the package's ports.
         ...deviceBindings,
+        // Pinned 42 s after the recording case's start: a running recording
+        // prints its elapsed time, and a wall clock would make that a new
+        // golden every second.
+        clockProvider.overrideWithValue(
+          FixedClock(DateTime.utc(2026, 9, 8, 14, 3, 49)),
+        ),
         // Nothing here may reach a real process: the pane's controls resolve a
         // runner as soon as a ready device exists.
         commandRunnerFactoryProvider.overrideWithValue(
