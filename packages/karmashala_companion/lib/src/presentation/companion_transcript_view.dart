@@ -5,6 +5,22 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'package:karmashala_remote/companion.dart';
 
+/// The reasoning some agents wrap their turn in: `<thinking>` or `<thought>`,
+/// as the desktop transcript folds them.
+final _thinkingTag = RegExp(
+  r'<(?:thinking|thought)>([\s\S]*?)</(?:thinking|thought)>',
+);
+
+/// The reasoning inside the first tag, and the turn with that tag removed.
+(String?, String) _splitThinking(String text) {
+  final match = _thinkingTag.firstMatch(text);
+  if (match == null) return (null, text);
+  final thinking = match.group(1)?.trim();
+  final clean = (text.substring(0, match.start) + text.substring(match.end))
+      .trim();
+  return (thinking, clean);
+}
+
 /// The phone's transcript, drawn newest-first: reversed, so offset zero *is*
 /// the newest message rather than a lazy list's estimated `maxScrollExtent`.
 class CompanionTranscriptView extends StatefulWidget {
@@ -413,16 +429,7 @@ class _MessageTile extends StatelessWidget {
       );
     }
 
-    final text = message.text;
-    final thinkingMatch = RegExp(
-      r'<thinking>([\s\S]*?)</thinking>',
-    ).firstMatch(text);
-    final String? thinking = thinkingMatch?.group(1)?.trim();
-    final String cleanText = thinkingMatch != null
-        ? (text.substring(0, thinkingMatch.start) +
-                  text.substring(thinkingMatch.end))
-              .trim()
-        : text;
+    final (thinking, cleanText) = _splitThinking(message.text);
 
     return tile(
       child: Column(
