@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala/src/features/env_secrets/presentation/settings_item_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -198,6 +199,8 @@ void main() {
     await pumpPage(tester);
     expect(find.textContaining('Verification is off for app'), findsOneWidget);
     expect(find.textContaining('at least one project check'), findsOneWidget);
+    // The card the environment-variable and snippet pages draw, not its own.
+    expect(find.byType(SettingsItemCard), findsOneWidget);
     expect(
       find.ancestor(
         of: find.textContaining('Verification is off for app'),

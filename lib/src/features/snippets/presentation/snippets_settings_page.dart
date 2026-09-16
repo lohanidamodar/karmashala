@@ -7,6 +7,7 @@ import 'package:karmashala_ui/menus.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/snippet_providers.dart';
 import '../domain/command_snippet.dart';
+import '../../env_secrets/presentation/settings_item_card.dart';
 import 'snippet_dialogs.dart';
 
 /// Settings → Snippets: the saved commands, somewhere a person looks for them.
@@ -94,89 +95,63 @@ class _SnippetCard extends ConsumerWidget {
       onSelected: (value) => value == 'edit'
           ? _editSnippet(context, ref, snippet)
           : _deleteSnippet(context, ref, snippet),
-      builder: (context) => Card(
-        margin: const EdgeInsets.only(bottom: Insets.sm),
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Icon(
-                      AppIcons.bookBookmark,
-                      size: Chrome.iconTitle,
-                      color: theme.colorScheme.tertiary,
-                    ),
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    child: Text(
-                      snippet.label,
-                      style: theme.textTheme.titleSmall,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: Insets.xs),
-              Text(
-                snippet.command,
-                style: MonoStyles.body,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: Insets.xs),
-              // Said in words rather than left to a badge: this page has the room
-              // the palette row does not, and "runs" is the one property of a
-              // snippet worth reading before you pick it.
-              Text(
-                snippet.submit
-                    ? '${shellTagLabel(snippet.shellId)} · runs as soon as it is '
-                          'picked'
-                    : '${shellTagLabel(snippet.shellId)} · typed at the prompt',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-              // A tag from a build that knew more shells than this one matches no pane at
-              // all, by design; nothing else in the app can say so.
-              if (snippet.hasUnknownShell)
-                Padding(
-                  padding: const EdgeInsets.only(top: Insets.xs),
-                  child: Text(
-                    'This build does not know the shell "${snippet.shellId}", so '
-                    'this snippet is offered in no terminal. Edit it to pick one.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: Insets.sm),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: () => _editSnippet(context, ref, snippet),
-                    icon: const Icon(AppIcons.pencilSimple),
-                    label: const Text('Edit'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _deleteSnippet(context, ref, snippet),
-                    icon: const Icon(AppIcons.trash),
-                    label: const Text('Delete'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: theme.colorScheme.error,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+      builder: (context) => SettingsItemCard(
+        icon: AppIcons.bookBookmark,
+        title: Text(
+          snippet.label,
+          style: theme.textTheme.titleSmall,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
+        details: [
+          Text(
+            snippet.command,
+            style: MonoStyles.body,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: Insets.xs),
+          // Said in words rather than left to a badge: this page has the room
+          // the palette row does not, and "runs" is the one property of a
+          // snippet worth reading before you pick it.
+          Text(
+            snippet.submit
+                ? '${shellTagLabel(snippet.shellId)} · runs as soon as it is '
+                      'picked'
+                : '${shellTagLabel(snippet.shellId)} · typed at the prompt',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          // A tag from a build that knew more shells than this one matches no
+          // pane at all, by design; nothing else in the app can say so.
+          if (snippet.hasUnknownShell)
+            Padding(
+              padding: const EdgeInsets.only(top: Insets.xs),
+              child: Text(
+                'This build does not know the shell "${snippet.shellId}", so '
+                'this snippet is offered in no terminal. Edit it to pick one.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ),
+        ],
+        actions: [
+          TextButton.icon(
+            onPressed: () => _editSnippet(context, ref, snippet),
+            icon: const Icon(AppIcons.pencilSimple),
+            label: const Text('Edit'),
+          ),
+          TextButton.icon(
+            onPressed: () => _deleteSnippet(context, ref, snippet),
+            icon: const Icon(AppIcons.trash),
+            label: const Text('Delete'),
+            style: TextButton.styleFrom(
+              foregroundColor: theme.colorScheme.error,
+            ),
+          ),
+        ],
       ),
     );
   }

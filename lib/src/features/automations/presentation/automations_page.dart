@@ -20,6 +20,7 @@ import '../domain/automation.dart';
 import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 import '../domain/cron_schedule.dart';
+import '../../env_secrets/presentation/settings_item_card.dart';
 import 'automation_dialog.dart';
 import 'automation_undo_dialog.dart';
 import 'project_checks_section.dart';
@@ -154,83 +155,68 @@ class AutomationCard extends ConsumerWidget {
         ? 'an agent that is no longer installed'
         : ref.watch(agentRegistryProvider).displayNameFor(installation.agentId);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: Insets.sm),
-      padding: const EdgeInsets.all(Insets.md),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(Radii.md),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return SettingsItemCard(
+      title: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: Insets.sm,
         children: [
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: Insets.sm,
-            children: [
-              Text(automation.name, style: theme.textTheme.bodyMedium),
-              if (!automation.enabled)
-                Text('Paused', style: theme.textTheme.bodySmall),
-              Text(
-                _environmentLabel(environment?.kind, environment?.name),
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-          ),
+          Text(automation.name, style: theme.textTheme.bodyMedium),
+          if (!automation.enabled)
+            Text('Paused', style: theme.textTheme.bodySmall),
           Text(
-            repository?.name ?? 'a checkout that is no longer here',
+            _environmentLabel(environment?.kind, environment?.name),
             style: theme.textTheme.bodySmall,
-            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: Insets.sm),
-          _Line(label: 'Runs', value: describeSchedule(automation, now: now)),
-          _Line(label: 'Agent', value: agentName),
-          _Line(label: 'Prompt', value: automation.prompt),
-          if (refusal != null) ...[
-            const SizedBox(height: Insets.sm),
-            // The gate's own words; not dismissable, since it still refuses.
-            DesktopErrorBanner(refusal.reason),
-          ],
-          const SizedBox(height: Insets.xs),
-          Wrap(
-            spacing: Insets.xs,
-            children: [
-              TextButton(
-                onPressed: () => ref
-                    .read(automationControllerProvider)
-                    .setEnabled(
-                      automation.id,
-                      enabled: !automation.enabled,
-                    ),
-                child: Text(automation.enabled ? 'Pause' : 'Resume'),
-              ),
-              TextButton(
-                onPressed: () => AutomationDialog.show(
-                  context,
-                  repository: repository,
-                  existing: automation,
-                ),
-                child: const Text('Edit'),
-              ),
-              TextButton(
-                onPressed: () => _confirmDelete(context, ref, automation),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-          if (runs.isEmpty)
-            Text(
-              'It has not run yet.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
-            )
-          else
-            for (final run in runs.take(6))
-              _RunLine(key: ValueKey(run.id), run: run, now: now),
         ],
       ),
+      details: [
+        Text(
+          repository?.name ?? 'a checkout that is no longer here',
+          style: theme.textTheme.bodySmall,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: Insets.sm),
+        _Line(label: 'Runs', value: describeSchedule(automation, now: now)),
+        _Line(label: 'Agent', value: agentName),
+        _Line(label: 'Prompt', value: automation.prompt),
+        if (refusal != null) ...[
+          const SizedBox(height: Insets.sm),
+          // The gate's own words; not dismissable, since it still refuses.
+          DesktopErrorBanner(refusal.reason),
+        ],
+      ],
+      actions: [
+        TextButton(
+          onPressed: () => ref
+              .read(automationControllerProvider)
+              .setEnabled(automation.id, enabled: !automation.enabled),
+          child: Text(automation.enabled ? 'Pause' : 'Resume'),
+        ),
+        TextButton(
+          onPressed: () => AutomationDialog.show(
+            context,
+            repository: repository,
+            existing: automation,
+          ),
+          child: const Text('Edit'),
+        ),
+        TextButton(
+          onPressed: () => _confirmDelete(context, ref, automation),
+          child: const Text('Delete'),
+        ),
+      ],
+      footer: [
+        if (runs.isEmpty)
+          Text(
+            'It has not run yet.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          )
+        else
+          for (final run in runs.take(6))
+            _RunLine(key: ValueKey(run.id), run: run, now: now),
+      ],
     );
   }
 }

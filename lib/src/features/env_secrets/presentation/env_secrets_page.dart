@@ -10,6 +10,7 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/env_secrets_controller.dart';
 import '../domain/env_variable.dart';
 import 'env_variable_dialog.dart';
+import 'settings_item_card.dart';
 
 /// The environment-variables settings page. The honesty copy is the first
 /// thing on it: "an agent can print these" must be met before the first token.
@@ -245,77 +246,55 @@ class _VariableCard extends ConsumerWidget {
             .setVariableEnabled(variable.id, !variable.enabled),
         _ => _remove(context, ref),
       },
-      builder: (context) => Card(
-        margin: const EdgeInsets.only(bottom: Insets.sm),
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.md),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    variable.secret ? AppIcons.warningCircle : AppIcons.code,
-                    size: Chrome.iconTitle,
-                    color: scheme.tertiary,
-                  ),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    child: Text(variable.name, style: MonoStyles.label),
-                  ),
-                  Switch(
-                    value: variable.enabled,
-                    onChanged: (value) => ref
-                        .read(envSecretsControllerProvider.notifier)
-                        .setVariableEnabled(variable.id, value),
-                  ),
-                ],
-              ),
-              const SizedBox(height: Insets.xs),
-              // The whole write-only rule, in one widget: a secret shows that it
-              // is set and when, and never what it is.
-              variable.secret
-                  ? Text(
-                      'Hidden — set, and not shown again.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    )
-                  : Text(
-                      variable.value,
-                      style: MonoStyles.body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-              const SizedBox(height: Insets.xs),
-              Text(
-                variable.enabled
-                    ? 'Updated ${_date(variable.updatedAt)}'
-                    : 'Off — kept, but not loaded into terminals.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: Insets.sm),
-              Row(
-                children: [
-                  TextButton.icon(
-                    onPressed: () =>
-                        EnvVariableDialog.show(context, existing: variable),
-                    icon: const Icon(AppIcons.pencilSimple),
-                    label: Text(variable.secret ? 'Replace' : 'Edit'),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _remove(context, ref),
-                    icon: const Icon(AppIcons.trash),
-                    label: const Text('Remove'),
-                    style: TextButton.styleFrom(foregroundColor: scheme.error),
-                  ),
-                ],
-              ),
-            ],
-          ),
+      builder: (context) => SettingsItemCard(
+        icon: variable.secret ? AppIcons.warningCircle : AppIcons.code,
+        title: Text(variable.name, style: MonoStyles.label),
+        trailing: Switch(
+          value: variable.enabled,
+          onChanged: (value) => ref
+              .read(envSecretsControllerProvider.notifier)
+              .setVariableEnabled(variable.id, value),
         ),
+        details: [
+          // The whole write-only rule, in one widget: a secret shows that it
+          // is set and when, and never what it is.
+          variable.secret
+              ? Text(
+                  'Hidden — set, and not shown again.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                )
+              : Text(
+                  variable.value,
+                  style: MonoStyles.body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+          const SizedBox(height: Insets.xs),
+          Text(
+            variable.enabled
+                ? 'Updated ${_date(variable.updatedAt)}'
+                : 'Off — kept, but not loaded into terminals.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        actions: [
+          TextButton.icon(
+            onPressed: () =>
+                EnvVariableDialog.show(context, existing: variable),
+            icon: const Icon(AppIcons.pencilSimple),
+            label: Text(variable.secret ? 'Replace' : 'Edit'),
+          ),
+          TextButton.icon(
+            onPressed: () => _remove(context, ref),
+            icon: const Icon(AppIcons.trash),
+            label: const Text('Remove'),
+            style: TextButton.styleFrom(foregroundColor: scheme.error),
+          ),
+        ],
       ),
     );
   }
