@@ -23,6 +23,7 @@ import '../../pairing/pairing_payload.dart';
 import '../../protocol.dart';
 import '../../transport/key_schedule.dart';
 import '../../transport/lan_beacon.dart';
+import '../../transport/lan_transport.dart';
 import '../../transport/relay_transport.dart';
 import '../../transport/remote_transport.dart';
 import 'companion_gateway.dart';
@@ -55,12 +56,14 @@ class RemoteCompanionGateway implements CompanionGateway {
     this.linkHealGrace = const Duration(seconds: 10),
     this.pairingTimeout = const Duration(seconds: 20),
     this.lan,
+    LanDialerFn? directDialer,
     this.pushTokenSource,
     Backoff? reconnectBackoff,
     Backoff? localReconnectBackoff,
     DateTime Function()? now,
     this.onLog,
-  }) : _relayFactory = relayFactory ?? _defaultRelayFactory,
+  }) : _directDialer = directDialer ?? _defaultDirectDialer,
+       _relayFactory = relayFactory ?? _defaultRelayFactory,
        _backoff = reconnectBackoff ?? Backoff(),
        _localBackoff =
            localReconnectBackoff ??
@@ -71,6 +74,11 @@ class RemoteCompanionGateway implements CompanionGateway {
        _now = now ?? DateTime.now {
     _ready = _loadStoredPairing();
   }
+
+  /// A plain TCP dial. `host` may be a name — the transport resolves it — which
+  /// is why the direct path does not go through `DiscoveredHost`.
+  static RemoteTransport _defaultDirectDialer(String host, int port) =>
+      LanTransport(host: host, port: port)..start();
 
   static RemoteTransport _defaultRelayFactory(
     Uri relay,
@@ -114,6 +122,10 @@ class RemoteCompanionGateway implements CompanionGateway {
   final void Function(String message)? onLog;
 
   final RelayTransportFactoryFn _relayFactory;
+
+  /// How the direct path reaches a peer with an address of its own. A seam, so
+  /// a test can dial a fake instead of a socket.
+  final LanDialerFn _directDialer;
 
   /// Waits between full re-dials. Blips inside a connection are the
   /// transport's own backoff, not this one.

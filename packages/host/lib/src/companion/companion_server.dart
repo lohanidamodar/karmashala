@@ -78,6 +78,12 @@ class CompanionServer {
       send: send,
     );
 
+    // The host speaks first, and must: `CompanionClient.connect` waits for
+    // `host.status` and gives up without one. The desktop announces on the same
+    // beat — a host that only ever answered would leave every phone timing out
+    // on a link that was working perfectly.
+    await api.sendHostStatus();
+
     await for (final frame in link.frames) {
       // A frame this build cannot even decode is refused rather than dropped.
       // A phone that gets no answer cannot tell a refusal from a host that has

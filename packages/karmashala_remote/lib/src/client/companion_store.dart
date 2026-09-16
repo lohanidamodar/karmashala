@@ -44,6 +44,7 @@ class CompanionPairing {
     this.lastConnectedAt,
     List<RelayCandidate>? candidates,
     this.lanHint,
+    this.directEndpoint,
   }) : deviceKey = Uint8List.fromList(deviceKey),
        // A record always knows at least the relay it paired through, so the
        // dial order below never has to special-case an empty set.
@@ -75,6 +76,16 @@ class CompanionPairing {
   /// hint that may be stale the moment DHCP moves, nothing more.
   final String? lanHint;
 
+  /// `host:port` for a peer this phone reaches straight over TCP — a session
+  /// host on a box with its own address, which is most of them.
+  ///
+  /// Kept apart from [lanHint] because they are learned differently and mean
+  /// different things: a hint is what a host *said about itself* in
+  /// `host.status`, while this is what the person typed when they paired. A box
+  /// cannot read its own public address, so only the second one is reliable
+  /// there — and unlike a hint, this may be a name rather than a literal IP.
+  final String? directEndpoint;
+
   /// The rendezvous generation counter — the companion's copy of the one
   /// number both ends persist. Bumped after a session pairs.
   final int generation;
@@ -91,6 +102,7 @@ class CompanionPairing {
     DateTime? lastConnectedAt,
     List<RelayCandidate>? candidates,
     String? lanHint,
+    String? directEndpoint,
   }) => CompanionPairing(
     hostId: hostId,
     deviceId: deviceId,
@@ -102,6 +114,7 @@ class CompanionPairing {
     lastConnectedAt: lastConnectedAt ?? this.lastConnectedAt,
     candidates: candidates ?? this.candidates,
     lanHint: lanHint ?? this.lanHint,
+    directEndpoint: directEndpoint ?? this.directEndpoint,
   );
 
   CompanionPairing withGeneration(int next) => copyWith(generation: next);
@@ -127,6 +140,7 @@ class CompanionPairing {
       'lastConnectedAt': lastConnectedAt!.toIso8601String(),
     'relays': [for (final candidate in candidates) candidate.toJson()],
     if (lanHint != null) 'lanHint': lanHint,
+    if (directEndpoint != null) 'directEndpoint': directEndpoint,
   };
 
   static CompanionPairing fromJson(Map<String, Object?> json) {
@@ -144,6 +158,7 @@ class CompanionPairing {
     }
     final lastConnected = json['lastConnectedAt'];
     final lanHint = json['lanHint'];
+    final direct = json['directEndpoint'];
     return CompanionPairing(
       hostId: DeviceId.parse(hostId),
       deviceId: DeviceId.parse(deviceId),
@@ -160,6 +175,7 @@ class CompanionPairing {
       // skipped, and a pairing is never lost to a bad candidate.
       candidates: _candidatesFromJson(json['relays']),
       lanHint: lanHint is String && lanHint.isNotEmpty ? lanHint : null,
+      directEndpoint: direct is String && direct.isNotEmpty ? direct : null,
     );
   }
 

@@ -1,8 +1,9 @@
 part of 'remote_companion_gateway.dart';
 
-// The paths one dial tries, in order: every fresh LAN candidate, the host's
-// own LAN hint, then the relays newest-known-good first. First success wins;
-// each loser is torn down before the next is tried.
+// The paths one dial tries, in order: the peer's own address when the pairing
+// has one, every fresh LAN candidate, the host's own LAN hint, then the relays
+// newest-known-good first. First success wins; each loser is torn down before
+// the next is tried.
 
 extension _GatewayDial on RemoteCompanionGateway {
   /// The dial order: every fresh LAN candidate, the host's own LAN hint, the
@@ -10,6 +11,15 @@ extension _GatewayDial on RemoteCompanionGateway {
   /// cooling), then the configured default. First success wins and is
   /// remembered; only one dial is ever in flight. Null when nobody answered.
   Future<CompanionClient?> _dialAnyPath() async {
+    // First, and before any discovery: a session host on a box is reached at
+    // the address the person typed when they paired. It is never on the
+    // beacon — that is a LAN broadcast and the box is on the internet — and
+    // going through a relay to reach a machine with its own address would be
+    // paying a detour for nothing.
+    final direct = await _dialDirect();
+    if (direct != null) return direct;
+    if (_abandonDial) return null;
+
     final scout = lan;
     if (scout != null) {
       var triedLan = false;
@@ -73,6 +83,42 @@ extension _GatewayDial on RemoteCompanionGateway {
       seenAt: _now(),
     );
     return scout.inCooldown(candidate) ? null : candidate;
+  }
+
+  /// Dials the address this pairing was made at, if it has one.
+  ///
+  /// Not through [LanPathScout]: that speaks in `DiscoveredHost`, which needs a
+  /// literal `InternetAddress`, and a box is as often a name as an IP. This
+  /// hands the host string to the transport, which resolves it — so
+  /// `box.example.com:47820` works exactly as `203.0.113.9:47820` does.
+  ///
+  /// One attempt, no generation probing: probing forward exists for a LAN host
+  /// whose beacon is stale, and an address somebody typed is not a guess.
+  Future<CompanionClient?> _dialDirect() async {
+    final endpoint = parseLanHint(_record?.directEndpoint);
+    if (endpoint == null) return null;
+
+    final client = _newClient();
+    final transport = _directDialer(endpoint.host, endpoint.port);
+    _dialled = transport;
+    _ownedTransport = transport;
+    try {
+      await client.connect(
+        transport: transport,
+        generation: client.pairing.generation,
+        helloTimeout: kLanAttemptTimeout,
+      );
+      _lastPathWasLocal = true;
+      _linkPath.value = CompanionLinkPath.lan;
+      onLog?.call('connected straight to ${endpoint.host}:${endpoint.port}');
+      return client;
+    } on Object catch (error) {
+      // Named, then the other paths are tried: a box that is asleep or behind a
+      // firewall somebody has changed is exactly when a relay earns its keep.
+      onLog?.call('direct attempt to ${endpoint.host}:${endpoint.port} failed: $error');
+      await _teardownClient();
+      return null;
+    }
   }
 
   /// One LAN candidate, walked across the generation window: the counters
