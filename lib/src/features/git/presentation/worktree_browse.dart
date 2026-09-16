@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../application/changes_providers.dart';
@@ -124,37 +125,17 @@ class WorktreeBrowseNotice extends ConsumerWidget {
       return const SizedBox.shrink();
     }
 
-    final theme = Theme.of(context);
-    final attention = SemanticColors.of(context).attention;
     final home = ref.watch(selectedCheckoutPathProvider);
     final fallback = home == null
         ? 'the checkout'
         : lastPathSegment(home.path);
 
-    return Container(
-      color: theme.colorScheme.surfaceContainerLow,
-      padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.xs, 2, Insets.xs),
-      child: Row(
-        children: [
-          Icon(AppIcons.warning, size: Chrome.iconSmall, color: attention),
-          const SizedBox(width: Insets.xs),
-          Expanded(
-            child: Text(
-              '${browsed.label} is gone. Reading $fallback instead.',
-              style: theme.textTheme.labelSmall?.copyWith(color: attention),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Stop reading the removed worktree',
-            iconSize: Chrome.iconAction,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-            padding: EdgeInsets.zero,
-            icon: const Icon(AppIcons.x),
-            onPressed: () => ref.read(worktreeBrowsingProvider.notifier).stop(),
-          ),
-        ],
-      ),
+    return PaneNoticeBar(
+      icon: AppIcons.warning,
+      tone: NoticeTone.attention,
+      message: '${browsed.label} is gone. Reading $fallback instead.',
+      dismissTooltip: 'Stop reading the removed worktree',
+      onDismiss: () => ref.read(worktreeBrowsingProvider.notifier).stop(),
     );
   }
 }

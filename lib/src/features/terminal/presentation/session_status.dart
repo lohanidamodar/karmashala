@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../application/terminal_sessions_controller.dart';
@@ -31,7 +32,6 @@ class PaneStatusBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final restored = liveness == PaneLiveness.restored;
     final label = restored
         ? 'Restored history — nothing is running here'
@@ -42,39 +42,17 @@ class PaneStatusBar extends StatelessWidget {
     return Semantics(
       container: true,
       label: '$label. $action this session.',
-      child: Material(
-        color: theme.colorScheme.surfaceContainerHigh,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Insets.sm, 2, Insets.xs, 2),
-          child: Row(
-            children: [
-              Icon(
-                restored ? AppIcons.clockCounterClockwise : AppIcons.stopCircle,
-                size: Chrome.iconAction,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-              const SizedBox(width: Insets.sm),
-              Flexible(
-                child: Text(
-                  where == null ? label : '$label · $where',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: onStart,
-                icon: const Icon(AppIcons.play, size: Chrome.iconAction),
-                label: Text(action),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  textStyle: theme.textTheme.labelMedium,
-                ),
-              ),
-            ],
+      child: PaneNoticeBar(
+        icon: restored ? AppIcons.clockCounterClockwise : AppIcons.stopCircle,
+        message: where == null ? label : '$label · $where',
+        maxLines: 1,
+        action: TextButton.icon(
+          onPressed: onStart,
+          icon: const Icon(AppIcons.play, size: Chrome.iconAction),
+          label: Text(action),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            textStyle: Theme.of(context).textTheme.labelMedium,
           ),
         ),
       ),
@@ -410,38 +388,17 @@ class PaneRecordingBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Semantics(
       container: true,
       label: 'Recording this pane. Stop recording.',
-      child: Material(
-        color: theme.colorScheme.errorContainer,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(Insets.sm, 2, Insets.xs, 2),
-          child: Row(
-            children: [
-              Icon(
-                AppIcons.circle,
-                size: Chrome.iconAction,
-                color: theme.colorScheme.error,
-              ),
-              const SizedBox(width: Insets.sm),
-              Expanded(
-                child: Text(
-                  'Recording — everything on this screen is being captured',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onErrorContainer,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: onStop,
-                child: const Text('Stop recording'),
-              ),
-            ],
-          ),
+      child: PaneNoticeBar(
+        icon: AppIcons.circle,
+        tone: NoticeTone.danger,
+        message: 'Recording — everything on this screen is being captured',
+        maxLines: 1,
+        action: TextButton(
+          onPressed: onStop,
+          child: const Text('Stop recording'),
         ),
       ),
     );
