@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../app_icons.dart';
@@ -121,48 +123,68 @@ class ProjectCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          children: [
-            Icon(
-              expanded ? AppIcons.folderOpen : AppIcons.folder,
-              size: density.icon,
-              color: missing ? scheme.error : scheme.onSurfaceVariant,
-            ),
-            const SizedBox(width: Insets.sm),
-            Expanded(
-              child: Text(
-                name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: density.title(theme),
-              ),
-            ),
-            if (summary.running > 0) ...[
-              const SizedBox(width: Insets.sm),
-              _runningBadge(muted, semantic, density),
-            ],
-            const SizedBox(width: Insets.sm),
-            if (onNewSession != null)
-              ExplorerRowAction(
-                tooltip: 'Start a session here with the default agent',
-                icon: AppIcons.plus,
-                onPressed: onNewSession,
-              ),
-            if (showMenu)
-              RowMenuButton(
-                tooltip: 'Project actions',
-                itemBuilder: menuItemsBuilder,
-                onSelected: onMenu,
-              ),
-            const SizedBox(width: Insets.xs),
-            // The affordance a phone reads as "this opens", on the edge a thumb
-            // travels towards.
-            Icon(
-              AppIcons.caretRight,
-              size: density.icon,
-              color: scheme.onSurfaceVariant,
-            ),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final slot = ExplorerRow.slotOf(density);
+            final fixed =
+                density.icon +
+                Insets.sm * 3 +
+                (onNewSession != null ? slot : 0) +
+                (showMenu ? slot : 0) +
+                Insets.xs +
+                density.icon;
+            // The count scales down before it can crowd the name out entirely.
+            final badgeMax = math.max(0.0, (constraints.maxWidth - fixed) / 2);
+            return Row(
+              children: [
+                Icon(
+                  expanded ? AppIcons.folderOpen : AppIcons.folder,
+                  size: density.icon,
+                  color: missing ? scheme.error : scheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: Insets.sm),
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: density.title(theme),
+                  ),
+                ),
+                if (summary.running > 0) ...[
+                  const SizedBox(width: Insets.sm),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: badgeMax),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: _runningBadge(muted, semantic, density),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: Insets.sm),
+                if (onNewSession != null)
+                  ExplorerRowAction(
+                    tooltip: 'Start a session here with the default agent',
+                    icon: AppIcons.plus,
+                    onPressed: onNewSession,
+                  ),
+                if (showMenu)
+                  RowMenuButton(
+                    tooltip: 'Project actions',
+                    itemBuilder: menuItemsBuilder,
+                    onSelected: onMenu,
+                  ),
+                const SizedBox(width: Insets.xs),
+                // The affordance a phone reads as "this opens", on the edge a
+                // thumb travels towards.
+                Icon(
+                  AppIcons.caretRight,
+                  size: density.icon,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ],
+            );
+          },
         ),
         if (aggregate != null) ...[
           SizedBox(height: density.lineGap),
@@ -333,46 +355,71 @@ class ProjectCard extends StatelessWidget {
     final text = missing
         ? (path.isEmpty ? 'Folder not found' : 'Folder not found — $path')
         : path;
-    return Row(
-      children: [
-        if (environmentBadge != null) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            margin: const EdgeInsets.only(right: 6),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              environmentBadge!,
-              style: muted?.copyWith(
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w600,
+    final badge = environmentBadge;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fixed =
+            (badge != null ? density.glyphGap : 0) +
+            (missing ? density.iconSmall + density.glyphGap : 0);
+        // Half the line at most: a long SSH host name overflowed a phone by
+        // 800px when the badge was the one child that could not give way.
+        final badgeMax = math.max(0.0, (constraints.maxWidth - fixed) / 2);
+        return Row(
+          children: [
+            if (badge != null) ...[
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: badgeMax),
+                child: Container(
+                  // 1px: a hairline of ground above and below the word, under
+                  // the 4-pt scale so the badge does not grow the path line.
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Insets.xs,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(Radii.sm),
+                  ),
+                  child: Tooltip(
+                    message: badge,
+                    child: Text(
+                      badge,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: muted?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: density.glyphGap),
+            ],
+            if (missing) ...[
+              Icon(
+                AppIcons.warningCircle,
+                size: density.iconSmall,
+                color: scheme.error,
+              ),
+              SizedBox(width: density.glyphGap),
+            ],
+            Expanded(
+              child: Tooltip(
+                message: text,
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: missing ? muted?.copyWith(color: scheme.error) : muted,
+                ),
               ),
             ),
-          ),
-        ],
-        if (missing) ...[
-          Icon(
-            AppIcons.warningCircle,
-            size: density.iconSmall,
-            color: scheme.error,
-          ),
-          SizedBox(width: density.glyphGap),
-        ],
-        Expanded(
-          child: Tooltip(
-            message: text,
-            child: Text(
-              text,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-              style: missing ? muted?.copyWith(color: scheme.error) : muted,
-            ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

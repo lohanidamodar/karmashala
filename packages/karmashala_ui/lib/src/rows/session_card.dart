@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../app_icons.dart';
@@ -159,9 +161,28 @@ class SessionCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _line1(context, muted, density),
+            _SessionCardHeaderLine(
+              agentIcon: agentIcon,
+              agentLabel: agentLabel,
+              agentColor: agentColor,
+              badge: badge,
+              age: age,
+              ageTooltip: ageTooltip,
+              muted: muted,
+              density: density,
+            ),
             SizedBox(height: density.lineGap),
-            _line2(theme, density),
+            _SessionCardTitleLine(
+              title: title,
+              link: link,
+              parentTitle: parentTitle,
+              lineageBroken: lineageBroken,
+              pinned: pinned,
+              showMenu: showMenu,
+              menuItemsBuilder: menuItemsBuilder,
+              onMenu: onMenu,
+              density: density,
+            ),
             // A worktree session draws line three before git answers: the glyph
             // is a persisted fact and must not blink into existence.
             if (worktree ||
@@ -172,7 +193,18 @@ class SessionCard extends StatelessWidget {
                 whereabouts != null ||
                 !(stat?.isEmpty ?? true)) ...[
               SizedBox(height: density.lineGap),
-              _line3(context, muted, density),
+              _SessionCardWhereLine(
+                subPath: subPath,
+                branch: branch,
+                statPending: statPending,
+                whereabouts: whereabouts,
+                whereaboutsTooltip: whereaboutsTooltip,
+                lineageBroken: lineageBroken,
+                worktree: worktree,
+                stat: stat,
+                muted: muted,
+                density: density,
+              ),
             ],
           ],
         );
@@ -207,105 +239,238 @@ class SessionCard extends StatelessWidget {
     // clicking the card cannot come to mean two different things.
     onChanged: (_) => onTap(),
   );
+}
 
-  Widget _line1(BuildContext context, TextStyle? muted, UiDensity density) {
+/// Line one: the agent, its live status and its age. The label gives way first;
+/// the badge scales down and the age ellipsises only once the label is gone,
+/// because the companion's labelled badge beside "active …" overflowed a 360px
+/// phone at 2x text.
+class _SessionCardHeaderLine extends StatelessWidget {
+  const _SessionCardHeaderLine({
+    required this.agentIcon,
+    required this.agentLabel,
+    required this.agentColor,
+    required this.badge,
+    required this.age,
+    required this.ageTooltip,
+    required this.muted,
+    required this.density,
+  });
+
+  final IconData agentIcon;
+  final String agentLabel;
+  final Color? agentColor;
+  final Widget? badge;
+  final String? age;
+  final String? ageTooltip;
+  final TextStyle? muted;
+  final UiDensity density;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    // One Expanded child rather than a Flexible label beside a Spacer: two flex
-    // children split the free space evenly and truncated the label mid-word.
-    return Row(
-      children: [
-        Expanded(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                agentIcon,
-                size: density.icon,
-                color: agentColor ?? scheme.onSurfaceVariant,
+    final gap = density.glyphGap;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Everything but the agent's glyph may go to the right-hand facts.
+        final budget = math.max(
+          0.0,
+          constraints.maxWidth - density.icon - gap * 2,
+        );
+        final badge = this.badge;
+        final age = this.age;
+        Widget? ageText;
+        if (age != null) {
+          final text = ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: math.max(
+                0.0,
+                badge == null ? budget - gap : (budget - gap * 2) / 2,
               ),
-              SizedBox(width: density.glyphGap),
-              Flexible(
-                child: Text(
-                  agentLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: muted,
+            ),
+            child: Text(
+              age,
+              style: muted,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+          ageText = ageTooltip == null
+              ? text
+              : Tooltip(message: ageTooltip!, child: text);
+        }
+        // One Expanded child rather than a Flexible label beside a Spacer: two
+        // flex children split the free space evenly and truncated mid-word.
+        return Row(
+          children: [
+            Expanded(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    agentIcon,
+                    size: density.icon,
+                    color: agentColor ?? scheme.onSurfaceVariant,
+                  ),
+                  SizedBox(width: gap),
+                  Flexible(
+                    child: Text(
+                      agentLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: muted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (badge != null || ageText != null)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: budget),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (badge != null) ...[
+                      SizedBox(width: gap),
+                      // The badge is any widget, so it cannot be told to
+                      // ellipsise; scaling keeps all of it legible for longer.
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: badge,
+                        ),
+                      ),
+                    ],
+                    if (ageText != null) ...[SizedBox(width: gap), ageText],
+                  ],
                 ),
               ),
-            ],
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Line two: lineage, pin, the title and the menu.
+class _SessionCardTitleLine extends StatelessWidget {
+  const _SessionCardTitleLine({
+    required this.title,
+    required this.link,
+    required this.parentTitle,
+    required this.lineageBroken,
+    required this.pinned,
+    required this.showMenu,
+    required this.menuItemsBuilder,
+    required this.onMenu,
+    required this.density,
+  });
+
+  final String title;
+  final SessionLink? link;
+  final String? parentTitle;
+  final bool lineageBroken;
+  final bool pinned;
+  final bool showMenu;
+  final RowMenuItemBuilder menuItemsBuilder;
+  final ValueChanged<String> onMenu;
+  final UiDensity density;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final link = this.link;
+    return Row(
+      children: [
+        if (lineageBroken) ...[
+          Tooltip(
+            message:
+                'Lineage cannot be established — this session names a parent '
+                'whose chain does not terminate, so it is drawn on its own '
+                'rather than under a tree we cannot vouch for.',
+            child: Icon(
+              AppIcons.question,
+              size: density.iconSmall,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(width: density.glyphGap),
+        ] else if (link != null) ...[
+          Tooltip(
+            message: parentTitle == null
+                ? '${link.phrase} a session that is not on this row'
+                : '${link.phrase} "$parentTitle"',
+            child: Icon(
+              SessionCard.linkIcon(link),
+              size: density.iconSmall,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(width: density.glyphGap),
+        ],
+        if (pinned) ...[
+          Icon(
+            AppIcons.pushPinFill,
+            size: density.iconSmall,
+            color: theme.colorScheme.primary,
+          ),
+          SizedBox(width: density.glyphGap),
+        ],
+        Expanded(
+          child: Text(
+            title,
+            // A phone gives a long title a second line rather than ellipsising
+            // the only thing that identifies the session; a dense pane cannot.
+            maxLines: density.isTouch ? 2 : 1,
+            overflow: TextOverflow.ellipsis,
+            style: density.title(theme),
           ),
         ),
-        if (badge != null) ...[SizedBox(width: density.glyphGap), badge!],
-        if (age != null) ...[
-          SizedBox(width: density.glyphGap),
-          if (ageTooltip == null)
-            Text(age!, style: muted, maxLines: 1)
-          else
-            Tooltip(
-              message: ageTooltip!,
-              child: Text(age!, style: muted, maxLines: 1),
-            ),
-        ],
+        if (showMenu)
+          RowMenuButton(
+            tooltip: 'Session actions',
+            itemBuilder: menuItemsBuilder,
+            onSelected: onMenu,
+          ),
       ],
     );
   }
+}
 
-  Widget _line2(ThemeData theme, UiDensity density) => Row(
-    children: [
-      if (lineageBroken) ...[
-        Tooltip(
-          message:
-              'Lineage cannot be established — this session names a parent '
-              'whose chain does not terminate, so it is drawn on its own '
-              'rather than under a tree we cannot vouch for.',
-          child: Icon(
-            AppIcons.question,
-            size: density.iconSmall,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        SizedBox(width: density.glyphGap),
-      ] else if (link != null) ...[
-        Tooltip(
-          message: parentTitle == null
-              ? '${link!.phrase} a session that is not on this row'
-              : '${link!.phrase} "$parentTitle"',
-          child: Icon(
-            linkIcon(link!),
-            size: density.iconSmall,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-        SizedBox(width: density.glyphGap),
-      ],
-      if (pinned) ...[
-        Icon(
-          AppIcons.pushPinFill,
-          size: density.iconSmall,
-          color: theme.colorScheme.primary,
-        ),
-        SizedBox(width: density.glyphGap),
-      ],
-      Expanded(
-        child: Text(
-          title,
-          // A phone gives a long title a second line rather than ellipsising
-          // the only thing that identifies the session; a dense pane cannot.
-          maxLines: density.isTouch ? 2 : 1,
-          overflow: TextOverflow.ellipsis,
-          style: density.title(theme),
-        ),
-      ),
-      if (showMenu)
-        RowMenuButton(
-          tooltip: 'Session actions',
-          itemBuilder: menuItemsBuilder,
-          onSelected: onMenu,
-        ),
-    ],
-  );
+/// Line three: where the session works, and what it has produced.
+class _SessionCardWhereLine extends StatelessWidget {
+  const _SessionCardWhereLine({
+    required this.subPath,
+    required this.branch,
+    required this.statPending,
+    required this.whereabouts,
+    required this.whereaboutsTooltip,
+    required this.lineageBroken,
+    required this.worktree,
+    required this.stat,
+    required this.muted,
+    required this.density,
+  });
 
-  Widget _line3(BuildContext context, TextStyle? muted, UiDensity density) {
+  final String? subPath;
+  final String? branch;
+  final bool statPending;
+  final String? whereabouts;
+  final String? whereaboutsTooltip;
+  final bool lineageBroken;
+  final bool worktree;
+  final SessionDiffStat? stat;
+  final TextStyle? muted;
+  final UiDensity density;
+
+  /// The most of the line the diff stat may take before it scales down, so a
+  /// `+12949 −10310 ↑14` never ellipsises the branch to nothing.
+  static const _statShare = 0.6;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     // The ellipsis stands in for the branch and only for the branch: a branch
     // name means the checkout was measured, so the two never share the line.
@@ -327,46 +492,67 @@ class SessionCard extends StatelessWidget {
       if (unmeasured) 'Branch and change counts have not been measured yet.',
       ?whereaboutsTooltip,
     ].join('\n');
-    return Row(
-      children: [
-        if (leading != null) ...[
-          Icon(
-            leading,
-            size: density.iconSmall,
-            color: scheme.onSurfaceVariant,
-          ),
-          SizedBox(width: density.glyphGap),
-        ],
-        // The left half is the only thing on the card allowed to be long, so it
-        // is the only thing that gives up width.
-        Expanded(
-          child: Tooltip(
-            message: tooltip,
-            child: Text(
-              where,
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-              style: muted,
+    final stat = this.stat;
+    final showStat = stat != null && !stat.isEmpty;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fixed =
+            (leading != null ? density.iconSmall + density.glyphGap : 0) +
+            (worktree ? density.glyphGap + density.iconSmall : 0) +
+            (showStat ? Insets.sm : 0);
+        final free = math.max(0.0, constraints.maxWidth - fixed);
+        return Row(
+          children: [
+            if (leading != null) ...[
+              Icon(
+                leading,
+                size: density.iconSmall,
+                color: scheme.onSurfaceVariant,
+              ),
+              SizedBox(width: density.glyphGap),
+            ],
+            // The left half is the only thing on the card allowed to be long,
+            // so it is the first thing that gives up width.
+            Expanded(
+              child: Tooltip(
+                message: tooltip,
+                child: Text(
+                  where,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted,
+                ),
+              ),
             ),
-          ),
-        ),
-        if (worktree) ...[
-          SizedBox(width: density.glyphGap),
-          Tooltip(
-            message: 'Runs in its own worktree',
-            child: Icon(
-              AppIcons.treeStructure,
-              size: density.iconSmall,
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-        if (stat != null && !stat!.isEmpty) ...[
-          const SizedBox(width: Insets.sm),
-          DiffStatLabel(stat: stat!),
-        ],
-      ],
+            if (worktree) ...[
+              SizedBox(width: density.glyphGap),
+              Tooltip(
+                message: 'Runs in its own worktree',
+                child: Icon(
+                  AppIcons.treeStructure,
+                  size: density.iconSmall,
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+            if (showStat) ...[
+              const SizedBox(width: Insets.sm),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: where.isEmpty ? free : free * _statShare,
+                ),
+                // Scaled, never ellipsised: half a line count is a wrong one.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: DiffStatLabel(stat: stat),
+                ),
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
