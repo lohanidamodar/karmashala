@@ -297,6 +297,75 @@ class _WindowTopNotice extends StatelessWidget {
   }
 }
 
+/// How one speaker's turn is drawn: the gutter's glyph, word and colour, and
+/// the frame round the turn — null [fill] and [edge] for the agent, whose turns
+/// read as the page itself.
+class CompanionTurnStyle {
+  const CompanionTurnStyle({
+    required this.icon,
+    required this.label,
+    required this.colour,
+    this.iconColour,
+    this.ring,
+    this.fill,
+    this.edge,
+  });
+
+  final IconData icon;
+  final String label;
+
+  /// The label's colour, and the glyph's unless [iconColour] says otherwise.
+  final Color colour;
+  final Color? iconColour;
+
+  /// A filled circle behind the glyph: the agent's avatar mark.
+  final Color? ring;
+  final Color? fill;
+  final Color? edge;
+}
+
+/// The one table of speakers. Anything the host sends that is not a user, a
+/// tool or an error is the agent.
+CompanionTurnStyle companionTurnStyle(
+  String role,
+  ColorScheme scheme,
+  SemanticColors semantic,
+) => switch (role) {
+  'user' => CompanionTurnStyle(
+    icon: AppIcons.userCircle,
+    label: 'YOU',
+    colour: scheme.primary,
+    fill: scheme.surfaceContainerHigh,
+    edge: scheme.outlineVariant.withValues(alpha: _faintEdge),
+  ),
+  'tool' => CompanionTurnStyle(
+    icon: AppIcons.terminal,
+    label: 'TOOL',
+    colour: scheme.tertiary,
+    fill: scheme.surfaceContainerHighest.withValues(alpha: _faintEdge),
+    edge: scheme.outlineVariant.withValues(alpha: _faintEdge),
+  ),
+  'error' => CompanionTurnStyle(
+    icon: AppIcons.warning,
+    label: 'ERROR',
+    colour: semantic.failure,
+    fill: semantic.failure.withValues(alpha: _errorFill),
+    edge: semantic.failure.withValues(alpha: _errorEdge),
+  ),
+  _ => CompanionTurnStyle(
+    icon: AppIcons.robot,
+    label: 'AGENT',
+    colour: scheme.onSurface,
+    iconColour: scheme.secondary,
+    ring: scheme.secondaryContainer.withValues(alpha: _avatarRing),
+  ),
+};
+
+const _faintEdge = 0.35;
+const _errorFill = 0.08;
+const _errorEdge = 0.4;
+const _avatarRing = 0.4;
+
 /// One turn, at a thumb's sizes. Copying is a long press: a copy button at the
 /// touch floor made every gutter 48px tall for an 11px label.
 class _MessageTile extends StatelessWidget {
@@ -304,165 +373,109 @@ class _MessageTile extends StatelessWidget {
 
   final CompanionChatMessage message;
 
-  /// The gutter: who is speaking, in one compact row, sized by the label rather
-  /// than by a control. [leading] is the agent's avatar mark.
-  Widget _gutter(
-    ThemeData theme, {
-    required Widget leading,
-    required String label,
-    required Color color,
-    required double gap,
-  }) => Row(
-    children: [
-      leading,
-      SizedBox(width: gap),
-      Text(
-        label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    ],
-  );
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final density = UiDensity.of(context);
+    final style = companionTurnStyle(
+      message.role,
+      theme.colorScheme,
+      SemanticColors.of(context),
+    );
     // A phone reads at arm's length, so message text takes the same step up
     // the ramp that `UiDensity.muted` takes for supporting lines.
     final mono = theme.textTheme.bodyMedium?.copyWith(fontFamily: kMonoFamily);
-
-    Widget tile({required Widget child, Color? fill, Color? edge}) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-      child: Container(
-        decoration: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(Radii.lg),
-          border: edge == null ? null : Border.all(color: edge),
-        ),
-        padding: fill == null && edge == null
-            ? EdgeInsets.zero
-            : const EdgeInsets.all(Insets.md),
-        child: child,
-      ),
-    );
-
-    if (message.role == 'user') {
-      return tile(
-        fill: scheme.surfaceContainerHigh,
-        edge: scheme.outlineVariant.withValues(alpha: 0.35),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _gutter(
-              theme,
-              leading: Icon(
-                AppIcons.userCircle,
-                size: density.iconSmall,
-                color: scheme.primary,
-              ),
-              label: 'YOU',
-              color: scheme.primary,
-              gap: density.glyphGap,
-            ),
-            const SizedBox(height: Insets.xs),
-            MarkdownMessage(message.text),
-          ],
-        ),
-      );
-    }
-
-    if (message.role == 'tool') {
-      return tile(
-        fill: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-        edge: scheme.outlineVariant.withValues(alpha: 0.35),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _gutter(
-              theme,
-              leading: Icon(
-                AppIcons.terminal,
-                size: density.iconSmall,
-                color: scheme.tertiary,
-              ),
-              label: 'TOOL',
-              color: scheme.tertiary,
-              gap: density.glyphGap,
-            ),
-            const SizedBox(height: Insets.xs),
-            SelectableText(message.text, style: mono),
-          ],
-        ),
-      );
-    }
-
-    if (message.role == 'error') {
-      final failure = SemanticColors.of(context).failure;
-      return tile(
-        fill: failure.withValues(alpha: 0.08),
-        edge: failure.withValues(alpha: 0.4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _gutter(
-              theme,
-              leading: Icon(
-                AppIcons.warning,
-                size: density.iconSmall,
-                color: failure,
-              ),
-              label: 'ERROR',
-              color: failure,
-              gap: density.glyphGap,
-            ),
-            const SizedBox(height: Insets.xs),
-            SelectableText(
-              message.text,
-              style: mono?.copyWith(color: failure),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final (thinking, cleanText) = _splitThinking(message.text);
-
-    return tile(
+    final (thinking, clean) = switch (message.role) {
+      'user' || 'tool' || 'error' => (null, message.text),
+      _ => _splitThinking(message.text),
+    };
+    return _TurnFrame(
+      fill: style.fill,
+      edge: style.edge,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _gutter(
-            theme,
-            leading: Container(
-              width: Touch.icon + Insets.xs,
-              height: Touch.icon + Insets.xs,
-              decoration: BoxDecoration(
-                color: scheme.secondaryContainer.withValues(alpha: 0.4),
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                AppIcons.robot,
-                size: density.iconSmall,
-                color: scheme.secondary,
-              ),
-            ),
-            label: 'AGENT',
-            color: scheme.onSurface,
-            gap: density.glyphGap,
-          ),
+          _RoleGutter(style: style),
           if (thinking != null && thinking.isNotEmpty) ...[
             const SizedBox(height: Insets.xs),
             ThinkingAccordion(thinking: thinking),
           ],
           const SizedBox(height: Insets.xs),
-          MarkdownMessage(cleanText),
+          switch (message.role) {
+            'tool' => SelectableText(clean, style: mono),
+            'error' => SelectableText(
+              clean,
+              style: mono?.copyWith(color: style.colour),
+            ),
+            _ => MarkdownMessage(clean),
+          },
         ],
       ),
+    );
+  }
+}
+
+/// The rounded frame round a turn; padded only when it draws something.
+class _TurnFrame extends StatelessWidget {
+  const _TurnFrame({required this.child, this.fill, this.edge});
+
+  final Widget child;
+  final Color? fill;
+  final Color? edge;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+    child: Container(
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(Radii.lg),
+        border: edge == null ? null : Border.all(color: edge!),
+      ),
+      padding: fill == null && edge == null
+          ? EdgeInsets.zero
+          : const EdgeInsets.all(Insets.md),
+      child: child,
+    ),
+  );
+}
+
+/// Who is speaking, in one compact row sized by the label, not by a control.
+class _RoleGutter extends StatelessWidget {
+  const _RoleGutter({required this.style});
+
+  final CompanionTurnStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final density = UiDensity.of(context);
+    final glyph = Icon(
+      style.icon,
+      size: density.iconSmall,
+      color: style.iconColour ?? style.colour,
+    );
+    final ring = style.ring;
+    return Row(
+      children: [
+        if (ring == null)
+          glyph
+        else
+          Container(
+            width: Touch.icon + Insets.xs,
+            height: Touch.icon + Insets.xs,
+            decoration: BoxDecoration(color: ring, shape: BoxShape.circle),
+            alignment: Alignment.center,
+            child: glyph,
+          ),
+        SizedBox(width: density.glyphGap),
+        Text(
+          style.label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: style.colour,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 }
