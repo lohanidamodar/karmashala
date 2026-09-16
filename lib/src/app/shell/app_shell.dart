@@ -5,6 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'resize_handle.dart';
 import 'side_panel.dart';
+import 'side_panel_state.dart';
 import 'status_bar.dart';
 import 'workbench.dart';
 
@@ -76,6 +77,15 @@ class _AppShellState extends ConsumerState<AppShell> {
     setState(() => _panelDrag = null);
   }
 
+  /// The shell is the only thing that knows the window's width, and a provider
+  /// cannot be written mid-build, so the reading lands after the frame.
+  void _reportPanelRoom(bool hasRoom) {
+    if (ref.read(sidePanelRoomProvider) == hasRoom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(sidePanelRoomProvider.notifier).report(hasRoom);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -133,6 +143,13 @@ class _AppShellState extends ConsumerState<AppShell> {
               final showExplorer = width.isCompact
                   ? shell.focusedPane == ShellPane.explorer
                   : shell.explorerPaneVisible;
+              // Measured as if focus mode were off: it hides the rail too, and
+              // leaving it must not find the selection dropped.
+              final panelFits = ShellLayout.panelFits(
+                available: constraints.maxWidth,
+                explorerColumn: showExplorer && !width.isCompact,
+              );
+              _reportPanelRoom(panelFits);
               final layout = ShellLayout.allocate(
                 available: constraints.maxWidth,
                 explorerColumn: !zen && showExplorer && !width.isCompact,
@@ -165,6 +182,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                         if (!zen)
                           SidePanel(
                             bodyWidth: layout.panelWidth,
+                            hasRoom: panelFits,
                             onResize: (value) => setState(
                               () => _panelDrag = layout.clampPanel(value),
                             ),
@@ -290,6 +308,20 @@ class ShellLayout {
       panelMaxWidth: panelMaxWidth,
     );
   }
+
+  /// Whether an open side panel would get a body beside the workbench floor.
+  static bool panelFits({
+    required double available,
+    required bool explorerColumn,
+  }) =>
+      ShellLayout.allocate(
+        available: available,
+        explorerColumn: explorerColumn,
+        panelOpen: true,
+        explorerWidth: explorerMin,
+        panelWidth: panelMin,
+      ).panelWidth !=
+      null;
 
   double clampExplorer(double width) =>
       width.clamp(explorerMin, explorerMaxWidth);

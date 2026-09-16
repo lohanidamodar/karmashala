@@ -104,9 +104,14 @@ class SidePanelController extends Notifier<SidePanelSurface?> {
   @override
   SidePanelSurface? build() => SidePanelSurface.changes;
 
+  /// Opening needs room: a panel the window cannot draw must not be recorded as
+  /// open, or every control would claim a body nobody can see.
+  bool get _hasRoom => ref.read(sidePanelRoomProvider);
+
   /// Clicking the open surface's icon closes the panel; clicking another
   /// switches to it. The same gesture does both jobs, as in every editor rail.
   void select(SidePanelSurface surface) {
+    if (!_hasRoom) return;
     if (state == surface) {
       collapse();
       return;
@@ -117,9 +122,14 @@ class SidePanelController extends Notifier<SidePanelSurface?> {
 
   void collapse() => state = null;
 
-  void expand() => state = _last;
+  void expand() {
+    if (_hasRoom) state = _last;
+  }
 
+  /// With no room this does nothing, so a selection hidden by the window's
+  /// width is kept for when it widens rather than closed unseen.
   void toggle() {
+    if (!_hasRoom) return;
     if (state == null) {
       expand();
     } else {
@@ -132,3 +142,28 @@ final sidePanelProvider =
     NotifierProvider<SidePanelController, SidePanelSurface?>(
       SidePanelController.new,
     );
+
+/// Why the side panel cannot open right now, worded for a tooltip or a menu.
+const kSidePanelNoRoom = 'Widen the window to open the side panel';
+
+/// Whether the window has room for the side panel's body. The shell writes it
+/// from its layout; true until the shell has measured.
+class SidePanelRoomController extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void report(bool hasRoom) {
+    if (state != hasRoom) state = hasRoom;
+  }
+}
+
+final sidePanelRoomProvider = NotifierProvider<SidePanelRoomController, bool>(
+  SidePanelRoomController.new,
+);
+
+/// The surface the side panel is actually showing: null when collapsed, and
+/// null when a selection is kept but the window is too narrow to draw it.
+final visibleSidePanelProvider = Provider<SidePanelSurface?>(
+  (ref) =>
+      ref.watch(sidePanelRoomProvider) ? ref.watch(sidePanelProvider) : null,
+);

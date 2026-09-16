@@ -265,6 +265,7 @@ class ViewMenu extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final hasRoom = ref.watch(sidePanelRoomProvider);
     final surfaces = SidePanelSurface.offered(
       debugMode: ref.watch(
         settingsControllerProvider.select((s) => s.debugMode),
@@ -287,7 +288,7 @@ class ViewMenu extends ConsumerWidget {
             shortcut: surface == SidePanelSurface.inbox
                 ? commandActivator(LogicalKeyboardKey.keyA, shift: true)
                 : null,
-            onPressed: () => actions.showSurface(surface),
+            onPressed: hasRoom ? () => actions.showSurface(surface) : null,
             child: Text(surface.label),
           ),
         const Divider(height: 1),
@@ -322,12 +323,17 @@ class _SidePanelCheckItem extends ConsumerWidget {
   final ShellMenuActions actions;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => CheckboxMenuButton(
-    value: ref.watch(sidePanelProvider.select((panel) => panel != null)),
-    shortcut: commandActivator(LogicalKeyboardKey.digit3),
-    onChanged: (_) => actions.toggleSidePanel(),
-    child: const Text('Side panel'),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasRoom = ref.watch(sidePanelRoomProvider);
+    return CheckboxMenuButton(
+      value: ref.watch(
+        visibleSidePanelProvider.select((panel) => panel != null),
+      ),
+      shortcut: commandActivator(LogicalKeyboardKey.digit3),
+      onChanged: hasRoom ? (_) => actions.toggleSidePanel() : null,
+      child: Text(hasRoom ? 'Side panel' : 'Side panel  ·  $kSidePanelNoRoom'),
+    );
+  }
 }
 
 class _FocusModeCheckItem extends ConsumerWidget {

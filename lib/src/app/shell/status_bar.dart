@@ -165,6 +165,13 @@ class _PanelItem extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(sidePanelRoomProvider)) {
+      return const _Item(
+        icon: AppIcons.sidebarSimple,
+        label: 'No room for panel',
+        tooltip: kSidePanelNoRoom,
+      );
+    }
     final panel = ref.watch(sidePanelProvider);
     return _Item(
       icon: AppIcons.sidebarSimple,
@@ -179,12 +186,16 @@ class _Item extends StatelessWidget {
     required this.icon,
     required this.label,
     this.onTap,
+    this.tooltip,
     this.emphasised = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
+
+  /// Defaults to the label; only a clickable item gets one unless given.
+  final String? tooltip;
 
   /// Something is running that has no tab. Worth the accent; nothing else here
   /// is.
@@ -216,10 +227,13 @@ class _Item extends StatelessWidget {
         ],
       ),
     );
-    if (onTap == null) return content;
+    if (onTap == null) {
+      final tip = tooltip;
+      return tip == null ? content : Tooltip(message: tip, child: content);
+    }
     return InkWell(
       onTap: onTap,
-      child: Tooltip(message: label, child: content),
+      child: Tooltip(message: tooltip ?? label, child: content),
     );
   }
 }

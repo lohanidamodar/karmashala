@@ -1,0 +1,172 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/karmashala_app.dart';
+import 'package:karmashala/src/app/shell/app_shell.dart';
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart';
+import 'package:karmashala/src/app/shell/side_panel.dart';
+import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/app/shell/status_bar.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala_store/database.dart';
+
+import '../../features/terminal/fake_instance.dart';
+import '../../support/fakes.dart';
+import '../../support/fixtures.dart';
+
+/// A window with no room for the side panel draws only its rail. Nothing may
+/// then claim the panel is open: not the rail, the chord, the View menu, the
+/// title bar toggle or the status bar.
+void main() {
+  late AppDatabase db;
+
+  setUp(() {
+    commandKeyIsMeta = false;
+    db = AppDatabase.memory();
+    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+  });
+  tearDown(() {
+    commandKeyIsMeta = false;
+    db.close();
+  });
+
+  // Medium width with the Explorer open: the panel cannot fit beside the
+  // workbench floor.
+  const narrow = Size(800, 700);
+  const wide = Size(1440, 900);
+
+  Future<ProviderContainer> pumpAt(WidgetTester tester, Size size) async {
+    final container = fakeTerminalContainer(database: db);
+    addTearDown(container.dispose);
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const KarmashalaApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return container;
+  }
+
+  Finder railTooltip(String label) => find.descendant(
+    of: find.byType(SidePanel),
+    matching: find.byWidgetPredicate(
+      (w) => w is Tooltip && (w.message ?? '').startsWith(label),
+    ),
+  );
+
+  String statusBarText(WidgetTester tester) => tester
+      .widgetList<Text>(
+        find.descendant(
+          of: find.byType(ShellStatusBar),
+          matching: find.byType(Text),
+        ),
+      )
+      .map((t) => t.data ?? '')
+      .join(' | ');
+
+  test('the layout reports whether the panel fits', () {
+    expect(
+      ShellLayout.panelFits(available: narrow.width, explorerColumn: true),
+      isFalse,
+    );
+    expect(
+      ShellLayout.panelFits(available: wide.width, explorerColumn: true),
+      isTrue,
+    );
+    expect(
+      ShellLayout.panelFits(available: narrow.width, explorerColumn: false),
+      isTrue,
+    );
+  });
+
+  testWidgets('a rail click with no room does not open the panel', (
+    tester,
+  ) async {
+    final container = await pumpAt(tester, narrow);
+    expect(find.byType(SidePanel), findsOneWidget);
+    final stored = container.read(sidePanelProvider);
+
+    final files = railTooltip('Files');
+    expect(files, findsOneWidget);
+    expect(
+      tester.widget<Tooltip>(files).message,
+      contains('Widen the window to open the side panel'),
+    );
+    expect(tester.widget<Tooltip>(files).message, isNot(contains('close')));
+
+    await tester.tap(files);
+    await tester.pumpAndSettle();
+
+    expect(container.read(sidePanelProvider), stored);
+    expect(container.read(visibleSidePanelProvider), isNull);
+    expect(statusBarText(tester), isNot(contains('Files')));
+    expect(statusBarText(tester), isNot(contains(stored!.label)));
+  });
+
+  testWidgets('the chord and the View menu do not open it either', (
+    tester,
+  ) async {
+    final container = await pumpAt(tester, narrow);
+    container.read(sidePanelProvider.notifier).collapse();
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(container.read(sidePanelProvider), isNull);
+
+    await tester.tap(find.text('View'));
+    await tester.pumpAndSettle();
+    final item = tester.widget<CheckboxMenuButton>(
+      find.byType(CheckboxMenuButton).at(1),
+    );
+    expect(item.value, isFalse);
+    expect(item.onChanged, isNull, reason: 'disabled while there is no room');
+    expect(
+      find.textContaining('Widen the window to open the side panel'),
+      findsOneWidget,
+    );
+    final surfaceItem = tester.widget<MenuItemButton>(
+      find.ancestor(
+        of: find.text('Files'),
+        matching: find.byType(MenuItemButton),
+      ),
+    );
+    expect(surfaceItem.onPressed, isNull);
+  });
+
+  testWidgets('a panel hidden by width comes back when the window widens', (
+    tester,
+  ) async {
+    final container = await pumpAt(tester, wide);
+    container.read(sidePanelProvider.notifier).select(SidePanelSurface.todos);
+    await tester.pumpAndSettle();
+    expect(statusBarText(tester), contains('Todos'));
+
+    tester.view.physicalSize = narrow;
+    await tester.pumpAndSettle();
+    expect(container.read(visibleSidePanelProvider), isNull);
+    expect(statusBarText(tester), isNot(contains('Todos')));
+    final rail = tester.widget<Semantics>(
+      find.descendant(
+        of: find.byType(SidePanel),
+        matching: find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == 'Todos',
+        ),
+      ),
+    );
+    expect(rail.properties.selected, isFalse);
+
+    tester.view.physicalSize = wide;
+    await tester.pumpAndSettle();
+    expect(container.read(visibleSidePanelProvider), SidePanelSurface.todos);
+    expect(statusBarText(tester), contains('Todos'));
+  });
+}

@@ -33,11 +33,21 @@ import '../../features/settings/application/settings_controller.dart';
 /// The right-hand side panel: a permanent icon rail plus a body that exists only
 /// while a surface is open — tools applied to the work, not peers of it.
 class SidePanel extends ConsumerWidget {
-  const SidePanel({this.bodyWidth, this.onResize, this.onResizeEnd, super.key});
+  const SidePanel({
+    this.bodyWidth,
+    this.hasRoom = true,
+    this.onResize,
+    this.onResizeEnd,
+    super.key,
+  });
 
   /// The open body's width, allocated by the shell; null draws the rail alone
   /// even with a surface selected, because the window has no room for it.
   final double? bodyWidth;
+
+  /// Whether the window could draw a body at all. Without room the rail says
+  /// why and opens nothing.
+  final bool hasRoom;
   final ValueChanged<double>? onResize;
   final VoidCallback? onResizeEnd;
 
@@ -97,7 +107,8 @@ class SidePanel extends ConsumerWidget {
             onResizeEnd: onResizeEnd,
           ),
         _SidePanelRail(
-          open: open,
+          open: hasRoom ? open : null,
+          hasRoom: hasRoom,
           debugMode: debugMode,
           notesEnabled: notesEnabled,
         ),
@@ -109,11 +120,13 @@ class SidePanel extends ConsumerWidget {
 class _SidePanelRail extends StatelessWidget {
   const _SidePanelRail({
     required this.open,
+    required this.hasRoom,
     required this.debugMode,
     required this.notesEnabled,
   });
 
   final SidePanelSurface? open;
+  final bool hasRoom;
   final bool debugMode;
   final bool notesEnabled;
 
@@ -137,7 +150,11 @@ class _SidePanelRail extends StatelessWidget {
               debugMode: debugMode,
               notesEnabled: notesEnabled,
             ))
-              _RailEntry(surface: surface, selected: surface == open),
+              _RailEntry(
+                surface: surface,
+                selected: surface == open,
+                enabled: hasRoom,
+              ),
           ],
         ),
       ),
@@ -148,10 +165,15 @@ class _SidePanelRail extends StatelessWidget {
 /// One rail glyph, wired. Only the inbox's watches the attention count, so a
 /// count change redraws one glyph rather than the rail.
 class _RailEntry extends ConsumerWidget {
-  const _RailEntry({required this.surface, required this.selected});
+  const _RailEntry({
+    required this.surface,
+    required this.selected,
+    required this.enabled,
+  });
 
   final SidePanelSurface surface;
   final bool selected;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => _RailButton(
@@ -162,7 +184,9 @@ class _RailEntry extends ConsumerWidget {
     badge: surface == SidePanelSurface.inbox
         ? ref.watch(attentionCountProvider)
         : 0,
-    onTap: () => ref.read(sidePanelProvider.notifier).select(surface),
+    onTap: enabled
+        ? () => ref.read(sidePanelProvider.notifier).select(surface)
+        : null,
   );
 }
 
@@ -176,7 +200,9 @@ class _RailButton extends StatelessWidget {
 
   final SidePanelSurface surface;
   final bool selected;
-  final VoidCallback onTap;
+
+  /// Null when the window has no room for the panel's body.
+  final VoidCallback? onTap;
 
   /// How many things are waiting behind this glyph; 0 draws nothing.
   final int badge;
@@ -189,6 +215,7 @@ class _RailButton extends StatelessWidget {
       if (badge > 0) '$badge waiting',
       if (selected) 'click to close',
     ].join('  ·  ');
+    if (onTap == null) return '$head\n$kSidePanelNoRoom';
     final direct = surface == SidePanelSurface.inbox
         ? shellChordLabel<OpenAttentionInboxIntent>()
         : null;
@@ -209,6 +236,7 @@ class _RailButton extends StatelessWidget {
       child: Semantics(
         button: true,
         selected: selected,
+        enabled: onTap != null,
         label: surface.label,
         child: InkWell(
           onTap: onTap,
@@ -230,7 +258,11 @@ class _RailButton extends StatelessWidget {
                   size: Chrome.icon,
                   color: badge > 0
                       ? semantic.attention
-                      : (selected ? scheme.primary : scheme.onSurfaceVariant),
+                      : selected
+                      ? scheme.primary
+                      : onTap == null
+                      ? Theme.of(context).disabledColor
+                      : scheme.onSurfaceVariant,
                 ),
                 if (badge > 0)
                   Positioned(

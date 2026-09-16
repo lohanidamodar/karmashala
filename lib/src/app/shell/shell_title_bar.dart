@@ -157,7 +157,10 @@ class _SidePanelToggle extends ConsumerWidget {
     icon: AppIcons.sidebarSimple,
     label: 'Show or hide the side panel',
     chord: shellChordLabel<ToggleSidePanelIntent>(),
-    selected: ref.watch(sidePanelProvider.select((panel) => panel != null)),
+    note: ref.watch(sidePanelRoomProvider) ? null : kSidePanelNoRoom,
+    selected: ref.watch(
+      visibleSidePanelProvider.select((panel) => panel != null),
+    ),
     onPressed: () => ref.read(sidePanelProvider.notifier).toggle(),
   );
 }
