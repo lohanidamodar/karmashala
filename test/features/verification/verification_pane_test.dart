@@ -124,6 +124,7 @@ void main() {
   Widget pane({
     required ThemeData theme,
     VerificationEvidenceReader reader = const _SyncEvidenceReader(),
+    Widget? home,
   }) => ProviderScope(
     overrides: [
       databaseProvider.overrideWithValue(h.db),
@@ -135,7 +136,7 @@ void main() {
     ],
     child: MaterialApp(
       theme: theme,
-      home: const Scaffold(body: VerificationPane()),
+      home: home ?? const Scaffold(body: VerificationPane()),
     ),
   );
 
@@ -431,6 +432,39 @@ void main() {
         tester,
         build: () => pane(theme: AppTheme.dark()),
         because: "the runs list is the panel's narrowest column",
+      );
+    });
+
+    testWidgets('and in a 240px side panel at the minimum window', (
+      tester,
+    ) async {
+      seed(
+        id: 'run-side',
+        title: 'a run read in the side panel',
+        verdict: VerificationVerdict.inconclusive,
+        reason: 'the page never finished loading',
+        steps: [step(1, 'Navigated'), step(2, 'Clicked Save', ok: false)],
+      );
+
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => pane(
+          theme: AppTheme.dark(),
+          // Window height less title bar 30, status bar 22, panel header 30.
+          home: Scaffold(
+            body: LayoutBuilder(
+              builder: (context, c) => Align(
+                alignment: Alignment.topRight,
+                child: SizedBox(
+                  width: 240,
+                  height: c.maxHeight - 82,
+                  child: const Material(child: VerificationPane()),
+                ),
+              ),
+            ),
+          ),
+        ),
+        because: 'the pane is mounted in the side panel, not the whole window',
       );
     });
   });

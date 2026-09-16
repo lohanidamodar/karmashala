@@ -124,21 +124,14 @@ class _RunRow extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                _VerdictChip(run: run),
-                const SizedBox(width: Insets.xs),
-                AttributionMark(attribution: run.attribution),
-                const SizedBox(width: Insets.sm),
-                Expanded(
-                  child: Text(
-                    run.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-              ],
+            _VerdictLine(
+              run: run,
+              child: Text(
+                run.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
@@ -199,19 +192,12 @@ class _RunDetail extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.all(Insets.md),
             children: [
-              Row(
-                children: [
-                  _VerdictChip(run: run),
-                  const SizedBox(width: Insets.xs),
-                  AttributionMark(attribution: run.attribution),
-                  const SizedBox(width: Insets.sm),
-                  Expanded(
-                    child: Text(
-                      run.reason ?? 'No reason was recorded.',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                ],
+              _VerdictLine(
+                run: run,
+                child: Text(
+                  run.reason ?? 'No reason was recorded.',
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
               const SizedBox(height: Insets.md),
               _MetaRow(label: 'Target', value: run.target.label),
@@ -707,6 +693,31 @@ class _FileTileState extends ConsumerState<_FileTile> {
       ],
     );
   }
+}
+
+/// The verdict, who graded it, then [child] taking the rest. The mark is capped
+/// at a third of the row: "unattributed" at 1.3x text is most of a 240px panel.
+class _VerdictLine extends StatelessWidget {
+  const _VerdictLine({required this.run, required this.child});
+
+  final VerificationRun run;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) => Row(
+      children: [
+        _VerdictChip(run: run),
+        const SizedBox(width: Insets.xs),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: constraints.maxWidth / 3),
+          child: AttributionMark(attribution: run.attribution),
+        ),
+        const SizedBox(width: Insets.sm),
+        Expanded(child: child),
+      ],
+    ),
+  );
 }
 
 class _VerdictChip extends StatelessWidget {

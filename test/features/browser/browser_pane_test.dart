@@ -103,6 +103,10 @@ void main() {
     await Harness().pump(tester);
     expect(find.text('Not connected'), findsOneWidget);
     expect(find.text('Attach · 9222'), findsOneWidget);
+    // Folded until asked: open, the explanation is taller than a side panel.
+    expect(find.textContaining('--remote-debugging-port=9222'), findsNothing);
+    await tester.tap(find.text('How attaching works'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('--remote-debugging-port=9222'), findsOneWidget);
     expect(find.textContaining('throwaway profile'), findsOneWidget);
     // Attach-first still works, and since Chrome 136 it takes two switches.

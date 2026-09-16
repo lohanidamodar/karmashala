@@ -30,6 +30,7 @@ class AttributionMark extends StatelessWidget {
       // nothing reads as "verified" to anyone scanning the row.
       attribution.shortLabel,
       maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: Theme.of(
         context,
       ).textTheme.labelSmall?.copyWith(color: colourOf(context, attribution)),

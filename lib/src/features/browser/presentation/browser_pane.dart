@@ -11,6 +11,7 @@ import '../application/browser_pane_controller.dart';
 import 'package:karmashala_browser/browser.dart';
 import 'browser_console.dart';
 import 'browser_viewport_shot.dart';
+import 'pane_status_row.dart';
 
 /// The browser pane: attach to the Chrome the developer already has open,
 /// drive it, and point at an element to send it to an agent.
@@ -110,48 +111,24 @@ class _ConnectionBar extends StatelessWidget {
       ),
     };
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: Insets.sm,
-        vertical: Insets.xs,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: colour, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: Tooltip(
-              message: state.isConnected
-                  ? '${state.connection}\n${state.title}\n${state.url}'
-                  : 'Karmashala attaches to a browser already listening on '
-                        'port ${state.port}. Since Chrome 136 that takes '
-                        '--remote-debugging-port=${state.port} together with '
-                        'a --user-data-dir of its own; the flag alone is '
-                        'ignored on the default profile. It only launches its '
-                        'own (on a throwaway profile) when nothing is '
-                        'listening.',
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-          ),
-          const SizedBox(width: Insets.sm),
-          if (state.isConnected)
-            TextButton(onPressed: onDisconnect, child: const Text('Detach'))
-          else
-            FilledButton.tonal(
+    return PaneStatusRow(
+      color: colour,
+      label: label,
+      tooltip: state.isConnected
+          ? '${state.connection}\n${state.title}\n${state.url}'
+          : 'Karmashala attaches to a browser already listening on '
+                'port ${state.port}. Since Chrome 136 that takes '
+                '--remote-debugging-port=${state.port} together with '
+                'a --user-data-dir of its own; the flag alone is '
+                'ignored on the default profile. It only launches its '
+                'own (on a throwaway profile) when nothing is '
+                'listening.',
+      action: state.isConnected
+          ? TextButton(onPressed: onDisconnect, child: const Text('Detach'))
+          : FilledButton.tonal(
               onPressed: state.isBusy ? null : onConnect,
               child: Text('Attach · ${state.port}'),
             ),
-        ],
-      ),
     );
   }
 }
@@ -275,7 +252,13 @@ class _Actions extends ConsumerWidget {
         horizontal: Insets.sm,
         vertical: Insets.xs,
       ),
-      child: Row(
+      // A Wrap, not a Row with a Spacer: in a 240px panel at 1.3x text the pick
+      // button alone is wider than the row.
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: Insets.sm,
+        runSpacing: Insets.xs,
         children: [
           if (picking)
             FilledButton.tonalIcon(
@@ -291,7 +274,6 @@ class _Actions extends ConsumerWidget {
               icon: const Icon(AppIcons.target),
               label: const Text('Pick element'),
             ),
-          const Spacer(),
           if (state.capture != null)
             TextButton(
               onPressed: controller.clearCapture,
@@ -365,16 +347,7 @@ class _Body extends ConsumerWidget {
       return PanePlaceholder(
         message: switch (state.status) {
           BrowserPaneStatus.disconnected =>
-            'Attach to a browser to drive it from here.\n\n'
-                'Karmashala attaches to a Chrome already listening on port '
-                '${state.port} — your window, your logins. Since Chrome 136 '
-                'that takes --remote-debugging-port=${state.port} together '
-                'with a --user-data-dir of its own: on your normal profile '
-                'the flag is ignored and no port opens. Chrome for Testing '
-                'honours it either way.\n\n'
-                'If nothing is listening, Karmashala launches one of its own '
-                'on a throwaway profile — which is not your logged-in '
-                'session. The status line above always says which you got.',
+            'Attach to a browser to drive it from here.',
           BrowserPaneStatus.picking =>
             'Point at an element in the browser and click it.\n'
                 'Escape cancels.',
@@ -382,9 +355,59 @@ class _Body extends ConsumerWidget {
             'Connected. Pick an element to capture its HTML, styles and a '
                 'cropped screenshot, then send it to a session.',
         },
+        action: state.status == BrowserPaneStatus.disconnected
+            ? _HowAttachingWorks(port: state.port)
+            : null,
       );
     }
     return _CapturePreview(capture: capture, state: state);
+  }
+}
+
+/// The long answer to "why did it launch its own browser", folded until asked:
+/// open, it is taller than a 240px panel.
+class _HowAttachingWorks extends StatefulWidget {
+  const _HowAttachingWorks({required this.port});
+
+  final int port;
+
+  @override
+  State<_HowAttachingWorks> createState() => _HowAttachingWorksState();
+}
+
+class _HowAttachingWorksState extends State<_HowAttachingWorks> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final port = widget.port;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextButton.icon(
+          onPressed: () => setState(() => _open = !_open),
+          icon: Icon(
+            _open ? AppIcons.caretDown : AppIcons.caretRight,
+            size: Chrome.iconAction,
+          ),
+          label: const Text('How attaching works'),
+        ),
+        if (_open)
+          Text(
+            'Karmashala attaches to a Chrome already listening on port $port '
+            '— your window, your logins. Since Chrome 136 that takes '
+            '--remote-debugging-port=$port with a --user-data-dir of its own; '
+            'on your normal profile the flag is ignored.\n\n'
+            'If nothing is listening, Karmashala launches its own on a '
+            'throwaway profile. The status line above says which you got.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+      ],
+    );
   }
 }
 
