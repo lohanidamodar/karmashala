@@ -124,4 +124,47 @@ void main() {
       }
     }
   });
+
+  group('a device row with three actions', () {
+    for (final width in [240.0, 320.0, 400.0]) {
+      for (final scale in scales) {
+        testWidgets('keeps its name and every action at ${width.toInt()}px, '
+            '${scale}x text', (tester) async {
+          // Tall enough that the list is not what is being measured.
+          await _pump(tester, size: Size(width, 900), textScale: scale);
+
+          // The emulator's row: Live preview, Files and Stop. As a ListTile
+          // with a Row of buttons trailing it, the name was squeezed to a
+          // few pixels, then the tile threw and no row was laid out at all.
+          final name = find.text('sdk_gphone64_arm64');
+          expect(name, findsOneWidget);
+          expect(
+            tester.getSize(name).width,
+            greaterThanOrEqualTo(width * 0.6),
+            reason: 'the name is the row; it must keep most of the width',
+          );
+
+          for (final key in [
+            'preview-$_emulator',
+            'files-$_emulator',
+            'stop-emulator-$_emulator',
+            'preview-$_phoneSerial',
+            'files-$_phoneSerial',
+          ]) {
+            final action = find.byKey(Key(key));
+            await tester.ensureVisible(action);
+            await tester.pumpAndSettle();
+            expect(
+              action.hitTestable(),
+              findsOneWidget,
+              reason: '$key must be reachable',
+            );
+            final rect = tester.getRect(action);
+            expect(rect.left, greaterThanOrEqualTo(0), reason: key);
+            expect(rect.right, lessThanOrEqualTo(width), reason: key);
+          }
+        });
+      }
+    }
+  });
 }

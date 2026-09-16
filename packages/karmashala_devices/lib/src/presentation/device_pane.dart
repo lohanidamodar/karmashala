@@ -17,6 +17,7 @@ import '../application/device_recording_controller.dart';
 import '../../karmashala_devices.dart';
 import '../application/ios_device_providers.dart';
 import 'android_slimming_dialog.dart';
+import 'device_action_row.dart';
 import 'device_clipboard_controls.dart';
 import 'device_files_dialog.dart';
 import 'device_section_header.dart';

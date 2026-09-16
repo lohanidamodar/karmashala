@@ -127,7 +127,7 @@ class _DeviceList extends ConsumerWidget {
           const DeviceSectionHeader(title: 'Connected'),
           const SizedBox(height: 4),
           for (final simulator in simulators)
-            _DeviceRow(
+            DeviceActionRow(
               key: Key('simulator-${simulator.udid}'),
               title: simulator.name,
               subtitle: switch (simulator.state) {
@@ -165,7 +165,7 @@ class _DeviceList extends ConsumerWidget {
               ],
             ),
           for (final device in devices)
-            _DeviceRow(
+            DeviceActionRow(
               title: runningAvdNames[device.serial] ?? device.displayName,
               subtitle: _stateLine(device),
               actions: [
@@ -220,7 +220,7 @@ class _DeviceList extends ConsumerWidget {
               ),
             ),
           for (final avd in idle)
-            _DeviceRow(
+            DeviceActionRow(
               title: avd.name,
               subtitle: booting.contains(avd.name) ? 'starting…' : null,
               actions: [
@@ -263,34 +263,6 @@ class _RowAction extends StatelessWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           : Text(label),
-    );
-  }
-}
-
-class _DeviceRow extends StatelessWidget {
-  const _DeviceRow({
-    required this.title,
-    required this.subtitle,
-    required this.actions,
-    super.key,
-  });
-
-  final String title;
-  final String? subtitle;
-  final List<Widget> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      contentPadding: const EdgeInsets.only(left: 16, right: 4),
-      title: Text(title, overflow: TextOverflow.ellipsis),
-      subtitle: subtitle == null
-          ? null
-          : Text(subtitle!, overflow: TextOverflow.ellipsis),
-      trailing: actions.isEmpty
-          ? null
-          : Row(mainAxisSize: MainAxisSize.min, children: actions),
     );
   }
 }
