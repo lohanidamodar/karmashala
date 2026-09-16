@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -82,6 +83,18 @@ class _FakeLiveView extends SimulatorLiveViewController {
   }
 }
 
+/// A live view whose stop never finishes, so the pane cannot tell from the
+/// state alone that it has already asked.
+class _SlowStopLiveView extends _FakeLiveView {
+  _SlowStopLiveView(super.initial);
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    await Completer<void>().future;
+  }
+}
+
 /// A simulator selection that is already made, the way `start` leaves it.
 class _PickedSimulator extends SelectedSimulatorUdid {
   _PickedSimulator(this._initial);
@@ -115,13 +128,14 @@ void main() {
     // A live view that is *starting* draws a spinner that never stops, so
     // `pumpAndSettle` would sit there until it timed out.
     bool settle = true,
+    _FakeLiveView? liveView,
   }) async {
     tester.view
       ..physicalSize = const Size(1440, 900)
       ..devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final fake = _FakeLiveView(live);
+    final fake = liveView ?? _FakeLiveView(live);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -450,6 +464,31 @@ void main() {
         greaterThan(0),
         reason: 'the picture cannot outlive the device it is of',
       );
+    });
+
+    testWidgets('asks once, not once per rebuild', (tester) async {
+      // The check once ran inside `build`, scheduling a stop after every
+      // frame until the state changed — so each rebuild while the first stop
+      // was in flight asked again.
+      final slow = _SlowStopLiveView(_running());
+      await pump(
+        tester,
+        live: _running(),
+        simulators: const [],
+        liveView: slow,
+      );
+      await tester.pumpAndSettle();
+      expect(slow.stops, 1);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(DevicePane)),
+      );
+      for (var i = 0; i < 3; i++) {
+        container.invalidate(androidSdkProvider);
+        await tester.pumpAndSettle();
+      }
+
+      expect(slow.stops, 1);
     });
   });
 }

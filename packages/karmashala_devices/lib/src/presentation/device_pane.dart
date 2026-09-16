@@ -53,11 +53,72 @@ class DevicePane extends ConsumerStatefulWidget {
 class _DevicePaneState extends ConsumerState<DevicePane>
     with WidgetsBindingObserver, _DeviceLiveStream, _DeviceEmulatorPower {
   @override
+  void initState() {
+    super.initState();
+    // A pane mounted over a live view whose device vanished while it was away
+    // hears no change to react to, so it looks once.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _dropVanishedDevices());
+  }
+
+  /// Takes down a picture whose device has gone. Run when the lists or the
+  /// live views change — never from `build`, which once asked again after
+  /// every frame while the first stop was still in flight.
+  void _dropVanishedDevices() {
+    if (!mounted) return;
+    // Stop streaming a device that went away — once the list has said so: a
+    // refresh in flight reads as the same empty list as nothing plugged in.
+    final deviceList = ref.read(devicesProvider);
+    final liveSerial = _liveSerial;
+    if (liveSerial != null &&
+        deviceList.hasValue &&
+        !deviceList.requireValue.any(
+          (d) => d.serial == liveSerial && d.isReady,
+        )) {
+      unawaited(_stopAndRebuild());
+    }
+
+    // The same rule for a simulator: a still image of a device that no longer
+    // exists cannot be told from a live one that has stopped moving.
+    final liveSimulatorUdid = switch (ref.read(simulatorLiveViewProvider)) {
+      SimulatorLiveViewRunning(:final view) => view.udid,
+      SimulatorLiveViewStarting(:final udid) => udid,
+      _ => null,
+    };
+    // Only once the list has come back: a load in flight reads the same empty
+    // list as every simulator having gone, and would tear the picture down.
+    final knownBooted = ref
+        .read(iosSimulatorsProvider)
+        .asData
+        ?.value
+        .where((s) => s.state.isReady || s.state == SimulatorState.booting);
+    if (liveSimulatorUdid == null) _stoppingSimulator = null;
+    if (liveSimulatorUdid != null &&
+        liveSimulatorUdid != _stoppingSimulator &&
+        knownBooted != null &&
+        !knownBooted.any((s) => s.udid == liveSimulatorUdid)) {
+      _stoppingSimulator = liveSimulatorUdid;
+      unawaited(ref.read(simulatorLiveViewProvider.notifier).stop());
+    }
+  }
+
+  /// The vanished simulator a stop has already been asked for, so a second
+  /// notification while that stop runs does not ask again.
+  String? _stoppingSimulator;
+
+  /// [_dropVanishedDevices] from a provider notification, one microtask on:
+  /// the stop writes providers of its own, which a listener must not do.
+  void _onDevicesChanged(Object? _, Object? _) =>
+      scheduleMicrotask(_dropVanishedDevices);
+
+  @override
   Widget build(BuildContext context) {
     ref.listen<String?>(
       selectedDeviceSerialProvider,
       (_, serial) => _onSelectionChanged(serial),
     );
+    ref.listen(devicesProvider, _onDevicesChanged);
+    ref.listen(iosSimulatorsProvider, _onDevicesChanged);
+    ref.listen(simulatorLiveViewProvider, _onDevicesChanged);
     final sdk = ref.watch(androidSdkProvider);
     final deviceList = ref.watch(devicesProvider);
     final devices = deviceList.asData?.value ?? const <AndroidDevice>[];
@@ -68,39 +129,6 @@ class _DevicePaneState extends ConsumerState<DevicePane>
       devices: devices,
       kind: ref.watch(deviceEnvironmentProvider).kind,
     );
-
-    // Stop streaming a device that went away — once the list has said so: a
-    // refresh in flight reads as the same empty list as nothing plugged in.
-    if (_liveSerial != null &&
-        deviceList.hasValue &&
-        !devices.any((d) => d.serial == _liveSerial && d.isReady)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_stopAndRebuild());
-      });
-    }
-
-    // The same rule for a simulator: a still image of a device that no longer
-    // exists cannot be told from a live one that has stopped moving.
-    final liveSimulatorUdid = switch (ref.watch(simulatorLiveViewProvider)) {
-      SimulatorLiveViewRunning(:final view) => view.udid,
-      SimulatorLiveViewStarting(:final udid) => udid,
-      _ => null,
-    };
-    // Only once the list has come back: a load in flight reads the same empty
-    // list as every simulator having gone, and would tear the picture down.
-    final simulatorList = ref.watch(iosSimulatorsProvider);
-    final knownBooted = simulatorList.asData?.value.where(
-      (s) => s.state.isReady || s.state == SimulatorState.booting,
-    );
-    if (liveSimulatorUdid != null &&
-        knownBooted != null &&
-        !knownBooted.any((s) => s.udid == liveSimulatorUdid)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          unawaited(ref.read(simulatorLiveViewProvider.notifier).stop());
-        }
-      });
-    }
 
     // The device the pane is about: while the live view runs it is that
     // view's device, and reading it from one place keeps them the same.
