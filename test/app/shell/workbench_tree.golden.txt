@@ -2195,31 +2195,32 @@ WorkbenchView
                                                                                   Listener
                                                                                     Semantics
                                                                                       MouseRegion
-                                                                                        Container
-                                                                                          DecoratedBox
-                                                                                            Padding
-                                                                                              Row
-                                                                                                Icon
-                                                                                                  Semantics
-                                                                                                    ExcludeSemantics
-                                                                                                      SizedBox
-                                                                                                        Center
-                                                                                                          RichText
-                                                                                                SizedBox
-                                                                                                Flexible
-                                                                                                  ConstrainedBox
-                                                                                                    Text text="Ask"
+                                                                                        PickerFace
+                                                                                          Container
+                                                                                            DecoratedBox
+                                                                                              Padding
+                                                                                                Row
+                                                                                                  Icon
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
+                                                                                                  SizedBox
+                                                                                                  Flexible
+                                                                                                    ConstrainedBox
+                                                                                                      Text text="Ask"
+                                                                                                        RichText
+                                                                                                  SizedBox
+                                                                                                  Flexible
+                                                                                                    Text text="· default"
                                                                                                       RichText
-                                                                                                SizedBox
-                                                                                                Flexible
-                                                                                                  Text text="· default"
-                                                                                                    RichText
-                                                                                                Icon
-                                                                                                  Semantics
-                                                                                                    ExcludeSemantics
-                                                                                                      SizedBox
-                                                                                                        Center
-                                                                                                          RichText
+                                                                                                  Icon
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
                                 SizedBox
                                 Flexible
                                   SessionModelChip
@@ -2251,27 +2252,28 @@ WorkbenchView
                                                                                       Listener
                                                                                         Semantics
                                                                                           MouseRegion
-                                                                                            Container
-                                                                                              DecoratedBox
-                                                                                                Padding
-                                                                                                  Row
-                                                                                                    Icon
-                                                                                                      Semantics
-                                                                                                        ExcludeSemantics
-                                                                                                          SizedBox
-                                                                                                            Center
-                                                                                                              RichText
-                                                                                                    SizedBox
-                                                                                                    Flexible
-                                                                                                      ConstrainedBox
-                                                                                                        Text text="default"
-                                                                                                          RichText
-                                                                                                    Icon
-                                                                                                      Semantics
-                                                                                                        ExcludeSemantics
-                                                                                                          SizedBox
-                                                                                                            Center
-                                                                                                              RichText
+                                                                                            PickerFace
+                                                                                              Container
+                                                                                                DecoratedBox
+                                                                                                  Padding
+                                                                                                    Row
+                                                                                                      Icon
+                                                                                                        Semantics
+                                                                                                          ExcludeSemantics
+                                                                                                            SizedBox
+                                                                                                              Center
+                                                                                                                RichText
+                                                                                                      SizedBox
+                                                                                                      Flexible
+                                                                                                        ConstrainedBox
+                                                                                                          Text text="default"
+                                                                                                            RichText
+                                                                                                      Icon
+                                                                                                        Semantics
+                                                                                                          ExcludeSemantics
+                                                                                                            SizedBox
+                                                                                                              Center
+                                                                                                                RichText
                                 SizedBox
                                 Expanded
                                   DeliveryStrip
@@ -3617,31 +3619,32 @@ WorkbenchView
                                                                                                                                                                                       Listener
                                                                                                                                                                                         Semantics
                                                                                                                                                                                           MouseRegion
-                                                                                                                                                                                            Container
-                                                                                                                                                                                              DecoratedBox
-                                                                                                                                                                                                Padding
-                                                                                                                                                                                                  Row
-                                                                                                                                                                                                    Icon
-                                                                                                                                                                                                      Semantics
-                                                                                                                                                                                                        ExcludeSemantics
-                                                                                                                                                                                                          SizedBox
-                                                                                                                                                                                                            Center
-                                                                                                                                                                                                              RichText
-                                                                                                                                                                                                    SizedBox
-                                                                                                                                                                                                    Flexible
-                                                                                                                                                                                                      ConstrainedBox
-                                                                                                                                                                                                        Text text="Ask"
+                                                                                                                                                                                            PickerFace
+                                                                                                                                                                                              Container
+                                                                                                                                                                                                DecoratedBox
+                                                                                                                                                                                                  Padding
+                                                                                                                                                                                                    Row
+                                                                                                                                                                                                      Icon
+                                                                                                                                                                                                        Semantics
+                                                                                                                                                                                                          ExcludeSemantics
+                                                                                                                                                                                                            SizedBox
+                                                                                                                                                                                                              Center
+                                                                                                                                                                                                                RichText
+                                                                                                                                                                                                      SizedBox
+                                                                                                                                                                                                      Flexible
+                                                                                                                                                                                                        ConstrainedBox
+                                                                                                                                                                                                          Text text="Ask"
+                                                                                                                                                                                                            RichText
+                                                                                                                                                                                                      SizedBox
+                                                                                                                                                                                                      Flexible
+                                                                                                                                                                                                        Text text="· default"
                                                                                                                                                                                                           RichText
-                                                                                                                                                                                                    SizedBox
-                                                                                                                                                                                                    Flexible
-                                                                                                                                                                                                      Text text="· default"
-                                                                                                                                                                                                        RichText
-                                                                                                                                                                                                    Icon
-                                                                                                                                                                                                      Semantics
-                                                                                                                                                                                                        ExcludeSemantics
-                                                                                                                                                                                                          SizedBox
-                                                                                                                                                                                                            Center
-                                                                                                                                                                                                              RichText
+                                                                                                                                                                                                      Icon
+                                                                                                                                                                                                        Semantics
+                                                                                                                                                                                                          ExcludeSemantics
+                                                                                                                                                                                                            SizedBox
+                                                                                                                                                                                                              Center
+                                                                                                                                                                                                                RichText
                                                                                                                                     SessionModelChip
                                                                                                                                       ModelChip
                                                                                                                                         PopupMenuButton<ModelChoice>
@@ -3671,27 +3674,28 @@ WorkbenchView
                                                                                                                                                                                         Listener
                                                                                                                                                                                           Semantics
                                                                                                                                                                                             MouseRegion
-                                                                                                                                                                                              Container
-                                                                                                                                                                                                DecoratedBox
-                                                                                                                                                                                                  Padding
-                                                                                                                                                                                                    Row
-                                                                                                                                                                                                      Icon
-                                                                                                                                                                                                        Semantics
-                                                                                                                                                                                                          ExcludeSemantics
-                                                                                                                                                                                                            SizedBox
-                                                                                                                                                                                                              Center
-                                                                                                                                                                                                                RichText
-                                                                                                                                                                                                      SizedBox
-                                                                                                                                                                                                      Flexible
-                                                                                                                                                                                                        ConstrainedBox
-                                                                                                                                                                                                          Text text="default"
-                                                                                                                                                                                                            RichText
-                                                                                                                                                                                                      Icon
-                                                                                                                                                                                                        Semantics
-                                                                                                                                                                                                          ExcludeSemantics
-                                                                                                                                                                                                            SizedBox
-                                                                                                                                                                                                              Center
-                                                                                                                                                                                                                RichText
+                                                                                                                                                                                              PickerFace
+                                                                                                                                                                                                Container
+                                                                                                                                                                                                  DecoratedBox
+                                                                                                                                                                                                    Padding
+                                                                                                                                                                                                      Row
+                                                                                                                                                                                                        Icon
+                                                                                                                                                                                                          Semantics
+                                                                                                                                                                                                            ExcludeSemantics
+                                                                                                                                                                                                              SizedBox
+                                                                                                                                                                                                                Center
+                                                                                                                                                                                                                  RichText
+                                                                                                                                                                                                        SizedBox
+                                                                                                                                                                                                        Flexible
+                                                                                                                                                                                                          ConstrainedBox
+                                                                                                                                                                                                            Text text="default"
+                                                                                                                                                                                                              RichText
+                                                                                                                                                                                                        Icon
+                                                                                                                                                                                                          Semantics
+                                                                                                                                                                                                            ExcludeSemantics
+                                                                                                                                                                                                              SizedBox
+                                                                                                                                                                                                                Center
+                                                                                                                                                                                                                  RichText
                                                                                                                                     SessionStatsButton
                                                                                                                                       Tooltip tooltip="Turns, tokens and tool calls for this session, counted from the agent’s own record"
                                                                                                                                         RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
@@ -4316,31 +4320,32 @@ WorkbenchView
                                                                                   Listener
                                                                                     Semantics
                                                                                       MouseRegion
-                                                                                        Container
-                                                                                          DecoratedBox
-                                                                                            Padding
-                                                                                              Row
-                                                                                                Icon
-                                                                                                  Semantics
-                                                                                                    ExcludeSemantics
-                                                                                                      SizedBox
-                                                                                                        Center
-                                                                                                          RichText
-                                                                                                SizedBox
-                                                                                                Flexible
-                                                                                                  ConstrainedBox
-                                                                                                    Text text="Ask"
+                                                                                        PickerFace
+                                                                                          Container
+                                                                                            DecoratedBox
+                                                                                              Padding
+                                                                                                Row
+                                                                                                  Icon
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
+                                                                                                  SizedBox
+                                                                                                  Flexible
+                                                                                                    ConstrainedBox
+                                                                                                      Text text="Ask"
+                                                                                                        RichText
+                                                                                                  SizedBox
+                                                                                                  Flexible
+                                                                                                    Text text="· default"
                                                                                                       RichText
-                                                                                                SizedBox
-                                                                                                Flexible
-                                                                                                  Text text="· default"
-                                                                                                    RichText
-                                                                                                Icon
-                                                                                                  Semantics
-                                                                                                    ExcludeSemantics
-                                                                                                      SizedBox
-                                                                                                        Center
-                                                                                                          RichText
+                                                                                                  Icon
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
                                 SizedBox
                                 Flexible
                                   SessionModelChip
@@ -4372,27 +4377,28 @@ WorkbenchView
                                                                                       Listener
                                                                                         Semantics
                                                                                           MouseRegion
-                                                                                            Container
-                                                                                              DecoratedBox
-                                                                                                Padding
-                                                                                                  Row
-                                                                                                    Icon
-                                                                                                      Semantics
-                                                                                                        ExcludeSemantics
-                                                                                                          SizedBox
-                                                                                                            Center
-                                                                                                              RichText
-                                                                                                    SizedBox
-                                                                                                    Flexible
-                                                                                                      ConstrainedBox
-                                                                                                        Text text="default"
-                                                                                                          RichText
-                                                                                                    Icon
-                                                                                                      Semantics
-                                                                                                        ExcludeSemantics
-                                                                                                          SizedBox
-                                                                                                            Center
-                                                                                                              RichText
+                                                                                            PickerFace
+                                                                                              Container
+                                                                                                DecoratedBox
+                                                                                                  Padding
+                                                                                                    Row
+                                                                                                      Icon
+                                                                                                        Semantics
+                                                                                                          ExcludeSemantics
+                                                                                                            SizedBox
+                                                                                                              Center
+                                                                                                                RichText
+                                                                                                      SizedBox
+                                                                                                      Flexible
+                                                                                                        ConstrainedBox
+                                                                                                          Text text="default"
+                                                                                                            RichText
+                                                                                                      Icon
+                                                                                                        Semantics
+                                                                                                          ExcludeSemantics
+                                                                                                            SizedBox
+                                                                                                              Center
+                                                                                                                RichText
                                 SizedBox
                                 Expanded
                                   DeliveryStrip
@@ -5095,31 +5101,32 @@ WorkbenchView
                                                                                   Listener
                                                                                     Semantics
                                                                                       MouseRegion
-                                                                                        Container
-                                                                                          DecoratedBox
-                                                                                            Padding
-                                                                                              Row
-                                                                                                Icon
-                                                                                                  Semantics
-                                                                                                    ExcludeSemantics
-                                                                                                      SizedBox
-                                                                                                        Center
-                                                                                                          RichText
-                                                                                                SizedBox
-                                                                                                Flexible
-                                                                                                  ConstrainedBox
-                                                                                                    Text text="Ask"
+                                                                                        PickerFace
+                                                                                          Container
+                                                                                            DecoratedBox
+                                                                                              Padding
+                                                                                                Row
+                                                                                                  Icon
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
+                                                                                                  SizedBox
+                                                                                                  Flexible
+                                                                                                    ConstrainedBox
+                                                                                                      Text text="Ask"
+                                                                                                        RichText
+                                                                                                  SizedBox
+                                                                                                  Flexible
+                                                                                                    Text text="· default"
                                                                                                       RichText
-                                                                                                SizedBox
-                                                                                                Flexible
-                                                                                                  Text text="· default"
-                                                                                                    RichText
-                                                                                                Icon
-                                                                                                  Semantics
-                                                                                                    ExcludeSemantics
-                                                                                                      SizedBox
-                                                                                                        Center
-                                                                                                          RichText
+                                                                                                  Icon
+                                                                                                    Semantics
+                                                                                                      ExcludeSemantics
+                                                                                                        SizedBox
+                                                                                                          Center
+                                                                                                            RichText
                                 SizedBox
                                 Expanded
                                   DeliveryStrip
