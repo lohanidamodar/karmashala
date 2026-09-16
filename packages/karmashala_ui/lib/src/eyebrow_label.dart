@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'design_tokens.dart';
+
 /// The small spaced label over a section or a field — written in any case and
-/// drawn uppercase in the theme's `labelSmall`, the chrome eyebrow.
+/// drawn uppercase in [Chrome.groupLabel].
 class EyebrowLabel extends StatelessWidget {
   const EyebrowLabel(
     this.text, {
@@ -23,7 +25,9 @@ class EyebrowLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.labelSmall;
+    final style = Theme.of(
+      context,
+    ).textTheme.labelSmall?.merge(Chrome.groupLabel);
     final label = Text(
       text.toUpperCase(),
       maxLines: maxLines,

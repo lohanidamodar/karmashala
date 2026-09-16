@@ -180,9 +180,9 @@ class SettingsNavGroupHeader extends StatelessWidget {
           group.label.toUpperCase(),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+          style: theme.textTheme.labelSmall
+              ?.merge(Chrome.groupLabel)
+              .copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
       ),
     );

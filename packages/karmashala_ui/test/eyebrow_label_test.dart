@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import 'support/layout_probe.dart';
 
 /// The small spaced uppercase label over a section. Five private copies wrote
 /// `Text(label.toUpperCase(), style: labelSmall)` by hand.
 void main() {
-  testWidgets('is the text uppercased, in the theme label style', (
+  testWidgets('is the text uppercased, in the group label style', (
     tester,
   ) async {
     await pumpInBox(
@@ -18,7 +19,7 @@ void main() {
     );
     final text = tester.widget<Text>(find.text('RECENT COMMITS'));
     final theme = AppTheme.light();
-    expect(text.style, theme.textTheme.labelSmall);
+    expect(text.style, theme.textTheme.labelSmall?.merge(Chrome.groupLabel));
     expect(text.maxLines, isNull, reason: 'wraps unless asked not to');
   });
 

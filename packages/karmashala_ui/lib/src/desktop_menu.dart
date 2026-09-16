@@ -246,10 +246,9 @@ class _HeaderLabel extends StatelessWidget {
     final theme = Theme.of(context);
     return Text(
       label.toUpperCase(),
-      style: theme.textTheme.labelSmall?.copyWith(
-        color: theme.colorScheme.onSurfaceVariant,
-        letterSpacing: 0.6,
-      ),
+      style: theme.textTheme.labelSmall
+          ?.merge(Chrome.groupLabel)
+          .copyWith(color: theme.colorScheme.onSurfaceVariant),
     );
   }
 }

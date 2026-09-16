@@ -154,9 +154,8 @@ enum HeaderEmphasis {
     // Spaced small caps, the same voice `SettingsSection` gives its own
     // titles, so a section reads as a label over a list rather than a row in
     // one.
-    HeaderEmphasis.section => theme.textTheme.labelSmall?.copyWith(
-      fontWeight: FontWeight.w600,
-      letterSpacing: 0.8,
+    HeaderEmphasis.section => theme.textTheme.labelSmall?.merge(
+      Chrome.groupLabel,
     ),
     HeaderEmphasis.context => theme.textTheme.labelSmall?.copyWith(
       fontWeight: FontWeight.w600,

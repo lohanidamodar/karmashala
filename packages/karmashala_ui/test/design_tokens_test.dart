@@ -83,6 +83,45 @@ void main() {
     });
   }
 
+  test('the type ramp: a quiet labelSmall, a spaced group label', () {
+    final text = AppTheme.light().textTheme;
+    expect(text.labelSmall?.fontSize, 11);
+    expect(text.labelSmall?.fontWeight, FontWeight.w500);
+    expect(text.labelSmall?.letterSpacing, 0.1);
+    expect(text.bodyMedium?.height, 1.45);
+
+    expect(Chrome.groupLabel.fontSize, 11);
+    expect(Chrome.groupLabel.fontWeight, FontWeight.w600);
+    expect(Chrome.groupLabel.letterSpacing, 0.6);
+  });
+
+  test('row title and meta, per density', () {
+    final theme = AppTheme.light();
+    final title = UiDensity.pointer.rowTitle(theme)!;
+    expect(title.fontSize, 13);
+    expect(title.fontSize! * title.height!, closeTo(18, 0.001));
+    expect(title.fontWeight, FontWeight.w500);
+    expect(
+      UiDensity.pointer.rowTitle(theme, strong: true)!.fontWeight,
+      FontWeight.w600,
+    );
+
+    final meta = UiDensity.pointer.muted(theme)!;
+    expect(meta.fontSize, 11.5);
+    expect(meta.fontSize! * meta.height!, closeTo(16, 0.001));
+    expect(meta.fontWeight, FontWeight.w400);
+    expect(meta.color, theme.colorScheme.onSurfaceVariant);
+
+    // A thumb reads one step up the ramp.
+    final touchTitle = UiDensity.touch.rowTitle(theme)!;
+    expect(touchTitle.fontSize, theme.textTheme.titleMedium!.fontSize);
+    expect(touchTitle.fontWeight, FontWeight.w500);
+    expect(
+      UiDensity.touch.muted(theme)!.fontSize,
+      theme.textTheme.bodySmall!.fontSize,
+    );
+  });
+
   for (final brightness in Brightness.values) {
     final theme = brightness == Brightness.dark
         ? AppTheme.dark()

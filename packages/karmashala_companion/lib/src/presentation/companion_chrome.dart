@@ -164,7 +164,10 @@ class CompanionSectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Semantics(
       header: true,
-      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.merge(Chrome.groupLabel),
+      ),
     );
     return gap == 0
         ? text

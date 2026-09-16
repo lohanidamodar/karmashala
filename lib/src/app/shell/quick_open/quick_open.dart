@@ -436,10 +436,9 @@ class _SectionHeader extends StatelessWidget {
         label.toUpperCase(),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          letterSpacing: 0.6,
-        ),
+        style: theme.textTheme.labelSmall
+            ?.merge(Chrome.groupLabel)
+            .copyWith(color: theme.colorScheme.onSurfaceVariant),
       ),
     );
   }

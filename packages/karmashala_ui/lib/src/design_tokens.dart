@@ -360,14 +360,40 @@ enum UiDensity {
       (isTouch ? theme.textTheme.titleMedium : theme.textTheme.bodyMedium)
           ?.copyWith(fontWeight: FontWeight.w600);
 
-  /// The muted supporting lines. A phone steps up to `bodySmall` because 11px
-  /// is under the floor for text a thumb's owner reads at arm's length.
-  TextStyle? muted(ThemeData theme) =>
-      (isTouch ? theme.textTheme.bodySmall : theme.textTheme.labelSmall)
-          ?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            letterSpacing: 0,
-          );
+  /// A list row's title: 13/18 w500 under a pointer, `titleMedium` under a
+  /// thumb. [strong] is w600, kept for a row that is unread or needs you.
+  TextStyle? rowTitle(ThemeData theme, {bool strong = false}) {
+    final weight = strong ? FontWeight.w600 : FontWeight.w500;
+    if (isTouch) {
+      return theme.textTheme.titleMedium?.copyWith(fontWeight: weight);
+    }
+    return theme.textTheme.bodyMedium?.copyWith(
+      fontSize: 13,
+      height: 18 / 13,
+      fontWeight: weight,
+    );
+  }
+
+  /// The muted supporting lines: 11.5/16 w400 under a pointer. A phone steps
+  /// up to `bodySmall` because that is under the floor for text a thumb's
+  /// owner reads at arm's length.
+  TextStyle? muted(ThemeData theme) {
+    final color = theme.colorScheme.onSurfaceVariant;
+    if (isTouch) {
+      return theme.textTheme.bodySmall?.copyWith(
+        color: color,
+        letterSpacing: 0,
+        fontWeight: FontWeight.w400,
+      );
+    }
+    return theme.textTheme.labelSmall?.copyWith(
+      color: color,
+      fontSize: 11.5,
+      height: 16 / 11.5,
+      fontWeight: FontWeight.w400,
+      letterSpacing: 0,
+    );
+  }
 
   /// [base] re-tuned for this density: **identity** for [UiDensity.pointer].
   /// Sizes only — Material's compact density undoes the 48dp floor, so it goes.
@@ -657,6 +683,14 @@ class Chrome {
   /// tab, so its name is set smaller than the tab's — the same hierarchy the
   /// two heights state, said again in type.
   static const TextStyle paneLabel = TextStyle(fontSize: 11);
+
+  /// A group or section header — "PROJECTS", a settings section. Merged over
+  /// `labelSmall` and written uppercase by the caller; nothing else is spaced.
+  static const TextStyle groupLabel = TextStyle(
+    fontSize: 11,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.6,
+  );
 
   /// [titleBar] grown with the ambient text scale, and never shrunk below the
   /// design height: a 150% menu label does not fit a 30px row, and clipping

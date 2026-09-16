@@ -368,8 +368,9 @@ class AppTheme {
         borderSide: BorderSide(color: color, width: width),
       );
 
-  /// Intentional type scale: tighter, confident titles; calm body; a spaced,
-  /// small label used as the chrome eyebrow.
+  /// Intentional type scale: tighter, confident titles; calm body; a small
+  /// label that is body text too, so its spacing stays near zero. Group
+  /// headers take [Chrome.groupLabel] on top of it.
   static TextTheme _textTheme(ColorScheme scheme) {
     final typography = Typography.material2021(colorScheme: scheme);
     // Light-on-dark glyph colours in dark mode; always using the `.black` set is
@@ -397,11 +398,11 @@ class AppTheme {
         color: onSurface,
       ),
       labelSmall: base.labelSmall?.copyWith(
-        letterSpacing: 0.8,
-        fontWeight: FontWeight.w600,
+        letterSpacing: 0.1,
+        fontWeight: FontWeight.w500,
         color: scheme.onSurfaceVariant,
       ),
-      bodyMedium: base.bodyMedium?.copyWith(color: onSurface, height: 1.35),
+      bodyMedium: base.bodyMedium?.copyWith(color: onSurface, height: 1.45),
       bodySmall: base.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
     );
   }

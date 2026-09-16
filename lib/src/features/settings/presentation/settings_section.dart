@@ -26,7 +26,12 @@ class SettingsSection extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(title, style: theme.textTheme.labelSmall)),
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.labelSmall?.merge(Chrome.groupLabel),
+                ),
+              ),
               ?trailing,
             ],
           ),
