@@ -95,6 +95,21 @@ void main() {
     expect(Chrome.groupLabel.letterSpacing, 0.6);
   });
 
+  test('radii and elevation: a pill, low popups, a floating shadow', () {
+    expect(Radii.pill, 999);
+    final theme = AppTheme.light();
+    expect(theme.popupMenuTheme.elevation, 4);
+    expect(theme.menuTheme.style?.elevation?.resolve({}), 4);
+    expect(theme.dialogTheme.elevation, 12);
+    expect(Shadows.floating, const [
+      BoxShadow(
+        color: Color.fromRGBO(0, 0, 0, 0.18),
+        offset: Offset(0, 10),
+        blurRadius: 24,
+      ),
+    ]);
+  });
+
   test('row title and meta, per density', () {
     final theme = AppTheme.light();
     final title = UiDensity.pointer.rowTitle(theme)!;

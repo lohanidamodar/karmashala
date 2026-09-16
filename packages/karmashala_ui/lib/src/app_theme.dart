@@ -250,7 +250,7 @@ class AppTheme {
       ),
       popupMenuTheme: PopupMenuThemeData(
         position: PopupMenuPosition.under,
-        elevation: 8,
+        elevation: Elevations.popup,
         color: scheme.surfaceContainerLow,
         surfaceTintColor: Colors.transparent,
         menuPadding: const EdgeInsets.symmetric(vertical: 4),
@@ -268,7 +268,7 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: scheme.surfaceContainerLowest,
         surfaceTintColor: Colors.transparent,
-        elevation: 16,
+        elevation: Elevations.dialog,
         alignment: Alignment.center,
         insetPadding: const EdgeInsets.all(32),
         titleTextStyle: text.titleMedium,
@@ -283,7 +283,7 @@ class AppTheme {
       // `popupMenuTheme`: two menus meant to look identical read from one set.
       menuTheme: MenuThemeData(
         style: MenuStyle(
-          elevation: const WidgetStatePropertyAll(8),
+          elevation: const WidgetStatePropertyAll(Elevations.popup),
           backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
           surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
           padding: const WidgetStatePropertyAll(

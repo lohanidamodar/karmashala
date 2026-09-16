@@ -145,7 +145,7 @@ class StreamIdleBadge extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: theme.colorScheme.scrim.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(Radii.pill),
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(

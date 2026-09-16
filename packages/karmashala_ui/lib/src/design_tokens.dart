@@ -255,7 +255,35 @@ class Radii {
   /// draws, because it has no bottom sheets.
   static const sheet = 22.0;
 
+  /// Fully round ends: a status pill, a round send button.
+  static const pill = 999.0;
+
   static const Radius card = Radius.circular(md);
+}
+
+/// Elevation drawn as a shadow, for surfaces that float over the workbench —
+/// the palette, dialogs, toasts.
+class Shadows {
+  const Shadows._();
+
+  static const floating = [
+    BoxShadow(
+      color: Color.fromRGBO(0, 0, 0, 0.18),
+      offset: Offset(0, 10),
+      blurRadius: 24,
+    ),
+  ];
+}
+
+/// The elevation a Material surface is given, where it uses one.
+class Elevations {
+  const Elevations._();
+
+  /// Popup menus and submenus.
+  static const popup = 4.0;
+
+  /// Dialogs.
+  static const dialog = 12.0;
 }
 
 /// A dialog body's design width, for `BoundedDialogContent`. Three steps
