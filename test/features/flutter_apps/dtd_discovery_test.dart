@@ -53,7 +53,7 @@ void main() {
         flutterAppDiscoveryDirectoryProvider.overrideWith(
           (ref) async => VmServiceUriDirectory(outFiles),
         ),
-        dtdPidFilesProvider.overrideWithValue(DtdPidFiles(pidFiles.path)),
+        dtdPidFilesProvider.overrideWithValue(DtdPidFiles([pidFiles.path])),
         dtdChannelOpenerProvider.overrideWithValue((Uri uri) async {
           opened.add(uri);
           final daemon = daemons[uri.toString()];
@@ -117,6 +117,30 @@ void main() {
     expect(registry().attached, hasLength(1));
     // The label falls back to the project directory, never to a bare id.
     expect(registry().apps.single.label, 'app');
+  });
+
+  test('the first daemon ever, whose directory did not exist at the first '
+      'look, arrives without another look', () async {
+    const daemon = 'ws://127.0.0.1:1/d=';
+    const app = 'ws://127.0.0.1:2/first=/ws';
+    pidFiles.deleteSync(recursive: true);
+    serveDaemon(daemon, apps: [
+      {'uri': app},
+    ]);
+    serveApp(app);
+
+    await apps().look();
+    expect(registry().apps, isEmpty);
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+
+    pidFiles.createSync();
+    writePidFile(11, daemon);
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (registry().attached.isEmpty && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+
+    expect(registry().attached, hasLength(1));
   });
 
   test('an app that registers later arrives as an event, not a poll', () async {

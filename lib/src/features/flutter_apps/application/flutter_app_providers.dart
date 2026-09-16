@@ -24,7 +24,7 @@ final flutterAppDiscoveryDirectoryProvider =
 final dtdPidFilesProvider = Provider<DtdPidFiles>(
   (ref) => DtdPidFiles.forEnvironment(
     Platform.environment,
-    isWindows: Platform.isWindows,
+    operatingSystem: Platform.operatingSystem,
   ),
 );
 

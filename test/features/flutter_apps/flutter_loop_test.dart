@@ -120,7 +120,7 @@ void main() {
         // This test knows about no tooling daemons. Without it the real
         // ones on the machine running the suite are read, and a live
         // `flutter run` in another window becomes an extra row.
-        dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(null)),
+        dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(<String>[])),
         vmServiceConnectorProvider.overrideWithValue((uri) async {
           final fake = reachable[uri.toString()];
           if (fake == null) throw const _Refused();

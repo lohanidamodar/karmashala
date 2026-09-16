@@ -91,7 +91,7 @@ void main() {
             flutterAppDiscoveryDirectoryProvider.overrideWith(
               (ref) async => VmServiceUriDirectory(temp),
             ),
-            dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(null)),
+            dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(<String>[])),
             adbServiceProvider.overrideWithValue(null),
             devicesProvider.overrideWith((ref) async => const []),
             vmServiceConnectorProvider.overrideWithValue(

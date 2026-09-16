@@ -58,7 +58,7 @@ void main() {
         flutterAppDiscoveryDirectoryProvider.overrideWith(
           (ref) async => VmServiceUriDirectory(outFiles),
         ),
-        dtdPidFilesProvider.overrideWithValue(DtdPidFiles(pidFiles.path)),
+        dtdPidFilesProvider.overrideWithValue(DtdPidFiles([pidFiles.path])),
         vmServiceConnectorProvider.overrideWithValue((uri) async {
           final fake = reachable[uri.toString()];
           if (fake == null) throw const _Refused();

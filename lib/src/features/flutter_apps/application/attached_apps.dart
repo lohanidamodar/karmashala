@@ -17,7 +17,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
 
   final Map<String, FlutterAppLink> _links = <String, FlutterAppLink>{};
   StreamSubscription<FileSystemEvent>? _watch;
-  StreamSubscription<FileSystemEvent>? _daemonWatch;
+  StreamSubscription<void>? _daemonWatch;
   VmServiceUriDirectory? _directory;
   Future<void>? _looking;
 

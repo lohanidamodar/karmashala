@@ -1,27 +1,38 @@
+import 'dart:async';
 import 'dart:io';
 
 import '../domain/dtd_instance.dart';
 
-/// The directory every Dart Tooling Daemon on this machine records itself in,
-/// one file per pid. The directory is the durable half (§20): a file in it is
-/// a candidate, never a fact.
+/// The directories the Dart Tooling Daemons on this machine record themselves
+/// in, one file per pid. The directory is the durable half (§20): a file in it
+/// is a candidate, never a fact.
 class DtdPidFiles {
-  const DtdPidFiles(this.path);
+  const DtdPidFiles(this.paths);
 
   /// Built from the environment, so a test hands over a temp directory.
   factory DtdPidFiles.forEnvironment(
     Map<String, String> environment, {
-    required bool isWindows,
-  }) => DtdPidFiles(dtdPidFileDirectory(environment, isWindows: isWindows));
+    required String operatingSystem,
+  }) => DtdPidFiles(
+    dtdPidFileDirectories(environment, operatingSystem: operatingSystem),
+  );
 
-  /// Where the files are, or null when this environment does not say — which
-  /// is "we cannot look", not "there is nothing".
-  final String? path;
+  /// Where the files may be; empty is "we cannot look", not "there is nothing".
+  final List<String> paths;
 
-  /// Every daemon that has written itself down, newest first.
+  /// Every daemon that has written itself down, newest first, once per pid.
   List<DtdInstance> scan() {
-    final where = path;
-    if (where == null) return const <DtdInstance>[];
+    final byPid = <int, DtdInstance>{};
+    for (final where in paths) {
+      for (final instance in _scanOne(where)) {
+        byPid.putIfAbsent(instance.pid, () => instance);
+      }
+    }
+    return byPid.values.toList()
+      ..sort((a, b) => b.startedAt.compareTo(a.startedAt));
+  }
+
+  static List<DtdInstance> _scanOne(String where) {
     final directory = Directory(where);
     if (!directory.existsSync()) return const <DtdInstance>[];
 
@@ -42,24 +53,106 @@ class DtdPidFiles {
         // Being written as we read it. The watch brings us back.
         continue;
       }
-      final name = entry.path.split(Platform.pathSeparator).last.split('/').last;
+      final name = entry.path
+          .split(Platform.pathSeparator)
+          .last
+          .split('/')
+          .last;
       final instance = parseDtdPidFile(name, raw);
       if (instance != null) found.add(instance);
     }
-    found.sort((a, b) => b.startedAt.compareTo(a.startedAt));
     return found;
   }
 
-  /// Fires when a daemon starts or stops. A subscription, not a poll.
-  Stream<FileSystemEvent> changes() {
-    final where = path;
-    if (where == null) return const Stream<FileSystemEvent>.empty();
-    final directory = Directory(where);
-    if (!directory.existsSync()) return const Stream<FileSystemEvent>.empty();
+  /// Fires when a daemon starts or stops. A directory not yet created (the SDK
+  /// makes it on the first run) is waited for on its nearest existing ancestor.
+  Stream<void> changes() {
+    final watches = <_DirectoryWatch>[];
+    late final StreamController<void> controller;
+    controller = StreamController<void>(
+      onListen: () {
+        for (final where in paths) {
+          watches.add(_DirectoryWatch(where, controller)..arm());
+        }
+      },
+      onCancel: () async {
+        await Future.wait(watches.map((watch) => watch.cancel()));
+        watches.clear();
+      },
+    );
+    return controller.stream;
+  }
+}
+
+class _DirectoryWatch {
+  _DirectoryWatch(this.target, this.out);
+
+  final String target;
+  final StreamController<void> out;
+
+  StreamSubscription<FileSystemEvent>? _subscription;
+  String? _watching;
+  bool _cancelled = false;
+
+  void arm() {
+    if (_cancelled) return;
+    final watching = _nearestExisting(target);
+    if (watching == null) return;
+    final Stream<FileSystemEvent> events;
     try {
-      return directory.watch();
-    } on FileSystemException {
-      return const Stream<FileSystemEvent>.empty();
+      events = Directory(watching).watch();
+    } on FileSystemException catch (error) {
+      out.addError(error);
+      return;
+    }
+    final wasWaiting = _watching != null && _watching != target;
+    _watching = watching;
+    final onTarget = watching == target;
+    _subscription = events.listen(
+      (_) {
+        if (onTarget) {
+          out.add(null);
+        } else if (_nearestExisting(target) != watching) {
+          // Somewhere on the way to the target appeared; move closer.
+          _rearm();
+        }
+      },
+      onError: out.addError,
+      onDone: () {
+        // Only a vanished directory is re-armed, so a closed watch cannot loop.
+        if (!Directory(watching).existsSync()) _rearm();
+      },
+      cancelOnError: false,
+    );
+    if (onTarget) {
+      // Files written before this watch started are only found by looking.
+      if (wasWaiting) out.add(null);
+    } else if (_nearestExisting(target) != watching) {
+      // The next step appeared between the check and the watch starting.
+      _rearm();
+    }
+  }
+
+  void _rearm() {
+    final previous = _subscription;
+    _subscription = null;
+    unawaited(previous?.cancel());
+    arm();
+  }
+
+  Future<void> cancel() async {
+    _cancelled = true;
+    await _subscription?.cancel();
+    _subscription = null;
+  }
+
+  static String? _nearestExisting(String path) {
+    var current = Directory(path);
+    while (true) {
+      if (current.existsSync()) return current.path;
+      final parent = current.parent;
+      if (parent.path == current.path) return null;
+      current = parent;
     }
   }
 }

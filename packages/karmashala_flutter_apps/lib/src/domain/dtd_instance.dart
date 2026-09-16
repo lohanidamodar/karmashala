@@ -102,33 +102,50 @@ List<DtdApp> vmServicesInDtdReply(String resultJson) {
   return found;
 }
 
-/// Where daemons write themselves down, or null when this environment does not
-/// say. Only the Windows answer is measured; the POSIX ones follow
-/// `package:dart_data_home`'s rule unverified.
-String? dtdPidFileDirectory(
+/// Every directory a daemon may have written itself down in, per the SDK's
+/// `getDartDataHome('dtd')` (docs/SETTLED.md); empty when the environment names
+/// none. An override adds a candidate: the daemon resolved it in *its* env.
+List<String> dtdPidFileDirectories(
   Map<String, String> environment, {
-  required bool isWindows,
+  required String operatingSystem,
 }) {
-  final override = environment['DART_DATA_HOME'];
-  if (override != null && override.isNotEmpty) {
-    return _join(override, 'dtd', isWindows: isWindows);
+  final isWindows = operatingSystem == 'windows';
+  String join(String base, List<String> names) {
+    final separator = isWindows ? r'\' : '/';
+    var path = base.replaceAll(RegExp(r'[\\/]+$'), '');
+    for (final name in names) {
+      path = '$path$separator$name';
+    }
+    return path;
   }
-  if (isWindows) {
-    final local = environment['LOCALAPPDATA'];
-    if (local == null || local.isEmpty) return null;
-    return _join(_join(local, 'Dart', isWindows: true), 'dtd', isWindows: true);
-  }
-  final home = environment['HOME'];
-  if (home == null || home.isEmpty) return null;
-  final state = environment['XDG_STATE_HOME'];
-  final base = state != null && state.isNotEmpty
-      ? state
-      : _join(_join(home, '.local', isWindows: false), 'state', isWindows: false);
-  return _join(_join(base, 'Dart', isWindows: false), 'dtd', isWindows: false);
-}
 
-String _join(String base, String name, {required bool isWindows}) {
-  final separator = isWindows ? r'\' : '/';
-  final trimmed = base.replaceAll(RegExp(r'[\\/]+$'), '');
-  return '$trimmed$separator$name';
+  String? named(String key) {
+    final value = environment[key];
+    return value == null || value.isEmpty ? null : value;
+  }
+
+  final found = <String>[];
+  final override = named('DART_DATA_HOME');
+  if (override != null) found.add(join(override, const ['dtd']));
+
+  switch (operatingSystem) {
+    case 'windows':
+      final local = named('LOCALAPPDATA');
+      if (local != null) found.add(join(local, const ['Dart', 'dtd']));
+    case 'macos':
+      final home = named('HOME');
+      if (home != null) {
+        found.add(
+          join(home, const ['Library', 'Application Support', 'Dart', 'dtd']),
+        );
+      }
+    case 'linux':
+      final state = named('XDG_STATE_HOME');
+      if (state != null) found.add(join(state, const ['Dart', 'dtd']));
+      final home = named('HOME');
+      if (home != null) {
+        found.add(join(home, const ['.local', 'state', 'Dart', 'dtd']));
+      }
+  }
+  return found.toSet().toList();
 }

@@ -43,7 +43,10 @@ void main() {
       final apps = vmServicesInDtdReply(reply);
 
       expect(apps, hasLength(1));
-      expect(apps.single.uri.toString(), 'ws://127.0.0.1:54385/Rzp5Wq0-P2o=/ws');
+      expect(
+        apps.single.uri.toString(),
+        'ws://127.0.0.1:54385/Rzp5Wq0-P2o=/ws',
+      );
       expect(apps.single.name, contains('Package: vmprobe'));
     });
 
@@ -65,35 +68,82 @@ void main() {
   });
 
   group('where the daemons write themselves down', () {
+    List<String> on(String os, Map<String, String> environment) =>
+        dtdPidFileDirectories(environment, operatingSystem: os);
+
     test('is under LOCALAPPDATA on Windows — measured on this machine', () {
       expect(
-        dtdPidFileDirectory(
-          const <String, String>{r'LOCALAPPDATA': r'C:\Users\dlohani\AppData\Local'},
-          isWindows: true,
-        ),
-        r'C:\Users\dlohani\AppData\Local\Dart\dtd',
+        on('windows', const {
+          'LOCALAPPDATA': r'C:\Users\dlohani\AppData\Local',
+          'APPDATA': r'C:\Users\dlohani\AppData\Roaming',
+          'HOME': r'C:\Users\dlohani',
+        }),
+        [r'C:\Users\dlohani\AppData\Local\Dart\dtd'],
       );
     });
 
-    test('DART_DATA_HOME wins wherever it is set', () {
+    test('is under Application Support on macOS, not the XDG state home', () {
       expect(
-        dtdPidFileDirectory(
-          const <String, String>{'DART_DATA_HOME': '/elsewhere/dart'},
-          isWindows: false,
-        ),
-        '/elsewhere/dart/dtd',
+        on('macos', const {
+          'HOME': '/Users/me',
+          'XDG_STATE_HOME': '/Users/me/.xdg-state',
+        }),
+        ['/Users/me/Library/Application Support/Dart/dtd'],
       );
     });
 
-    test('is null when the environment says nothing, never a guessed path', () {
+    test('is the XDG state home on Linux when set, with the default beside '
+        'it', () {
       expect(
-        dtdPidFileDirectory(const <String, String>{}, isWindows: true),
-        isNull,
-      );
-      expect(
-        dtdPidFileDirectory(const <String, String>{}, isWindows: false),
-        isNull,
+        on('linux', const {
+          'HOME': '/home/me',
+          'XDG_STATE_HOME': '/xdg/state/',
+        }),
+        ['/xdg/state/Dart/dtd', '/home/me/.local/state/Dart/dtd'],
       );
     });
+
+    test('is ~/.local/state on Linux without XDG_STATE_HOME', () {
+      expect(on('linux', const {'HOME': '/home/me'}), [
+        '/home/me/.local/state/Dart/dtd',
+      ]);
+      expect(on('linux', const {'HOME': '/home/me', 'XDG_STATE_HOME': ''}), [
+        '/home/me/.local/state/Dart/dtd',
+      ]);
+    });
+
+    test('DART_DATA_HOME comes first but does not hide the default', () {
+      expect(
+        on('macos', const {'DART_DATA_HOME': '/elsewhere/dart', 'HOME': '/u'}),
+        ['/elsewhere/dart/dtd', '/u/Library/Application Support/Dart/dtd'],
+      );
+      expect(
+        on('windows', const {
+          'DART_DATA_HOME': r'D:\dart',
+          'LOCALAPPDATA': r'C:\L',
+        }),
+        [r'D:\dart\dtd', r'C:\L\Dart\dtd'],
+      );
+    });
+
+    test('names each directory once', () {
+      expect(
+        on('linux', const {
+          'HOME': '/home/me',
+          'DART_DATA_HOME': '/home/me/.local/state/Dart',
+        }),
+        ['/home/me/.local/state/Dart/dtd'],
+      );
+    });
+
+    test(
+      'is empty when the environment says nothing, never a guessed path',
+      () {
+        expect(on('windows', const {}), isEmpty);
+        expect(on('macos', const {}), isEmpty);
+        expect(on('linux', const {}), isEmpty);
+        expect(on('fuchsia', const {'HOME': '/h'}), isEmpty);
+      },
+    );
   });
 }

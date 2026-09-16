@@ -47,7 +47,7 @@ void main() {
         // This test knows about no tooling daemons. Without it the real
         // ones on the machine running the suite are read, and a live
         // `flutter run` in another window becomes an extra row.
-        dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(null)),
+        dtdPidFilesProvider.overrideWithValue(const DtdPidFiles(<String>[])),
         // And no Android SDK and no devices, so opening the pane spawns no
         // `adb` and reads no real phone.
         adbServiceProvider.overrideWithValue(null),
