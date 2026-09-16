@@ -125,4 +125,42 @@ void main() {
     await tester.pump();
     expect(gateway.reconnectRequests, 1);
   });
+
+  // Measured 2026-09-16: the Projects tab overflowed by 19px in landscape at
+  // 130% text once the keyboard came up for the search field.
+  for (final keyboard in const [120.0, 150.0, 180.0]) {
+    testWidgets('the projects tab fits a landscape phone with a '
+        '${keyboard.toInt()}px keyboard at 1.3x', (
+      tester,
+    ) async {
+      tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
+      addTearDown(tester.view.resetViewInsets);
+      final errors = <FlutterErrorDetails>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = errors.add;
+      try {
+        await pumpPhone(
+          tester,
+          size: const Size(800, 360),
+          textScale: 1.3,
+          gateway: FakeCompanionGateway.paired(
+            sessions: [
+              summary('s1', project: 'alpha', projectId: 'p1'),
+              summary('s2', project: 'beta', projectId: 'p2'),
+            ],
+          ),
+          home: const CompanionShell(),
+        );
+      } finally {
+        FlutterError.onError = previous;
+      }
+      expect(
+        [
+          for (final e in errors)
+            if ('${e.exception}'.contains('overflowed')) '${e.exception}',
+        ],
+        isEmpty,
+      );
+    });
+  }
 }

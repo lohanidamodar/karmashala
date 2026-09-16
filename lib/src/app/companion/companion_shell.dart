@@ -49,7 +49,9 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
             // Which desktop these sessions belong to, below the outage banner — an
             // unreachable host is the more urgent fact of the two.
             const LinkBanner(),
-            if (_tab == 0) const HostSwitcherBar(),
+            // Gives way to the search field the keyboard came up for.
+            if (_tab == 0 && !companionKeyboardSqueezed(context))
+              const HostSwitcherBar(),
             Expanded(
               child: IndexedStack(
                 index: _tab,

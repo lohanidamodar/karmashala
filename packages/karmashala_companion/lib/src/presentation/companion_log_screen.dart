@@ -83,45 +83,47 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: ListView(
-          padding: companionListInsets(
-            context,
-            EdgeInsets.all(density.padX),
-          ),
-          children: [
-            SelectableText(buildIdentity(), style: MonoStyles.label),
-            if (dropped > 0)
-              Text(
-                '$dropped earlier lines have been dropped.',
-                style: density.muted(theme),
-              ),
-            const Divider(),
-            if (visible.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: Insets.xl),
-                child: Text(
-                  _problemsOnly
-                      ? 'No warnings or errors this run. Show everything to '
-                            'see what the link has been doing.'
-                      : 'Nothing logged yet.',
-                  textAlign: TextAlign.center,
-                  // Prose, not a caption: this is the sentence that stops the
-                  // screen looking broken.
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: ListView(
+            padding: companionListInsets(
+              context,
+              EdgeInsets.all(density.padX),
+            ),
+            children: [
+              SelectableText(buildIdentity(), style: MonoStyles.label),
+              if (dropped > 0)
+                Text(
+                  '$dropped earlier lines have been dropped.',
+                  style: density.muted(theme),
                 ),
-              )
-            else
-              // Selectable as one block: the useful gesture on a phone is "take
-              // all of this".
-              SelectableText(
-                [for (final entry in visible) entry.format()].join('\n'),
-                style: MonoStyles.label,
-              ),
-          ],
+              const Divider(),
+              if (visible.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: Insets.xl),
+                  child: Text(
+                    _problemsOnly
+                        ? 'No warnings or errors this run. Show everything to '
+                              'see what the link has been doing.'
+                        : 'Nothing logged yet.',
+                    textAlign: TextAlign.center,
+                    // Prose, not a caption: this is the sentence that stops the
+                    // screen looking broken.
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                )
+              else
+                // Selectable as one block: the useful gesture on a phone is
+                // "take all of this".
+                SelectableText(
+                  [for (final entry in visible) entry.format()].join('\n'),
+                  style: MonoStyles.label,
+                ),
+            ],
+          ),
         ),
       ),
     );

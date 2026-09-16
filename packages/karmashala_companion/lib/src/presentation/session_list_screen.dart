@@ -412,7 +412,15 @@ class _BackToMachines extends StatelessWidget {
                 style: density.title(theme),
               ),
             ),
-            Text('All machines', style: density.muted(theme)),
+            SizedBox(width: density.glyphGap),
+            Flexible(
+              child: Text(
+                'All machines',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: density.muted(theme),
+              ),
+            ),
           ],
         ),
       ),

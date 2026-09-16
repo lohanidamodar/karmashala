@@ -311,12 +311,17 @@ class _Title extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(Radii.sm),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: Insets.sm,
+        // The floor, not the label: 16px of text and two 8px gutters came to
+        // 44, under what a thumb needs.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: Touch.target),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: Insets.sm,
+            ),
+            child: label,
           ),
-          child: label,
         ),
       ),
     );
