@@ -101,6 +101,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
             session.status == CompanionSessionStatus.idle ||
             session.status == CompanionSessionStatus.failed ||
             session.status == CompanionSessionStatus.unknown);
+    final keyboardSqueezed = companionKeyboardSqueezed(context);
 
     // Hoisted out so the readable-width wrapper below stays one line.
     final pane = sessionGone
@@ -185,8 +186,11 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                     : 'Connect to resume',
                 onResume: () => _resume(sessionId),
               ),
-            if (!sessionGone && !imported)
-              CompanionComposer(
+          ],
+        ),
+        composer: sessionGone || imported
+            ? null
+            : CompanionComposer(
                 controller: _composer,
                 enabled: canPrompt && !imported,
                 hintText: canPrompt
@@ -219,8 +223,6 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                   }
                 },
               ),
-          ],
-        ),
       ),
     );
 
@@ -242,45 +244,49 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
             // Full-bleed above the column: an outage is chrome, not content.
             const LinkBanner(),
             // Everything below is content and keeps a phone's measure past the
-            // compact breakpoint (CLAUDE.md §6).
-            CompanionReadable(
-              child: Padding(
-                // What only this session can answer: its status, and where it
-                // is.
-                padding: EdgeInsets.symmetric(
-                  horizontal: density.padX,
-                  vertical: density.isTouch ? Insets.sm : Insets.xs,
-                ),
-                child: Row(
-                  children: [
-                    if (session != null)
-                      CompanionStatusBadge(
-                        status: session.status,
-                        showLabel: true,
+            // compact breakpoint (CLAUDE.md §6). The status line gives way to
+            // the composer when the keyboard leaves too little height for both.
+            if (!keyboardSqueezed) ...[
+              CompanionReadable(
+                child: Padding(
+                  // What only this session can answer: its status, and where it
+                  // is.
+                  padding: EdgeInsets.symmetric(
+                    horizontal: density.padX,
+                    vertical: density.isTouch ? Insets.sm : Insets.xs,
+                  ),
+                  child: Row(
+                    children: [
+                      if (session != null)
+                        CompanionStatusBadge(
+                          status: session.status,
+                          showLabel: true,
+                        ),
+                      const SizedBox(width: Insets.sm),
+                      Expanded(
+                        child: Text(
+                          [
+                            if (session?.agentLabel != null)
+                              session!.agentLabel,
+                            if (session?.whereabouts != null)
+                              session!.whereabouts!,
+                            if (session?.deliveryStage != null)
+                              SessionViewScreen._stageLabel(
+                                session!.deliveryStage!,
+                              ),
+                          ].join('  ·  '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: density.muted(theme),
+                        ),
                       ),
-                    const SizedBox(width: Insets.sm),
-                    Expanded(
-                      child: Text(
-                        [
-                          if (session?.agentLabel != null) session!.agentLabel,
-                          if (session?.whereabouts != null)
-                            session!.whereabouts!,
-                          if (session?.deliveryStage != null)
-                            SessionViewScreen._stageLabel(
-                              session!.deliveryStage!,
-                            ),
-                        ].join('  ·  '),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: density.muted(theme),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const CompanionReadable(child: Divider(height: 1)),
+              const CompanionReadable(child: Divider(height: 1)),
+            ],
             // NOT `AsyncValue.when`: a provider being retried is
             // `AsyncLoading` *carrying* its error, so `when` takes the loading
             // branch and this screen spins for ever.

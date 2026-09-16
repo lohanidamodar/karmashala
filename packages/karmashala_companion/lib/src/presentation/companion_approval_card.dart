@@ -82,62 +82,58 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
         ),
         border: Border.all(color: scheme.outlineVariant),
       ),
-      // The card grows with the text scale and the footer does not scroll, so
-      // it is capped against the viewport and scrolls inside — a clipped card
-      // would hide the evidence the reader is being asked to act on.
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.45,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    _answerable
-                        ? AppIcons.warningCircle
-                        : AppIcons.chatCircleDots,
-                    size: density.iconSmall,
-                    // Being asked for something is `attention`; a card with
-                    // nothing to press is not asking, so it stays muted.
-                    color: _answerable
-                        ? SemanticColors.of(context).attention
-                        : scheme.onSurfaceVariant,
-                  ),
-                  SizedBox(width: density.glyphGap),
-                  Expanded(
-                    child: Text(switch (approval.waiting) {
-                      RemoteWaitKind.input => '$name is waiting for your input',
-                      RemoteWaitKind.unrecorded when !_answerable =>
-                        '$name needs your attention',
-                      _ => '$name is waiting for you',
-                    }, style: theme.textTheme.labelLarge),
-                  ),
-                ],
-              ),
-              SizedBox(height: density.lineGap),
-              _evidence(context, theme, scheme),
-              const SizedBox(height: Insets.sm),
-              // Whether anything can be pressed is asked before whether this
-              // phone may press it, or a session with nothing to approve would
-              // be answered with "you were not granted approval rights".
-              if (!_answerable)
-                _nothingToAnswer(theme, scheme)
-              else if (!widget.canAnswer)
-                Text(
-                  'This phone was not granted approval rights, so it cannot '
-                  'answer. Answer on the desktop.',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.error,
-                  ),
-                )
-              else
-                _answers(theme, scheme),
-            ],
-          ),
+      // Bounded by the space it is given, not the window: in the session
+      // footer that is already a scroll, and a height it was never given
+      // pushed the composer under the keyboard.
+      child: SingleChildScrollView(
+        primary: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _answerable
+                      ? AppIcons.warningCircle
+                      : AppIcons.chatCircleDots,
+                  size: density.iconSmall,
+                  // Being asked for something is `attention`; a card with
+                  // nothing to press is not asking, so it stays muted.
+                  color: _answerable
+                      ? SemanticColors.of(context).attention
+                      : scheme.onSurfaceVariant,
+                ),
+                SizedBox(width: density.glyphGap),
+                Expanded(
+                  child: Text(switch (approval.waiting) {
+                    RemoteWaitKind.input => '$name is waiting for your input',
+                    RemoteWaitKind.unrecorded when !_answerable =>
+                      '$name needs your attention',
+                    _ => '$name is waiting for you',
+                  }, style: theme.textTheme.labelLarge),
+                ),
+              ],
+            ),
+            SizedBox(height: density.lineGap),
+            _evidence(context, theme, scheme),
+            const SizedBox(height: Insets.sm),
+            // Whether anything can be pressed is asked before whether this
+            // phone may press it, or a session with nothing to approve would
+            // be answered with "you were not granted approval rights".
+            if (!_answerable)
+              _nothingToAnswer(theme, scheme)
+            else if (!widget.canAnswer)
+              Text(
+                'This phone was not granted approval rights, so it cannot '
+                'answer. Answer on the desktop.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.error,
+                ),
+              )
+            else
+              _answers(theme, scheme),
+          ],
         ),
       ),
     );

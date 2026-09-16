@@ -34,6 +34,18 @@ EdgeInsets companionListInsets(BuildContext context, EdgeInsets base) {
       : base.copyWith(left: base.left + gutter, right: base.right + gutter);
 }
 
+/// The height left above an open keyboard under which a screen drops its
+/// secondary chrome, so the field being typed into keeps the room.
+const double companionSqueezedHeight = 520;
+
+/// Whether the keyboard is open and has left less than
+/// [companionSqueezedHeight] of the screen.
+bool companionKeyboardSqueezed(BuildContext context) {
+  final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+  return keyboard > 0 &&
+      MediaQuery.sizeOf(context).height - keyboard < companionSqueezedHeight;
+}
+
 /// The same cap for content that does not scroll — a header strip, a status
 /// row, a transcript with its composer pinned under it.
 class CompanionReadable extends StatelessWidget {

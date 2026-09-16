@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
+import 'companion_chrome.dart';
 
 /// The phone's message box: a prompt, and at most one file. The picker appears
 /// only when the host has said what it would take.
@@ -291,7 +292,9 @@ class _CompanionComposerState extends State<CompanionComposer> {
                     controller: _input,
                     enabled: canType,
                     minLines: 1,
-                    maxLines: 5,
+                    // Fewer when the keyboard has left little: the box must not
+                    // grow over the transcript it is replying to.
+                    maxLines: companionKeyboardSqueezed(context) ? 3 : 5,
                     // Named, not inherited: `maxLines != 1` picks a multiline
                     // type, whose Android IME draws Return, not Send.
                     keyboardType: TextInputType.text,
@@ -316,6 +319,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
                       // Keep it one line at 16px on a 390px phone: the field
                       // gets 276px there, and a wrapped hint grows the bar.
                       hintText: widget.hintText,
+                      hintMaxLines: 2,
                       // No alpha: `onSurfaceVariant` at 70% on
                       // `surfaceContainerLow` is about 3:1, under the 4.5:1
                       // floor, and this hint is the field's only label.

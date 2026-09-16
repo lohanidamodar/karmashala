@@ -11,6 +11,7 @@ class CompanionTranscriptView extends StatefulWidget {
   const CompanionTranscriptView({
     required this.messages,
     this.footer,
+    this.composer,
     this.emptyHint = 'No messages yet.',
     this.onSuggestionTap,
     super.key,
@@ -19,8 +20,16 @@ class CompanionTranscriptView extends StatefulWidget {
   /// Oldest first, exactly as the gateway holds it; the list draws bottom-up.
   final List<CompanionChatMessage> messages;
 
-  /// Pinned under the conversation — the approval card and the composer.
+  /// Between the conversation and [composer] — the approval card, the activity
+  /// strip. Capped at [footerShare] of the height and scrolled inside, so it
+  /// can never push the composer under the keyboard.
   final Widget? footer;
+
+  /// Pinned at the bottom at its own height.
+  final Widget? composer;
+
+  /// The most of this view's height [footer] takes before it scrolls.
+  static const footerShare = 0.5;
 
   final String emptyHint;
 
@@ -92,9 +101,11 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
     ];
     final total = turns.length;
 
-    return Column(
+    return CustomMultiChildLayout(
+      delegate: _TranscriptLayout(),
       children: [
-        Expanded(
+        LayoutId(
+          id: _Slot.list,
           child: total == 0
               // Which kind of nothing this is decides the screen: a welcome
               // over a session the user can see running reads as broken.
@@ -112,9 +123,9 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
                     vertical: Insets.sm,
                   ),
                   itemCount: total,
-                  // Keyed by position in the whole window, so a message shifted
-                  // by a newer arrival keeps its element and the sliver
-                  // corrects offsets instead of redrawing under the reader.
+                  // Keyed by position in the whole window, so a message
+                  // shifted by a newer arrival keeps its element and the
+                  // sliver corrects offsets instead of redrawing under it.
                   findChildIndexCallback: (key) {
                     if (key is! ValueKey<int>) return null;
                     final index = total - 1 - key.value;
@@ -139,19 +150,84 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
         // overlap the newest turn at any text scale. Not animated: a sized
         // transition would relayout the viewport on every frame.
         if (total > 0 && !_atLatest)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              Insets.md,
-              Insets.xs,
-              Insets.md,
-              Insets.xs,
+          LayoutId(
+            id: _Slot.jump,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Insets.md,
+                Insets.xs,
+                Insets.md,
+                Insets.xs,
+              ),
+              // `heightFactor` keeps it its own height inside a bounded slot.
+              child: Center(
+                heightFactor: 1,
+                child: _JumpToLatest(onPressed: _toLatest),
+              ),
             ),
-            child: Center(child: _JumpToLatest(onPressed: _toLatest)),
           ),
-        if (widget.footer != null) widget.footer!,
+        if (widget.footer case final footer?)
+          LayoutId(
+            id: _Slot.footer,
+            child: SingleChildScrollView(child: footer),
+          ),
+        if (widget.composer case final composer?)
+          LayoutId(id: _Slot.composer, child: composer),
       ],
     );
   }
+}
+
+enum _Slot { list, jump, footer, composer }
+
+/// The composer at its own height first, then the jump button, then the footer
+/// in at most [CompanionTranscriptView.footerShare] of what is left; the list
+/// takes the rest. A [Column] could not: a loose flexible footer leaves a gap.
+class _TranscriptLayout extends MultiChildLayoutDelegate {
+  _TranscriptLayout();
+
+  @override
+  void performLayout(Size size) {
+    var room = size.height;
+    double place(_Slot slot, double maxHeight) {
+      if (!hasChild(slot)) return 0;
+      return layoutChild(
+        slot,
+        BoxConstraints(
+          minWidth: size.width,
+          maxWidth: size.width,
+          maxHeight: maxHeight < 0 ? 0 : maxHeight,
+        ),
+      ).height;
+    }
+
+    final composer = place(_Slot.composer, room);
+    room -= composer;
+    final jump = place(_Slot.jump, room);
+    room -= jump;
+    final footer = place(
+      _Slot.footer,
+      room * CompanionTranscriptView.footerShare,
+    );
+    room = room - footer < 0 ? 0 : room - footer;
+    if (hasChild(_Slot.list)) {
+      layoutChild(
+        _Slot.list,
+        BoxConstraints.tightFor(width: size.width, height: room),
+      );
+      positionChild(_Slot.list, Offset.zero);
+    }
+    if (hasChild(_Slot.jump)) positionChild(_Slot.jump, Offset(0, room));
+    if (hasChild(_Slot.footer)) {
+      positionChild(_Slot.footer, Offset(0, room + jump));
+    }
+    if (hasChild(_Slot.composer)) {
+      positionChild(_Slot.composer, Offset(0, size.height - composer));
+    }
+  }
+
+  @override
+  bool shouldRelayout(_TranscriptLayout oldDelegate) => false;
 }
 
 /// The way back to the newest message, shown only once the reader has left it.
