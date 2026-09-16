@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -186,7 +187,9 @@ class _RemoteFileBrowserDialogState
             if (_busy)
               const Padding(
                 padding: EdgeInsets.all(Insets.lg),
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(
+                  child: InlineSpinner(size: InlineSpinnerSize.large),
+                ),
               )
             else if (error == null)
               Expanded(

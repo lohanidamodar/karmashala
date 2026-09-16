@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
@@ -103,11 +104,7 @@ class _ReadingAge extends ConsumerWidget {
     return Row(
       children: [
         if (report.running)
-          const SizedBox(
-            width: Chrome.icon,
-            height: Chrome.icon,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
+          const InlineSpinner(size: InlineSpinnerSize.medium)
         else
           Icon(
             report.hasRun ? AppIcons.clockCounterClockwise : AppIcons.question,

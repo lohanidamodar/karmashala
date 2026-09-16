@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
@@ -112,11 +113,7 @@ class _UsageCardState extends ConsumerState<_UsageCard> {
                 ),
               ),
               if (_loading)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+                const InlineSpinner()
               else
                 TextButton.icon(
                   onPressed: _fetch,

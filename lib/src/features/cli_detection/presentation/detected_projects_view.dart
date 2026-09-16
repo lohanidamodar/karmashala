@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../environments/application/environments_controller.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
@@ -67,7 +68,9 @@ class DetectedProjectsView extends ConsumerWidget {
         const Divider(height: 1),
         Expanded(
           child: detected.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(
+              child: InlineSpinner(size: InlineSpinnerSize.large),
+            ),
             error: (e, _) => Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),

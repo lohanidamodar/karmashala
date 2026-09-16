@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/agent_hook_installation_service.dart';
@@ -291,11 +292,7 @@ class _BridgeVerdict extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: report.running
-                  ? const SizedBox(
-                      width: Chrome.icon,
-                      height: Chrome.icon,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const InlineSpinner(size: InlineSpinnerSize.medium)
                   : Icon(
                       current == null
                           ? AppIcons.question

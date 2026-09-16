@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
@@ -409,11 +410,7 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
         FilledButton(
           onPressed: _busy ? null : _create,
           child: _busy
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const InlineSpinner(size: InlineSpinnerSize.medium)
               : Text(hasGit ? 'Clone & create' : 'Create & scan'),
         ),
       ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/picking.dart';
@@ -268,10 +269,7 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
         FilledButton(
           onPressed: _busy ? null : _save,
           child: _busy
-              ? const SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const InlineSpinner(size: InlineSpinnerSize.medium)
               : const Text('Save'),
         ),
       ],

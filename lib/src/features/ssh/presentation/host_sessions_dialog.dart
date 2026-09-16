@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
@@ -99,7 +100,7 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
         child: switch ((_busy, _error, sessions)) {
           (true, _, null) => const Padding(
             padding: EdgeInsets.all(Insets.lg),
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
           ),
           (_, final String message, _) => Padding(
             padding: const EdgeInsets.all(Insets.md),

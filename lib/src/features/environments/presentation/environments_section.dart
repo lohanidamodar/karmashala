@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
@@ -171,11 +172,7 @@ class _EnvironmentCard extends ConsumerWidget {
                         .read(environmentScanControllerProvider.notifier)
                         .scan(environment),
               icon: scan.busy
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const InlineSpinner()
                   : const Icon(AppIcons.magnifyingGlass),
               label: Text(isSsh ? 'Connect and find agents' : 'Find agents'),
             ),

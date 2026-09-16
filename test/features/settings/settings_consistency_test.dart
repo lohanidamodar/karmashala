@@ -55,8 +55,21 @@ void main() {
     );
   });
 
+  final spinner = RegExp(r'CircularProgressIndicator\(');
+
+  test('a spinner is an InlineSpinner', () {
+    expect(
+      hits(spinner),
+      isEmpty,
+      reason:
+          'use InlineSpinner at the size of the slot it stands in, not a '
+          'hand-sized CircularProgressIndicator',
+    );
+  });
+
   test('the guards can fail', () {
     expect(card.hasMatch('return Card('), isTrue);
     expect(card.hasMatch('SettingsCard('), isFalse);
+    expect(spinner.hasMatch('child: CircularProgressIndicator()'), isTrue);
   });
 }

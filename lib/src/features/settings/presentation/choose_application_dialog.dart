@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -63,10 +64,7 @@ class _ChooseApplicationDialogState
             Expanded(
               child: applications.when(
                 loading: () => const Center(
-                  child: SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
+                  child: InlineSpinner(size: InlineSpinnerSize.large),
                 ),
                 // The list is read, never assumed: a desktop that would not
                 // answer says so rather than reading as a machine with nothing

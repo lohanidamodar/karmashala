@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 import '../../editor/application/code_editor_providers.dart';
@@ -106,7 +107,9 @@ class _ImportedSessionViewState extends ConsumerState<ImportedSessionView> {
         const Divider(height: 1),
         Expanded(
           child: transcript.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(
+              child: InlineSpinner(size: InlineSpinnerSize.large),
+            ),
             error: (e, _) => Center(child: Text('Could not read history: $e')),
             data: (messages) => ChatTranscriptView(
               messages: [

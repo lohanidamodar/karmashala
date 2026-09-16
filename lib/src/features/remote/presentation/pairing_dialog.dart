@@ -288,7 +288,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     if (session == null) {
       return const Padding(
         padding: EdgeInsets.all(Insets.xl),
-        child: CircularProgressIndicator(),
+        child: InlineSpinner(size: InlineSpinnerSize.large),
       );
     }
     return Column(
