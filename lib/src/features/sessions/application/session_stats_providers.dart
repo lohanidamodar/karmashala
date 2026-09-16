@@ -35,6 +35,7 @@ class SessionStatsView {
     this.agentName, {
     this.lifetime,
     this.lifetimeUnavailable,
+    this.sessionTitle,
   }) : unavailable = null;
 
   const SessionStatsView.unavailable(
@@ -42,6 +43,7 @@ class SessionStatsView {
     this.agentName, {
     this.lifetime,
     this.lifetimeUnavailable,
+    this.sessionTitle,
   }) : stats = null;
 
   final SessionStats? stats;
@@ -56,6 +58,9 @@ class SessionStatsView {
 
   /// What to call the agent in the dialog. Empty when the session named none.
   final String agentName;
+
+  /// The session's own title, for the header. Null when there is no row.
+  final String? sessionTitle;
 }
 
 /// Reads a session's own counts out of whichever store its agent keeps — both
@@ -95,6 +100,7 @@ class SessionStatsService {
         name,
         lifetime: lifetime.$1,
         lifetimeUnavailable: lifetime.$2,
+        sessionTitle: session.title,
       );
     }
 
@@ -105,6 +111,7 @@ class SessionStatsService {
         name,
         lifetime: lifetime.$1,
         lifetimeUnavailable: lifetime.$2,
+        sessionTitle: session.title,
       );
     }
 
@@ -119,6 +126,7 @@ class SessionStatsService {
         name,
         lifetime: lifetime.$1,
         lifetimeUnavailable: lifetime.$2,
+        sessionTitle: session.title,
       );
     }
 
@@ -131,6 +139,7 @@ class SessionStatsService {
         name,
         lifetime: lifetime.$1,
         lifetimeUnavailable: lifetime.$2,
+        sessionTitle: session.title,
       );
     }
     return SessionStatsView.computed(
@@ -138,6 +147,7 @@ class SessionStatsService {
       name,
       lifetime: lifetime.$1,
       lifetimeUnavailable: lifetime.$2,
+      sessionTitle: session.title,
     );
   }
 

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -10,6 +12,10 @@ import 'package:agent_cli/usage.dart';
 import '../application/session_providers.dart';
 import '../application/session_signals.dart';
 import '../application/session_stats_providers.dart';
+import 'agent_status_badge.dart';
+import 'session_stats_sections.dart';
+
+export 'session_stats_sections.dart' show kStatNotRecorded;
 
 /// What one session has cost, in counts, on demand. **Counts only, never
 /// money**: a price table drifts the moment a model is repriced.
@@ -28,6 +34,7 @@ class SessionStatsDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(sessionStatsProvider(sessionId));
     final view = async.asData?.value;
+    final title = view?.sessionTitle?.trim();
 
     return AlertDialog(
       title: DesktopDialogTitle(
@@ -35,19 +42,31 @@ class SessionStatsDialog extends ConsumerWidget {
         title: 'Session stats',
         subtitle: view == null
             ? (async.hasError ? 'Could not be read' : 'Reading the store…')
-            : (view.agentName.isEmpty ? null : view.agentName),
+            : (title == null || title.isEmpty ? null : title),
       ),
       content: BoundedDialogContent(
-        width: DialogWidth.regular,
+        width: DialogWidth.wide,
         child: switch (async) {
-          AsyncValue(hasError: true, :final error) => DesktopErrorBanner(
-            'The store could not be read: $error',
+          AsyncValue(hasError: true, :final error) => ClipRRect(
+            borderRadius: BorderRadius.circular(Radii.sm),
+            child: PaneNoticeBar(
+              icon: AppIcons.warningCircle,
+              tone: NoticeTone.danger,
+              maxLines: 6,
+              message: 'The store could not be read: $error',
+            ),
           ),
-          AsyncValue(:final value?) => _Body(view: value),
+          AsyncValue(:final value?) => SessionStatsBody(
+            view: value,
+            status: AgentStatusBadge(sessionId: sessionId, showLabel: true),
+          ),
           _ => const Padding(
             padding: EdgeInsets.symmetric(vertical: Insets.xl),
             child: Center(
-              child: InlineSpinner(size: InlineSpinnerSize.large),
+              child: InlineSpinner(
+                size: InlineSpinnerSize.large,
+                semanticsLabel: 'Reading the session’s own record',
+              ),
             ),
           ),
         },
@@ -69,25 +88,29 @@ class SessionStatsDialog extends ConsumerWidget {
   }
 }
 
-class _Body extends StatelessWidget {
-  const _Body({required this.view});
+/// The dialog's body for one [view]: this session, then all time, then the
+/// caveat. [status] is the live badge, a slot so the body stays a plain value.
+class SessionStatsBody extends StatelessWidget {
+  const SessionStatsBody({required this.view, this.status, super.key});
 
   final SessionStatsView view;
+  final Widget? status;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
+        _MetaLine(view: view, status: status),
         // Two sections, one scroll, never a tab strip: they come from different
         // books, can honestly disagree, and each carries its own provenance.
         _SessionSection(view: view),
         _LifetimeSection(view: view),
-        const SizedBox(height: Insets.md),
+        const SizedBox(height: Insets.lg),
         Text(
-          'Counts only \u2014 no cost estimate, and not a bill: these are what '
+          'Counts only — no cost estimate, and not a bill: these are what '
           'the agents wrote down, which can differ from what a vendor charges. '
           'Live quota is in the status bar.',
           style: theme.textTheme.bodySmall?.copyWith(
@@ -99,6 +122,60 @@ class _Body extends StatelessWidget {
   }
 }
 
+/// Status · agent · models · last active, on one wrapping line.
+class _MetaLine extends StatelessWidget {
+  const _MetaLine({required this.view, this.status});
+
+  final SessionStatsView view;
+  final Widget? status;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final stats = view.stats;
+    final models = stats?.tokensByModel?.keys.toList() ?? const <String>[];
+    final last = stats?.lastActivityAt;
+    final facts = [
+      if (view.agentName.isNotEmpty)
+        Text(
+          view.agentName,
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      if (models.isNotEmpty)
+        Text(
+          models.length == 1
+              ? models.single
+              : '${models.first} +${models.length - 1} more',
+          style: muted,
+        ),
+      if (last != null)
+        Text('Last active ${formatStatAge(last)}', style: muted),
+    ];
+    if (status == null && facts.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: Insets.lg),
+      child: Wrap(
+        spacing: Insets.sm,
+        runSpacing: Insets.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          ?status,
+          for (var i = 0; i < facts.length; i++) ...[
+            if (i > 0 || status != null)
+              ExcludeSemantics(child: Text('·', style: muted)),
+            facts[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _SessionSection extends StatelessWidget {
   const _SessionSection({required this.view});
 
@@ -106,65 +183,107 @@ class _SessionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final reason = view.unavailable;
     if (reason != null) {
       return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const _Section('This session', first: true),
-          Text(
-            sessionStatsExplanation(reason, view.agentName),
-            style: theme.textTheme.bodySmall,
-          ),
+          const StatsSectionHeading('This session', first: true),
+          _Notice(sessionStatsExplanation(reason, view.agentName)),
         ],
       );
     }
 
     final stats = view.stats!;
     final tokens = stats.tokens;
+    final total = tokens.total;
+    final cache = cacheReadShare(tokens);
+    final hasContext =
+        stats.lastPromptTokens != null || stats.contextWindow != null;
+    final perTurn = stats.outputTokensPerTurn;
+    final byModel = stats.tokensByModel;
+    final byName = stats.toolCallsByName;
+    final replies = stats.replies;
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _Section(
+        StatsSectionHeading(
           'This session',
           first: true,
-          provenance: sessionStatsProvenance(view),
+          detail: sessionStatsProvenance(view),
         ),
-        _StatRow('Turns', formatStatCount(stats.turns)),
-        _StatRow('Replies', formatStatCount(stats.replies)),
-        _StatRow('Tool calls', formatStatCount(stats.toolCalls)),
-        _StatRow('Input tokens', formatStatCount(tokens.input)),
-        _StatRow('Output tokens', formatStatCount(tokens.output)),
-        _StatRow('Cache created', formatStatCount(tokens.cacheCreated)),
-        _StatRow('Cache read', formatStatCount(tokens.cacheRead)),
-        // Only where the agent breaks it out — Claude Code folds thinking into
-        // its output count and there is no honest number to print.
-        if (tokens.reasoning != null)
-          _StatRow('of which reasoning', formatStatCount(tokens.reasoning)),
-        _StatRow(
-          'Total tokens',
-          formatStatCount(tokens.total),
-          emphasise: true,
+        StatTileGrid(
+          tiles: [
+            StatTile(
+              label: 'Total tokens',
+              value: total == null ? null : formatCompactCount(total),
+              caption: total == null ? null : formatStatCount(total),
+              unrecorded: kStatNotRecorded,
+            ),
+            StatTile(
+              label: 'Turns',
+              value: _count(stats.turns),
+              caption: replies == null
+                  ? null
+                  : '${formatStatCount(replies)} '
+                        '${replies == 1 ? 'reply' : 'replies'}',
+              unrecorded: kStatNotRecorded,
+            ),
+            StatTile(
+              label: 'Tool calls',
+              value: _count(stats.toolCalls),
+              unrecorded: kStatNotRecorded,
+            ),
+            StatTile(
+              label: 'Elapsed',
+              value: stats.span == null ? null : formatStatSpan(stats.span),
+              caption: 'first to last record',
+              tooltip:
+                  'Elapsed is first record to last, not time spent '
+                  'working.',
+              unrecorded: kStatNotRecorded,
+            ),
+          ],
         ),
-        if (stats.contextWindow != null)
-          _StatRow('Context window', formatStatCount(stats.contextWindow)),
-        _StatRow('First activity', formatStatMoment(stats.firstActivityAt)),
-        _StatRow('Last activity', formatStatMoment(stats.lastActivityAt)),
-        _StatRow('Elapsed', formatStatSpan(stats.span)),
-        const SizedBox(height: Insets.xs),
-        Text(
-          'Elapsed is first record to last, not time spent working.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+        StatsNote(
+          'First record ${formatStatMoment(stats.firstActivityAt)} · '
+          'last ${formatStatMoment(stats.lastActivityAt)}',
         ),
+        const StatsBlockLabel('Tokens'),
+        if (tokens.isUnknown)
+          const StatsNote('Token counts are $kStatNotRecorded.')
+        else ...[
+          TokenSplit(tally: tokens),
+          if (cache != null) ...[
+            const SizedBox(height: Insets.sm),
+            CacheReadMeter(share: cache),
+          ],
+        ],
+        if (hasContext) ...[
+          const StatsBlockLabel('Context'),
+          ContextUsage(stats: stats, agentName: view.agentName),
+        ],
+        if (perTurn != null && perTurn.length >= 2) ...[
+          const StatsBlockLabel('Output per turn'),
+          OutputPerTurn(perTurn: perTurn),
+        ],
+        if (byModel != null && byModel.length >= 2) ...[
+          const StatsBlockLabel('By model'),
+          TokensByModel(byModel: byModel),
+        ],
+        if (byName != null && byName.isNotEmpty) ...[
+          const StatsBlockLabel('Tool calls by name'),
+          ToolCallsByName(byName: byName, total: stats.toolCalls),
+        ],
       ],
     );
   }
 }
+
+String? _count(int? value) => value == null ? null : formatStatCount(value);
 
 class _LifetimeSection extends StatelessWidget {
   const _LifetimeSection({required this.view});
@@ -173,145 +292,84 @@ class _LifetimeSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final lifetime = view.lifetime;
     if (lifetime == null) {
       return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const _Section('All time'),
-          Text(
+          const StatsSectionHeading('All time'),
+          _Notice(
             lifetimeStatsExplanation(
               view.lifetimeUnavailable ??
                   LifetimeStatsUnavailable.agentKeepsNoAggregate,
               view.agentName,
             ),
-            style: theme.textTheme.bodySmall,
           ),
         ],
       );
     }
 
     final tokens = lifetime.tokens;
+    final total = lifetime.totalTokens;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _Section(
+        StatsSectionHeading(
           'All time',
-          provenance: lifetimeStatsProvenance(lifetime, view.agentName),
+          detail: lifetimeStatsProvenance(lifetime, view.agentName),
         ),
-        _StatRow(
-          lifetime.source == LifetimeStatsSource.agentIndex
-              ? 'Threads'
-              : 'Sessions',
-          formatStatCount(lifetime.sessions),
+        StatTileGrid(
+          tiles: [
+            StatTile(
+              label: lifetime.source == LifetimeStatsSource.agentIndex
+                  ? 'Threads'
+                  : 'Sessions',
+              value: _count(lifetime.sessions),
+              unrecorded: kStatNotRecorded,
+            ),
+            if (lifetime.messages != null)
+              StatTile(
+                label: 'Messages',
+                value: _count(lifetime.messages),
+                unrecorded: kStatNotRecorded,
+              ),
+            StatTile(
+              label: 'Total tokens',
+              value: total == null ? null : formatCompactCount(total),
+              caption: total == null ? null : formatStatCount(total),
+              unrecorded: kStatNotRecorded,
+            ),
+          ],
         ),
-        if (lifetime.messages != null)
-          _StatRow('Messages', formatStatCount(lifetime.messages)),
-        _StatRow('Input tokens', formatStatCount(tokens.input)),
-        _StatRow('Output tokens', formatStatCount(tokens.output)),
-        _StatRow('Cache created', formatStatCount(tokens.cacheCreated)),
-        _StatRow('Cache read', formatStatCount(tokens.cacheRead)),
-        _StatRow(
-          'Total tokens',
-          formatStatCount(lifetime.totalTokens),
-          emphasise: true,
+        StatsNote(
+          'First activity ${formatStatMoment(lifetime.firstActivityAt)} · '
+          'last ${formatStatMoment(lifetime.lastActivityAt)}',
         ),
-        _StatRow('First activity', formatStatMoment(lifetime.firstActivityAt)),
-        _StatRow('Last activity', formatStatMoment(lifetime.lastActivityAt)),
+        if (!tokens.isUnknown) ...[
+          const StatsBlockLabel('Tokens'),
+          TokenSplit(tally: tokens),
+        ],
         // The source's own caveat, in its own words: these numbers do not count
         // what the section above counts.
-        if (lifetime.note case final note?) ...[
-          const SizedBox(height: Insets.xs),
-          Text(
-            note,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
+        if (lifetime.note case final note?) StatsNote(note),
       ],
     );
   }
 }
 
-class _Section extends StatelessWidget {
-  const _Section(this.label, {this.provenance, this.first = false});
+/// Why a section has nothing to show, as a notice rather than a bare paragraph.
+class _Notice extends StatelessWidget {
+  const _Notice(this.message);
 
-  final String label;
-
-  /// Where this section's numbers came from. Per section, never once: two books
-  /// under one unlabelled heading read as a bug.
-  final String? provenance;
-
-  final bool first;
+  final String message;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: EdgeInsets.only(top: first ? 0 : Insets.lg, bottom: Insets.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              letterSpacing: 0.8,
-            ),
-          ),
-          if (provenance case final line?)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                line,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatRow extends StatelessWidget {
-  const _StatRow(this.label, this.value, {this.emphasise = false});
-
-  final String label;
-  final String value;
-  final bool emphasise;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final unknown = value == kStatNotRecorded;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: Text(label, style: theme.textTheme.bodySmall)),
-          const SizedBox(width: Insets.sm),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: MonoStyles.body.copyWith(
-                color: unknown
-                    ? theme.colorScheme.onSurfaceVariant
-                    : theme.colorScheme.onSurface,
-                fontWeight: emphasise ? FontWeight.w600 : null,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(Radii.sm),
+      child: PaneNoticeBar(icon: AppIcons.info, message: message, maxLines: 8),
     );
   }
 }
@@ -386,10 +444,6 @@ class SessionStatsButton extends ConsumerWidget {
     );
   }
 }
-
-/// What is printed where a route could not supply a number. A word, not a zero:
-/// "0 tool calls" and "we were never told" are different claims.
-const String kStatNotRecorded = 'not recorded';
 
 /// Where the numbers came from, in the dialog's own words.
 String sessionStatsProvenance(SessionStatsView view) {
