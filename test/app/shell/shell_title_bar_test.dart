@@ -14,6 +14,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/window_matrix.dart';
 
 void main() {
   late AppDatabase db;
@@ -75,6 +76,61 @@ void main() {
       size.height,
       lessThanOrEqualTo(DetectedProjectsView.dialogMaxSize.height),
     );
+  });
+
+  testWidgets(
+    'the title bar survives narrow, large-text and very wide windows',
+    (tester) async {
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: titleBar,
+        matrix: const [
+          // The compact pane selector's window at the largest text step: the
+          // menu titles alone took 487 of its 640px and the row ran 23px over.
+          WindowCell('640x900 @ 2x text', Size(640, 900), textScale: 2),
+          minimumWindowLargeText,
+          WindowCell('720x560 @ 2x text', Size(720, 560), textScale: 2),
+          WindowCell('1000x700 @ 2x text', Size(1000, 700), textScale: 2),
+          desktopWindow,
+          WindowCell('3840x1200 (very wide)', Size(3840, 1200)),
+        ],
+      );
+    },
+  );
+
+  testWidgets('a row too narrow for the menu titles folds them behind one '
+      'glyph, and every item is still reachable', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pumpAt(tester, const Size(640, 900));
+
+    expect(find.byType(MenuBar), findsNothing);
+    await tester.tap(find.byTooltip('Menu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Workspace'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Detect CLI sessions'));
+    await tester.pumpAndSettle();
+
+    // The item's own context is gone once the menu closes; the scan and the
+    // dialog must still happen.
+    expect(scans, hasLength(1));
+    expect(find.byType(DetectedProjectsView), findsOneWidget);
+  });
+
+  testWidgets('a row with room keeps the menu titles', (tester) async {
+    for (final (size, scale) in [
+      (const Size(1440, 900), 1.0),
+      (const Size(720, 560), 1.0),
+      (const Size(720, 560), 1.3),
+      (const Size(1440, 900), 2.0),
+    ]) {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      await pumpAt(tester, size);
+      expect(find.byType(MenuBar), findsOneWidget, reason: '$size @ $scale');
+      expect(find.byTooltip('Menu'), findsNothing, reason: '$size @ $scale');
+    }
+    tester.platformDispatcher.clearTextScaleFactorTestValue();
   });
 }
 

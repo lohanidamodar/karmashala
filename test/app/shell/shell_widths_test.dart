@@ -139,8 +139,10 @@ void main() {
   testWidgets('the compact pane selector grows with the text', (tester) async {
     tester.platformDispatcher.textScaleFactorTestValue = 2;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-    await pumpAt(tester, const Size(640, 900));
+    final errors = await pumpAt(tester, const Size(640, 900));
 
+    // The title bar above it ran 23px over at this size until its menus fold.
+    expect(errors.map((e) => '${e.exception}'.split('\n').first), isEmpty);
     final selector = find.byType(SegmentedButton<ShellPane>);
     expect(selector, findsOneWidget);
     // A fixed 38px bar squeezed the buttons until their labels hung out.

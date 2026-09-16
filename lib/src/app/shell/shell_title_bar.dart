@@ -26,9 +26,32 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Size get preferredSize => Size.fromHeight(height);
 
+  /// The three menu titles at 1x text: the only part of the row that grows
+  /// with the text scale.
+  static const _menuTitlesWidth = 272.0;
+
+  /// Everything else in the row, which does not grow: padding, gaps, the four
+  /// toggles, room for both session badges, and the terminal toolbar in its
+  /// compact (+ and caret) or full width.
+  static const _glyphsWidth = 204.0;
+  static const _compactToolbarWidth = 52.0;
+  static const _fullToolbarWidth = 156.0;
+
+  /// Whether a row [width] wide has to fold the menus behind one glyph.
+  static bool foldsMenus(
+    double width,
+    TextScaler textScaler, {
+    required bool compactToolbar,
+  }) =>
+      width <
+      WidthClass.scaleBreakpoint(_menuTitlesWidth, textScaler) +
+          _glyphsWidth +
+          (compactToolbar ? _compactToolbarWidth : _fullToolbarWidth);
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final textScaler = MediaQuery.textScalerOf(context);
     // No app icon or name: the OS title bar already carries those.
     return Material(
       color: scheme.surfaceContainerLow,
@@ -40,28 +63,36 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
         ),
         // Its own width, not the window's: the row is what has to fit.
         child: LayoutBuilder(
-          builder: (context, constraints) => Row(
-            children: [
-              const _ExplorerToggle(),
-              const SizedBox(width: Insets.xs),
-              const ShellMenuBar(),
-              const SizedBox(width: Insets.sm),
-              // Expanded, not Flexible-then-Spacer: the field takes its own
-              // width and the toggles are pushed to the far edge by the rest.
-              const Expanded(child: _QuickOpenSlot()),
-              // The terminal's own verbs, on the pane the keyboard is in. Not
-              // per group: seven in every strip made a split narrower than its
-              // bar.
-              TerminalToolbar(
-                compact: ShellWidth.of(constraints.maxWidth).isCompact,
-              ),
-              const _RestoredSessionsBadge(),
-              const _BackgroundSessionsBadge(),
-              const _FocusModeToggle(),
-              const _SidePanelToggle(),
-              const _SettingsToggle(),
-            ],
-          ),
+          builder: (context, constraints) {
+            final compactToolbar = ShellWidth.of(
+              constraints.maxWidth,
+            ).isCompact;
+            final folded = foldsMenus(
+              constraints.maxWidth,
+              textScaler,
+              compactToolbar: compactToolbar,
+            );
+            return Row(
+              children: [
+                const _ExplorerToggle(),
+                const SizedBox(width: Insets.xs),
+                folded ? const ShellOverflowMenu() : const ShellMenuBar(),
+                const SizedBox(width: Insets.sm),
+                // Expanded, not Flexible-then-Spacer: the field takes its own
+                // width and the toggles are pushed to the far edge by the rest.
+                const Expanded(child: _QuickOpenSlot()),
+                // The terminal's own verbs, on the pane the keyboard is in. Not
+                // per group: seven in every strip made a split narrower than
+                // its bar.
+                TerminalToolbar(compact: compactToolbar),
+                const _RestoredSessionsBadge(),
+                const _BackgroundSessionsBadge(),
+                const _FocusModeToggle(),
+                const _SidePanelToggle(),
+                const _SettingsToggle(),
+              ],
+            );
+          },
         ),
       ),
     );

@@ -160,6 +160,38 @@ class ShellMenuBar extends ConsumerWidget {
   }
 }
 
+/// The same three menus behind one glyph, for a row too narrow for their
+/// titles.
+class ShellOverflowMenu extends ConsumerWidget {
+  const ShellOverflowMenu({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final actions = ShellMenuActions(context, ref);
+    final scheme = Theme.of(context).colorScheme;
+    return MenuAnchor(
+      menuChildren: [
+        WorkspaceMenu(actions),
+        ViewMenu(actions),
+        ToolsMenu(actions),
+      ],
+      builder: (context, controller, _) => IconButton(
+        tooltip: 'Menu',
+        constraints: const BoxConstraints.tightFor(
+          width: Chrome.control,
+          height: Chrome.control,
+        ),
+        padding: EdgeInsets.zero,
+        iconSize: Chrome.icon,
+        color: scheme.onSurfaceVariant,
+        icon: const Icon(AppIcons.dotsThreeVertical),
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
+    );
+  }
+}
+
 /// New project and session, go to, the CLI-store scans, and quit.
 class WorkspaceMenu extends StatelessWidget {
   const WorkspaceMenu(this.actions, {this.style, super.key});
