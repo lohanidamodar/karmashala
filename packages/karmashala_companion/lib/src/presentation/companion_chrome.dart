@@ -74,10 +74,16 @@ class CompanionReadable extends StatelessWidget {
 /// The height of a companion app bar: [Touch.appBar] grown with the ambient
 /// text scale, or the desktop's title-bar row off a touch surface. Material's
 /// fixed `toolbarHeight` clips a title above about 130%.
-double companionAppBarHeight(BuildContext context) =>
-    UiDensity.of(context).isTouch
-    ? Touch.appBarOf(context)
-    : Chrome.titleBarOf(context);
+///
+/// While the keyboard squeezes the screen a touch bar keeps its design height:
+/// one line of title clipped at the edge costs less than the field being typed
+/// into.
+double companionAppBarHeight(BuildContext context) {
+  if (!UiDensity.of(context).isTouch) return Chrome.titleBarOf(context);
+  return companionKeyboardSqueezed(context)
+      ? Touch.appBar
+      : Touch.appBarOf(context);
+}
 
 /// The companion's app bar. Only the height is set here: a theme cannot express
 /// it, because it depends on the text scaler at this point in the tree.
