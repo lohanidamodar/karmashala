@@ -593,7 +593,7 @@ class _DeviceRuntime {
     }
     for (final g in _rendezvousHexByGeneration.keys.toList()) {
       if (g >= from) continue;
-      await _closeGeneration(g);
+      _closeGeneration(g);
     }
     await syncRelayListeners();
   }
@@ -607,7 +607,7 @@ class _DeviceRuntime {
     for (final g in _listeners.keys.toList()) {
       for (final key in _listeners[g]!.keys.toList()) {
         if (want.containsKey(key)) continue;
-        await _closeRelayListener(g, key);
+        _closeRelayListener(g, key);
       }
     }
     _listenerUrls = urls;
@@ -628,10 +628,37 @@ class _DeviceRuntime {
     }
   }
 
-  Future<void> _closeRelayListener(int generation, String url) async {
-    await _listenerSubscriptions[generation]?.remove(url)?.cancel();
+  /// Stops routing to one relay listener and closes it **without waiting for
+  /// the network**.
+  ///
+  /// Closing a [RelayTransport] is a WebSocket goodbye handshake with the
+  /// relay, and it was awaited on the path that serves a phone's *hello*:
+  /// [listenFrom] retires every generation below the arriving one, and a phone
+  /// probes forward, so this ran on essentially every hello. The phone's whole
+  /// budget for a hello is eight seconds.
+  ///
+  /// So a relay that was slow to say goodbye — which is the usual reason the
+  /// phone is re-dialling at all — spent that budget on a socket nobody would
+  /// use again. The phone timed out, dropped, and dialled once more, and the
+  /// desktop's log showed the cycle at exactly the timeout: "paired", then
+  /// "a socket is waiting" 8.0 s later, repeating for a hundred seconds until
+  /// the phone gave up on the relay and took the LAN link instead.
+  ///
+  /// The bookkeeping stays synchronous, so nothing routes to a listener this
+  /// has removed. Only the goodbye is detached.
+  void _closeRelayListener(int generation, String url) {
+    unawaited(_listenerSubscriptions[generation]?.remove(url)?.cancel());
     final transport = _listeners[generation]?.remove(url);
-    if (transport != null) await transport.close();
+    if (transport == null) return;
+    unawaited(() async {
+      try {
+        await transport.close();
+      } on Object catch (error) {
+        // A listener we have already stopped reading. Saying goodbye badly is
+        // not a reason to fail whatever asked for the retirement.
+        service.onLog?.call('closing a retired relay listener failed: $error');
+      }
+    }());
   }
 
   /// Abandons [generation] when a frame the phone genuinely sealed cannot be
@@ -655,11 +682,11 @@ class _DeviceRuntime {
     service.onDevicesChanged?.call();
   }
 
-  Future<void> _closeGeneration(int generation) async {
+  void _closeGeneration(int generation) {
     final hex = _rendezvousHexByGeneration.remove(generation);
     if (hex != null) service._lanRoutes.remove(hex);
     for (final url in _listeners[generation]?.keys.toList() ?? const <String>[]) {
-      await _closeRelayListener(generation, url);
+      _closeRelayListener(generation, url);
     }
     _listeners.remove(generation);
     _listenerSubscriptions.remove(generation);
@@ -840,7 +867,7 @@ class _DeviceRuntime {
     _liveWatch = null;
     _watchedTransport = null;
     for (final generation in _rendezvousHexByGeneration.keys.toList()) {
-      await _closeGeneration(generation);
+      _closeGeneration(generation);
     }
     _listenerUrls = const [];
     _active = null;
