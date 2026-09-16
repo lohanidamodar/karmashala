@@ -260,6 +260,27 @@ void main() {
     }
   });
 
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('End brings the last row into view at ${scale}x text', (
+      tester,
+    ) async {
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      tester.view.physicalSize = const Size(1440, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await open(tester);
+      await press(tester, LogicalKeyboardKey.end);
+
+      final list = tester.getRect(find.byType(ListView));
+      final row = find.byWidgetPredicate(
+        (w) => w is QuickOpenRow && w.selected,
+      );
+      expect(row, findsOneWidget, reason: 'the last row was never built');
+      expect(tester.getRect(row).bottom, lessThanOrEqualTo(list.bottom + 0.5));
+    });
+  }
+
   testWidgets('typing keeps the caret in the field while the arrows move', (
     tester,
   ) async {

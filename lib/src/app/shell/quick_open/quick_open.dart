@@ -220,6 +220,9 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     if (_flat.isEmpty) return;
     setState(() => _selected = index.clamp(0, _flat.length - 1));
     _revealSelected();
+    // Again after layout: a lazy list only estimates the extent it has not
+    // built, and a jump clamped to that estimate stops short of a far row.
+    _revealSelectedAfterLayout();
   }
 
   /// The scroll offset of the row for result [index], counting the headers
