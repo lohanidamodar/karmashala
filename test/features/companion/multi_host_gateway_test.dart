@@ -584,6 +584,44 @@ void main() {
     );
   });
 
+  test('the trouble sentence belongs to the desktop that produced it, and '
+      'does not follow the phone to the next one', () async {
+    final studio = await startHost(
+      hostId: idA,
+      sessionId: 's-studio',
+      title: 'Studio work',
+    );
+    final laptop = await startHost(
+      hostId: idB,
+      sessionId: 's-laptop',
+      title: 'Laptop work',
+    );
+    final gateway = makeGateway();
+    await pairWith(gateway, studio);
+    await pairWith(gateway, laptop);
+
+    // The studio goes dark, so the phone builds up a sentence about IT.
+    await studio.service.stop();
+    await gateway.switchTo(idA);
+    await eventually(
+      () async => await gateway.linkTroubleStates.first != null,
+      reason: 'the phone has something to say about the studio',
+    );
+
+    // Back to the laptop, which is up. `linkTroubleStates` is the raw cell the
+    // banner reads — unlike the `linkTrouble` getter it is not gated on the
+    // link being down — so a sentence left in it here is rendered under the
+    // laptop's name, as the laptop's problem, before the laptop has been asked
+    // anything.
+    await gateway.switchTo(idB);
+
+    expect(
+      await gateway.linkTroubleStates.first,
+      isNull,
+      reason: "the studio's problem is not the laptop's",
+    );
+  });
+
   test('attention events carry the host they came from', () async {
     final studio = await startHost(
       hostId: idA,

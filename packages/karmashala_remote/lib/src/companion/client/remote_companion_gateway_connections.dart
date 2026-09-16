@@ -91,6 +91,22 @@ extension _GatewayConnections on RemoteCompanionGateway {
     _promotionHoldOff = 0;
     _promotionPenalty = 0;
     _unanswered = 0;
+    // What the *last* host said about itself. It survives a teardown on
+    // purpose — a relay whose address moved announces the new one seconds
+    // before taking the old socket down, so reconnecting to the same desktop
+    // it is the freshest thing we have (see [_teardownClient]). Across a
+    // change of host it is a statement about a different machine, and
+    // [_relayOrder] does not merely add it: [mergeRelayCandidates] lets the
+    // announcement *replace* the saved set, so the desktop being switched to
+    // was dialled at the old one's relays with its own last-known-good ones
+    // dropped from the order. That made a switch strictly slower than a cold
+    // launch, which starts with no announcement at all.
+    _lastHostStatus = null;
+    // The sentence shown under "Connecting to your desktop…". It is a report
+    // about the desktop that produced it, so carrying it across a switch
+    // stated the old desktop's problem under the new one's name, before the
+    // new one had been asked anything.
+    _trouble.value = null;
     _sessions = null;
     _hostOrder.clear();
     if (!_sessionChanges.isClosed) _sessionChanges.add(const []);
