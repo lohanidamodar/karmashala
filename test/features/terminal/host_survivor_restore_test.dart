@@ -7,7 +7,6 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala/src/features/terminal/data/host_terminal_instance.dart';
 import 'package:karmashala/src/features/terminal/data/local_host_access.dart';
 import 'package:karmashala_host/karmashala_host.dart';
-import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
