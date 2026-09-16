@@ -2,7 +2,7 @@
 /// proof the fake is not load-bearing anywhere between pixel and protocol.
 library;
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala_companion/screens.dart';

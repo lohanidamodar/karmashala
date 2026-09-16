@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/explorer/application/session_context.dart';
 import 'package:karmashala/src/features/sessions/application/session_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';

@@ -9,17 +9,24 @@ environment:
 # Pub workspace. The app is the root; every member declares `resolution:
 # workspace` and shares this one resolution, lock file and `.dart_tool`, so a
 # member's `dart test` needs no `pub get` of its own (docs/PACKAGE_SPLIT.md §2).
-# Not every directory under `packages/` is a member. `packages/host`,
-# `packages/mcp_bridge`, `packages/relay` and the plugin packages stay out on
-# purpose: each is a standalone binary that resolves on its own lock file, and
+# Not every directory under `packages/` is a member. `packages/mcp_bridge`,
+# `packages/relay` and the plugin packages stay out on purpose: each is a
+# standalone binary that resolves on its own lock file, and
 # their resolutions must not follow the app's — `dart compile exe` cannot reach
 # a target that pulls in the app's build-hook plugins, and relay's Dockerfile
 # (fly.io, see packages/relay/fly.toml) copies that directory alone and runs
 # `dart pub get` in it, which a member cannot do ("found no workspace root
 # including it"). A member is marked by `resolution: workspace` in its own
 # pubspec and by appearing below; nothing else is.
+# `packages/host` joined on 2026-09-15. It carries the app's own store now, and
+# `karmashala_store` pulls in `sqlite3`, whose build hook `dart compile exe`
+# refuses outright ("does not support build hooks") — so the host is built with
+# `dart build cli` and the exemption above bought it nothing. Sharing this
+# resolution is the point: one lock file is what stops the host's schema and the
+# app's from drifting, the same reason they already share the wire protocol.
 workspace:
   - packages/agent_cli
+  - packages/host
   - packages/karmashala_agent_reporting
   - packages/karmashala_browser
   - packages/karmashala_companion
@@ -32,6 +39,7 @@ workspace:
   - packages/karmashala_remote
   - packages/karmashala_session
   - packages/karmashala_ssh
+  - packages/karmashala_store
   - packages/karmashala_terminal_core
   - packages/karmashala_ui
   - packages/local_ipc
@@ -95,6 +103,11 @@ dependencies:
   # Pure Dart.
   karmashala_ssh:
     path: packages/karmashala_ssh
+  # The SQLite store: the connection, the migration ladder and the column
+  # conversions. Pure Dart with no Riverpod, so the session host binary carries
+  # the same schema as the app and two machines that talk cannot diverge.
+  karmashala_store:
+    path: packages/karmashala_store
   # What a terminal is, as values: profiles and launch contexts, the pane and
   # workspace geometry, the grid vocabulary, OSC shell integration and the cast
   # format. A Flutter package — `xterm2`'s buffer types are its vocabulary

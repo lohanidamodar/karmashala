@@ -3,7 +3,7 @@
 /// setup wakes up on the relay it was already using.
 library;
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/remote/application/relay_prefs.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';

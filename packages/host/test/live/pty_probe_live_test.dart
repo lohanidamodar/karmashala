@@ -12,7 +12,7 @@ void main() {
     final harness = WslHarness.prepare();
     final result = harness.runSync(
       '${harness.installScript('/tmp/karmashala_host_probe')}\n'
-      '/tmp/karmashala_host_probe probe-pty',
+      '${WslHarness.executableIn('/tmp/karmashala_host_probe')} probe-pty',
     );
     final output = '${result.stdout}${result.stderr}';
     printOnFailure(output);

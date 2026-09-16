@@ -1,6 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
-import '../../../core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import '../../../core/database/database_providers.dart';
 import '../domain/explorer_section.dart';
 

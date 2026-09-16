@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../../../core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 
 /// Which `(agent, environment)` pairs this workspace has ever *searched* for —
 /// never looked for is not the same as looked for and not found.

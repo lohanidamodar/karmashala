@@ -1,10 +1,50 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
+
+/// The host these tests drive, built once per test isolate.
+///
+/// **Not `dart run`**, since 2026-09-15: the host depends on `sqlite3`, so every
+/// spawn would stage the bundled library into `.dart_tool/`, and eight test
+/// workers doing that at once fail with *"Cannot delete file … sqlite3.dll"* —
+/// the DLL is held open by the sibling already running. Building once also
+/// means these tests exercise the artifact that actually ships.
+///
+/// **Not one shared output directory either**, and not behind a lock: Dart has
+/// no atomic directory claim to serialise the workers with. `createSync()`
+/// succeeds silently when the directory already exists — measured 2026-09-15,
+/// with and without `recursive` — so every worker "wins" and they delete each
+/// other's lock. A directory of its own costs one build for each of the three
+/// suites that need a host, and races with nothing.
+final Future<String> _host = _buildHost();
+
+Future<String> hostExecutable() => _host;
+
+Future<String> _buildHost() async {
+  // Unique per isolate, not per process: isolates sharing a process share a
+  // pid and would land on the same directory (see `WslHarness.runSync`).
+  final root =
+      'build/livehost-$pid-'
+      '${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(1 << 32)}';
+  final result = await Process.run(Platform.resolvedExecutable, [
+    'build',
+    'cli',
+    '-t',
+    'bin/karmashala_host.dart',
+    // `-o` rather than the default, so no test knows the `<os>_<arch>` name.
+    '-o',
+    root,
+  ]);
+  if (result.exitCode != 0) {
+    throw StateError('host build failed: ${result.stdout}${result.stderr}');
+  }
+  return '$root/bundle/bin/karmashala_host${Platform.isWindows ? '.exe' : ''}';
+}
 
 /// A real `karmashala_host serve` in a home of its own, so a test never touches
 /// a host a person is using. Started rather than slept for: [start] waits on the
@@ -22,8 +62,8 @@ class LocalHost {
 
   static Future<LocalHost> start(Directory home) async {
     final process = await Process.start(
-      Platform.resolvedExecutable,
-      ['run', 'bin/karmashala_host.dart', 'serve'],
+      await hostExecutable(),
+      ['serve'],
       environment: {'USERPROFILE': home.path, 'HOME': home.path},
       workingDirectory: Directory.current.path,
     );

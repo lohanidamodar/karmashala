@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/pty_output_coalescer.dart';
 import 'package:karmashala/src/features/terminal/data/scrollback_park.dart';

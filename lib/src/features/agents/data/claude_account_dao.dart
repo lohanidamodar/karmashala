@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/usage.dart';
 
 /// Data-access for saved [ClaudeAccount] rows. Hand-written SQL, no codegen.

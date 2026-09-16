@@ -22,7 +22,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_browser/browser.dart';

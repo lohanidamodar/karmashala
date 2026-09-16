@@ -20,5 +20,6 @@ export 'src/serve/host_paths.dart';
 export 'src/serve/client_command.dart';
 export 'src/serve/host_server.dart';
 export 'src/serve/session_store.dart';
+export 'src/store/store_probe.dart';
 export 'src/transport/socket_transport.dart';
 export 'src/transport/transport.dart';

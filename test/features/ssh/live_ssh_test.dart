@@ -3,7 +3,7 @@ library;
 
 import 'dart:io';
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ssh/runner.dart';
 import 'package:karmashala_core/util.dart';

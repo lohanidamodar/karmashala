@@ -1,7 +1,6 @@
 import 'dart:convert';
 
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 
 /// Data-access for the `terminal_presets` table (v44), hand-written SQL. A row

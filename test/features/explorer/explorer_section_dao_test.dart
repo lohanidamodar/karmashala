@@ -1,5 +1,5 @@
-import 'package:karmashala/src/core/database/app_database.dart';
-import 'package:karmashala/src/core/database/migrations.dart';
+import 'package:karmashala_store/database.dart';
+import 'package:karmashala_store/migrations.dart';
 import 'package:karmashala/src/features/explorer/data/explorer_section_dao.dart';
 import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
 import 'package:flutter_test/flutter_test.dart';

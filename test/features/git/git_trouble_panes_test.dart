@@ -1,5 +1,5 @@
 import 'package:karmashala_ui/panes.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';

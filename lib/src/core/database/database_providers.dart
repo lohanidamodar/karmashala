@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import 'app_database.dart';
+import 'package:karmashala_store/database.dart';
 
 /// Provides the application [AppDatabase], created at bootstrap and supplied
 /// by a `ProviderScope` override. Throws without one, so wiring fails loudly.

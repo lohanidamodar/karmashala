@@ -1,5 +1,4 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_session/transcript.dart';
 
 /// Data-access for the recap one session was asked for (schema v48). [write]

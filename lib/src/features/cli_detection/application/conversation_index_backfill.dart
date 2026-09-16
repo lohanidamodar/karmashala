@@ -1,4 +1,4 @@
-import '../../../core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import '../../../core/database/database_providers.dart';
 import 'package:karmashala_core/util.dart';
 import '../data/conversation_index_dao.dart';

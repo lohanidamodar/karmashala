@@ -14,7 +14,7 @@ import 'dart:io' show InternetAddress;
 import 'dart:typed_data';
 
 import 'package:karmashala/src/app/companion/companion_lifecycle.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
 import 'package:karmashala_remote/client.dart'

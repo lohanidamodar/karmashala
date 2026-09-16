@@ -5,7 +5,7 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
 import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';

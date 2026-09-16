@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/remote.dart';
 
 /// Data access for the `paired_devices` table (schema v18, `relay_url` v19).

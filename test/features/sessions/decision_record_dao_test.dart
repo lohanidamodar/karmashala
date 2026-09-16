@@ -1,4 +1,4 @@
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/sessions/data/decision_record_dao.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:flutter_test/flutter_test.dart';

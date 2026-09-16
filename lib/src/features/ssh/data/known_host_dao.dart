@@ -1,5 +1,4 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ssh/connection.dart';
 
 /// Data-access for trusted host keys — Karmashala's `known_hosts`. One row per

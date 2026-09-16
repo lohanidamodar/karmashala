@@ -5,6 +5,11 @@ import 'package:sqlite3/sqlite3.dart';
 
 import 'migrations.dart';
 
+/// The SQLite this build is linked against. Read, never assumed: the library is
+/// chosen by the build hook rather than by this package, so a host binary and
+/// the app can be carrying different ones.
+String get sqliteLibraryVersion => sqlite3.version.libVersion;
+
 /// The app's SQLite database: hand-written SQL, no code generation. Owns the
 /// connection and the typed helpers, so `sqlite3` never leaks into features.
 class AppDatabase {
@@ -27,7 +32,6 @@ class AppDatabase {
 
   /// Opens an ephemeral in-memory database, for tests.
   factory AppDatabase.memory() => AppDatabase(sqlite3.openInMemory());
-
 
   /// Connection settings, applied once before any other statement. WAL, and
   /// `synchronous = NORMAL` only once WAL is in effect — see docs/SETTLED.md.
@@ -75,7 +79,6 @@ class AppDatabase {
   int get _userVersion =>
       _db.select('PRAGMA user_version;').first.values.first! as int;
 
-
   /// Runs a SELECT and returns rows as plain column-name → value maps, which
   /// keeps the `sqlite3` types out of feature code.
   List<Map<String, Object?>> query(
@@ -110,7 +113,6 @@ class AppDatabase {
       rethrow;
     }
   }
-
 
   /// Reads a metadata value by [key], or `null` if absent.
   String? readMetadata(String key) {

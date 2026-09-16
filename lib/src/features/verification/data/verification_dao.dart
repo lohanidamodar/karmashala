@@ -1,5 +1,4 @@
-import '../../../core/database/app_database.dart';
-import '../../../core/database/row_mapping.dart';
+import 'package:karmashala_store/database.dart';
 import '../domain/verification_artifact.dart';
 import '../domain/verification_run.dart';
 import '../domain/verification_step.dart';

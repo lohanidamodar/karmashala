@@ -1,5 +1,5 @@
 import 'package:karmashala/src/app/shell/workbench.dart';
-import 'package:karmashala/src/core/database/app_database.dart';
+import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';

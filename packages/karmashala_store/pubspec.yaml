@@ -1,0 +1,27 @@
+name: karmashala_store
+description: >-
+  Karmashala's SQLite store: the connection, the hand-written migration ladder
+  and the column conversions. Pure Dart with no Flutter and no Riverpod, so the
+  same schema serves the desktop app and the session host binary deployed to a
+  machine with no GUI — one migration ladder, so two machines that talk to each
+  other cannot diverge.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # The database itself. `sqlite3_flutter_libs` stays in the app: it only
+  # bundles the native library for Flutter targets, and a standalone binary
+  # links the system libsqlite3 instead.
+  path: ^1.9.1
+  sqlite3: ^3.3.3
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1
