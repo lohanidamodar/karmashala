@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/claude_accounts_controller.dart';
 import 'package:karmashala/src/features/agents/application/codex_accounts_controller.dart';
 import 'package:agent_cli/discovery.dart';
@@ -14,6 +15,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/settings/presentation/claude_accounts_section.dart';
 import 'package:karmashala/src/features/settings/presentation/codex_accounts_section.dart';
 
+import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 
 /// The "Switch to" menu over the shared pool of saved Claude accounts.
@@ -105,6 +107,84 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(switched, [theirs]);
+  });
+
+  group('a token expiry is read against the app clock', () {
+    // `testTime` is long past, so a section that asked the wall clock would
+    // call a token three hours ahead of it "expired".
+    final expiresAt = testTime.add(const Duration(hours: 3, minutes: 5));
+
+    testWidgets('Claude', (tester) async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      final installation = agentInstallation();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            clockProvider.overrideWithValue(FixedClock(testTime)),
+            claudeAccountsControllerProvider.overrideWith(
+              () => _FakeAccounts(const [], []),
+            ),
+            claudeAuthSnapshotProvider(installation).overrideWith(
+              (ref) async => ClaudeAuthSnapshot(
+                environmentId: 'windows',
+                email: 'me@example.com',
+                subscriptionType: 'max',
+                accessTokenExpiresAt: expiresAt,
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: ClaudeAccountsSection(installations: [installation]),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('max · token expires in 3h'), findsOneWidget);
+    });
+
+    testWidgets('Codex', (tester) async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      final installation = agentInstallation();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            clockProvider.overrideWithValue(FixedClock(testTime)),
+            codexAccountsControllerProvider.overrideWith(
+              () => _FakeCodexAccounts(const []),
+            ),
+            codexAuthSnapshotProvider(installation).overrideWith(
+              (ref) async => CodexAuthSnapshot(
+                environmentId: 'windows',
+                accountId: 'account-1',
+                planType: 'pro',
+                accessTokenExpiresAt: expiresAt,
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: CodexAccountsSection(installations: [installation]),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('pro · token expires in 3h'), findsOneWidget);
+    });
   });
 
   testWidgets('Codex shows the active identity and captured accounts', (
