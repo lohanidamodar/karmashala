@@ -5,10 +5,10 @@ import 'package:karmashala_remote/host.dart';
 import 'package:karmashala_remote/remote.dart';
 
 import '../domain/session_registry.dart';
-import '../transport/transport.dart';
+
 import 'companion_bindings.dart';
 
-/// Serves the companion's own frame protocol over one byte channel.
+/// Serves the companion's own frame protocol over one link.
 ///
 /// **The host is a peer the phone pairs with, not a machine behind somebody
 /// else's desktop.** Its own pairing table lives in its own store, so the
@@ -27,9 +27,9 @@ import 'companion_bindings.dart';
 ///
 /// **Unsealed today, and only because nothing has paired yet.** The sealed
 /// channel is what carries a device key, and there is no key until the pairing
-/// half lands here; [serve] takes bytes, so it will sit on a `SealedChannel`
-/// without changing. Until then this is reachable only over a channel something
-/// else has already authenticated, which is why the first transport is SSH.
+/// half lands here. `SealedChannel` is itself a [RemoteTransport], so [serve]
+/// sits on one without changing a line — which is the reason it takes frames
+/// rather than bytes.
 class CompanionServer {
   CompanionServer({
     required this.registry,
@@ -53,11 +53,14 @@ class CompanionServer {
 
   final DateTime Function() _now;
 
-  /// Reads frames until [connection] ends, answering each one. Completes when
-  /// the peer goes away; it does not close the connection itself, because the
-  /// caller owns it (`attach` proxies stdio, a test drives a pipe).
-  Future<void> serve(HostConnection connection) async {
-    final framer = LengthPrefixedFramer();
+  /// Answers frames until [link] ends. Completes when the peer goes away; it
+  /// does not close the link, because the caller owns it.
+  ///
+  /// A [RemoteTransport] and not a byte channel, which is the layer the desktop
+  /// serves at too: `LanLink`, the relay transport and a `SealedChannel` are all
+  /// one, and every one of them already frames. Taking bytes here would mean
+  /// framing a second time on top of transports that had done it once.
+  Future<void> serve(RemoteTransport link) async {
     var seq = 0;
 
     Future<bool> send(
@@ -65,9 +68,7 @@ class CompanionServer {
       String? id,
       Map<String, Object?> payload = const {},
     }) async {
-      final envelope = Envelope.of(type, seq: seq++, id: id, payload: payload);
-      connection.add(LengthPrefixedFramer.encode(envelope.toBytes()));
-      await connection.flush();
+      link.send(Envelope.of(type, seq: seq++, id: id, payload: payload).toBytes());
       return true;
     }
 
@@ -77,26 +78,26 @@ class CompanionServer {
       send: send,
     );
 
-    await for (final chunk in connection.incoming) {
-      for (final frame in framer.add(chunk)) {
-        // A frame this build cannot even decode is refused rather than dropped.
-        // A phone that gets no answer cannot tell a refusal from a host that
-        // has stopped reading, which is precisely the failure `91a457db` was.
-        try {
-          await api.handleEnvelope(Envelope.fromBytes(frame));
-        } on ProtocolException catch (e) {
-          await send(
-            FrameType.error,
-            payload: {'code': ErrorCode.badRequest.wire, 'message': e.message},
-          );
-        }
+    await for (final frame in link.frames) {
+      // A frame this build cannot even decode is refused rather than dropped.
+      // A phone that gets no answer cannot tell a refusal from a host that has
+      // stopped reading, which is precisely the failure `91a457db` was.
+      try {
+        await api.handleEnvelope(Envelope.fromBytes(frame));
+      } on ProtocolException catch (e) {
+        await send(
+          FrameType.error,
+          payload: {'code': ErrorCode.badRequest.wire, 'message': e.message},
+        );
       }
     }
   }
 
   /// The phone on the other end, as the api's own type. The key is empty and
-  /// the generation zero because SSH holds both: the *channel* is the sealed
-  /// thing, and the key that opened it is sshd's business, not this process's.
+  /// the generation zero because the link below has already used them: a
+  /// `SealedChannel` proves which device is speaking before a frame gets here,
+  /// so re-checking the key at this layer would be asking a question the
+  /// transport has already answered.
   PairedDevice _localDevice() => PairedDevice(
     id: clientId,
     name: clientId,

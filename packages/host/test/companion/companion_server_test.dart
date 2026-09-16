@@ -5,22 +5,27 @@ import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:test/test.dart';
 
-/// Both ends of one byte channel, so a test can be the phone.
-class _Pipe implements HostConnection {
+/// Both ends of one link, so a test can be the phone. A [RemoteTransport] and
+/// not a socket: that is the layer `serve` works at, and the layer a
+/// `SealedChannel` or a `LanLink` would arrive as.
+class _Pipe implements RemoteTransport {
   final _toHost = StreamController<Uint8List>();
   final fromHost = StreamController<Uint8List>.broadcast();
 
   @override
-  String get description => 'test';
+  Stream<Uint8List> get frames => _toHost.stream;
 
   @override
-  Stream<Uint8List> get incoming => _toHost.stream;
+  void send(List<int> frame) => fromHost.add(Uint8List.fromList(frame));
 
   @override
-  void add(Uint8List bytes) => fromHost.add(bytes);
+  Stream<TransportState> get states => const Stream<TransportState>.empty();
 
   @override
-  Future<void> flush() async {}
+  TransportState get state => TransportState.connected;
+
+  @override
+  bool get isConnected => true;
 
   @override
   Future<void> close() async {
@@ -28,15 +33,10 @@ class _Pipe implements HostConnection {
     await fromHost.close();
   }
 
-  @override
-  Future<void> get done => _toHost.done;
+  void sendToHost(Envelope envelope) => _toHost.add(envelope.toBytes());
 
-  void sendToHost(Envelope envelope) =>
-      _toHost.add(LengthPrefixedFramer.encode(envelope.toBytes()));
-
-  /// A framed payload that is not an envelope at all.
-  void sendRaw(Uint8List payload) =>
-      _toHost.add(LengthPrefixedFramer.encode(payload));
+  /// A frame that is not an envelope at all.
+  void sendRaw(Uint8List payload) => _toHost.add(payload);
 }
 
 void main() {
@@ -49,12 +49,9 @@ void main() {
     pipe = _Pipe();
     registry = SessionRegistry(launcher: FakePtyLauncher());
     answers = [];
-    final framer = LengthPrefixedFramer();
-    reader = pipe.fromHost.stream.listen((chunk) {
-      for (final frame in framer.add(chunk)) {
-        answers.add(Envelope.fromBytes(frame));
-      }
-    });
+    reader = pipe.fromHost.stream.listen(
+      (frame) => answers.add(Envelope.fromBytes(frame)),
+    );
 
     unawaited(
       CompanionServer(
@@ -155,12 +152,9 @@ void main() {
     // nothing can pair yet.
     final viewOnly = _Pipe();
     final seen = <Envelope>[];
-    final framer = LengthPrefixedFramer();
-    final sub = viewOnly.fromHost.stream.listen((chunk) {
-      for (final frame in framer.add(chunk)) {
-        seen.add(Envelope.fromBytes(frame));
-      }
-    });
+    final sub = viewOnly.fromHost.stream.listen(
+      (frame) => seen.add(Envelope.fromBytes(frame)),
+    );
     addTearDown(() async {
       await sub.cancel();
       await viewOnly.close();
