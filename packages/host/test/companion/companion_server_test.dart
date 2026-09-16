@@ -148,6 +148,55 @@ void main() {
     expect(answer.payload['message'], contains('no such session'));
   });
 
+  test('a phone paired with less is granted less', () async {
+    // The grant travels with the paired device, the same way it does on the
+    // desktop — this host is a peer a phone pairs with, not a machine behind
+    // one. Pinned rather than assumed, because the default is everything while
+    // nothing can pair yet.
+    final viewOnly = _Pipe();
+    final seen = <Envelope>[];
+    final framer = LengthPrefixedFramer();
+    final sub = viewOnly.fromHost.stream.listen((chunk) {
+      for (final frame in framer.add(chunk)) {
+        seen.add(Envelope.fromBytes(frame));
+      }
+    });
+    addTearDown(() async {
+      await sub.cancel();
+      await viewOnly.close();
+    });
+
+    unawaited(
+      CompanionServer(
+        registry: registry,
+        hostName: 'do-box',
+        clientId: 'pixel-7',
+        capabilities: CapabilitySet.of([Capability.viewSessions]),
+      ).serve(viewOnly),
+    );
+
+    viewOnly.sendToHost(
+      Envelope.of(FrameType.sessionsList, seq: 1, id: 'a'),
+    );
+    viewOnly.sendToHost(
+      Envelope.of(
+        FrameType.transcriptGet,
+        seq: 2,
+        id: 'b',
+        payload: {'sessionId': 'karmashala_live'},
+      ),
+    );
+    await Future.doWhile(() async {
+      await Future<void>.delayed(Duration.zero);
+      return seen.length < 2;
+    }).timeout(const Duration(seconds: 5));
+
+    expect(seen.firstWhere((e) => e.id == 'a').type, FrameType.result.wire);
+    final refused = seen.firstWhere((e) => e.id == 'b');
+    expect(refused.type, FrameType.error.wire);
+    expect(refused.payload['code'], ErrorCode.notPermitted.wire);
+  });
+
   test('a frame this build cannot decode is answered, not dropped', () async {
     pipe.sendRaw(Uint8List.fromList('{not json'.codeUnits));
 
