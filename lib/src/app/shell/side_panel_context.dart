@@ -117,7 +117,7 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
   }
 }
 
-/// The 22px strip. Identical whether or not it is a button.
+/// The status-bar-high strip. Identical whether or not it is a button.
 class _ContextLineBody extends StatelessWidget {
   const _ContextLineBody({
     required this.repository,
@@ -134,7 +134,7 @@ class _ContextLineBody extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Container(
-      height: 22,
+      height: Chrome.statusBarOf(context),
       padding: const EdgeInsets.symmetric(horizontal: Insets.md),
       color: scheme.surfaceContainerLowest,
       child: Row(
@@ -168,7 +168,7 @@ class _ContextLineBody extends StatelessWidget {
             ),
           ],
           if (pickable) ...[
-            const SizedBox(width: 2),
+            const SizedBox(width: Insets.xs / 2),
             Icon(
               AppIcons.caretDown,
               size: Chrome.iconSmall,
@@ -297,16 +297,21 @@ class _WorktreeChip extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: Insets.sm,
-              vertical: 2,
+              vertical: Insets.xs / 2,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(AppIcons.gitBranch, size: Chrome.iconSmall, color: colour),
                 const SizedBox(width: Insets.xs),
-                Text(
-                  label,
-                  style: theme.textTheme.labelSmall?.copyWith(color: colour),
+                // The tooltip carries the full path, so a long branch can end.
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(color: colour),
+                  ),
                 ),
               ],
             ),

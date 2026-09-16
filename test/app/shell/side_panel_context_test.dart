@@ -6,6 +6,10 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/features/explorer/application/checkout_picker.dart';
+import 'package:karmashala_git/git.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,6 +79,64 @@ void main() {
     await pump(tester);
 
     expect(find.byType(Text), findsNothing);
+  });
+
+  testWidgets('a long worktree branch fits the narrowest panel', (
+    tester,
+  ) async {
+    final worktrees = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        selectedCheckoutWorktreesProvider.overrideWith(
+          (ref) async => const [
+            GitWorktree(
+              path: EnvironmentPath(
+                environmentId: 'windows',
+                path: r'C:\src\demo\wt\login',
+              ),
+              branch: 'session/fix-the-login-form-validation',
+            ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(worktrees.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: worktrees,
+        child: const MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(width: 240, child: SidePanelWorktrees()),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('session/fix'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the context line grows with the text size', (tester) async {
+    container.read(selectedRepositoryIdProvider.notifier).select('nested');
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(2)),
+          child: MaterialApp(home: Scaffold(body: SidePanelContextLine())),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(
+      tester.getSize(find.byType(SidePanelContextLine)).height,
+      greaterThan(Chrome.statusBar),
+    );
   });
 
   test('every repository-scoped surface is one that reads the selection', () {
