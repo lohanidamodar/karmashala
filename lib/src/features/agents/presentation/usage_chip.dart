@@ -357,47 +357,47 @@ class _UsageChipState extends ConsumerState<UsageChip> {
       child: Semantics(
         tooltip: view.tooltip,
         child: Tooltip(
-        excludeFromSemantics: true,
-        padding: EdgeInsets.zero,
-        decoration: const BoxDecoration(),
-        richMessage: WidgetSpan(
-          child: UsageChipPopover(
-            view: view,
-            accountKey: account,
-            agentId: installation.agentId,
-            environmentId: installation.environmentId,
+          excludeFromSemantics: true,
+          padding: EdgeInsets.zero,
+          decoration: const BoxDecoration(),
+          richMessage: WidgetSpan(
+            child: UsageChipPopover(
+              view: view,
+              accountKey: account,
+              agentId: installation.agentId,
+              environmentId: installation.environmentId,
+            ),
           ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                // The health panel's glyphs, on purpose: one vocabulary for
-                // "a reading with an age" and for "nothing was observed".
-                switch (view.mark) {
-                  UsageMark.live => AppIcons.circleHalf,
-                  UsageMark.stale => AppIcons.clockCounterClockwise,
-                  UsageMark.unknown => AppIcons.question,
-                },
-                size: _glyph,
-                color: colour,
-              ),
-              const SizedBox(width: _glyphGap),
-              // Flexible, so a bounded bar makes the chip give up its tail
-              // rather than overflow, each period giving up its own.
-              Flexible(child: _words(view.label, colour)),
-              if (view.longLabel case final longer?) ...[
-                // A gap rather than another `·`: the dot already separates the
-                // halves *inside* a fact. It also costs no height.
-                const SizedBox(width: Insets.sm),
-                Flexible(child: _words(longer, colour)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  // The health panel's glyphs, on purpose: one vocabulary for
+                  // "a reading with an age" and for "nothing was observed".
+                  switch (view.mark) {
+                    UsageMark.live => AppIcons.circleHalf,
+                    UsageMark.stale => AppIcons.clockCounterClockwise,
+                    UsageMark.unknown => AppIcons.question,
+                  },
+                  size: _glyph,
+                  color: colour,
+                ),
+                const SizedBox(width: _glyphGap),
+                // Flexible, so a bounded bar makes the chip give up its tail
+                // rather than overflow, each period giving up its own.
+                Flexible(child: _words(view.label, colour)),
+                if (view.longLabel case final longer?) ...[
+                  // A gap rather than another `·`: the dot already separates the
+                  // halves *inside* a fact. It also costs no height.
+                  const SizedBox(width: Insets.sm),
+                  Flexible(child: _words(longer, colour)),
+                ],
               ],
-            ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

@@ -53,7 +53,10 @@ class _UsageTokensCardState extends ConsumerState<UsageTokensCard> {
               else
                 TextButton.icon(
                   onPressed: _count,
-                  icon: const Icon(AppIcons.arrowsClockwise, size: Chrome.iconAction),
+                  icon: const Icon(
+                    AppIcons.arrowsClockwise,
+                    size: Chrome.iconAction,
+                  ),
                   label: Text(_asked ? 'Count again' : 'Count tokens'),
                 ),
             ],

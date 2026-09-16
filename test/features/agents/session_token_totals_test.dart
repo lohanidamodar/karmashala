@@ -43,7 +43,12 @@ void main() {
 
     test('a session last active before the period is left out', () {
       final totals = aggregateTokenTotals([
-        row('old', 'Codex CLI', 9000, last: since.subtract(const Duration(minutes: 1))),
+        row(
+          'old',
+          'Codex CLI',
+          9000,
+          last: since.subtract(const Duration(minutes: 1)),
+        ),
         row('new', 'Codex CLI', 10, last: since),
       ], since: since);
       expect(totals.byProject, [('new', 10)]);
@@ -60,13 +65,15 @@ void main() {
       expect(totals.counted, 1);
     });
 
-    test('tokens with an unknown last activity are not placed in the period',
-        () {
-      final totals = aggregateTokenTotals([
-        row('p', 'Claude Code', 50, unknownLast: true),
-      ], since: since);
-      expect(totals.isEmpty, isTrue);
-    });
+    test(
+      'tokens with an unknown last activity are not placed in the period',
+      () {
+        final totals = aggregateTokenTotals([
+          row('p', 'Claude Code', 50, unknownLast: true),
+        ], since: since);
+        expect(totals.isEmpty, isTrue);
+      },
+    );
   });
 
   test('formatTokenCount is label-sized', () {
@@ -92,9 +99,7 @@ void main() {
       ],
       child: const MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          body: SingleChildScrollView(child: UsageTokensCard()),
-        ),
+        home: Scaffold(body: SingleChildScrollView(child: UsageTokensCard())),
       ),
     );
 

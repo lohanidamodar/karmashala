@@ -66,7 +66,9 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
-          home: Scaffold(body: Center(child: UsageChip(sessionId: 's1'))),
+          home: Scaffold(
+            body: Center(child: UsageChip(sessionId: 's1')),
+          ),
         ),
       ),
     );
@@ -105,7 +107,9 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
-          home: Scaffold(body: Center(child: UsageChip(sessionId: 's1'))),
+          home: Scaffold(
+            body: Center(child: UsageChip(sessionId: 's1')),
+          ),
         ),
       ),
     );
@@ -176,7 +180,10 @@ void main() {
               resetsAt: testTime.add(const Duration(days: 3)),
               span: kUsageSevenDayWindow,
             ),
-            const UsageWindow(label: 'Claude Opus Fable Sonnet · weekly', percent: 3),
+            const UsageWindow(
+              label: 'Claude Opus Fable Sonnet · weekly',
+              percent: 3,
+            ),
             const UsageWindow(label: 'Gemini Code Assist'),
           ],
         ),
