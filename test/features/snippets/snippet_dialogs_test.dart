@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -131,7 +132,18 @@ void main() {
     expect(find.text('Run the tests'), findsOneWidget);
     expect(find.text('Any shell'), findsOneWidget);
 
+    // Asks first, as the settings page does, and takes no for an answer.
     await tester.tap(find.byTooltip('Delete Run the tests'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Run the tests?'), findsOneWidget);
+    expect(container.read(commandSnippetsProvider), hasLength(1));
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(container.read(commandSnippetsProvider), hasLength(1));
+
+    await tester.tap(find.byTooltip('Delete Run the tests'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(DestructiveButton, 'Delete'));
     await tester.pumpAndSettle();
 
     expect(container.read(commandSnippetsProvider), isEmpty);

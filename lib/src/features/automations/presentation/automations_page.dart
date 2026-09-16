@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
@@ -212,8 +213,7 @@ class AutomationCard extends ConsumerWidget {
                 child: const Text('Edit'),
               ),
               TextButton(
-                onPressed: () =>
-                    ref.read(automationControllerProvider).delete(automation.id),
+                onPressed: () => _confirmDelete(context, ref, automation),
                 child: const Text('Delete'),
               ),
             ],
@@ -232,6 +232,38 @@ class AutomationCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Asks first: a deleted automation is gone, schedule, prompt and all, and
+/// re-arming it is the whole authorisation again.
+Future<void> _confirmDelete(
+  BuildContext context,
+  WidgetRef ref,
+  Automation automation,
+) async {
+  final controller = ref.read(automationControllerProvider);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text('Delete ${automation.name}?'),
+      content: const Text(
+        'It will not fire again, and its schedule and prompt are forgotten. '
+        'To stop it for now and keep it, pause it instead.',
+      ),
+      actions: [
+        TextButton(
+          autofocus: true,
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        DestructiveButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed == true) controller.delete(automation.id);
 }
 
 /// What the card says about when this fires. Never "next run in 18 hours" for a

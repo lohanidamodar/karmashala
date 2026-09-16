@@ -213,35 +213,11 @@ Future<void> _editSnippet(
   );
 }
 
-/// Asks first, unlike the library dialog: on a settings page you are browsing,
-/// a delete sits beside Edit with no undo behind it.
 Future<void> _deleteSnippet(
   BuildContext context,
   WidgetRef ref,
   CommandSnippet snippet,
 ) async {
   final snippets = ref.read(commandSnippetsProvider.notifier);
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: Text('Delete ${snippet.label}?'),
-      content: Text(
-        'The command itself is not going anywhere — this only forgets that you '
-        'saved it.\n\n${snippet.command}',
-      ),
-      actions: [
-        TextButton(
-          autofocus: true,
-          onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Delete'),
-        ),
-      ],
-    ),
-  );
-  if (confirmed != true) return;
-  snippets.delete(snippet.id);
+  if (await confirmSnippetDelete(context, snippet)) snippets.delete(snippet.id);
 }

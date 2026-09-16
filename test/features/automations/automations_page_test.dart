@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -303,6 +304,29 @@ void main() {
       expect(find.text('Failed'), findsOneWidget);
       expect(find.textContaining('Verification is off for app'), findsOneWidget);
     });
+  });
+
+  testWidgets('deleting asks first, and takes no for an answer', (
+    tester,
+  ) async {
+    makeReady();
+    arm();
+    await pumpPage(tester);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Nightly sweep?'), findsOneWidget);
+    expect(AutomationDao(db).getById('auto1'), isNotNull);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(AutomationDao(db).getById('auto1'), isNotNull);
+
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(DestructiveButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(AutomationDao(db).getById('auto1'), isNull);
+    expect(find.text('Nightly sweep'), findsNothing);
   });
 
   testWidgets('pausing is one press, and it keeps the row', (tester) async {

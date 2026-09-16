@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_store/database.dart';
@@ -172,7 +173,7 @@ void main() {
 
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.tap(find.widgetWithText(DestructiveButton, 'Delete'));
     await tester.pumpAndSettle();
 
     expect(container.read(commandSnippetsProvider), isEmpty);

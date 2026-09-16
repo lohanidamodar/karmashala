@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
@@ -182,7 +183,7 @@ void main() {
 
       await tester.tap(find.byTooltip('Delete Game dev'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.tap(find.widgetWithText(DestructiveButton, 'Delete'));
       await tester.pumpAndSettle();
 
       expect(container.read(workspacesControllerProvider), isEmpty);

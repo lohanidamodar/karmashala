@@ -263,10 +263,7 @@ class _WorkspacesDialogState extends ConsumerState<WorkspacesDialog> {
               onPressed: () => setState(() => _confirmingDeleteId = null),
               child: const Text('Cancel'),
             ),
-            TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: theme.colorScheme.error,
-              ),
+            DestructiveButton(
               onPressed: () {
                 ref
                     .read(workspacesControllerProvider.notifier)

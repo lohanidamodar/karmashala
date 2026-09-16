@@ -13,6 +13,7 @@ import 'package:karmashala/src/features/verification/domain/verification_target.
 import 'package:karmashala/src/features/verification/presentation/verification_pane.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -175,6 +176,22 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
   }
+
+  testWidgets('deleting a run asks, with a destructive confirm', (
+    tester,
+  ) async {
+    seed(id: 'run-del', title: 'a run to delete');
+    await pump(tester);
+    await tapAndSettle(tester, find.text('a run to delete'));
+    await tapAndSettle(tester, find.byTooltip('Delete this run'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Delete this run?'), findsOneWidget);
+    expect(find.widgetWithText(DestructiveButton, 'Delete'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(h.dao.getRun('run-del'), isNotNull);
+  });
 
   testWidgets('with nothing recorded it says what a run is for', (
     tester,

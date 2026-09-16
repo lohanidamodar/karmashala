@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
@@ -298,7 +299,7 @@ class _RunActionsState extends ConsumerState<_RunActions> {
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
-          FilledButton(
+          DestructiveButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),
