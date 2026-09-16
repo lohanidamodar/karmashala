@@ -6,7 +6,6 @@ import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 
 import '../domain/session_registry.dart';
-import 'companion_port_number.dart';
 import 'companion_server.dart';
 import 'sealed_link.dart';
 

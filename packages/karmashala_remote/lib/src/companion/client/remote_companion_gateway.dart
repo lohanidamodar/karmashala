@@ -350,7 +350,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// pasted full payload — sniffed apart here. Full entropy (160 bits), so no
   /// PAKE is needed; SPAKE2 stays descoped for want of a vetted Dart one.
   @override
-  Future<CompanionPairing> pairWithCode(String shortCode) async {
+  Future<CompanionPairing> pairWithCode(String shortCode, {String? at}) async {
     await _ready;
     final text = shortCode.trim();
     if (text.startsWith('{')) return pairWithQr(text);
@@ -378,8 +378,11 @@ class RemoteCompanionGateway implements CompanionGateway {
       ),
       relay: relay,
       rendezvous: rendezvous,
+      at: at,
     );
-    return _adoptPairing(record);
+    // Remembered on the record, so every later dial goes straight back rather
+    // than searching a network the box was never on.
+    return _adoptPairing(at == null ? record : record.copyWith(directEndpoint: at));
   }
 
   @override

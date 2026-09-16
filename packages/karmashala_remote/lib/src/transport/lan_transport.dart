@@ -16,6 +16,18 @@ const int kDefaultLanPort = 47653;
 const Duration kLanConnectTimeout = Duration(seconds: 5);
 
 /// The companion's end of the direct path: dials the host and keeps redialling.
+/// The port a session host listens on for phones.
+///
+/// Here rather than beside the listener because three packages have to agree on
+/// it and they cannot all reach each other: the host binds it, the deployer
+/// opens it in a firewall, and the phone dials it. This is the only package all
+/// three already depend on — and the phone must never depend on the host's,
+/// which would drag SQLite onto a handset.
+///
+/// Its own, not the desktop's: a box may run both, and two listeners on one
+/// port is a failure at bind time rather than a question anybody wants to debug.
+const int kHostCompanionPort = 47_820;
+
 class LanTransport extends ReconnectingTransport {
   LanTransport({
     required this.host,

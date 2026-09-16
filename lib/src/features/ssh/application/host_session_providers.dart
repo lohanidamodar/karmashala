@@ -50,3 +50,29 @@ HostSessionAccess? _hostSessionAccessFor(Ref ref, SshHost host) {
   }
   return ref.read(hostSessionAccessRegistryProvider).forHost(host);
 }
+
+/// Everything needed to invite a phone to one machine: the address this desktop
+/// connected with, the companion port, and the host already running there.
+///
+/// Built per host and never cached — a port that was open an hour ago is not a
+/// port that is open now, and this answers by dialling (§19).
+final sshCompanionSetupProvider =
+    FutureProvider.family<SshCompanionSetup, SshHost>((ref, host) async {
+      final access = ref.read(hostSessionAccessRegistryProvider).forHost(host);
+      // The pane's own reading, so a pairing lands on the host the sessions are
+      // in rather than a second one at a path nobody is watching.
+      final deployment = await access.deployment();
+      final remotePath = deployment.remotePath;
+      if (remotePath == null) {
+        throw StateError(
+          'No session host is deployed on ${host.name} yet — ${deployment.reason}',
+        );
+      }
+      return SshCompanionSetup(
+        host: host,
+        target: SshHostDeployTarget(
+          ref.read(sshConnectionPoolProvider).forHostId(host.id),
+        ),
+        remotePath: remotePath,
+      );
+    });

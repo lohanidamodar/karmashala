@@ -295,7 +295,7 @@ class FakeCompanionGateway implements CompanionGateway {
   }
 
   @override
-  Future<CompanionPairing> pairWithCode(String shortCode) async {
+  Future<CompanionPairing> pairWithCode(String shortCode, {String? at}) async {
     // The same sniff the real gateway does: a pasted payload is JSON.
     if (shortCode.trim().startsWith('{')) return pairWithQr(shortCode);
     if (shortCode.trim().toUpperCase() != validShortCode.toUpperCase()) {

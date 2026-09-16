@@ -13,6 +13,7 @@ import '../application/ssh_hosts_controller.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'ssh_connection_status_chip.dart';
 import 'host_sessions_dialog.dart';
+import 'pair_phone_dialog.dart';
 import 'ssh_host_dialog.dart';
 import 'remote_file_browser_dialog.dart';
 
@@ -98,6 +99,11 @@ class _HostCard extends ConsumerWidget {
           label: 'Edit',
           icon: AppIcons.pencilSimple,
         ),
+        DesktopMenuItem(
+          value: 'pair_phone',
+          label: 'Pair a phone…',
+          icon: AppIcons.deviceMobile,
+        ),
         const DesktopMenuDivider(),
         DesktopMenuItem(
           value: 'remove',
@@ -115,6 +121,7 @@ class _HostCard extends ConsumerWidget {
           ),
         'browse' => RemoteFileBrowserDialog.show(context, host: host),
         'edit' => SshHostDialog.show(context, existing: host),
+        'pair_phone' => PairPhoneDialog.show(context, host: host),
         _ => _remove(context, ref),
       },
       builder: (context) => Card(
