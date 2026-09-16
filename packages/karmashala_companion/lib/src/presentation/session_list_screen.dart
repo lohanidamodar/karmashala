@@ -19,6 +19,7 @@ import 'add_project_screen.dart';
 import 'project_group.dart';
 import 'project_sessions_screen.dart';
 import 'running_sessions_group.dart';
+import 'session_list_view.dart';
 import 'start_session_screen.dart';
 
 /// The phone's first tab: the host's projects, each opening its own sessions on
@@ -104,7 +105,6 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
     CompanionLinkState? link,
     String hostName,
   ) {
-    final query = companionSearchQuery(_raw);
     return companionAsync(
       sessions,
       loading: () => const CompanionSkeletonList(lines: 2),
@@ -128,87 +128,69 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
             return _empty(context, ref, link, hostName);
           }
         }
-        // Which machine, before which project. A key naming nothing here is a
-        // desktop we have since switched away from, and reads as "all of them"
-        // rather than as an empty list.
-        final machines = companionEnvironments(
-          list,
-          projects: projects.asData?.value ?? const [],
+        final view = sessionListViewOf(
+          sessions: list,
+          projects: projects.asData?.value,
+          chosenEnvironment: ref.watch(companionEnvironmentProvider),
+          rawQuery: _raw,
         );
-        final chosen = ref.watch(companionEnvironmentProvider);
-        final active = machines.any((m) => m.key == chosen) ? chosen : null;
-        if (machines.length > 1 && active == null && query.isEmpty) {
-          return EnvironmentIndex(
-            environments: machines,
-            onPick: (key) =>
-                ref.read(companionEnvironmentProvider.notifier).choose(key),
-          );
-        }
-        // One machine needs no step, and a search crosses all of them.
-        final scoped = active == null
-            ? list
-            : sessionsOnEnvironment(list, active);
-        final onMachine = active == null
-            ? null
-            : machines.firstWhere((m) => m.key == active);
-
-        // Scoped like the sessions above, and by the same key: an unfiltered
-        // list here put every machine's projects behind every machine's row.
-        final allProjects = projects.asData?.value;
-        final metadata = allProjects == null || active == null
-            ? allProjects
-            : projectsOnEnvironment(allProjects, active);
-        final groups = metadata == null
-            ? groupByProject(scoped)
-            : mergeProjectsAndSessions(metadata, scoped);
-        final shown = companionMatchingGroups(groups, query);
-        final back = onMachine == null
+        Widget? back(CompanionEnvironment? machine) => machine == null
             ? null
             : _BackToMachines(
-                label: onMachine.label,
+                label: machine.label,
                 onBack: () =>
-                    ref.read(companionEnvironmentProvider.notifier).choose(null),
+                    ref.read(companionEnvironmentProvider.notifier).choose(
+                      null,
+                    ),
               );
-        if (groups.length == 1 && groups.single.sessions.isNotEmpty) {
-          final only = shown.firstOrNull;
-          if (only == null || only.sessions.isEmpty) return _noMatch();
+        return switch (view) {
+          EnvironmentPick(:final environments) => EnvironmentIndex(
+            environments: environments,
+            onPick: (key) =>
+                ref.read(companionEnvironmentProvider.notifier).choose(key),
+          ),
+          NoMatch() => _noMatch(),
           // Lifted out of the list rather than copied above it: one row per
           // session.
-          final split = partitionByRunning(only.sessions);
-          return CompanionSessionList(
-            sessions: split.rest,
-            header: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                ?back,
-                ProjectHeaderCard(group: only),
-                RunningSessionsGroup(sessions: split.running),
-              ],
+          SingleProject(
+            :final group,
+            :final running,
+            :final rest,
+            :final machine,
+          ) =>
+            CompanionSessionList(
+              sessions: rest,
+              header: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ?back(machine),
+                  ProjectHeaderCard(group: group),
+                  RunningSessionsGroup(sessions: running),
+                ],
+              ),
+              bottomInset: companionFabGutter,
             ),
-            bottomInset: companionFabGutter,
-          );
-        }
-        if (shown.isEmpty) return _noMatch();
-        // The index lists projects, so nothing is lifted: these are pinned
-        // above a list they are not already in.
-        final running = [
-          for (final group in shown) ...partitionByRunning(group.sessions).running,
-        ];
-        final header = [
-          ?back,
-          if (running.isNotEmpty)
-            RunningSessionsGroup(sessions: running, showProject: true),
-        ];
-        return _projectIndex(
-          context,
-          shown,
-          header: header.isEmpty
-              ? null
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: header,
-                ),
-        );
+          // The index lists projects, so nothing is lifted: these are pinned
+          // above a list they are not already in.
+          ProjectIndex(:final groups, :final running, :final machine) =>
+            _projectIndex(
+              context,
+              groups,
+              header: machine == null && running.isEmpty
+                  ? null
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ?back(machine),
+                        if (running.isNotEmpty)
+                          RunningSessionsGroup(
+                            sessions: running,
+                            showProject: true,
+                          ),
+                      ],
+                    ),
+            ),
+        };
       },
     );
   }
