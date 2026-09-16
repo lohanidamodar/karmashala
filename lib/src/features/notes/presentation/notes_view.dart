@@ -331,7 +331,10 @@ class _CardAction extends StatelessWidget {
     tooltip: tooltip,
     iconSize: Chrome.iconSmall,
     visualDensity: VisualDensity.compact,
-    constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+    constraints: const BoxConstraints(
+      minWidth: Chrome.control,
+      minHeight: Chrome.control,
+    ),
     padding: EdgeInsets.zero,
     icon: Icon(icon),
     onPressed: onPressed,

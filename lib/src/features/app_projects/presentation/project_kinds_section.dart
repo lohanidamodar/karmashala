@@ -153,7 +153,7 @@ class _FieldLine extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 14, color: colour),
+          Icon(icon, size: Chrome.iconAction, color: colour),
           const SizedBox(width: Insets.xs),
           Expanded(
             child: Column(

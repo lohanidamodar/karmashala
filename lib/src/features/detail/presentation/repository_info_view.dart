@@ -166,9 +166,12 @@ class _RevealButton extends ConsumerWidget {
     if (!reveal.canReveal(path)) return const SizedBox.shrink();
     return IconButton(
       tooltip: 'Open in File Explorer',
-      iconSize: dense ? 13 : 14,
+      iconSize: dense ? Chrome.iconSmall : Chrome.iconAction,
       visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+      constraints: const BoxConstraints(
+        minWidth: Chrome.control,
+        minHeight: Chrome.control,
+      ),
       padding: EdgeInsets.zero,
       icon: const Icon(AppIcons.folderOpen),
       onPressed: () async {
@@ -836,7 +839,10 @@ class _CopyButton extends StatelessWidget {
       tooltip: 'Copy ${what.toLowerCase()}',
       iconSize: Chrome.iconSmall,
       visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+      constraints: const BoxConstraints(
+        minWidth: Chrome.control,
+        minHeight: Chrome.control,
+      ),
       padding: EdgeInsets.zero,
       icon: const Icon(AppIcons.copy),
       onPressed: () async {

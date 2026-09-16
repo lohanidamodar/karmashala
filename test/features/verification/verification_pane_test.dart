@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/verification/application/evidence_reader.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
@@ -423,6 +424,16 @@ void main() {
       find.textContaining('TypeError: save is not a function'),
       findsOneWidget,
     );
+    // The house mono family, with no private fallback list of its own.
+    final evidence = tester.widget<SelectableText>(
+      find.byWidgetPredicate(
+        (w) =>
+            w is SelectableText &&
+            (w.data ?? '').contains('TypeError: save is not a function'),
+      ),
+    );
+    expect(evidence.style?.fontFamily, kMonoFamily);
+    expect(evidence.style?.fontFamilyFallback, isNull);
   });
 
   testWidgets('an evidence file is read off the frame, not during a build', (

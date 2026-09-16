@@ -134,7 +134,7 @@ class _AppList extends ConsumerWidget {
             selected: app.id == selectedId,
             leading: Icon(
               app.isAttached ? AppIcons.play : AppIcons.linkBreak,
-              size: 14,
+              size: Chrome.iconAction,
             ),
             title: Text(app.label ?? app.id, style: theme.textTheme.bodySmall),
             // How it was found and how old that reading is, before the address:
@@ -300,7 +300,7 @@ class _Action extends StatelessWidget {
       message: disabledReason ?? label,
       child: TextButton.icon(
         onPressed: off ? null : onPressed,
-        icon: Icon(icon, size: 14),
+        icon: Icon(icon, size: Chrome.iconAction),
         label: Text(label),
         style: TextButton.styleFrom(
           visualDensity: VisualDensity.compact,
@@ -371,7 +371,7 @@ class _AttachByAddressState extends ConsumerState<_AttachByAddress> {
     if (!_open) {
       return TextButton.icon(
         onPressed: () => setState(() => _open = true),
-        icon: const Icon(AppIcons.linkSimple, size: 14),
+        icon: const Icon(AppIcons.linkSimple, size: Chrome.iconAction),
         label: const Text('Attach by address'),
       );
     }
@@ -566,7 +566,7 @@ class _ConsoleLine extends StatelessWidget {
                   : '${record.message}\n${record.detail}',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: colour,
-                fontFamily: 'monospace',
+                fontFamily: kMonoFamily,
               ),
             ),
           ),

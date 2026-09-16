@@ -14,6 +14,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -115,6 +116,15 @@ void main() {
 
       expect(find.text('GIT'), findsOneWidget);
       expect(find.text('WORKTREES'), findsOneWidget);
+      // A path action is a control-sized target, not a 22px speck.
+      final reveal = find.ancestor(
+        of: find.byTooltip('Open in File Explorer'),
+        matching: find.byType(IconButton),
+      );
+      expect(reveal, findsWidgets);
+      for (final button in tester.widgetList<IconButton>(reveal)) {
+        expect(button.constraints?.minHeight, Chrome.control);
+      }
       expect(
         find.text('Select a repository to see its branches and worktrees.'),
         findsNothing,
