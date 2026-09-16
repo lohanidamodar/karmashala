@@ -42,6 +42,18 @@ final class EnvironmentNode extends ExplorerNode {
 
   String get label => environment?.name ?? environmentId;
   EnvironmentKind? get kind => environment?.kind;
+
+  @override
+  bool operator ==(Object other) =>
+      other is EnvironmentNode &&
+      other.environmentId == environmentId &&
+      other.environment == environment &&
+      other.projectCount == projectCount &&
+      other.expanded == expanded;
+
+  @override
+  int get hashCode =>
+      Object.hash(environmentId, environment, projectCount, expanded);
 }
 
 enum EnvironmentSection {
@@ -75,6 +87,19 @@ final class EnvironmentSectionNode extends ExplorerNode {
   final String? detail;
 
   String get label => section.label;
+
+  @override
+  bool operator ==(Object other) =>
+      other is EnvironmentSectionNode &&
+      other.environmentId == environmentId &&
+      other.section == section &&
+      other.expanded == expanded &&
+      other.count == count &&
+      other.detail == detail;
+
+  @override
+  int get hashCode =>
+      Object.hash(environmentId, section, expanded, count, detail);
 }
 
 /// A context, inside the machine its projects run on. One spanning two
@@ -93,6 +118,18 @@ final class ContextNode extends ExplorerNode {
   final bool expanded;
 
   String get label => workspace.name;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContextNode &&
+      other.environmentId == environmentId &&
+      other.workspace == workspace &&
+      other.projectCount == projectCount &&
+      other.expanded == expanded;
+
+  @override
+  int get hashCode =>
+      Object.hash(environmentId, workspace, projectCount, expanded);
 }
 
 /// A project, at depth 2 loose under its machine or 3 inside a context.
@@ -105,6 +142,16 @@ final class ProjectNode extends ExplorerNode {
 
   final Project project;
   final bool expanded;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ProjectNode &&
+      other.project == project &&
+      other.expanded == expanded &&
+      other.depth == depth;
+
+  @override
+  int get hashCode => Object.hash(project, expanded, depth);
 }
 
 /// A session started here, under the project it belongs to.
@@ -131,6 +178,30 @@ final class SessionRowNode extends ExplorerNode {
   final SessionLink? link;
   final String? parentTitle;
   final bool lineageBroken;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SessionRowNode &&
+      other.depth == depth &&
+      other.projectId == projectId &&
+      other.session.id == session.id &&
+      other.subPath == subPath &&
+      other.pinned == pinned &&
+      other.link == link &&
+      other.parentTitle == parentTitle &&
+      other.lineageBroken == lineageBroken;
+
+  @override
+  int get hashCode => Object.hash(
+    depth,
+    projectId,
+    session.id,
+    subPath,
+    pinned,
+    link,
+    parentTitle,
+    lineageBroken,
+  );
 }
 
 /// A conversation read out of a CLI's own store rather than started here.
@@ -147,7 +218,36 @@ final class ImportedRowNode extends ExplorerNode {
   final ImportedSession session;
   final String? subPath;
   final bool pinned;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ImportedRowNode &&
+      other.depth == depth &&
+      other.projectId == projectId &&
+      other.subPath == subPath &&
+      other.pinned == pinned &&
+      _sameImported(other.session, session);
+
+  @override
+  int get hashCode =>
+      Object.hash(depth, projectId, session.id, subPath, pinned);
 }
+
+/// Field by field: [ImportedSession] has no `==`, and every re-read is a new
+/// instance, so identity would call every recompute a change.
+bool _sameImported(ImportedSession a, ImportedSession b) =>
+    a.id == b.id &&
+    a.repositoryId == b.repositoryId &&
+    a.cli == b.cli &&
+    a.externalId == b.externalId &&
+    a.environmentId == b.environmentId &&
+    a.filePath == b.filePath &&
+    a.storeHome == b.storeHome &&
+    a.isSubagent == b.isSubagent &&
+    a.title == b.title &&
+    a.preview == b.preview &&
+    a.updatedAt == b.updatedAt &&
+    a.createdAt == b.createdAt;
 
 /// One row under a machine's `Terminals`.
 final class TerminalRowNode extends ExplorerNode {
@@ -156,17 +256,37 @@ final class TerminalRowNode extends ExplorerNode {
 
   final String environmentId;
   final EnvironmentTerminal terminal;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TerminalRowNode &&
+      other.environmentId == environmentId &&
+      other.terminal.id == terminal.id &&
+      other.terminal.label == terminal.label &&
+      other.terminal.running == terminal.running &&
+      other.terminal.paneId == terminal.paneId &&
+      other.terminal.hostSessionId == terminal.hostSessionId;
+
+  @override
+  int get hashCode =>
+      Object.hash(environmentId, terminal.id, terminal.label, terminal.running);
 }
 
 /// A line of prose at [depth] — "nothing here yet", "could not look".
 final class HintNode extends ExplorerNode {
-  HintNode({
-    required super.id,
-    required super.depth,
-    required this.message,
-  });
+  HintNode({required super.id, required super.depth, required this.message});
 
   final String message;
+
+  @override
+  bool operator ==(Object other) =>
+      other is HintNode &&
+      other.id == id &&
+      other.depth == depth &&
+      other.message == message;
+
+  @override
+  int get hashCode => Object.hash(id, depth, message);
 }
 
 /// The collapse ids that must be open for a project on [environmentId] — and

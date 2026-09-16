@@ -131,8 +131,9 @@ class NativeSessionRow extends ConsumerWidget {
     // Asynchronous by construction, and `.value` rather than `asData?.value`:
     // a refresh is an `AsyncLoading` carrying the previous value, and reading
     // it as null blinked the branch chip out on every workspace mutation.
-    final delivery = ref.watch(sessionDiffStatProvider(session.id));
-    final stat = delivery.value;
+    final (:stat, :pending) = ref.watch(
+      sessionDiffStatProvider(session.id).select(_statFacts),
+    );
 
     return SessionCard(
       depth: depth,
@@ -165,7 +166,7 @@ class NativeSessionRow extends ConsumerWidget {
       whereabouts: whereabouts.note,
       whereaboutsTooltip: whereabouts.explanation,
       stat: stat,
-      statPending: !delivery.hasValue,
+      statPending: pending,
       worktree: session.useWorktree,
       link: link,
       parentTitle: parentTitle,
@@ -368,12 +369,9 @@ class ImportedSessionRow extends ConsumerWidget {
       }
     }
 
-    // `.value`, and `hasValue` for the pending flag, for the same two reasons
-    // the native row above gives.
-    final delivery = ref.watch(
-      repositoryDiffStatProvider(session.repositoryId),
+    final (:stat, :pending) = ref.watch(
+      repositoryDiffStatProvider(session.repositoryId).select(_statFacts),
     );
-    final stat = delivery.value;
 
     return SessionCard(
       depth: depth,
@@ -394,7 +392,7 @@ class ImportedSessionRow extends ConsumerWidget {
       branch: stat?.branch,
       subPath: subPath,
       stat: stat,
-      statPending: !delivery.hasValue,
+      statPending: pending,
       selecting: selecting,
       ticked: ticked,
       onTap: selecting
@@ -498,6 +496,13 @@ Future<void> _openImportedInTerminal(
     );
   }
 }
+
+/// The stat a card draws, and whether one has arrived. Selected rather than
+/// watched: every status change re-reads git for the whole checkout, and a
+/// refresh landing on the same answer must not repaint the sibling rows.
+({SessionDiffStat? stat, bool pending}) _statFacts(
+  AsyncValue<SessionDiffStat> delivery,
+) => (stat: delivery.value, pending: !delivery.hasValue);
 
 /// Builds a shell command with [build], copies it to the clipboard, and reports
 /// the result. Used by the "Copy … command" menu actions.

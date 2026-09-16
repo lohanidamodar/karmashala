@@ -168,11 +168,12 @@ void main() {
         for (final count in scale)
           count: on[count]!.statements - off[count]!.statements,
       };
-      // Ten times the projects, the same sweeps: the environment table is
-      // read once for the whole tree, never once per row.
+      // Ten times the projects, no more sweeps: the environment table is read
+      // once for the tree, never once per row. Fewer is allowed — rows are
+      // lazy, and a WSL project scrolled off screen asks nothing of it.
       expect(
         on[100]!.sweeps,
-        on[10]!.sweeps,
+        lessThanOrEqualTo(on[10]!.sweeps),
         reason: 'a sweep that grows with the workspace is the per-row read '
             'this test exists to catch: $sweeps',
       );

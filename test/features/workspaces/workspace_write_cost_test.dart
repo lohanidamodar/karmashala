@@ -237,15 +237,12 @@ void main() {
     }
 
     final bare = await rebuildCost();
-    // The project menus are built eagerly per row, and "which agents are
-    // installed here" used to be asked inside that loop: 31 identical queries
-    // per rebuild. It is asked once per *environment* now.
+    // "Which agents are installed here" used to be asked once per row on every
+    // rebuild: 31 identical queries. A row's menu now asks it when it opens.
     expect(
       db.matching('FROM agent_installations'),
-      1,
-      reason:
-          'one query for the one environment these 31 projects share, not one '
-          'query per project row',
+      0,
+      reason: 'a rebuild must not resolve menus nobody opened',
     );
 
     final workspaces = container.read(workspacesControllerProvider.notifier);
