@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../application/device_ports.dart';
 import '../application/ios_device_providers.dart';
@@ -110,10 +111,9 @@ class _StartButton extends StatelessWidget {
       key: const Key('start-simulator'),
       onPressed: busy ? null : onPressed,
       child: busy
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          ? const InlineSpinner(
+              size: InlineSpinnerSize.medium,
+              semanticsLabel: 'Starting',
             )
           : const Text('Start'),
     );

@@ -250,10 +250,9 @@ class _RowAction extends StatelessWidget {
     return TextButton(
       onPressed: busy ? null : onPressed,
       child: busy
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+          ? InlineSpinner(
+              size: InlineSpinnerSize.medium,
+              semanticsLabel: label,
             )
           : Text(label),
     );

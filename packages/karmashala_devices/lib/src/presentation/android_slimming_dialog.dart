@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/device_ports.dart';
 import '../application/device_providers.dart';
@@ -380,11 +381,7 @@ class _RestoreTarget extends ConsumerWidget {
                       );
                     },
               child: busy
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
+                  ? const InlineSpinner(semanticsLabel: 'Restoring')
                   : const Text('Restore'),
             ),
         ],

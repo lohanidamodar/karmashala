@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../devices.dart';
 import 'device_touch_surface.dart';
@@ -241,13 +242,9 @@ class StreamReconnectingOverlay extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: theme.colorScheme.onInverseSurface,
-                ),
+              InlineSpinner(
+                size: InlineSpinnerSize.large,
+                color: theme.colorScheme.onInverseSurface,
               ),
               const SizedBox(height: 10),
               Text(

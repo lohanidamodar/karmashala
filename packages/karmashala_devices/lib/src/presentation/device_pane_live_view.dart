@@ -54,7 +54,12 @@ class _LiveView extends ConsumerWidget {
     // A spinner only when there is nothing better to show. With a held frame
     // there is.
     if (starting && !reconnecting) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: InlineSpinner(
+          size: InlineSpinnerSize.large,
+          semanticsLabel: 'Starting the live view',
+        ),
+      );
     }
     final controller = video;
     final currentDevice = device;

@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart' show CommandException;
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../application/device_file_actions.dart';
@@ -395,11 +396,7 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
                 ),
                 child: Row(
                   children: [
-                    const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
+                    const InlineSpinner(),
                     const SizedBox(width: Insets.sm),
                     Expanded(
                       child: Text(busy, style: theme.textTheme.bodySmall),

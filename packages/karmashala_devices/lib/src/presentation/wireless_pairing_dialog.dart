@@ -5,8 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
-import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/primitives.dart';
+import 'package:karmashala_ui/tokens.dart';
 import '../application/wireless_pairing_controller.dart';
 
 /// Which of Android's two pairing screens this dialog is talking to.
@@ -320,7 +320,7 @@ class _Working extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: Insets.lg),
     child: Column(
       children: [
-        const CircularProgressIndicator(),
+        InlineSpinner(size: InlineSpinnerSize.large, semanticsLabel: label),
         const SizedBox(height: Insets.sm),
         Text(label, style: Theme.of(context).textTheme.labelSmall),
       ],
