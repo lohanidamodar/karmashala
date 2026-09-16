@@ -23,26 +23,44 @@ final deviceLogcatOpenProvider = NotifierProvider<DeviceLogcatOpen, bool>(
 /// **The device's log, under its picture.** Collapsed it is one strip that
 /// costs nothing: the session is `autoDispose`, so no view, no `logcat`.
 class DeviceLogcatSection extends ConsumerWidget {
-  const DeviceLogcatSection({required this.device, super.key});
+  const DeviceLogcatSection({
+    required this.device,
+    this.logHeight = defaultLogHeight,
+    super.key,
+  });
 
   /// The device the pane is showing. Null while there is none, which is when
   /// the strip disables itself rather than disappearing.
   final AndroidDevice? device;
 
+  /// How tall the open log is. The pane sizes it to itself: a fixed 220px in a
+  /// 478px side panel left the picture above it a sliver.
+  final double logHeight;
+
+  static const defaultLogHeight = 220.0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final open = ref.watch(deviceLogcatOpenProvider);
     final serial = device?.serial;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Divider(height: 1),
-        _Strip(device: device, open: open),
-        // Nothing below the strip until it is opened, and nothing watching the
-        // session provider either — that is what keeps a closed view free.
-        if (open && serial != null)
-          SizedBox(height: 220, child: _Logcat(serial: serial)),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final log = open && serial != null
+            ? SizedBox(height: logHeight, child: _Logcat(serial: serial))
+            : null;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Divider(height: 1),
+            _Strip(device: device, open: open),
+            // Nothing below the strip until it is opened, and nothing watching
+            // the session provider either — that is what keeps a closed view
+            // free. Given less room than [logHeight], the log gives way first.
+            if (log != null)
+              constraints.hasBoundedHeight ? Flexible(child: log) : log,
+          ],
+        );
+      },
     );
   }
 }

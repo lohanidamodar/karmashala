@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -137,75 +138,211 @@ class _DevicePaneState extends ConsumerState<DevicePane>
         const DeviceRecordingBanner(),
         const Divider(height: 1),
         Expanded(
-          // The simulator's picture wins while it is up: it is the only thing
-          // on screen the user asked for by name.
-          child: simulatorShowing
-              ? const SimulatorLivePane()
-              : reason != null
-              ? _DeviceEmptyState(
-                  message: reason,
-                  stopping: _stopping,
-                  booting: _booting,
-                  onPreview: _startStream,
-                  onStopEmulator: _stopEmulator,
-                  onBootAvd: _bootAvd,
-                )
-              : _streamError != null
-              ? _DeviceEmptyState(
-                  message:
-                      'Live view unavailable: $_streamError\n\n'
-                      'Screenshots, input and logcat still work.',
-                  stopping: _stopping,
-                  booting: _booting,
-                  onPreview: _startStream,
-                  onStopEmulator: _stopEmulator,
-                  onBootAvd: _bootAvd,
-                )
-              : _LiveView(
-                  // The held frame while a restart is in flight, so the
-                  // picture does not blink out and back — covered, and said.
-                  video: _video ?? _heldVideo,
-                  device: live,
-                  // A remount shows the spinner, never the last frame: the
-                  // held picture went with the old element.
-                  starting: _starting || _resuming,
-                  reconnecting: _holdingPicture,
-                  sink: _sink,
-                  keyboard: _keyboardSink,
-                  health: _health,
-                  exhausted: _restarts.isExhausted && _reconnectTimer == null,
-                  // Still being found out, rather than found to be empty:
-                  // only the first answer is unknown, and re-asking flickers.
-                  probing:
-                      !(sdk.asData != null || sdk.hasError) ||
-                      !deviceList.hasValue,
-                  onRestart: _restartStream,
-                  stopping: _stopping,
-                  booting: _booting,
-                  onPreview: _startStream,
-                  onStopEmulator: _stopEmulator,
-                  onBootAvd: _bootAvd,
-                ),
-        ),
-        // Not while a simulator's picture is up: that pane carries its own
-        // controls, and this row would offer Back under an iPhone.
-        if (!simulatorShowing && paneDevice != null) ...[
-          const Divider(height: 1),
-          // Deliberately [live], not [paneDevice]: input follows the running
-          // session, or Stop leaves these driving whatever is selected.
-          _AndroidControls(
-            device: live,
-            clipboard: _clipboard,
-            recordable: _session != null,
+          child: _DevicePaneLayout(
+            // The simulator's picture wins while it is up: it is the only thing
+            // on screen the user asked for by name.
+            picture: simulatorShowing
+                ? const SimulatorLivePane()
+                : reason != null
+                ? _DeviceEmptyState(
+                    message: reason,
+                    stopping: _stopping,
+                    booting: _booting,
+                    onPreview: _startStream,
+                    onStopEmulator: _stopEmulator,
+                    onBootAvd: _bootAvd,
+                  )
+                : _streamError != null
+                ? _DeviceEmptyState(
+                    message:
+                        'Live view unavailable: $_streamError\n\n'
+                        'Screenshots, input and logcat still work.',
+                    stopping: _stopping,
+                    booting: _booting,
+                    onPreview: _startStream,
+                    onStopEmulator: _stopEmulator,
+                    onBootAvd: _bootAvd,
+                  )
+                : _LiveView(
+                    // The held frame while a restart is in flight, so the
+                    // picture does not blink out and back — covered, and said.
+                    video: _video ?? _heldVideo,
+                    device: live,
+                    // A remount shows the spinner, never the last frame: the
+                    // held picture went with the old element.
+                    starting: _starting || _resuming,
+                    reconnecting: _holdingPicture,
+                    sink: _sink,
+                    keyboard: _keyboardSink,
+                    health: _health,
+                    exhausted: _restarts.isExhausted && _reconnectTimer == null,
+                    // Still being found out, rather than found to be empty:
+                    // only the first answer is unknown, and re-asking flickers.
+                    probing:
+                        !(sdk.asData != null || sdk.hasError) ||
+                        !deviceList.hasValue,
+                    onRestart: _restartStream,
+                    stopping: _stopping,
+                    booting: _booting,
+                    onPreview: _startStream,
+                    onStopEmulator: _stopEmulator,
+                    onBootAvd: _bootAvd,
+                  ),
+            // Not while a simulator's picture is up: that pane carries its own
+            // controls, and this row would offer Back under an iPhone.
+            controls: simulatorShowing || paneDevice == null
+                ? null
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Divider(height: 1),
+                      // Deliberately [live], not [paneDevice]: input follows the
+                      // running session, or Stop leaves these driving whatever
+                      // is selected.
+                      _AndroidControls(
+                        device: live,
+                        clipboard: _clipboard,
+                        recordable: _session != null,
+                      ),
+                      // Install / launch / force-stop, through the same claim
+                      // the tools take — so a device an agent is driving refuses
+                      // these by name.
+                      DeviceAppControls(device: paneDevice),
+                    ],
+                  ),
+            // [paneDevice], not [live]: reading a log is not driving, so it
+            // follows the selection and works with no live view up at all.
+            logcat: simulatorShowing || paneDevice == null
+                ? null
+                : (logHeight) => DeviceLogcatSection(
+                    device: paneDevice,
+                    logHeight: logHeight,
+                  ),
           ),
-          // Install / launch / force-stop, through the same claim the tools
-          // take — so a device an agent is driving refuses these by name.
-          DeviceAppControls(device: paneDevice),
-          // [paneDevice], not [live]: reading a log is not driving, so it
-          // follows the selection and works with no live view up at all.
-          DeviceLogcatSection(device: paneDevice),
-        ],
+        ),
       ],
     );
   }
+}
+
+/// The pane below its toolbar: the picture, the controls under it, and the
+/// log under those. Fixed-height rows under an `Expanded` picture once left
+/// the picture 64px with the log open in a 240px side panel, so the picture is
+/// guaranteed a share first; the log is sized to the pane, and the controls
+/// scroll in whatever is left.
+class _DevicePaneLayout extends StatelessWidget {
+  const _DevicePaneLayout({
+    required this.picture,
+    required this.controls,
+    required this.logcat,
+  });
+
+  final Widget picture;
+  final Widget? controls;
+
+  /// Builds the log section for a log body of the given height.
+  final Widget Function(double logHeight)? logcat;
+
+  /// The least the picture is left, as a height and as a share of the pane:
+  /// whichever is larger, unless the pane itself is smaller.
+  static const pictureFloor = 160.0;
+  static const pictureShare = 0.45;
+
+  /// The open log's height: [logMax] where there is room, [logShare] of the
+  /// pane where there is not.
+  static const logMax = 220.0;
+  static const logShare = 0.35;
+
+  /// Kept for the log's strip whatever the picture wants, at 1x text: the strip
+  /// is how the log is closed again.
+  static const stripFloor = 48.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final controls = this.controls;
+    final logcat = this.logcat;
+    if (controls == null && logcat == null) return picture;
+    final scaler = MediaQuery.textScalerOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final height = constraints.maxHeight;
+        final wanted = math.max(pictureFloor, height * pictureShare);
+        final pictureMin = math.max(
+          0.0,
+          math.min(wanted, height - scaler.scale(stripFloor)),
+        );
+        return CustomMultiChildLayout(
+          delegate: _DevicePaneLayoutDelegate(pictureMin: pictureMin),
+          children: [
+            LayoutId(id: _DevicePaneSlot.picture, child: picture),
+            if (controls != null)
+              LayoutId(
+                id: _DevicePaneSlot.controls,
+                child: SingleChildScrollView(primary: false, child: controls),
+              ),
+            if (logcat != null)
+              LayoutId(
+                id: _DevicePaneSlot.logcat,
+                child: ClipRect(
+                  child: logcat(math.min(logMax, height * logShare)),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+enum _DevicePaneSlot { picture, controls, logcat }
+
+/// Lays the log out first (it was opened on purpose), then the controls in
+/// what the picture's share leaves, then gives the picture everything else.
+class _DevicePaneLayoutDelegate extends MultiChildLayoutDelegate {
+  _DevicePaneLayoutDelegate({required this.pictureMin});
+
+  final double pictureMin;
+
+  @override
+  void performLayout(Size size) {
+    final width = size.width;
+    final rest = math.max(0.0, size.height - pictureMin);
+    BoxConstraints below(double maxHeight) =>
+        BoxConstraints(minWidth: width, maxWidth: width, maxHeight: maxHeight);
+
+    var logHeight = 0.0;
+    if (hasChild(_DevicePaneSlot.logcat)) {
+      logHeight = layoutChild(_DevicePaneSlot.logcat, below(rest)).height;
+    }
+    var controlsHeight = 0.0;
+    if (hasChild(_DevicePaneSlot.controls)) {
+      controlsHeight = layoutChild(
+        _DevicePaneSlot.controls,
+        below(math.max(0.0, rest - logHeight)),
+      ).height;
+    }
+    final pictureHeight = math.max(
+      0.0,
+      size.height - logHeight - controlsHeight,
+    );
+    layoutChild(
+      _DevicePaneSlot.picture,
+      BoxConstraints.tight(Size(width, pictureHeight)),
+    );
+    positionChild(_DevicePaneSlot.picture, Offset.zero);
+    if (hasChild(_DevicePaneSlot.controls)) {
+      positionChild(_DevicePaneSlot.controls, Offset(0, pictureHeight));
+    }
+    if (hasChild(_DevicePaneSlot.logcat)) {
+      positionChild(
+        _DevicePaneSlot.logcat,
+        Offset(0, pictureHeight + controlsHeight),
+      );
+    }
+  }
+
+  @override
+  bool shouldRelayout(_DevicePaneLayoutDelegate oldDelegate) =>
+      oldDelegate.pictureMin != pictureMin;
 }

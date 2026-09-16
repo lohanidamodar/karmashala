@@ -6,6 +6,7 @@ import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_devices/pane.dart';
 import 'package:karmashala_devices/ports.dart';
 import 'package:karmashala_devices/providers.dart';
+import 'package:karmashala_devices/widgets.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import 'support/fake_command_runner.dart';
@@ -120,6 +121,44 @@ void main() {
           expect(tester.getSize(picker).width, greaterThanOrEqualTo(48));
           // The action is still there, named by its tooltip.
           expect(find.byTooltip('Live view').hitTestable(), findsOneWidget);
+        });
+      }
+    }
+  });
+
+  group('the picture with the log open', () {
+    for (final width in [240.0, 360.0]) {
+      for (final scale in [1.0, 1.25]) {
+        testWidgets('keeps its share at ${width.toInt()}x478, ${scale}x text', (
+          tester,
+        ) async {
+          final container = await _pump(
+            tester,
+            size: Size(width, 478),
+            textScale: scale,
+            avds: const [
+              Avd(name: 'Pixel_7', runningSerial: _emulator),
+              Avd(name: 'Pixel_Tablet'),
+            ],
+          );
+          container
+              .read(selectedDeviceSerialProvider.notifier)
+              .select(_emulator);
+          await tester.pumpAndSettle();
+          container.read(deviceLogcatOpenProvider.notifier).toggle();
+          await tester.pumpAndSettle();
+
+          // The log really is open, under a picture region that is still one.
+          expect(find.textContaining('kept'), findsOneWidget);
+          // `_LiveView` is the picture's region whether or not a stream is up:
+          // the pane hands it everything the controls and the log do not take.
+          // Fixed-height controls, app controls and a 220px log above it once
+          // left 64px — a 30px-wide phone at 240px.
+          final picture = find.byWidgetPredicate(
+            (widget) => widget.runtimeType.toString() == '_LiveView',
+          );
+          expect(picture, findsOneWidget);
+          expect(tester.getSize(picture).height, greaterThanOrEqualTo(160));
         });
       }
     }
