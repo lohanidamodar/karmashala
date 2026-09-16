@@ -4,6 +4,7 @@
 /// widget — the app composes them.
 library;
 
+export 'src/domain/app_log_filter.dart';
 export 'src/domain/app_log_record.dart';
 export 'src/domain/attached_app.dart';
 export 'src/domain/dtd_instance.dart';

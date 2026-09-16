@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:logging/logging.dart';
 import 'package:vm_service/vm_service.dart';
 
+import '../domain/app_log_filter.dart';
 import '../domain/app_log_record.dart';
 import '../domain/attached_app.dart';
 import '../domain/flutter_app_failure.dart';
@@ -104,6 +105,17 @@ class FlutterAppLink {
   /// The newest [limit] console lines, oldest first.
   List<AppLogRecord> tail({int limit = 200, Set<AppLogSource>? sources}) =>
       _console.tail(limit: limit, sources: sources);
+
+  /// Console lines ever received; the sequence number the next one will get.
+  int get consoleAppended => _console.appended;
+
+  /// The whole console under [query], kept current by [cache] — only lines
+  /// numbered [hideBefore] and newer.
+  AppLogFilterResult filterConsole(
+    AppLogFilterCache cache,
+    AppLogQuery query, {
+    int hideBefore = 0,
+  }) => cache.update(_console, query, hideBefore: hideBefore);
 
   /// Completes when the app closes the connection, or [dispose] is called.
   Future<void> get done => _done.future;
@@ -354,17 +366,11 @@ class FlutterAppLink {
     if (!_handshakeDone) return true;
     final timestamp = event.timestamp;
     if (timestamp == null) return false;
-    return DateTime.fromMillisecondsSinceEpoch(
-      timestamp,
-    ).isBefore(attachedAt);
+    return DateTime.fromMillisecondsSinceEpoch(timestamp).isBefore(attachedAt);
   }
 
   void _note(String message) => _emit(
-    AppLogRecord(
-      source: AppLogSource.lifecycle,
-      at: _now(),
-      message: message,
-    ),
+    AppLogRecord(source: AppLogSource.lifecycle, at: _now(), message: message),
   );
 
   void _emit(AppLogRecord record) {
@@ -429,13 +435,11 @@ class FlutterAppLink {
 
   /// Turns the running app's own widget-select mode on or off. The value is a
   /// *string*: `_registerBoolServiceExtension` compares `enabled == 'true'`.
-  Future<void> setWidgetSelectMode({required bool enabled}) => _call(
-    kInspectorShow,
-    <String, dynamic>{
-      'isolateId': isolateId,
-      'enabled': enabled ? 'true' : 'false',
-    },
-  );
+  Future<void> setWidgetSelectMode({required bool enabled}) =>
+      _call(kInspectorShow, <String, dynamic>{
+        'isolateId': isolateId,
+        'enabled': enabled ? 'true' : 'false',
+      });
 
   /// Reads whatever the inspector has selected right now, or `null` when
   /// nothing is — select mode can be on with no tap yet.

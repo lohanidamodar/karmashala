@@ -74,6 +74,7 @@ class AppLogBuffer {
   final int capacity;
   final List<AppLogRecord> _records = <AppLogRecord>[];
   int _dropped = 0;
+  int _appended = 0;
 
   /// Lines discarded to stay within [capacity], oldest first.
   int get dropped => _dropped;
@@ -82,8 +83,24 @@ class AppLogBuffer {
 
   List<AppLogRecord> get records => List<AppLogRecord>.unmodifiable(_records);
 
+  /// Every record ever added, never reset: a record's sequence number is its
+  /// place in this count, so it survives both dropping and [clear].
+  int get appended => _appended;
+
+  /// The sequence number of the oldest record still held.
+  int get firstSequence => _appended - _records.length;
+
+  /// The records numbered [sequence] and newer, oldest first.
+  List<AppLogRecord> since(int sequence) {
+    final start = sequence - firstSequence;
+    if (start <= 0) return List<AppLogRecord>.unmodifiable(_records);
+    if (start >= _records.length) return const <AppLogRecord>[];
+    return List<AppLogRecord>.unmodifiable(_records.sublist(start));
+  }
+
   void add(AppLogRecord record) {
     _records.add(record);
+    _appended = _appended + 1;
     if (_records.length > capacity) {
       _records.removeRange(0, _records.length - capacity);
       _dropped = _dropped + 1;
