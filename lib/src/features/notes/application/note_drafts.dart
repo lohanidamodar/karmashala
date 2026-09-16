@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/lifecycle/before_quit.dart';
 import '../domain/note.dart';
 import '../domain/note_draft.dart';
 import 'notes_providers.dart';
@@ -37,7 +38,17 @@ class NoteDrafts extends Notifier<Map<String, NoteDraft>> {
       _timers.clear();
     });
     ref.listen(notesProvider, (_, notes) => _reconcile(notes));
+    ref.onDispose(
+      ref.read(beforeQuitHooksProvider).addFlush('note drafts', saveAll),
+    );
     return const {};
+  }
+
+  /// Writes every buffer an autosave is still waiting on; conflicts stay put.
+  void saveAll() {
+    for (final noteId in state.keys.toList()) {
+      save(noteId);
+    }
   }
 
   Note? _note(String id) {

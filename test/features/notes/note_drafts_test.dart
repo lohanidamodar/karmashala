@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
@@ -5,10 +7,12 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/notes/application/note_drafts.dart';
 import 'package:karmashala/src/features/notes/application/notes_providers.dart';
 import 'package:karmashala/src/features/notes/domain/note_draft.dart';
+import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../system/fake_native_adapters.dart';
 
 /// The buffer a note tab edits: autosaved after a pause, never written over
 /// something that changed elsewhere, and honest about which of those it is in.
@@ -140,5 +144,47 @@ void main() {
     final id = capture('');
     drafts().open(id);
     expect(draftOf(id)!.saveState, NoteSaveState.empty);
+  });
+
+  /// Quits the way the tray, Cmd+Q and the window's X all do, and reads what
+  /// the store held when the ordered shutdown began — the moment after which
+  /// disposing the container cancels any pending autosave.
+  Future<String?> quitReading(WidgetTester tester, String id) async {
+    String? atShutdown;
+    final service = SystemIntegrationService(
+      container,
+      adapters: FakeNatives().adapters,
+      registerOsQuit: (_) {},
+      endProcess: () {},
+      onQuitRequested: () async =>
+          atShutdown = container.read(noteDaoProvider).getById(id)!.body,
+    );
+    unawaited(service.quit());
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    return atShutdown;
+  }
+
+  testWidgets('quitting inside the autosave pause writes the last keystrokes', (
+    tester,
+  ) async {
+    final id = capture('before');
+    drafts()
+      ..open(id)
+      ..edit(id, body: 'typed just before quitting');
+
+    expect(await quitReading(tester, id), 'typed just before quitting');
+  });
+
+  testWidgets('quitting does not write over a note in conflict', (
+    tester,
+  ) async {
+    final id = capture('base');
+    drafts()
+      ..open(id)
+      ..edit(id, body: 'mine');
+    container.read(notesProvider.notifier).edit(id, body: 'theirs');
+
+    expect(await quitReading(tester, id), 'theirs');
   });
 }

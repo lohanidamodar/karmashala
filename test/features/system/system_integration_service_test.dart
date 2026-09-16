@@ -326,13 +326,13 @@ void main() {
       settings().setCloseToTray(true);
       await pumpEventQueue();
 
-      expect(osQuit, isNotNull, reason: 'macOS registers a quit handler');
+      expect(osQuit, isNotNull, reason: 'every desktop registers one');
       await osQuit!();
       await pumpEventQueue();
 
       expect(quitCalls, ['shutdown']);
       expect(natives.window.destroyed, isTrue);
-    }, skip: Platform.isMacOS ? null : 'the quit handler is registered on macOS only');
+    });
 
     test('close to tray quits when there is no tray to close to', () async {
       // Stock GNOME has no StatusNotifier host unless an AppIndicator extension

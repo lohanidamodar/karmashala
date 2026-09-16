@@ -10,8 +10,10 @@ import 'status_bar.dart';
 import 'workbench.dart';
 
 import '../../core/database/database_providers.dart';
+import '../../core/lifecycle/before_quit.dart';
 import '../../features/automations/application/automation_runner.dart';
 import '../../features/automations/application/automation_scheduler.dart';
+import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
 import '../../features/flutter_apps/application/flutter_gate_observer.dart';
 import '../../features/git/application/worktree_setup_providers.dart';
@@ -87,9 +89,20 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
   }
 
+  /// Removes the before-quit guard this shell registered.
+  late final void Function() _removeQuitGuard;
+
   @override
   void initState() {
     super.initState();
+    // The shell holds the navigator a quit-time question needs.
+    _removeQuitGuard = ref
+        .read(beforeQuitHooksProvider)
+        .addGuard(
+          'unsaved work',
+          () async =>
+              !mounted || await confirmQuitWithUnsavedWork(context, ref),
+        );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final database = ref.read(databaseProvider);
@@ -100,6 +113,12 @@ class _AppShellState extends ConsumerState<AppShell> {
       database.writeMetadata(MetadataKeys.environmentHealthOnboarding, 'shown');
       EnvironmentHealthDialog.show(context);
     });
+  }
+
+  @override
+  void dispose() {
+    _removeQuitGuard();
+    super.dispose();
   }
 
   @override

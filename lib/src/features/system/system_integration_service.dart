@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -10,6 +12,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../app/shell/quick_open/quick_open.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../core/lifecycle/app_lifecycle.dart';
+import '../../core/lifecycle/before_quit.dart';
 import '../notifications/application/attention_inbox.dart';
 import '../notifications/application/notification_providers.dart';
 import '../notifications/domain/inbox_item.dart';
@@ -35,13 +38,30 @@ const MethodChannel _lifecycleChannel = MethodChannel('karmashala/lifecycle');
 typedef OsQuitRegistrar = void Function(Future<void> Function() quit);
 
 /// The real one: macOS's `applicationShouldTerminate` cancels its own
-/// termination and calls `quitRequested` here instead, so Cmd+Q gets the same
-/// ordered shutdown as the tray's Quit.
+/// termination and calls `quitRequested` here instead, so Cmd+Q and logout get
+/// the same ordered shutdown as the tray's Quit. Any engine exit request is
+/// routed there too.
 void registerOsQuitOverChannel(Future<void> Function() quit) {
-  _lifecycleChannel.setMethodCallHandler((call) async {
-    if (call.method == 'quitRequested') unawaited(quit());
-  });
+  if (Platform.isMacOS) {
+    _lifecycleChannel.setMethodCallHandler((call) async {
+      if (call.method == 'quitRequested') unawaited(quit());
+    });
+  }
+  _exitRequests?.dispose();
+  _exitRequests = listenForExitRequests(quit);
 }
+
+AppLifecycleListener? _exitRequests;
+
+/// Answers a cancelable exit the engine asks the framework about by running
+/// [quit] instead, which asks, flushes and ends the process itself.
+AppLifecycleListener listenForExitRequests(Future<void> Function() quit) =>
+    AppLifecycleListener(
+      onExitRequested: () async {
+        unawaited(quit());
+        return AppExitResponse.cancel;
+      },
+    );
 
 /// Prefix for the per-session "needs you" items; the suffix is the index into
 /// [SystemIntegrationService._pending].
@@ -126,6 +146,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// on macOS, and the two passes bounce off each other forever without this.
   bool _quitting = false;
 
+  /// While the before-quit guards are asking; a second quit meanwhile is dropped.
+  bool _confirmingQuit = false;
+
   /// What the user asked for, kept separately from what the OS confirmed.
   bool? _desiredKeepAwake;
   bool? _appliedKeepAwake;
@@ -193,9 +216,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
     // macOS routes Cmd+Q here rather than terminating, so the same ordered
     // shutdown runs for it. Without this the app menu's Quit was swallowed.
-    if (Platform.isMacOS) {
-      _registerOsQuit(() => _quit());
-    }
+    _registerOsQuit(() => _quit());
 
     _trayIconApplied = await _run(NativeSetting.trayIcon, () async {
       await _native.tray.setIcon(_kIdleTrayIcon);
@@ -539,13 +560,31 @@ class SystemIntegrationService with TrayListener, WindowListener {
     }
   }
 
-  /// Quits the application: layout snapshot, ordered shutdown, window destroyed,
-  /// process ended. The one graceful exit, and it runs at most once per launch.
+  /// Quits the application: before-quit guards and flushes, layout snapshot,
+  /// ordered shutdown, window destroyed, process ended. The one graceful exit,
+  /// and it runs at most once per launch — unless a guard cancels it.
   Future<void> quit() => _quit();
 
   Future<void> _quit() async {
     if (_quitting) return;
+    if (_confirmingQuit) {
+      // Asked again while a question is up: it may be behind a hidden window.
+      unawaited(_showWindow());
+      return;
+    }
+    final hooks = _beforeQuitHooks();
+    if (hooks != null) {
+      _confirmingQuit = true;
+      final bool proceed;
+      try {
+        proceed = await hooks.confirm();
+      } finally {
+        _confirmingQuit = false;
+      }
+      if (!proceed || _quitting) return;
+    }
     _quitting = true;
+    await hooks?.flush();
     _saveTerminalLayout();
     try {
       await _onQuitRequested();
@@ -569,6 +608,16 @@ class SystemIntegrationService with TrayListener, WindowListener {
     // Destroying the window does not end the process: `applicationShouldTerminate`
     // cancels AppKit's termination so this shutdown can run at all.
     _endProcess();
+  }
+
+  BeforeQuitHooks? _beforeQuitHooks() {
+    try {
+      return _container.read(beforeQuitHooksProvider);
+    } on Object catch (error) {
+      // A container already gone has nothing left to flush.
+      _logger.warning('system: before-quit hooks unavailable reason=$error');
+      return null;
+    }
   }
 
   /// Writes the queued log lines to disk, bounded, before the process ends —

@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../notes/application/note_drafts.dart';
+import '../../notes/application/note_tabs.dart';
 import '../../notes/presentation/note_close_guard.dart';
+import '../../notifications/application/notification_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import '../application/editor_tab_actions.dart';
 import '../application/open_documents.dart';
 import 'discard_unsaved_dialog.dart';
@@ -17,15 +21,19 @@ import 'discard_unsaved_dialog.dart';
 Future<bool> confirmEditorsClosable(
   BuildContext context,
   WidgetRef ref,
-  List<String> tabIds,
-) async {
-  if (!await confirmNotesClosable(context, ref, tabIds)) return false;
+  List<String> tabIds, {
+  bool quitting = false,
+}) async {
+  if (!await confirmNotesClosable(context, ref, tabIds, quitting: quitting)) {
+    return false;
+  }
   if (!context.mounted) return false;
   final unsaved = ref.read(editorTabActionsProvider).unsavedIn(tabIds);
   if (unsaved.isEmpty) return true;
   final choice = await confirmUnsavedClose(
     context,
     files: [for (final path in unsaved) p.windows.basename(path)],
+    quitting: quitting,
   );
   if (choice == null) return false;
   if (choice == UnsavedChoice.discard) return true;
@@ -48,6 +56,26 @@ Future<bool> confirmEditorsClosable(
     return false;
   }
   return true;
+}
+
+/// The before-quit guard: files are saved only when asked to, so quitting with
+/// unsaved files or conflicted notes in any tab asks, with the window raised.
+Future<bool> confirmQuitWithUnsavedWork(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  final tabs = ref.read(terminalSessionsControllerProvider).tabs;
+  final tabIds = [for (final tab in tabs) tab.id];
+  final conflicted = ref
+      .read(conflictedNoteIdsProvider)
+      .intersection(noteIdsIn(tabs));
+  if (conflicted.isEmpty &&
+      ref.read(editorTabActionsProvider).unsavedIn(tabIds).isEmpty) {
+    return true;
+  }
+  // Quit can come from the tray while the window is hidden.
+  ref.read(windowRaiseRequestProvider.notifier).bump();
+  return confirmEditorsClosable(context, ref, tabIds, quitting: true);
 }
 
 /// Asks, runs [close], then drops the buffers those tabs held — in that order,

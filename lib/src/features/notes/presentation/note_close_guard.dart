@@ -16,8 +16,9 @@ enum _ConflictChoice { keepMine, discardMine }
 Future<bool> confirmNotesClosable(
   BuildContext context,
   WidgetRef ref,
-  List<String> tabIds,
-) async {
+  List<String> tabIds, {
+  bool quitting = false,
+}) async {
   final wanted = tabIds.toSet();
   final open = noteIdsIn(
     ref
@@ -62,7 +63,7 @@ Future<bool> confirmNotesClosable(
         FilledButton(
           autofocus: true,
           onPressed: () => Navigator.of(context).pop(_ConflictChoice.keepMine),
-          child: const Text('Keep mine and close'),
+          child: Text(quitting ? 'Keep mine and quit' : 'Keep mine and close'),
         ),
       ],
     ),

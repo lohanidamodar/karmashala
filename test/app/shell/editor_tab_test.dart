@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,12 +18,14 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_ui/code.dart';
 
 import '../../features/scale/scale_harness.dart';
+import '../../features/system/fake_native_adapters.dart';
 import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -192,10 +196,7 @@ void main() {
   /// every assertion below is actually about; it does not exercise the key
   /// path, and nothing here claims to.
   Future<void> typeInEditor(WidgetTester tester, String text) async {
-    tester
-            .widget<AppCodeEditor>(find.byType(AppCodeEditor))
-            .controller
-            .text =
+    tester.widget<AppCodeEditor>(find.byType(AppCodeEditor)).controller.text =
         text;
     await tester.pumpAndSettle();
   }
@@ -488,5 +489,94 @@ void main() {
     expect(find.byTooltip('Save (Ctrl+S)'), findsNothing);
     expect(find.byTooltip('Reload from disk'), findsNothing);
     expect(find.textContaining('Ln 1, Col 1'), findsNothing);
+  });
+
+  group('quitting', () {
+    /// Starts a quit the way every exit does, and returns what it reached:
+    /// `shutdown` once the ordered teardown began.
+    Future<List<String>> quit(
+      WidgetTester tester,
+      ProviderContainer container,
+    ) async {
+      final reached = <String>[];
+      final service = SystemIntegrationService(
+        container,
+        adapters: FakeNatives().adapters,
+        registerOsQuit: (_) {},
+        endProcess: () => reached.add('ended'),
+        onQuitRequested: () async => reached.add('shutdown'),
+      );
+      unawaited(service.quit());
+      await settle(tester);
+      return reached;
+    }
+
+    testWidgets('with unsaved edits it asks, and Cancel keeps the app open', (
+      tester,
+    ) async {
+      final container = await openFile(tester);
+      await typeInEditor(tester, 'unsaved\n');
+      await settle(tester);
+
+      final reached = await quit(tester, container);
+      expect(find.text('Save counter.dart before quitting?'), findsOneWidget);
+      expect(reached, isEmpty, reason: 'nothing shuts down while it asks');
+
+      await tester.tap(find.text('Cancel'));
+      await settle(tester);
+      expect(reached, isEmpty);
+      expect(container.read(openDocumentProvider(_path))?.text, 'unsaved\n');
+      expect(store.disk[_path], _initial);
+    });
+
+    testWidgets("Quit, don't save quits without writing", (tester) async {
+      final container = await openFile(tester);
+      await typeInEditor(tester, 'unsaved\n');
+      await settle(tester);
+
+      final reached = await quit(tester, container);
+      await tester.tap(find.text("Quit, don't save"));
+      await settle(tester);
+
+      expect(reached, contains('shutdown'));
+      expect(store.disk[_path], _initial);
+    });
+
+    testWidgets('saving from that dialog writes, then quits', (tester) async {
+      final container = await openFile(tester);
+      await typeInEditor(tester, 'kept\n');
+      await settle(tester);
+
+      final reached = await quit(tester, container);
+      await tester.tap(find.text('Save and quit'));
+      await settle(tester);
+
+      expect(store.disk[_path], 'kept\n');
+      expect(reached, contains('shutdown'));
+    });
+
+    testWidgets('a save that is refused keeps the app open', (tester) async {
+      final container = await openFile(tester);
+      await typeInEditor(tester, 'mine\n');
+      await settle(tester);
+      store.writeBehindOurBack(_path, 'someone else\n');
+
+      final reached = await quit(tester, container);
+      await tester.tap(find.text('Save and quit'));
+      await settle(tester);
+
+      expect(reached, isEmpty, reason: 'quitting now would lose the edits');
+      expect(store.disk[_path], 'someone else\n');
+      expect(container.read(openDocumentProvider(_path))?.text, 'mine\n');
+    });
+
+    testWidgets('with nothing unsaved it quits without asking', (tester) async {
+      final container = await openFile(tester);
+
+      final reached = await quit(tester, container);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(reached, contains('shutdown'));
+    });
   });
 }
