@@ -11,6 +11,7 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import 'package:agent_cli/process.dart';
 import '../application/file_explorer_providers.dart';
+import '../application/file_tree_rows.dart';
 import '../data/file_listing_service.dart';
 
 /// How far in a row at [depth] starts. One expression for the rows and the
@@ -59,201 +60,179 @@ class FileExplorerView extends ConsumerWidget {
                   message: 'Select a repository to browse its files.',
                   icon: AppIcons.folder,
                 )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-                  child: _DirChildren(dir: root, depth: 0),
-                ),
+              : FileTreeList(root: root),
         ),
       ],
     );
   }
 }
 
-class _DirChildren extends ConsumerWidget {
-  const _DirChildren({required this.dir, required this.depth});
+/// The tree under [root] as one lazy list: a row is built only while it is on
+/// screen, and a folder is listed only once it is opened.
+class FileTreeList extends ConsumerStatefulWidget {
+  const FileTreeList({required this.root, super.key});
 
-  final String dir;
-  final int depth;
+  final String root;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final async = ref.watch(directoryListingProvider(dir));
-    return async.when(
-      loading: () => _leaf(depth, 'Loading…', theme),
-      error: (e, _) => _leaf(depth, "Can't read this folder.", theme),
-      data: (entries) {
-        if (entries.isEmpty) return _leaf(depth, 'Empty', theme);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final entry in entries) _EntryRow(entry: entry, depth: depth),
-          ],
+  ConsumerState<FileTreeList> createState() => _FileTreeListState();
+}
+
+class _FileTreeListState extends ConsumerState<FileTreeList> {
+  final _scroll = ScrollController();
+
+  /// Held by the reveal target's row while it is built.
+  final _targetRow = GlobalKey();
+
+  /// The target already scrolled to. Scrolling once is a reveal; scrolling on
+  /// every rebuild fights the reader.
+  FileRevealTarget? _scrolledTo;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// Puts the target on screen once its row exists in the list. Off screen it
+  /// has no context, so jump by its share of the list first, then settle.
+  void _followTarget(FileTreeRows rows) {
+    final target = ref.read(fileRevealTargetProvider);
+    if (target == null) {
+      _scrolledTo = null;
+      return;
+    }
+    if (target == _scrolledTo) return;
+    final wanted = fileTreeKey(target.hostPath);
+    final index = rows.items.indexWhere(
+      (item) =>
+          item is FileTreeEntryItem &&
+          fileTreeKey(item.entry.windowsPath) == wanted,
+    );
+    if (index < 0) return;
+    _scrolledTo = target;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      void settle() {
+        final row = _targetRow.currentContext;
+        if (row == null) return;
+        Scrollable.ensureVisible(
+          row,
+          alignment: 0.5,
+          duration: const Duration(milliseconds: 150),
         );
+      }
+
+      if (_targetRow.currentContext == null && _scroll.hasClients) {
+        final position = _scroll.position;
+        final content = position.maxScrollExtent + position.viewportDimension;
+        final guess =
+            content * index / rows.items.length -
+            position.viewportDimension / 2;
+        _scroll.jumpTo(guess.clamp(0.0, position.maxScrollExtent));
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) settle();
+        });
+        return;
+      }
+      settle();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = ref.watch(fileTreeRowsProvider(widget.root));
+    // Listened, not watched: a target arriving redraws the rows whose role
+    // changed, never the list.
+    ref.listen(fileRevealTargetProvider, (_, _) => _followTarget(rows));
+    _followTarget(rows);
+    return ListView.builder(
+      controller: _scroll,
+      // One fixed extent: without it a jump far down lays out every row on
+      // the way to learn where it lands, which is the cost this list avoids.
+      prototypeItem: const FileRowTile(name: '', depth: 0, isDirectory: true),
+      padding: const EdgeInsets.symmetric(vertical: Insets.xs),
+      itemCount: rows.items.length,
+      itemBuilder: (context, index) => switch (rows.items[index]) {
+        final FileTreeEntryItem item => FileEntryRow(
+          key: ValueKey(item.entry.windowsPath),
+          entry: item.entry,
+          depth: item.depth,
+          targetKey: _targetRow,
+        ),
+        final FileTreeNoticeItem item => FileTreeNoticeRow(
+          key: ValueKey('${item.folder}#notice'),
+          notice: item.notice,
+          depth: item.depth,
+        ),
       },
     );
   }
-
-  static Widget _leaf(int depth, String text, ThemeData theme) => Padding(
-    padding: EdgeInsets.only(
-      left: _indentFor(depth) + Chrome.treeGutter,
-      top: _rowPadY,
-      bottom: _rowPadY,
-    ),
-    child: Text(
-      text,
-      style: theme.textTheme.bodySmall?.copyWith(
-        color: theme.colorScheme.onSurfaceVariant,
-        fontStyle: FontStyle.italic,
-      ),
-    ),
-  );
 }
 
-class _EntryRow extends ConsumerStatefulWidget {
-  const _EntryRow({required this.entry, required this.depth});
+/// "Loading…", "Empty", or a folder that could not be read.
+class FileTreeNoticeRow extends StatelessWidget {
+  const FileTreeNoticeRow({
+    required this.notice,
+    required this.depth,
+    super.key,
+  });
+
+  final FileTreeNotice notice;
+  final int depth;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: EdgeInsets.only(
+        left: _indentFor(depth) + Chrome.treeGutter,
+        top: _rowPadY,
+        bottom: _rowPadY,
+      ),
+      child: Text(
+        switch (notice) {
+          FileTreeNotice.loading => 'Loading…',
+          FileTreeNotice.unreadable => "Can't read this folder.",
+          FileTreeNotice.empty => 'Empty',
+        },
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontStyle: FontStyle.italic,
+        ),
+      ),
+    );
+  }
+}
+
+/// One file or folder. Watches only its own reveal role and whether it is open.
+class FileEntryRow extends ConsumerWidget {
+  const FileEntryRow({
+    required this.entry,
+    required this.depth,
+    required this.targetKey,
+    super.key,
+  });
 
   final DirEntry entry;
   final int depth;
 
-  @override
-  ConsumerState<_EntryRow> createState() => _EntryRowState();
-}
-
-class _EntryRowState extends ConsumerState<_EntryRow> {
-  bool _expanded = false;
-
-  /// Whether this row has already put itself on screen for the target it is.
-  /// Scrolling once is a reveal; scrolling on every rebuild fights the reader.
-  bool _scrolled = false;
+  /// Worn while this row is the reveal target, so the list can scroll to it.
+  final GlobalKey targetKey;
 
   /// The row's path as the rest of the app spells one — `DirEntry.windowsPath`
   /// with its owning environment put back, which is what reveal needs.
   EnvironmentPath get _path => EnvironmentPath(
     environmentId: localHostEnvironmentId,
-    path: widget.entry.windowsPath,
+    path: entry.windowsPath,
   );
 
-  void _say(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  /// Opens the file in a workbench tab. The external editor is still one
-  /// right-click away, for the files this one refuses.
-  void _open() =>
-      ref.read(editorTabActionsProvider).open(widget.entry.windowsPath);
-
-  Future<void> _openExternally() async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref.read(editorActionsProvider).openPath(widget.entry.windowsPath);
-      if (!mounted) return;
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Opening in editor…')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(e is StateError ? e.message : '$e')),
-      );
-    }
-  }
-
-  /// Shows the row in the host's file manager, and says why when it cannot.
-  /// Failure is a [RevealOutcome], not a throw, so a `catch` would never fire.
-  Future<void> _reveal() async {
-    final outcome = await ref
-        .read(revealInFileManagerProvider)
-        .reveal(_path, select: !widget.entry.isDirectory);
-    if (!outcome.ok) _say(outcome.error!);
-  }
-
-  Future<void> _copyPath() async {
-    await Clipboard.setData(ClipboardData(text: widget.entry.windowsPath));
-    _say('Path copied to clipboard');
-  }
-
-  /// Right-click items. Reveal is offered only where the host can reach the row;
-  /// `canReveal` starts no process, so asking while building is free.
-  List<PopupMenuEntry<String>> _menuItems() => [
-    if (!widget.entry.isDirectory)
-      DesktopMenuItem(
-        value: 'open',
-        label: 'Open in editor',
-        icon: AppIcons.fileCode,
-      ),
-    DesktopMenuItem(
-      value: 'external',
-      label: widget.entry.isDirectory
-          ? 'Open folder in external editor'
-          : 'Open in external editor',
-      icon: AppIcons.arrowSquareOut,
-    ),
-    if (ref.read(revealInFileManagerProvider).canReveal(_path))
-      DesktopMenuItem(
-        value: 'reveal',
-        label: widget.entry.isDirectory
-            ? 'Open in File Explorer'
-            : 'Reveal in File Explorer',
-        icon: AppIcons.folderOpen,
-      ),
-    DesktopMenuItem(
-      value: 'copy-path',
-      label: 'Copy path',
-      icon: AppIcons.copySimple,
-    ),
-  ];
-
-  void _onMenu(String action) {
-    switch (action) {
-      case 'open':
-        _open();
-      case 'external':
-        _openExternally();
-      case 'reveal':
-        _reveal();
-      case 'copy-path':
-        _copyPath();
-    }
-  }
-
-  /// Opens on the way down, and puts the target on screen once it exists. After
-  /// the frame and with no sequencing: each new listing asks the same question.
-  void _followReveal(FileRevealRole role) {
-    if (role == FileRevealRole.none) {
-      _scrolled = false;
-      return;
-    }
-    // A folder is opened whether it is on the way down or the target itself:
-    // revealing a directory means showing what is in it.
-    if (widget.entry.isDirectory && !_expanded) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() => _expanded = true);
-      });
-    }
-    if (role == FileRevealRole.target && !_scrolled) {
-      _scrolled = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            duration: const Duration(milliseconds: 150),
-          );
-        }
-      });
-    }
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     debugFileRowBuilds++;
-    final theme = Theme.of(context);
-    final entry = widget.entry;
     final isDir = entry.isDirectory;
-    // `select` rather than a plain watch: every row re-runs this when a target
-    // arrives, but only the rows whose answer *changed* are rebuilt.
+    // `select` rather than a plain watch: only the rows whose answer *changed*
+    // are rebuilt when a target arrives.
     final role = ref.watch(
       fileRevealTargetProvider.select(
         (target) => fileRevealRoleFor(
@@ -263,25 +242,86 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
         ),
       ),
     );
-    _followReveal(role);
+    final expanded =
+        isDir &&
+        ref.watch(
+          fileTreeExpansionProvider.select(
+            (open) => open.contains(fileTreeKey(entry.windowsPath)),
+          ),
+        );
     final selected = role == FileRevealRole.target;
-    final row = InkWell(
-      onTap: isDir ? () => setState(() => _expanded = !_expanded) : _open,
+    final actions = _FileEntryActions(ref, context, entry, _path);
+    final row = FileRowTile(
+      name: entry.name,
+      depth: depth,
+      isDirectory: isDir,
+      expanded: expanded,
+      selected: selected,
+      onTap: isDir
+          ? () => ref
+                .read(fileTreeExpansionProvider.notifier)
+                .toggle(entry.windowsPath)
+          : actions.open,
+    );
+    // [RowContextMenu] rather than a bare right-click: with the gesture alone a
+    // keyboard could reach every file and none of their actions. No `⋮` here.
+    return Semantics(
+      key: selected ? targetKey : null,
+      selected: selected,
+      child: RowContextMenu(
+        menuLabel: 'Actions for ${entry.name}',
+        itemBuilder: () => fileEntryMenuItems(
+          isDirectory: isDir,
+          // `canReveal` starts no process, so asking while building is free.
+          canReveal: ref.read(revealInFileManagerProvider).canReveal(_path),
+        ),
+        onSelected: actions.onMenu,
+        builder: (context) => row,
+      ),
+    );
+  }
+}
+
+/// What one file or folder row draws. Pure, so the list can also measure one
+/// as its prototype.
+class FileRowTile extends StatelessWidget {
+  const FileRowTile({
+    required this.name,
+    required this.depth,
+    required this.isDirectory,
+    this.expanded = false,
+    this.selected = false,
+    this.onTap,
+    super.key,
+  });
+
+  final String name;
+  final int depth;
+  final bool isDirectory;
+  final bool expanded;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
       child: Container(
         color: selected
             ? theme.colorScheme.primary.withValues(alpha: 0.14)
             : null,
         padding: EdgeInsets.only(
-          left: _indentFor(widget.depth),
+          left: _indentFor(depth),
           top: _rowPadY,
           bottom: _rowPadY,
           right: Insets.sm,
         ),
         child: Row(
           children: [
-            if (isDir)
+            if (isDirectory)
               Icon(
-                _expanded ? AppIcons.caretDown : AppIcons.caretRight,
+                expanded ? AppIcons.caretDown : AppIcons.caretRight,
                 size: Chrome.iconAction,
                 color: theme.colorScheme.onSurfaceVariant,
               )
@@ -289,18 +329,18 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
               const SizedBox(width: Chrome.iconAction),
             const SizedBox(width: 2),
             Icon(
-              isDir
-                  ? (_expanded ? AppIcons.folderOpen : AppIcons.folder)
+              isDirectory
+                  ? (expanded ? AppIcons.folderOpen : AppIcons.folder)
                   : AppIcons.article,
               size: Chrome.iconAction,
-              color: isDir
+              color: isDirectory
                   ? theme.colorScheme.tertiary
                   : theme.colorScheme.onSurfaceVariant,
             ),
             SizedBox(width: UiDensity.of(context).glyphGap),
             Expanded(
               child: Text(
-                entry.name,
+                name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall,
@@ -310,24 +350,96 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
         ),
       ),
     );
-    // [RowContextMenu] rather than a bare right-click: with the gesture alone a
-    // keyboard could reach every file and none of their actions. No `⋮` here.
-    final menu = Semantics(
-      selected: selected,
-      child: RowContextMenu(
-        menuLabel: 'Actions for ${entry.name}',
-        itemBuilder: _menuItems,
-        onSelected: _onMenu,
-        builder: (context) => row,
-      ),
-    );
-    if (!isDir || !_expanded) return menu;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        menu,
-        _DirChildren(dir: entry.windowsPath, depth: widget.depth + 1),
-      ],
-    );
+  }
+}
+
+/// A file row's right-click items. Reveal only where the host can reach it.
+List<PopupMenuEntry<String>> fileEntryMenuItems({
+  required bool isDirectory,
+  required bool canReveal,
+}) => [
+  if (!isDirectory)
+    DesktopMenuItem(
+      value: 'open',
+      label: 'Open in editor',
+      icon: AppIcons.fileCode,
+    ),
+  DesktopMenuItem(
+    value: 'external',
+    label: isDirectory
+        ? 'Open folder in external editor'
+        : 'Open in external editor',
+    icon: AppIcons.arrowSquareOut,
+  ),
+  if (canReveal)
+    DesktopMenuItem(
+      value: 'reveal',
+      label: isDirectory ? 'Open in File Explorer' : 'Reveal in File Explorer',
+      icon: AppIcons.folderOpen,
+    ),
+  DesktopMenuItem(
+    value: 'copy-path',
+    label: 'Copy path',
+    icon: AppIcons.copySimple,
+  ),
+];
+
+class _FileEntryActions {
+  _FileEntryActions(this.ref, this.context, this.entry, this.path);
+
+  final WidgetRef ref;
+  final BuildContext context;
+  final DirEntry entry;
+  final EnvironmentPath path;
+
+  void _say(String message) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Opens the file in a workbench tab. The external editor is still one
+  /// right-click away, for the files this one refuses.
+  void open() => ref.read(editorTabActionsProvider).open(entry.windowsPath);
+
+  Future<void> _openExternally() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(editorActionsProvider).openPath(entry.windowsPath);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Opening in editor…')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(e is StateError ? e.message : '$e')),
+      );
+    }
+  }
+
+  /// Failure is a [RevealOutcome], not a throw, so a `catch` would never fire.
+  Future<void> _reveal() async {
+    final outcome = await ref
+        .read(revealInFileManagerProvider)
+        .reveal(path, select: !entry.isDirectory);
+    if (!outcome.ok) _say(outcome.error!);
+  }
+
+  Future<void> _copyPath() async {
+    await Clipboard.setData(ClipboardData(text: entry.windowsPath));
+    _say('Path copied to clipboard');
+  }
+
+  void onMenu(String action) {
+    switch (action) {
+      case 'open':
+        open();
+      case 'external':
+        _openExternally();
+      case 'reveal':
+        _reveal();
+      case 'copy-path':
+        _copyPath();
+    }
   }
 }

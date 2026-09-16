@@ -194,12 +194,10 @@ void main() {
     reveal();
     await tester.pumpAndSettle();
 
-    // Twenty-five rows are on screen and four are redrawn: the two folders on
-    // the way, the leaf, and `main.dart`, which is inside one of them — a row
-    // builds its children, so opening one redraws its own subtree and nothing
-    // else. The twenty-one rows at the root are never asked again, because
-    // `select` saw their answer had not changed.
-    expect(debugFileRowBuilds, 4);
+    // Twenty-five rows are on screen and three are redrawn: the two folders on
+    // the way and the leaf. The tree is one flat list, so a folder no longer
+    // rebuilds its children, and every other row's `select` saw no change.
+    expect(debugFileRowBuilds, 3);
   });
 
   testWidgets('clearing the target lets go of the selection', (tester) async {
