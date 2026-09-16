@@ -106,7 +106,7 @@ class SidePanel extends ConsumerWidget {
   }
 }
 
-class _SidePanelRail extends ConsumerWidget {
+class _SidePanelRail extends StatelessWidget {
   const _SidePanelRail({
     required this.open,
     required this.debugMode,
@@ -118,7 +118,7 @@ class _SidePanelRail extends ConsumerWidget {
   final bool notesEnabled;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Container(
       width: Chrome.rail,
@@ -137,22 +137,33 @@ class _SidePanelRail extends ConsumerWidget {
               debugMode: debugMode,
               notesEnabled: notesEnabled,
             ))
-              _RailButton(
-                surface: surface,
-                selected: surface == open,
-                // The rail is where a badge belongs: it is always visible, even
-                // when the panel is collapsed to its 34px.
-                badge: surface == SidePanelSurface.inbox
-                    ? ref.watch(attentionCountProvider)
-                    : 0,
-                onTap: () =>
-                    ref.read(sidePanelProvider.notifier).select(surface),
-              ),
+              _RailEntry(surface: surface, selected: surface == open),
           ],
         ),
       ),
     );
   }
+}
+
+/// One rail glyph, wired. Only the inbox's watches the attention count, so a
+/// count change redraws one glyph rather than the rail.
+class _RailEntry extends ConsumerWidget {
+  const _RailEntry({required this.surface, required this.selected});
+
+  final SidePanelSurface surface;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => _RailButton(
+    surface: surface,
+    selected: selected,
+    // The rail is where a badge belongs: it is always visible, even when the
+    // panel is collapsed to its 34px.
+    badge: surface == SidePanelSurface.inbox
+        ? ref.watch(attentionCountProvider)
+        : 0,
+    onTap: () => ref.read(sidePanelProvider.notifier).select(surface),
+  );
 }
 
 class _RailButton extends StatelessWidget {
