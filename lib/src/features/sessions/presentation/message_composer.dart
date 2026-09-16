@@ -1,5 +1,6 @@
 import 'package:karmashala_core/logging.dart';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,26 @@ import 'package:pasteboard/pasteboard.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/picking.dart';
+
+/// How many lines of [style] fit [height], between 1 and 12. Unbounded means
+/// the composer's full twelve.
+@visibleForTesting
+int composerLinesThatFit(
+  double height, {
+  required TextStyle? style,
+  required TextScaler textScaler,
+}) {
+  const most = 12;
+  if (!height.isFinite) return most;
+  final painter = TextPainter(
+    text: TextSpan(text: ' ', style: style),
+    textDirection: TextDirection.ltr,
+    textScaler: textScaler,
+  )..layout();
+  final line = painter.preferredLineHeight;
+  painter.dispose();
+  return (height / line).floor().clamp(1, most);
+}
 
 /// A pasted/attached image, kept on disk so its path can be handed to the agent.
 class _Attachment {
@@ -229,82 +250,119 @@ class _MessageComposerState extends State<MessageComposer> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final canType = widget.enabled && !_busy;
+    final textScaler = MediaQuery.textScalerOf(context);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Divider(height: 1),
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
-            child: Padding(
-              padding: const EdgeInsets.all(Insets.sm),
-              child: AnimatedContainer(
-                duration: Motion.fast,
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(Radii.lg),
-                  // The accent border is the whole focus signal. The 1.0→1.5
-                  // width it also grew relaid the composer out on every focus.
-                  border: Border.all(
-                    color: _focusNode.hasFocus
-                        ? scheme.primary
-                        : scheme.outlineVariant,
+    return LayoutBuilder(
+      builder: (context, box) {
+        // As many lines as the pane leaves room for. The scroll view is the
+        // last resort for a pane shorter than the chrome itself.
+        final maxLines = composerLinesThatFit(
+          box.maxHeight - _chromeHeight(box.maxWidth, textScaler),
+          style: theme.textTheme.bodyMedium,
+          textScaler: textScaler,
+        );
+        return SingleChildScrollView(
+          primary: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Divider(height: 1),
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: Chrome.readableWidth,
                   ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_attachments.isNotEmpty) _attachmentStrip(theme),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: Insets.md,
-                        vertical: Insets.sm,
-                      ),
-                      child: TextField(
-                        controller: _input,
-                        focusNode: _focusNode,
-                        enabled: canType,
-                        // **Three lines at rest, not one.** The glyphs got 19
-                        // of the composer's 113 logical pixels.
-                        minLines: 3,
-                        maxLines: 12,
-                        textInputAction: TextInputAction.newline,
-                        style: theme.textTheme.bodyMedium,
-                        decoration: InputDecoration(
-                          isDense: true,
-                          // `filled` is on in the app's theme, and with no
-                          // border it painted a rectangle inside this card.
-                          filled: false,
-                          border: InputBorder.none,
-                          // The wrapper above already spends `Insets.sm`
-                          // vertically; a second helping here paid twice.
-                          contentPadding: EdgeInsets.zero,
-                          hintText: widget.hintText,
-                          hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(Insets.sm),
+                    child: AnimatedContainer(
+                      duration: Motion.fast,
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(Radii.lg),
+                        // The accent border is the whole focus signal. The
+                        // 1.0→1.5 width it also grew relaid the composer out
+                        // on every focus.
+                        border: Border.all(
+                          color: _focusNode.hasFocus
+                              ? scheme.primary
+                              : scheme.outlineVariant,
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        Insets.sm,
-                        0,
-                        Insets.sm,
-                        Insets.sm,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_attachments.isNotEmpty) _attachmentStrip(theme),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: Insets.md,
+                              vertical: Insets.sm,
+                            ),
+                            child: TextField(
+                              controller: _input,
+                              focusNode: _focusNode,
+                              enabled: canType,
+                              // **Three lines at rest, not one.** The glyphs
+                              // got 19 of the composer's 113 logical pixels.
+                              // Fewer only when the pane has no room for three.
+                              minLines: math.min(3, maxLines),
+                              maxLines: maxLines,
+                              textInputAction: TextInputAction.newline,
+                              style: theme.textTheme.bodyMedium,
+                              decoration: InputDecoration(
+                                isDense: true,
+                                // `filled` is on in the app's theme, and with
+                                // no border it painted a rectangle inside
+                                // this card.
+                                filled: false,
+                                border: InputBorder.none,
+                                // The wrapper above already spends
+                                // `Insets.sm` vertically; a second helping
+                                // here paid twice.
+                                contentPadding: EdgeInsets.zero,
+                                hintText: widget.hintText,
+                                hintStyle: theme.textTheme.bodyMedium
+                                    ?.copyWith(color: scheme.onSurfaceVariant),
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              Insets.sm,
+                              0,
+                              Insets.sm,
+                              Insets.sm,
+                            ),
+                            child: _toolbar(canType),
+                          ),
+                        ],
                       ),
-                      child: _toolbar(canType),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
+  }
+
+  /// Everything but the text lines, near enough to size the box by: guessing
+  /// low costs a few pixels of scroll, never an overflow.
+  double _chromeHeight(double width, TextScaler textScaler) {
+    // Divider, card padding and border, the text's own padding, the toolbar.
+    var height =
+        1 + 2 * Insets.sm + 2 + 2 * Insets.sm + Chrome.control + Insets.sm;
+    final toolbarWidth =
+        math.min(width, Chrome.readableWidth) - 4 * Insets.sm - 2;
+    if (widget.chips.isNotEmpty && toolbarWidth <= _toolbarRowMinWidth) {
+      height += Insets.xs + Chrome.control;
+    }
+    if (_attachments.isNotEmpty) {
+      height += Insets.sm + 56 + Insets.xs + textScaler.scale(11) * 1.5;
+    }
+    return height;
   }
 
   /// The thumbnails, and the one line explaining where the files went. Drawn

@@ -108,6 +108,10 @@ String describeToolBatch(Iterable<ChatMessage> messages) {
   ].join(' · ');
 }
 
+/// The most of [ChatTranscriptView]'s height its footer may take; the rest is
+/// the conversation's. A footer with no ceiling pushed the list off the pane.
+const double kTranscriptFooterShare = 0.7;
+
 /// Called when the user keeps a message as a note: the message, and its index
 /// in the whole transcript — not the visible window — which the note records.
 typedef SaveNoteCallback = void Function(ChatMessage message, int ordinal);
@@ -208,82 +212,92 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     final visible = widget.messages.sublist(start);
     final rows = transcriptRows(visible);
 
-    return Column(
-      children: [
-        // Its own traversal group so its stops cannot interleave with the
-        // footer's: tabbing below the fold scrolls the list under the policy.
-        Expanded(
-          child: FocusTraversalGroup(
-            child: total == 0
-                ? _ChatEmptyState(hint: widget.emptyHint)
-                : Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: Chrome.readableWidth,
-                      ),
-                      child: ListView.builder(
-                        controller: _scroll,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: Insets.md,
-                          vertical: Insets.sm,
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        children: [
+          // Its own traversal group so its stops cannot interleave with the
+          // footer's: tabbing below the fold scrolls the list under the policy.
+          Expanded(
+            child: FocusTraversalGroup(
+              child: total == 0
+                  ? _ChatEmptyState(hint: widget.emptyHint)
+                  : Align(
+                      alignment: Alignment.topCenter,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          maxWidth: Chrome.readableWidth,
                         ),
-                        itemCount: rows.length + (start > 0 ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (start > 0 && index == 0) {
-                            return Center(
-                              child: TextButton.icon(
-                                onPressed: () => setState(
-                                  () => _shown = math.min(_shown + _page, total),
+                        child: ListView.builder(
+                          controller: _scroll,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: Insets.md,
+                            vertical: Insets.sm,
+                          ),
+                          itemCount: rows.length + (start > 0 ? 1 : 0),
+                          itemBuilder: (context, index) {
+                            if (start > 0 && index == 0) {
+                              return Center(
+                                child: TextButton.icon(
+                                  onPressed: () => setState(
+                                    () => _shown = math.min(_shown + _page, total),
+                                  ),
+                                  icon: const Icon(AppIcons.caretUp),
+                                  label: Text(
+                                    'Load $start earlier message'
+                                    '${start == 1 ? '' : 's'}',
+                                  ),
                                 ),
-                                icon: const Icon(AppIcons.caretUp),
-                                label: Text(
-                                  'Load $start earlier message'
-                                  '${start == 1 ? '' : 's'}',
+                              );
+                            }
+                            final row = rows[index - (start > 0 ? 1 : 0)];
+                            Widget tileAt(int offset) {
+                              final message = visible[offset];
+                              return _ChatMessageTile(
+                                message: message,
+                                resolveHostPath: widget.resolveHostPath,
+                                onPathTap: widget.onPathTap,
+                                detail: widget.detailBuilder?.call(
+                                  message,
+                                  start + offset,
                                 ),
-                              ),
+                                onSaveNote: widget.onSaveNote == null
+                                    ? null
+                                    : () =>
+                                          widget.onSaveNote!(message, start + offset),
+                              );
+                            }
+  
+                            if (!row.isBatch) return tileAt(row.from);
+                            return _ToolBatchTile(
+                              // The run itself, so the line can name the calls.
+                              messages: visible.sublist(row.from, row.to),
+                              tileAt: tileAt,
+                              from: row.from,
                             );
-                          }
-                          final row = rows[index - (start > 0 ? 1 : 0)];
-                          Widget tileAt(int offset) {
-                            final message = visible[offset];
-                            return _ChatMessageTile(
-                              message: message,
-                              resolveHostPath: widget.resolveHostPath,
-                              onPathTap: widget.onPathTap,
-                              detail: widget.detailBuilder?.call(
-                                message,
-                                start + offset,
-                              ),
-                              onSaveNote: widget.onSaveNote == null
-                                  ? null
-                                  : () =>
-                                        widget.onSaveNote!(message, start + offset),
-                            );
-                          }
-
-                          if (!row.isBatch) return tileAt(row.from);
-                          return _ToolBatchTile(
-                            // The run itself, so the line can name the calls.
-                            messages: visible.sublist(row.from, row.to),
-                            tileAt: tileAt,
-                            from: row.from,
-                          );
-                        },
+                          },
+                        ),
                       ),
                     ),
-                  ),
-          ),
-        ),
-        if (widget.footer != null)
-          Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
-              child: widget.footer!,
             ),
           ),
-      ],
+          if (widget.footer != null)
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: constraints.maxHeight * kTranscriptFooterShare,
+              ),
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: Chrome.readableWidth,
+                  ),
+                  child: widget.footer!,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

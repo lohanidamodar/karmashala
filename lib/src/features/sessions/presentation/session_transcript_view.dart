@@ -58,6 +58,12 @@ class SessionTranscriptView extends ConsumerStatefulWidget {
 }
 
 class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
+  /// The most of the footer the composer may take; the strips get the rest.
+  static const _composerShare = 0.7;
+
+  /// The most of the conversation's height the recap may take.
+  static const _recapShare = 0.3;
+
   /// Owned here rather than inside the composer, because something outside the
   /// composer writes to it: a note sent back lands in this box.
   final _composer = TextEditingController();
@@ -300,81 +306,140 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         ),
         SessionRepositoriesBar(sessionId: widget.sessionId),
         const Divider(height: 1),
-        // Above the messages and outside their scroll: a digest you have to
-        // scroll back to is a digest of a conversation you have already re-read.
-        SessionRecapCard(sessionId: widget.sessionId),
         Expanded(
-          child: transcript.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('$e')),
-            data: (messages) => ChatTranscriptView(
-              messages: messages,
-              resolveHostPath: resolveHostPath,
-              // Paths in the conversation are clickable, and a click reveals
-              // rather than opens — see [_openPath].
-              onPathTap: _openPath,
-              // What the parent's `Task(…)` row never showed. Collapsed and
-              // unread until opened — one session's turns came to 1,485 MiB.
-              detailBuilder: (message, ordinal) {
-                final reference = _subagents[ordinal];
-                if (reference == null) return null;
-                return SubagentTurnsTile(
-                  reference: reference,
-                  resolveHostPath: resolveHostPath,
-                );
-              },
-              // Null when Notes is off: the transcript never learns the
-              // feature exists, so there is nothing left behind to hide.
-              onSaveNote: notesEnabled ? _saveNote : null,
-              // The delivery strip sits on the composer's channel: its prompt
-              // actions send through `continueSession`.
-              footer: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Above the handoff row and the composer, because it blocks
-                  // the session: nothing typed is read until it is answered.
-                  ApprovalRequestCard(sessionId: widget.sessionId),
-                  DeliveryStrip(sessionId: widget.sessionId),
-                  // Directly above the box: "what is it doing right now" was
-                  // only answerable by scrolling to the end. Silent when idle.
-                  ActivityStrip(sessionId: widget.sessionId),
-                  // Directly above the composer whose chip row posts it, so the
-                  // answer to "what did that chip just do" is next to the chip.
-                  SessionNoticeLine(sessionId: widget.sessionId),
-                  MessageComposer(
-                    controller: _composer,
-                    // MonoCode's chip row: the session's own safety policy, and
-                    // what this session has cost, beside the session itself.
-                    chips: [
-                      PermissionModeChip(sessionId: widget.sessionId),
-                      // The same pair as the terminal's own bar, in the same
-                      // order: what it may do without asking, and what with.
-                      SessionModelChip(sessionId: widget.sessionId),
-                      SessionStatsButton(sessionId: widget.sessionId),
-                    ],
-                    hintText: active
-                        // No emoji: the old hint named a 🖼 that is nowhere in
-                        // the composer; the attach control's tooltip does.
-                        ? 'Message the agent…'
-                        : 'Type to continue this session…',
-                    onSend: (text) => ref
-                        .read(sessionActionsProvider)
-                        .continueSession(widget.sessionId, text),
+          child: LayoutBuilder(
+            builder: (context, box) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Above the messages and outside their scroll: a digest you
+                // have to scroll back to is of a conversation already re-read.
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: box.maxHeight * _recapShare,
                   ),
-                ],
-              ),
-              emptyHint: _emptyHint(
-                chatAvailable: chatAvailable,
-                reading: reading,
-                fromPty: fromPty,
-                active: active,
-                hasTerminal: hasTerminal,
-              ),
+                  child: SessionRecapCard(sessionId: widget.sessionId),
+                ),
+                Expanded(
+                  child: _conversation(
+                    transcript: transcript,
+                    resolveHostPath: resolveHostPath,
+                    notesEnabled: notesEnabled,
+                    active: active,
+                    chatAvailable: chatAvailable,
+                    reading: reading,
+                    fromPty: fromPty,
+                    hasTerminal: hasTerminal,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _conversation({
+    required AsyncValue<List<ChatMessage>> transcript,
+    required String? Function(String)? resolveHostPath,
+    required bool notesEnabled,
+    required bool active,
+    required bool chatAvailable,
+    required SessionChatView reading,
+    required bool fromPty,
+    required bool hasTerminal,
+  }) {
+    return transcript.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('$e')),
+      data: (messages) => ChatTranscriptView(
+        messages: messages,
+        resolveHostPath: resolveHostPath,
+        // Paths in the conversation are clickable, and a click reveals
+        // rather than opens — see [_openPath].
+        onPathTap: _openPath,
+        // What the parent's `Task(…)` row never showed. Collapsed and
+        // unread until opened — one session's turns came to 1,485 MiB.
+        detailBuilder: (message, ordinal) {
+          final reference = _subagents[ordinal];
+          if (reference == null) return null;
+          return SubagentTurnsTile(
+            reference: reference,
+            resolveHostPath: resolveHostPath,
+          );
+        },
+        // Null when Notes is off: the transcript never learns the
+        // feature exists, so there is nothing left behind to hide.
+        onSaveNote: notesEnabled ? _saveNote : null,
+        // The delivery strip sits on the composer's channel: its prompt
+        // actions send through `continueSession`.
+        footer: LayoutBuilder(
+          builder: (context, box) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // The strips scroll among themselves in whatever the
+              // composer leaves; none of them may push the box away.
+              Flexible(
+                child: SingleChildScrollView(
+                  primary: false,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Above the handoff row and the composer, because
+                      // it blocks the session: nothing typed is read
+                      // until it is answered.
+                      ApprovalRequestCard(sessionId: widget.sessionId),
+                      DeliveryStrip(sessionId: widget.sessionId),
+                      // Directly above the box: "what is it doing right
+                      // now" was only answerable by scrolling to the end.
+                      ActivityStrip(sessionId: widget.sessionId),
+                      // Directly above the composer whose chip row posts
+                      // it, so the answer sits next to the chip.
+                      SessionNoticeLine(sessionId: widget.sessionId),
+                    ],
+                  ),
+                ),
+              ),
+              ConstrainedBox(
+                // A long draft may not crowd an approval out of sight.
+                constraints: BoxConstraints(
+                  maxHeight: box.maxHeight * _composerShare,
+                ),
+                child: MessageComposer(
+                  controller: _composer,
+                  // MonoCode's chip row: the session's own safety policy,
+                  // and what it has cost, beside the session itself.
+                  chips: [
+                    PermissionModeChip(sessionId: widget.sessionId),
+                    // The same pair as the terminal's own bar, in the
+                    // same order: what it may do without asking, and
+                    // what with.
+                    SessionModelChip(sessionId: widget.sessionId),
+                    SessionStatsButton(sessionId: widget.sessionId),
+                  ],
+                  hintText: active
+                      // No emoji: the old hint named a 🖼 that is nowhere
+                      // in the composer; the attach tooltip does.
+                      ? 'Message the agent…'
+                      : 'Type to continue this session…',
+                  onSend: (text) => ref
+                      .read(sessionActionsProvider)
+                      .continueSession(widget.sessionId, text),
+                ),
+              ),
+            ],
+          ),
+        ),
+        emptyHint: _emptyHint(
+          chatAvailable: chatAvailable,
+          reading: reading,
+          fromPty: fromPty,
+          active: active,
+          hasTerminal: hasTerminal,
+        ),
+      ),
     );
   }
 

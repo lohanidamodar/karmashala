@@ -58,6 +58,9 @@ class SessionRecapCard extends ConsumerWidget {
 
   final String sessionId;
 
+  /// Below this height a pinned header would leave the text no line to show.
+  static const _pinnedHeaderFloor = 96.0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recap = ref.watch(sessionRecapProvider(sessionId));
@@ -74,6 +77,55 @@ class SessionRecapCard extends ConsumerWidget {
         .length;
     final stale = turnsNow != null && recap.isStaleAgainst(turnsNow);
 
+    final header = Row(
+      children: [
+        Icon(
+          AppIcons.article,
+          size: Chrome.iconSmall,
+          color: theme.colorScheme.primary,
+        ),
+        const SizedBox(width: Insets.sm),
+        Text('Recap', style: theme.textTheme.labelLarge),
+        const Spacer(),
+        if (running)
+          const SizedBox(
+            width: Chrome.iconSmall,
+            height: Chrome.iconSmall,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        else if (stale)
+          // Offered only where it would say something new: a turn
+          // spent re-deriving the text already on screen is wasted.
+          TextButton.icon(
+            icon: const Icon(AppIcons.arrowsClockwise),
+            label: const Text('Recap again'),
+            onPressed: () => requestSessionRecap(context, ref, sessionId),
+          ),
+        IconButton(
+          tooltip: 'Dismiss this recap',
+          icon: const Icon(AppIcons.x),
+          iconSize: Chrome.iconSmall,
+          onPressed: () {
+            ref.read(sessionRecapDaoProvider).delete(sessionId);
+            ref.invalidate(sessionRecapProvider(sessionId));
+          },
+        ),
+      ],
+    );
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SelectableText(recap.text, style: theme.textTheme.bodySmall),
+        const SizedBox(height: Insets.xs),
+        Text(
+          _provenance(recap, ref, stale: stale, turnsNow: turnsNow),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         Insets.md,
@@ -89,57 +141,34 @@ class SessionRecapCard extends ConsumerWidget {
             left: BorderSide(color: theme.colorScheme.primary, width: 2),
           ),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.sm),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    AppIcons.article,
-                    size: Chrome.iconSmall,
-                    color: theme.colorScheme.primary,
+        // The text scrolls under a pinned header inside whatever height the
+        // conversation spares it; a pane too short for that scrolls it all.
+        child: LayoutBuilder(
+          builder: (context, box) => box.maxHeight < _pinnedHeaderFloor
+              ? SingleChildScrollView(
+                  primary: false,
+                  padding: const EdgeInsets.all(Insets.sm),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [header, body],
                   ),
-                  const SizedBox(width: Insets.sm),
-                  Text('Recap', style: theme.textTheme.labelLarge),
-                  const Spacer(),
-                  if (running)
-                    const SizedBox(
-                      width: Chrome.iconSmall,
-                      height: Chrome.iconSmall,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  else if (stale)
-                    // Offered only where it would say something new: a turn
-                    // spent re-deriving the text already on screen is wasted.
-                    TextButton.icon(
-                      icon: const Icon(AppIcons.arrowsClockwise),
-                      label: const Text('Recap again'),
-                      onPressed: () =>
-                          requestSessionRecap(context, ref, sessionId),
-                    ),
-                  IconButton(
-                    tooltip: 'Dismiss this recap',
-                    icon: const Icon(AppIcons.x),
-                    iconSize: Chrome.iconSmall,
-                    onPressed: () {
-                      ref.read(sessionRecapDaoProvider).delete(sessionId);
-                      ref.invalidate(sessionRecapProvider(sessionId));
-                    },
+                )
+              : Padding(
+                  padding: const EdgeInsets.all(Insets.sm),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      header,
+                      Flexible(
+                        child: SingleChildScrollView(
+                          primary: false,
+                          child: body,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              SelectableText(recap.text, style: theme.textTheme.bodySmall),
-              const SizedBox(height: Insets.xs),
-              Text(
-                _provenance(recap, ref, stale: stale, turnsNow: turnsNow),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );
