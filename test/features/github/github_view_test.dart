@@ -3,6 +3,8 @@ import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/github/presentation/github_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -37,6 +39,22 @@ void main() {
     // the quick-open palette's, rather than a second title under the pane's.
     expect(find.text('PULL REQUESTS'), findsOneWidget);
     expect(find.text('ISSUES'), findsOneWidget);
+  });
+
+  testWidgets('waiting on gh is the house spinner', (tester) async {
+    final never = Completer<List<PullRequest>>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          githubRepositoryProvider.overrideWith((ref) async => null),
+          githubPullRequestsProvider.overrideWith((ref) => never.future),
+          githubIssuesProvider.overrideWith((ref) async => const []),
+        ],
+        child: const MaterialApp(home: Scaffold(body: GitHubView())),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(InlineSpinner), findsOneWidget);
   });
 
   testWidgets('surfaces a gh error', (tester) async {

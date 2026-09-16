@@ -189,7 +189,8 @@ class AutomationCard extends ConsumerWidget {
           _Line(label: 'Prompt', value: automation.prompt),
           if (refusal != null) ...[
             const SizedBox(height: Insets.sm),
-            _Refusal(reason: refusal.reason),
+            // The gate's own words; not dismissable, since it still refuses.
+            DesktopErrorBanner(refusal.reason),
           ],
           const SizedBox(height: Insets.xs),
           Wrap(
@@ -284,40 +285,6 @@ String describeSchedule(Automation automation, {required DateTime now}) {
   final next = cron.nextAfter(now);
   if (next == null) return '${schedule.cron} — never comes round';
   return '${schedule.cron} — next ${next.toLocal()}';
-}
-
-/// Why this automation would be refused, in the gate's own words.
-class _Refusal extends StatelessWidget {
-  const _Refusal({required this.reason});
-
-  final String reason;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(Insets.sm),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(Radii.sm),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(AppIcons.warning, color: theme.colorScheme.onErrorContainer),
-          const SizedBox(width: Insets.xs),
-          Expanded(
-            child: Text(
-              reason,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onErrorContainer,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// One occurrence, with its verdict, its age and its reason.

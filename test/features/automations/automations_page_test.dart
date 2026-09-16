@@ -193,6 +193,13 @@ void main() {
     await pumpPage(tester);
     expect(find.textContaining('Verification is off for app'), findsOneWidget);
     expect(find.textContaining('at least one project check'), findsOneWidget);
+    expect(
+      find.ancestor(
+        of: find.textContaining('Verification is off for app'),
+        matching: find.byType(DesktopErrorBanner),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a mode that would stop to ask is refused by name', (

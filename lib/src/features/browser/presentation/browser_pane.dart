@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -64,10 +65,13 @@ class _BrowserPaneState extends ConsumerState<BrowserPane> {
         if (state.tabs.length > 1) _TabPicker(state: state),
         const Divider(height: 1),
         _Actions(state: state),
-        if (state.error != null)
-          _ErrorBanner(
-            message: state.error!,
-            onDismiss: _controller.clearError,
+        if (state.error case final error?)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: Insets.sm,
+              vertical: Insets.xs,
+            ),
+            child: DesktopErrorBanner(error, onDismiss: _controller.clearError),
           ),
         // Under the actions and above the picture: the two questions a person
         // asks a page they are debugging, over the same service the tools use.
@@ -279,52 +283,6 @@ class _Actions extends ConsumerWidget {
               onPressed: controller.clearCapture,
               child: const Text('Clear'),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorBanner extends StatelessWidget {
-  const _ErrorBanner({required this.message, required this.onDismiss});
-
-  final String message;
-  final VoidCallback onDismiss;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      color: theme.colorScheme.errorContainer,
-      padding: const EdgeInsets.fromLTRB(
-        Insets.sm,
-        Insets.sm,
-        Insets.xs,
-        Insets.sm,
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            AppIcons.warningCircle,
-            color: theme.colorScheme.onErrorContainer,
-          ),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: SelectableText(
-              message,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onErrorContainer,
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Dismiss',
-            visualDensity: VisualDensity.compact,
-            icon: const Icon(AppIcons.x, size: Chrome.iconSmall),
-            onPressed: onDismiss,
-          ),
         ],
       ),
     );

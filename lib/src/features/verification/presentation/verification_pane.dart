@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/dialogs.dart';
@@ -33,10 +34,9 @@ class VerificationPane extends ConsumerWidget {
     final ready = ref.watch(verificationRootReadyProvider);
     return ready.when(
       loading: () => const Center(
-        child: SizedBox(
-          width: 16,
-          height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
+        child: InlineSpinner(
+          size: InlineSpinnerSize.medium,
+          semanticsLabel: 'Opening verification runs',
         ),
       ),
       error: (error, _) =>
@@ -325,11 +325,7 @@ class _RunActionsState extends ConsumerState<_RunActions> {
       if (_busy)
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: Insets.sm),
-          child: SizedBox(
-            width: 12,
-            height: 12,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
+          child: InlineSpinner(semanticsLabel: 'Writing the report'),
         )
       else
         IconButton(

@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/sessions/application/session_actions.dar
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_browser.dart';
@@ -114,6 +115,22 @@ void main() {
     // that promises "your window, your logins" for it is promising a session
     // they will not get.
     expect(find.textContaining('--user-data-dir'), findsOneWidget);
+  });
+
+  testWidgets('a lost browser is reported in the house error banner', (
+    tester,
+  ) async {
+    final harness = Harness();
+    await harness.pump(tester);
+    await tester.tap(find.text('Attach · 9222'));
+    await tester.pumpAndSettle();
+    harness.fake.socket.drop();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DesktopErrorBanner), findsOneWidget);
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DesktopErrorBanner), findsNothing);
   });
 
   testWidgets('attaching reports which browser, verbatim', (tester) async {

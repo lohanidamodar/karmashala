@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import '../../../core/util/clock_provider.dart';
@@ -33,10 +34,9 @@ class SessionMediaPanel extends ConsumerWidget {
         now: ref.watch(clockProvider).nowUtc(),
       ),
       loading: () => const Center(
-        child: SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
+        child: InlineSpinner(
+          size: InlineSpinnerSize.large,
+          semanticsLabel: 'Reading this session',
         ),
       ),
       // The stream is written not to fail, but a red box where a list of

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -192,7 +193,12 @@ class _AsyncList<T> extends StatelessWidget {
     return value.when(
       loading: () => const Padding(
         padding: EdgeInsets.all(Insets.lg),
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(
+          child: InlineSpinner(
+            size: InlineSpinnerSize.large,
+            semanticsLabel: 'Asking GitHub',
+          ),
+        ),
       ),
       error: (e, _) => Padding(
         padding: const EdgeInsets.all(Insets.md),

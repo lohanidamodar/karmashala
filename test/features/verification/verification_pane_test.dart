@@ -23,6 +23,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -186,6 +187,25 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
   }
+
+  testWidgets('opening the artifact folder waits on the house spinner', (
+    tester,
+  ) async {
+    final never = Completer<Directory>();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(h.db),
+          verificationRootReadyProvider.overrideWith((ref) => never.future),
+          verificationServiceProvider.overrideWithValue(h.service),
+          verificationChangesProvider.overrideWithValue(h.changes),
+        ],
+        child: const MaterialApp(home: Scaffold(body: VerificationPane())),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(InlineSpinner), findsOneWidget);
+  });
 
   testWidgets('a run being recorded is marked with the shared status dot', (
     tester,
