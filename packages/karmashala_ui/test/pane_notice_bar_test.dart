@@ -103,6 +103,7 @@ void main() {
     final expected = {
       NoticeTone.neutral: theme.colorScheme.onSurfaceVariant,
       NoticeTone.attention: semantic.attention,
+      NoticeTone.positive: theme.colorScheme.primary,
       NoticeTone.danger: theme.colorScheme.error,
     };
     final grounds = <Color>{};
@@ -124,7 +125,8 @@ void main() {
             .color!,
       );
     }
-    expect(grounds, hasLength(3));
+    expect(grounds, hasLength(NoticeTone.values.length));
+    expect(NoticeTone.values, hasLength(4));
   });
 
   testWidgets('without an action or dismiss it is just the message', (

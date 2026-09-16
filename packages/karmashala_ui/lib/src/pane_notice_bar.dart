@@ -11,6 +11,9 @@ enum NoticeTone {
   /// Something changed under the user that they should know about.
   attention,
 
+  /// Something the user asked for worked — a saved setting, a check that passed.
+  positive,
+
   /// Something is happening that they may not want — a recording, a failure.
   danger,
 }
@@ -68,6 +71,16 @@ class PaneNoticeBar extends StatelessWidget {
           scheme.surfaceContainerLow,
         ),
         semantic.attention,
+        scheme.onSurface,
+      ),
+      // The accent, as settings' own notice draws a success: a second green
+      // would be a second accent.
+      NoticeTone.positive => (
+        Color.alphaBlend(
+          scheme.primary.withValues(alpha: 0.12),
+          scheme.surfaceContainerLow,
+        ),
+        scheme.primary,
         scheme.onSurface,
       ),
       NoticeTone.danger => (
