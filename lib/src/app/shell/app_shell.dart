@@ -43,8 +43,8 @@ enum ShellWidth {
   /// it is 34px and it is the only way back to the tools.
   compact,
 
-  /// Explorer beside the workbench. An open side panel eats into the workbench,
-  /// which its own clamp keeps survivable.
+  /// Explorer beside the workbench. An open side panel gets what the workbench
+  /// floor leaves, or keeps only its rail (see [ShellLayout]).
   medium,
 
   /// Everything at its natural width.
@@ -69,6 +69,24 @@ class AppShell extends ConsumerStatefulWidget {
 }
 
 class _AppShellState extends ConsumerState<AppShell> {
+  /// A width mid-drag. Persisted, and cleared, when the drag ends.
+  double? _explorerDrag;
+  double? _panelDrag;
+
+  void _saveExplorerWidth() {
+    final width = _explorerDrag;
+    if (width == null) return;
+    ref.read(settingsControllerProvider.notifier).setExplorerPaneWidth(width);
+    setState(() => _explorerDrag = null);
+  }
+
+  void _savePanelWidth() {
+    final width = _panelDrag;
+    if (width == null) return;
+    ref.read(settingsControllerProvider.notifier).setDetailSidebarWidth(width);
+    setState(() => _panelDrag = null);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -101,6 +119,12 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(automationRunObserverProvider);
     // Focus mode: the workbench takes the window.
     final zen = ref.watch(terminalMaximizedProvider);
+    final explorerWidth = ref.watch(
+      settingsControllerProvider.select((s) => s.explorerPaneWidth),
+    );
+    final panelWidth = ref.watch(
+      settingsControllerProvider.select((s) => s.detailSidebarWidth),
+    );
     // The global hotkey summons the window with quick open up; the service that
     // registers it lives outside the tree, so it bumps a counter for the shell.
     ref.listen(quickOpenRequestProvider, (_, _) {
@@ -116,10 +140,17 @@ class _AppShellState extends ConsumerState<AppShell> {
             builder: (context, constraints) {
               final width = ShellWidth.of(constraints.maxWidth);
               // At compact widths the Explorer and the workbench take turns
-              // in the same column; the side panel keeps only its rail.
+              // in the same column.
               final showExplorer = width.isCompact
                   ? shell.focusedPane == ShellPane.explorer
                   : shell.explorerPaneVisible;
+              final layout = ShellLayout.allocate(
+                available: constraints.maxWidth,
+                explorerColumn: !zen && showExplorer && !width.isCompact,
+                panelOpen: !zen && SidePanel.openSurface(ref) != null,
+                explorerWidth: _explorerDrag ?? explorerWidth,
+                panelWidth: _panelDrag ?? panelWidth,
+              );
               return Column(
                 children: [
                   Expanded(
@@ -129,12 +160,27 @@ class _AppShellState extends ConsumerState<AppShell> {
                         if (!zen && showExplorer)
                           width.isCompact
                               ? const Expanded(child: ExplorerPanel())
-                              : _ExplorerColumn(
-                                  available: constraints.maxWidth,
+                              : ResizableColumn(
+                                  width: layout.explorerWidth!,
+                                  semanticLabel: 'Resize Explorer width',
+                                  onResize: (value) => setState(
+                                    () => _explorerDrag = layout.clampExplorer(
+                                      value,
+                                    ),
+                                  ),
+                                  onResizeEnd: _saveExplorerWidth,
+                                  child: const ExplorerPanel(),
                                 ),
                         if (!width.isCompact || !showExplorer)
                           const Expanded(child: WorkbenchView()),
-                        if (!zen) const SidePanel(),
+                        if (!zen)
+                          SidePanel(
+                            bodyWidth: layout.panelWidth,
+                            onResize: (value) => setState(
+                              () => _panelDrag = layout.clampPanel(value),
+                            ),
+                            onResizeEnd: _savePanelWidth,
+                          ),
                       ],
                     ),
                   ),
@@ -190,45 +236,76 @@ class _CompactPaneSelector extends ConsumerWidget {
   }
 }
 
-/// The Explorer with a draggable right edge; its width is persisted.
-class _ExplorerColumn extends ConsumerStatefulWidget {
-  const _ExplorerColumn({required this.available});
+/// How the shell's width is shared out. The workbench's floor is met first,
+/// then the side panel's width, then the Explorer's; a panel that cannot fit
+/// beside the floor keeps only its rail rather than crush the workbench.
+@immutable
+class ShellLayout {
+  const ShellLayout._({
+    required this.explorerWidth,
+    required this.explorerMaxWidth,
+    required this.panelWidth,
+    required this.panelMaxWidth,
+  });
 
-  final double available;
+  /// The least the workbench is given beside an open Explorer and side panel.
+  static const workbenchFloor = 360.0;
 
-  @override
-  ConsumerState<_ExplorerColumn> createState() => _ExplorerColumnState();
-}
+  static const explorerMin = 200.0;
+  static const explorerMax = 560.0;
+  static const panelMin = 240.0;
+  static const panelMax = 620.0;
 
-class _ExplorerColumnState extends ConsumerState<_ExplorerColumn> {
-  static const _min = 200.0;
-  static const _max = 560.0;
-  double? _width;
+  /// The Explorer column's width; null when there is no column to size.
+  final double? explorerWidth;
+  final double explorerMaxWidth;
 
-  @override
-  Widget build(BuildContext context) {
-    _width ??= ref.read(
-      settingsControllerProvider.select((s) => s.explorerPaneWidth),
-    );
-    // A saved desktop width must not crush the workbench when the window is
-    // later restored or resized smaller. Always reserve a useful work surface.
-    final responsiveMax = (widget.available - 520).clamp(_min, _max);
-    final width = _width!.clamp(_min, responsiveMax);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(width: width, child: const ExplorerPanel()),
-        ResizeHandle(
-          semanticLabel: 'Resize Explorer width',
-          onDelta: (dx) =>
-              setState(() => _width = (width + dx).clamp(_min, responsiveMax)),
-          onEnd: () => ref
-              .read(settingsControllerProvider.notifier)
-              .setExplorerPaneWidth(_width!.clamp(_min, _max)),
-        ),
-      ],
+  /// The side panel body's width; null when only the rail is drawn.
+  final double? panelWidth;
+  final double panelMaxWidth;
+
+  /// [available] is the whole shell row, rail included. [explorerWidth] and
+  /// [panelWidth] are the widths asked for, typically the saved ones.
+  factory ShellLayout.allocate({
+    required double available,
+    required bool explorerColumn,
+    required bool panelOpen,
+    required double explorerWidth,
+    required double panelWidth,
+  }) {
+    const handle = ResizeHandle.thickness;
+    final room = available - Chrome.rail - workbenchFloor;
+    final explorerReserve = explorerColumn ? explorerMin + handle : 0.0;
+
+    double? panel;
+    var panelMaxWidth = panelMin;
+    final panelRoom = room - explorerReserve - handle;
+    if (panelOpen && panelRoom >= panelMin) {
+      panelMaxWidth = panelRoom < panelMax ? panelRoom : panelMax;
+      panel = panelWidth.clamp(panelMin, panelMaxWidth);
+    }
+
+    double? explorer;
+    var explorerMaxWidth = explorerMin;
+    if (explorerColumn) {
+      final explorerRoom =
+          room - handle - (panel == null ? 0.0 : panel + handle);
+      explorerMaxWidth = explorerRoom.clamp(explorerMin, explorerMax);
+      explorer = explorerWidth.clamp(explorerMin, explorerMaxWidth);
+    }
+
+    return ShellLayout._(
+      explorerWidth: explorer,
+      explorerMaxWidth: explorerMaxWidth,
+      panelWidth: panel,
+      panelMaxWidth: panelMaxWidth,
     );
   }
+
+  double clampExplorer(double width) =>
+      width.clamp(explorerMin, explorerMaxWidth);
+
+  double clampPanel(double width) => width.clamp(panelMin, panelMaxWidth);
 }
 
 /// The window's one chrome row: the menus, the command field and the pane
@@ -250,7 +327,7 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
     final explorerVisible = ref.watch(
       shellControllerProvider.select((s) => s.explorerPaneVisible),
     );
-    final width = ShellWidth.of(MediaQuery.sizeOf(context).width);
+    final focusMode = ref.watch(terminalMaximizedProvider);
     // No app icon or name: the OS title bar already carries those.
     return Material(
       color: scheme.surfaceContainerLow,
@@ -260,61 +337,67 @@ class ShellTitleBar extends ConsumerWidget implements PreferredSizeWidget {
         decoration: BoxDecoration(
           border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
         ),
-        child: Row(
-          children: [
-            _ChromeToggle(
-              icon: AppIcons.treeStructure,
-              label: 'Show or hide the Explorer',
-              chord: shellChordLabel<ToggleExplorerPaneIntent>(),
-              note: 'Ctrl+B does it too, outside a terminal pane',
-              selected: explorerVisible,
-              onPressed: () => ref
-                  .read(shellControllerProvider.notifier)
-                  .toggleExplorerPane(),
-            ),
-            const SizedBox(width: Insets.xs),
-            const _DesktopMenuBar(),
-            const SizedBox(width: Insets.sm),
-            // Expanded, not Flexible-then-Spacer: the field takes its own
-            // width and the toggles are pushed to the far edge by the rest.
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) => constraints.maxWidth < 64
-                    // Below its own leading glyph there is nothing to draw. The
-                    // field is a convenience — `Ctrl+K` is the same command.
-                    ? const SizedBox.shrink()
-                    : const Align(
-                        alignment: Alignment.centerLeft,
-                        child: QuickOpenButton(),
-                      ),
+        // Its own width, not the window's: the row is what has to fit.
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              _ChromeToggle(
+                icon: AppIcons.treeStructure,
+                label: 'Show or hide the Explorer',
+                chord: shellChordLabel<ToggleExplorerPaneIntent>(),
+                note: 'Ctrl+B does it too, outside a terminal pane',
+                selected: explorerVisible,
+                onPressed: () => ref
+                    .read(shellControllerProvider.notifier)
+                    .toggleExplorerPane(),
               ),
-            ),
-            // The terminal's own verbs, on the pane the keyboard is in. Not per
-            // group: seven in every strip made a split narrower than its bar.
-            TerminalToolbar(compact: width.isCompact),
-            const _WindowSessionBadges(),
-            _ChromeToggle(
-              icon: AppIcons.arrowsOutSimple,
-              label: 'Focus mode',
-              chord: shellChordLabel<ToggleFocusModeIntent>(),
-              note: 'Hides the Explorer and the side panel',
-              selected: ref.watch(terminalMaximizedProvider),
-              onPressed: () =>
-                  ref.read(terminalMaximizedProvider.notifier).toggle(),
-            ),
-            _ChromeToggle(
-              icon: AppIcons.sidebarSimple,
-              label: 'Show or hide the side panel',
-              chord: shellChordLabel<ToggleSidePanelIntent>(),
-              selected: panelOpen,
-              onPressed: () => ref.read(sidePanelProvider.notifier).toggle(),
-            ),
-            _ChromeToggle(
-              icon: AppIcons.gearSix,
-              label: 'Settings',
-              onPressed: () => openSettingsTab(ref),
-            ),
-          ],
+              const SizedBox(width: Insets.xs),
+              const _DesktopMenuBar(),
+              const SizedBox(width: Insets.sm),
+              // Expanded, not Flexible-then-Spacer: the field takes its own
+              // width and the toggles are pushed to the far edge by the rest.
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, constraints) => constraints.maxWidth < 64
+                      // Below its own leading glyph there is nothing to draw.
+                      // The field is a convenience — `Ctrl+K` is the same.
+                      ? const SizedBox.shrink()
+                      : const Align(
+                          alignment: Alignment.centerLeft,
+                          child: QuickOpenButton(),
+                        ),
+                ),
+              ),
+              // The terminal's own verbs, on the pane the keyboard is in. Not
+              // per group: seven in every strip made a split narrower than its
+              // bar.
+              TerminalToolbar(
+                compact: ShellWidth.of(constraints.maxWidth).isCompact,
+              ),
+              const _WindowSessionBadges(),
+              _ChromeToggle(
+                icon: AppIcons.arrowsOutSimple,
+                label: 'Focus mode',
+                chord: shellChordLabel<ToggleFocusModeIntent>(),
+                note: 'Hides the Explorer and the side panel',
+                selected: focusMode,
+                onPressed: () =>
+                    ref.read(terminalMaximizedProvider.notifier).toggle(),
+              ),
+              _ChromeToggle(
+                icon: AppIcons.sidebarSimple,
+                label: 'Show or hide the side panel',
+                chord: shellChordLabel<ToggleSidePanelIntent>(),
+                selected: panelOpen,
+                onPressed: () => ref.read(sidePanelProvider.notifier).toggle(),
+              ),
+              _ChromeToggle(
+                icon: AppIcons.gearSix,
+                label: 'Settings',
+                onPressed: () => openSettingsTab(ref),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -528,10 +611,7 @@ class _DesktopMenuBar extends ConsumerWidget {
           menuChildren: [
             MenuItemButton(
               leadingIcon: const Icon(AppIcons.folderPlus),
-              shortcut: commandActivator(
-                LogicalKeyboardKey.keyN,
-                shift: true,
-              ),
+              shortcut: commandActivator(LogicalKeyboardKey.keyN, shift: true),
               onPressed: () => NewProjectDialog.show(context),
               child: const Text('New project'),
             ),
@@ -593,10 +673,7 @@ class _DesktopMenuBar extends ConsumerWidget {
               value: shell.explorerPaneVisible,
               // Ctrl+Shift+B, not Ctrl+B: a menu should teach the chord that
               // works everywhere, and Ctrl+B belongs to tmux inside a pane.
-              shortcut: commandActivator(
-                LogicalKeyboardKey.keyB,
-                shift: true,
-              ),
+              shortcut: commandActivator(LogicalKeyboardKey.keyB, shift: true),
               onChanged: (_) => ref
                   .read(shellControllerProvider.notifier)
                   .toggleExplorerPane(),

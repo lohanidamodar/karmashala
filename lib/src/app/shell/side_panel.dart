@@ -33,7 +33,27 @@ import '../../features/settings/application/settings_controller.dart';
 /// The right-hand side panel: a permanent icon rail plus a body that exists only
 /// while a surface is open — tools applied to the work, not peers of it.
 class SidePanel extends ConsumerWidget {
-  const SidePanel({super.key});
+  const SidePanel({this.bodyWidth, this.onResize, this.onResizeEnd, super.key});
+
+  /// The open body's width, allocated by the shell; null draws the rail alone
+  /// even with a surface selected, because the window has no room for it.
+  final double? bodyWidth;
+  final ValueChanged<double>? onResize;
+  final VoidCallback? onResizeEnd;
+
+  /// The surface whose body is open. Switching a feature off while its surface
+  /// is open closes it, rather than leaving a body behind a vanished glyph.
+  static SidePanelSurface? openSurface(WidgetRef ref) {
+    final selected = ref.watch(sidePanelProvider);
+    if (selected == null) return null;
+    final offered = selected.isOffered(
+      debugMode: ref.watch(
+        settingsControllerProvider.select((s) => s.debugMode),
+      ),
+      notesEnabled: ref.watch(notesEnabledProvider),
+    );
+    return offered ? selected : null;
+  }
 
   /// The glyph for each surface. **Every one must be legible at 16px** — the
   /// rail is unlabelled icons, and `side_panel_test.dart` pins them.
@@ -63,22 +83,19 @@ class SidePanel extends ConsumerWidget {
       settingsControllerProvider.select((s) => s.debugMode),
     );
     final notesEnabled = ref.watch(notesEnabledProvider);
-    final selected = ref.watch(sidePanelProvider);
-    // Switching a feature off while its surface is open must close it, not
-    // leave a body behind a glyph that is no longer on the rail.
-    final open =
-        selected != null &&
-            !selected.isOffered(
-              debugMode: debugMode,
-              notesEnabled: notesEnabled,
-            )
-        ? null
-        : selected;
+    final open = openSurface(ref);
+    final width = bodyWidth;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Collapsed costs nothing but the rail: no divider, no reserved body.
-        if (open != null) _SidePanelBody(surface: open),
+        if (open != null && width != null)
+          _SidePanelBody(
+            surface: open,
+            width: width,
+            onResize: onResize,
+            onResizeEnd: onResizeEnd,
+          ),
         _SidePanelRail(
           open: open,
           debugMode: debugMode,
@@ -225,76 +242,51 @@ class _RailButton extends StatelessWidget {
   }
 }
 
-/// The open surface, with a draggable left edge; its width is persisted.
-class _SidePanelBody extends ConsumerStatefulWidget {
-  const _SidePanelBody({required this.surface});
+/// The open surface, with a draggable left edge. The shell owns its width.
+class _SidePanelBody extends ConsumerWidget {
+  const _SidePanelBody({
+    required this.surface,
+    required this.width,
+    this.onResize,
+    this.onResizeEnd,
+  });
 
   final SidePanelSurface surface;
+  final double width;
+  final ValueChanged<double>? onResize;
+  final VoidCallback? onResizeEnd;
 
   @override
-  ConsumerState<_SidePanelBody> createState() => _SidePanelBodyState();
-}
-
-class _SidePanelBodyState extends ConsumerState<_SidePanelBody> {
-  static const _min = 240.0;
-  static const _max = 620.0;
-  double? _width;
-
-  @override
-  Widget build(BuildContext context) {
-    _width ??= ref.read(
-      settingsControllerProvider.select((s) => s.detailSidebarWidth),
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Keep a useful workbench available. This also makes persisted widths
-        // safe when the window moves to a smaller display.
-        final responsiveMax = (constraints.maxWidth - 360).clamp(_min, _max);
-        final width = _width!.clamp(_min, responsiveMax);
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ResizeHandle(
-              semanticLabel: 'Resize side panel width',
-              // Dragging the left edge leftwards widens the panel.
-              onDelta: (dx) => setState(
-                () => _width = (width - dx).clamp(_min, responsiveMax),
-              ),
-              onEnd: () => ref
-                  .read(settingsControllerProvider.notifier)
-                  .setDetailSidebarWidth(_width!.clamp(_min, _max)),
-            ),
-            SizedBox(
-              width: width,
-              child: Material(
-                color: scheme.surface,
-                // Every surface here closes from its header, the panel's or its
-                // own — handed down, so the panel watches nothing for a glyph.
-                child: PaneCloseAction(
-                  tooltip:
-                      'Close panel  ·  '
-                      '${shellChordLabel<ToggleSidePanelIntent>()}',
-                  onClose: () =>
-                      ref.read(sidePanelProvider.notifier).collapse(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!widget.surface.drawsOwnHeader)
-                        _SidePanelHeader(surface: widget.surface),
-                      if (widget.surface.scopedToRepository) ...[
-                        const SidePanelContextLine(),
-                        const SidePanelWorktrees(),
-                      ],
-                      Expanded(child: _surfaceBody(widget.surface)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    return ResizableColumn(
+      width: width,
+      handleAtStart: true,
+      semanticLabel: 'Resize side panel width',
+      onResize: onResize ?? (_) {},
+      onResizeEnd: onResizeEnd,
+      child: Material(
+        color: scheme.surface,
+        // Every surface here closes from its header, the panel's or its own —
+        // handed down, so the panel watches nothing for a glyph.
+        child: PaneCloseAction(
+          tooltip:
+              'Close panel  ·  '
+              '${shellChordLabel<ToggleSidePanelIntent>()}',
+          onClose: () => ref.read(sidePanelProvider.notifier).collapse(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!surface.drawsOwnHeader) _SidePanelHeader(surface: surface),
+              if (surface.scopedToRepository) ...[
+                const SidePanelContextLine(),
+                const SidePanelWorktrees(),
+              ],
+              Expanded(child: _surfaceBody(surface)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -334,8 +326,6 @@ class _SidePanelHeader extends StatelessWidget {
   final SidePanelSurface surface;
 
   @override
-  Widget build(BuildContext context) => PaneHeader(
-    icon: SidePanel.iconFor(surface),
-    title: surface.label,
-  );
+  Widget build(BuildContext context) =>
+      PaneHeader(icon: SidePanel.iconFor(surface), title: surface.label);
 }
