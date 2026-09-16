@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_providers.dart';
@@ -108,9 +109,11 @@ class _AddButton extends ConsumerWidget {
         ),
         itemBuilder: (_) => [
           for (final repository in candidates)
-            PopupMenuItem(
+            DesktopMenuDetailItem(
               value: repository.id,
-              child: Text('${repository.name}  ·  ${repository.path.path}'),
+              label: repository.name,
+              detail: repository.path.path,
+              icon: AppIcons.folder,
             ),
         ],
         child: const Padding(

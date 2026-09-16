@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/git/application/worktree_setup_providers.dart';
 import 'package:karmashala_git/git.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_dialog.dart';
 import 'package:karmashala/src/features/git/presentation/worktree_setup_page.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
@@ -87,6 +88,18 @@ void main() {
     expect(find.text('WORKTREE SETUP'), findsOneWidget);
     expect(find.text('No checkout has a setup yet.'), findsOneWidget);
     expect(find.text('Add a checkout'), findsOneWidget);
+  });
+
+  testWidgets('the checkouts on offer are house menu rows, name over path', (
+    tester,
+  ) async {
+    await pumpPage(tester);
+    await tester.tap(find.text('Add a checkout'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DesktopMenuDetailItem<String>), findsOneWidget);
+    expect(find.text('app'), findsOneWidget);
+    expect(find.text('/home/me/app'), findsOneWidget);
   });
 
   testWidgets('a configured checkout shows what will happen and where', (
