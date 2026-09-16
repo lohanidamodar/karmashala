@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,16 +8,20 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/projects/presentation/edit_project_dialog.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
+import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
+import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/remote/presentation/pairing_dialog.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
@@ -31,6 +36,7 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala_store/devices.dart';
 
 import '../support/fake_command_runner.dart';
 import '../support/fakes.dart';
@@ -349,6 +355,51 @@ void main() {
       );
     });
   });
+
+  testWidgets('Remote access section with a long device name', (tester) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    PairedDeviceDao(db).insert(
+      PairedDevice(
+        id: 'a' * 32,
+        name: "Damodar's Pixel 9 Pro XL (work profile, second SIM, travel)",
+        deviceKey: Uint8List(32),
+        capabilities: CapabilitySet.all,
+        generation: 1,
+        createdAt: testTime,
+        lastSeenAt: testTime,
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        ...noProcessOverrides(),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        discoveredTerminalThemesProvider.overrideWithValue(const []),
+        localRelayStatusProvider.overrideWithValue(
+          const LocalRelayStatus.stopped(),
+        ),
+        remoteAccessControllerProvider.overrideWith(_PairingAccess.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    container
+        .read(settingsControllerProvider.notifier)
+        .setRemoteAccessEnabled(true);
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => app(
+        container,
+        const SettingsScreen(initialSection: SettingsSectionId.remote),
+      ),
+      matrix: settingsMatrix,
+      because:
+          'a phone names itself at pairing, and the header row puts a label '
+          'beside a button in the narrow two-column layout',
+    );
+  });
 }
 
 /// A companion setup that answers at once with a long address and an open
@@ -409,6 +460,9 @@ class _PairingAccess extends RemoteAccessController {
     );
     return _last = session;
   }
+
+  @override
+  Future<void> sync() async {}
 
   @override
   Future<void> cancelPairing() async {

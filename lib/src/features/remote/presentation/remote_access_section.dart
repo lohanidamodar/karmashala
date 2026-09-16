@@ -199,10 +199,15 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
                 ),
               ),
             const SizedBox(height: Insets.md),
-            Row(
+            // A Wrap, not a Row with a Spacer: at the narrowest two-column
+            // window with bigger text the button goes under the label.
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: Insets.sm,
+              runSpacing: Insets.xs,
               children: [
                 Text('Paired devices', style: theme.textTheme.labelMedium),
-                const Spacer(),
                 FilledButton.icon(
                   onPressed: () => PairingDialog.show(context),
                   icon: const Icon(AppIcons.deviceMobile, size: Chrome.icon),
@@ -392,6 +397,8 @@ class _DeviceRow extends ConsumerWidget {
               children: [
                 Text(
                   device.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: device.revoked ? scheme.outline : null,
                   ),
