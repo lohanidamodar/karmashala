@@ -90,7 +90,7 @@ class LocalHost {
   /// Kills the daemon with no chance to write anything, so every session it
   /// held is left recorded as running.
   Future<void> kill() async {
-    process.kill();
+    process.kill(ProcessSignal.sigkill);
     await process.exitCode.timeout(const Duration(seconds: 20), onTimeout: () => -1);
   }
 }

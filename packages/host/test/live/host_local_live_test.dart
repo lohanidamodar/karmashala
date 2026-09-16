@@ -19,7 +19,13 @@ void main() {
     expect(host.greeting, contains(host.socketPath));
     expect(
       host.greeting,
-      contains(Platform.isWindows ? 'kernel32.dll' : 'libc'),
+      contains(
+        Platform.isWindows
+            ? 'kernel32.dll'
+            : Platform.isMacOS
+            ? 'libSystem'
+            : 'libc',
+      ),
       reason: 'the host reports which pty layer it measured, never which it assumed',
     );
     expect(host.greeting, contains('restored 0 session(s)'));

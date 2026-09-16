@@ -1,6 +1,7 @@
 // ignore_for_file: non_constant_identifier_names
 
 import 'dart:ffi';
+import 'dart:io' show Platform;
 
 import 'package:ffi/ffi.dart';
 
@@ -16,15 +17,19 @@ final class Winsize extends Struct {
   external int ws_ypixel;
 }
 
-/// Linux, x86_64 and arm64 alike. Not portable to BSD, which is why the
-/// deployer refuses anything but Linux (see host_targets.dart).
-const int kTIOCSWINSZ = 0x5414;
-const int kTIOCGWINSZ = 0x5413;
-const int kOReadWrite = 2; // O_RDWR
-const int kPosixSpawnSetsid = 0x80; // glibc POSIX_SPAWN_SETSID
+/// Linux (x86_64 and arm64 alike) and macOS, which ships its own host bundle
+/// since the release started carrying one. Values measured from the SDK headers
+/// on macOS 26 arm64; the ioctl numbers encode the struct size, so they differ.
+final int kTIOCSWINSZ = Platform.isMacOS ? 0x80087467 : 0x5414;
+final int kTIOCGWINSZ = Platform.isMacOS ? 0x40087468 : 0x5413;
+const int kOReadWrite = 2; // O_RDWR, the same on both
+final int kPosixSpawnSetsid = Platform.isMacOS ? 0x400 : 0x80; // POSIX_SPAWN_SETSID
 
 /// glibc's `posix_spawnattr_t` is 336 bytes and `posix_spawn_file_actions_t` 80
-/// on x86_64, both opaque; over-allocating survives a libc that grew them.
+/// on x86_64, both opaque; over-allocating survives a libc that grew them. On
+/// Darwin both are a pointer (8 bytes, measured on arm64) that the `_init` calls
+/// fill with their own allocation, so the buffer is larger than it needs to be
+/// and still correct.
 const int kOpaqueSpawnStructBytes = 1024;
 
 typedef OpenptyNative =
@@ -85,7 +90,9 @@ class Libc {
           .lookup<NativeFunction<Int32 Function(Int32, Int32)>>('kill')
           .asFunction<int Function(int, int)>(),
       errnoLocation = _libc
-          .lookup<NativeFunction<Pointer<Int32> Function()>>('__errno_location')
+          .lookup<NativeFunction<Pointer<Int32> Function()>>(
+            Platform.isMacOS ? '__error' : '__errno_location',
+          )
           .asFunction<Pointer<Int32> Function()>(),
       faInit = _libc
           .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
@@ -173,6 +180,11 @@ class Libc {
   static Libc open() {
     final existing = _instance;
     if (existing != null) return existing;
+    if (Platform.isMacOS) {
+      // libSystem carries libc and libutil alike: openpty, posix_spawn, __error.
+      const system = '/usr/lib/libSystem.B.dylib';
+      return _instance = Libc._(DynamicLibrary.open(system), PtySymbolSource.libc, system);
+    }
     final libc = DynamicLibrary.open('libc.so.6');
     PtySymbolSource source;
     String library;

@@ -11,7 +11,7 @@ import 'pty.dart';
 
 const int _eintr = 4;
 const int _eio = 5;
-const int _eagain = 11;
+final int _eagain = Platform.isMacOS ? 35 : 11; // EAGAIN
 
 /// The child's environment: the host process's, with [overrides] laid over it.
 ///
@@ -108,7 +108,8 @@ class PosixPtyLauncher implements PtyLauncher {
       if (cwd != null && cwd.isNotEmpty) {
         if (addChdir == null) {
           throw const PtyException(
-            'this libc has no posix_spawn_file_actions_addchdir_np (glibc < 2.29); '
+            'this libc has no posix_spawn_file_actions_addchdir_np '
+            '(glibc < 2.29, macOS < 10.15); '
             'a working directory cannot be honoured',
           );
         }

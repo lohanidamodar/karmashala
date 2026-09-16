@@ -1,6 +1,8 @@
 @Tags(['live'])
 library;
 
+import 'dart:io';
+
 
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
@@ -107,6 +109,9 @@ void main() {
 /// Whether [pid] is still alive: a handle that will not open is a process that
 /// is gone. Pids are reused, so this is only asked seconds after it was seen.
 bool _stillRunning(int pid) {
+  if (!Platform.isWindows) {
+    return Process.runSync('kill', ['-0', '$pid']).exitCode == 0;
+  }
   final k = Kernel32.open();
   final handle = k.openProcess(kProcessQueryLimitedInformation | kSynchronize, 0, pid);
   if (handle == 0) return false;
