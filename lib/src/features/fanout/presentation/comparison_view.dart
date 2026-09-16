@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_git/git.dart';
@@ -297,8 +298,8 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
       builder: (context) => StatefulBuilder(
         builder: (context, setInner) => AlertDialog(
           title: const Text('These worktrees hold uncommitted work'),
-          content: SizedBox(
-            width: 460,
+          content: BoundedDialogContent(
+            width: DialogWidth.regular,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -335,7 +336,7 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
               onPressed: () => Navigator.pop(context, false),
               child: const Text('Keep them all'),
             ),
-            FilledButton(
+            DestructiveButton(
               onPressed: chosen.isEmpty
                   ? null
                   : () => Navigator.pop(context, true),
