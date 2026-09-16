@@ -13,6 +13,24 @@ const int _eintr = 4;
 const int _eio = 5;
 const int _eagain = 11;
 
+/// The child's environment: the host process's, with [overrides] laid over it.
+///
+/// Layered, not replaced. Until 2026-09-16 this was `overrides` alone, so a
+/// pane whose client sent `{'TERM': 'xterm-256color'}` — which is exactly what
+/// both the SSH pane and the local-host pane send — started its shell with **no
+/// `PATH`, no `HOME` and no `USER`**. The agent itself still ran, because argv[0]
+/// is an absolute path resolved on the desktop, but anything it shelled out to
+/// had nothing to resolve against and nothing to call a home directory.
+///
+/// The Windows branch has always layered (`conpty.dart`), for a reason that is
+/// only more obviously true here: a block with no `SystemRoot` cannot load a
+/// DLL, and a block with no `PATH` cannot find a program. Case-sensitive, unlike
+/// that one — POSIX environment names are.
+Map<String, String> childEnvironment(
+  Map<String, String> overrides, {
+  Map<String, String>? base,
+}) => {...base ?? Platform.environment, ...overrides};
+
 /// A pty pair from `openpty`, a child from `posix_spawn`, never `forkpty`: its
 /// child returns into Dart after a fork in a multithreaded VM, where a malloc
 /// lock held by another thread hangs it forever, intermittently.
@@ -103,7 +121,7 @@ class PosixPtyLauncher implements PtyLauncher {
       }
       argv[request.argv.length] = nullptr;
 
-      final entries = request.environment.entries.toList();
+      final entries = childEnvironment(request.environment).entries.toList();
       final envp = arena<Pointer<Uint8>>(entries.length + 1);
       for (var i = 0; i < entries.length; i++) {
         envp[i] = cString(arena, '${entries[i].key}=${entries[i].value}');

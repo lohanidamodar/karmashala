@@ -50,4 +50,37 @@ void main() {
       expect(sessionMembers(1, proc: Directory('${proc.path}/absent')), isEmpty);
     });
   });
+
+  group('childEnvironment', () {
+    test('lays the client\'s overrides over the host process\'s own', () {
+      final merged = childEnvironment(
+        const {'TERM': 'xterm-256color'},
+        base: const {'PATH': '/usr/bin:/bin', 'HOME': '/home/d', 'TERM': 'dumb'},
+      );
+
+      // The bug this is written for: until 2026-09-16 the child's environment
+      // was the overrides *alone*, so a pane that sent only TERM — which is
+      // what both the SSH pane and the local-host pane send — ran its shell
+      // with no PATH and no HOME.
+      expect(merged['PATH'], '/usr/bin:/bin');
+      expect(merged['HOME'], '/home/d');
+      expect(merged['TERM'], 'xterm-256color', reason: 'the client wins');
+    });
+
+    test('an empty override map still inherits everything', () {
+      expect(
+        childEnvironment(const {}, base: const {'PATH': '/bin'}),
+        {'PATH': '/bin'},
+      );
+    });
+
+    test('names are case-sensitive, unlike the Windows branch', () {
+      final merged = childEnvironment(
+        const {'path': '/override'},
+        base: const {'PATH': '/usr/bin'},
+      );
+      expect(merged['PATH'], '/usr/bin');
+      expect(merged['path'], '/override');
+    });
+  });
 }

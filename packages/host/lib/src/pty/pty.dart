@@ -15,8 +15,10 @@ class PtySpawnRequest {
   /// argv[0] is the executable; it is resolved on PATH by the launcher.
   final List<String> argv;
   final String? workingDirectory;
-  /// POSIX takes this as the whole environment; Windows layers it over the host
-  /// process's, because a block with no `SystemRoot` cannot load a DLL.
+  /// **Overrides**, on both platforms: laid over the host process's own
+  /// environment rather than replacing it. A block with no `SystemRoot` cannot
+  /// load a DLL on Windows, and one with no `PATH` or `HOME` cannot run a shell
+  /// anywhere.
   final Map<String, String> environment;
   final int columns;
   final int rows;
