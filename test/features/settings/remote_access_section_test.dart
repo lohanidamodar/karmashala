@@ -177,6 +177,32 @@ void main() {
     expect(find.text('Revoke'), findsNothing);
   });
 
+  testWidgets('renaming a device stores the new name, and the dialog closes '
+      'cleanly', (tester) async {
+    PairedDeviceDao(db).insert(device());
+    await tester.pumpWidget(app());
+    await enableRemoteAccess(tester);
+
+    await tester.tap(find.byTooltip('Rename'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      'Work phone',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Rename'));
+    // Through the whole exit animation: the field is still drawn while the
+    // route leaves, so its controller must outlive the pop.
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(PairedDeviceDao(db).getById('a' * 32)!.name, 'Work phone');
+    expect(find.text('Work phone'), findsOneWidget);
+  });
+
   testWidgets('a revoked device keeps its row but offers no revoke', (
     tester,
   ) async {

@@ -12,6 +12,7 @@ import 'package:karmashala_remote/remote.dart';
 import '../relay_local/local_relay_providers.dart';
 import '../relay_local/local_relay_service.dart';
 import 'pairing_dialog.dart';
+import 'rename_device_dialog.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../../settings/presentation/settings_row.dart';
 
@@ -325,38 +326,10 @@ class _DeviceRow extends ConsumerWidget {
     return 'Last seen ${since.inDays} d ago';
   }
 
-  /// A phone names itself at pairing, and two of them once arrived calling
-  /// themselves the same thing. This is the only way to tell them apart again.
   Future<void> _rename(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController(text: device.name);
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Rename device'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Name',
-            helperText: 'Only this desktop sees it; the phone is not told.',
-          ),
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (picked == null || picked.trim().isEmpty) return;
-    ref.read(remoteAccessControllerProvider).rename(device, picked);
+    final name = await RenameDeviceDialog.show(context, device.name);
+    if (name == null) return;
+    ref.read(remoteAccessControllerProvider).rename(device, name);
   }
 
   @override
