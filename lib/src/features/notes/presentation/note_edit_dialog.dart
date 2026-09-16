@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../todos/presentation/project_menu.dart';
@@ -133,46 +134,47 @@ class _NoteEditDialogState extends ConsumerState<NoteEditDialog> {
       // note" over an empty box is the kind of small lie that makes somebody
       // wonder whether they are in the right place.
       title: Text(widget.note.id.isEmpty ? 'New note' : 'Edit note'),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _title,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  labelText: 'Title (optional)',
-                  hintText: 'Named by its first line when left empty',
-                ),
+      content: BoundedDialogContent(
+        width: DialogWidth.wide,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _title,
+              decoration: const InputDecoration(
+                isDense: true,
+                labelText: 'Title (optional)',
+                hintText: 'Named by its first line when left empty',
               ),
-              const SizedBox(height: Insets.md),
-              TextField(
-                controller: _body,
-                autofocus: true,
-                minLines: 6,
-                maxLines: 16,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  labelText: 'Note',
-                ),
+            ),
+            const SizedBox(height: Insets.md),
+            TextField(
+              controller: _body,
+              autofocus: true,
+              // Eight, and the field scrolls inside itself past that: at 16
+              // it was taller than the dialog at 720x560 and its label
+              // scrolled away while typing.
+              minLines: 6,
+              maxLines: 8,
+              decoration: const InputDecoration(
+                isDense: true,
+                labelText: 'Note',
               ),
-              const SizedBox(height: Insets.md),
-              ProjectField(
-                projectId: _projectId,
-                tooltip: 'File this note under a project, or under nothing',
-                onChanged: (id) => setState(() => _projectId = id),
-              ),
-              const SizedBox(height: Insets.sm),
-              Text(
-                'This is the text an agent will receive. It was kept word for '
-                'word; edit it into the prompt you want.',
-                style: theme.textTheme.bodySmall,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: Insets.md),
+            ProjectField(
+              projectId: _projectId,
+              tooltip: 'File this note under a project, or under nothing',
+              onChanged: (id) => setState(() => _projectId = id),
+            ),
+            const SizedBox(height: Insets.sm),
+            Text(
+              'This is the text an agent will receive. It was kept word for '
+              'word; edit it into the prompt you want.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
         ),
       ),
       actions: [
