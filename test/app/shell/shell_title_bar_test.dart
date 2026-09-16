@@ -67,7 +67,10 @@ void main() {
 
     expect(scans, hasLength(1));
     final size = tester.getSize(find.byType(DetectedProjectsView));
-    expect(size.width, lessThanOrEqualTo(DetectedProjectsView.dialogMaxSize.width));
+    expect(
+      size.width,
+      lessThanOrEqualTo(DetectedProjectsView.dialogMaxSize.width),
+    );
     expect(
       size.height,
       lessThanOrEqualTo(DetectedProjectsView.dialogMaxSize.height),
