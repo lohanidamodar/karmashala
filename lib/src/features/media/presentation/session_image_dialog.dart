@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart' show compactAge;
@@ -54,40 +55,12 @@ class SessionImageDialog extends StatelessWidget {
               Insets.xs,
               Insets.sm,
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        reference,
-                        style: MonoStyles.small.copyWith(
-                          color: scheme.onSurface,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        // The path is the extracted copy's and means nothing to
-                        // a reader; the age is what identifies the picture.
-                        _describe(item, now),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Close',
-                  icon: const Icon(AppIcons.x, size: Chrome.icon),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
+            // The path is the extracted copy's and means nothing to a reader;
+            // the age is what identifies the picture.
+            child: DesktopDialogTitle(
+              icon: AppIcons.image,
+              title: reference,
+              subtitle: _describe(item, now),
             ),
           ),
           if (matches > 1)
