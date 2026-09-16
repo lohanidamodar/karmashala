@@ -6,6 +6,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import '../../application/companion_providers.dart';
 import '../companion_chrome.dart';
+import '../companion_states.dart';
 import 'pairing_progress_screen.dart';
 import 'short_code_screen.dart';
 
@@ -118,12 +119,7 @@ class _ScanQrScreenState extends ConsumerState<ScanQrScreen> {
                             Insets.lg,
                             0,
                           ),
-                          child: Text(
-                            _error!,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: scheme.error,
-                            ),
-                          ),
+                          child: CompanionInlineError(_error!),
                         ),
                       Padding(
                         padding: const EdgeInsets.all(Insets.lg),

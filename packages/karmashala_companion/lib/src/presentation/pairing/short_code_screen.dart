@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/companion.dart';
 import '../../application/companion_providers.dart';
@@ -111,10 +112,7 @@ class _ShortCodeScreenState extends ConsumerState<ShortCodeScreen> {
               FilledButton(
                 onPressed: _busy ? null : _pair,
                 child: _busy
-                    ? const SizedBox.square(
-                        dimension: Touch.icon,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                    ? const InlineSpinner(size: InlineSpinnerSize.medium)
                     : const Text('Pair'),
               ),
             ],

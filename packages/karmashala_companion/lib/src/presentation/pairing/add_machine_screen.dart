@@ -7,6 +7,7 @@ import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../companion_chrome.dart';
+import '../companion_states.dart';
 import 'pairing_progress_screen.dart';
 
 /// Pairing with a machine that has an address of its own — a session host on a
@@ -101,6 +102,7 @@ class _AddMachineScreenState extends ConsumerState<AddMachineScreen> {
               textInputAction: TextInputAction.next,
               decoration: const InputDecoration(
                 labelText: 'Address',
+                border: OutlineInputBorder(),
                 hintText: '203.0.113.9',
                 helperText: 'The same address you use to reach it over SSH.',
               ),
@@ -115,17 +117,13 @@ class _AddMachineScreenState extends ConsumerState<AddMachineScreen> {
               onSubmitted: (_) => _pair(),
               decoration: const InputDecoration(
                 labelText: 'Pairing code',
+                border: OutlineInputBorder(),
                 hintText: 'K7QM-3X2W-…',
               ),
             ),
             if (_error != null) ...[
               const SizedBox(height: Insets.md),
-              Text(
-                _error!,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
+              CompanionInlineError(_error!),
             ],
             const SizedBox(height: Insets.lg),
             FilledButton(onPressed: _pair, child: const Text('Pair')),

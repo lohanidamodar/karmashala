@@ -422,26 +422,19 @@ class _ResumePanel extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (failure != null)
-          Text(
-            failure!,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
-          ),
-        FilledButton.icon(
-          onPressed: !enabled || busy ? null : onResume,
-          icon: busy
-              ? const SizedBox.square(
-                  dimension: Touch.iconSmall,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(AppIcons.play),
-          label: Text(
-            !enabled
-                ? disabledLabel
-                : busy
-                ? 'Resuming…'
-                : 'Resume session',
-          ),
+        if (failure case final failure?) ...[
+          CompanionInlineError(failure),
+          const SizedBox(height: Insets.sm),
+        ],
+        CompanionPrimaryButton(
+          busy: busy,
+          onPressed: enabled ? onResume : null,
+          icon: AppIcons.play,
+          label: !enabled
+              ? disabledLabel
+              : busy
+              ? 'Resuming…'
+              : 'Resume session',
         ),
       ],
     ),

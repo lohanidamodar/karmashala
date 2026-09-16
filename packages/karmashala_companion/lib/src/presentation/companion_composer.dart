@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -346,10 +347,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
                     minHeight: density.minRow,
                   ),
                   icon: _busy
-                      ? SizedBox.square(
-                          dimension: density.icon,
-                          child: const CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const InlineSpinner(size: InlineSpinnerSize.medium)
                       : Icon(AppIcons.paperPlaneRight, size: density.icon),
                 ),
               ],

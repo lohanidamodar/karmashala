@@ -140,6 +140,7 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
         textInputAction: TextInputAction.next,
         decoration: const InputDecoration(
           labelText: 'Project name',
+          border: OutlineInputBorder(),
           prefixIcon: Icon(AppIcons.folder),
         ),
       ),
@@ -151,25 +152,21 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
         keyboardType: TextInputType.url,
         decoration: const InputDecoration(
           labelText: 'Desktop path',
+          border: OutlineInputBorder(),
           hintText: r'C:\Users\you\projects\app',
           prefixIcon: Icon(AppIcons.folderOpen),
         ),
       ),
       if (_error != null) ...[
         const SizedBox(height: Insets.md),
-        Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        CompanionInlineError(_error!),
       ],
       const SizedBox(height: Insets.lg),
-      FilledButton.icon(
-        onPressed: _busy ? null : _submit,
-        icon: _busy
-            ? const SizedBox(
-                width: Touch.iconSmall,
-                height: Touch.iconSmall,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : const Icon(AppIcons.folderPlus),
-        label: Text(_busy ? 'Adding…' : 'Add project'),
+      CompanionPrimaryButton(
+        busy: _busy,
+        onPressed: _submit,
+        icon: AppIcons.folderPlus,
+        label: _busy ? 'Adding…' : 'Add project',
       ),
     ],
   );
