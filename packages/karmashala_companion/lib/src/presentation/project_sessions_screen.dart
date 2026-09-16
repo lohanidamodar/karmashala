@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -331,7 +333,6 @@ class _Facts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
     final muted = UiDensity.of(context).muted(theme);
     final attention = group.summary.attentionLabel;
@@ -363,58 +364,95 @@ class _Facts extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: muted,
           ),
-          if (group.path.isNotEmpty || group.folderMissing || group.environmentBadge != null) ...[
+          if (group.path.isNotEmpty ||
+              group.folderMissing ||
+              group.environmentBadge != null) ...[
             SizedBox(height: UiDensity.of(context).lineGap),
-            Row(
-              children: [
-                if (group.environmentBadge != null) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 1,
-                    ),
-                    margin: const EdgeInsets.only(right: 6),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      group.environmentBadge!,
-                      style: muted?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-                if (group.folderMissing) ...[
-                  Icon(
-                    AppIcons.warningCircle,
-                    size: Touch.iconSmall,
-                    color: scheme.error,
-                  ),
-                  const SizedBox(width: Insets.xs),
-                ],
-                if (group.path.isNotEmpty || group.folderMissing)
-                  Expanded(
-                    child: Text(
-                      group.folderMissing
-                          ? (group.path.isEmpty
-                                ? 'Folder not found'
-                                : 'Folder not found — ${group.path}')
-                          : group.path,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: group.folderMissing
-                          ? muted?.copyWith(color: scheme.error)
-                          : muted,
-                    ),
-                  ),
-              ],
-            ),
+            _PathLine(group: group, muted: muted),
           ],
         ],
       ),
     );
   }
+}
+
+/// The badge, a missing-folder mark and the path, as `ProjectCard`'s own path
+/// line draws them: the badge takes half the line at most and gives way.
+class _PathLine extends StatelessWidget {
+  const _PathLine({required this.group, required this.muted});
+
+  final CompanionProjectGroup group;
+  final TextStyle? muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final density = UiDensity.of(context);
+    final missing = group.folderMissing;
+    final path = group.path;
+    final badge = group.environmentBadge;
+    final text = missing
+        ? (path.isEmpty ? 'Folder not found' : 'Folder not found — $path')
+        : path;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fixed =
+            (badge != null ? density.glyphGap : 0) +
+            (missing ? density.iconSmall + density.glyphGap : 0);
+        final badgeMax = math.max(0.0, (constraints.maxWidth - fixed) / 2);
+        return Row(
+          children: [
+            if (badge != null) ...[
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: badgeMax),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Insets.xs,
+                    vertical: _badgeHairline,
+                  ),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(Radii.sm),
+                  ),
+                  child: Text(
+                    badge,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: muted?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(width: density.glyphGap),
+            ],
+            if (missing) ...[
+              Icon(
+                AppIcons.warningCircle,
+                size: density.iconSmall,
+                color: scheme.error,
+              ),
+              SizedBox(width: density.glyphGap),
+            ],
+            if (text.isNotEmpty)
+              Expanded(
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: missing ? muted?.copyWith(color: scheme.error) : muted,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// A hairline of ground above and below the word, under the 4-pt scale so
+  /// the badge does not grow the line.
+  static const _badgeHairline = 1.0;
 }
