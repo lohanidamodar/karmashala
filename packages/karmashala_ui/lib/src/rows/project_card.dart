@@ -370,11 +370,9 @@ class ProjectCard extends StatelessWidget {
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: badgeMax),
                 child: Container(
-                  // 1px: a hairline of ground above and below the word, under
-                  // the 4-pt scale so the badge does not grow the path line.
                   padding: const EdgeInsets.symmetric(
                     horizontal: Insets.xs,
-                    vertical: 1,
+                    vertical: Insets.hair,
                   ),
                   decoration: BoxDecoration(
                     color: scheme.surfaceContainerHighest,

@@ -133,12 +133,27 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
 /// Spacing scale (4-pt base). Use these instead of ad-hoc paddings.
 class Insets {
   const Insets._();
+
+  /// A hairline of ground around a badge's word — under the scale on purpose,
+  /// so the badge does not grow the line it sits in.
+  static const hair = 1.0;
   static const xs = 4.0;
   static const sm = 8.0;
   static const md = 12.0;
   static const lg = 16.0;
   static const xl = 24.0;
   static const xxl = 32.0;
+}
+
+/// Washes of the accent a surface is marked with.
+class Tints {
+  const Tints._();
+
+  /// Over [ColorScheme.primary]: a selected row, tab or destination.
+  static const selectionAlpha = 0.14;
+
+  static Color selection(ColorScheme scheme) =>
+      scheme.primary.withValues(alpha: selectionAlpha);
 }
 
 /// Corner radii.
@@ -346,7 +361,7 @@ enum UiDensity {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: scheme.surfaceContainerLow,
-        indicatorColor: scheme.primary.withValues(alpha: 0.14),
+        indicatorColor: Tints.selection(scheme),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,

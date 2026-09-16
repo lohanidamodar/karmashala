@@ -189,7 +189,7 @@ class _ExplorerRowFill extends StatelessWidget {
     // selected stays selected while it is hovered.
     var color = kind.surface(scheme);
     if (selected) {
-      color = Color.alphaBlend(scheme.primary.withValues(alpha: 0.14), color);
+      color = Color.alphaBlend(Tints.selection(scheme), color);
     }
     if (interaction?.focused ?? false) {
       color = Color.alphaBlend(scheme.primary.withValues(alpha: 0.10), color);
