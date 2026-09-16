@@ -39,37 +39,15 @@ class _ReadOnlyNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Container(
-      color: scheme.surfaceContainerHigh,
-      padding: const EdgeInsets.fromLTRB(
-        Insets.md,
-        Insets.xs,
-        Insets.xs,
-        Insets.xs,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            AppIcons.info,
-            size: Chrome.iconAction,
-            color: scheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: Insets.sm),
-          Expanded(
-            child: Text(
-              'Read-only: ${_megabytes(bytes)} is too large to edit here '
-              'without the editor becoming slow.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          TextButton.icon(
-            onPressed: onOpenExternally,
-            icon: const Icon(AppIcons.arrowSquareOut, size: Chrome.iconAction),
-            label: const Text('Open in external editor'),
-          ),
-        ],
+    return PaneNoticeBar(
+      icon: AppIcons.info,
+      message:
+          'Read-only: ${_megabytes(bytes)} is too large to edit here '
+          'without the editor becoming slow.',
+      action: TextButton.icon(
+        onPressed: onOpenExternally,
+        icon: const Icon(AppIcons.arrowSquareOut, size: Chrome.iconAction),
+        label: const Text('Open in external editor'),
       ),
     );
   }
