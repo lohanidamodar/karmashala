@@ -28,6 +28,7 @@ import 'design_tokens.dart';
 import 'desktop_dialog.dart';
 import 'hidden_files.dart';
 import 'hidden_files_chip.dart';
+import 'inline_spinner.dart';
 
 /// One row of a listed directory.
 @immutable
@@ -563,10 +564,7 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
     final Widget body;
     if (_loading) {
       body = const Center(
-        child: SizedBox.square(
-          dimension: 22,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+        child: InlineSpinner(size: InlineSpinnerSize.large),
       );
     } else if (_error != null) {
       body = _Message(icon: AppIcons.warningCircle, text: _error!);
