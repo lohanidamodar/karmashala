@@ -6,6 +6,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_core/logging.dart';
 import '../application/device_ports.dart';
@@ -28,6 +29,7 @@ import 'device_stream_status.dart';
 import '../application/simulator_live_view.dart';
 import 'simulator_live_pane.dart';
 import 'simulator_list.dart';
+import 'device_toolbar_model.dart';
 import 'device_touch_surface.dart';
 import 'wireless_pairing_dialog.dart';
 

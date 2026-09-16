@@ -30,267 +30,289 @@ class _DeviceToolbar extends ConsumerWidget {
   final VoidCallback? onRestart;
   final VoidCallback? onStopEmulator;
 
+  /// Below this width (at 1x text) the stream action gives up its label: in a
+  /// 240px side panel "Live view" beside four buttons left the picker 0px.
+  static const compactBelow = 400.0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     // Android devices and booted simulators in one list: they are the same
     // thing to the user, and apart, a booted simulator was invisible here.
     final simulators = ref.watch(bootedSimulatorsProvider);
-    final chosenSimulator = ref.watch(selectedSimulatorUdidProvider);
-    final simulatorState = ref.watch(simulatorLiveViewProvider);
-    // The simulator whose picture is up, whatever the picker says — every
-    // state but idle names one, a failed start included, whose Stop dismisses.
-    final liveSimulator = switch (simulatorState) {
-      SimulatorLiveViewIdle() => null,
-      SimulatorLiveViewStarting(:final udid) => udid,
-      SimulatorLiveViewRunning(:final view) => view.udid,
-      SimulatorLiveViewFailed(:final udid) => udid,
-    };
-    // Restarting a *start* is not offered: [SimulatorLiveViewController.start]
-    // refuses to interrupt one in flight, so it would be inert for 20 seconds.
-    final restartableSimulator = switch (simulatorState) {
-      SimulatorLiveViewRunning(:final view) => view.udid,
-      SimulatorLiveViewFailed(:final udid) => udid,
-      _ => null,
-    };
-    // The simulator this toolbar is *about* when no live view settles it.
-    // Keyed on the explicit choice: the derived one is never null with a phone.
-    final chosenAndroid = ref.watch(selectedDeviceSerialProvider);
-    final pickedSimulator =
-        chosenAndroid == null &&
-            chosenSimulator != null &&
-            simulators.any((s) => s.udid == chosenSimulator)
-        ? chosenSimulator
-        : null;
-    // What the power button acts on: a simulator on screen or picked wins,
-    // then an Android *emulator* — `adb emu kill` could only fail on a phone.
-    final liveOrPicked = liveSimulator ?? pickedSimulator;
-    final _PowerTarget? powerTarget = switch ((liveOrPicked, selected)) {
-      (final String udid, _) => _SimulatorPower(
-        udid,
-        simulators
-                .where((s) => s.udid == udid)
-                .map((s) => s.name)
-                .firstOrNull ??
-            'this simulator',
-      ),
-      (null, final AndroidDevice device)
-          when device.isEmulator && onStopEmulator != null =>
-        _AndroidPower(device.displayName),
-      _ => null,
-    };
-    final busySimulators = ref.watch(simulatorTransitionsProvider);
+    final model = DeviceToolbarModel.from(
+      bootedSimulators: simulators,
+      simulatorState: ref.watch(simulatorLiveViewProvider),
+      chosenSimulator: ref.watch(selectedSimulatorUdidProvider),
+      chosenAndroid: ref.watch(selectedDeviceSerialProvider),
+      selected: selected,
+      canStopEmulator: onStopEmulator != null,
+      stoppingEmulator: stoppingEmulator,
+      busySimulators: ref.watch(simulatorTransitionsProvider),
+      starting: starting,
+      streaming: streaming,
+    );
+    final picked = model.pickedSimulator;
+    final restartableSimulator = model.restartableSimulator;
+    final powerTarget = model.powerTarget;
 
     // Without a backend a simulator can still be listed, started and stopped;
     // only the picture is unavailable.
     final canMirror = ref.watch(simulatorBackendProvider) != null;
+    final simulatorLive = ref.read(simulatorLiveViewProvider.notifier);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Row(
-        children: [
-          Expanded(
-            child: DropdownButtonHideUnderline(
-              // `DropdownButton` is Material 2 and the app's
-              // `dropdownMenuTheme` is Material 3, so size is set here by hand.
-              child: DropdownButton<String>(
-                isExpanded: true,
-                isDense: true,
-                style: theme.textTheme.bodySmall,
-                iconSize: Chrome.icon,
-                // The simulator is tested first: when one is picked it is the
-                // answer, and [selected] may be a default nobody chose.
-                value: pickedSimulator != null
-                    ? '$_simulatorValue$pickedSimulator'
-                    : selected != null
-                    ? '$_androidValue${selected!.serial}'
-                    : null,
-                hint: Text(
-                  'No device selected',
-                  style: theme.textTheme.bodySmall,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact =
+            constraints.maxWidth <
+            WidthClass.scaleBreakpoint(
+              compactBelow,
+              MediaQuery.textScalerOf(context),
+            );
+        return Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: Insets.sm,
+            vertical: Insets.xs,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _DevicePicker(
+                  // The simulator is tested first: when one is picked it is
+                  // the answer, and [selected] may be a default nobody chose.
+                  value: picked != null
+                      ? '$_simulatorValue$picked'
+                      : selected != null
+                      ? '$_androidValue${selected!.serial}'
+                      : null,
+                  devices: devices,
+                  simulators: simulators,
+                  // Picking a device moves the live view with it, and picking
+                  // one kind clears the other so the two cannot disagree.
+                  onChanged: (value) {
+                    if (value.startsWith(_simulatorValue)) {
+                      ref
+                          .read(selectedDeviceSerialProvider.notifier)
+                          .select(null);
+                      ref
+                          .read(selectedSimulatorUdidProvider.notifier)
+                          .select(value.substring(_simulatorValue.length));
+                    } else {
+                      ref
+                          .read(selectedSimulatorUdidProvider.notifier)
+                          .select(null);
+                      // …and take the simulator's picture down: the pane gives
+                      // it priority, so deselecting alone would leave it up.
+                      unawaited(simulatorLive.stop());
+                      ref
+                          .read(selectedDeviceSerialProvider.notifier)
+                          .select(value.substring(_androidValue.length));
+                    }
+                  },
                 ),
-                items: [
-                  for (final device in devices)
-                    DropdownMenuItem(
-                      value: '$_androidValue${device.serial}',
-                      enabled: device.isReady,
-                      child: Text(
-                        device.isReady
-                            ? '${device.displayName} (${device.serial})'
-                            : '${device.displayName} — ${device.state.name}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  for (final simulator in simulators)
-                    DropdownMenuItem(
-                      value: '$_simulatorValue${simulator.udid}',
-                      child: Text(
-                        simulator.displayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                ],
-                // Picking a device moves the live view with it, and picking
-                // one kind clears the other so the two cannot disagree.
-                onChanged: (value) {
-                  if (value == null) return;
-                  if (value.startsWith(_simulatorValue)) {
-                    ref
-                        .read(selectedDeviceSerialProvider.notifier)
-                        .select(null);
-                    ref
-                        .read(selectedSimulatorUdidProvider.notifier)
-                        .select(value.substring(_simulatorValue.length));
-                  } else {
-                    ref
-                        .read(selectedSimulatorUdidProvider.notifier)
-                        .select(null);
-                    // …and take the simulator's picture down: the pane gives
-                    // it priority, so deselecting alone would leave it up.
-                    unawaited(
-                      ref.read(simulatorLiveViewProvider.notifier).stop(),
-                    );
-                    ref
-                        .read(selectedDeviceSerialProvider.notifier)
-                        .select(value.substring(_androidValue.length));
-                  }
+              ),
+              const SizedBox(width: Insets.sm),
+              // Beside Refresh because both are about the *list*, and only
+              // when there is an adb to pair with — an inert button is worse
+              // than none.
+              if (ref.watch(adbServiceProvider) != null)
+                IconButton(
+                  key: const Key('wireless-pairing-open'),
+                  tooltip: 'Pair a device over Wi-Fi',
+                  icon: const Icon(AppIcons.wifiHigh),
+                  onPressed: () => WirelessPairingDialog.show(context),
+                ),
+              IconButton(
+                // Named for what it does: "Refresh devices" is what people
+                // pressed when the picture froze, and it refreshes the list.
+                tooltip: 'Refresh device list',
+                icon: const Icon(AppIcons.arrowsClockwise),
+                onPressed: () {
+                  ref.invalidate(devicesProvider);
+                  ref.invalidate(avdsProvider);
+                  ref.invalidate(iosSimulatorsProvider);
                 },
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Beside Refresh because both are about the *list*, and only when
-          // there is an adb to pair with — an inert button is worse than none.
-          if (ref.watch(adbServiceProvider) != null)
-            IconButton(
-              key: const Key('wireless-pairing-open'),
-              tooltip: 'Pair a device over Wi-Fi',
-              icon: const Icon(AppIcons.wifiHigh),
-              onPressed: () => WirelessPairingDialog.show(context),
-            ),
-          IconButton(
-            // Named for what it does: "Refresh devices" is what people pressed
-            // when the picture froze, and it refreshes the list, not the stream.
-            tooltip: 'Refresh device list',
-            icon: const Icon(AppIcons.arrowsClockwise),
-            onPressed: () {
-              ref.invalidate(devicesProvider);
-              ref.invalidate(avdsProvider);
-              ref.invalidate(iosSimulatorsProvider);
-            },
-          ),
-          // Restart belongs to whichever live view is up; [onRestart] is the
-          // Android path only, and a simulator costs 20 s to start again.
-          if (restartableSimulator != null)
-            IconButton(
-              tooltip: 'Restart live view',
-              icon: const Icon(AppIcons.arrowCounterClockwise),
-              // `start` tears the current view down first — the runner holds
-              // :8100 and :9100, so a second cannot come up beside it.
-              onPressed: () => ref
-                  .read(simulatorLiveViewProvider.notifier)
-                  .start(restartableSimulator),
-            )
-          else if (onRestart != null)
-            IconButton(
-              tooltip: 'Restart live view',
-              icon: const Icon(AppIcons.arrowCounterClockwise),
-              onPressed: onRestart,
-            ),
-          // Power acts on the device this toolbar is *about* — from [selected]
-          // alone it once shut down an emulator nobody was looking at.
-          if (powerTarget != null)
-            IconButton(
-              tooltip: switch (powerTarget) {
-                _SimulatorPower(:final name) => 'Shut down $name',
-                _AndroidPower(:final name) => 'Stop $name',
-              },
-              icon: stoppingEmulator || busySimulators.contains(liveOrPicked)
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(AppIcons.power),
-              onPressed:
-                  stoppingEmulator || busySimulators.contains(liveOrPicked)
-                  ? null
-                  : switch (powerTarget) {
-                      _SimulatorPower(:final udid, :final name) => () async {
-                        if (!await confirmSimulatorShutdown(context, name)) {
-                          return;
-                        }
-                        await ref
-                            .read(simulatorTransitionsProvider.notifier)
-                            .shutdown(udid);
-                      },
-                      _AndroidPower() => onStopEmulator,
+              // Restart belongs to whichever live view is up; [onRestart] is
+              // the Android path only, and a simulator costs 20 s to start.
+              if (restartableSimulator != null)
+                IconButton(
+                  tooltip: 'Restart live view',
+                  icon: const Icon(AppIcons.arrowCounterClockwise),
+                  // `start` tears the current view down first — the runner
+                  // holds :8100 and :9100, so a second cannot come up beside.
+                  onPressed: () => simulatorLive.start(restartableSimulator),
+                )
+              else if (onRestart != null)
+                IconButton(
+                  tooltip: 'Restart live view',
+                  icon: const Icon(AppIcons.arrowCounterClockwise),
+                  onPressed: onRestart,
+                ),
+              // Power acts on the device this toolbar is *about* — from
+              // [selected] alone it once shut down an emulator nobody watched.
+              if (powerTarget != null)
+                _PowerButton(
+                  target: powerTarget,
+                  busy: model.powerBusy,
+                  onPressed: switch (powerTarget) {
+                    SimulatorPowerTarget(:final udid, :final name) => () async {
+                      if (!await confirmSimulatorShutdown(context, name)) {
+                        return;
+                      }
+                      await ref
+                          .read(simulatorTransitionsProvider.notifier)
+                          .shutdown(udid);
                     },
-            ),
-          if (starting)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                    AndroidPowerTarget() => onStopEmulator,
+                  },
+                ),
+              _PrimaryStreamAction(
+                kind: model.primary,
+                compact: compact,
+                onPressed: switch (model.primary) {
+                  PrimaryStreamKind.starting => null,
+                  PrimaryStreamKind.stopSimulator => simulatorLive.stop,
+                  PrimaryStreamKind.startSimulator =>
+                    canMirror ? () => simulatorLive.start(picked!) : null,
+                  PrimaryStreamKind.stopAndroid => onStop,
+                  PrimaryStreamKind.startAndroid => onStart,
+                },
               ),
-            )
-          // Ordered by what is *running*, then by what is picked: the pane
-          // gives the simulator's picture priority, so Stop means what is up.
-          else if (liveSimulator != null)
-            TextButton.icon(
-              onPressed: () =>
-                  ref.read(simulatorLiveViewProvider.notifier).stop(),
-              icon: const Icon(AppIcons.stop),
-              label: const Text('Stop'),
-            )
-          else if (pickedSimulator != null)
-            TextButton.icon(
-              onPressed: canMirror
-                  ? () => ref
-                        .read(simulatorLiveViewProvider.notifier)
-                        .start(pickedSimulator)
-                  : null,
-              icon: const Icon(AppIcons.play),
-              label: const Text('Live view'),
-            )
-          else if (streaming)
-            TextButton.icon(
-              onPressed: onStop,
-              icon: const Icon(AppIcons.stop),
-              label: const Text('Stop'),
-            )
-          else
-            TextButton.icon(
-              onPressed: onStart,
-              icon: const Icon(AppIcons.play),
-              label: const Text('Live view'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The one picker over Android devices and booted simulators, keyed by the
+/// prefixed values above.
+class _DevicePicker extends StatelessWidget {
+  const _DevicePicker({
+    required this.value,
+    required this.devices,
+    required this.simulators,
+    required this.onChanged,
+  });
+
+  final String? value;
+  final List<AndroidDevice> devices;
+  final List<IosSimulator> simulators;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DropdownButtonHideUnderline(
+      // `DropdownButton` is Material 2 and the app's `dropdownMenuTheme` is
+      // Material 3, so size is set here by hand.
+      child: DropdownButton<String>(
+        isExpanded: true,
+        isDense: true,
+        style: theme.textTheme.bodySmall,
+        iconSize: Chrome.icon,
+        value: value,
+        hint: Text(
+          'No device selected',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall,
+        ),
+        items: [
+          for (final device in devices)
+            DropdownMenuItem(
+              value: '$_androidValue${device.serial}',
+              enabled: device.isReady,
+              child: Text(
+                device.isReady
+                    ? '${device.displayName} (${device.serial})'
+                    : '${device.displayName} — ${device.state.name}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          for (final simulator in simulators)
+            DropdownMenuItem(
+              value: '$_simulatorValue${simulator.udid}',
+              child: Text(
+                simulator.displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
+        onChanged: (value) {
+          if (value != null) onChanged(value);
+        },
       ),
     );
   }
 }
 
-/// Which device the toolbar's power button would shut down. A sealed pair, not
-/// two nullables: `simctl shutdown` and `adb emu kill` are different verbs.
-sealed class _PowerTarget {
-  const _PowerTarget(this.name);
+/// Shuts down what [target] names, with a spinner in its place while it goes.
+class _PowerButton extends StatelessWidget {
+  const _PowerButton({
+    required this.target,
+    required this.busy,
+    required this.onPressed,
+  });
 
-  /// What the tooltip calls it, so the button says what it will stop.
-  final String name;
+  final DevicePowerTarget target;
+  final bool busy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: switch (target) {
+      SimulatorPowerTarget(:final name) => 'Shut down $name',
+      AndroidPowerTarget(:final name) => 'Stop $name',
+    },
+    icon: busy
+        ? const InlineSpinner(size: InlineSpinnerSize.medium)
+        : const Icon(AppIcons.power),
+    onPressed: busy ? null : onPressed,
+  );
 }
 
-class _SimulatorPower extends _PowerTarget {
-  const _SimulatorPower(this.udid, super.name);
-  final String udid;
-}
+/// Start or Stop for whichever live view the toolbar is about. Labelled while
+/// there is room; a glyph with the label as its tooltip when there is not.
+class _PrimaryStreamAction extends StatelessWidget {
+  const _PrimaryStreamAction({
+    required this.kind,
+    required this.compact,
+    required this.onPressed,
+  });
 
-class _AndroidPower extends _PowerTarget {
-  const _AndroidPower(super.name);
+  final PrimaryStreamKind kind;
+  final bool compact;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    if (kind == PrimaryStreamKind.starting) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Insets.md),
+        child: InlineSpinner(
+          size: InlineSpinnerSize.medium,
+          semanticsLabel: kind.label,
+        ),
+      );
+    }
+    final icon = Icon(kind.stops ? AppIcons.stop : AppIcons.play);
+    if (compact) {
+      return IconButton(
+        tooltip: kind.label,
+        icon: icon,
+        onPressed: onPressed,
+      );
+    }
+    return TextButton.icon(
+      onPressed: onPressed,
+      icon: icon,
+      label: Text(kind.label),
+    );
+  }
 }
 
 /// Confirms before shutting a simulator down: a running machine ends and the
