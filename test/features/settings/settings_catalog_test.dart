@@ -236,6 +236,30 @@ void main() {
     );
   });
 
+  test('device slimming has a page, beside Projects, that search finds', () {
+    expect(SettingsSectionId.devices.group, SettingsGroup.workspace);
+    final workspace = SettingsGroup.workspace.pages;
+    expect(
+      workspace.indexOf(SettingsSectionId.devices),
+      workspace.indexOf(SettingsSectionId.projects) + 1,
+    );
+    for (final term in ['emulator', 'simulator', 'slimming', 'gpu', 'avd']) {
+      expect(
+        SettingsSectionId.values.where((p) => p.matches(term)),
+        contains(SettingsSectionId.devices),
+        reason: term,
+      );
+    }
+    expect(
+      searchSettings('renderer').map((e) => e.anchor),
+      contains(SettingsAnchor.androidEmulators),
+    );
+    expect(
+      searchSettings('universal links').single.anchor,
+      SettingsAnchor.iosSimulators,
+    );
+  });
+
   test('a link naming the page a section used to be on still lands on it', () {
     final target = SettingsTarget(
       SettingsSectionId.tools,

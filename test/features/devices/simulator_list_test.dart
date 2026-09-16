@@ -208,7 +208,7 @@ void main() {
     expect(picker.initialValue, isNotNull);
   });
 
-  testWidgets('the slimming choice is on the pane, not in Settings', (
+  testWidgets('the slimming choice opens from the pane itself', (
     tester,
   ) async {
     await _pump(

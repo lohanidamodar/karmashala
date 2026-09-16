@@ -19,7 +19,31 @@ class SimulatorSlimmingDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return AlertDialog(
+      title: const Text('Simulator slimming'),
+      content: const BoundedDialogContent(
+        width: DialogWidth.regular,
+        child: SimulatorSlimmingSettings(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Done'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The simulator slimming choices themselves, shared by the dialog and the
+/// app's Settings page so the two cannot drift.
+class SimulatorSlimmingSettings extends ConsumerWidget {
+  const SimulatorSlimmingSettings({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final canRun = ref.watch(hostCanRunSimulatorsProvider);
     final enabled = ref.watch(slimmingOnStartProvider);
     final kept = ref.watch(slimmingKeptCategoriesProvider);
     final controller = ref.read(deviceSlimmingPreferencesProvider.notifier);
@@ -34,70 +58,70 @@ class SimulatorSlimmingDialog extends ConsumerWidget {
       controller.setSimulatorSlimmingKept([for (final c in next) c.id]);
     }
 
-    return AlertDialog(
-      title: const Text('Simulator slimming'),
-      content: BoundedDialogContent(
-        width: DialogWidth.regular,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SwitchListTile(
-              key: const Key('slimming-enabled'),
-              contentPadding: EdgeInsets.zero,
-              value: enabled,
-              title: const Text('Slim simulators when they start'),
-              subtitle: const Text(
-                'A stock iOS simulator boots around 358 background services '
-                'to serve a user who is not there. Switching off the ones '
-                'below took memory from 3.1 GB to 0.9 GB and boot from 15.8s '
-                'to 9.6s on an iPhone 17.',
-              ),
-              onChanged: controller.setSimulatorSlimming,
-            ),
-            const SizedBox(height: Insets.sm),
-            Text(
-              // The one thing about this that surprises people. launchd reads
-              // the file at boot, so nothing here can reach a running device.
-              'Applied when a simulator starts. A simulator that is already '
-              'running keeps the services it booted with — stop and start it '
-              'to slim it.',
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SwitchListTile(
+          key: const Key('slimming-enabled'),
+          contentPadding: EdgeInsets.zero,
+          value: enabled,
+          title: const Text('Slim simulators when they start'),
+          subtitle: const Text(
+            'A stock iOS simulator boots around 358 background services '
+            'to serve a user who is not there. Switching off the ones '
+            'below took memory from 3.1 GB to 0.9 GB and boot from 15.8s '
+            'to 9.6s on an iPhone 17.',
+          ),
+          // Off and fixed where simulators cannot run: the stored choice
+          // would do nothing here.
+          onChanged: canRun ? controller.setSimulatorSlimming : null,
+        ),
+        const SizedBox(height: Insets.sm),
+        Text(
+          // The one thing about this that surprises people. launchd reads
+          // the file at boot, so nothing here can reach a running device.
+          'Applied when a simulator starts. A simulator that is already '
+          'running keeps the services it booted with — stop and start it '
+          'to slim it.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        if (!canRun)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Text(
+              'iOS simulators run only on a Mac, so nothing here applies '
+              'on this computer.',
+              key: const Key('slimming-host-cannot-run'),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            const Divider(height: Insets.xl),
-            Text('Keep running', style: theme.textTheme.titleSmall),
-            Padding(
-              padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
-              child: Text(
-                'Ticked groups keep running. The three ticked by default are '
-                'the ones a Flutter app is most likely to need and whose '
-                'absence is hardest to diagnose — untick them if your app '
-                'has no push notifications, photo picker or universal links.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
+          ),
+        const Divider(height: Insets.xl),
+        Text('Keep running', style: theme.textTheme.titleSmall),
+        Padding(
+          padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
+          child: Text(
+            'Ticked groups keep running. The three ticked by default are '
+            'the ones a Flutter app is most likely to need and whose '
+            'absence is hardest to diagnose — untick them if your app '
+            'has no push notifications, photo picker or universal links.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-            for (final category in SlimmingCategory.values)
-              _CategoryTile(
-                category: category,
-                keep: kept.contains(category),
-                // Nothing is switched off at all while slimming is off, so
-                // offering the choice would be a lie about what will happen.
-                onChanged: enabled
-                    ? (keep) => setKept(category, keep: keep)
-                    : null,
-              ),
-          ],
+          ),
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
-        ),
+        for (final category in SlimmingCategory.values)
+          _CategoryTile(
+            category: category,
+            keep: kept.contains(category),
+            // Nothing is switched off at all while slimming is off, so
+            // offering the choice would be a lie about what will happen.
+            onChanged: enabled ? (keep) => setKept(category, keep: keep) : null,
+          ),
       ],
     );
   }

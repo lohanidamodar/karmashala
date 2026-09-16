@@ -59,6 +59,15 @@ enum SettingsSectionId {
     SettingsGroup.workspace,
     'What each checkout needs in a new worktree, and what it can build.',
   ),
+  // Beside Projects: an emulator is where an app project runs. Orca files its
+  // Mobile Emulator page under Workflows, its equivalent of this group.
+  devices(
+    'Devices',
+    AppIcons.deviceMobile,
+    SettingsGroup.workspace,
+    'What Android emulators and iOS simulators start with, and what is '
+        'switched off inside them.',
+  ),
   snippets(
     'Snippets',
     AppIcons.bookBookmark,
@@ -115,7 +124,7 @@ enum SettingsSectionId {
   ),
   remote(
     'Remote access',
-    AppIcons.deviceMobile,
+    AppIcons.wifiHigh,
     SettingsGroup.connections,
     'Pair a phone to follow and answer sessions from anywhere.',
   ),
@@ -253,6 +262,23 @@ enum SettingsAnchor {
     'flutter',
     'react native',
     'build',
+  ]),
+  // Also shown from the device pane's Slimming buttons; one widget draws both.
+  androidEmulators(SettingsSectionId.devices, 'Android emulators', [
+    'android',
+    'emulator',
+    'emulators',
+    'avd',
+    'slimming',
+    'gpu',
+    'renderer',
+  ]),
+  iosSimulators(SettingsSectionId.devices, 'iOS simulators', [
+    'ios',
+    'simulator',
+    'simulators',
+    'iphone',
+    'slimming',
   ]),
   snippets(SettingsSectionId.snippets, 'Command snippets', [
     'snippet',
@@ -565,6 +591,41 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.appProjects,
     description: 'What a checkout is detected as, and what it builds.',
     keywords: ['app projects', 'flutter', 'react native', 'project kinds'],
+  ),
+  SettingsEntry(
+    'Slim emulators when they start',
+    anchor: SettingsAnchor.androidEmulators,
+    description: 'Switch off what an Android emulator does not need.',
+    keywords: ['slimming', 'memory', 'ram', 'processes', 'android'],
+  ),
+  SettingsEntry(
+    'Emulator renderer',
+    anchor: SettingsAnchor.androidEmulators,
+    description: 'The GPU mode an emulator is started with.',
+    keywords: ['gpu', 'swiftshader', 'host gpu', 'black preview'],
+  ),
+  SettingsEntry(
+    'What emulator slimming applies',
+    anchor: SettingsAnchor.androidEmulators,
+    description: 'Launch flags, animations and packages, one group at a time.',
+    keywords: ['packages', 'animations', 'flags', 'categories'],
+  ),
+  SettingsEntry(
+    'Slim simulators when they start',
+    anchor: SettingsAnchor.iosSimulators,
+    description: 'Switch off the background services a simulator boots.',
+    keywords: ['slimming', 'memory', 'boot', 'services', 'xcode'],
+  ),
+  SettingsEntry(
+    'Simulator services kept running',
+    anchor: SettingsAnchor.iosSimulators,
+    description: 'Groups a slimmed simulator leaves on.',
+    keywords: [
+      'keep running',
+      'push notifications',
+      'photo picker',
+      'universal links',
+    ],
   ),
   SettingsEntry(
     'Command snippets',

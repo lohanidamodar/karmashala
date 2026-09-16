@@ -18,6 +18,7 @@ import 'agent_path_section.dart';
 import 'agent_tools_section.dart';
 import 'agents_pages.dart';
 import 'default_model_section.dart';
+import 'devices_page.dart';
 import 'diagnostics_page.dart';
 import 'editor_files_sections.dart';
 import 'external_app_section.dart';
@@ -81,6 +82,8 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.terminalAdvanced => const TerminalAdvancedSection(),
   SettingsAnchor.worktreeSetup => const WorktreeSetupPage(),
   SettingsAnchor.appProjects => const ProjectKindsSection(),
+  SettingsAnchor.androidEmulators => const AndroidEmulatorsSection(),
+  SettingsAnchor.iosSimulators => const IosSimulatorsSection(),
   SettingsAnchor.snippets => const SnippetsSettingsPage(),
   SettingsAnchor.variables => const EnvSecretsPage(),
   SettingsAnchor.automations => const AutomationsPage(),

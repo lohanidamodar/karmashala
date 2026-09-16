@@ -21,61 +21,11 @@ class AndroidSlimmingDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final enabled = ref.watch(androidSlimmingOnStartProvider);
-    final selected = categoriesFromIds(
-      ref.watch(
-        deviceSlimmingPreferencesProvider.select((s) => s.androidSlimmingEnabled),
-      ),
-    );
-    final controller = ref.read(deviceSlimmingPreferencesProvider.notifier);
-
-    void setSelected(AndroidSlimmingCategory category, {required bool apply}) {
-      final next = {...selected};
-      if (apply) {
-        next.add(category);
-      } else {
-        next.remove(category);
-      }
-      controller.setAndroidSlimmingEnabled([for (final c in next) c.id]);
-    }
-
     return AlertDialog(
       title: const Text('Emulator slimming'),
-      content: BoundedDialogContent(
+      content: const BoundedDialogContent(
         width: DialogWidth.regular,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SwitchListTile(
-              key: const Key('android-slimming-enabled'),
-              contentPadding: EdgeInsets.zero,
-              value: enabled,
-              title: const Text('Slim emulators when they start'),
-              subtitle: const Text(
-                'Measured on an API 34 emulator here: with the package '
-                'groups below switched on too, 373 processes down to 312 and '
-                'used RAM 1.40 GB down to 1.07 GB. The flags and animation '
-                'groups on their own cost nothing and break nothing — they '
-                'buy a device that settles instantly when you drive it. The '
-                'packages are where the memory is.',
-              ),
-              onChanged: controller.setAndroidSlimming,
-            ),
-            const SizedBox(height: Insets.md),
-            _GpuPicker(enabled: true),
-            for (final layer in AndroidSlimmingLayer.values)
-              _LayerSection(
-                layer: layer,
-                selected: selected,
-                // Nothing is applied at all while slimming is off, so
-                // offering the choice would be a lie about what will happen.
-                onChanged: enabled ? setSelected : null,
-              ),
-            const Divider(height: Insets.xl),
-            const _RestoreRow(),
-          ],
-        ),
+        child: AndroidSlimmingSettings(),
       ),
       actions: [
         TextButton(
@@ -90,6 +40,75 @@ class AndroidSlimmingDialog extends ConsumerWidget {
         Insets.md,
       ),
       titleTextStyle: theme.textTheme.titleMedium,
+    );
+  }
+}
+
+/// The emulator slimming choices themselves, shared by the dialog and the
+/// app's Settings page so the two cannot drift. [showRestore] adds the
+/// per-emulator Restore, which lists running devices and so belongs beside
+/// them.
+class AndroidSlimmingSettings extends ConsumerWidget {
+  const AndroidSlimmingSettings({this.showRestore = true, super.key});
+
+  final bool showRestore;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabled = ref.watch(androidSlimmingOnStartProvider);
+    final selected = categoriesFromIds(
+      ref.watch(
+        deviceSlimmingPreferencesProvider.select(
+          (s) => s.androidSlimmingEnabled,
+        ),
+      ),
+    );
+    final controller = ref.read(deviceSlimmingPreferencesProvider.notifier);
+
+    void setSelected(AndroidSlimmingCategory category, {required bool apply}) {
+      final next = {...selected};
+      if (apply) {
+        next.add(category);
+      } else {
+        next.remove(category);
+      }
+      controller.setAndroidSlimmingEnabled([for (final c in next) c.id]);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SwitchListTile(
+          key: const Key('android-slimming-enabled'),
+          contentPadding: EdgeInsets.zero,
+          value: enabled,
+          title: const Text('Slim emulators when they start'),
+          subtitle: const Text(
+            'Measured on an API 34 emulator here: with the package '
+            'groups below switched on too, 373 processes down to 312 and '
+            'used RAM 1.40 GB down to 1.07 GB. The flags and animation '
+            'groups on their own cost nothing and break nothing — they '
+            'buy a device that settles instantly when you drive it. The '
+            'packages are where the memory is.',
+          ),
+          onChanged: controller.setAndroidSlimming,
+        ),
+        const SizedBox(height: Insets.md),
+        _GpuPicker(enabled: true),
+        for (final layer in AndroidSlimmingLayer.values)
+          _LayerSection(
+            layer: layer,
+            selected: selected,
+            // Nothing is applied at all while slimming is off, so
+            // offering the choice would be a lie about what will happen.
+            onChanged: enabled ? setSelected : null,
+          ),
+        if (showRestore) ...[
+          const Divider(height: Insets.xl),
+          const _RestoreRow(),
+        ],
+      ],
     );
   }
 }
@@ -322,7 +341,8 @@ class _RestoreTarget extends ConsumerWidget {
     // Unknown is not "nothing": no button while the device is still being
     // asked, but one anyway if the ask failed — a restore costs one `pm list`.
     final offerRestore = carried?.isSlimmed ?? status.hasError;
-    final detail = carried?.summary ??
+    final detail =
+        carried?.summary ??
         (status.hasError
             ? 'Could not read what is applied — the emulator did not answer.'
             : 'Checking what is applied…');
