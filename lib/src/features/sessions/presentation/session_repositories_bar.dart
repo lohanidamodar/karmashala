@@ -41,10 +41,10 @@ class SessionRepositoriesBar extends ConsumerWidget {
     void bump() => ref.publishSessionChange(SessionChange.moved(sessionId));
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+      padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.xs, Insets.sm, 0),
       child: Wrap(
-        spacing: 6,
-        runSpacing: 4,
+        spacing: Insets.sm,
+        runSpacing: Insets.xs,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           for (final repo in repos)

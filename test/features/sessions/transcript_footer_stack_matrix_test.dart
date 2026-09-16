@@ -29,7 +29,6 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
-import 'package:karmashala_ui/icons.dart';
 
 import '../../app/minimum_window_matrix_test.dart' show noProcessOverrides;
 import '../../support/fakes.dart';

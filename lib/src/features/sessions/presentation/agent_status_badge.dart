@@ -56,7 +56,7 @@ class AgentStatusBadge extends ConsumerWidget {
           children: [
             Icon(appearance.icon, size: Chrome.iconSmall, color: colour),
             if (showLabel) ...[
-              const SizedBox(width: 4),
+              const SizedBox(width: Insets.xs),
               Text(
                 appearance.label,
                 style: theme.textTheme.labelSmall?.copyWith(color: colour),

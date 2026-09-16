@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/usage.dart';
 import '../application/session_providers.dart';
@@ -36,20 +37,20 @@ class SessionStatsDialog extends ConsumerWidget {
             ? (async.hasError ? 'Could not be read' : 'Reading the store…')
             : (view.agentName.isEmpty ? null : view.agentName),
       ),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
-          child: switch (async) {
-            AsyncValue(hasError: true, :final error) => DesktopErrorBanner(
-              'The store could not be read: $error',
+      content: BoundedDialogContent(
+        width: DialogWidth.regular,
+        child: switch (async) {
+          AsyncValue(hasError: true, :final error) => DesktopErrorBanner(
+            'The store could not be read: $error',
+          ),
+          AsyncValue(:final value?) => _Body(view: value),
+          _ => const Padding(
+            padding: EdgeInsets.symmetric(vertical: Insets.xl),
+            child: Center(
+              child: InlineSpinner(size: InlineSpinnerSize.large),
             ),
-            AsyncValue(:final value?) => _Body(view: value),
-            _ => const Padding(
-              padding: EdgeInsets.symmetric(vertical: Insets.xl),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          },
-        ),
+          ),
+        },
       ),
       actionsPadding: const EdgeInsets.fromLTRB(
         Insets.lg,

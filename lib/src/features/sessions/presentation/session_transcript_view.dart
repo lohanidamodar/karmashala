@@ -9,6 +9,7 @@ import '../../../app/shell/side_panel_state.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../cli_detection/presentation/subagent_turns_tile.dart';
@@ -351,7 +352,9 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     required bool hasTerminal,
   }) {
     return transcript.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(
+        child: InlineSpinner(size: InlineSpinnerSize.large),
+      ),
       error: (e, _) => Center(child: Text('$e')),
       data: (messages) => ChatTranscriptView(
         messages: messages,
@@ -556,11 +559,7 @@ class _RecapButton extends ConsumerWidget {
           ? 'Writing a recap…'
           : 'Recap — ask this session\'s CLI what it concluded',
       icon: running
-          ? const SizedBox(
-              width: Chrome.iconSmall,
-              height: Chrome.iconSmall,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
+          ? const InlineSpinner()
           : const Icon(AppIcons.article),
       onPressed: running
           ? null

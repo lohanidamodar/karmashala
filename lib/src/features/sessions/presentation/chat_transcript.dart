@@ -879,7 +879,7 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
                   children: [
                     Icon(
                       _open ? AppIcons.caretDown : AppIcons.caretRight,
-                      size: 14,
+                      size: Chrome.iconAction,
                       color: scheme.onSurfaceVariant,
                     ),
                     const SizedBox(width: Insets.xs),

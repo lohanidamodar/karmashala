@@ -9,6 +9,7 @@ import 'package:pasteboard/pasteboard.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/picking.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 /// How many lines of [style] fit [height], between 1 and 12. Unbounded means
 /// the composer's full twelve.
@@ -542,10 +543,7 @@ class _SendButton extends StatelessWidget {
             foregroundColor: ready ? scheme.onPrimary : scheme.onSurfaceVariant,
           ),
           icon: busy
-              ? const SizedBox.square(
-                  dimension: Chrome.iconSmall,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const InlineSpinner()
               : const Icon(AppIcons.paperPlaneRight),
         );
       },

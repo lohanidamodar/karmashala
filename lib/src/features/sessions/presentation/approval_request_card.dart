@@ -150,10 +150,7 @@ class _Evidence extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: SelectableText(
                 report.evidence.join('\n'),
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: kMonoFamily,
-                  fontFamilyFallback: const ['Consolas', 'Courier New'],
-                ),
+                style: MonoStyles.body,
               ),
             ),
           ),

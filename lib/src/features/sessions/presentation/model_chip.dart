@@ -325,7 +325,7 @@ class SessionModelMark extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(AppIcons.robot, size: Chrome.iconSmall, color: muted),
-          const SizedBox(width: 4),
+          const SizedBox(width: Insets.xs),
           ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxWidth),
             child: Text(

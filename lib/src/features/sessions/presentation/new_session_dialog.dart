@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import '../../agents/application/agent_installations_controller.dart';
 import 'package:agent_cli/discovery.dart';
@@ -121,23 +122,23 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     final terminals = ref.watch(availableSystemTerminalsProvider);
     return terminals.when(
       loading: () => const Padding(
-        padding: EdgeInsets.only(top: 12),
+        padding: EdgeInsets.only(top: Insets.md),
         child: LinearProgressIndicator(),
       ),
       error: (e, _) => Padding(
-        padding: const EdgeInsets.only(top: 12),
+        padding: const EdgeInsets.only(top: Insets.md),
         child: Text('Could not detect terminals: $e'),
       ),
       data: (list) {
         if (list.isEmpty) {
           return const Padding(
-            padding: EdgeInsets.only(top: 12),
+            padding: EdgeInsets.only(top: Insets.md),
             child: Text('No external terminals were found on PATH.'),
           );
         }
         _terminal ??= list.first;
         return Padding(
-          padding: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.only(top: Insets.md),
           child: DropdownButtonFormField<SystemTerminal>(
             initialValue: list.contains(_terminal) ? _terminal : list.first,
             isExpanded: true,
@@ -205,14 +206,16 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     }
 
     return AlertDialog(
-      scrollable: true,
       title: const DesktopDialogTitle(
         icon: AppIcons.chatCircleDots,
         title: 'New session',
         subtitle: 'Choose where and how the coding agent should run.',
       ),
+      // The whole dialog scrolls, title included: with only the body scrolling,
+      // Tab left the title field above the window at 1.3x text.
+      scrollable: true,
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
+        constraints: const BoxConstraints(maxWidth: DialogWidth.narrow),
         child: destination == null
             ? _noProjects()
             : Column(
@@ -234,7 +237,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                     controller: _titleController,
                     decoration: const InputDecoration(labelText: 'Title'),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: Insets.md),
                   if (installations.isEmpty)
                     Row(
                       children: [
@@ -280,7 +283,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                       ],
                       onChanged: (v) => setState(() => _installation = v),
                     ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: Insets.md),
                   SegmentedButton<bool>(
                     showSelectedIcon: false,
                     segments: const [
@@ -312,7 +315,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                     title: const Text('Run in a dedicated Git worktree'),
                   ),
                   if (_error != null) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: Insets.sm),
                     DesktopErrorBanner(_error!),
                   ],
                 ],
@@ -328,11 +331,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               ? null
               : _create,
           child: _busy
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const InlineSpinner(size: InlineSpinnerSize.medium)
               : const Text('Start'),
         ),
       ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -88,11 +89,7 @@ class SessionRecapCard extends ConsumerWidget {
         Text('Recap', style: theme.textTheme.labelLarge),
         const Spacer(),
         if (running)
-          const SizedBox(
-            width: Chrome.iconSmall,
-            height: Chrome.iconSmall,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          )
+          const InlineSpinner()
         else if (stale)
           // Offered only where it would say something new: a turn
           // spent re-deriving the text already on screen is wasted.

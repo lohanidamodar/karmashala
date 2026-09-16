@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import '../../agents/application/session_model_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
@@ -195,15 +196,16 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            style: destructive
-                ? FilledButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.error,
-                  )
-                : null,
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(action),
-          ),
+          if (destructive)
+            DestructiveButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(action),
+            )
+          else
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(action),
+            ),
         ],
       ),
     );
@@ -339,7 +341,12 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
         Padding(
           // Padded on all four sides: the strip is hosted under the terminal as
           // well as above the composer, and there nothing below gives it room.
-          padding: const EdgeInsets.fromLTRB(8, Insets.xs, 8, Insets.xs),
+          padding: const EdgeInsets.fromLTRB(
+            Insets.sm,
+            Insets.xs,
+            Insets.sm,
+            Insets.xs,
+          ),
           child: Wrap(
             spacing: Insets.sm,
             runSpacing: Insets.xs,
@@ -443,7 +450,7 @@ List<Widget> _deliveryFacts(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(_stageIcon(stage), size: Chrome.iconSmall, color: colour),
-        const SizedBox(width: 4),
+        const SizedBox(width: Insets.xs),
         Text(stage.label, style: label?.copyWith(color: colour)),
       ],
     ),
@@ -459,7 +466,7 @@ List<Widget> _deliveryFacts(
             size: Chrome.iconSmall,
             color: theme.colorScheme.onSurfaceVariant,
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: Insets.xs),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 160),
             child: RemoteLink(

@@ -351,11 +351,7 @@ class PermissionModeChip extends ConsumerWidget {
     return showDialog<bool>(
       context: context,
       builder: (context) {
-        final theme = Theme.of(context);
         return AlertDialog(
-          // Three paragraphs do not fit an 800x600 window, and a warning the
-          // user cannot read to the end is worse than none.
-          scrollable: true,
           title: DesktopDialogTitle(
             icon: AppIcons.warning,
             title: '$label?',
@@ -363,8 +359,10 @@ class PermissionModeChip extends ConsumerWidget {
                 ? 'This restarts the session.'
                 : 'This applies the next time the session runs.',
           ),
-          content: SizedBox(
-            width: 420,
+          // Three paragraphs do not fit an 800x600 window, and a warning the
+          // user cannot read to the end is worse than none: the body scrolls.
+          content: BoundedDialogContent(
+            width: DialogWidth.narrow,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -405,11 +403,7 @@ class PermissionModeChip extends ConsumerWidget {
               onPressed: () => Navigator.of(context).pop(false),
               child: const Text('Cancel'),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: theme.colorScheme.error,
-                foregroundColor: theme.colorScheme.onError,
-              ),
+            DestructiveButton(
               onPressed: () => Navigator.of(context).pop(true),
               // Says what the button does, not that it agrees: "OK" on a
               // dialog offering three consequences names none of them.
