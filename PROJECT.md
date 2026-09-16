@@ -52,8 +52,9 @@ Before making changes:
 While making changes:
 
 - Preserve user changes already present in the working tree.
-- Keep commits, publishing, deployments, and release builds manual unless the
-  user explicitly asks for them.
+- Commit each finished, verified task (see "Karmashala overrides" in
+  AGENTS.md), committing only the paths you changed. Keep pushing, publishing,
+  deployments, and release builds manual unless the user explicitly asks.
 - Use package and framework APIs instead of ad hoc implementations when the
   project already has a standard way to solve the problem.
 - Keep generated or mechanical changes separate from logic changes when possible.

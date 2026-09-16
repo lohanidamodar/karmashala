@@ -35,4 +35,15 @@ Never run a bare `flutter` or `dart` from a WSL `PATH`: it resolves to a Linux
 SDK and rewrites the shared Windows install.
 <!-- popupbits:rails:end -->
 
+## Karmashala overrides
+
+**Commit every time you finish a task.** This overrides the rail above that says
+to commit only when asked — the owner's instruction for this repository
+(2026-09-16). A task is finished when its change is verified: the relevant
+tests or gate ran and passed, read from a file. Commit then, one commit per
+task, not batched at the end of a session. The rest of that rail still holds:
+commit only the paths you changed, with `git commit -- <path>`, never
+`git add -A` — other sessions work in this checkout and leave uncommitted
+changes that are not yours. **Pushing is still only when asked.**
+
 **Read [PROJECT.md](PROJECT.md) before changing anything** — it is the full guide for this repository.
