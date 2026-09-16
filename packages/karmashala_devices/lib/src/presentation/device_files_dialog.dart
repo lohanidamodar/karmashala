@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/process.dart' show CommandException;
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/picking.dart';
 import '../application/device_file_actions.dart';
@@ -539,8 +540,6 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     // A refusal, first and on its own: it is not a shorter listing.
     if (_refusal case final refusal?) {
       return _notice(
-        theme,
-        scheme,
         icon: AppIcons.warning,
         title: 'Not permitted',
         detail: refusal,
@@ -552,8 +551,6 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     }
     if (listing.isEmpty && listing.skipped.isEmpty) {
       return _notice(
-        theme,
-        scheme,
         icon: AppIcons.folderOpen,
         title: 'Nothing here',
         detail: listing.note ?? 'This directory is empty.',
@@ -754,33 +751,13 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
     ),
   );
 
-  Widget _notice(
-    ThemeData theme,
-    ColorScheme scheme, {
+  /// A refusal or an empty directory, in the house placeholder: it scrolls
+  /// when a long refusal does not fit the body.
+  Widget _notice({
     required IconData icon,
     required String title,
     required String detail,
-  }) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(Insets.xl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 28, color: scheme.onSurfaceVariant),
-          const SizedBox(height: Insets.sm),
-          Text(title, style: theme.textTheme.titleSmall),
-          const SizedBox(height: Insets.xs),
-          Text(
-            detail,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+  }) => PanePlaceholder(icon: icon, message: '$title\n$detail');
 }
 
 /// The row menu's items. An enum so an action added without a handler is a

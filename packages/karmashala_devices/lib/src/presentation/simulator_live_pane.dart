@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/device_recording_controller.dart';
 import '../application/ios_device_providers.dart';
@@ -22,58 +24,27 @@ class SimulatorLivePane extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(simulatorLiveViewProvider);
     final controller = ref.read(simulatorLiveViewProvider.notifier);
-    final theme = Theme.of(context);
 
     return switch (state) {
       SimulatorLiveViewIdle() => const SizedBox.shrink(),
-      SimulatorLiveViewStarting() => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(height: Insets.md),
-            Text('Starting the live view', style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 4),
-            // Named, because twenty seconds of spinner reads as a hang: WDA
-            // is installed into the simulator, launched, then bootstraps.
-            Text(
-              'WebDriverAgent is starting inside the simulator. '
-              'This takes about 20 seconds the first time.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-              ),
-            ),
-          ],
+      // Named, because twenty seconds of spinner reads as a hang: WDA is
+      // installed into the simulator, launched, then bootstraps.
+      SimulatorLiveViewStarting() => const PanePlaceholder(
+        message:
+            'Starting the live view\n\n'
+            'WebDriverAgent is starting inside the simulator. '
+            'This takes about 20 seconds the first time.',
+        action: InlineSpinner(
+          size: InlineSpinnerSize.large,
+          semanticsLabel: 'Starting the live view',
         ),
       ),
-      SimulatorLiveViewFailed(:final reason) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(Insets.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'The live view would not start',
-                style: theme.textTheme.titleSmall,
-              ),
-              const SizedBox(height: Insets.sm),
-              Text(
-                reason,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: Insets.md),
-              TextButton(
-                onPressed: controller.stop,
-                child: const Text('Dismiss'),
-              ),
-            ],
-          ),
+      SimulatorLiveViewFailed(:final reason) => PanePlaceholder(
+        icon: AppIcons.warningCircle,
+        message: 'The live view would not start\n\n$reason',
+        action: TextButton(
+          onPressed: controller.stop,
+          child: const Text('Dismiss'),
         ),
       ),
       SimulatorLiveViewRunning(:final view) => _Running(view: view),

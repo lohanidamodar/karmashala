@@ -328,15 +328,20 @@ DevicePane
                                                         IgnorePointer key=[GlobalKey#…]
                                                           _SingleChildViewport
                                                             Column
-                                                              Icon
-                                                                Semantics
-                                                                  ExcludeSemantics
-                                                                    SizedBox
-                                                                      Center
-                                                                        RichText
-                                                              SizedBox
-                                                              Text text="Pick a device below, or start an emulator."
-                                                                RichText
+                                                              PanePlaceholder
+                                                                LayoutBuilder
+                                                                  Center
+                                                                    Padding
+                                                                      Column
+                                                                        Icon
+                                                                          Semantics
+                                                                            ExcludeSemantics
+                                                                              SizedBox
+                                                                                Center
+                                                                                  RichText
+                                                                        SizedBox
+                                                                        Text text="Pick a device below, or start an emulator."
+                                                                          RichText
                                                               _HeadlessDeviceToggle
                                                                 SwitchListTile key=[<'headless-emulator-toggle'>]
                                                                   MergeSemantics
@@ -1845,15 +1850,20 @@ DevicePane
                                                         IgnorePointer key=[GlobalKey#…]
                                                           _SingleChildViewport
                                                             Column
-                                                              Icon
-                                                                Semantics
-                                                                  ExcludeSemantics
-                                                                    SizedBox
-                                                                      Center
-                                                                        RichText
-                                                              SizedBox
-                                                              Text text="Pick a device below, or start an emulator."
-                                                                RichText
+                                                              PanePlaceholder
+                                                                LayoutBuilder
+                                                                  Center
+                                                                    Padding
+                                                                      Column
+                                                                        Icon
+                                                                          Semantics
+                                                                            ExcludeSemantics
+                                                                              SizedBox
+                                                                                Center
+                                                                                  RichText
+                                                                        SizedBox
+                                                                        Text text="Pick a device below, or start an emulator."
+                                                                          RichText
                                                               _HeadlessDeviceToggle
                                                                 SizedBox
                                                               _DeviceList
@@ -3354,15 +3364,20 @@ DevicePane
                                                         IgnorePointer key=[GlobalKey#…]
                                                           _SingleChildViewport
                                                             Column
-                                                              Icon
-                                                                Semantics
-                                                                  ExcludeSemantics
-                                                                    SizedBox
-                                                                      Center
-                                                                        RichText
-                                                              SizedBox
-                                                              Text text="Pick a device below, or start an emulator."
-                                                                RichText
+                                                              PanePlaceholder
+                                                                LayoutBuilder
+                                                                  Center
+                                                                    Padding
+                                                                      Column
+                                                                        Icon
+                                                                          Semantics
+                                                                            ExcludeSemantics
+                                                                              SizedBox
+                                                                                Center
+                                                                                  RichText
+                                                                        SizedBox
+                                                                        Text text="Pick a device below, or start an emulator."
+                                                                          RichText
                                                               _HeadlessDeviceToggle
                                                                 SizedBox
                                                               _DeviceList
@@ -4648,15 +4663,20 @@ DevicePane
                                                 IgnorePointer key=[GlobalKey#…]
                                                   _SingleChildViewport
                                                     Column
-                                                      Icon
-                                                        Semantics
-                                                          ExcludeSemantics
-                                                            SizedBox
-                                                              Center
-                                                                RichText
-                                                      SizedBox
-                                                      Text text="No devices connected. Plug in a device with USB debugging enabled, pair one over Wi-Fi from the toolbar above, or start an emulator below."
-                                                        RichText
+                                                      PanePlaceholder
+                                                        LayoutBuilder
+                                                          Center
+                                                            Padding
+                                                              Column
+                                                                Icon
+                                                                  Semantics
+                                                                    ExcludeSemantics
+                                                                      SizedBox
+                                                                        Center
+                                                                          RichText
+                                                                SizedBox
+                                                                Text text="No devices connected. Plug in a device with USB debugging enabled, pair one over Wi-Fi from the toolbar above, or start an emulator below."
+                                                                  RichText
                                                       _HeadlessDeviceToggle
                                                         SwitchListTile key=[<'headless-emulator-toggle'>]
                                                           MergeSemantics
@@ -5079,15 +5099,20 @@ DevicePane
                                                 IgnorePointer key=[GlobalKey#…]
                                                   _SingleChildViewport
                                                     Column
-                                                      Icon
-                                                        Semantics
-                                                          ExcludeSemantics
-                                                            SizedBox
-                                                              Center
-                                                                RichText
-                                                      SizedBox
-                                                      Text text="No devices connected. Plug in a device with USB debugging enabled, pair one over Wi-Fi from the toolbar above, or start an emulator below."
-                                                        RichText
+                                                      PanePlaceholder
+                                                        LayoutBuilder
+                                                          Center
+                                                            Padding
+                                                              Column
+                                                                Icon
+                                                                  Semantics
+                                                                    ExcludeSemantics
+                                                                      SizedBox
+                                                                        Center
+                                                                          RichText
+                                                                SizedBox
+                                                                Text text="No devices connected. Plug in a device with USB debugging enabled, pair one over Wi-Fi from the toolbar above, or start an emulator below."
+                                                                  RichText
                                                       _HeadlessDeviceToggle
                                                         SizedBox
                                                       _DeviceList
@@ -5360,15 +5385,20 @@ DevicePane
                                                 IgnorePointer key=[GlobalKey#…]
                                                   _SingleChildViewport
                                                     Column
-                                                      Icon
-                                                        Semantics
-                                                          ExcludeSemantics
-                                                            SizedBox
-                                                              Center
-                                                                RichText
-                                                      SizedBox
-                                                      Text text="Device connected but not authorised — accept the USB debugging prompt on the device."
-                                                        RichText
+                                                      PanePlaceholder
+                                                        LayoutBuilder
+                                                          Center
+                                                            Padding
+                                                              Column
+                                                                Icon
+                                                                  Semantics
+                                                                    ExcludeSemantics
+                                                                      SizedBox
+                                                                        Center
+                                                                          RichText
+                                                                SizedBox
+                                                                Text text="Device connected but not authorised — accept the USB debugging prompt on the device."
+                                                                  RichText
                                                       _HeadlessDeviceToggle
                                                         SizedBox
                                                       _DeviceList
@@ -5592,15 +5622,20 @@ DevicePane
                                                 IgnorePointer key=[GlobalKey#…]
                                                   _SingleChildViewport
                                                     Column
-                                                      Icon
-                                                        Semantics
-                                                          ExcludeSemantics
-                                                            SizedBox
-                                                              Center
-                                                                RichText
-                                                      SizedBox
-                                                      Text text="No Android SDK found. Set ANDROID_HOME, or install the SDK to %LOCALAPPDATA%\\Android\\Sdk."
-                                                        RichText
+                                                      PanePlaceholder
+                                                        LayoutBuilder
+                                                          Center
+                                                            Padding
+                                                              Column
+                                                                Icon
+                                                                  Semantics
+                                                                    ExcludeSemantics
+                                                                      SizedBox
+                                                                        Center
+                                                                          RichText
+                                                                SizedBox
+                                                                Text text="No Android SDK found. Set ANDROID_HOME, or install the SDK to %LOCALAPPDATA%\\Android\\Sdk."
+                                                                  RichText
                                                       _HeadlessDeviceToggle
                                                         SizedBox
                                                       _DeviceList
@@ -6035,15 +6070,20 @@ DevicePane
                                                         IgnorePointer key=[GlobalKey#…]
                                                           _SingleChildViewport
                                                             Column
-                                                              Icon
-                                                                Semantics
-                                                                  ExcludeSemantics
-                                                                    SizedBox
-                                                                      Center
-                                                                        RichText
-                                                              SizedBox
-                                                              Text text="Pick a device below, or start an emulator."
-                                                                RichText
+                                                              PanePlaceholder
+                                                                LayoutBuilder
+                                                                  Center
+                                                                    Padding
+                                                                      Column
+                                                                        Icon
+                                                                          Semantics
+                                                                            ExcludeSemantics
+                                                                              SizedBox
+                                                                                Center
+                                                                                  RichText
+                                                                        SizedBox
+                                                                        Text text="Pick a device below, or start an emulator."
+                                                                          RichText
                                                               _HeadlessDeviceToggle
                                                                 SizedBox
                                                               _DeviceList

@@ -348,7 +348,7 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsNothing);
     expect(find.textContaining('adb could not be run'), findsOneWidget);
-    expect(find.text('Not permitted'), findsOneWidget);
+    expect(find.textContaining('Not permitted'), findsOneWidget);
     // The Up button is live again: the dialog is not wedged.
     runner.throwError = null;
     await tester.tap(find.byKey(const Key('device-files-up')));

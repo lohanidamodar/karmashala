@@ -32,26 +32,22 @@ class _DeviceEmptyState extends ConsumerWidget {
   final String message;
   final _DeviceListActions actions;
 
+  /// The widest the message and the lists get: rows of a name and three
+  /// actions, not a paragraph of prose.
+  static const maxWidth = 460.0;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+        constraints: const BoxConstraints(maxWidth: maxWidth),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                AppIcons.deviceMobile,
-                size: 40,
-                color: Theme.of(context).colorScheme.outline,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              // Unbounded here, so it draws without a scroll view of its own:
+              // this one scrolls the message and the lists together.
+              PanePlaceholder(icon: AppIcons.deviceMobile, message: message),
               // Above both lists, because it governs both: inside Emulators,
               // a Mac with Xcode and no Android SDK never saw it.
               const _HeadlessDeviceToggle(),
