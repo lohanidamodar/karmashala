@@ -14,6 +14,7 @@ import '../application/parsed_diff.dart';
 import '../application/review_threads.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_git/git.dart';
+import '../../terminal/presentation/dense_icon_button.dart';
 import 'diff_line_tile.dart';
 
 /// Renders one file's unified diff, with the review threads anchored to it.
@@ -39,7 +40,7 @@ class FileDiffView extends ConsumerStatefulWidget {
   final String? repositoryId;
 
   /// The width a row's comment action takes, beside its text.
-  static const commentExtent = _DenseIconButton.extent;
+  static const commentExtent = DenseIconButton.inRow;
 
   @override
   ConsumerState<FileDiffView> createState() => _FileDiffViewState();
@@ -253,7 +254,7 @@ class ReviewableDiffLine extends ConsumerWidget {
       // A blank of the same width on a row with nothing to comment on, so every
       // row's text scrolls against the same edge.
       trailing: commentable
-          ? _DenseIconButton(
+          ? DenseIconButton(
               tooltip: here.isEmpty
                   ? 'Add review comment'
                   : here.map((entry) => entry.thread.body).join('\n\n'),
@@ -275,35 +276,9 @@ class ReviewableDiffLine extends ConsumerWidget {
                       existing: here,
                     ),
             )
-          : const SizedBox(width: _DenseIconButton.extent),
+          : const SizedBox(width: DenseIconButton.inRow),
     );
   }
-}
-
-/// An icon action inside a dense row: one square size wherever a row carries
-/// one, rather than a minimum picked per call site.
-class _DenseIconButton extends StatelessWidget {
-  const _DenseIconButton({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  static const extent = 24.0;
-
-  final String tooltip;
-  final Widget icon;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) => IconButton(
-    tooltip: tooltip,
-    visualDensity: VisualDensity.compact,
-    constraints: const BoxConstraints.tightFor(width: extent, height: extent),
-    padding: EdgeInsets.zero,
-    icon: icon,
-    onPressed: onPressed,
-  );
 }
 
 /// A thread no line of this diff can carry — file-level, or detached by an

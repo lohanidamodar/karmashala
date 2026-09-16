@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/panes.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/shell/shell_state.dart';
@@ -573,10 +574,7 @@ class _ExplorerPanelState extends ConsumerState<ExplorerPanel> {
             if (syncing)
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: Insets.sm),
-                child: SizedBox.square(
-                  dimension: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
+                child: InlineSpinner(size: InlineSpinnerSize.medium),
               ),
             // One funnel for everything the Explorer holds back: two hiding
             // controls would be two stories about why a session is off screen.

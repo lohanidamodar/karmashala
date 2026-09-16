@@ -210,10 +210,7 @@ class _Body extends StatelessWidget {
     if (!review.hasRun) {
       return _Placeholder(
         child: running
-            ? const SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+            ? const InlineSpinner(size: InlineSpinnerSize.large)
             : Text('Nothing checked.', style: theme.textTheme.bodySmall),
       );
     }

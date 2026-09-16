@@ -72,8 +72,8 @@ class _PaneFloatingActionsState extends ConsumerState<_PaneFloatingActions> {
                       child: Tooltip(
                         message: 'Drag the pane elsewhere',
                         child: SizedBox(
-                          width: 16,
-                          height: 22,
+                          width: Chrome.icon,
+                          height: DenseIconButton.inRow,
                           child: Icon(
                             AppIcons.dotsSixVertical,
                             size: Chrome.iconAction,
@@ -83,31 +83,17 @@ class _PaneFloatingActionsState extends ConsumerState<_PaneFloatingActions> {
                       ),
                     ),
                   ),
-                  IconButton(
+                  DenseIconButton(
                     tooltip: 'Move pane to a new tab',
-                    iconSize: Chrome.iconSmall,
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-                    padding: EdgeInsets.zero,
-                    icon: Icon(
-                      AppIcons.terminalWindow,
-                      size: Chrome.iconAction,
-                      color: scheme.onSurfaceVariant,
-                    ),
+                    color: scheme.onSurfaceVariant,
+                    icon: const Icon(AppIcons.terminalWindow),
                     onPressed: widget.onMoveToNewTab,
                   ),
                   const SizedBox(width: 2),
-                  IconButton(
+                  DenseIconButton(
                     tooltip: 'Close pane',
-                    iconSize: Chrome.iconSmall,
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-                    padding: EdgeInsets.zero,
-                    icon: Icon(
-                      AppIcons.x,
-                      size: Chrome.iconAction,
-                      color: scheme.onSurfaceVariant,
-                    ),
+                    color: scheme.onSurfaceVariant,
+                    icon: const Icon(AppIcons.x),
                     onPressed: widget.onClose,
                   ),
                 ],

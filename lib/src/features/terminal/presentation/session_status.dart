@@ -80,7 +80,7 @@ class TabLivenessDot extends StatelessWidget {
         // with a Chrome.tabLabel title and must not crowd it.
         child: Icon(
           restored ? AppIcons.clockCounterClockwise : AppIcons.circle,
-          size: 11,
+          size: UiDensity.of(context).iconSmall,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
           semanticLabel: message,
         ),
@@ -107,7 +107,7 @@ class TabAgentStatusDot extends StatelessWidget {
         // The same 11 px [TabLivenessDot] uses, for the same row.
         child: Icon(
           appearance.icon,
-          size: 11,
+          size: UiDensity.of(context).iconSmall,
           color: appearance.colour(SemanticColors.of(context)),
           semanticLabel: message,
         ),

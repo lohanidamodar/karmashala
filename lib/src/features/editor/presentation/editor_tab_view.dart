@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/code.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -320,10 +321,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   Widget _body(SourceDocument? document) {
     if (document == null) {
       return const Center(
-        child: SizedBox.square(
-          dimension: Chrome.iconHero,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+        child: InlineSpinner(size: InlineSpinnerSize.large),
       );
     }
     if (!document.isReadable) {

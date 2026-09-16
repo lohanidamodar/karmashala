@@ -20,7 +20,7 @@ class _NoTerminalOpen extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('No terminal open', style: theme.textTheme.bodySmall),
-          const SizedBox(height: 12),
+          const SizedBox(height: Insets.md),
           FilledButton.tonalIcon(
             onPressed: onNewTerminal,
             icon: const Icon(AppIcons.plus, size: Chrome.icon),

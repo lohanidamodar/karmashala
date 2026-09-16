@@ -30,6 +30,7 @@ import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/shell/tab_picker.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'dense_icon_button.dart';
 import 'empty_pane_region.dart';
 import 'pane_frame.dart';
 import 'pane_group_strip.dart';

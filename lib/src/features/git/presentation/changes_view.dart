@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -280,7 +281,9 @@ class _ChangedFiles extends ConsumerWidget {
     return ref
         .watch(repositoryChangesProvider)
         .when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const Center(
+            child: InlineSpinner(size: InlineSpinnerSize.large),
+          ),
           error: (e, _) => _NoChangesToRead(error: e),
           data: (files) => files.isEmpty
               ? const PanePlaceholder(

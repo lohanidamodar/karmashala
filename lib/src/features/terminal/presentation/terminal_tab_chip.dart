@@ -12,6 +12,7 @@ import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../../../app/shell/workbench_tab_chip.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/panes.dart';
+import 'dense_icon_button.dart';
 import 'session_status.dart';
 
 /// A bulk close, named the way VS Code names it. Declared in the order the menu
@@ -233,16 +234,13 @@ class _TabCloseButtonState extends State<_TabCloseButton> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: IconButton(
+      child: DenseIconButton(
         tooltip: widget.unsaved
             ? 'Unsaved changes — close tab'
             : widget.liveness.isLive
             ? 'Close tab (the session keeps running)'
             : 'Close tab',
-        iconSize: Chrome.iconSmall,
-        visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-        padding: EdgeInsets.zero,
+        extent: DenseIconButton.inTabStrip,
         icon: dot
             ? StatusDot(
                 color: Theme.of(context).colorScheme.primary,

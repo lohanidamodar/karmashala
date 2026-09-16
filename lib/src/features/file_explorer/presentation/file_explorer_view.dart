@@ -297,7 +297,7 @@ class _EntryRowState extends ConsumerState<_EntryRow> {
                   ? theme.colorScheme.tertiary
                   : theme.colorScheme.onSurfaceVariant,
             ),
-            const SizedBox(width: 7),
+            SizedBox(width: UiDensity.of(context).glyphGap),
             Expanded(
               child: Text(
                 entry.name,

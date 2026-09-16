@@ -12,6 +12,7 @@ import 'package:karmashala_ui/menus.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
+import 'dense_icon_button.dart';
 import 'session_status.dart';
 
 /// The header one region of a split draws for the panes stacked in it.
@@ -257,16 +258,11 @@ class PaneTabChip extends ConsumerWidget {
           : TabAgentStatusDot(status: activity),
       label: title,
       tooltip: title,
-      trailing: IconButton(
+      trailing: DenseIconButton(
         tooltip: liveness.isLive
             ? 'Close pane (the session keeps running)'
             : 'Close pane',
-        iconSize: Chrome.iconSmall,
-        visualDensity: VisualDensity.compact,
-        // A [Chrome.paneStrip] row with a 2px rule under it leaves 22px; the
-        // workbench strip's 20px box fits with no gutter at all.
-        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-        padding: EdgeInsets.zero,
+        extent: DenseIconButton.inPaneStrip,
         icon: const Icon(AppIcons.x),
         onPressed: () => sessions.closePane(paneId),
       ),
