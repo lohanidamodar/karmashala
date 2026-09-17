@@ -14,7 +14,9 @@ const int kLanPromotionHoldOffCap = 64;
 extension _GatewayConnectLoop on RemoteCompanionGateway {
   void _startLoop() {
     if (_loopRunning || _closed) return;
-    _ensureLanScout();
+    // A box is never on the beacon, so its record joins no multicast group;
+    // [_dialAnyPath] starts the scout the first time a desktop needs it.
+    if (_record?.route == null) _ensureLanScout();
     _loopRunning = true;
     unawaited(_connectLoop());
   }
@@ -34,6 +36,8 @@ extension _GatewayConnectLoop on RemoteCompanionGateway {
   void _onLanSighting(DiscoveredHost host) {
     final scout = lan;
     if (scout == null || _closed || _record == null) return;
+    // A beacon is a desktop's; a box's link has nothing to be promoted to.
+    if (_record?.route != null) return;
     if (_link.value != CompanionLinkState.connected) return;
     if (_linkPath.value != CompanionLinkPath.relay) return;
     // The desktop IS the relay: the embedded local relay is served on the very

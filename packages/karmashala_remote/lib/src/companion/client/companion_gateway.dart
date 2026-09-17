@@ -7,7 +7,10 @@ import 'dart:typed_data';
 
 import '../../domain/companion_presence.dart';
 import '../../domain/remote_payloads.dart';
+import '../../pairing/host_pairing_invite.dart' show HostRoute;
 import '../../protocol.dart';
+
+export '../../pairing/host_pairing_invite.dart' show HostRoute;
 
 /// A refused or failed gateway call. Carries a sentence fit to show the user.
 class GatewayException implements Exception {
@@ -100,7 +103,15 @@ class CompanionPairing {
     required this.capabilities,
     this.hostName,
     this.hostId,
+    this.route,
+    this.directEndpoint,
   });
+
+  /// How a session host on a box is reached; null for a desktop.
+  final HostRoute? route;
+
+  /// `host:port` of a box reached directly; null otherwise.
+  final String? directEndpoint;
 
   /// What the desktop granted this phone; every action the UI offers must be
   /// backed by a bit here.
@@ -120,7 +131,17 @@ class CompanionConnection {
     required this.name,
     required this.active,
     this.lastConnectedAt,
+    this.route,
+    this.directEndpoint,
   });
+
+  /// How a session host on a box is reached — [HostRoute.direct] at
+  /// [directEndpoint], or [HostRoute.relay]. Null for a desktop, which the
+  /// phone finds by itself.
+  final HostRoute? route;
+
+  /// `host:port` of a box reached directly; null otherwise.
+  final String? directEndpoint;
 
   /// The host's id in its wire (hex) form — the key [CompanionGateway.switchTo]
   /// and [CompanionGateway.removeConnection] take.
@@ -142,10 +163,13 @@ class CompanionConnection {
       other.hostId == hostId &&
       other.name == name &&
       other.active == active &&
-      other.lastConnectedAt == lastConnectedAt;
+      other.lastConnectedAt == lastConnectedAt &&
+      other.route == route &&
+      other.directEndpoint == directEndpoint;
 
   @override
-  int get hashCode => Object.hash(hostId, name, active, lastConnectedAt);
+  int get hashCode =>
+      Object.hash(hostId, name, active, lastConnectedAt, route, directEndpoint);
 
   @override
   String toString() =>
@@ -388,7 +412,9 @@ class CompanionActivity {
   });
 
   /// Nothing has been heard yet — not "nothing is running".
-  static final unknown = CompanionActivity(at: DateTime.fromMillisecondsSinceEpoch(0));
+  static final unknown = CompanionActivity(
+    at: DateTime.fromMillisecondsSinceEpoch(0),
+  );
 
   /// When this reading landed here, on the **phone's** clock: what a live
   /// elapsed time is counted from.
@@ -577,6 +603,10 @@ abstract interface class CompanionGateway {
   /// Pairs from a scanned QR payload. A phone that is already paired ADDS the
   /// new desktop and switches to it; pairing the SAME host replaces that one
   /// record and leaves the others alone.
+  ///
+  /// A QR with `kind: host` is a session host's invite (`HostPairingInvite`):
+  /// it is paired over the one route it names — straight to its address, or
+  /// through the relay it carries — and never over both.
   Future<CompanionPairing> pairWithQr(String qrPayload);
 
   /// Pairs from what the user typed or pasted: the grouped base32 code or the

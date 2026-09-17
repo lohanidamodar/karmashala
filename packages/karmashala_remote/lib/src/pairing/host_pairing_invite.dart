@@ -47,6 +47,14 @@ class HostInviteExpiredException implements Exception {
   String toString() => message;
 }
 
+/// An invite in a format newer than this build reads. Still a
+/// [ProtocolException], so a caller that only knows "not an invite" is right;
+/// one that can say "update this app" can tell.
+class HostInviteTooNewException extends ProtocolException {
+  const HostInviteTooNewException()
+    : super('this code was made by a newer Karmashala — update this app');
+}
+
 /// One scan's worth of pairing with a box: where, with what code, by which
 /// route, until when.
 class HostPairingInvite {
@@ -129,9 +137,7 @@ class HostPairingInvite {
       throw const ProtocolException('host invite has no version');
     }
     if (version > kHostInviteVersion) {
-      throw const ProtocolException(
-        'this code was made by a newer Karmashala — update this app',
-      );
+      throw const HostInviteTooNewException();
     }
     final at = json['at'];
     final code = json['code'];

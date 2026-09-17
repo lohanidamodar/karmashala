@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import '../../domain/companion_presence.dart';
 import '../../domain/remote_payloads.dart';
+import '../../pairing/host_pairing_invite.dart';
 import '../../protocol.dart';
 import 'companion_gateway.dart';
 
@@ -94,6 +95,8 @@ class FakeCompanionGateway implements CompanionGateway {
                      hostId: pairing.hostId?.value ?? _kFakeHostId,
                      name: pairing.hostName ?? 'Desktop',
                      active: true,
+                     route: pairing.route,
+                     directEndpoint: pairing.directEndpoint,
                    ),
                  ],
          ),
@@ -125,10 +128,14 @@ class FakeCompanionGateway implements CompanionGateway {
     String? failSwitchTo,
     DateTime? linkSince,
     DateTime Function()? now,
+    HostRoute? route,
+    String? directEndpoint,
   }) => FakeCompanionGateway(
     pairing: CompanionPairing(
       capabilities: capabilities ?? CapabilitySet.all,
       hostName: hostName,
+      route: route,
+      directEndpoint: directEndpoint,
     ),
     link: link,
     linkPath: linkPath,
@@ -178,6 +185,7 @@ class FakeCompanionGateway implements CompanionGateway {
     _stampedLink = _link.value;
     _linkSince.value = _now();
   }
+
   final _Watched<List<CompanionSessionSummary>> _sessions;
   final _Watched<List<CompanionConnection>> _connections;
   final Map<String, List<CompanionSessionSummary>> _sessionsByHost;
@@ -275,6 +283,7 @@ class FakeCompanionGateway implements CompanionGateway {
 
   @override
   Future<CompanionPairing> pairWithQr(String qrPayload) async {
+    if (HostPairingInvite.looksLike(qrPayload)) return _pairInvite(qrPayload);
     Object? decoded;
     try {
       decoded = jsonDecode(qrPayload);
@@ -292,6 +301,38 @@ class FakeCompanionGateway implements CompanionGateway {
       );
     }
     return _pairStaged();
+  }
+
+  /// The real gateway's refusals, word for word, and a box that always
+  /// answers on the route its invite names.
+  Future<CompanionPairing> _pairInvite(String text) async {
+    final HostPairingInvite invite;
+    try {
+      invite = HostPairingInvite.decode(text, now: _now());
+    } on HostInviteExpiredException catch (error) {
+      throw _refuse(PairingException(error.message));
+    } on HostInviteTooNewException {
+      throw _refuse(
+        const PairingException(
+          'This code was made by a newer Karmashala. Update this app, then '
+          'scan it again.',
+        ),
+      );
+    } on ProtocolException {
+      throw _refuse(
+        const PairingException(
+          'That is not a Karmashala pairing code. Show the QR code from the '
+          "desktop's Remote access settings and scan it again.",
+        ),
+      );
+    }
+    final direct = invite.route == HostRoute.direct;
+    return _pairStaged(
+      hostName: invite.hostName,
+      searching: direct ? 'at ${invite.endpoint}' : 'over the relay',
+      route: invite.route,
+      directEndpoint: direct ? invite.endpoint : null,
+    );
   }
 
   @override
@@ -347,37 +388,49 @@ class FakeCompanionGateway implements CompanionGateway {
       ? Future<void>.value()
       : Future<void>.delayed(pairDelay);
 
-  Future<CompanionPairing> _pairStaged() async {
+  Future<CompanionPairing> _pairStaged({
+    String hostName = 'Desktop',
+    String searching = 'on this network and over the relay',
+    HostRoute? route,
+    String? directEndpoint,
+  }) async {
     _emit(CompanionPairingStage.codeAccepted);
     await _gap();
-    _emit(
-      CompanionPairingStage.searching,
-      detail: 'on this network and over the relay',
-    );
+    _emit(CompanionPairingStage.searching, detail: searching);
     await _gap();
     _emit(
       CompanionPairingStage.proving,
-      hostName: 'Desktop',
+      hostName: hostName,
       capabilities: _grantOnPair,
     );
     await _gap();
-    final paired = _pair();
+    final paired = _pair(
+      hostName: hostName,
+      route: route,
+      directEndpoint: directEndpoint,
+    );
     _emit(
       CompanionPairingStage.paired,
-      hostName: 'Desktop',
+      hostName: hostName,
       capabilities: paired.capabilities,
     );
     return paired;
   }
 
-  CompanionPairing _pair() {
+  CompanionPairing _pair({
+    String hostName = 'Desktop',
+    HostRoute? route,
+    String? directEndpoint,
+  }) {
     // Pairing ADDS a desktop and switches to it; only re-pairing the same
     // host replaces its record.
     final hostId = fakeHostId(_connections.value.length);
     final paired = CompanionPairing(
       capabilities: _grantOnPair,
-      hostName: 'Desktop',
+      hostName: hostName,
       hostId: DeviceId.parse(hostId),
+      route: route,
+      directEndpoint: directEndpoint,
     );
     _pairing.value = paired;
     _connections.value = List.unmodifiable([
@@ -387,9 +440,20 @@ class FakeCompanionGateway implements CompanionGateway {
           name: c.name,
           active: false,
           lastConnectedAt: c.lastConnectedAt,
+          route: c.route,
+          directEndpoint: c.directEndpoint,
         ),
-      CompanionConnection(hostId: hostId, name: 'Desktop', active: true),
+      CompanionConnection(
+        hostId: hostId,
+        name: hostName,
+        active: true,
+        route: route,
+        directEndpoint: directEndpoint,
+      ),
     ]);
+    _linkPath.value = route == HostRoute.direct
+        ? CompanionLinkPath.lan
+        : _linkPath.value;
     _link.value = CompanionLinkState.connected;
     _linkPath.value ??= CompanionLinkPath.relay;
     return paired;
@@ -450,8 +514,9 @@ class FakeCompanionGateway implements CompanionGateway {
 
   @override
   Future<void> removeConnection(String hostId) async {
-    final wasActive = _connections.value
-        .any((c) => c.hostId == hostId && c.active);
+    final wasActive = _connections.value.any(
+      (c) => c.hostId == hostId && c.active,
+    );
     final rest = [
       for (final c in _connections.value)
         if (c.hostId != hostId) c,
@@ -476,6 +541,8 @@ class FakeCompanionGateway implements CompanionGateway {
         name: c.name,
         active: c.hostId == hostId,
         lastConnectedAt: c.lastConnectedAt,
+        route: c.route,
+        directEndpoint: c.directEndpoint,
       ),
   ]);
 
@@ -544,7 +611,9 @@ class FakeCompanionGateway implements CompanionGateway {
   @override
   Stream<List<CompanionChatMessage>> transcript(String sessionId) {
     final failure = transcriptFailures[sessionId];
-    if (failure != null) return Stream<List<CompanionChatMessage>>.error(failure);
+    if (failure != null) {
+      return Stream<List<CompanionChatMessage>>.error(failure);
+    }
     // Never emits and never closes: a screen must still find something to
     // say, because a user cannot tell "slow" from "never" by looking.
     if (stalledTranscripts.contains(sessionId)) {
@@ -604,7 +673,8 @@ class FakeCompanionGateway implements CompanionGateway {
     required String requestId,
     required String name,
     required String path,
-  }) async => RemoteWorkspaceProject(projectId: requestId, name: name, path: path);
+  }) async =>
+      RemoteWorkspaceProject(projectId: requestId, name: name, path: path);
 
   @override
   Future<RemoteSessionStarted> startSession({
@@ -665,7 +735,10 @@ class FakeCompanionGateway implements CompanionGateway {
     if (failure != null) throw failure;
     return _resumesByKey.putIfAbsent(
       requestId,
-      () => RemoteSessionStarted(sessionId: 'resumed-$sessionId', title: 'Resumed'),
+      () => RemoteSessionStarted(
+        sessionId: 'resumed-$sessionId',
+        title: 'Resumed',
+      ),
     );
   }
 

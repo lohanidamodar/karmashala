@@ -33,6 +33,8 @@ extension _GatewayConnections on RemoteCompanionGateway {
         name: record.hostName.isEmpty ? 'Desktop' : record.hostName,
         active: record.hostId.value == _all.activeHostId?.value,
         lastConnectedAt: record.lastConnectedAt,
+        route: record.route,
+        directEndpoint: record.directEndpoint,
       ),
   ]);
 
@@ -60,6 +62,8 @@ extension _GatewayConnections on RemoteCompanionGateway {
         capabilities: record.capabilities,
         hostName: record.hostName.isEmpty ? null : record.hostName,
         hostId: record.hostId,
+        route: record.route,
+        directEndpoint: record.directEndpoint,
       );
 
   /// Drops the current link and rebuilds every derived state for [record] —

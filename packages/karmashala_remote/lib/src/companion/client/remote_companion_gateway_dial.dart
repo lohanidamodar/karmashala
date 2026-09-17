@@ -5,6 +5,13 @@ part of 'remote_companion_gateway.dart';
 // newest-known-good first. First success wins; each loser is torn down before
 // the next is tried.
 
+/// Why a directly-paired box is not connected, and the one remedy there is:
+/// the route is chosen on the desktop, so that is where it is changed.
+String _directUnreachableTrouble(String? endpoint) =>
+    '${endpoint ?? 'This machine'} did not answer. If it is no longer '
+    "reachable from here, pair it again from the desktop and choose 'Hosted "
+    "relay'.";
+
 extension _GatewayDial on RemoteCompanionGateway {
   /// The dial order: every fresh LAN candidate, the host's own LAN hint, the
   /// last relay that worked, the rest of the saved set (skipping any still
@@ -20,8 +27,18 @@ extension _GatewayDial on RemoteCompanionGateway {
     if (direct != null) return direct;
     if (_abandonDial) return null;
 
-    final scout = lan;
+    // A box is reached by the one route chosen when it was paired. Falling
+    // through to a relay — or to a search of this network — would put its
+    // traffic somewhere nobody picked, so the failure is said instead.
+    final route = _record?.route;
+    if (route == HostRoute.direct) {
+      _noteTrouble(_directUnreachableTrouble(_record?.directEndpoint));
+      return null;
+    }
+
+    final scout = route == HostRoute.relay ? null : lan;
     if (scout != null) {
+      _ensureLanScout();
       var triedLan = false;
       for (final host in scout.candidates.take(3).toList()) {
         if (_abandonDial) return null;
@@ -60,6 +77,17 @@ extension _GatewayDial on RemoteCompanionGateway {
     // not been written down yet: an announcement is persisted only once a link
     // reaches `connected`, or the write would clobber the client's own record.
     final announced = _lastHostStatus?.relays ?? const <Uri>[];
+    if (record.route == HostRoute.relay) {
+      // The phone's configured relay is where a *desktop's* typed code meets
+      // it; a box was never told about it and is not looked for there.
+      return orderRelayCandidates(
+        announced.isEmpty
+            ? record.candidates
+            : mergeRelayCandidates(record.candidates, announced),
+        fallback: record.relay,
+        now: _now(),
+      );
+    }
     return orderRelayCandidates(
       announced.isEmpty
           ? record.candidates
@@ -110,12 +138,14 @@ extension _GatewayDial on RemoteCompanionGateway {
       );
       _lastPathWasLocal = true;
       _linkPath.value = CompanionLinkPath.lan;
+      _noteTrouble(null);
       onLog?.call('connected straight to ${endpoint.host}:${endpoint.port}');
       return client;
     } on Object catch (error) {
-      // Named, then the other paths are tried: a box that is asleep or behind a
-      // firewall somebody has changed is exactly when a relay earns its keep.
-      onLog?.call('direct attempt to ${endpoint.host}:${endpoint.port} failed: $error');
+      // Named. What happens next is the route's to decide — see [_dialAnyPath].
+      onLog?.call(
+        'direct attempt to ${endpoint.host}:${endpoint.port} failed: $error',
+      );
       await _teardownClient();
       return null;
     }

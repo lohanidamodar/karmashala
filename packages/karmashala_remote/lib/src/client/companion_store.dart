@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../pairing/host_pairing_invite.dart' show HostRoute;
 import '../protocol.dart';
 import 'relay_candidates.dart';
 
@@ -45,7 +46,9 @@ class CompanionPairing {
     List<RelayCandidate>? candidates,
     this.lanHint,
     this.directEndpoint,
-  }) : deviceKey = Uint8List.fromList(deviceKey),
+    HostRoute? route,
+  }) : route = route ?? (directEndpoint == null ? null : HostRoute.direct),
+       deviceKey = Uint8List.fromList(deviceKey),
        // A record always knows at least the relay it paired through, so the
        // dial order below never has to special-case an empty set.
        candidates = candidates == null || candidates.isEmpty
@@ -86,6 +89,11 @@ class CompanionPairing {
   /// there — and unlike a hint, this may be a name rather than a literal IP.
   final String? directEndpoint;
 
+  /// How a session host on a box is reached, as chosen on the desktop that
+  /// showed its code. Null for a desktop pairing. A record written before
+  /// routes existed carries none, and reads as direct when it has an address.
+  final HostRoute? route;
+
   /// The rendezvous generation counter — the companion's copy of the one
   /// number both ends persist. Bumped after a session pairs.
   final int generation;
@@ -103,6 +111,7 @@ class CompanionPairing {
     List<RelayCandidate>? candidates,
     String? lanHint,
     String? directEndpoint,
+    HostRoute? route,
   }) => CompanionPairing(
     hostId: hostId,
     deviceId: deviceId,
@@ -115,6 +124,7 @@ class CompanionPairing {
     candidates: candidates ?? this.candidates,
     lanHint: lanHint ?? this.lanHint,
     directEndpoint: directEndpoint ?? this.directEndpoint,
+    route: route ?? this.route,
   );
 
   CompanionPairing withGeneration(int next) => copyWith(generation: next);
@@ -141,6 +151,7 @@ class CompanionPairing {
     'relays': [for (final candidate in candidates) candidate.toJson()],
     if (lanHint != null) 'lanHint': lanHint,
     if (directEndpoint != null) 'directEndpoint': directEndpoint,
+    if (route != null) 'via': route!.wire,
   };
 
   static CompanionPairing fromJson(Map<String, Object?> json) {
@@ -176,6 +187,7 @@ class CompanionPairing {
       candidates: _candidatesFromJson(json['relays']),
       lanHint: lanHint is String && lanHint.isNotEmpty ? lanHint : null,
       directEndpoint: direct is String && direct.isNotEmpty ? direct : null,
+      route: HostRoute.tryParse(json['via']),
     );
   }
 
@@ -233,9 +245,8 @@ class CompanionConnections {
 
   DeviceId? activeHostId;
 
-  CompanionPairing? get active => activeHostId == null
-      ? null
-      : byHost(activeHostId!.value);
+  CompanionPairing? get active =>
+      activeHostId == null ? null : byHost(activeHostId!.value);
 
   CompanionPairing? byHost(String hostIdValue) {
     for (final record in records) {
@@ -344,10 +355,7 @@ class CompanionConnections {
     await store.write(storeKey, jsonEncode(toJson()));
     final record = active;
     if (record != null) {
-      await store.write(
-        CompanionPairing.storeKey,
-        jsonEncode(record.toJson()),
-      );
+      await store.write(CompanionPairing.storeKey, jsonEncode(record.toJson()));
     } else {
       await store.delete(CompanionPairing.storeKey);
     }

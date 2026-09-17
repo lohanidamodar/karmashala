@@ -3,6 +3,10 @@ part of 'remote_companion_gateway.dart';
 // Pairing: minting this phone's identity, the two-legged race that finds the
 // desktop, and adopting the record the desktop confirmed.
 
+/// The paths one pairing attempt may try. A desktop's code races all three; a
+/// box's invite names exactly one, and the others are not tried behind it.
+enum _PairingLeg { relay, lan, direct }
+
 extension _GatewayPairing on RemoteCompanionGateway {
   Future<DeviceId> _readOrMintDeviceId() async {
     try {
@@ -116,6 +120,11 @@ extension _GatewayPairing on RemoteCompanionGateway {
     required Uri relay,
     required RendezvousId rendezvous,
     String? at,
+    Set<_PairingLeg> legs = const {
+      _PairingLeg.relay,
+      _PairingLeg.lan,
+      _PairingLeg.direct,
+    },
   }) async {
     try {
       return await _pairOverAnyPath(
@@ -123,6 +132,7 @@ extension _GatewayPairing on RemoteCompanionGateway {
         relay: relay,
         rendezvous: rendezvous,
         at: at,
+        legs: legs,
       );
     } on PairingException catch (error) {
       _emitPairing(CompanionPairingStage.failed, message: error.message);
@@ -146,11 +156,18 @@ extension _GatewayPairing on RemoteCompanionGateway {
     attempt,
     required Uri relay,
     required RendezvousId rendezvous,
+    required Set<_PairingLeg> legs,
     String? at,
   }) async {
-    final endpoint = parseLanHint(at);
-    final scout = lan;
-    _ensureLanScout();
+    final endpoint = legs.contains(_PairingLeg.direct)
+        ? parseLanHint(at)
+        : null;
+    // A leg that is not asked for is not started either: joining the beacon
+    // group for an invite that names an address would be searching a network
+    // nobody said the machine is on.
+    final scout = legs.contains(_PairingLeg.lan) ? lan : null;
+    if (scout != null) _ensureLanScout();
+    final overRelay = legs.contains(_PairingLeg.relay);
     _emitPairing(
       CompanionPairingStage.searching,
       detail: endpoint != null
@@ -183,6 +200,7 @@ extension _GatewayPairing on RemoteCompanionGateway {
     }
 
     Future<void> relayLeg() async {
+      if (!overRelay) return;
       final transport = _relayFactory(relay, rendezvous);
       open.add(transport);
       var everConnected = false;
@@ -242,6 +260,7 @@ extension _GatewayPairing on RemoteCompanionGateway {
     }
 
     Future<void> lanLeg() async {
+      if (!legs.contains(_PairingLeg.lan)) return;
       if (scout == null) {
         lanNote = 'this phone cannot search this network for it';
         return;
@@ -310,6 +329,18 @@ extension _GatewayPairing on RemoteCompanionGateway {
             PairingException(
               'Could not pair — $directNote. Check the address and port, that '
               'the host is running there, and that the code has not expired.',
+            ),
+          );
+          return;
+        }
+        if (!legs.contains(_PairingLeg.lan)) {
+          // A box paired through a relay: nothing was searched, so the
+          // sentence is about the one place that was tried.
+          outcome.completeError(
+            PairingException(
+              'Could not pair — ${relayNote ?? 'the relay was not tried'}. '
+              'Make sure the code is still on the desktop screen and that the '
+              'machine is running, then retry.',
             ),
           );
           return;

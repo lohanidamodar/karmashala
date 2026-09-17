@@ -18,6 +18,7 @@ import '../../client/lan_path.dart';
 import '../../client/relay_candidates.dart';
 import '../../domain/remote_payloads.dart';
 import '../../pairing/companion_device_name.dart';
+import '../../pairing/host_pairing_invite.dart';
 import '../../pairing/pairing_code.dart';
 import '../../pairing/pairing_payload.dart';
 import '../../protocol.dart';
@@ -174,6 +175,7 @@ class RemoteCompanionGateway implements CompanionGateway {
     _stampedLink = _link.value;
     _linkSince.value = _now().toUtc();
   }
+
   final _progress = StreamController<CompanionPairingProgress>.broadcast(
     sync: true,
   );
@@ -241,6 +243,7 @@ class RemoteCompanionGateway implements CompanionGateway {
   final _trouble = _Watched<String?>(null);
   bool _lanStarted = false;
   StreamSubscription<DiscoveredHost>? _lanSightings;
+
   /// Runs while a dropped transport is being given its chance to come back.
   Timer? _healTimer;
 
@@ -316,6 +319,9 @@ class RemoteCompanionGateway implements CompanionGateway {
   @override
   Future<CompanionPairing> pairWithQr(String qrPayload) async {
     await _ready;
+    if (HostPairingInvite.looksLike(qrPayload)) {
+      return _pairWithInvite(qrPayload);
+    }
     final PairingPayload payload;
     try {
       payload = PairingPayload.decode(qrPayload.trim());
@@ -344,6 +350,63 @@ class RemoteCompanionGateway implements CompanionGateway {
       rendezvous: payload.rendezvous,
     );
     return _adoptPairing(record);
+  }
+
+  /// A session host's invite: the typed-code ceremony over the ONE route the
+  /// desktop that showed it chose. The other legs are not raced behind it — the
+  /// code-derived rendezvous would show the attempt to a relay nobody picked.
+  Future<CompanionPairing> _pairWithInvite(String text) async {
+    final HostPairingInvite invite;
+    try {
+      invite = HostPairingInvite.decode(text, now: _now());
+    } on HostInviteExpiredException catch (error) {
+      _emitPairing(CompanionPairingStage.failed, message: error.message);
+      throw PairingException(error.message);
+    } on HostInviteTooNewException {
+      const message =
+          'This code was made by a newer Karmashala. Update this app, then '
+          'scan it again.';
+      _emitPairing(CompanionPairingStage.failed, message: message);
+      throw const PairingException(message);
+    } on ProtocolException {
+      throw _refusedPairingInput();
+    }
+    final codeSecret = PairingCode.tryDecode(invite.code)!;
+    _emitPairing(CompanionPairingStage.codeAccepted);
+    await _dropLink();
+    final direct = invite.route == HostRoute.direct;
+    // Only ever dialled on the relay route; on the direct one it is just what
+    // the record has to name, and the dial never reads it.
+    final relay = invite.relay ?? await pairingRelay();
+    final rendezvous = await derivePairingRendezvous(
+      (await derivePairingSecret(codeSecret)).bytes,
+    );
+    final pairingClient = CompanionPairingClient(
+      store: store,
+      deviceId: await stableDeviceId(),
+      deviceName: await _deviceName(),
+    );
+    final record = await _runPairing(
+      attempt: (link) => pairingClient.pairWithTypedCode(
+        codeSecret: codeSecret,
+        relay: relay,
+        transport: link,
+        timeout: pairingTimeout,
+        onConfirm: _onPairingConfirm,
+      ),
+      relay: relay,
+      rendezvous: rendezvous,
+      at: direct ? invite.endpoint : null,
+      legs: {direct ? _PairingLeg.direct : _PairingLeg.relay},
+    );
+    return _adoptPairing(
+      direct
+          ? record.copyWith(
+              directEndpoint: invite.endpoint,
+              route: HostRoute.direct,
+            )
+          : record.copyWith(route: HostRoute.relay),
+    );
   }
 
   /// The typed path: a grouped base32 code carrying only the secret, or a
@@ -382,7 +445,9 @@ class RemoteCompanionGateway implements CompanionGateway {
     );
     // Remembered on the record, so every later dial goes straight back rather
     // than searching a network the box was never on.
-    return _adoptPairing(at == null ? record : record.copyWith(directEndpoint: at));
+    return _adoptPairing(
+      at == null ? record : record.copyWith(directEndpoint: at),
+    );
   }
 
   @override
@@ -605,15 +670,16 @@ class RemoteCompanionGateway implements CompanionGateway {
       _approvalOf(sessionId).stream;
 
   @override
-  Stream<CompanionActivity> activity(String sessionId) =>
-      Stream.multi((controller) {
-        final watched = _activityOf(sessionId);
-        final subscription = watched.stream.listen(controller.add);
-        controller.onCancel = subscription.cancel;
-        // Asked outright once, because the host states this unprompted and an
-        // unprompted frame cannot be replayed for a screen that opened after it.
-        unawaited(_primeActivity(sessionId));
-      });
+  Stream<CompanionActivity> activity(String sessionId) => Stream.multi((
+    controller,
+  ) {
+    final watched = _activityOf(sessionId);
+    final subscription = watched.stream.listen(controller.add);
+    controller.onCancel = subscription.cancel;
+    // Asked outright once, because the host states this unprompted and an
+    // unprompted frame cannot be replayed for a screen that opened after it.
+    unawaited(_primeActivity(sessionId));
+  });
 
   @override
   Future<List<RemoteWorkspaceProject>> listWorkspace() async {
