@@ -1,6 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../checkpoints/application/checkpoint_turn_hints.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_outcome_writer.dart';
@@ -94,6 +95,18 @@ AgentStatusReport applyAgentHookCallback(
     );
   } on Object catch (error) {
     logger?.warning('Recording an agent working directory failed: $error');
+  }
+  // Before the status moves: a turn's checkpoint is labelled with its prompt.
+  try {
+    recordCheckpointHints(
+      container,
+      agentId: report.agentId,
+      agentSessionId: report.sessionId,
+      event: event,
+      body: body,
+    );
+  } on Object catch (error) {
+    logger?.warning('Recording checkpoint hints from a hook failed: $error');
   }
   // The status pipeline's *primary* input: a hook is authoritative and already
   // in memory, so folding it in here beats a poll five seconds later.

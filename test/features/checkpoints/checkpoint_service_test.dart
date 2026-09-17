@@ -85,6 +85,13 @@ void main() {
     if (args.contains('rev-parse') && args.contains('--verify')) {
       return const CommandResult(exitCode: 0, stdout: 'head1', stderr: '');
     }
+    if (args.contains('--numstat')) {
+      return const CommandResult(
+        exitCode: 0,
+        stdout: '3\t1\tlib/a.dart\n-\t-\tlib/b.dart\n',
+        stderr: '',
+      );
+    }
     if (args.contains('--name-status')) {
       return const CommandResult(
         exitCode: 0,
@@ -363,6 +370,45 @@ void main() {
       expect(dao.insert(make('b')).sequence, 1);
       expect(dao.latestFor('a')!.sequence, 2);
       expect(dao.sessionsWithCheckpoints(), containsAll(['a', 'b']));
+    });
+  });
+
+  group('turns and repositories', () {
+    const other = EnvironmentPath(
+      environmentId: 'windows',
+      path: r'C:\src\demo\packages\nested',
+    );
+
+    test('each repository keeps its own chain', () async {
+      // Two repositories that happen to hold the same tree are still two
+      // chains: comparing across them would skip a real change.
+      final first = await service.capture(_repo, sessionId: 's1');
+      final nested = await service.capture(other, sessionId: 's1');
+      expect(first, isNotNull);
+      expect(nested, isNotNull);
+      expect(nested!.parentCommitSha, isNull);
+      expect(await service.capture(_repo, sessionId: 's1'), isNull);
+      expect(dao.repositoriesFor('s1'), [other, _repo]);
+      expect(dao.forRepository('s1', other).single.id, nested.id);
+    });
+
+    test('records the turn, its prompt and each file\'s line counts', () async {
+      final checkpoint = await service.capture(
+        _repo,
+        sessionId: 's1',
+        reason: CheckpointReason.turnStart,
+        turn: 4,
+        prompt: 'Rename the parser',
+      );
+      final stored = dao.getById(checkpoint!.id)!;
+      expect(stored.reason, CheckpointReason.turnStart);
+      expect(stored.turn, 4);
+      expect(stored.prompt, 'Rename the parser');
+      expect(stored.additions, 3);
+      expect(stored.deletions, 1);
+      // A binary file has no count, and says so rather than reading as zero.
+      expect(stored.lineStats.containsKey('lib/b.dart'), isFalse);
+      expect(dao.lastTurn('s1'), 4);
     });
   });
 }

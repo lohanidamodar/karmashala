@@ -8,7 +8,9 @@ import '../../notifications/application/session_status_registry.dart';
 import '../../sessions/application/decision_recorder.dart';
 import '../domain/checkpoint.dart';
 import '../domain/turn_boundary.dart';
+import '../data/checkpoint_dao.dart';
 import 'checkpoint_providers.dart';
+import 'checkpoint_turn_hints.dart';
 
 /// Why [SessionCheckpointRecorder.captureNow] can answer with no checkpoint.
 /// Two reasons nothing above can tell apart, so it says both (§19).
@@ -26,6 +28,14 @@ class SessionCheckpointRecorder extends Notifier<int> {
   /// One capture at a time per session, queued rather than dropped: a turn's
   /// end must not be lost because its start is still running `git add -A`.
   final Map<String, Future<void>> _queues = {};
+
+  /// The turn in progress per session: its number and prompt, which both of
+  /// its checkpoints carry.
+  final Map<String, ({int number, String? prompt})> _current = {};
+
+  /// The last turn number handed out per session, kept past the turn: a turn
+  /// that changed nothing writes no row for the next number to count from.
+  final Map<String, int> _lastTurn = {};
 
   /// The last skip reason logged per session, so a repeat is not re-logged.
   final Map<String, String> _lastSkip = {};
@@ -89,7 +99,12 @@ class SessionCheckpointRecorder extends Notifier<int> {
     final reason = edge == TurnEdge.started
         ? CheckpointReason.turnStart
         : CheckpointReason.turn;
-    final when = edge == TurnEdge.started ? 'before' : 'after';
+    final turn = edge == TurnEdge.started
+        ? _beginTurn(sessionId)
+        : _current.remove(sessionId) ?? _beginTurn(sessionId);
+    final when = edge == TurnEdge.started
+        ? 'before turn ${turn.number}'
+        : 'after turn ${turn.number}';
     final repo = checkpointTargetFor(ref, sessionId);
     if (repo == null) {
       _skip(sessionId, 'it has no repository to checkpoint');
@@ -98,11 +113,17 @@ class SessionCheckpointRecorder extends Notifier<int> {
     try {
       final checkpoint = await ref
           .read(checkpointServiceProvider)
-          .capture(repo, sessionId: sessionId, reason: reason);
+          .capture(
+            repo,
+            sessionId: sessionId,
+            reason: reason,
+            turn: turn.number,
+            prompt: turn.prompt,
+          );
       if (!ref.mounted) return;
       if (checkpoint == null) {
         _log.info(
-          'Checkpoint $when a turn of session $sessionId skipped: '
+          'Checkpoint $when of session $sessionId skipped: '
           '${repo.path} is unchanged since its last checkpoint.',
         );
         return;
@@ -110,12 +131,24 @@ class SessionCheckpointRecorder extends Notifier<int> {
       _lastSkip.remove(sessionId);
       ref.read(checkpointsRevisionProvider.notifier).bump();
       _log.info(
-        'Checkpoint ${checkpoint.sequence} $when a turn of session $sessionId: '
+        'Checkpoint ${checkpoint.sequence} $when of session $sessionId: '
         '${checkpoint.files.length} files in ${repo.path}.',
       );
     } on Object catch (error) {
       _skip(sessionId, 'capturing ${repo.path} failed: $error');
     }
+  }
+
+  ({int number, String? prompt}) _beginTurn(String sessionId) {
+    final last = _lastTurn[sessionId] ?? 0;
+    final stored = ref.read(checkpointDaoProvider).lastTurn(sessionId);
+    final ({int number, String? prompt}) turn = (
+      number: (last > stored ? last : stored) + 1,
+      prompt: ref.read(checkpointTurnHintsProvider).takePrompt(sessionId),
+    );
+    _current[sessionId] = turn;
+    _lastTurn[sessionId] = turn.number;
+    return turn;
   }
 
   void _skip(String sessionId, String reason) {

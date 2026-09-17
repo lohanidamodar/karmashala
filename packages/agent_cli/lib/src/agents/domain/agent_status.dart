@@ -353,6 +353,8 @@ class AgentHookSpec {
     this.entryStyle = AgentHookEntryStyle.grouped,
     this.sessionIdPath = const ['session_id'],
     this.cwdPath = const ['cwd'],
+    this.promptPath = const ['prompt'],
+    this.toolInputPath = const ['tool_input'],
     this.messagePaths = const [],
     this.messageWaiting = const {},
     this.eventKindPath = const [],
@@ -396,6 +398,15 @@ class AgentHookSpec {
   /// unreadable value costs precision, never correctness: adoption falls back
   /// to the oldest unclaimed pane rather than refusing.
   final List<String> cwdPath;
+
+  /// Where the text the user submitted sits in a prompt event's payload —
+  /// Claude Code and Codex both send `prompt` on `UserPromptSubmit`. Only a
+  /// checkpoint's label reads it; empty or absent means none is shown.
+  final List<String> promptPath;
+
+  /// Where a tool event's arguments sit, so the paths a tool touched can name
+  /// the repositories a turn changed. Empty when this agent's hooks carry none.
+  final List<String> toolInputPath;
 
   /// Where a human-readable description of *what the agent is doing or wants*
   /// sits in the payload — **candidate paths, tried in order**, the first

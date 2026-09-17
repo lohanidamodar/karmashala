@@ -114,13 +114,15 @@ class CheckpointService {
     CheckpointReason reason = CheckpointReason.turn,
     String? label,
     bool evenIfUnchanged = false,
+    int? turn,
+    String? prompt,
   }) async {
     final git = _gitFor(repo);
     final dirs = await git.checkpointDirs(repo);
     await git.ensureCheckpointDirs(repo, dirs);
     final tree = await git.writeWorkingTree(repo, dirs);
 
-    final previous = dao.latestFor(sessionId);
+    final previous = dao.latestFor(sessionId, repository: repo);
     if (!evenIfUnchanged && previous != null && previous.treeSha == tree) {
       return null;
     }
@@ -133,9 +135,16 @@ class CheckpointService {
     );
     await git.updateRef(repo, Checkpoint.refFor(sessionId), commit);
 
-    final files = previous == null
-        ? await _changesAgainstHead(git, repo, tree)
-        : await git.diffNameStatus(repo, from: previous.treeSha, to: tree);
+    final head = await git.revParse(repo, 'HEAD');
+    // The first checkpoint of a tree has no predecessor, so what changed is
+    // measured against the commit the repository is on; with none, nothing is.
+    final base = previous?.treeSha ?? head;
+    final files = base == null
+        ? const <FileChange>[]
+        : await git.diffNameStatus(repo, from: base, to: tree);
+    final lineStats = base == null || files.isEmpty
+        ? const <String, FileDiffStat>{}
+        : await git.diffNumstat(repo, from: base, to: tree);
 
     return dao.insert(
       Checkpoint(
@@ -147,26 +156,16 @@ class CheckpointService {
         treeSha: tree,
         commitSha: commit,
         parentCommitSha: previous?.commitSha,
-        headSha: await git.revParse(repo, 'HEAD'),
+        headSha: head,
         reason: reason,
         label: label,
         createdAt: clock.nowUtc(),
         files: files,
+        turn: turn,
+        prompt: prompt,
+        lineStats: lineStats,
       ),
     );
-  }
-
-  /// The first checkpoint of a session has no predecessor, so "what changed" is
-  /// measured against the commit the repository is on. In a repository with no
-  /// commits, everything in the tree is new.
-  Future<List<FileChange>> _changesAgainstHead(
-    GitService git,
-    EnvironmentPath repo,
-    String tree,
-  ) async {
-    final head = await git.revParse(repo, 'HEAD');
-    if (head == null) return const [];
-    return git.diffNameStatus(repo, from: head, to: tree);
   }
 
   // --- reading ---------------------------------------------------------------
@@ -183,7 +182,7 @@ class CheckpointService {
   Future<String> diffOf(Checkpoint checkpoint) async {
     // The previous checkpoint's tree if there is one; otherwise the commit the
     // repository was on, which is the only earlier state that exists.
-    final base = _previousTreeOf(checkpoint) ?? checkpoint.headSha;
+    final base = dao.previousOf(checkpoint)?.treeSha ?? checkpoint.headSha;
     if (base == null) return '';
     return _gitFor(
       checkpoint.repository,
@@ -192,7 +191,7 @@ class CheckpointService {
 
   /// What has changed in [repo] since [sessionId]'s most recent checkpoint.
   Future<String> pendingSince(EnvironmentPath repo, String sessionId) async {
-    final latest = dao.latestFor(sessionId);
+    final latest = dao.latestFor(sessionId, repository: repo);
     if (latest == null) return '';
     return _gitFor(repo).diffObjects(repo, from: latest.treeSha);
   }
@@ -212,7 +211,10 @@ class CheckpointService {
     await git.ensureCheckpointDirs(repo, dirs);
 
     final current = await git.writeWorkingTree(repo, dirs);
-    final latest = dao.latestFor(checkpoint.sessionId);
+    final latest = dao.latestFor(
+      checkpoint.sessionId,
+      repository: checkpoint.repository,
+    );
     final movedSinceLastCheckpoint =
         latest != null && latest.treeSha != current;
 
@@ -358,15 +360,6 @@ class CheckpointService {
   }
 
   // --- internals -------------------------------------------------------------
-
-  String? _previousTreeOf(Checkpoint checkpoint) {
-    if (checkpoint.sequence <= 1) return null;
-    final all = dao.forSession(checkpoint.sessionId);
-    for (final other in all) {
-      if (other.sequence == checkpoint.sequence - 1) return other.treeSha;
-    }
-    return null;
-  }
 
   GitService _gitFor(EnvironmentPath repo) {
     final env = environmentDao.getById(repo.environmentId);

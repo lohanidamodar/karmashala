@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/agents/application/agent_status_provider
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
+import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
@@ -361,5 +362,49 @@ void main() {
     await pumpEventQueue();
     await turn('cli-1');
     expect(reasonsFor('s1'), ['turnStart', 'turn']);
+  });
+
+  test('turns are numbered and carry the prompt a hook sent', () async {
+    SessionDao(db).updateExternalSessionId('s1', 'cli-1');
+    startRecorder();
+    recordCheckpointHints(
+      container,
+      agentId: AgentIds.claudeCode,
+      agentSessionId: 'cli-1',
+      event: 'UserPromptSubmit',
+      body: '{"session_id":"cli-1","prompt":"Fix the login redirect"}',
+    );
+    await turn('cli-1');
+    fixedTree = 'same';
+    // A turn that changes nothing writes nothing, and still uses its number.
+    await turn('cli-1');
+    await turn('cli-1');
+    fixedTree = null;
+    await turn('cli-1');
+
+    final rows = CheckpointDao(db).forSession('s1');
+    expect(
+      [for (final c in rows) '${c.reason.name}:${c.turn}'],
+      ['turnStart:1', 'turn:1', 'turnStart:2', 'turnStart:4', 'turn:4'],
+    );
+    expect(rows.first.prompt, 'Fix the login redirect');
+    expect(rows[1].prompt, 'Fix the login redirect');
+    expect(
+      rows.last.prompt,
+      isNull,
+      reason: 'a turn no hook announced does not inherit an old prompt',
+    );
+  });
+
+  test('a restart continues the numbering from the store', () async {
+    startRecorder();
+    await turn('cli-1');
+    container.invalidate(sessionCheckpointRecorderProvider);
+    startRecorder();
+    await turn('cli-1');
+    expect(
+      [for (final c in CheckpointDao(db).forSession('s1')) c.turn],
+      [1, 1, 2, 2],
+    );
   });
 }

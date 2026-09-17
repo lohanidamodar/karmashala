@@ -39,6 +39,9 @@ class Checkpoint {
     required this.createdAt,
     this.label,
     this.files = const [],
+    this.turn,
+    this.prompt,
+    this.lineStats = const {},
   });
 
   final String id;
@@ -75,6 +78,32 @@ class Checkpoint {
   /// What changed between the previous checkpoint and this one.
   final List<FileChange> files;
 
+  /// Which of the session's turns this was taken around, as the recorder
+  /// counted them. `null` for a manual, safety or pre-v52 checkpoint.
+  final int? turn;
+
+  /// What the user asked in that turn, when a hook carried it.
+  final String? prompt;
+
+  /// Lines added and removed per path in [files]. A path absent here is one
+  /// git gave no count for (binary, or not recorded), not an unchanged one.
+  final Map<String, FileDiffStat> lineStats;
+
+  /// Total lines added, or `null` when no file has a count.
+  int? get additions => _sum((s) => s.added);
+
+  /// Total lines removed, or `null` when no file has a count.
+  int? get deletions => _sum((s) => s.removed);
+
+  int? _sum(int? Function(FileDiffStat stat) pick) {
+    int? total;
+    for (final stat in lineStats.values) {
+      final value = pick(stat);
+      if (value != null) total = (total ?? 0) + value;
+    }
+    return total;
+  }
+
   Checkpoint copyWith({List<FileChange>? files}) => Checkpoint(
     id: id,
     sessionId: sessionId,
@@ -88,6 +117,9 @@ class Checkpoint {
     createdAt: createdAt,
     label: label,
     files: files ?? this.files,
+    turn: turn,
+    prompt: prompt,
+    lineStats: lineStats,
   );
 
   /// The ref that keeps this session's checkpoint chain reachable. One per

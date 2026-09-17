@@ -60,6 +60,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   49: _migrateToV49,
   50: _migrateToV50,
   51: _migrateToV51,
+  52: _migrateToV52,
 };
 
 /// Was this pane running when its row was written? `DEFAULT 0` is the honest
@@ -1309,5 +1310,27 @@ void _migrateToV51(Database db) {
   db.execute(
     'CREATE INDEX IF NOT EXISTS idx_usage_samples_recorded '
     'ON usage_samples (recorded_at);',
+  );
+}
+
+/// Which turn a checkpoint belongs to and what was asked, and each file's
+/// line counts. Nullable: older rows never recorded any of it.
+void _migrateToV52(Database db) {
+  void addColumn(String table, String column, String type) {
+    final columns = db
+        .select('PRAGMA table_info($table);')
+        .map((row) => row['name'] as String);
+    if (columns.contains(column)) return;
+    db.execute('ALTER TABLE $table ADD COLUMN $column $type;');
+  }
+
+  addColumn('session_checkpoints', 'turn', 'INTEGER');
+  addColumn('session_checkpoints', 'prompt', 'TEXT');
+  addColumn('session_checkpoint_files', 'additions', 'INTEGER');
+  addColumn('session_checkpoint_files', 'deletions', 'INTEGER');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_checkpoints_repository '
+    'ON session_checkpoints (session_id, environment_id, repository_path, '
+    'sequence);',
   );
 }

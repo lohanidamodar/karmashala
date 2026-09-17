@@ -728,6 +728,28 @@ class GitService {
     return parseNameStatus(result.stdout);
   }
 
+  /// Lines added and removed per file between two objects, keyed by path. Empty
+  /// when git cannot say: a count is withheld, never invented.
+  Future<Map<String, FileDiffStat>> diffNumstat(
+    EnvironmentPath repo, {
+    required String from,
+    String? to,
+  }) async {
+    try {
+      final result = await _git(repo, [
+        'diff',
+        '--numstat',
+        '--no-renames',
+        from,
+        ?to,
+      ]);
+      if (!result.ok) return const {};
+      return parseNumstatByFile(result.stdout);
+    } on CommandException {
+      return const {};
+    }
+  }
+
   /// Applies [patch] to [repo].
   ///
   /// [cached] applies to the index only, [reverse] applies it backwards, [check]

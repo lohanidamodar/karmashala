@@ -50,6 +50,8 @@ class _FakeCheckpoints extends CheckpointService {
     CheckpointReason reason = CheckpointReason.turn,
     String? label,
     bool evenIfUnchanged = false,
+    int? turn,
+    String? prompt,
   }) async {
     if (failure != null) throw failure!;
     captures.add((

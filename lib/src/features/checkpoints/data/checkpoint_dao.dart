@@ -27,8 +27,8 @@ class CheckpointDao {
       _db.execute(
         'INSERT INTO session_checkpoints (id, session_id, environment_id, '
         'repository_path, sequence, tree_sha, commit_sha, parent_commit_sha, '
-        'head_sha, reason, label, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+        'head_sha, reason, label, created_at, turn, prompt) '
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
         [
           checkpoint.id,
           checkpoint.sessionId,
@@ -42,30 +42,26 @@ class CheckpointDao {
           checkpoint.reason.name,
           checkpoint.label,
           isoFromDate(checkpoint.createdAt),
+          checkpoint.turn,
+          checkpoint.prompt,
         ],
       );
       for (final file in checkpoint.files) {
         _db.execute(
           'INSERT OR REPLACE INTO session_checkpoint_files '
-          '(checkpoint_id, path, status) VALUES (?, ?, ?);',
-          [checkpoint.id, file.path, file.type.name],
+          '(checkpoint_id, path, status, additions, deletions) '
+          'VALUES (?, ?, ?, ?, ?);',
+          [
+            checkpoint.id,
+            file.path,
+            file.type.name,
+            checkpoint.lineStats[file.path]?.added,
+            checkpoint.lineStats[file.path]?.removed,
+          ],
         );
       }
 
-      return Checkpoint(
-        id: checkpoint.id,
-        sessionId: checkpoint.sessionId,
-        repository: checkpoint.repository,
-        sequence: sequence,
-        treeSha: checkpoint.treeSha,
-        commitSha: checkpoint.commitSha,
-        parentCommitSha: checkpoint.parentCommitSha,
-        headSha: checkpoint.headSha,
-        reason: checkpoint.reason,
-        createdAt: checkpoint.createdAt,
-        label: checkpoint.label,
-        files: checkpoint.files,
-      );
+      return _withSequence(checkpoint, sequence);
     });
   }
 
@@ -76,14 +72,76 @@ class CheckpointDao {
     [sessionId],
   );
 
-  /// The most recent checkpoint for [sessionId], or `null`.
-  Checkpoint? latestFor(String sessionId) {
+  /// [sessionId]'s checkpoints of one working tree, oldest first — the chain
+  /// one ref holds. A session can checkpoint several repositories.
+  List<Checkpoint> forRepository(
+    String sessionId,
+    EnvironmentPath repository,
+  ) => _read(
+    'SELECT * FROM session_checkpoints WHERE session_id = ? '
+    'AND environment_id = ? AND repository_path = ? ORDER BY sequence;',
+    [sessionId, repository.environmentId, repository.path],
+  );
+
+  /// The most recent checkpoint for [sessionId] — of [repository] when given,
+  /// which is the only comparison a tree sha means anything in.
+  Checkpoint? latestFor(String sessionId, {EnvironmentPath? repository}) {
+    final rows = repository == null
+        ? _read(
+            'SELECT * FROM session_checkpoints WHERE session_id = ? '
+            'ORDER BY sequence DESC LIMIT 1;',
+            [sessionId],
+          )
+        : _read(
+            'SELECT * FROM session_checkpoints WHERE session_id = ? '
+            'AND environment_id = ? AND repository_path = ? '
+            'ORDER BY sequence DESC LIMIT 1;',
+            [sessionId, repository.environmentId, repository.path],
+          );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// The checkpoint of the same working tree taken just before [checkpoint].
+  Checkpoint? previousOf(Checkpoint checkpoint) {
     final rows = _read(
       'SELECT * FROM session_checkpoints WHERE session_id = ? '
+      'AND environment_id = ? AND repository_path = ? AND sequence < ? '
       'ORDER BY sequence DESC LIMIT 1;',
-      [sessionId],
+      [
+        checkpoint.sessionId,
+        checkpoint.repository.environmentId,
+        checkpoint.repository.path,
+        checkpoint.sequence,
+      ],
     );
     return rows.isEmpty ? null : rows.first;
+  }
+
+  /// The highest turn number recorded for [sessionId], or 0.
+  int lastTurn(String sessionId) {
+    final rows = _db.query(
+      'SELECT COALESCE(MAX(turn), 0) AS turn FROM session_checkpoints '
+      'WHERE session_id = ?;',
+      [sessionId],
+    );
+    return rows.first['turn']! as int;
+  }
+
+  /// The working trees [sessionId] has checkpoints of, most recently used first.
+  List<EnvironmentPath> repositoriesFor(String sessionId) {
+    final rows = _db.query(
+      'SELECT environment_id, repository_path, MAX(sequence) AS last '
+      'FROM session_checkpoints WHERE session_id = ? '
+      'GROUP BY environment_id, repository_path ORDER BY last DESC;',
+      [sessionId],
+    );
+    return [
+      for (final row in rows)
+        EnvironmentPath(
+          environmentId: row['environment_id']! as String,
+          path: row['repository_path']! as String,
+        ),
+    ];
   }
 
   Checkpoint? getById(String id) {
@@ -111,48 +169,98 @@ class CheckpointDao {
     [sessionId],
   );
 
-  List<Checkpoint> _read(String sql, List<Object?> params) {
-    final rows = _db.query(sql, params);
-    return [
-      for (final row in rows)
-        Checkpoint(
-          id: row['id']! as String,
-          sessionId: row['session_id']! as String,
-          repository: EnvironmentPath(
-            environmentId: row['environment_id']! as String,
-            path: row['repository_path']! as String,
-          ),
-          sequence: row['sequence']! as int,
-          treeSha: row['tree_sha']! as String,
-          commitSha: row['commit_sha']! as String,
-          parentCommitSha: row['parent_commit_sha'] as String?,
-          headSha: row['head_sha'] as String?,
-          reason: CheckpointReason.fromName(row['reason']! as String),
-          label: row['label'] as String?,
-          createdAt: dateFromIso(row['created_at']),
-          files: _filesFor(row['id']! as String),
-        ),
-    ];
+  /// Drops [dropIds] and re-points the survivors at their rewritten commits, in
+  /// one transaction so the rows never describe a chain git does not hold.
+  void prune({
+    required List<String> dropIds,
+    required Map<String, ({String commit, String? parent})> rewritten,
+  }) {
+    _db.transaction(() {
+      for (final id in dropIds) {
+        _db.execute(
+          'DELETE FROM session_checkpoint_files WHERE checkpoint_id = ?;',
+          [id],
+        );
+        _db.execute('DELETE FROM session_checkpoints WHERE id = ?;', [id]);
+      }
+      for (final entry in rewritten.entries) {
+        _db.execute(
+          'UPDATE session_checkpoints SET commit_sha = ?, parent_commit_sha = ? '
+          'WHERE id = ?;',
+          [entry.value.commit, entry.value.parent, entry.key],
+        );
+      }
+    });
   }
 
-  List<FileChange> _filesFor(String checkpointId) {
-    final rows = _db.query(
-      'SELECT path, status FROM session_checkpoint_files '
+  Checkpoint _withSequence(Checkpoint c, int sequence) => Checkpoint(
+    id: c.id,
+    sessionId: c.sessionId,
+    repository: c.repository,
+    sequence: sequence,
+    treeSha: c.treeSha,
+    commitSha: c.commitSha,
+    parentCommitSha: c.parentCommitSha,
+    headSha: c.headSha,
+    reason: c.reason,
+    createdAt: c.createdAt,
+    label: c.label,
+    files: c.files,
+    turn: c.turn,
+    prompt: c.prompt,
+    lineStats: c.lineStats,
+  );
+
+  List<Checkpoint> _read(String sql, List<Object?> params) {
+    final rows = _db.query(sql, params);
+    return [for (final row in rows) _fromRow(row)];
+  }
+
+  Checkpoint _fromRow(Map<String, Object?> row) {
+    final id = row['id']! as String;
+    final fileRows = _db.query(
+      'SELECT path, status, additions, deletions FROM session_checkpoint_files '
       'WHERE checkpoint_id = ? ORDER BY path;',
-      [checkpointId],
+      [id],
     );
-    return [
-      for (final row in rows)
-        FileChange(
-          path: row['path']! as String,
-          type: FileChangeType.values.firstWhere(
-            (t) => t.name == row['status'],
-            orElse: () => FileChangeType.unknown,
+    return Checkpoint(
+      id: id,
+      sessionId: row['session_id']! as String,
+      repository: EnvironmentPath(
+        environmentId: row['environment_id']! as String,
+        path: row['repository_path']! as String,
+      ),
+      sequence: row['sequence']! as int,
+      treeSha: row['tree_sha']! as String,
+      commitSha: row['commit_sha']! as String,
+      parentCommitSha: row['parent_commit_sha'] as String?,
+      headSha: row['head_sha'] as String?,
+      reason: CheckpointReason.fromName(row['reason']! as String),
+      label: row['label'] as String?,
+      createdAt: dateFromIso(row['created_at']),
+      turn: row['turn'] as int?,
+      prompt: row['prompt'] as String?,
+      files: [
+        for (final file in fileRows)
+          FileChange(
+            path: file['path']! as String,
+            type: FileChangeType.values.firstWhere(
+              (t) => t.name == file['status'],
+              orElse: () => FileChangeType.unknown,
+            ),
+            staged: false,
+            unstaged: true,
           ),
-          staged: false,
-          unstaged: true,
-        ),
-    ];
+      ],
+      lineStats: {
+        for (final file in fileRows)
+          if (file['additions'] != null || file['deletions'] != null)
+            file['path']! as String: FileDiffStat(
+              added: file['additions'] as int?,
+              removed: file['deletions'] as int?,
+            ),
+      },
+    );
   }
 }
 
