@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
+import 'privileged_command.dart';
+
 /// What `uname -sm` and the libc probe said about a machine.
 @immutable
 class HostPlatform {
@@ -78,6 +80,8 @@ class HostDeployment {
     this.hostVersion,
     this.protocolVersion,
     this.restartedByUs = false,
+    this.availableTargets = const [],
+    this.privileged,
   });
 
   factory HostDeployment.unknown(String reason, DateTime observedAt) =>
@@ -97,6 +101,14 @@ class HostDeployment {
   /// Whether this deploy had to start `serve` itself. True means it holds none
   /// of the sessions it held before — what a pane needs to say they are gone.
   final bool restartedByUs;
+
+  /// For [HostDeploymentStatus.noBinary]: the targets this build does carry,
+  /// so the remedy can say what it has and what the machine wanted.
+  final List<String> availableTargets;
+
+  /// A step only root can take before this deploy can succeed — a missing
+  /// `tar`, say — for a terminal on the machine. Never run from here.
+  final PrivilegedCommand? privileged;
 
   bool get isReady => status == HostDeploymentStatus.ready;
 

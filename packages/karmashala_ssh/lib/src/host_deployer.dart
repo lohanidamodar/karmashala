@@ -2,12 +2,18 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:karmashala_host/protocol.dart';
+import 'package:meta/meta.dart';
 
 import 'package:karmashala_core/logging.dart';
 import 'host_deployment.dart';
 import 'host_binaries.dart';
 import 'host_deploy_target.dart';
+import 'privileged_command.dart';
+import 'relay_setup.dart';
 import 'remote_home.dart';
+import 'ssh_host.dart';
+
+part 'host_installation.dart';
 
 /// Puts the session host on a machine and confirms it answers. Every outcome
 /// carries when it was taken — a host that answered is not one that answers.
@@ -34,45 +40,18 @@ class HostDeployer {
   /// expands `$HOME`, SFTP does not, so a literal `$HOME/...` names nothing.
   static const String remoteHomeSubdirectory = kRemoteHomeSubdirectory;
 
-  Future<HostDeployment> deploy() async {
+  /// [reinstall] uploads and unpacks again whatever is already there, and
+  /// restarts a `serve` running from it when that holds no sessions.
+  Future<HostDeployment> deploy({bool reinstall = false}) async {
     final platform = await measurePlatform();
     if (platform == null) {
       return HostDeployment.unknown('${target.address} did not answer `uname -sm`.', _now());
     }
-    if (platform.libc == HostLibc.musl) {
-      return HostDeployment(
-        status: HostDeploymentStatus.unsupportedPlatform,
-        observedAt: _now(),
-        platform: platform,
-        reason:
-            '${target.address} runs musl libc. The host bundles are glibc-linked ELF, '
-            'so there is nothing to send.',
-      );
-    }
-    if (!platform.isLinux) {
-      return HostDeployment(
-        status: HostDeploymentStatus.unsupportedPlatform,
-        observedAt: _now(),
-        platform: platform,
-        reason:
-            '${target.address} runs ${platform.operatingSystem}; the host is published for '
-            'Linux only'
-            '${platform.operatingSystem == 'darwin' ? ', and no macOS bundle is built yet' : ''}.',
-      );
-    }
+    final unsupported = _unsupported(platform);
+    if (unsupported != null) return unsupported;
 
     final binary = await binaries.binaryFor(platform);
-    if (binary == null) {
-      final have = await binaries.availableTargets();
-      return HostDeployment(
-        status: HostDeploymentStatus.noBinary,
-        observedAt: _now(),
-        platform: platform,
-        reason:
-            'No host binary for ${platform.targetKey} in this build'
-            '${have.isEmpty ? '' : ' (it has ${have.join(', ')})'}.',
-      );
-    }
+    if (binary == null) return _noBinary(platform);
     _logger.debug(
       'host binary for ${platform.targetKey}: ${binary.source} (version ${binary.version}, '
       '${binary.candidates == 1 ? 'the only candidate' : 'newest of ${binary.candidates} candidates'}).',
@@ -95,7 +74,7 @@ class HostDeployer {
     final layout = _RemoteLayout.of(remoteDirectory, binary, platform);
     final remotePath = layout.executable;
     try {
-      await _install(remoteDirectory, layout, binary);
+      await _install(remoteDirectory, layout, binary, force: reinstall);
     } on HostInstallException catch (e) {
       return HostDeployment(
         status: HostDeploymentStatus.cannotInstall,
@@ -103,6 +82,7 @@ class HostDeployer {
         platform: platform,
         remotePath: remotePath,
         reason: e.message,
+        privileged: e.privileged,
       );
     }
 
@@ -162,6 +142,27 @@ class HostDeployer {
     // when it holds none.
     var stale = '';
     final runningPath = restarted ? null : await _runningServePath(home);
+    // The files under a running `serve` were just replaced; it goes on running
+    // the old ones until it is started again, which costs what it holds.
+    if (reinstall && runningPath == remotePath) {
+      final held = await _sessionsHeld(remotePath);
+      if (held == 0 && await _stopServe(home)) {
+        final started = await _startServe(home, remotePath);
+        final fresh = started.ok ? await _sayHello(remotePath) : null;
+        if (fresh != null) {
+          greeting = fresh;
+          restarted = true;
+        }
+      }
+      if (!restarted) {
+        stale = held == null || held == 0
+            ? ' It was reinstalled, and the running host could not be '
+                  'restarted onto the fresh files.'
+            : ' It was reinstalled; $held session(s) are on the running host, '
+                  'so it was left running and uses the fresh files the next '
+                  'time it starts.';
+      }
+    }
     if (runningPath != null && runningPath != remotePath) {
       final held = await _sessionsHeld(remotePath);
       if (held == 0 && await _stopServe(home)) {
@@ -201,6 +202,43 @@ class HostDeployer {
     );
   }
 
+  /// Null for a machine the host runs on; otherwise why it does not.
+  HostDeployment? _unsupported(HostPlatform platform) {
+    if (platform.libc == HostLibc.musl) {
+      return HostDeployment(
+        status: HostDeploymentStatus.unsupportedPlatform,
+        observedAt: _now(),
+        platform: platform,
+        reason:
+            '${target.address} runs musl libc. The host bundles are glibc-linked ELF, '
+            'so there is nothing to send.',
+      );
+    }
+    if (platform.isLinux) return null;
+    return HostDeployment(
+      status: HostDeploymentStatus.unsupportedPlatform,
+      observedAt: _now(),
+      platform: platform,
+      reason:
+          '${target.address} runs ${platform.operatingSystem}; the host is published for '
+          'Linux only'
+          '${platform.operatingSystem == 'darwin' ? ', and no macOS bundle is built yet' : ''}.',
+    );
+  }
+
+  Future<HostDeployment> _noBinary(HostPlatform platform) async {
+    final have = await binaries.availableTargets();
+    return HostDeployment(
+      status: HostDeploymentStatus.noBinary,
+      observedAt: _now(),
+      platform: platform,
+      availableTargets: have,
+      reason:
+          'No host binary for ${platform.targetKey} in this build'
+          '${have.isEmpty ? '' : ' (it has ${have.join(', ')})'}.',
+    );
+  }
+
   /// `uname -sm` plus a libc reading, in one command so it costs one channel.
   Future<HostPlatform?> measurePlatform() async {
     final result = await target.run(
@@ -233,7 +271,12 @@ class HostDeployer {
   /// the version is in the filename, and hashing megabytes per open costs more.
   /// For a bundle the size measured is the *uploaded archive's*, which is still
   /// beside the directory it was unpacked into for exactly this reason.
-  Future<void> _install(String remoteDirectory, _RemoteLayout layout, HostBinary binary) async {
+  Future<void> _install(
+    String remoteDirectory,
+    _RemoteLayout layout,
+    HostBinary binary, {
+    bool force = false,
+  }) async {
     final existing = await target.run(
       'mkdir -p ${_quote(remoteDirectory)} && wc -c < ${_quote(layout.upload)} 2>/dev/null || echo missing',
     );
@@ -241,7 +284,7 @@ class HostDeployer {
     // The right size does not mean it can run: for a bundle nothing may have
     // unpacked the archive, and a bare file restored from a backup is the size
     // it should be and is not executable.
-    if (reported == '${binary.length}' && await _isRunnable(layout.executable)) {
+    if (!force && reported == '${binary.length}' && await _isRunnable(layout.executable)) {
       _logger.debug('${layout.upload} is already ${binary.length} bytes; skipping the upload.');
       return;
     }
@@ -250,6 +293,9 @@ class HostDeployer {
         'Could not reach $remoteDirectory on ${target.address}: ${existing.output}',
       );
     }
+    // Asked before tens of megabytes cross the wire for a machine that cannot
+    // unpack or start them.
+    await _requireTools(archive: layout.unpackInto != null);
     try {
       // Read only now. The skip above is the steady state, and these bytes are
       // a whole bundle.
@@ -272,6 +318,58 @@ class HostDeployer {
         'A noexec home directory looks like this.',
       );
     }
+  }
+
+  /// `tar` unpacks the bundle and `setsid` detaches `serve`; a minimal image
+  /// can lack either. Installing a package is root's, so it becomes a command
+  /// for a terminal there rather than something attempted from here.
+  Future<void> _requireTools({required bool archive}) async {
+    final tools = [if (archive) 'tar', 'setsid'];
+    final result = await target.run(
+      'for t in ${tools.join(' ')}; do command -v "\$t" >/dev/null 2>&1 || echo "missing=\$t"; done; '
+      'for m in apt-get dnf yum pacman zypper; do '
+      'if command -v "\$m" >/dev/null 2>&1; then echo "pm=\$m"; break; fi; done; '
+      'echo "uid=\$(id -u 2>/dev/null)"',
+    );
+    final lines = const LineSplitter().convert(result.stdout).map((l) => l.trim()).toList();
+    final missing = [
+      for (final line in lines)
+        if (line.startsWith('missing=')) line.substring(8),
+    ];
+    if (missing.isEmpty) return;
+    String? said(String key) {
+      for (final line in lines) {
+        if (line.startsWith('$key=')) return line.substring(key.length + 1);
+      }
+      return null;
+    }
+
+    final packages = {for (final tool in missing) tool == 'setsid' ? 'util-linux' : tool}.join(' ');
+    final sudo = said('uid') == '0' ? '' : 'sudo ';
+    final install = switch (said('pm')) {
+      'apt-get' => '${sudo}apt-get install -y $packages',
+      'dnf' => '${sudo}dnf install -y $packages',
+      'yum' => '${sudo}yum install -y $packages',
+      'pacman' => '${sudo}pacman -S --needed $packages',
+      'zypper' => '${sudo}zypper install -y $packages',
+      _ => null,
+    };
+    final names = missing.map((t) => '`$t`').join(' and ');
+    throw HostInstallException(
+      '${target.address} has no $names, which the session host needs to '
+      '${missing.contains('tar') ? 'be unpacked' : 'keep running after this connection closes'}. '
+      'Nothing was uploaded.'
+      '${install == null ? ' Install $packages with the machine\'s package manager, then install again.' : ''}',
+      privileged: install == null
+          ? null
+          : PrivilegedCommand(
+              command: install,
+              does: 'Installs $packages on ${target.address} from its own package manager.',
+              why:
+                  'Installing a system package changes the whole machine and needs '
+                  'root, so it is yours to run, in a terminal there.',
+            ),
+    );
   }
 
   /// Whether what is already on the machine can run. The `chmod` rides along
@@ -433,7 +531,11 @@ class HostDeployer {
   /// is resolved the way `HostPaths` resolves it, which is the one place this
   /// knowledge is duplicated — a lock read from the wrong directory would kill
   /// nothing and report success.
-  Future<bool> _stopServe(String home) async {
+  Future<bool> _stopServe(String home) async =>
+      (await _stopServeSaid(home)).contains('karmashala-stopped');
+
+  /// `karmashala-stopped`, `karmashala-no-pid` or `karmashala-still-running`.
+  Future<String> _stopServeSaid(String home) async {
     final result = await target.run(
       'd="\${XDG_RUNTIME_DIR:+\$XDG_RUNTIME_DIR/karmashala}"; '
       '[ -n "\$d" ] || d=${_quote('$home/$remoteHomeSubdirectory')}; '
@@ -444,7 +546,7 @@ class HostDeployer {
       'kill -0 "\$p" 2>/dev/null || { echo karmashala-stopped; exit 0; }; '
       'sleep 0.2; done; echo karmashala-still-running',
     );
-    return result.stdout.contains('karmashala-stopped');
+    return result.stdout;
   }
 
   Future<RemoteRun> _startServe(String home, String remotePath) {
@@ -499,8 +601,11 @@ class _RemoteLayout {
 }
 
 class HostInstallException implements Exception {
-  const HostInstallException(this.message);
+  const HostInstallException(this.message, {this.privileged});
   final String message;
+
+  /// What root has to do on the machine first, when that is the remedy.
+  final PrivilegedCommand? privileged;
   @override
   String toString() => message;
 }

@@ -118,6 +118,11 @@ class SshHostSessionAccess implements HostSessionAccess {
     );
   }
 
+  /// Drops the shared reading, so the next caller deploys — and reads — again.
+  /// For after an explicit install or remove, and for Retry: a reading that
+  /// said `noBinary` is otherwise kept for the life of the connection.
+  void forgetReading() => _reading = null;
+
   /// Bounds the whole deploy — the upload of the host binary included.
   static const deployTimeout = Duration(minutes: 3);
 
@@ -189,6 +194,9 @@ class HostSessionAccessRegistry {
         connection: connectionFor(host.id),
         binaries: binaries,
       );
+
+  /// [SshHostSessionAccess.forgetReading] for [hostId], when it has one.
+  void forgetReading(String hostId) => _byHostId[hostId]?.forgetReading();
 
   Future<void> dispose() async {
     for (final access in _byHostId.values) {
