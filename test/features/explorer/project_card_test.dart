@@ -219,7 +219,8 @@ void main() {
       final oneLine = tester.getSize(find.byType(ProjectCard)).height;
       expect(find.textContaining('popupbits'), findsOneWidget);
       expect(find.byTooltip('2 sessions are running'), findsOneWidget);
-      expect(find.text('6 sessions'), findsOneWidget);
+      expect(find.text('6'), findsOneWidget);
+      expect(find.byTooltip('6 sessions · 3 changed'), findsOneWidget);
 
       // The running badge waits for a title slot wide enough.
       await pump(tester, width: 200, summary: summary, detail: false);

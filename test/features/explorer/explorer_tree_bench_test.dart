@@ -218,6 +218,10 @@ void main() {
       typed.add(watch.elapsedMicroseconds);
     }
     expect(find.text('Project 49'), findsWidgets);
+    // Three keys changed what is drawn — the first, from a scrolled list, and
+    // the two that narrowed it — and each built a screenful. A list that
+    // crossed the distance instead built every match: 602 statements here.
+    expect(explorerStatements(harness.db), lessThan(300));
     // ignore: avoid_print
     print(
       'EXPLORER-BENCH folded projects=$_projects '

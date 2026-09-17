@@ -44,4 +44,57 @@ void main() {
     expect(find.text('Alpha'), findsNothing);
     expect(find.text('Beta'), findsOneWidget);
   });
+
+  testWidgets(
+    'a search typed from deep in the list starts at its first match',
+    (tester) async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      for (var i = 0; i < 80; i++) {
+        final n = '$i'.padLeft(2, '0');
+        ProjectDao(
+          db,
+        ).insert(project(id: 'p$n', name: 'Project $n', path: 'C:\\src\\p$n'));
+      }
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            commandRunnerFactoryProvider.overrideWithValue(
+              FakeCommandRunnerFactory(),
+            ),
+          ],
+          child: const MaterialApp(home: Scaffold(body: ExplorerPanel())),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(find.byType(ListView), const Offset(0, -2000));
+      await tester.pumpAndSettle();
+      // The list's own position, not the search field's.
+      double listOffset() => tester
+          .state<ScrollableState>(
+            find.descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            ),
+          )
+          .position
+          .pixels;
+      expect(find.text('Project 00'), findsNothing, reason: 'it did scroll');
+      expect(listOffset(), greaterThan(0));
+
+      await tester.enterText(find.byType(TextField), 'Project 0');
+      await tester.pumpAndSettle();
+      expect(find.text('Project 00'), findsOneWidget);
+      expect(find.text('Project 09'), findsOneWidget);
+      expect(listOffset(), 0);
+
+      // Clearing it lands at the top too, never where the old list was left.
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pumpAndSettle();
+      expect(find.text('Project 00'), findsOneWidget);
+    },
+  );
 }

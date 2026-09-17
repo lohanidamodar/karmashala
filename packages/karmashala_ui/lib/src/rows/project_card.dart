@@ -186,7 +186,9 @@ class ProjectCard extends StatelessWidget {
         meta: summary.sessions == 0
             ? null
             : ExplorerRowMeta('${summary.sessions}', tooltip: count),
-        wideMeta: summary.sessions == 0
+        // One line has the badges beside the name already; the words would
+        // take the name's room a second time.
+        wideMeta: summary.sessions == 0 || !detail
             ? null
             : ExplorerRowMeta(summary.sessionsLabel, tooltip: count),
         action: onNewSession == null
