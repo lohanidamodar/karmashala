@@ -146,8 +146,8 @@ void main() {
         );
         expect(
           line.data,
-          anyOf('~/D/p/popupbits-ai-workspace', '…/popupbits-ai-workspace'),
-          reason: 'cut from the middle at ${width}px, never from the end',
+          '…/popupbits-ai-workspace',
+          reason: 'its parents dropped at ${width}px, never its end',
         );
       }
     });

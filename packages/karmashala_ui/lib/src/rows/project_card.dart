@@ -513,7 +513,7 @@ class ProjectPathLine extends StatelessWidget {
 /// 1. the changed-file count;
 /// 2. the state's words — `● 2 running` becomes `● 2`;
 /// 3. the branch;
-/// 4. then the path shortens — whole, fish-style, last folder alone — and only
+/// 4. then the path shortens — whole, then `…/` and its last folder — and only
 ///    that last spelling is ever ellipsised.
 ///
 /// The state's glyph and number never go. Room left over goes to the path,
