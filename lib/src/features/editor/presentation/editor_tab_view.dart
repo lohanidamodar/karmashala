@@ -17,6 +17,7 @@ import '../application/code_editor_providers.dart';
 import '../application/editor_tab_actions.dart';
 import '../application/open_documents.dart';
 import '../domain/source_document.dart';
+import 'editor_menu_actions.dart';
 
 /// One open file, as the content of a workbench tab. The buffer lives in
 /// [openDocumentsProvider], not here: this widget is dropped whenever its tab
@@ -318,11 +319,58 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
     }
   }
 
+  List<PopupMenuEntry<String>> _menuItems(CodeEditorMenuContext menu) => [
+    ...editorFileMenuItems(
+      relativeRoot: filesPanelRootFor(ref, widget.hostPath),
+    ),
+    if (menu.hasSelection) const DesktopMenuDivider(),
+    ...editorSelectionMenuItems(
+      hasSelection: menu.hasSelection,
+      notesEnabled: notesAreEnabled(ref),
+      offerNote: true,
+      hasSession: hasSessionToOffer(ref),
+    ),
+  ];
+
+  Future<void> _onMenuItem(String value, CodeEditorMenuContext menu) async {
+    final path = widget.hostPath;
+    switch (value) {
+      case EditorMenuValues.copyPath:
+        await copyToClipboard(context, path, 'Path');
+      case EditorMenuValues.copyRelativePath:
+        final root = filesPanelRootFor(ref, path);
+        if (root == null) return;
+        await copyToClipboard(
+          context,
+          relativeHostPath(root, path),
+          'Relative path',
+        );
+      case EditorMenuValues.copyPathLine:
+        await copyToClipboard(context, '$path:${menu.line}', 'Path and line');
+      case EditorMenuValues.revealInFiles:
+        revealInFilesPanel(ref, path);
+      case EditorMenuValues.openExternally:
+        await _openExternally();
+      case EditorMenuValues.openFolder:
+        await _reveal();
+      case EditorMenuValues.selectionToNote:
+        await captureSelectionAsNote(
+          context,
+          ref,
+          text: menu.selectedText,
+          hostPath: path,
+        );
+      case EditorMenuValues.selectionToSession:
+        sendSelectionToSession(context, ref, menu.selectedText);
+    }
+  }
+
+  void _setWrap(bool wrap) =>
+      ref.read(settingsControllerProvider.notifier).setEditorWordWrap(wrap);
+
   Widget _body(SourceDocument? document) {
     if (document == null) {
-      return const Center(
-        child: InlineSpinner(size: InlineSpinnerSize.large),
-      );
+      return const Center(child: InlineSpinner(size: InlineSpinnerSize.large));
     }
     if (!document.isReadable) {
       return PanePlaceholder(
@@ -360,6 +408,9 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
               fontSize: fontSize,
               wrap: wrap,
               revealLine: reveal,
+              onWrapChanged: _setWrap,
+              menuItems: _menuItems,
+              onMenuItem: _onMenuItem,
             ),
           ),
         ],
@@ -373,6 +424,9 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
       wrap: wrap,
       revealLine: reveal,
       onSave: _save,
+      onWrapChanged: _setWrap,
+      menuItems: _menuItems,
+      onMenuItem: _onMenuItem,
     );
   }
 

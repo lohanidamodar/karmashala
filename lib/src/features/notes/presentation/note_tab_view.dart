@@ -11,6 +11,7 @@ import '../../settings/application/settings_controller.dart';
 import '../application/note_drafts.dart';
 import '../application/notes_providers.dart';
 import '../domain/note_draft.dart';
+import '../../editor/presentation/editor_menu_actions.dart';
 import 'note_delete.dart';
 import 'note_tab_parts.dart';
 
@@ -218,6 +219,22 @@ class _NoteTabViewState extends ConsumerState<NoteTabView> {
                           ),
                         ),
                         onSave: _save,
+                        // A note's subset: no path, and no note made of a note.
+                        menuItems: (menu) => editorSelectionMenuItems(
+                          hasSelection: menu.hasSelection,
+                          notesEnabled: false,
+                          offerNote: false,
+                          hasSession: hasSessionToOffer(ref),
+                        ),
+                        onMenuItem: (value, menu) {
+                          if (value == EditorMenuValues.selectionToSession) {
+                            sendSelectionToSession(
+                              context,
+                              ref,
+                              menu.selectedText,
+                            );
+                          }
+                        },
                       ),
               ),
             ],
