@@ -7,6 +7,7 @@ import 'package:karmashala_ui/primitives.dart';
 import '../../devices.dart';
 
 import 'desktop_key_bridge.dart';
+import 'device_list_row.dart';
 
 /// What the bar says the keyboard is doing. Public so a test asserts the same
 /// words the user reads.
@@ -281,11 +282,8 @@ class _KeyboardBar extends StatelessWidget {
           const SizedBox(width: Insets.sm),
           Semantics(
             label: 'Send keyboard to $device',
-            child: Switch(
-              value: armed,
-              onChanged: onChanged,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
+            // The pane's one switch, ending on the pane's one right edge.
+            child: DeviceSwitch(value: armed, onChanged: onChanged),
           ),
         ],
       ),

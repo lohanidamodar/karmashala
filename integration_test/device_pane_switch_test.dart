@@ -511,7 +511,7 @@ void main() {
     const avd = 'loop40_probe';
     final start = find.byKey(const Key('start-avd-$avd'));
     expect(start, findsOneWidget, reason: '$avd should be listed and stopped');
-    final toggle = tester.widget<SwitchListTile>(
+    final toggle = tester.widget<DeviceSwitchRow>(
       find.byKey(const Key('headless-emulator-toggle')),
     );
     expect(toggle.value, isTrue, reason: 'headless is meant to be the default');

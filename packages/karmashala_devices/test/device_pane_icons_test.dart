@@ -245,7 +245,13 @@ void main() {
       tester,
     ) async {
       await _pump(tester);
-      final power = find.byTooltip('Stop Pixel');
+      // The toolbar's: the emulator's row in the list offers the same Stop.
+      final power = find.descendant(
+        of: find.byWidgetPredicate(
+          (widget) => widget.runtimeType.toString() == '_DeviceToolbar',
+        ),
+        matching: find.byTooltip('Stop Pixel'),
+      );
       expect(power, findsOneWidget);
       expect(
         find.descendant(of: power, matching: find.byIcon(AppIcons.power)),

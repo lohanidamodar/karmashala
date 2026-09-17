@@ -19,10 +19,11 @@ import '../application/device_recording_controller.dart';
 import '../../karmashala_devices.dart';
 import '../application/ios_device_providers.dart';
 import 'android_slimming_dialog.dart';
-import 'device_action_row.dart';
 import 'device_clipboard_controls.dart';
 import 'device_files_dialog.dart';
+import 'device_list_row.dart';
 import 'device_section_header.dart';
+import 'device_start_options.dart';
 import 'device_controls.dart';
 import 'device_app_controls.dart';
 import 'device_keyboard_surface.dart';
@@ -183,15 +184,14 @@ class _DevicePaneState extends ConsumerState<DevicePane>
             picture: simulatorShowing
                 ? const SimulatorLivePane()
                 : reason != null
-                ? _DeviceEmptyState(
-                    message: reason,
-                    actions: listActions,
-                  )
+                ? _DeviceEmptyState(message: reason, actions: listActions)
                 : _streamError != null
                 ? _DeviceEmptyState(
+                    // One paragraph: it is a line above the list, not a page.
                     message:
-                        'Live view unavailable: $_streamError\n\n'
-                        'Screenshots, input and logcat still work.',
+                        'Live view unavailable: $_streamError — screenshots, '
+                        'input and logcat still work.',
+                    failed: true,
                     actions: listActions,
                   )
                 : _LiveView(

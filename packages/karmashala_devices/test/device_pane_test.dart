@@ -5,6 +5,7 @@ import 'package:karmashala_devices/ports.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_devices/pane.dart';
+import 'package:karmashala_devices/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -107,6 +108,15 @@ Future<void> _pump(
   // `pumpAndSettle` would wait forever on a probe that never answers.
   await (stillProbing ? tester.pump() : tester.pumpAndSettle());
 }
+
+/// Narrows [finder] to the bar above the picture: a running emulator's row in
+/// the list offers the same Stop, by the same name.
+Finder _inToolbar(Finder finder) => find.descendant(
+  of: find.byWidgetPredicate(
+    (widget) => widget.runtimeType.toString() == '_DeviceToolbar',
+  ),
+  matching: finder,
+);
 
 class _StubSimulatorBackend implements WdaBackend {
   @override
@@ -223,7 +233,7 @@ void main() {
         simulatorBackend: true,
       );
 
-      expect(find.text('Connected'), findsOneWidget);
+      expect(find.text('CONNECTED'), findsOneWidget);
       expect(find.text('iPhone 17 Pro'), findsWidgets);
       expect(find.byKey(const Key('stop-simulator-booted')), findsOneWidget);
       expect(find.byKey(const Key('live-view-booted')), findsOneWidget);
@@ -232,7 +242,7 @@ void main() {
       // pane's centred column while every row under it was inset 16, so a
       // one-device list read as a caption floating over a left-aligned list.
       expect(
-        tester.getRect(find.text('Connected')).left,
+        tester.getRect(find.text('CONNECTED')).left,
         tester.getRect(find.text('iPhone 17 Pro').first).left,
         reason: 'the heading is aligned with the device under it',
       );
@@ -296,7 +306,7 @@ void main() {
     testWidgets('asks for a device when the SDK is present but nothing is '
         'connected', (tester) async {
       await _pump(tester, sdk: _sdk(), devices: const []);
-      expect(find.textContaining('No devices connected'), findsOneWidget);
+      expect(find.textContaining('No device connected'), findsOneWidget);
     });
 
     testWidgets('surfaces an unauthorized device instead of hiding it', (
@@ -323,7 +333,7 @@ void main() {
         avds: const [Avd(name: 'Pixel_8_Pro')],
       );
       expect(find.text('Pixel_8_Pro'), findsOneWidget);
-      expect(find.text('Start'), findsOneWidget);
+      expect(find.byTooltip('Start Pixel_8_Pro'), findsOneWidget);
     });
 
     testWidgets('points at the list once a device is ready', (tester) async {
@@ -534,7 +544,7 @@ void main() {
       await _pump(tester, sdk: _sdk(), devices: [_device()]);
       // The tooltip names the device now, because the button used to be able
       // to stop one the user was not looking at.
-      expect(find.byTooltip('Stop Pixel'), findsOneWidget);
+      expect(_inToolbar(find.byTooltip('Stop Pixel')), findsOneWidget);
     });
 
     testWidgets('does not offer to stop a physical device', (tester) async {
@@ -557,7 +567,7 @@ void main() {
       (tester) async {
         final runner = FakeCommandRunner();
         await _pump(tester, sdk: _sdk(), devices: [_device()], runner: runner);
-        await tester.tap(find.byTooltip('Stop Pixel'));
+        await tester.tap(_inToolbar(find.byTooltip('Stop Pixel')));
         await tester.pumpAndSettle();
         expect(find.textContaining('is lost'), findsOneWidget);
 
@@ -587,7 +597,7 @@ void main() {
       // view — and the row is stoppable anyway. That is the whole fix.
       expect(find.text('Live view'), findsOneWidget);
       expect(find.byKey(const Key('stop-emulator-$_emulator')), findsOneWidget);
-      expect(find.text('Start'), findsNothing);
+      expect(find.byTooltip('Start Pixel_8_Pro'), findsNothing);
     });
 
     testWidgets('stopping from the list confirms, then runs emu kill', (
@@ -791,7 +801,7 @@ void main() {
         devices: const [],
         avds: const [Avd(name: 'Pixel_8_Pro')],
       );
-      final toggle = tester.widget<SwitchListTile>(
+      final toggle = tester.widget<DeviceSwitchRow>(
         find.byKey(const Key('headless-emulator-toggle')),
       );
       expect(toggle.value, isTrue);
@@ -899,7 +909,8 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(find.text('starting…'), findsOneWidget);
-      expect(find.text('Start'), findsNothing);
+      // The spinner has the glyph's slot, so there is nothing to press twice.
+      expect(find.byTooltip('Start Pixel_8_Pro'), findsNothing);
 
       await settle(tester, frames: 40);
       expect(find.text('starting…'), findsNothing);
@@ -925,7 +936,11 @@ void main() {
       await tester.tap(find.byKey(const Key('start-avd-Pixel_8_Pro')));
       await settle(tester);
       expect(find.textContaining('could not be started'), findsOneWidget);
-      expect(find.text('Start'), findsOneWidget, reason: 'the row must reset');
+      expect(
+        find.byTooltip('Start Pixel_8_Pro'),
+        findsOneWidget,
+        reason: 'the row must reset',
+      );
       await tester.pump(const Duration(seconds: 6));
     });
   });

@@ -485,8 +485,16 @@ void main() {
         picked: null,
       );
 
-      expect(find.byTooltip('Stop Pixel'), findsOneWidget);
-      expect(find.byTooltip('Shut down iPhone 17'), findsNothing);
+      // In the toolbar: each device's row in the list offers its own Stop, by
+      // the same name.
+      Finder inToolbar(Finder finder) => find.descendant(
+        of: find.byWidgetPredicate(
+          (widget) => widget.runtimeType.toString() == '_DeviceToolbar',
+        ),
+        matching: finder,
+      );
+      expect(inToolbar(find.byTooltip('Stop Pixel')), findsOneWidget);
+      expect(inToolbar(find.byTooltip('Shut down iPhone 17')), findsNothing);
     });
   });
 

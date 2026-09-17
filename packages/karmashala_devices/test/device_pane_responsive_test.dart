@@ -1,5 +1,6 @@
 import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_devices/devices.dart';
@@ -185,9 +186,15 @@ void main() {
           // few pixels, then the tile threw and no row was laid out at all.
           final name = find.text('sdk_gphone64_arm64');
           expect(name, findsOneWidget);
+          // Either whole, or cut with most of the row to itself: its three
+          // actions are glyphs in fixed slots and take the same 72px at any
+          // width.
+          final whole = !tester
+              .renderObject<RenderParagraph>(name)
+              .didExceedMaxLines;
           expect(
-            tester.getSize(name).width,
-            greaterThanOrEqualTo(width * 0.6),
+            whole || tester.getSize(name).width >= width * 0.6,
+            isTrue,
             reason: 'the name is the row; it must keep most of the width',
           );
 

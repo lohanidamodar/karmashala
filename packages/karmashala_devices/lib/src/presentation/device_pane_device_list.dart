@@ -27,34 +27,64 @@ class _DeviceListActions {
 }
 
 class _DeviceEmptyState extends ConsumerWidget {
-  const _DeviceEmptyState({required this.message, required this.actions});
+  const _DeviceEmptyState({
+    required this.message,
+    required this.actions,
+    this.failed = false,
+  });
 
   final String message;
   final _DeviceListActions actions;
 
-  /// The widest the message and the lists get: rows of a name and three
-  /// actions, not a paragraph of prose.
-  static const maxWidth = 460.0;
+  /// Whether [message] reports something that went wrong, rather than that
+  /// nothing is here yet: a warning in the failure colour, not a phone.
+  final bool failed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Center(
+    final anything =
+        (ref.watch(devicesProvider).asData?.value.isNotEmpty ?? false) ||
+        (ref.watch(avdsProvider).asData?.value.isNotEmpty ?? false) ||
+        (ref.watch(hostCanRunSimulatorsProvider) &&
+            (ref.watch(startableSimulatorsProvider).isNotEmpty ||
+                ref.watch(bootedSimulatorsProvider).isNotEmpty));
+    // With nothing to list the message is the whole pane, centred as every
+    // other empty pane is.
+    final icon = failed ? AppIcons.warning : AppIcons.deviceMobile;
+    final iconColor = failed ? Theme.of(context).colorScheme.error : null;
+    if (!anything) {
+      return PanePlaceholder(
+        icon: icon,
+        iconColor: iconColor,
+        message: message,
+      );
+    }
+    // With a list under it the column starts at the top: centred, every row
+    // moved each time a device came or went.
+    return Align(
+      alignment: Alignment.topCenter,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: maxWidth),
+        constraints: const BoxConstraints(maxWidth: DeviceListMetrics.maxWidth),
         child: SingleChildScrollView(
+          primary: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Unbounded here, so it draws without a scroll view of its own:
-              // this one scrolls the message and the lists together.
-              PanePlaceholder(icon: AppIcons.deviceMobile, message: message),
-              // Above both lists, because it governs both: inside Emulators,
-              // a Mac with Xcode and no Android SDK never saw it.
-              const _HeadlessDeviceToggle(),
+              // One line, not a hero: the lists under it are the pane.
+              PanePlaceholder.inline(
+                icon: icon,
+                iconColor: iconColor,
+                message: message,
+              ),
               _DeviceList(actions: actions),
               // Below the Android sections and independent of them: a Mac
               // with no SDK still has simulators to start.
               const SimulatorList(),
+              // Under both lists, because it governs both: inside Emulators,
+              // a Mac with Xcode and no Android SDK never saw it.
+              const DeviceStartOptions(),
+              const SizedBox(height: Insets.md),
             ],
           ),
         ),
@@ -112,13 +142,13 @@ class _DeviceList extends ConsumerWidget {
 
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (devices.isNotEmpty || simulators.isNotEmpty) ...[
-          const SizedBox(height: Insets.lg),
+          const SizedBox(height: DeviceListMetrics.sectionGap),
           const DeviceSectionHeader(title: 'Connected'),
-          const SizedBox(height: Insets.xs),
           for (final simulator in simulators)
-            DeviceActionRow(
+            DeviceRow(
               key: Key('simulator-${simulator.udid}'),
               title: simulator.name,
               subtitle: switch (simulator.state) {
@@ -128,18 +158,21 @@ class _DeviceList extends ConsumerWidget {
               },
               actions: [
                 if (canMirror && simulator.state.isReady)
-                  _RowAction(
+                  DeviceRowAction(
                     key: Key('live-view-${simulator.udid}'),
-                    label: 'Live view',
+                    icon: AppIcons.eye,
+                    tooltip: _liveView,
                     busy: busySimulators.contains(simulator.udid),
                     onPressed: () async => ref
                         .read(simulatorLiveViewProvider.notifier)
                         .start(simulator.udid),
                   ),
                 if (simulator.state.isReady)
-                  _RowAction(
+                  DeviceRowAction(
                     key: Key('stop-simulator-${simulator.udid}'),
-                    label: 'Stop',
+                    icon: AppIcons.power,
+                    // The toolbar's words for the toolbar's glyph.
+                    tooltip: 'Shut down ${simulator.name}',
                     busy: busySimulators.contains(simulator.udid),
                     onPressed: () async {
                       if (!await confirmSimulatorShutdown(
@@ -156,30 +189,35 @@ class _DeviceList extends ConsumerWidget {
               ],
             ),
           for (final device in devices)
-            DeviceActionRow(
+            DeviceRow(
               title: runningAvdNames[device.serial] ?? device.displayName,
               subtitle: _stateLine(device),
               actions: [
                 if (device.isReady)
-                  _RowAction(
+                  DeviceRowAction(
                     key: Key('preview-${device.serial}'),
-                    label: 'Live preview',
+                    icon: AppIcons.eye,
+                    tooltip: _liveView,
                     onPressed: () => actions.onPreview(device),
                   ),
                 // Reading the device's storage, and moving files either way.
                 // Its own dialog; it asks the driver which roots it can reach.
                 if (device.isReady)
-                  _RowAction(
+                  DeviceRowAction(
                     key: Key('files-${device.serial}'),
-                    label: 'Files',
+                    icon: AppIcons.folder,
+                    tooltip: 'Files',
                     onPressed: () => DeviceFilesDialog.show(context, device),
                   ),
                 // Only emulators: `emu kill` talks to the emulator console, so
                 // on a phone it could only ever fail.
                 if (device.isReady && device.isEmulator)
-                  _RowAction(
+                  DeviceRowAction(
                     key: Key('stop-emulator-${device.serial}'),
-                    label: 'Stop',
+                    icon: AppIcons.power,
+                    tooltip:
+                        'Stop '
+                        '${runningAvdNames[device.serial] ?? device.displayName}',
                     busy: actions.stopping.contains(device.serial),
                     onPressed: () => actions.onStopEmulator(
                       serial: device.serial,
@@ -191,40 +229,29 @@ class _DeviceList extends ConsumerWidget {
             ),
         ],
         if (anyEmulator) ...[
-          const SizedBox(height: Insets.lg),
+          const SizedBox(height: DeviceListMetrics.sectionGap),
           DeviceSectionHeader(
-            title: 'Emulators',
-            action: TextButton(
+            title: 'Android emulators',
+            action: DeviceSectionAction(
               key: const Key('android-slimming-open'),
+              tooltip: 'Emulator slimming…',
               onPressed: () => AndroidSlimmingDialog.show(context),
-              child: const Text('Slimming'),
             ),
           ),
           if (idle.isEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Insets.lg,
-                Insets.xs,
-                Insets.lg,
-                0,
-              ),
-              child: Text(
-                'Every emulator is running — they are listed above.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
+            const DeviceListNote(
+              'Every emulator is running — they are listed above.',
             ),
           for (final avd in idle)
-            DeviceActionRow(
+            DeviceRow(
               title: avd.name,
-              subtitle: actions.booting.contains(avd.name)
-                  ? 'starting…'
-                  : null,
+              subtitle: actions.booting.contains(avd.name) ? 'starting…' : null,
               actions: [
-                _RowAction(
+                DeviceRowAction(
                   key: Key('start-avd-${avd.name}'),
-                  label: 'Start',
+                  icon: AppIcons.playCircle,
+                  tooltip: 'Start ${avd.name}',
+                  primary: true,
                   busy: actions.booting.contains(avd.name),
                   onPressed: () => actions.onBootAvd(avd.name),
                 ),
@@ -234,68 +261,7 @@ class _DeviceList extends ConsumerWidget {
       ],
     );
   }
-}
 
-/// One action on a device row. A spinner replaces the label while it runs,
-/// because with a headless emulator nothing else on screen changes.
-class _RowAction extends StatelessWidget {
-  const _RowAction({
-    super.key,
-    required this.label,
-    required this.onPressed,
-    this.busy = false,
-  });
-
-  final String label;
-  final VoidCallback onPressed;
-  final bool busy;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: busy ? null : onPressed,
-      child: busy
-          ? InlineSpinner(
-              size: InlineSpinnerSize.medium,
-              semanticsLabel: label,
-            )
-          : Text(label),
-    );
-  }
-}
-
-/// The one switch that decides whether a started device gets a window. Hidden
-/// with nothing to start, and worded by promise: the mechanics differ per OS.
-class _HeadlessDeviceToggle extends ConsumerWidget {
-  const _HeadlessDeviceToggle();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final idleAvds = (ref.watch(avdsProvider).asData?.value ?? const <Avd>[])
-        .where((avd) => !avd.isRunning)
-        .isNotEmpty;
-    final startableSimulators = ref
-        .watch(startableSimulatorsProvider)
-        .isNotEmpty;
-    if (!idleAvds && !startableSimulators) return const SizedBox.shrink();
-
-    final both = idleAvds && startableSimulators;
-    return SwitchListTile(
-      key: const Key('headless-emulator-toggle'),
-      dense: true,
-      value: ref.watch(headlessDeviceProvider),
-      onChanged: (value) =>
-          ref.read(headlessDeviceProvider.notifier).update(value),
-      title: const Text('Start without a window'),
-      subtitle: Text(
-        both
-            ? 'Watch it here instead. Turn off for the emulator\'s extended '
-                  'controls, or the Simulator app.'
-            : startableSimulators
-            ? 'Watch it here instead. Turn off to open the Simulator app too.'
-            : 'Watch it here instead. Turn off for the emulator\'s own '
-                  'extended controls.',
-      ),
-    );
-  }
+  /// The toolbar's word for the toolbar's glyph.
+  static const _liveView = 'Live view';
 }

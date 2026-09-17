@@ -45,12 +45,20 @@ Future<void> _pump(
         // Overriding the two derived providers keeps these cases about the
         // list rather than about how a preference is stored.
         slimmingOnStartProvider.overrideWithValue(true),
+        // The options block asks about the Android side too; none here.
+        devicesProvider.overrideWith((ref) async => const []),
+        avdsProvider.overrideWith((ref) async => const []),
         slimmingKeptCategoriesProvider.overrideWithValue(const {}),
         if (settings != null)
           settingsControllerProvider.overrideWith(() => _Settings(settings)),
       ],
       child: const MaterialApp(
-        home: Scaffold(body: SingleChildScrollView(child: SimulatorList())),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            // As the pane stacks them: the list, then how its devices start.
+            child: Column(children: [SimulatorList(), DeviceStartOptions()]),
+          ),
+        ),
       ),
     ),
   );
@@ -84,10 +92,13 @@ void main() {
       simulators: [_sim('u', 'iPhone 17', SimulatorState.shutdown)],
     );
 
-    final tile = tester.widget<CheckboxListTile>(
+    final row = tester.widget<DeviceSwitchRow>(
       find.byKey(const Key('slim-on-start')),
     );
-    expect(tile.value, isTrue);
+    expect(row.value, isTrue);
+    expect(row.help, contains('background services'));
+    // A switch like the option above it — it was the pane's one tick box.
+    expect(find.byType(Checkbox), findsNothing);
   });
 
   testWidgets('a running simulator is told it has to be restarted', (
@@ -106,22 +117,38 @@ void main() {
     expect(find.textContaining('Stop and start it to slim it'), findsOneWidget);
   });
 
-  testWidgets('offers a picker and a Start, not 170 rows', (tester) async {
+  testWidgets('offers the newest few and a Show all, not 170 rows', (
+    tester,
+  ) async {
     // Xcode accumulates simulators; this developer's machine holds 170. A flat
-    // list would bury the Android devices above it and leave the user reading
-    // rows to find the iPhone they meant.
+    // list would bury everything under it and leave the user reading rows to
+    // find the iPhone they meant — and a picker, which this was, made the
+    // simulators a different kind of thing from the emulators above them.
     await _pump(
       tester,
       simulators: [
-        for (var i = 0; i < 40; i++)
+        for (var i = 10; i < 50; i++)
           _sim('u$i', 'iPhone $i', SimulatorState.shutdown),
       ],
     );
 
-    expect(find.byKey(const Key('simulator-picker')), findsOneWidget);
-    expect(find.byKey(const Key('start-simulator')), findsOneWidget);
+    expect(find.byType(DropdownButtonFormField<String>), findsNothing);
+    expect(find.byType(DeviceRow), findsNWidgets(SimulatorList.folded));
+    expect(find.byKey(const Key('start-simulator-u10')), findsOneWidget);
+    expect(find.text('Show all (40)'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('simulators-show-all')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DeviceRow), findsNWidgets(40));
+    expect(find.text('Show fewer'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('simulators-show-all')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('simulators-show-all')));
+    await tester.pumpAndSettle();
+    expect(find.byType(DeviceRow), findsNWidgets(SimulatorList.folded));
     expect(
-      find.byKey(const Key('stop-simulator-u0')),
+      find.byKey(const Key('stop-simulator-u10')),
       findsNothing,
       reason: 'nothing is running, so nothing is a row',
     );
@@ -139,8 +166,8 @@ void main() {
       ],
     );
 
-    expect(find.byKey(const Key('simulator-picker')), findsNothing);
-    expect(find.text('iOS Simulators'), findsNothing);
+    expect(find.byKey(const Key('start-simulator-gone')), findsNothing);
+    expect(find.text('IOS SIMULATORS'), findsNothing);
   });
 
   testWidgets('the newest runtime is offered first', (tester) async {
@@ -164,10 +191,13 @@ void main() {
       ],
     );
 
-    final picker = tester.widget<DropdownButtonFormField<String>>(
-      find.byKey(const Key('simulator-picker')),
+    expect(
+      tester.getTopLeft(find.text('iPhone 17 Pro')).dy,
+      lessThan(tester.getTopLeft(find.text('iPhone 8')).dy),
     );
-    expect(picker.initialValue, 'new');
+    // Each says which iOS it is: two iPhone 17s differ only by that.
+    expect(find.text('iOS 26.4'), findsOneWidget);
+    expect(find.text('iOS 17.0'), findsOneWidget);
   });
 
   testWidgets('the whole section is absent off macOS', (tester) async {
@@ -179,38 +209,19 @@ void main() {
       simulators: [_sim('u', 'iPhone 17', SimulatorState.shutdown)],
     );
 
-    expect(find.text('iOS Simulators'), findsNothing);
-    expect(find.byKey(const Key('simulator-picker')), findsNothing);
+    expect(find.text('IOS SIMULATORS'), findsNothing);
+    expect(find.byType(DeviceRow), findsNothing);
+    expect(find.byKey(const Key('slim-on-start')), findsNothing);
   });
 
   testWidgets('nothing to show is nothing at all', (tester) async {
     await _pump(tester, simulators: const []);
 
-    expect(find.text('iOS Simulators'), findsNothing);
+    expect(find.text('IOS SIMULATORS'), findsNothing);
+    expect(find.text('WHEN STARTING'), findsNothing);
   });
 
-  testWidgets('a picked simulator that starts falls back to a real one', (
-    tester,
-  ) async {
-    // The one that was picked leaves the startable list the moment it boots;
-    // the picker must not be left showing a blank selection.
-    await _pump(
-      tester,
-      simulators: [
-        _sim('a', 'iPhone A', SimulatorState.shutdown),
-        _sim('b', 'iPhone B', SimulatorState.shutdown),
-      ],
-    );
-
-    final picker = tester.widget<DropdownButtonFormField<String>>(
-      find.byKey(const Key('simulator-picker')),
-    );
-    expect(picker.initialValue, isNotNull);
-  });
-
-  testWidgets('the slimming choice opens from the pane itself', (
-    tester,
-  ) async {
+  testWidgets('the slimming choice opens from the pane itself', (tester) async {
     await _pump(
       tester,
       simulators: [_sim('a', 'iPhone A', SimulatorState.shutdown)],
@@ -241,14 +252,16 @@ void main() {
       simulators: [_sim('booted', 'iPhone 17 Pro', SimulatorState.booted)],
     );
 
-    expect(find.text('iOS Simulators'), findsOneWidget);
+    expect(find.text('IOS SIMULATORS'), findsOneWidget);
     expect(find.byKey(const Key('simulator-slimming-open')), findsOneWidget);
     expect(find.byKey(const Key('slim-on-start')), findsOneWidget);
     expect(
-      find.byKey(const Key('simulator-picker')),
+      find.byType(DeviceRow),
       findsNothing,
       reason: 'there is nothing left to start',
     );
+    // A heading over nothing is a question; it says where they went.
+    expect(find.textContaining('they are listed above'), findsOneWidget);
   });
 
   testWidgets('the heading lines up with the rows under it', (tester) async {
@@ -260,11 +273,13 @@ void main() {
     // One indent down the pane. The heading was inset 16 while the Android
     // headings above it were centred over rows inset 16, so the same column
     // read as three unrelated panels.
+    final left = tester.getRect(find.text('IOS SIMULATORS')).left;
     expect(
-      tester.getRect(find.text('iOS Simulators')).left,
-      tester.getRect(find.byKey(const Key('simulator-picker'))).left,
-      reason: 'the heading starts where the picker under it starts',
+      tester.getRect(find.text('iPhone A')).left,
+      left,
+      reason: 'the heading starts where the names under it start',
     );
-    expect(find.byType(DeviceSectionHeader), findsOneWidget);
+    expect(tester.getRect(find.text('Slim simulators on start')).left, left);
+    expect(find.byType(DeviceSectionHeader), findsNWidgets(2));
   });
 }

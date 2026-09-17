@@ -134,6 +134,9 @@ Future<void> _pump(
         androidSlimmingServiceProvider.overrideWithValue(null),
         slimmingOnStartProvider.overrideWithValue(false),
         slimmingKeptCategoriesProvider.overrideWithValue(const {}),
+        // The Android half of the same saved settings: its switch is in the
+        // pane beside the simulators' now, not only behind the dialog.
+        androidSlimmingOnStartProvider.overrideWithValue(false),
         devicesProvider.overrideWith((ref) async => devices),
         avdsProvider.overrideWith((ref) async => avds),
         deviceScreenSizeProvider.overrideWith((ref, serial) async => null),
