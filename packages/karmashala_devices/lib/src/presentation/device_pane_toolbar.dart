@@ -69,9 +69,13 @@ class _DeviceToolbar extends ConsumerWidget {
               MediaQuery.textScalerOf(context),
             );
         return Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: Insets.xs,
+          // The picker's words start the pane's column — the list's, the log
+          // strip's — and the buttons' own padding makes up the far side.
+          padding: const EdgeInsets.fromLTRB(
+            DeviceListMetrics.inset,
+            Insets.xs,
+            Insets.sm,
+            Insets.xs,
           ),
           child: Row(
             children: [

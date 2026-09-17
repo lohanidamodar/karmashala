@@ -116,6 +116,8 @@ void main() {
     await _pump(tester);
 
     final lefts = {
+      // The toolbar's picker starts the same column the list is drawn in.
+      'device picker': tester.getRect(find.text('No device selected')).left,
       'emulators header': tester.getRect(_emulatorsHeader).left,
       'simulators header': tester.getRect(_simulatorsHeader).left,
       'emulator name': tester.getRect(find.text('Pixel_8')).left,
@@ -124,7 +126,7 @@ void main() {
       for (final (i, label) in _slimLabels.evaluate().indexed)
         'slim option $i': tester.getRect(find.byWidget(label.widget)).left,
     };
-    expect(lefts.length, greaterThanOrEqualTo(6), reason: '$lefts');
+    expect(lefts.length, greaterThanOrEqualTo(8), reason: '$lefts');
     expect(lefts.values.toSet(), hasLength(1), reason: '$lefts');
   });
 
