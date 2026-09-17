@@ -44,7 +44,8 @@ class FakeTerminalInstance
         TieredTerminalInstance,
         ParkableTerminalInstance,
         AdoptableTerminalInstance,
-        RecordableTerminalInstance {
+        RecordableTerminalInstance,
+        PromptTypingTerminalInstance {
   FakeTerminalInstance({
     required this.id,
     required this.title,
@@ -75,6 +76,13 @@ class FakeTerminalInstance
       terminal.write(restored!);
     }
   }
+
+  /// What was typed at this pane's prompt for the person to run, verbatim —
+  /// so a test can assert nothing in it presses Enter.
+  final typedAtPrompt = <String>[];
+
+  @override
+  void typeAtPrompt(String text) => typedAtPrompt.add(text);
 
   /// The buffer this pane was handed instead of text, if it was — asserted on
   /// by the resume-cost gate.

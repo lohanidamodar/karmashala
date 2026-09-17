@@ -131,6 +131,13 @@ abstract interface class RecordableTerminalInstance {
   CastRecorder? get recorder;
 }
 
+/// A [TerminalInstance] that can be handed a command before it is connected,
+/// and types it at the prompt once there is one — **never submitted**: the
+/// person reads it, presses Enter, and answers `sudo` in the real terminal.
+abstract interface class PromptTypingTerminalInstance {
+  void typeAtPrompt(String text);
+}
+
 /// A [ValueListenable] that holds one value and never notifies — what
 /// [TerminalInstance.directory] is for a pane whose shell cannot report one.
 class UnchangingValue<T> implements ValueListenable<T> {

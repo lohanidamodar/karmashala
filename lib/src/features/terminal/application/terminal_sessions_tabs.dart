@@ -34,6 +34,24 @@ extension TerminalTabVerbs on TerminalSessionsController {
     return tabId;
   }
 
+  /// [openTab], with [text] typed at the new shell's prompt and **left there**:
+  /// nothing here presses Enter. False when the pane cannot take text before it
+  /// is connected — the caller still has the command to show.
+  ({String tabId, bool typed}) openTabTyping(
+    TerminalProfile profile,
+    String text, {
+    String? workingDirectory,
+  }) {
+    final tabId = openTab(profile, workingDirectory: workingDirectory);
+    final paneId = _tabById(tabId)?.focusedPaneId;
+    final instance = paneId == null ? null : instanceFor(paneId);
+    if (instance is! PromptTypingTerminalInstance) {
+      return (tabId: tabId, typed: false);
+    }
+    (instance as PromptTypingTerminalInstance).typeAtPrompt(text);
+    return (tabId: tabId, typed: true);
+  }
+
   /// Opens document pane [paneId] in a tab, or brings the open one forward:
   /// one tab per document, or two views would disagree about the same thing.
   String openDocumentTab(String paneId) {
