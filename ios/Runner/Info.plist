@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- The pairing screen's QR scanner. Without this string iOS kills the app
+	     the moment the camera is asked for, rather than prompting. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a pairing code from Karmashala on your computer</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

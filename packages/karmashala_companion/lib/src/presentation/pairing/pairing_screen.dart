@@ -31,15 +31,16 @@ class PairingScreen extends StatelessWidget {
               'This phone is a remote for the sessions a machine holds. On a '
               'desktop, open Settings → Remote access and choose "Pair a '
               'device" — scan its QR code, or paste its pairing code here. A '
-              'server with an address of its own is added the third way.',
+              'server with an address of its own is added the third way, or '
+              'by scanning the QR code in its "Pair a phone" dialog.',
           actionLabel: 'Scan the QR code',
           onAction: () => Navigator.of(
             context,
           ).push(companionRoute<void>(context, (_) => const ScanQrScreen())),
           secondaryLabel: 'Paste the code instead',
-          onSecondary: () => Navigator.of(context).push(
-            companionRoute<void>(context, (_) => const ShortCodeScreen()),
-          ),
+          onSecondary: () => Navigator.of(
+            context,
+          ).push(companionRoute<void>(context, (_) => const ShortCodeScreen())),
           // A box is never found by searching, so it gets its own way in
           // rather than a code field that quietly does not work for it.
           tertiaryLabel: 'Add a machine by address',

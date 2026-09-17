@@ -15,7 +15,15 @@ import '../companion_states.dart';
 /// Staged progress for one pairing attempt — code accepted, looking for the
 /// desktop, proving keys, paired — with a Retry that re-runs the same attempt.
 class PairingProgressScreen extends ConsumerStatefulWidget {
-  const PairingProgressScreen({required this.attempt, super.key});
+  const PairingProgressScreen({
+    required this.attempt,
+    this.peerIsMachine = false,
+    super.key,
+  });
+
+  /// Whether the peer is a machine with an address rather than a desktop this
+  /// phone goes looking for. Words only: the attempt is [attempt]'s business.
+  final bool peerIsMachine;
 
   /// One pairing attempt against the gateway, re-run by Retry.
   final Future<CompanionPairing> Function(CompanionGateway gateway) attempt;
@@ -192,13 +200,16 @@ class _PairingProgressScreenState extends ConsumerState<PairingProgressScreen> {
       const _Step(CompanionPairingStage.codeAccepted, 'Code accepted', null),
       _Step(
         CompanionPairingStage.searching,
-        'Looking for your desktop',
+        widget.peerIsMachine
+            ? 'Reaching the machine'
+            : 'Looking for your desktop',
         _detail,
       ),
       const _Step(CompanionPairingStage.proving, 'Proving keys', null),
       _Step(
         CompanionPairingStage.paired,
-        'Paired with ${_hostName ?? 'your desktop'}',
+        'Paired with '
+        '${_hostName ?? (widget.peerIsMachine ? 'the machine' : 'your desktop')}',
         grants == null ? null : 'This phone may: $grants',
       ),
     ];

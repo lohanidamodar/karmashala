@@ -4,5 +4,6 @@ library;
 
 export 'src/presentation/pairing/pairing_progress_screen.dart';
 export 'src/presentation/pairing/pairing_screen.dart';
+export 'src/presentation/pairing/pairing_scanner.dart';
 export 'src/presentation/pairing/scan_qr_screen.dart';
 export 'src/presentation/pairing/short_code_screen.dart';

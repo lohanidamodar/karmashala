@@ -8,6 +8,7 @@ import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_route.dart';
+import 'connections_section.dart' show connectionRouteLabel;
 import 'pairing/pairing_screen.dart';
 
 /// The strip above the session list that names the desktop being shown and
@@ -18,6 +19,18 @@ import 'pairing/pairing_screen.dart';
 /// the link — [LinkBanner] owns that, and says *why* as well.
 class HostSwitcherBar extends ConsumerWidget {
   const HostSwitcherBar({super.key});
+
+  /// "Active", and for a machine the route it is reached by — two saved
+  /// machines are otherwise told apart by name alone.
+  static Widget? _subtitle(CompanionConnection connection) {
+    final parts = [
+      if (connection.active) 'Active',
+      ?connectionRouteLabel(connection),
+    ];
+    return parts.isEmpty
+        ? null
+        : Text(parts.join(' · '), maxLines: 1, overflow: TextOverflow.ellipsis);
+  }
 
   Future<void> _choose(
     BuildContext context,
@@ -40,7 +53,7 @@ class HostSwitcherBar extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            subtitle: connection.active ? const Text('Active') : null,
+            subtitle: _subtitle(connection),
             selected: connection.active,
             onTap: () => Navigator.of(context).pop(connection.hostId),
           ),

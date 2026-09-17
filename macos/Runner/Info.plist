@@ -33,6 +33,10 @@
 	     mDNS traffic. -->
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Karmashala looks for your desktop on this network so your phone can connect to it directly instead of going through the relay.</string>
+	<!-- Companion mode's QR scanner. The desktop app never asks for the camera;
+	     without the string macOS refuses it outright instead of prompting. -->
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a pairing code from Karmashala on your computer</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

@@ -24,6 +24,10 @@ class LinkBanner extends ConsumerWidget {
     // Watched, not read: the reason arrives with no link-state change behind
     // it, so a `ref.read` would wait for somebody else's rebuild.
     final trouble = ref.watch(companionLinkTroubleProvider).asData?.value;
+    // A machine paired by address is not "your desktop", and what to check
+    // about it is different.
+    final pairing = ref.watch(companionPairingProvider).asData?.value;
+    final machine = pairing?.route != null;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
@@ -33,20 +37,22 @@ class LinkBanner extends ConsumerWidget {
     // What the phone is doing and, once it knows, why it is still doing it —
     // "Connecting…" alone leaves nothing to act on.
     final headline = connecting
-        ? 'Connecting to your desktop…'
+        ? machine
+              ? 'Connecting to ${pairing?.hostName ?? 'the machine'}…'
+              : 'Connecting to your desktop…'
         : 'Host unreachable';
     final detail =
         trouble ??
         (connecting
             ? null
+            : machine
+            ? 'Check that the machine is running and can be reached from here.'
             : 'Check that Karmashala is running on your desktop.');
 
     return Material(
       // The word carries the meaning and the tint only supports it, so the text
       // keeps full on-surface contrast.
-      color: connecting
-          ? semantic.workingSurface
-          : semantic.attentionSurface,
+      color: connecting ? semantic.workingSurface : semantic.attentionSurface,
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           density.padX,
@@ -79,18 +85,20 @@ class LinkBanner extends ConsumerWidget {
                       headline,
                       maxLines: _maxLines,
                       overflow: TextOverflow.ellipsis,
-                      style: (density.isTouch
-                          ? theme.textTheme.bodyMedium
-                          : theme.textTheme.bodySmall)?.copyWith(
-                        color: scheme.onSurface,
-                      ),
+                      style:
+                          (density.isTouch
+                                  ? theme.textTheme.bodyMedium
+                                  : theme.textTheme.bodySmall)
+                              ?.copyWith(color: scheme.onSurface),
                     ),
                     // The gateway's own sentence: a relay that hung up saying
                     // nobody was there is not a broken network.
                     if (detail != null)
                       Text(
                         detail,
-                        maxLines: _maxLines,
+                        // A machine's trouble ends in its remedy — pair again
+                        // by the other route — which two lines would cut off.
+                        maxLines: machine ? _machineDetailLines : _maxLines,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -117,4 +125,5 @@ class LinkBanner extends ConsumerWidget {
   static const _sideBySideWidth = 280.0;
 
   static const _maxLines = 2;
+  static const _machineDetailLines = 4;
 }

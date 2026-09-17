@@ -54,10 +54,7 @@ class ConnectionsSection extends ConsumerWidget {
             onPressed: switching != null
                 ? null
                 : () => Navigator.of(context).push(
-                    companionRoute<void>(
-                      context,
-                      (_) => const PairingScreen(),
-                    ),
+                    companionRoute<void>(context, (_) => const PairingScreen()),
                   ),
             icon: const Icon(AppIcons.plus),
             label: const Text('Add a desktop'),
@@ -224,6 +221,15 @@ class _ConnectionRow extends ConsumerWidget {
               ],
             ),
             Text(subtitle, style: density.muted(theme)),
+            // A machine is reached by the one route it was paired over, so the
+            // row says which — it is also what to change when it stops working.
+            if (connectionRouteLabel(connection) case final route?)
+              Text(
+                route,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: density.muted(theme),
+              ),
           ],
         ),
         trailing: IconButton(
@@ -238,6 +244,15 @@ class _ConnectionRow extends ConsumerWidget {
     );
   }
 }
+
+/// How a machine paired by address is reached, or null for a desktop — which
+/// the phone finds by itself, over whichever path answers.
+String? connectionRouteLabel(CompanionConnection connection) =>
+    switch (connection.route) {
+      null => null,
+      HostRoute.direct => ['Direct', ?connection.directEndpoint].join(' · '),
+      HostRoute.relay => 'Hosted relay',
+    };
 
 /// The "Active" pill — colour plus a word, never colour alone.
 class _ActiveBadge extends StatelessWidget {

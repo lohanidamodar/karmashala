@@ -71,6 +71,7 @@ class _AddMachineScreenState extends ConsumerState<AddMachineScreen> {
       companionRoute<void>(
         context,
         (_) => PairingProgressScreen(
+          peerIsMachine: true,
           attempt: (gateway) => gateway.pairWithCode(code, at: endpoint),
         ),
       ),
@@ -92,7 +93,9 @@ class _AddMachineScreenState extends ConsumerState<AddMachineScreen> {
             Text(
               'A server running the Karmashala session host answers on its own '
               'address. On that machine, or from the desktop that set it up, '
-              'open a pairing window and type what it shows here.',
+              'open a pairing window and type what it shows here. The '
+              'desktop\'s "Pair a phone" dialog also shows a QR code — '
+              'scanning it fills all of this in.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: Insets.lg),
