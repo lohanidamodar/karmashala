@@ -7,6 +7,7 @@ import 'package:karmashala_core/logging.dart';
 import 'host_deployment.dart';
 import 'host_binaries.dart';
 import 'host_deploy_target.dart';
+import 'remote_home.dart';
 
 /// Puts the session host on a machine and confirms it answers. Every outcome
 /// carries when it was taken — a host that answered is not one that answers.
@@ -31,7 +32,7 @@ class HostDeployer {
 
   /// What is hung off the remote home. A *fragment*, never a path: `mkdir`
   /// expands `$HOME`, SFTP does not, so a literal `$HOME/...` names nothing.
-  static const String remoteHomeSubdirectory = '.karmashala';
+  static const String remoteHomeSubdirectory = kRemoteHomeSubdirectory;
 
   Future<HostDeployment> deploy() async {
     final platform = await measurePlatform();
@@ -226,25 +227,7 @@ class HostDeployer {
 
   /// The remote home as an absolute path, asked of the machine's shell. Null is
   /// *unknown*, never a guess at `/home/<user>`; the last non-empty line wins.
-  Future<String?> resolveHome() async {
-    final RemoteRun result;
-    try {
-      result = await target.run('echo "\$HOME"');
-    } on Object catch (e) {
-      _logger.debug('${target.address} could not be asked for \$HOME: $e');
-      return null;
-    }
-    final lines = const LineSplitter()
-        .convert(result.stdout)
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty);
-    if (lines.isEmpty) return null;
-    final home = lines.last;
-    // An answer that is not an absolute path is not an answer: `$HOME` unset
-    // echoes an empty line, and a shell that printed a complaint is not a home.
-    if (!home.startsWith('/')) return null;
-    return home.length > 1 && home.endsWith('/') ? home.substring(0, home.length - 1) : home;
-  }
+  Future<String?> resolveHome() => resolveRemoteHome(target, logger: _logger);
 
   /// Uploads unless what is already there is this size. Size, not a checksum:
   /// the version is in the filename, and hashing megabytes per open costs more.

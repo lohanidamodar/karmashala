@@ -11,3 +11,4 @@ export 'src/host_deploy_target.dart';
 export 'src/host_deployer.dart';
 export 'src/host_deployment.dart';
 export 'src/host_session_access.dart';
+export 'src/relay_setup.dart';
