@@ -2,6 +2,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/shell/reveal_in_file_manager.dart';
@@ -11,6 +12,7 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
@@ -156,7 +158,7 @@ void main() {
     return db;
   }
 
-  Widget explorer(double width) {
+  Widget explorer(double width, {bool working = false}) {
     final db = seeded();
     addTearDown(db.close);
     return ProviderScope(
@@ -179,6 +181,8 @@ void main() {
           (_) async => const ImportSummary(),
         ),
         attentionInboxProvider.overrideWith(_Inbox.new),
+        if (working)
+          projectWorkingCountsProvider.overrideWithValue(const {'p1': 1}),
       ],
       child: _column(width, const ExplorerPanel()),
     );
@@ -213,6 +217,39 @@ void main() {
       because: 'a side panel is 240px at the minimum window',
     );
   });
+
+  // The same column with everything the polish pass added on it at once: the
+  // switcher saying "All", a project whose running mark is turning, and a row
+  // the arrow keys have put the focus ring on — at 2x text as well.
+  for (final width in [200.0, 240.0]) {
+    testWidgets('the Explorer at ${width.toInt()}px with a session working '
+        'and a row focused by the arrow keys, up to 2x text', (tester) async {
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => explorer(width, working: true),
+        matrix: const [
+          ...windowMatrix,
+          WindowCell('720x560 @ 2x text', Size(720, 560), textScale: 2),
+        ],
+        warmUp: (tester) async {
+          await openProject(tester);
+          expect(find.byType(WorkingSpinner), findsOneWidget);
+          Focus.of(tester.element(find.text(_long))).requestFocus();
+          await tester.pumpAndSettle();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expect(
+            FocusManager.instance.primaryFocus?.context
+                ?.findAncestorWidgetOfExactType<SessionCard>(),
+            isNotNull,
+            reason: 'the arrow key moved onto the first session',
+          );
+        },
+      );
+      // The spinner's clock is a real timer: stopped with the last spinner.
+      await tester.pumpWidget(const SizedBox());
+    });
+  }
 
   testWidgets('the Files panel at 240px with long names', (tester) async {
     const root = r'C:\src\app';

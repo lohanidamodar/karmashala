@@ -141,6 +141,7 @@ class _SectionHeader extends ConsumerWidget {
       kind: ExplorerRowKind.group,
       depth: 0,
       selected: false,
+      expanded: !section.collapsed,
       onTap: () => controller.toggleCollapsed(section.id),
       menuItemsBuilder: items,
       onMenu: onAction,

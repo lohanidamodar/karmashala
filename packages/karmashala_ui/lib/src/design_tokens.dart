@@ -791,4 +791,8 @@ class Latency {
 
   /// A search over a buffer, re-run as its query or its text changes.
   static const searchDebounce = Duration(milliseconds: 150);
+
+  /// How long letters typed into a list are one word: `c`, `h` within it goes
+  /// to "charlie", after it `h` starts a new search. What file managers use.
+  static const typeAhead = Duration(milliseconds: 700);
 }

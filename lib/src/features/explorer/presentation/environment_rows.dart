@@ -56,6 +56,7 @@ class ExplorerGroupHeader extends StatelessWidget {
     final onMenu = this.onMenu;
     final row = ExplorerRow(
       kind: ExplorerRowKind.group,
+      expanded: expanded,
       depth: 0,
       selected: false,
       onTap: onTap,
@@ -146,6 +147,9 @@ class TerminalRow extends StatelessWidget {
     kind: ExplorerRowKind.terminal,
     depth: depth,
     selected: false,
+    // The row is its own first verb, as a session's is — which is also what
+    // makes it a stop the arrow keys can land on.
+    onTap: terminal.running ? onOpen : null,
     builder: (context) {
       final theme = Theme.of(context);
       final scheme = theme.colorScheme;

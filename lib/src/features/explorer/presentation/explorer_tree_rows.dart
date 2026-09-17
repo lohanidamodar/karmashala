@@ -15,9 +15,9 @@ import '../../workspaces/application/workspaces_controller.dart';
 import '../application/environment_terminals_providers.dart';
 import '../application/explorer_tree_nodes.dart';
 import '../application/explorer_tree_provider.dart';
-import '../application/explorer_tree_state.dart';
 import 'environment_rows.dart';
 import 'explorer_context_actions.dart';
+import 'explorer_keyboard.dart';
 import 'explorer_project_row.dart';
 import 'session_rows.dart';
 
@@ -113,7 +113,7 @@ class ExplorerTerminalsHeader extends ConsumerWidget {
       trailingWords: node.count == null ? null : '${node.count} running',
       detail: node.detail,
       tooltip: known ? null : 'This environment is no longer in the workspace.',
-      onTap: () => _toggle(ref),
+      onTap: () => toggleExplorerTerminals(ref, node.environmentId),
       action: known
           ? ExplorerRowAction(
               tooltip: 'Open a terminal on ${node.environmentLabel}',
@@ -149,19 +149,6 @@ class ExplorerTerminalsHeader extends ConsumerWidget {
         }
       },
     );
-  }
-
-  /// Opening a machine's terminals asks it; closing one asks nothing. The
-  /// answer is never refreshed on a timer (§19).
-  void _toggle(WidgetRef ref) {
-    final opening = ref
-        .read(explorerExpandedTerminalsProvider.notifier)
-        .toggle(node.environmentId);
-    if (opening) {
-      ref
-          .read(environmentTerminalsProvider(node.environmentId).notifier)
-          .refresh();
-    }
   }
 }
 

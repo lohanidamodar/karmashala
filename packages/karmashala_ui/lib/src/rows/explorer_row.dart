@@ -59,12 +59,17 @@ class ExplorerRow extends StatelessWidget {
     this.menuItemsBuilder,
     this.onMenu,
     this.settled = false,
+    this.expanded,
     super.key,
   });
 
   final ExplorerRowKind kind;
   final int depth;
   final bool selected;
+
+  /// Whether the rows under this one are drawn, for a row that folds; null for
+  /// one that does not. Said to a screen reader — the caret is the row's own.
+  final bool? expanded;
 
   /// Null draws the row as a plain header — the companion uses a project card
   /// that way, above a list it is already inside.
@@ -194,7 +199,15 @@ class ExplorerRow extends StatelessWidget {
 
     // Built once, and handed to the fill as a `child` it passes straight
     // through: a hover repaints the tone and rebuilds nothing inside it.
-    final row = InkWell(onTap: onTap, borderRadius: _radius, child: content);
+    Widget row = InkWell(
+      onTap: onTap,
+      focusNode: ExplorerRowFocus.maybeOf(context),
+      borderRadius: _radius,
+      child: content,
+    );
+    // On the row's own node, so a screen reader hears "collapsed" with the
+    // name and not as a stray child.
+    if (expanded != null) row = Semantics(expanded: expanded, child: row);
 
     // The Explorer's body is one lazy `ListView`, so a row Tab reaches may be a
     // cached one above the viewport. See [RevealOnFocus].
@@ -217,6 +230,22 @@ class ExplorerRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Hands the row beneath it the [FocusNode] its one stop takes, so a list that
+/// moves focus by key — arrows, Home, a typed letter — can focus a row it
+/// holds only by id. Without one a row makes its own, as ever.
+class ExplorerRowFocus extends InheritedWidget {
+  const ExplorerRowFocus({required this.node, required super.child, super.key});
+
+  final FocusNode node;
+
+  /// Read, not depended on: the node is the same for the row's whole life.
+  static FocusNode? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<ExplorerRowFocus>()?.node;
+
+  @override
+  bool updateShouldNotify(ExplorerRowFocus old) => old.node != node;
 }
 
 /// The only part of a row a hover changes: [child] travels through untouched.

@@ -15,6 +15,7 @@ import '../application/explorer_tree_state.dart';
 import '../application/explorer_view_mode.dart';
 import '../application/session_selection.dart';
 import 'explorer_header_actions.dart';
+import 'explorer_keyboard.dart';
 import 'explorer_scope_bar.dart';
 import 'explorer_selection_actions.dart';
 import 'explorer_sections_view.dart';
@@ -55,43 +56,46 @@ class ExplorerPanel extends ConsumerWidget {
       // the same column — see [PaneHeader.icon].
       focused: focused,
       actions: const [ExplorerHeaderActions()],
-      body: Column(
-        children: [
-          // The scope — which machine, which context — narrows the tree and
-          // not the saved views, which cross both; it is not drawn over them.
-          if (hasProjects && showingViews)
-            search
-          else if (hasProjects) ...[
-            ExplorerScopeBar(search: search),
-            const ExplorerContextChips(),
-          ],
-          // Not a stop of its own: it hears keys from the rows and the strip,
-          // and never from the search field above it.
-          Expanded(
-            child: Focus(
-              canRequestFocus: false,
-              skipTraversal: true,
-              onKeyEvent: (_, event) => _selectionKeys(ref, event),
-              child: Column(
-                children: [
-                  if (selecting) const SessionSelectionBar(),
-                  Expanded(
-                    child: showingViews
-                        ? const ExplorerSectionsList()
-                        : hasProjects
-                        ? const ExplorerTreeView()
-                        : const PanePlaceholder(
-                            message:
-                                'No projects yet.\nUse + to create one from a '
-                                'folder, then its CLI sessions are imported '
-                                'automatically.',
-                          ),
-                  ),
-                ],
+      // The search field and the list are one column to the arrow keys.
+      body: ExplorerKeyboardScope(
+        child: Column(
+          children: [
+            // The scope — which machine, which context — narrows the tree and
+            // not the saved views, which cross both; it is not drawn over them.
+            if (hasProjects && showingViews)
+              search
+            else if (hasProjects) ...[
+              ExplorerScopeBar(search: search),
+              const ExplorerContextChips(),
+            ],
+            // Not a stop of its own: it hears keys from the rows and the strip,
+            // and never from the search field above it.
+            Expanded(
+              child: Focus(
+                canRequestFocus: false,
+                skipTraversal: true,
+                onKeyEvent: (_, event) => _selectionKeys(ref, event),
+                child: Column(
+                  children: [
+                    if (selecting) const SessionSelectionBar(),
+                    Expanded(
+                      child: showingViews
+                          ? const ExplorerSectionsList()
+                          : hasProjects
+                          ? const ExplorerTreeView()
+                          : const PanePlaceholder(
+                              message:
+                                  'No projects yet.\nUse + to create one from a '
+                                  'folder, then its CLI sessions are imported '
+                                  'automatically.',
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -122,25 +126,48 @@ class ExplorerSearchField extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    // Inset to the row tiles' own edges: the field and the rows beneath it
-    // are one column, not two things that nearly line up.
-    padding: const EdgeInsets.fromLTRB(
-      Insets.xs,
-      Insets.sm,
-      Insets.xs,
-      Insets.xs,
-    ),
-    child: TextField(
-      decoration: const InputDecoration(
-        isDense: true,
-        prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
-        hintText: 'Search projects',
-        border: OutlineInputBorder(),
+  Widget build(BuildContext context) {
+    final links = ExplorerKeyboardScope.maybeOf(context);
+    return Padding(
+      // Inset to the row tiles' own edges: the field and the rows beneath it
+      // are one column, not two things that nearly line up.
+      padding: const EdgeInsets.fromLTRB(
+        Insets.xs,
+        Insets.sm,
+        Insets.xs,
+        Insets.xs,
       ),
-      onChanged: onChanged,
-    ),
-  );
+      // `↓` leaves the field for the list under it — the one key of the
+      // field's that a single line has no use for. Every other key is its own.
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: (_, event) {
+          final keys = HardwareKeyboard.instance;
+          final down =
+              event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowDown &&
+              !keys.isShiftPressed &&
+              !keys.isControlPressed &&
+              !keys.isMetaPressed &&
+              !keys.isAltPressed;
+          return down && (links?.enterList?.call() ?? false)
+              ? KeyEventResult.handled
+              : KeyEventResult.ignored;
+        },
+        child: TextField(
+          focusNode: links?.searchFocus,
+          decoration: const InputDecoration(
+            isDense: true,
+            prefixIcon: Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
+            hintText: 'Search projects',
+            border: OutlineInputBorder(),
+          ),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
 }
 
 /// The saved sections, in place of the tree.
@@ -177,8 +204,28 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
   /// Names the list. A new name is a new list, at the top.
   int _generation = 0;
 
+  /// The arrow keys. It holds rows by id and asks for the tree when a key
+  /// arrives, so it outlives every rebuild and causes none.
+  late final _keyboard = ExplorerTreeKeyboard(
+    ref: ref,
+    scroll: _scroll,
+    readNodes: () => ref.read(explorerTreeProvider).nodes,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final links = ExplorerKeyboardScope.maybeOf(context);
+    if (identical(links, _keyboard.links)) return;
+    _keyboard.links?.enterList = null;
+    _keyboard.links = links;
+    links?.enterList = _keyboard.enter;
+  }
+
   @override
   void dispose() {
+    _keyboard.links?.enterList = null;
+    _keyboard.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -252,12 +299,17 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
       itemCount: nodes.length,
       itemBuilder: (context, index) {
         final node = nodes[index];
-        return ExplorerTreeRow(
+        return ExplorerKeyboardRow(
           key: ValueKey(node.id),
-          node: node,
-          anchorKey: node is ProjectNode && node.project.id == selectedProjectId
-              ? _selectedRow
-              : null,
+          id: node.id,
+          keyboard: _keyboard,
+          child: ExplorerTreeRow(
+            node: node,
+            anchorKey:
+                node is ProjectNode && node.project.id == selectedProjectId
+                ? _selectedRow
+                : null,
+          ),
         );
       },
     );
@@ -265,23 +317,32 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
     // over the pinned header instead of passing under it.
     return Scrollbar(
       controller: _scroll,
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          ScrollConfiguration(
-            behavior: ScrollConfiguration.of(
-              context,
-            ).copyWith(scrollbars: false),
-            child: list,
-          ),
-          ExplorerPinnedHeader(
-            // A new list starts at the top, with nothing pinned.
-            key: ValueKey(_generation),
-            controller: _scroll,
-            nodes: nodes,
-            topPadding: ExplorerRow.gap,
-          ),
-        ],
+      // Not a stop of its own: it hears the keys of whichever row has focus,
+      // the pinned header's copy included — and so never a text field's, a
+      // menu's or the terminal's, which are not under it.
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onKeyEvent: _keyboard.onKey,
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            ScrollConfiguration(
+              behavior: ScrollConfiguration.of(
+                context,
+              ).copyWith(scrollbars: false),
+              child: list,
+            ),
+            ExplorerPinnedHeader(
+              // A new list starts at the top, with nothing pinned.
+              key: ValueKey(_generation),
+              controller: _scroll,
+              nodes: nodes,
+              topPadding: ExplorerRow.gap,
+              keyboard: _keyboard,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -296,11 +357,16 @@ class ExplorerPinnedHeader extends StatefulWidget {
     required this.controller,
     required this.nodes,
     required this.topPadding,
+    this.keyboard,
     super.key,
   });
 
   final ScrollController controller;
   final List<ExplorerNode> nodes;
+
+  /// Told when focus is in the pinned copy, so the arrow keys move from the
+  /// header it stands for.
+  final ExplorerTreeKeyboard? keyboard;
 
   /// The list's own padding above its first row.
   final double topPadding;
@@ -490,6 +556,11 @@ class _ExplorerPinnedHeaderState extends State<ExplorerPinnedHeader> {
     final node = widget.nodes[pinned];
     if (node is! ExplorerHeaderNode) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
+    final keyboard = widget.keyboard;
+    final Widget row = ExplorerTreeRow(
+      key: ValueKey('pinned:${node.id}'),
+      node: node,
+    );
     return Positioned(
       top: _shift,
       left: 0,
@@ -502,7 +573,15 @@ class _ExplorerPinnedHeaderState extends State<ExplorerPinnedHeader> {
           color: scheme.surface,
           border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
         ),
-        child: ExplorerTreeRow(key: ValueKey('pinned:${node.id}'), node: node),
+        child: keyboard == null
+            ? row
+            : ExplorerKeyboardRow(
+                key: ValueKey('pinned-keys:${node.id}'),
+                id: node.id,
+                keyboard: keyboard,
+                stop: false,
+                child: row,
+              ),
       ),
     );
   }

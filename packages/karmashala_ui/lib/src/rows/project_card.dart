@@ -111,6 +111,8 @@ class ProjectCard extends StatelessWidget {
 
     return ExplorerRow(
       kind: ExplorerRowKind.project,
+      // A plain header — the companion's — folds nothing.
+      expanded: onTap == null ? null : expanded,
       depth: depth,
       selected: selected,
       onTap: onTap,
