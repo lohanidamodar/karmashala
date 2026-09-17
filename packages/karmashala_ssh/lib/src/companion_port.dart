@@ -66,15 +66,22 @@ class PortOpening {
 class CompanionPortSetup {
   CompanionPortSetup({
     required this.target,
+    String? dialHost,
     Future<bool> Function(String host, int port, Duration within)? dial,
     DateTime Function()? clock,
     AppLogger? logger,
     this.dialTimeout = const Duration(seconds: 5),
-  }) : _dial = dial ?? _connect,
+  }) : machine = dialHost ?? target.address,
+       _dial = dial ?? _connect,
        _now = clock ?? DateTime.now,
        _logger = logger ?? AppLogger.named('ssh.port');
 
   final HostDeployTarget target;
+
+  /// What is dialled and named in every sentence: the bare host. **Not**
+  /// `target.address`, which for a real SSH target is the log label
+  /// `user@host:22` — a lookup failure that reads as a shut port.
+  final String machine;
   final Duration dialTimeout;
   final Future<bool> Function(String host, int port, Duration within) _dial;
   final DateTime Function() _now;
@@ -88,7 +95,7 @@ class CompanionPortSetup {
         status: PortStatus.alreadyReachable,
         observedAt: _now(),
         reason:
-            '${target.address}:$port answered. No firewall rule was needed, so '
+            '$machine:$port answered. No firewall rule was needed, so '
             'nothing on the machine was changed.',
       );
     }
@@ -107,7 +114,7 @@ class CompanionPortSetup {
       return PortOpening(
         status: PortStatus.opened,
         observedAt: _now(),
-        reason: '${attempt.reason} ${target.address}:$port answers now.',
+        reason: '${attempt.reason} $machine:$port answers now.',
         command: attempt.command,
       );
     }
@@ -116,7 +123,7 @@ class CompanionPortSetup {
       status: PortStatus.ruleAddedStillShut,
       observedAt: _now(),
       reason:
-          '${attempt.reason} ${target.address}:$port still does not answer, so '
+          '${attempt.reason} $machine:$port still does not answer, so '
           'something outside the machine is dropping it — a provider firewall '
           'or security group is the usual one, and nothing here can open that.',
       command: attempt.command,
@@ -125,11 +132,11 @@ class CompanionPortSetup {
 
   Future<bool> _reachable(int port) async {
     try {
-      final answered = await _dial(target.address, port, dialTimeout);
-      _logger.debug('${target.address}:$port ${answered ? 'answered' : 'did not answer'}');
+      final answered = await _dial(machine, port, dialTimeout);
+      _logger.debug('$machine:$port ${answered ? 'answered' : 'did not answer'}');
       return answered;
     } on Object catch (error) {
-      _logger.debug('${target.address}:$port did not answer: $error');
+      _logger.debug('$machine:$port did not answer: $error');
       return false;
     }
   }
@@ -154,7 +161,7 @@ class CompanionPortSetup {
         // because two binaries are absent is the confident false statement
         // every other verdict here is shaped to avoid.
         reason:
-            'Found no `ufw` or `firewall-cmd` on ${target.address}, so nothing '
+            'Found no `ufw` or `firewall-cmd` on $machine, so nothing '
             'there was changed. If it filters with nftables or iptables, or your '
             'provider has a firewall, $port/tcp has to be opened there.',
         command: null,
@@ -162,7 +169,7 @@ class CompanionPortSetup {
       'unknown' => (
         ran: false,
         reason:
-            '${target.address} filters with nftables or iptables, which this '
+            '$machine filters with nftables or iptables, which this '
             'does not open by hand — the rule depends on the chain it is going '
             'into. Open $port/tcp there.',
         command: null,
@@ -170,14 +177,14 @@ class CompanionPortSetup {
       'nosudo' => (
         ran: false,
         reason:
-            'A firewall is running on ${target.address} and this cannot change it '
+            'A firewall is running on $machine and this cannot change it '
             'without a password. Run the command below there, then deploy again.',
         command: 'sudo ufw allow $port/tcp   # or your firewall\'s equivalent',
       ),
       _ => (
         ran: false,
         reason:
-            '${target.address} answered "${said.isEmpty ? 'nothing' : said}" when '
+            '$machine answered "${said.isEmpty ? 'nothing' : said}" when '
             'asked about its firewall, which this does not understand. Open '
             '$port/tcp there by hand.',
         command: null,

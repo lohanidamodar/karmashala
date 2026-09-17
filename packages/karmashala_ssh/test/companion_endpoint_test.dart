@@ -7,12 +7,17 @@ import 'package:test/test.dart';
 
 class _Box implements HostDeployTarget {
   String firewall = 'none';
+  String label = 'box.example';
+  final ran = <String>[];
 
   @override
-  String get address => 'box.example';
+  String get address => label;
 
   @override
-  Future<RemoteRun> run(String command) async => RemoteRun(0, '$firewall\n', '');
+  Future<RemoteRun> run(String command) async {
+    ran.add(command);
+    return RemoteRun(0, '$firewall\n', '');
+  }
 
   @override
   Future<void> upload(String remotePath, Uint8List bytes) async {}
@@ -50,6 +55,31 @@ void main() {
     expect(endpoint.address, '203.0.113.9');
     expect(endpoint.hostName, 'do-box');
     expect(endpoint.reachable, isTrue);
+  });
+
+  test('the proof dials the machine, not the label ssh logs it under', () async {
+    // What the real target answers: `user@host:22`, for logs. Dialling that is
+    // a lookup failure, which read as "shut" on every real machine and sent a
+    // firewall rule after a port that was open all along.
+    final box = _Box()..label = 'dlohani@203.0.113.9:22';
+    final dialled = <String>[];
+    final setup = SshCompanionSetup(
+      host: host,
+      target: box,
+      remotePath: '/x/karmashala_host',
+      dial: (address, port, _) async {
+        dialled.add('$address:$port');
+        return true;
+      },
+    );
+
+    final endpoint = await setup.prepare();
+
+    expect(dialled, ['203.0.113.9:$kHostCompanionPort']);
+    expect(endpoint.reachable, isTrue);
+    expect(endpoint.reason, contains('203.0.113.9:$kHostCompanionPort answered'));
+    expect(endpoint.reason, isNot(contains('dlohani@')));
+    expect(box.ran, isEmpty, reason: 'an open port changes nothing on the box');
   });
 
   test('the companion port is not the ssh port', () async {

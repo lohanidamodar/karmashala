@@ -58,8 +58,12 @@ class SshCompanionSetup {
     required this.remotePath,
     CompanionPortSetup? ports,
     RemotePairing? pairing,
+    Future<bool> Function(String host, int port, Duration within)? dial,
     this.port = kHostCompanionPort,
-  }) : _ports = ports ?? CompanionPortSetup(target: target),
+  }) : _ports =
+           ports ??
+           // The address the person typed, which is what a phone will dial too.
+           CompanionPortSetup(target: target, dialHost: host.host, dial: dial),
        _pairing =
            pairing ?? RemotePairing(target: target, remotePath: remotePath);
 

@@ -107,6 +107,7 @@ class SshRelaySetup {
         ports ??
         CompanionPortSetup(
           target: target,
+          dialHost: host.host,
           clock: clock,
           logger: _logger,
           dialTimeout: probeTimeout,
