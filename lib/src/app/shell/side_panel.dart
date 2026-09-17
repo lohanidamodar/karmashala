@@ -8,6 +8,7 @@ import 'logs_panel.dart';
 import 'resize_handle.dart';
 import 'shell_shortcuts.dart';
 import 'side_panel_context.dart';
+import 'side_panel_rail_menu.dart';
 import 'side_panel_state.dart';
 
 import '../../features/agents/presentation/agent_context_panel.dart';
@@ -107,7 +108,7 @@ class SidePanel extends ConsumerWidget {
             onResizeEnd: onResizeEnd,
           ),
         _SidePanelRail(
-          open: hasRoom ? open : null,
+          open: open,
           hasRoom: hasRoom,
           debugMode: debugMode,
           notesEnabled: notesEnabled,
@@ -117,7 +118,9 @@ class SidePanel extends ConsumerWidget {
   }
 }
 
-class _SidePanelRail extends StatelessWidget {
+/// The rail. It alone watches which surfaces are hidden, so hiding one redraws
+/// these glyphs and not the panel's body beside them.
+class _SidePanelRail extends ConsumerWidget {
   const _SidePanelRail({
     required this.open,
     required this.hasRoom,
@@ -125,37 +128,54 @@ class _SidePanelRail extends StatelessWidget {
     required this.notesEnabled,
   });
 
+  /// The open surface, even when the window has no room to draw it: a hidden
+  /// one keeps its glyph for as long as it is open, not as long as it fits.
   final SidePanelSurface? open;
   final bool hasRoom;
   final bool debugMode;
   final bool notesEnabled;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: Chrome.rail,
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
-        border: Border(left: BorderSide(color: scheme.outlineVariant)),
-      ),
-      // The glyphs scroll rather than overflow: fourteen at 32px need ~450px,
-      // more than the smallest supported window leaves the rail.
-      child: SingleChildScrollView(
-        primary: false,
-        child: Column(
-          children: [
-            const SizedBox(height: Insets.xs),
-            for (final surface in SidePanelSurface.offered(
-              debugMode: debugMode,
-              notesEnabled: notesEnabled,
-            ))
-              _RailEntry(
-                surface: surface,
-                selected: surface == open,
-                enabled: hasRoom,
-              ),
-          ],
+    final hidden = ref.watch(hiddenSidePanelSurfacesProvider);
+    return GestureDetector(
+      // Up, not down: a glyph's own region is deeper and wins the tap, so the
+      // rail's menu opens once and names the glyph under the pointer.
+      onSecondaryTapUp: (details) =>
+          showRailMenu(context, ref, position: details.globalPosition),
+      child: Container(
+        width: Chrome.rail,
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          border: Border(left: BorderSide(color: scheme.outlineVariant)),
+        ),
+        // The glyphs scroll rather than overflow: fourteen at 32px need ~450px,
+        // more than the smallest supported window leaves the rail.
+        child: SingleChildScrollView(
+          primary: false,
+          child: Column(
+            children: [
+              const SizedBox(height: Insets.xs),
+              for (final surface in SidePanelSurface.offered(
+                debugMode: debugMode,
+                notesEnabled: notesEnabled,
+              ))
+                // The Inbox is always built: whether a hidden one shows
+                // depends on the attention count, which only its entry
+                // watches.
+                if (surface == SidePanelSurface.inbox ||
+                    surface.showsOnRail(hidden: hidden, open: open))
+                  _RailEntry(
+                    surface: surface,
+                    selected: hasRoom && surface == open,
+                    hidden: hidden.contains(surface),
+                    open: surface == open,
+                    enabled: hasRoom,
+                  ),
+              const _RailItemsButton(),
+            ],
+          ),
         ),
       ),
     );
@@ -168,26 +188,80 @@ class _RailEntry extends ConsumerWidget {
   const _RailEntry({
     required this.surface,
     required this.selected,
+    required this.hidden,
+    required this.open,
     required this.enabled,
   });
 
   final SidePanelSurface surface;
   final bool selected;
+
+  /// Hidden from the rail by the user, and drawn anyway: open, or needing you.
+  final bool hidden;
+  final bool open;
   final bool enabled;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => _RailButton(
-    surface: surface,
-    selected: selected,
+  Widget build(BuildContext context, WidgetRef ref) {
     // The rail is where a badge belongs: it is always visible, even when the
     // panel is collapsed to its 34px.
-    badge: surface == SidePanelSurface.inbox
+    final badge = surface == SidePanelSurface.inbox
         ? ref.watch(attentionCountProvider)
-        : 0,
-    onTap: enabled
-        ? () => ref.read(sidePanelProvider.notifier).select(surface)
-        : null,
-  );
+        : 0;
+    if (hidden && !open && badge == 0) return const SizedBox.shrink();
+    return GestureDetector(
+      onSecondaryTapUp: (details) => showRailMenu(
+        context,
+        ref,
+        position: details.globalPosition,
+        target: surface,
+      ),
+      child: _RailButton(
+        surface: surface,
+        selected: selected,
+        hidden: hidden,
+        badge: badge,
+        onTap: enabled
+            ? () => ref.read(sidePanelProvider.notifier).select(surface)
+            : null,
+      ),
+    );
+  }
+}
+
+/// The rail's menu for a keyboard, and the way back when every glyph is hidden.
+class _RailItemsButton extends ConsumerWidget {
+  const _RailItemsButton();
+
+  static const label = 'Side panel items';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: '$label\nShow or hide the glyphs on this rail',
+      child: Semantics(
+        button: true,
+        label: label,
+        child: Builder(
+          // The menu opens under the button, so it needs the button's context.
+          builder: (context) => InkWell(
+            onTap: () => showRailMenu(context, ref),
+            child: Container(
+              height: Chrome.tabStrip,
+              margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+              alignment: Alignment.center,
+              child: Icon(
+                AppIcons.dotsThreeVertical,
+                size: Chrome.icon,
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _RailButton extends StatelessWidget {
@@ -195,11 +269,15 @@ class _RailButton extends StatelessWidget {
     required this.surface,
     required this.selected,
     required this.onTap,
+    this.hidden = false,
     this.badge = 0,
   });
 
   final SidePanelSurface surface;
   final bool selected;
+
+  /// Drawn although the user hid it, so the tooltip says why it is here.
+  final bool hidden;
 
   /// Null when the window has no room for the panel's body.
   final VoidCallback? onTap;
@@ -215,13 +293,14 @@ class _RailButton extends StatelessWidget {
       if (badge > 0) '$badge waiting',
       if (selected) 'click to close',
     ].join('  ·  ');
-    if (onTap == null) return '$head\n$kSidePanelNoRoom';
+    final why = hidden ? '\nHidden from the rail · shown while open' : '';
+    if (onTap == null) return '$head$why\n$kSidePanelNoRoom';
     final direct = surface == SidePanelSurface.inbox
         ? shellChordLabel<OpenAttentionInboxIntent>()
         : null;
     final panel = shellChordLabel<ToggleSidePanelIntent>();
     return [
-      head,
+      '$head$why',
       if (direct != null) '$direct  ·  opens this one',
       if (panel != null) '$panel  ·  shows or hides the panel',
     ].join('\n');

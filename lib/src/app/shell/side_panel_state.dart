@@ -1,5 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
+import '../../features/settings/application/settings_controller.dart';
+
 /// The surfaces the right-hand side panel can show.
 enum SidePanelSurface {
   /// First on the rail because it is the thing you check first: everything
@@ -82,8 +84,30 @@ enum SidePanelSurface {
   bool isOffered({required bool debugMode, bool notesEnabled = true}) =>
       (debugMode || !requiresDebugMode) && (notesEnabled || !requiresNotes);
 
+  /// Whether this surface's glyph is on the rail. One the user hid is still
+  /// drawn while it is [open] — as VS Code does, so what is showing always has
+  /// a glyph that closes it — and the Inbox while something [needsYou].
+  bool showsOnRail({
+    required Set<SidePanelSurface> hidden,
+    SidePanelSurface? open,
+    bool needsYou = false,
+  }) =>
+      !hidden.contains(this) ||
+      this == open ||
+      (this == SidePanelSurface.inbox && needsYou);
+
+  /// The surface stored under [id], or null for one this build does not have.
+  static SidePanelSurface? fromId(String id) {
+    for (final surface in values) {
+      if (surface.name == id) return surface;
+    }
+    return null;
+  }
+
   /// The surfaces to offer — on the rail, in the View menu and in quick open.
-  /// One list, so a surface cannot be hidden and still reachable from a menu.
+  /// One list, so a surface switched off cannot still be reachable from a
+  /// menu. Hiding one from the rail is not switching it off: see
+  /// [hiddenSidePanelSurfacesProvider].
   static List<SidePanelSurface> offered({
     required bool debugMode,
     bool notesEnabled = true,
@@ -93,6 +117,18 @@ enum SidePanelSurface {
         surface,
   ];
 }
+
+/// The surfaces the user took off the rail. Only the rail and the lists that
+/// toggle it read this; the View menu, quick open and every chord still open a
+/// hidden surface.
+final hiddenSidePanelSurfacesProvider = Provider<Set<SidePanelSurface>>(
+  (ref) => {
+    for (final id in ref.watch(
+      settingsControllerProvider.select((s) => s.hiddenSidePanelSurfaces),
+    ))
+      ?SidePanelSurface.fromId(id),
+  },
+);
 
 /// Which side-panel surface is open, or `null` when collapsed — and collapsed
 /// means collapsed: the body gets no width at all, only the rail stays.

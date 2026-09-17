@@ -58,6 +58,14 @@ class ShellMenuActions {
   void showSurface(SidePanelSurface surface) =>
       _ref.read(sidePanelProvider.notifier).select(surface);
 
+  void setSurfaceHidden(SidePanelSurface surface, {required bool hidden}) =>
+      _ref
+          .read(settingsControllerProvider.notifier)
+          .setSidePanelSurfaceHidden(surface.name, hidden: hidden);
+
+  void showAllSurfaces() =>
+      _ref.read(settingsControllerProvider.notifier).showAllSidePanelSurfaces();
+
   void toggleFocusMode() =>
       _ref.read(terminalMaximizedProvider.notifier).toggle();
 
@@ -277,6 +285,7 @@ class ViewMenu extends ConsumerWidget {
       menuChildren: [
         _ExplorerCheckItem(actions),
         _SidePanelCheckItem(actions),
+        _SidePanelItemsSubmenu(actions),
         const Divider(height: 1),
         // The surfaces the panel can show, so every tool is reachable from the
         // menu bar and not only from a glyph on the rail.
@@ -332,6 +341,44 @@ class _SidePanelCheckItem extends ConsumerWidget {
       shortcut: commandActivator(LogicalKeyboardKey.digit3),
       onChanged: hasRoom ? (_) => actions.toggleSidePanel() : null,
       child: Text(hasRoom ? 'Side panel' : 'Side panel  ·  $kSidePanelNoRoom'),
+    );
+  }
+}
+
+/// The rail's checklist without a mouse: the same list its right-click opens.
+/// Hiding changes a preference, not the panel, so it needs no room.
+class _SidePanelItemsSubmenu extends ConsumerWidget {
+  const _SidePanelItemsSubmenu(this.actions);
+
+  final ShellMenuActions actions;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hidden = ref.watch(hiddenSidePanelSurfacesProvider);
+    final surfaces = SidePanelSurface.offered(
+      debugMode: ref.watch(
+        settingsControllerProvider.select((s) => s.debugMode),
+      ),
+      notesEnabled: ref.watch(notesEnabledProvider),
+    );
+    return SubmenuButton(
+      leadingIcon: const Icon(AppIcons.sidebarSimple),
+      menuChildren: [
+        for (final surface in surfaces)
+          CheckboxMenuButton(
+            value: !hidden.contains(surface),
+            onChanged: (visible) =>
+                actions.setSurfaceHidden(surface, hidden: visible != true),
+            child: Text(surface.label),
+          ),
+        const Divider(height: 1),
+        MenuItemButton(
+          leadingIcon: const Icon(AppIcons.arrowCounterClockwise),
+          onPressed: hidden.isEmpty ? null : actions.showAllSurfaces,
+          child: const Text('Show all'),
+        ),
+      ],
+      child: const Text('Side panel items'),
     );
   }
 }
