@@ -68,6 +68,27 @@ cp -R build/host-macos/bundle "$APP/Contents/MacOS/host"
 # run here, passed throughout.
 "$APP/Contents/MacOS/host/bin/karmashala_host" probe-pty
 
+# The hosts this app deploys to SSH boxes, beside the app binary, where
+# `DirectoryHostBinaries` looks first. Without them every deploy from a Mac
+# answered `noBinary` — found 2026-09-17, when "use an SSH host as a relay"
+# could put nothing on the box.
+#
+# Cross-built here, which `build_release.bat` cannot do: from Windows the
+# bundled library's relative path is baked with `\` and the host cannot open a
+# store on Linux. From macOS the separator is already `/`; the arm64 bundle was
+# run in a Linux container that day and passed probe-store and probe-pty.
+echo "=== SESSION HOSTS (linux, to deploy) ==="
+rm -f "$APP"/Contents/MacOS/karmashala_host-*-linux-*.tar.gz
+for arch in x64 arm64; do
+  rm -rf "build/host-linux-$arch"
+  dart build cli -t packages/host/bin/karmashala_host.dart \
+    --target-os=linux --target-arch="$arch" -o "build/host-linux-$arch"
+  # No AppleDouble files or xattr headers: a Linux tar warns on every one.
+  COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf \
+    "$APP/Contents/MacOS/karmashala_host-$APPSHORT-linux-$arch.tar.gz" \
+    -C "build/host-linux-$arch/bundle" .
+done
+
 # Re-sign after writing into the bundle: adding a file invalidates the seal
 # Flutter's own build applied, and an app with a broken signature is refused by
 # Gatekeeper with a message that names nothing useful. Ad-hoc (`-`) is what an
