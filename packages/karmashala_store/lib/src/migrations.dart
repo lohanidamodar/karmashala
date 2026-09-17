@@ -61,6 +61,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   50: _migrateToV50,
   51: _migrateToV51,
   52: _migrateToV52,
+  53: _migrateToV53,
 };
 
 /// Was this pane running when its row was written? `DEFAULT 0` is the honest
@@ -1332,5 +1333,40 @@ void _migrateToV52(Database db) {
     'CREATE INDEX IF NOT EXISTS idx_session_checkpoints_repository '
     'ON session_checkpoints (session_id, environment_id, repository_path, '
     'sequence);',
+  );
+}
+
+/// A session the user asked to have resumed at a moment, usually a usage
+/// window's reset. At most one live row per session; ended rows are the record.
+void _migrateToV53(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS scheduled_resumes (
+      id                  TEXT PRIMARY KEY,
+      session_id          TEXT NOT NULL,
+      account_key         TEXT NOT NULL DEFAULT '',
+      window_label        TEXT,
+      fire_at             TEXT NOT NULL,
+      message             TEXT NOT NULL DEFAULT '',
+      permission_mode     TEXT,
+      notify              INTEGER NOT NULL DEFAULT 0,
+      late_policy         TEXT NOT NULL DEFAULT 'ask',
+      state               TEXT NOT NULL,
+      reason              TEXT NOT NULL DEFAULT '',
+      attempts            INTEGER NOT NULL DEFAULT 0,
+      live_when_scheduled INTEGER NOT NULL DEFAULT 0,
+      scheduled_by        TEXT NOT NULL DEFAULT 'the user',
+      scheduled_at        TEXT NOT NULL,
+      finished_at         TEXT,
+      FOREIGN KEY (session_id) REFERENCES sessions (id) ON DELETE CASCADE
+    );
+  ''');
+  db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_scheduled_resumes_live '
+    'ON scheduled_resumes (session_id) '
+    "WHERE state IN ('pending', 'queued', 'firing');",
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_scheduled_resumes_fire_at '
+    'ON scheduled_resumes (state, fire_at);',
   );
 }
