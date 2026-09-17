@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
+import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
@@ -347,6 +348,25 @@ void main() {
 
       expect(contextOf('p2'), 'w1');
       expect(contextOf('p3'), 'w1');
+    });
+  });
+
+  group('resuming when usage resets', () {
+    testWidgets('a right-click on ticked sessions opens the dialog for all of '
+        'them', (tester) async {
+      await pump(tester);
+      await clickWith(tester, 'Session 0', LogicalKeyboardKey.controlLeft);
+      await clickWith(tester, 'Session 1', LogicalKeyboardKey.controlLeft);
+
+      await rightClick(tester, 'Session 0');
+      await tester.tap(find.text('Resume 2 sessions when usage resets…'));
+      await tester.pumpAndSettle();
+
+      final dialog = tester.widget<ResumeOnResetDialog>(
+        find.byType(ResumeOnResetDialog),
+      );
+      expect(dialog.sessionIds, unorderedEquals(['n0', 'n1']));
+      expect(find.text('2 sessions'), findsOneWidget);
     });
   });
 

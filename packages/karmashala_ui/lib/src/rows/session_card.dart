@@ -43,6 +43,8 @@ class SessionCard extends StatelessWidget {
     this.subPath,
     this.whereabouts,
     this.whereaboutsTooltip,
+    this.scheduled,
+    this.scheduledTooltip,
     this.stat,
     this.statPending = false,
     this.worktree = false,
@@ -112,6 +114,11 @@ class SessionCard extends StatelessWidget {
   /// "open in another process", "last seen 2h ago".
   final String? whereabouts;
   final String? whereaboutsTooltip;
+
+  /// What is due to happen to this session and when — `resumes 14:05` — drawn
+  /// first on the meta line behind a clock, so a narrow row keeps it.
+  final String? scheduled;
+  final String? scheduledTooltip;
 
   /// Line three, right: what the checkout has produced.
   final SessionDiffStat? stat;
@@ -226,6 +233,8 @@ class SessionCard extends StatelessWidget {
                 statPending: statPending,
                 whereabouts: whereabouts,
                 whereaboutsTooltip: whereaboutsTooltip,
+                scheduled: scheduled,
+                scheduledTooltip: scheduledTooltip,
                 lineageBroken: lineageBroken,
                 worktree: worktree,
                 stat: stat,
@@ -346,6 +355,8 @@ class SessionCard extends StatelessWidget {
             statPending: statPending,
             whereabouts: whereabouts,
             whereaboutsTooltip: whereaboutsTooltip,
+            scheduled: scheduled,
+            scheduledTooltip: scheduledTooltip,
             worktree: worktree,
             stat: stat,
             link: link,
@@ -611,6 +622,8 @@ class _SessionCardWhereLine extends StatelessWidget {
     required this.statPending,
     required this.whereabouts,
     required this.whereaboutsTooltip,
+    required this.scheduled,
+    required this.scheduledTooltip,
     required this.lineageBroken,
     required this.worktree,
     required this.stat,
@@ -623,6 +636,8 @@ class _SessionCardWhereLine extends StatelessWidget {
   final bool statPending;
   final String? whereabouts;
   final String? whereaboutsTooltip;
+  final String? scheduled;
+  final String? scheduledTooltip;
   final bool lineageBroken;
   final bool worktree;
   final SessionDiffStat? stat;
@@ -640,6 +655,7 @@ class _SessionCardWhereLine extends StatelessWidget {
     // name means the checkout was measured, so the two never share the line.
     final unmeasured = statPending && branch == null;
     final where = [
+      ?scheduled,
       ?subPath,
       ?branch,
       if (unmeasured) '…',
@@ -648,13 +664,16 @@ class _SessionCardWhereLine extends StatelessWidget {
     ].join('  ·  ');
     // One glyph, for whichever fact leads. Two would crowd a line that is
     // already the first thing to ellipsise at the pane's minimum width.
-    final leading = subPath != null
+    final leading = scheduled != null
+        ? AppIcons.clock
+        : subPath != null
         ? AppIcons.folder
         : (branch != null || unmeasured ? AppIcons.gitBranch : null);
     final tooltip = [
       if (where.isNotEmpty) where,
       if (unmeasured) 'Branch and change counts have not been measured yet.',
       ?whereaboutsTooltip,
+      ?scheduledTooltip,
     ].join('\n');
     final stat = this.stat;
     final showStat = stat != null && !stat.isEmpty;
@@ -730,6 +749,8 @@ class _PointerMetaLine extends StatelessWidget {
     required this.statPending,
     required this.whereabouts,
     required this.whereaboutsTooltip,
+    required this.scheduled,
+    required this.scheduledTooltip,
     required this.worktree,
     required this.stat,
     required this.link,
@@ -743,6 +764,8 @@ class _PointerMetaLine extends StatelessWidget {
   final bool statPending;
   final String? whereabouts;
   final String? whereaboutsTooltip;
+  final String? scheduled;
+  final String? scheduledTooltip;
   final bool worktree;
   final SessionDiffStat? stat;
   final SessionLink? link;
@@ -763,6 +786,7 @@ class _PointerMetaLine extends StatelessWidget {
       ),
     );
     final clauses = [
+      ?scheduled,
       agentLabel,
       ?branch,
       if (unmeasured) '…',
@@ -772,6 +796,7 @@ class _PointerMetaLine extends StatelessWidget {
       clauses.join('  ·  '),
       if (unmeasured) 'Branch and change counts have not been measured yet.',
       ?whereaboutsTooltip,
+      ?scheduledTooltip,
     ].join('\n');
     final stat = this.stat;
     final showStat = stat != null && !stat.isEmpty;
@@ -804,6 +829,18 @@ class _PointerMetaLine extends StatelessWidget {
                 child: Text.rich(
                   TextSpan(
                     children: [
+                      if (scheduled != null)
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.middle,
+                          child: Padding(
+                            padding: EdgeInsets.only(right: density.glyphGap),
+                            child: Icon(
+                              AppIcons.clock,
+                              size: density.iconSmall,
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
                       for (var i = 0; i < clauses.length; i++) ...[
                         if (i > 0) separator,
                         TextSpan(text: clauses[i]),

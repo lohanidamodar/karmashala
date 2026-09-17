@@ -30,6 +30,8 @@ import '../application/session_row_attention.dart';
 import '../application/session_selection.dart';
 import 'explorer_selection_actions.dart';
 import 'section_membership_dialog.dart';
+import '../../automations/application/scheduled_resume_providers.dart';
+import '../../automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala_ui/rows.dart';
 
 /// The two rows that stand for a session, wherever the app draws one: the tree
@@ -144,6 +146,8 @@ class NativeSessionRow extends ConsumerWidget {
     final (:stat, :pending) = ref.watch(
       sessionDiffStatProvider(session.id).select(_statFacts),
     );
+    // A value type: a bump that did not change these words rebuilds nothing.
+    final resume = ref.watch(sessionResumeBadgeProvider(session.id));
 
     return SessionCard(
       depth: depth,
@@ -185,6 +189,8 @@ class NativeSessionRow extends ConsumerWidget {
       subPath: subPath,
       whereabouts: whereabouts.note,
       whereaboutsTooltip: whereabouts.explanation,
+      scheduled: resume?.label,
+      scheduledTooltip: resume?.tooltip,
       stat: stat,
       statPending: pending,
       worktree: session.useWorktree,
@@ -225,6 +231,25 @@ class NativeSessionRow extends ConsumerWidget {
               label: 'Recap',
               icon: AppIcons.article,
             ),
+            // Read when the menu opens: what it offers depends on what waits.
+            if (ref.read(sessionResumeBadgeProvider(session.id)) == null)
+              DesktopMenuItem(
+                value: 'resume-on-reset',
+                label: 'Resume when usage resets…',
+                icon: AppIcons.clock,
+              )
+            else ...[
+              DesktopMenuItem(
+                value: 'resume-on-reset',
+                label: 'Change scheduled resume…',
+                icon: AppIcons.clock,
+              ),
+              DesktopMenuItem(
+                value: 'resume-cancel',
+                label: 'Cancel scheduled resume',
+                icon: AppIcons.x,
+              ),
+            ],
             // One entry, not one per installed terminal: three of eight items here
             // used to be external openers. The rest is a setting.
             if (terminals.isNotEmpty)
@@ -303,6 +328,10 @@ class NativeSessionRow extends ConsumerWidget {
             ref
                 .read(settingsControllerProvider.notifier)
                 .togglePinnedSession(session.id);
+          case 'resume-on-reset':
+            await ResumeOnResetDialog.show(context, [session.id]);
+          case 'resume-cancel':
+            ref.read(scheduledResumeControllerProvider).cancelFor(session.id);
           case 'sections':
             await SectionMembershipDialog.show(context, ref, session.id);
           case 'changed-files':

@@ -7,7 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
 
+import '../../automations/presentation/resume_on_reset_dialog.dart';
 import '../../projects/application/project_providers.dart';
+import '../../sessions/application/session_providers.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/presentation/new_context_dialog.dart';
 import '../application/bulk_session_delete.dart';
@@ -113,6 +115,7 @@ class ExplorerSelectionVerbs {
   static const newContext = 'selection:new-context';
   static const remove = 'selection:remove';
   static const delete = 'selection:delete';
+  static const resumeOnReset = 'selection:resume-on-reset';
   static const selectAll = 'selection:all';
   static const done = 'selection:done';
 
@@ -143,13 +146,19 @@ class ExplorerSelectionVerbs {
           label: 'Remove $many from their context',
           icon: AppIcons.minusCircle,
         ),
-      ] else
+      ] else ...[
+        DesktopMenuItem(
+          value: resumeOnReset,
+          label: 'Resume $many when usage resets…',
+          icon: AppIcons.clock,
+        ),
         DesktopMenuItem(
           value: delete,
           label: 'Delete $many…',
           icon: AppIcons.trash,
           destructive: true,
         ),
+      ],
       const DesktopMenuDivider(),
       ..._tail(),
     ];
@@ -162,13 +171,19 @@ class ExplorerSelectionVerbs {
     return [
       if (kind == SelectionKind.projects)
         ...moveMenu(prefix: 'Move to ')
-      else if (some)
+      else if (some) ...[
+        DesktopMenuItem(
+          value: resumeOnReset,
+          label: 'Resume when usage resets…',
+          icon: AppIcons.clock,
+        ),
         DesktopMenuItem(
           value: delete,
           label: 'Delete…',
           icon: AppIcons.trash,
           destructive: true,
         ),
+      ],
       if (kind == SelectionKind.projects)
         DesktopMenuItem(
           value: remove,
@@ -223,6 +238,13 @@ class ExplorerSelectionVerbs {
         _file(null, null);
       case delete:
         await _delete();
+      case resumeOnReset:
+        // Imported rows have no session of ours to resume, so they sit out.
+        final sessions = ref.read(sessionDaoProvider);
+        await ResumeOnResetDialog.show(context, [
+          for (final id in _selection.ids)
+            if (sessions.getById(id) != null) id,
+        ]);
       case selectAll:
         selectAllVisible(ref, _selection.kind ?? SelectionKind.sessions);
       case done:
