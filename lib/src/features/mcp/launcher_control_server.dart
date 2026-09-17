@@ -538,11 +538,12 @@ class LauncherControlServer implements SessionMcp {
     }
   }
 
-  /// Brings the per-turn checkpoint recorder to life: Riverpod never builds it
-  /// unless something reads it, and it has no UI of its own to do the reading.
+  /// Brings the per-turn checkpoint recorder to life. It subscribes to the
+  /// status registry itself: a Riverpod `listen` inside an unwatched provider
+  /// is paused, which is how every turn but a visible pane's went unrecorded.
   void _startCheckpointRecorder() {
     try {
-      _container.read(sessionCheckpointRecorderProvider);
+      _container.read(sessionCheckpointRecorderProvider.notifier).start();
     } on Object catch (error, stack) {
       _logger.warning('Checkpoint recorder failed to start.', error, stack);
     }

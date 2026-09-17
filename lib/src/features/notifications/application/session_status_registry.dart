@@ -229,6 +229,8 @@ class SessionStatusRegistry {
   final StreamController<void> _changes = StreamController<void>.broadcast();
   final StreamController<SessionStatusEntry> _hookChanges =
       StreamController<SessionStatusEntry>.broadcast();
+  final StreamController<SessionStatusEntry> _statusChanges =
+      StreamController<SessionStatusEntry>.broadcast(sync: true);
 
   DateTime? _nextTranscriptSearch;
   DateTime? _nextStoreSlot;
@@ -347,6 +349,17 @@ class SessionStatusRegistry {
   /// event path `AgentStatusWatcher` listens on so approvals do not wait a pass.
   Stream<SessionStatusEntry> get hookChanges => _hookChanges.stream;
 
+  /// Every session whose status evidence moved, one entry per move and from
+  /// any source. Synchronous, so two moves in one event-loop turn stay two.
+  Stream<SessionStatusEntry> get statusChanges => _statusChanges.stream;
+
+  void _statusMoved(_Tracked tracked) {
+    if (_disposed || _statusChanges.isClosed || !_statusChanges.hasListener) {
+      return;
+    }
+    _statusChanges.add(tracked.entry());
+  }
+
   /// Folds a hook callback in now, out of turn: no disk, no scan, no terminal.
   /// An untracked [key] asks for a cycle instead, rationed by [hookCycleFloor].
   void hookReported(AgentSessionKey key) {
@@ -416,7 +429,7 @@ class SessionStatusRegistry {
       seen.add(session.key);
       final tracked = _tracked.putIfAbsent(
         session.key,
-        () => _Tracked(session, now),
+        () => _Tracked(session, now, _statusMoved),
       );
       tracked.session = session;
       tracked.statePath = session.stateFilePath ?? tracked.statePath;
@@ -549,6 +562,7 @@ class SessionStatusRegistry {
     _byOpenId.clear();
     unawaited(_changes.close());
     unawaited(_hookChanges.close());
+    unawaited(_statusChanges.close());
   }
 
   /// Forgets resolved transcript paths so the next cycle looks again — for a
@@ -759,7 +773,7 @@ bool _sameLines(List<String> a, List<String> b) {
 
 /// Everything the registry keeps about one session between cycles.
 class _Tracked {
-  _Tracked(this.session, DateTime now)
+  _Tracked(this.session, DateTime now, this._onMoved)
     : report = AgentStatusReport(
         agentId: session.key.agentId,
         sessionId: session.key.sessionId,
@@ -774,6 +788,7 @@ class _Tracked {
   WatchedSession session;
   AgentStatusReport report;
   DateTime sampledAt;
+  final void Function(_Tracked tracked) _onMoved;
 
   /// When the status last actually changed — the input to "recently active".
   DateTime changedAt;
@@ -798,9 +813,11 @@ class _Tracked {
       session.imported || session.key.sessionId != session.openId;
 
   void publish(AgentStatusReport next, DateTime now) {
-    if (!_sameEvidence(report, next)) changedAt = now;
+    final moved = !_sameEvidence(report, next);
+    if (moved) changedAt = now;
     report = next;
     sampledAt = now;
+    if (moved) _onMoved(this);
   }
 
   SessionStatusEntry entry() => SessionStatusEntry(

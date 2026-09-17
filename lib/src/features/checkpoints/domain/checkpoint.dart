@@ -5,6 +5,9 @@ import 'package:karmashala_git/git.dart';
 /// what make a restore undoable, so a reader needs to be able to tell them from
 /// the turns they were taken to protect.
 enum CheckpointReason {
+  /// Taken as an agent turn started: the state that undoes the turn.
+  turnStart,
+
   /// An agent session finished a turn.
   turn,
 

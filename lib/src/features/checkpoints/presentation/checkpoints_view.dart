@@ -76,7 +76,8 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     final checkpoints = ref.watch(sessionCheckpointsProvider(sessionId));
     if (checkpoints.isEmpty) {
       return const PanePlaceholder(
-        message: 'No checkpoints yet. One is recorded each time this session '
+        message:
+            'No checkpoints yet. One is recorded each time this session '
             'finishes a turn, and Capture now records one on demand.',
         icon: AppIcons.clockCounterClockwise,
       );
@@ -134,6 +135,7 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
   }
 
   String _reasonLabel(CheckpointReason reason) => switch (reason) {
+    CheckpointReason.turnStart => 'Before turn',
     CheckpointReason.turn => 'Turn',
     CheckpointReason.safety => 'Before restore',
     CheckpointReason.manual => 'Checkpoint',
@@ -277,10 +279,9 @@ class _CheckpointDiffState extends ConsumerState<_CheckpointDiff> {
           color: theme.colorScheme.surfaceContainerLowest,
           child: LayoutBuilder(
             builder: (context, box) {
-              final width = DiffLineTile.textWidthOf(
-                parsed.widestLine,
-                scaler,
-              ) + DiffLineTile.leadingExtent;
+              final width =
+                  DiffLineTile.textWidthOf(parsed.widestLine, scaler) +
+                  DiffLineTile.leadingExtent;
               // The vertical bar outside the sideways scroll, so it stays on
               // screen however far the code is scrolled.
               return SelectionArea(
