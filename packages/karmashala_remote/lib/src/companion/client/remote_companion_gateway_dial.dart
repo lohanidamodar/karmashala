@@ -120,35 +120,53 @@ extension _GatewayDial on RemoteCompanionGateway {
   /// hands the host string to the transport, which resolves it — so
   /// `box.example.com:47820` works exactly as `203.0.113.9:47820` does.
   ///
-  /// One attempt, no generation probing: probing forward exists for a LAN host
-  /// whose beacon is stale, and an address somebody typed is not a guess.
   Future<CompanionClient?> _dialDirect() async {
     final endpoint = parseLanHint(_record?.directEndpoint);
     if (endpoint == null) return null;
 
-    final client = _newClient();
-    final transport = _directDialer(endpoint.host, endpoint.port);
-    _dialled = transport;
-    _ownedTransport = transport;
-    try {
-      await client.connect(
-        transport: transport,
-        generation: client.pairing.generation,
-        helloTimeout: kLanAttemptTimeout,
-      );
-      _lastPathWasLocal = true;
-      _linkPath.value = CompanionLinkPath.lan;
-      _noteTrouble(null);
-      onLog?.call('connected straight to ${endpoint.host}:${endpoint.port}');
-      return client;
-    } on Object catch (error) {
-      // Named. What happens next is the route's to decide — see [_dialAnyPath].
-      onLog?.call(
-        'direct attempt to ${endpoint.host}:${endpoint.port} failed: $error',
-      );
-      await _teardownClient();
-      return null;
+    // Walked across the generation window like a LAN candidate, and for the
+    // same reason: a box serves each generation once, so a phone whose bump
+    // never reached its keystore is one behind, and is hung up on. Only "took
+    // the socket and then dropped it" is worth asking again one later; nobody
+    // home is one dial. Never a fallback: it is the same address every time.
+    for (var probe = 0; probe < kCompanionProbeWindow; probe++) {
+      if (_abandonDial) return null;
+      final client = _newClient();
+      final transport = _directDialer(endpoint.host, endpoint.port);
+      _dialled = transport;
+      _ownedTransport = transport;
+      var socketOpened = false;
+      var hungUp = false;
+      final watching = transport.states.listen((state) {
+        if (state == TransportState.connected) socketOpened = true;
+        if (state == TransportState.disconnected && socketOpened) {
+          hungUp = true;
+        }
+      });
+      try {
+        await client.connect(
+          transport: transport,
+          generation: client.pairing.generation + probe,
+          helloTimeout: kLanAttemptTimeout,
+        );
+        _lastPathWasLocal = true;
+        _linkPath.value = CompanionLinkPath.lan;
+        _noteTrouble(null);
+        onLog?.call('connected straight to ${endpoint.host}:${endpoint.port}');
+        return client;
+      } on Object catch (error) {
+        // Named. What happens next is the route's to decide — see
+        // [_dialAnyPath].
+        onLog?.call(
+          'direct attempt to ${endpoint.host}:${endpoint.port} failed: $error',
+        );
+        await _teardownClient();
+        if (!hungUp) break;
+      } finally {
+        await watching.cancel();
+      }
     }
+    return null;
   }
 
   /// One LAN candidate, walked across the generation window: the counters

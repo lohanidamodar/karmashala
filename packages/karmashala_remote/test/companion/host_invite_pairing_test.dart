@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart'
     show InMemoryCompanionStore, LanPathScout;
@@ -30,8 +31,21 @@ class _FakeBox {
 
   Future<void> start() async {
     server = await LanTransportServer.bind(address: '127.0.0.1', port: 0);
-    _links = server.connections.listen((link) => session?.attach(link));
+    _links = server.connections.listen((link) {
+      final refuse = _refuse;
+      if (refuse == null) {
+        session?.attach(link);
+        return;
+      }
+      link.frames.listen((frame) async {
+        final hello = LinkHello.tryDecode(frame);
+        if (hello != null) await refuse(hello.rendezvous.value);
+        await link.close();
+      });
+    });
   }
+
+  Future<void> Function(String rendezvous)? _refuse;
 
   Future<String> openWindow() async {
     final payload = await PairingPayload.generateWithCode(
@@ -45,6 +59,16 @@ class _FakeBox {
       persist: (device) async => paired.add(device),
     );
     return PairingCode.encode(payload.typedSecret!);
+  }
+
+  /// Stops pairing and answers every session hello by hanging up, telling
+  /// [onHello] which rendezvous was asked for.
+  Future<void> refuseSessions(
+    Future<void> Function(String rendezvous) onHello,
+  ) async {
+    await session?.close();
+    session = null;
+    _refuse = onHello;
   }
 
   Future<void> stop() async {
@@ -256,6 +280,36 @@ void main() {
     expect(scout.touched, 0);
     expect(directDials.length, greaterThan(1));
   });
+
+  test(
+    'a box that hangs up on a stale counter is asked at the next one',
+    () async {
+      // The phone bumps its counter after every link and the box serves each
+      // generation once. A bump that did not reach the keystore leaves the phone
+      // one behind, where the box takes the socket and drops it — and with one
+      // attempt per pass that phone would be locked out of a healthy machine.
+      final code = await box.openWindow();
+      final gateway = makeGateway();
+      await gateway.pairWithQr(invite(code));
+      final device = box.paired.single;
+      final key = SecretKeyData(device.deviceKey);
+      final asked = <int>{};
+      final third = Completer<void>();
+      // From here on the box is a session host that refuses every generation.
+      await box.refuseSessions((rendezvous) async {
+        for (var g = device.generation; g < device.generation + 4; g++) {
+          if ((await rendezvousFor(key, g)).value != rendezvous) continue;
+          asked.add(g);
+          if (asked.length >= 3 && !third.isCompleted) third.complete();
+        }
+      });
+
+      await third.future.timeout(const Duration(seconds: 10));
+
+      expect(asked, containsAll([device.generation, device.generation + 1]));
+      expect(relayDials, isEmpty, reason: 'probing forward is not a fallback');
+    },
+  );
 
   test('a relay host is dialled only at its relays', () async {
     final code = await box.openWindow();
