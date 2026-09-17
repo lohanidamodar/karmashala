@@ -18,6 +18,7 @@ import 'cold_screen.dart';
 import 'package:karmashala_host/protocol.dart' show ProtocolErrorCode;
 import 'host_pane_link.dart';
 import 'pane_terminal.dart';
+import 'prompt_typer.dart';
 import 'command_block_recorder.dart';
 import 'pty_output_coalescer.dart';
 import 'terminal_grid_text.dart';
@@ -44,7 +45,8 @@ class SshTerminalInstance
         TieredTerminalInstance,
         ParkableTerminalInstance,
         AdoptableTerminalInstance,
-        RecordableTerminalInstance {
+        RecordableTerminalInstance,
+        PromptTypingTerminalInstance {
   SshTerminalInstance({
     required this.id,
     required this.title,
@@ -213,8 +215,15 @@ class SshTerminalInstance
   @override
   void stopRecording() => _recorder = null;
 
+  /// Through `textInput`, so it takes the road a keystroke takes.
+  late final PromptTyper _typer = PromptTyper(send: terminal.textInput);
+
+  @override
+  void typeAtPrompt(String text) => _typer.type(text);
+
   void _onDataBytes(List<int> bytes) {
     if (_disposed) return;
+    _typer.onOutput();
     final uint8 = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
     // Before the tier split — see [RecordableTerminalInstance].
     _recorder?.addOutput(uint8);
@@ -327,15 +336,15 @@ class SshTerminalInstance
       deployment = await access.deployment();
     } on Object catch (e) {
       _emit(
-        '\x1b[33m[could not ask ${host.address} about its session host ($e). '
-        'Falling back to tmux.]\x1b[0m\r\n',
+        '\x1b[33m[could not ask ${host.address} about its session host '
+        '(${_words(e)}). Falling back to tmux.]\x1b[0m\r\n',
       );
       return false;
     }
     if (_disposed) return true;
     if (deployment.fallsBackToTmux) {
       _emit(
-        '\x1b[33m[session host unavailable: ${deployment.reason} '
+        '\x1b[33m[session host unavailable: ${_whyNot(deployment)} '
         'Falling back to tmux, which does not carry command blocks, links or '
         'exit codes.]\x1b[0m\r\n',
       );
@@ -361,6 +370,22 @@ class SshTerminalInstance
     _reconnects ??= access.reconnected.listen((_) => unawaited(_reconnectToHost(access)));
     return true;
   }
+
+  /// The deploy's sentence and remedy. A pane has no buttons, so it says where
+  /// they are: the machine's card carries Install, Retry and the rest.
+  String _whyNot(HostDeployment deployment) {
+    final said = explainHostDeployment(deployment, hostName: host.name);
+    return '${said.sentence}${said.remedy.isEmpty ? '' : ' ${said.remedy}'}'
+        '${said.action == HostDeployAction.none ? '' : ' (${said.action.label} is on ${host.name}\'s card in Settings › Environments.)'}';
+  }
+
+  /// An error as a person reads it: never "Bad state:" or a class name.
+  static String _words(Object error) => switch (error) {
+    StateError e => e.message,
+    TimeoutException _ => 'it did not answer in time',
+    SshConnectionException e => e.message,
+    _ => '$error',
+  };
 
   /// Whether this pane's session is already under tmux, in which case it stays
   /// there: both carry the same name, so the host path would open an empty one.
@@ -494,14 +519,17 @@ class SshTerminalInstance
     try {
       deployment = await access.deployment();
     } on Object catch (e) {
-      _emit('\r\n\x1b[33m[the session host on ${host.address} is not answering ($e)]\x1b[0m\r\n');
+      _emit(
+        '\r\n\x1b[33m[the session host on ${host.address} is not answering '
+        '(${_words(e)})]\x1b[0m\r\n',
+      );
       return;
     }
     final remotePath = deployment.remotePath;
     if (_disposed || deployment.fallsBackToTmux || remotePath == null) {
       _emit(
         '\r\n\x1b[33m[the session host is no longer available: '
-        '${deployment.reason}]\x1b[0m\r\n',
+        '${_whyNot(deployment)}]\x1b[0m\r\n',
       );
       return;
     }
@@ -606,6 +634,7 @@ class SshTerminalInstance
     // [RecordableTerminalInstance].
     _recorder?.sourceEnded();
     _recorder = null;
+    _typer.dispose();
     _liveness.value = PaneLiveness.exited;
     _liveness.dispose();
     _cwd.dispose();

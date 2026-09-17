@@ -111,6 +111,28 @@ void main() {
     pane.dispose();
   });
 
+  test('a command handed to a new pane is typed at its prompt, and Enter is '
+      'never pressed', () async {
+    final access = PaneAccess(ready());
+    final pane = paneWith(access: access);
+    // Asked for before the pane is connected, which is when a button asks.
+    pane.typeAtPrompt('sudo ufw allow 8787/tcp\r\n');
+    await settle();
+    final channel = access.channels.single;
+    expect(channel.all<InputMessage>(), isEmpty, reason: 'no prompt yet');
+
+    channel.pushOutput(0, 'me@box:~\$ ');
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+
+    final typed = String.fromCharCodes(
+      channel.all<InputMessage>().expand((m) => m.bytes),
+    );
+    expect(typed, 'sudo ufw allow 8787/tcp');
+    expect(typed.contains('\r') || typed.contains('\n'), isFalse);
+
+    pane.dispose();
+  });
+
   test('a machine that will not name its shell still gets one', () async {
     final access = PaneAccess(ready())..shell = null;
     final pane = paneWith(access: access);
@@ -278,6 +300,36 @@ void main() {
       expect(text, contains('musl'));
       expect(text, contains('tmux'));
       expect(access.execs, isEmpty, reason: 'nothing is attempted on the host');
+      pane.dispose();
+    });
+
+    test('a build with no bundle for the machine says what it is, what the '
+        'build carries, and where the button is', () async {
+      final access = PaneAccess(
+        HostDeployment(
+          status: HostDeploymentStatus.noBinary,
+          observedAt: DateTime.utc(2026),
+          reason: 'No host binary for linux-arm64 in this build.',
+          platform: HostPlatform(
+            operatingSystem: 'linux',
+            architecture: 'arm64',
+            libc: HostLibc.glibc,
+            observedAt: DateTime.utc(2026),
+          ),
+          availableTargets: const ['linux-x64'],
+        ),
+      );
+      final pane = paneWith(access: access);
+      await settle();
+
+      // Joined: the pane wraps a long notice, and where is not the point.
+      final text = screenText(pane.terminal).replaceAll('\n', '');
+      expect(text, contains('session host unavailable'));
+      expect(text, contains('linux/arm64'));
+      expect(text, contains('it carries linux-x64 only'));
+      expect(text, contains('Settings › Environments'));
+      expect(text, contains('tmux'));
+      expect(text, isNot(contains('Bad state')));
       pane.dispose();
     });
 
