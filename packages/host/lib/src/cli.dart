@@ -3,6 +3,7 @@ import 'dart:io';
 import 'host_version.dart';
 import 'protocol/messages.dart';
 import 'pty/pty_probe.dart';
+import 'relay/relay_command.dart';
 import 'serve/attach_command.dart';
 import 'serve/client_command.dart';
 import 'serve/serve_command.dart';
@@ -17,6 +18,7 @@ karmashala_host $kHostVersion — Karmashala's session host.
   karmashala_host list          what this machine's host is holding
   karmashala_host end <id>      end one session (see `list` for ids)
   karmashala_host stop          stop the host itself; --force takes sessions with it
+  karmashala_host relay         be the relay for one desktop; `relay --help` for flags
   karmashala_host probe-pty     prove the pty layer works on this machine
   karmashala_host probe-store   prove this machine can hold a store
   karmashala_host version       print the host and protocol versions
@@ -37,6 +39,8 @@ Future<int> runHostCli(List<String> args, {IOSink? out, IOSink? err}) async {
       return runEnd(args.skip(1).toList(), out: sink, err: errSink);
     case 'stop':
       return runStop(args.skip(1).toList(), out: sink, err: errSink);
+    case 'relay':
+      return runRelay(args.skip(1).toList(), out: sink, err: errSink);
     case 'probe-pty':
       return runPtyProbe(out: sink);
     case 'probe-store':

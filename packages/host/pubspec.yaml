@@ -34,6 +34,11 @@ dependencies:
   # the same rule for the host's socket, so the two cannot disagree about it.
   karmashala_local_ipc:
     path: ../local_ipc
+  # `karmashala_host relay`: the same bundle a box already has can be the
+  # relay for a desktop, so CI ships no second artifact. Pure Dart, no build
+  # hook, and it imports nothing of ours — the dependency runs one way.
+  karmashala_relay:
+    path: ../relay
   karmashala_store:
     path: ../karmashala_store
 
