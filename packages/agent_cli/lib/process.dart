@@ -27,3 +27,4 @@ export 'src/process/process_spawner.dart';
 export 'src/process/wsl_command_runner.dart';
 export 'src/process/wsl_distributions.dart';
 export 'src/process/wsl_interop.dart';
+export 'src/process/wsl_path_existence.dart';

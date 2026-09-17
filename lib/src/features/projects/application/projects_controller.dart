@@ -4,13 +4,13 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/application/project_import_service.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
+import '../../explorer/application/project_head.dart';
 import 'package:agent_cli/process.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -23,6 +23,7 @@ import 'cli_store_purge.dart';
 import 'project_providers.dart';
 import 'project_service.dart';
 import 'project_service_provider.dart';
+import 'wsl_path_existence.dart';
 
 /// Holds the list of persisted projects and drives project creation. Reads are
 /// synchronous, so the state is the plain list, refreshed after mutations.
@@ -186,7 +187,9 @@ class ProjectsController extends Notifier<List<Project>> {
         .read(environmentResolverProvider)
         .resolve(targetEnvironmentId)
         .require;
-    final result = await ref.read(projectServiceProvider).createProject(
+    final result = await ref
+        .read(projectServiceProvider)
+        .createProject(
           name: name,
           target: target,
           targetPath: folderPath,
@@ -280,15 +283,20 @@ class ProjectsController extends Notifier<List<Project>> {
     }
     final added = await ref
         .read(projectServiceProvider)
-        .rediscover(
-          project,
-          projectEnvironment: environment,
-          windows: windows,
-        );
+        .rediscover(project, projectEnvironment: environment, windows: windows);
+    // Asked for: the folder's own answer is taken again, not from what is kept.
+    if (environment.wslDistribution case final distribution?) {
+      ref
+          .read(wslPathExistenceProvider)
+          .forget(distribution, project.root.path);
+    }
+    ref.invalidate(projectPathMissingProvider(project));
     // A rescan is also the moment to notice what has gone. **Not awaited**: it
     // probes once per checkout, which over a stopped distro's UNC blocks for
     // seconds each, and the caller asked what the scan *found*.
-    unawaited(_retireMissingCheckouts(projectId, project, environment, windows));
+    unawaited(
+      _retireMissingCheckouts(projectId, project, environment, windows),
+    );
     if (added.isNotEmpty) {
       // New repositories may already have CLI history behind them, and the
       // tree's providers all hang off the revision.
@@ -322,9 +330,9 @@ class ProjectsController extends Notifier<List<Project>> {
     } catch (error) {
       // A tidy-up that fails is not a failed rescan. The rows it would have
       // dropped are still there, which is the safe direction.
-      AppLogger.named('projects').warning(
-        'Retiring missing checkouts failed: $error',
-      );
+      AppLogger.named(
+        'projects',
+      ).warning('Retiring missing checkouts failed: $error');
     }
   }
 
@@ -369,13 +377,18 @@ class ProjectsController extends Notifier<List<Project>> {
     final session = ref.read(selectedSessionIdProvider);
     final imported = ref.read(selectedImportedSessionIdProvider);
     return (
-      session: session != null &&
+      session:
+          session != null &&
           repoIds.contains(
             ref.read(sessionDaoProvider).getById(session)?.repositoryId,
           ),
-      imported: imported != null &&
+      imported:
+          imported != null &&
           repoIds.contains(
-            ref.read(importedSessionDaoProvider).getById(imported)?.repositoryId,
+            ref
+                .read(importedSessionDaoProvider)
+                .getById(imported)
+                ?.repositoryId,
           ),
     );
   }
@@ -413,8 +426,14 @@ class ProjectsController extends Notifier<List<Project>> {
 final projectsControllerProvider =
     NotifierProvider<ProjectsController, List<Project>>(ProjectsController.new);
 
-/// Whether a project's root folder no longer exists on disk. Defaults to "not
-/// missing" while loading or unresolvable, so the UI never falsely flags one.
+/// Whether a project's root folder no longer exists. Defaults to "not
+/// missing" while loading, unresolvable or **not checked**, so the UI never
+/// falsely flags one.
+///
+/// An SSH project is never asked. A WSL project is asked from inside its
+/// distribution ([WslPathExistence]) — batched, kept, asked again when the
+/// window comes back to the front or the project is rescanned, and never by a
+/// stat over `\\wsl.localhost` (docs/windows-antivirus.md).
 final projectPathMissingProvider = FutureProvider.autoDispose
     .family<bool, Project>((ref, project) async {
       final environmentDao = ref.read(executionEnvironmentDaoProvider);
@@ -422,22 +441,26 @@ final projectPathMissingProvider = FutureProvider.autoDispose
       if (env == null) return false;
       if (env.kind == EnvironmentKind.ssh) return false;
 
-      var path = project.root.path;
+      final path = project.root.path;
       if (env.kind == EnvironmentKind.wsl) {
+        final distribution = env.wslDistribution;
         // Swept once for the whole workspace, not once per WSL project.
         final windows = ref.watch(localEnvironmentProvider);
-        if (windows == null || windows.kind != EnvironmentKind.windowsNative) {
+        if (distribution == null ||
+            windows?.kind != EnvironmentKind.windowsNative) {
           return false;
         }
-        try {
-          path = ref
-              .read(pathTranslatorProvider)
-              .translate(project.root, from: env, to: windows)
-              .path;
-        } catch (_) {
-          return false;
-        }
+        final exists = await ref
+            .read(wslPathExistenceProvider)
+            .exists(
+              distribution,
+              path,
+              stamp: ref.watch(windowRefocusCountProvider),
+            );
+        return exists == false;
       }
+      // A share, whoever it is filed under: not a folder to stat per row.
+      if (path.startsWith(r'\\') || path.startsWith('//')) return false;
       try {
         return !await Directory(path).exists();
       } catch (_) {
@@ -489,7 +512,10 @@ class CliSessionsCheckedController extends Notifier<CliSessionsChecked> {
 
   void stampProject(String projectId) => state = CliSessionsChecked(
     all: state.all,
-    byProject: {...state.byProject, projectId: ref.read(clockProvider).nowUtc()},
+    byProject: {
+      ...state.byProject,
+      projectId: ref.read(clockProvider).nowUtc(),
+    },
   );
 }
 

@@ -7,7 +7,9 @@ import 'package:agent_cli/usage.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/paths/path_probe_provider.dart';
 import 'package:karmashala_core/paths.dart';
+import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/projects/application/wsl_path_existence.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
@@ -30,6 +32,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_profiles.dart';
 
+import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../agents/usage_fixtures.dart';
 
@@ -313,6 +316,14 @@ fakeTerminalOverrides({
     // before it spawns (CLAUDE.md §20), and the fixtures' paths are on no
     // machine. A test that is *about* the check hands over its own disk.
     pathProbeProvider.overrideWithValue(pathProbe ?? everyPathOpens),
+    // No `wsl.exe` either: a built WSL project row asks whether its folder is
+    // there, and the host runner behind that is a real one unless overridden.
+    wslPathExistenceProvider.overrideWith(
+      (ref) => WslPathExistence(
+        host: FakeCommandRunner(),
+        now: ref.watch(clockProvider).nowUtc,
+      ),
+    ),
     // Off by default for the same reason and in the same words as
     // `deliveryPollIntervalProvider` below — see [headlessProbeGate]. The one
     // test that is *about* the gate asks for the real one.

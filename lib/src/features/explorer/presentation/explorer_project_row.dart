@@ -90,8 +90,10 @@ class ExplorerProjectRow extends ConsumerWidget {
     final pinned = ref.watch(
       settingsControllerProvider.select((s) => s.isPinned(project.id)),
     );
+    // `.value`, not `asData`: a re-ask carries the last answer, so the mark
+    // does not blink when the window comes back to the front.
     final missing =
-        ref.watch(projectPathMissingProvider(project)).asData?.value ?? false;
+        ref.watch(projectPathMissingProvider(project)).value ?? false;
     // Sessions come from the database; changed files are whatever the
     // per-checkout providers already answered, so no header starts a git wave.
     final summary = ref.watch(projectSummaryProvider(project.id));
