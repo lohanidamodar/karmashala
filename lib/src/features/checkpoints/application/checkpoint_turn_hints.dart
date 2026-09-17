@@ -4,6 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../sessions/application/session_providers.dart';
+import 'session_checkpoint_recorder.dart';
 
 /// The longest prompt kept for a checkpoint label; the view shows one line.
 const int kCheckpointPromptLimit = 500;
@@ -79,13 +80,19 @@ void recordCheckpointHints(
   if (spec.toolInputPath.isEmpty) return;
   final input = _valueAt(spec.toolInputPath, payload);
   if (input is! Map) return;
+  var touched = false;
   for (final entry in input.entries) {
     final value = entry.value;
     if (value is String &&
         value.isNotEmpty &&
         kToolPathKeys.contains(entry.key)) {
-      hints.recordPath(session.id, value);
+      if (hints.recordPath(session.id, value)) touched = true;
     }
+  }
+  if (touched) {
+    container
+        .read(sessionCheckpointRecorderProvider.notifier)
+        .noteTouched(session.id);
   }
 }
 
@@ -96,4 +103,27 @@ Object? _valueAt(List<String> path, Object? payload) {
     value = value[segment];
   }
   return value;
+}
+
+/// The longest a tool's hook is held for its before-turn checkpoint: inside
+/// the two seconds the installed hook scripts give `curl`.
+const Duration kCheckpointHookHold = Duration(milliseconds: 1500);
+
+/// Holds a `PreToolUse` callback until [agentSessionId]'s queued captures are
+/// done, at most [kCheckpointHookHold], so a repository the tool is about to
+/// change is checkpointed before it does. Anything else returns at once.
+Future<void> holdToolForCheckpoint(
+  ProviderContainer container, {
+  required String agentSessionId,
+  required String? event,
+}) async {
+  if (event != 'PreToolUse' || agentSessionId.isEmpty) return;
+  final session = container
+      .read(sessionDaoProvider)
+      .getByExternalSessionId(agentSessionId);
+  if (session == null) return;
+  await container
+      .read(sessionCheckpointRecorderProvider.notifier)
+      .settled(session.id)
+      .timeout(kCheckpointHookHold, onTimeout: () {});
 }

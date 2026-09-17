@@ -1,15 +1,17 @@
 import 'dart:async';
 
+import 'package:agent_cli/process.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/session_status_registry.dart';
 import '../../sessions/application/decision_recorder.dart';
+import '../data/checkpoint_dao.dart';
 import '../domain/checkpoint.dart';
 import '../domain/turn_boundary.dart';
-import '../data/checkpoint_dao.dart';
 import 'checkpoint_providers.dart';
+import 'checkpoint_targets.dart';
 import 'checkpoint_turn_hints.dart';
 
 /// Why [SessionCheckpointRecorder.captureNow] can answer with no checkpoint.
@@ -17,6 +19,30 @@ import 'checkpoint_turn_hints.dart';
 const String kNothingToCapture =
     'Nothing has changed since the last checkpoint, or this session has no '
     'repository to checkpoint.';
+
+/// Why a session has no automatic checkpoints right now, per session, for the
+/// panel to say. Cleared by the next capture that reaches git.
+class CheckpointSkipReasons extends Notifier<Map<String, String>> {
+  @override
+  Map<String, String> build() => const {};
+
+  void set(String sessionId, String reason) {
+    if (state[sessionId] == reason) return;
+    state = {...state, sessionId: reason};
+  }
+
+  void clear(String sessionId) {
+    if (!state.containsKey(sessionId)) return;
+    state = {...state}..remove(sessionId);
+  }
+}
+
+final checkpointSkipReasonsProvider =
+    NotifierProvider<CheckpointSkipReasons, Map<String, String>>(
+      CheckpointSkipReasons.new,
+    );
+
+typedef _Turn = ({int number, String? prompt});
 
 /// Turns an agent's turns into checkpoints: one as a turn starts (the state
 /// to roll back to) and one as it ends, off every status move the registry
@@ -29,16 +55,18 @@ class SessionCheckpointRecorder extends Notifier<int> {
   /// end must not be lost because its start is still running `git add -A`.
   final Map<String, Future<void>> _queues = {};
 
-  /// The turn in progress per session: its number and prompt, which both of
-  /// its checkpoints carry.
-  final Map<String, ({int number, String? prompt})> _current = {};
+  /// The turn in progress per session, which all of its checkpoints carry.
+  final Map<String, _Turn> _current = {};
 
   /// The last turn number handed out per session, kept past the turn: a turn
   /// that changed nothing writes no row for the next number to count from.
   final Map<String, int> _lastTurn = {};
 
-  /// The last skip reason logged per session, so a repeat is not re-logged.
-  final Map<String, String> _lastSkip = {};
+  /// The repositories already given a before-turn checkpoint this turn.
+  final Map<String, Set<String>> _startedIn = {};
+
+  /// The last message logged per session and repository, so a repeat is not.
+  final Map<String, String> _lastLogged = {};
 
   StreamSubscription<SessionStatusEntry>? _subscription;
   SessionStatusRegistry? _watching;
@@ -81,6 +109,40 @@ class SessionCheckpointRecorder extends Notifier<int> {
     _log.info('Checkpoint recorder is watching agent turns.');
   }
 
+  /// Completes when [sessionId]'s queued captures have, so a hook about to let
+  /// a tool write can hold it until the before-turn checkpoint exists.
+  Future<void> settled(String sessionId) =>
+      _queues[sessionId] ?? Future<void>.value();
+
+  /// A hook named a new path mid-turn: a repository it is in that has no
+  /// before-turn checkpoint yet gets one now, before the tool runs.
+  void noteTouched(String sessionId) {
+    if (!ref.mounted || !_turns.inTurn(sessionId)) return;
+    unawaited(
+      _serial(sessionId, () async {
+        final turn = _current[sessionId];
+        if (turn == null || !ref.mounted) return;
+        final hints = ref.read(checkpointTurnHintsProvider);
+        final targets = await checkpointTargetsFor(
+          ref,
+          sessionId,
+          touched: hints.pathsOf(sessionId),
+        );
+        final started = _startedIn[sessionId] ??= <String>{};
+        for (final repo in targets) {
+          if (!started.add(_keyOf(repo))) continue;
+          await _captureOne(
+            sessionId,
+            repo,
+            CheckpointReason.turnStart,
+            turn,
+            'before turn ${turn.number} first changed it',
+          );
+        }
+      }),
+    );
+  }
+
   void _onStatus(SessionStatusEntry entry) {
     // Runs inside the registry's cycle or hook callback: never throw into it.
     try {
@@ -96,53 +158,84 @@ class SessionCheckpointRecorder extends Notifier<int> {
 
   Future<void> _captureTurn(String sessionId, TurnEdge edge) async {
     if (!ref.mounted) return;
-    final reason = edge == TurnEdge.started
-        ? CheckpointReason.turnStart
-        : CheckpointReason.turn;
-    final turn = edge == TurnEdge.started
+    final starting = edge == TurnEdge.started;
+    final turn = starting
         ? _beginTurn(sessionId)
         : _current.remove(sessionId) ?? _beginTurn(sessionId);
-    final when = edge == TurnEdge.started
-        ? 'before turn ${turn.number}'
-        : 'after turn ${turn.number}';
-    final repo = checkpointTargetFor(ref, sessionId);
-    if (repo == null) {
+    final hints = ref.read(checkpointTurnHintsProvider);
+    final targets = await checkpointTargetsFor(
+      ref,
+      sessionId,
+      touched: hints.pathsOf(sessionId),
+    );
+    if (!ref.mounted) return;
+    if (!starting) {
+      hints.clearPaths(sessionId);
+      _startedIn.remove(sessionId);
+    }
+    if (targets.isEmpty) {
       _skip(sessionId, 'it has no repository to checkpoint');
       return;
     }
+    final started = starting ? (_startedIn[sessionId] = <String>{}) : null;
+    for (final repo in targets) {
+      started?.add(_keyOf(repo));
+      await _captureOne(
+        sessionId,
+        repo,
+        starting ? CheckpointReason.turnStart : CheckpointReason.turn,
+        turn,
+        starting ? 'before turn ${turn.number}' : 'after turn ${turn.number}',
+      );
+    }
+  }
+
+  Future<void> _captureOne(
+    String sessionId,
+    EnvironmentPath repo,
+    CheckpointReason reason,
+    _Turn turn,
+    String when,
+  ) async {
+    if (!ref.mounted) return;
+    final service = ref.read(checkpointServiceProvider);
+    final unsupported = service.unsupportedReason(repo);
+    if (unsupported != null) {
+      _skip(sessionId, unsupported, repo: repo);
+      return;
+    }
     try {
-      final checkpoint = await ref
-          .read(checkpointServiceProvider)
-          .capture(
-            repo,
-            sessionId: sessionId,
-            reason: reason,
-            turn: turn.number,
-            prompt: turn.prompt,
-          );
+      final checkpoint = await service.capture(
+        repo,
+        sessionId: sessionId,
+        reason: reason,
+        turn: turn.number,
+        prompt: turn.prompt,
+      );
       if (!ref.mounted) return;
+      ref.read(checkpointSkipReasonsProvider.notifier).clear(sessionId);
+      _lastLogged.remove(_logKey(sessionId, repo));
       if (checkpoint == null) {
         _log.info(
-          'Checkpoint $when of session $sessionId skipped: '
-          '${repo.path} is unchanged since its last checkpoint.',
+          'Checkpoint $when of session $sessionId skipped: ${repo.path} is '
+          'unchanged since its last checkpoint.',
         );
         return;
       }
-      _lastSkip.remove(sessionId);
       ref.read(checkpointsRevisionProvider.notifier).bump();
       _log.info(
         'Checkpoint ${checkpoint.sequence} $when of session $sessionId: '
         '${checkpoint.files.length} files in ${repo.path}.',
       );
     } on Object catch (error) {
-      _skip(sessionId, 'capturing ${repo.path} failed: $error');
+      _skip(sessionId, 'capturing ${repo.path} failed: $error', repo: repo);
     }
   }
 
-  ({int number, String? prompt}) _beginTurn(String sessionId) {
+  _Turn _beginTurn(String sessionId) {
     final last = _lastTurn[sessionId] ?? 0;
     final stored = ref.read(checkpointDaoProvider).lastTurn(sessionId);
-    final ({int number, String? prompt}) turn = (
+    final _Turn turn = (
       number: (last > stored ? last : stored) + 1,
       prompt: ref.read(checkpointTurnHintsProvider).takePrompt(sessionId),
     );
@@ -151,11 +244,19 @@ class SessionCheckpointRecorder extends Notifier<int> {
     return turn;
   }
 
-  void _skip(String sessionId, String reason) {
-    if (_lastSkip[sessionId] == reason) return;
-    _lastSkip[sessionId] = reason;
+  void _skip(String sessionId, String reason, {EnvironmentPath? repo}) {
+    ref.read(checkpointSkipReasonsProvider.notifier).set(sessionId, reason);
+    final key = _logKey(sessionId, repo);
+    if (_lastLogged[key] == reason) return;
+    _lastLogged[key] = reason;
     _log.info('No checkpoint for session $sessionId: $reason.');
   }
+
+  static String _keyOf(EnvironmentPath repo) =>
+      '${repo.environmentId} ${repo.path}';
+
+  static String _logKey(String sessionId, EnvironmentPath? repo) =>
+      repo == null ? sessionId : '$sessionId ${_keyOf(repo)}';
 
   Future<T> _serial<T>(String sessionId, Future<T> Function() task) {
     final previous = _queues[sessionId] ?? Future<void>.value();
@@ -168,8 +269,9 @@ class SessionCheckpointRecorder extends Notifier<int> {
     return result;
   }
 
-  /// Captures [sessionId]'s working tree now, whatever its status. [decidedBy]
-  /// says who asked; null is "not recorded", which a caller that cannot say passes.
+  /// Captures [sessionId]'s working trees now, whatever its status, answering
+  /// with the first checkpoint taken — its own checkout's when that moved.
+  /// [decidedBy] says who asked; null is "not recorded".
   Future<Checkpoint?> captureNow(
     String sessionId, {
     CheckpointReason reason = CheckpointReason.manual,
@@ -178,27 +280,37 @@ class SessionCheckpointRecorder extends Notifier<int> {
     String? decidedBySessionId,
   }) {
     return _serial(sessionId, () async {
-      final repo = checkpointTargetFor(ref, sessionId);
-      if (repo == null) return null;
-      try {
-        final checkpoint = await ref
-            .read(checkpointServiceProvider)
-            .capture(repo, sessionId: sessionId, reason: reason, label: label);
-        if (checkpoint != null && ref.mounted) {
+      final targets = await checkpointTargetsFor(ref, sessionId);
+      Checkpoint? first;
+      for (final repo in targets) {
+        try {
+          final checkpoint = await ref
+              .read(checkpointServiceProvider)
+              .capture(
+                repo,
+                sessionId: sessionId,
+                reason: reason,
+                label: label,
+              );
+          if (checkpoint == null || !ref.mounted) continue;
+          first ??= checkpoint;
           ref.read(checkpointsRevisionProvider.notifier).bump();
           _recordIfChosen(
             checkpoint,
             decidedBy: decidedBy,
             decidedBySessionId: decidedBySessionId,
           );
+        } catch (error, stack) {
+          // A checkpoint that cannot be taken must never stop the turn it was
+          // watching. The repository may not be a git repository at all.
+          _log.warning(
+            'Could not checkpoint ${repo.path} for session $sessionId.',
+            error,
+            stack,
+          );
         }
-        return checkpoint;
-      } catch (error, stack) {
-        // A checkpoint that cannot be taken must never stop the turn it was
-        // watching. The repository may not be a git repository at all.
-        _log.warning('Could not checkpoint session $sessionId.', error, stack);
-        return null;
       }
+      return first;
     });
   }
 

@@ -18,6 +18,7 @@ import 'package:agent_cli/process.dart';
 import '../flutter_apps/application/flutter_app_tools.dart';
 import '../app_projects/application/project_build_tools.dart';
 import '../flutter_apps/application/flutter_run_tools.dart';
+import '../checkpoints/application/checkpoint_turn_hints.dart';
 import '../checkpoints/application/session_checkpoint_recorder.dart';
 import '../verification/application/verification_providers.dart';
 import '../verification/application/verification_tool_schemas.dart';
@@ -800,8 +801,19 @@ class LauncherControlServer implements SessionMcp {
         body: body,
         logger: _logger,
       );
+      // The one bounded hold: a tool about to write waits, at most
+      // kCheckpointHookHold, for the checkpoint that can undo it.
+      try {
+        await holdToolForCheckpoint(
+          _container,
+          agentSessionId: report.sessionId,
+          event: request.uri.queryParameters['event'],
+        );
+      } on Object catch (error) {
+        _logger.warning('Holding a tool for its checkpoint failed: $error');
+      }
       // Always 200 on an authenticated callback, even for an event we do not
-      // recognise: a hook must never block the agent that fired it.
+      // recognise: a hook must never fail the agent that fired it.
       response.headers.contentType = ContentType.json;
       response.write(jsonEncode({'ok': true, 'status': report.status.name}));
       await response.close();

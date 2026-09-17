@@ -407,4 +407,27 @@ void main() {
       [1, 1, 2, 2],
     );
   });
+
+  test(
+    'a session on an SSH host is skipped, and the panel can say why',
+    () async {
+      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      RepositoryDao(
+        db,
+      ).insert(repository(id: 'r2', environmentId: 'ssh:h1', path: '/srv/app'));
+      SessionDao(db).insert(
+        session(id: 's3', repositoryId: 'r2', status: SessionStatus.running),
+      );
+      watched = [...watched, watch('s3', 'cli-3')];
+      await registry.cycle();
+      startRecorder();
+      await turn('cli-3');
+      expect(reasonsFor('s3'), isEmpty);
+      expect(
+        container.read(checkpointSkipReasonsProvider)['s3'],
+        'checkpoints are not supported for repositories on build-box: they '
+        'need a private git index this machine can write to',
+      );
+    },
+  );
 }

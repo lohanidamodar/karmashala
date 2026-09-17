@@ -1,4 +1,5 @@
 import 'package:agent_cli/process.dart';
+import 'package:path/path.dart' as p;
 import 'package:karmashala_core/util.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
@@ -166,6 +167,50 @@ class CheckpointService {
         lineStats: lineStats,
       ),
     );
+  }
+
+  /// Why [repo] cannot be checkpointed from here, or `null` when it can.
+  String? unsupportedReason(EnvironmentPath repo) {
+    final env = environmentDao.getById(repo.environmentId);
+    if (env == null) return 'its environment ${repo.environmentId} is unknown';
+    if (env.kind == EnvironmentKind.ssh) {
+      return 'checkpoints are not supported for repositories on ${env.name}: '
+          'they need a private git index this machine can write to';
+    }
+    return null;
+  }
+
+  /// Directories git has named the work-tree root of. Only answers are kept: a
+  /// path that is in no repository now may be a worktree a moment later.
+  final Map<String, String> _roots = {};
+
+  /// The repository [path] is in — a file, or a directory — as this environment
+  /// spells paths, or `null`. Walks up past paths that do not exist yet.
+  Future<EnvironmentPath?> repositoryRootOf(EnvironmentPath path) async {
+    final env = environmentDao.getById(path.environmentId);
+    if (env == null || env.kind == EnvironmentKind.ssh) return null;
+    final context = usesWindowsPaths(env.kind) ? p.windows : p.posix;
+    final git = _gitFor(path);
+    var probe = context.normalize(path.path);
+    for (var depth = 0; depth < 8; depth++) {
+      final key = '${path.environmentId}\u0000$probe';
+      var root = _roots[key];
+      if (root == null) {
+        final answer = await git.topLevel(
+          EnvironmentPath(environmentId: path.environmentId, path: probe),
+        );
+        // git answers with forward slashes on Windows; stored paths use the
+        // environment's own, or one repository becomes two chains.
+        if (answer != null) root = _roots[key] = context.normalize(answer);
+      }
+      if (root != null) {
+        return EnvironmentPath(environmentId: path.environmentId, path: root);
+      }
+      final parent = context.dirname(probe);
+      if (parent == probe) break;
+      probe = parent;
+    }
+    return null;
   }
 
   // --- reading ---------------------------------------------------------------

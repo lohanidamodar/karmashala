@@ -158,6 +158,19 @@ class GitService {
     }
   }
 
+  /// The root of the work tree [directory] is in, as git spells it, or `null`
+  /// when it is in none or does not exist. A nested repository answers for
+  /// itself, not for the one it sits inside.
+  Future<String?> topLevel(EnvironmentPath directory) async {
+    try {
+      final result = await _git(directory, ['rev-parse', '--show-toplevel']);
+      final root = result.stdout.trim();
+      return result.ok && root.isNotEmpty ? root : null;
+    } on CommandException {
+      return null;
+    }
+  }
+
   /// The current branch name of [repo], or `null` if detached/unknown.
   Future<String?> currentBranch(EnvironmentPath repo) async {
     final result = await _git(repo, ['rev-parse', '--abbrev-ref', 'HEAD']);
