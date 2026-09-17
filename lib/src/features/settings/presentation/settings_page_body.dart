@@ -25,6 +25,7 @@ import 'external_app_section.dart';
 import 'general_pages.dart';
 import 'permissions_page.dart';
 import 'settings_catalog.dart';
+import 'side_panel_items_section.dart';
 import 'terminal_pages.dart';
 import 'tools_page.dart';
 import 'watch_set_section.dart';
@@ -67,6 +68,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.launcherHotkey => const LauncherHotkeySection(),
   SettingsAnchor.notes => const NotesSettingsSection(),
   SettingsAnchor.themeText => const ThemeTextSection(),
+  SettingsAnchor.sidePanel => const SidePanelItemsSection(),
   SettingsAnchor.editor => const EditorSection(),
   SettingsAnchor.fileBrowsing => const FileBrowsingSection(),
   SettingsAnchor.externalTerminal => const ExternalAppSection(

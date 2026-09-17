@@ -38,7 +38,8 @@ enum SettingsSectionId {
     'Appearance',
     AppIcons.circleHalf,
     SettingsGroup.general,
-    'Theme, text size and density for the whole app.',
+    'Theme, text size and density for the whole app, and what the side '
+        'panel’s rail shows.',
   ),
   editorFiles(
     'Editor & files',
@@ -211,6 +212,14 @@ enum SettingsAnchor {
     'scale',
     'density',
     'compact',
+  ]),
+  // Also the rail's right-click menu and View › Side panel items.
+  sidePanel(SettingsSectionId.appearance, 'Side panel', [
+    'side panel',
+    'rail',
+    'activity bar',
+    'sidebar',
+    'panel items',
   ]),
   editor(SettingsSectionId.editorFiles, 'In-app editor', ['editor', 'wrap']),
   fileBrowsing(SettingsSectionId.editorFiles, 'File browsing', [
@@ -507,6 +516,12 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.themeText,
     description: 'Denser lists and controls.',
     keywords: ['density', 'compact', 'roomy'],
+  ),
+  SettingsEntry(
+    'Side panel items',
+    anchor: SettingsAnchor.sidePanel,
+    description: 'Which tools keep a glyph on the side panel’s rail.',
+    keywords: ['hide', 'show', 'rail', 'activity bar', 'icons', 'glyphs'],
   ),
   SettingsEntry(
     'Wrap long lines in the editor',

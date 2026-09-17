@@ -85,6 +85,16 @@ void main() {
       );
     });
 
+    test('finds the side panel checklist by what VS Code calls it', () {
+      for (final query in ['activity bar', 'rail', 'hide', 'side panel']) {
+        expect(labels(query), contains('Side panel items'), reason: query);
+      }
+      expect(
+        searchSettings('activity bar').single.page,
+        SettingsSectionId.appearance,
+      );
+    });
+
     test('a hit names the page the rail shows it under', () {
       final hit = searchSettings('dotfiles').single;
       expect(hit.page, SettingsSectionId.editorFiles);
