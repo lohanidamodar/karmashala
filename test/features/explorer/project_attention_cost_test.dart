@@ -100,9 +100,11 @@ void main() {
 
         // ignore: avoid_print
         print('PROJECT-ATTENTION-COST projects=$count queries=${db.queries}');
+        // The two session counts. Its repositories are not re-read: a waiting
+        // session is not a repository fact (`projectRepositoriesProvider`).
         expect(
           db.queries,
-          3,
+          2,
           reason: 'one project changed, so unrelated summaries must not query',
         );
       },

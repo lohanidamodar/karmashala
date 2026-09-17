@@ -11,6 +11,7 @@ export 'src/git/data/file_edit_reader.dart';
 export 'src/git/data/git_diff_parsing.dart';
 export 'src/git/data/git_dir.dart';
 export 'src/git/data/git_files.dart';
+export 'src/git/data/git_head_reader.dart';
 export 'src/git/data/git_merge_state.dart';
 export 'src/git/data/git_origin_reader.dart';
 export 'src/git/data/git_presence_reader.dart';

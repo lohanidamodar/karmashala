@@ -7,6 +7,7 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
+import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'checkout.dart';
 import 'project_working.dart';
@@ -107,6 +108,19 @@ final projectWorkingCountsProvider = Provider<Map<String, int>>((ref) {
   return Map.unmodifiable(counts);
 });
 
+/// One project's repositories, read once for its header and shared with the
+/// branch its row reads from `HEAD`. A session's status is not a repository
+/// fact, so a status tick re-reads nothing here.
+final projectRepositoriesProvider = Provider.autoDispose
+    .family<List<Repository>, String>((ref, projectId) {
+      ref.watchSessionKinds(const {
+        SessionChangeKind.membership,
+        SessionChangeKind.placement,
+        SessionChangeKind.workspace,
+      });
+      return ref.read(repositoryDaoProvider).getByProject(projectId);
+    });
+
 /// Sessions, changed files, running sessions and waiting work under one
 /// project. `ref.exists`, never `ref.watch`, which on an autoDispose family
 /// *creates*: that once ran 345 git processes for an unexpanded header.
@@ -120,9 +134,7 @@ final projectSummaryProvider = Provider.autoDispose
         SessionChangeKind.placement,
         SessionChangeKind.workspace,
       });
-      final repositories = ref
-          .read(repositoryDaoProvider)
-          .getByProject(projectId);
+      final repositories = ref.watch(projectRepositoriesProvider(projectId));
       final sessionDao = ref.read(sessionDaoProvider);
       final importedDao = ref.read(importedSessionDaoProvider);
       // The one attention count in the app, narrowed rather than recomputed.

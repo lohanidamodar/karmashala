@@ -311,6 +311,9 @@ void main() {
         // Nothing is expanded, so nothing is drawn — and nothing recorded may
         // be paid for.
         expect(rows, 0, reason: 'a collapsed project draws no session cards');
+        // Its row does draw a branch, off one `HEAD` file — and only for a
+        // project with one repository, so never one per recorded checkout.
+        expect(files.headReads.length, lessThanOrEqualTo(1));
       });
     }
 
@@ -795,8 +798,16 @@ class _ProbeFiles implements GitFiles {
   int readsEndingIn(String suffix) =>
       reads.where((path) => path.endsWith(suffix)).length;
 
+  /// The project row's own question — which branch — kept apart from [reads]:
+  /// one file for a row that is on screen, whatever the project records.
+  final List<String> headReads = [];
+
   @override
   Future<String?> readString(String path) async {
+    if (path.endsWith(r'\.git\HEAD')) {
+      headReads.add(path);
+      return 'ref: refs/heads/main\n';
+    }
     reads.add(path);
     if (path.endsWith(r'\.git\config')) {
       return '[remote "origin"]\n'

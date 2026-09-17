@@ -26,6 +26,7 @@ import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala_git/git.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -43,8 +44,21 @@ import '../terminal/fake_instance.dart';
 /// recomputes the tree. Counted, never timed (`scale_harness.dart`).
 const _projects = 1000;
 
+/// Every repository is on `main`, and every read is kept: the branch on a
+/// project's line is a file read, so what is counted is files.
+class _EveryHead extends NoGitFiles {
+  final reads = <String>[];
+
+  @override
+  Future<String?> readString(String path) async {
+    reads.add(path);
+    return path.endsWith('/.git/HEAD') ? 'ref: refs/heads/main\n' : null;
+  }
+}
+
 void main() {
   late FakeCommandRunner git;
+  late _EveryHead files;
 
   CountingDatabase seed() {
     final db = CountingDatabase();
@@ -90,6 +104,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final db = seed();
+    files = _EveryHead();
     addTearDown(db.close);
     git = FakeCommandRunner(
       responder: (request) {
@@ -105,7 +120,7 @@ void main() {
     );
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(database: db, gitFiles: files),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
@@ -172,6 +187,54 @@ void main() {
     expect(git.requests, isEmpty, reason: 'a project line ran git');
   });
 
+  testWidgets('a thousand projects read a screenful of HEAD files, one each, '
+      'and spawn nothing for a branch', (tester) async {
+    await pump(tester);
+
+    // Those on screen and those the list keeps built just off it.
+    final built = tester
+        .widgetList(find.byType(ExplorerProjectRow, skipOffstage: false))
+        .length;
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ProjectCard, 'Project 0003'),
+        matching: find.text('main'),
+      ),
+      findsOneWidget,
+      reason: 'the branch really is drawn',
+    );
+    expect(files.reads.toSet(), hasLength(files.reads.length), reason: 'once');
+    expect(files.reads, hasLength(built), reason: 'one file per row built');
+    expect(files.reads.length, lessThanOrEqualTo(60));
+    expect(git.requests, isEmpty, reason: 'a branch spawned a process');
+
+    // A fling reads the rows it builds and no others; coming back reads none.
+    await tester.fling(
+      find.byType(ListView),
+      const Offset(0, -600),
+      6000,
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    final afterFling = files.reads.length;
+    expect(afterFling, lessThan(_projects ~/ 2));
+    expect(files.reads.toSet(), hasLength(afterFling));
+    await tester.fling(
+      find.byType(ListView),
+      const Offset(0, 600),
+      6000,
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Project 0000'),
+      findsOneWidget,
+      reason: 'back at the top',
+    );
+    expect(files.reads, hasLength(afterFling), reason: 'answered from cache');
+    expect(git.requests, isEmpty);
+  });
+
   testWidgets('a session\'s tick redraws its own project\'s row and no other', (
     tester,
   ) async {
@@ -221,6 +284,7 @@ void main() {
 
     final before = cards(tester);
     harness.db.reset();
+    files.reads.clear();
     // A second arrival: the working tree moved under the open cards.
     SessionDao(harness.db).updateStatus('p0002-s0', SessionStatus.idle);
     harness.container
@@ -229,6 +293,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(treeChanges, 1, reason: 'a reading is not a change of shape');
+    expect(files.reads, [
+      '/Users/me/Documents/projects/client-0002/workspace-0002/.git/HEAD',
+    ], reason: 'the one HEAD the reading is about, and no other row\'s');
     expect(
       rebuilt(before, cards(tester)).where((name) => name != 'Project 0002'),
       isEmpty,

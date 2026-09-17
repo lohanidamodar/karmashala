@@ -35,6 +35,7 @@ import '../application/checkout_default.dart';
 import '../application/checkout_picker.dart';
 import '../application/explorer_actions.dart';
 import '../application/explorer_tree_state.dart';
+import '../application/project_head.dart';
 import '../application/session_diff_stat.dart';
 import '../application/session_selection.dart';
 import '../application/where_you_are.dart';
@@ -97,6 +98,14 @@ class ExplorerProjectRow extends ConsumerWidget {
     final detail = ref.watch(
       settingsControllerProvider.select((s) => s.explorerProjectDetails),
     );
+    // The branch off the repository's own `HEAD` — a file read, for a row that
+    // is built and draws a second line. `.value`, not `asData`: a re-read
+    // carries the last answer, so the branch does not blink.
+    final head = detail
+        ? ref.watch(
+            projectHeadBranchProvider(project.id).select((head) => head.value),
+          )
+        : null;
     final actions = ProjectRowActions(ref, context, project);
     // Each its own `.select`, so ticking one project moves that row alone.
     final selecting = ref.watch(
@@ -124,7 +133,8 @@ class ExplorerProjectRow extends ConsumerWidget {
         environmentIcon: environmentIcon,
         pathCandidates: pathCandidates,
         detail: detail,
-        summary: summary,
+        // A borrowed reading wins: it also knows `↑n` and what changed.
+        summary: summary.withBranchFallback(head),
         onTap: () {
           if (!handleSelectableClick(
             ref,
