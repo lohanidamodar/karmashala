@@ -52,11 +52,34 @@ void main() {
       expect(chordFor('⌘V').activator.shift, isFalse);
     });
 
+    test('copy and select-all are left to whatever holds the keyboard', () {
+      // A transcript's selection area answers ⌘C and ⌘A as ordinary key events.
+      // A shell chord on either would be registered with the macOS window,
+      // which swallows a registered chord before Flutter sees the key.
+      final taken = [
+        for (final chord in shellChords)
+          if (!chord.paneOnly &&
+              !chord.activator.shift &&
+              (chord.activator.trigger == LogicalKeyboardKey.keyC ||
+                  chord.activator.trigger == LogicalKeyboardKey.keyA))
+            chord.label,
+      ];
+      expect(taken, isEmpty);
+      expect(focusedCommandChords.keys, isNot(contains('c')));
+      expect(focusedCommandChords.keys, isNot(contains('a')));
+      for (final activator in shellShortcutMap.keys) {
+        if (activator is! SingleActivator || activator.shift) continue;
+        expect(activator.trigger, isNot(LogicalKeyboardKey.keyC));
+        expect(activator.trigger, isNot(LogicalKeyboardKey.keyA));
+      }
+    });
+
     test('plain Ctrl+V is not claimed — it is quoted-insert', () {
       expect(
         has('Ctrl+V'),
         isFalse,
-        reason: '⌘V already pastes, so taking Ctrl+V would cost a shell '
+        reason:
+            '⌘V already pastes, so taking Ctrl+V would cost a shell '
             'binding for nothing',
       );
     });
