@@ -1,5 +1,6 @@
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -74,9 +75,11 @@ void main() {
     SessionDiffStat? stat,
     bool worktree = false,
     bool selected = false,
+    bool unread = false,
   }) => SessionCard(
     depth: 1,
     selected: selected,
+    unread: unread,
     agentIcon: AppIcons.playCircle,
     agentLabel: 'Claude Code  ·  running',
     title: title,
@@ -237,6 +240,26 @@ void main() {
 
     await tester.pumpWidget(host(card(worktree: true)));
     expect(find.byIcon(AppIcons.treeStructure), findsOneWidget);
+  });
+
+  testWidgets('a finished turn nobody has seen is a filled dot, in the unread '
+      'colour, where the status glyph was', (tester) async {
+    await tester.pumpWidget(host(card()));
+    final status = tester.getCenter(find.byIcon(AppIcons.playCircle));
+    final titleLeft = tester.getTopLeft(find.text('Benchmark arcade games'));
+
+    await tester.pumpWidget(host(card(unread: true)));
+    expect(find.byIcon(AppIcons.circle), findsNothing, reason: 'hollow');
+    final dot = find.byIcon(AppIcons.circleFill);
+    expect(dot, findsOneWidget);
+    final context = tester.element(dot);
+    expect(tester.widget<Icon>(dot).color, SemanticColors.of(context).unread);
+    expect(tester.widget<Icon>(dot).size, UiDensity.of(context).iconSmall);
+    expect(find.byTooltip('Finished — not seen yet'), findsOneWidget);
+
+    // One slot: the dot stands where the glyph stood and the title stays put.
+    expect(tester.getCenter(dot), status);
+    expect(tester.getTopLeft(find.text('Benchmark arcade games')), titleLeft);
   });
 
   testWidgets('an age we could not compute is drawn as nothing, not 0m', (

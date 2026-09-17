@@ -268,7 +268,7 @@ class SessionCard extends StatelessWidget {
       glyph = Tooltip(
         message: 'Finished — not seen yet',
         child: Icon(
-          AppIcons.circle,
+          AppIcons.circleFill,
           size: density.iconSmall,
           color: semantic.unread,
           semanticLabel: 'Finished, not seen yet',
