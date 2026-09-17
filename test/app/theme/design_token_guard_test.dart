@@ -105,7 +105,22 @@ void main() {
     expect(bare, isEmpty, reason: 'add fontFamilyFallback: kMonoFallback');
   });
 
+  /// A generic family name where the mono token belongs: `'monospace'` is not
+  /// a font on Windows or macOS, so the line falls back to whatever the engine
+  /// picks — never the Consolas or Monaco the rest of the app draws code in.
+  final bareMonospace = RegExp(r'''fontFamily:\s*['"]monospace['"]''');
+
+  test('no bare monospace family in presentation code', () {
+    expect(
+      hits(bareMonospace, isPresentation),
+      isEmpty,
+      reason: 'use fontFamily: kMonoFamily, fontFamilyFallback: kMonoFallback',
+    );
+  });
+
   test('the guards can fail', () {
+    expect(bareMonospace.hasMatch("fontFamily: 'monospace',"), isTrue);
+    expect(bareMonospace.hasMatch('fontFamily: kMonoFamily,'), isFalse);
     expect(
       accentAlpha.hasMatch('scheme.primary.withValues(alpha: 0.12)'),
       isTrue,

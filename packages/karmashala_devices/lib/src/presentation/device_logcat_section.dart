@@ -283,8 +283,8 @@ class _Line extends StatelessWidget {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
     final colour = switch (entry.level) {
-      LogLevel.error || LogLevel.fatal => semantic.attention,
-      LogLevel.warning => semantic.working,
+      LogLevel.error || LogLevel.fatal => semantic.failure,
+      LogLevel.warning => semantic.attention,
       LogLevel.verbose || LogLevel.debug => theme.colorScheme.onSurfaceVariant,
       LogLevel.info => theme.colorScheme.onSurface,
     };
@@ -296,7 +296,8 @@ class _Line extends StatelessWidget {
             TextSpan(
               text: '${entry.level.code} ${entry.tag}: ',
               style: theme.textTheme.bodySmall?.copyWith(
-                fontFamily: 'monospace',
+                fontFamily: kMonoFamily,
+                fontFamilyFallback: kMonoFallback,
                 color: colour,
                 fontWeight: FontWeight.w600,
               ),
@@ -304,7 +305,8 @@ class _Line extends StatelessWidget {
             TextSpan(
               text: entry.message,
               style: theme.textTheme.bodySmall?.copyWith(
-                fontFamily: 'monospace',
+                fontFamily: kMonoFamily,
+                fontFamilyFallback: kMonoFallback,
                 color: colour,
               ),
             ),

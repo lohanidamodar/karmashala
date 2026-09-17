@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/ports.dart';
 import 'package:karmashala_devices/providers.dart';
@@ -211,6 +212,38 @@ void main() {
     expect(find.textContaining('beginning of main'), findsNothing);
   });
 
+  testWidgets('errors are drawn in failure and warnings in attention, in the '
+      'mono family', (tester) async {
+    // The Flutter console draws an error in `failure`; the same error on the
+    // device's own log was amber, and a bare 'monospace' family fell back to
+    // whatever the engine picked instead of Consolas or Monaco.
+    await pump(tester);
+    await tester.tap(strip());
+    await tester.pumpAndSettle();
+
+    // Two at a time: the open log is short, and older lines scroll away.
+    Future<void> say(List<String> levels) async {
+      for (final level in levels) {
+        logcat.emitStdout(_line(level, 'MyTag', 'said at $level'));
+      }
+      await tester.pump(DeviceLogcatSession.flushWindow);
+      await tester.pumpAndSettle();
+    }
+
+    final context = tester.element(find.byType(DeviceLogcatSection));
+    final semantic = SemanticColors.of(context);
+    final scheme = Theme.of(context).colorScheme;
+    await say(['E', 'W']);
+    expect(_styleOf(tester, 'said at E').color, semantic.failure);
+    expect(_styleOf(tester, 'said at W').color, semantic.attention);
+    await say(['F', 'I']);
+    expect(_styleOf(tester, 'said at F').color, semantic.failure);
+    expect(_styleOf(tester, 'said at I').color, scheme.onSurface);
+    final style = _styleOf(tester, 'said at I');
+    expect(style.fontFamily, kMonoFamily);
+    expect(style.fontFamilyFallback, kMonoFallback);
+  });
+
   testWidgets('the status line carries the age of the reading, never a zero', (
     tester,
   ) async {
@@ -336,4 +369,29 @@ void main() {
       reason: 'the stream produces lines; nothing asks for them',
     );
   });
+}
+
+/// The style [text] is drawn in: the span holding it, merged over every span
+/// above it, so a colour set on the line and a fill set on a match both count.
+TextStyle _styleOf(WidgetTester tester, String text) {
+  final selectable = tester
+      .widgetList<SelectableText>(find.byType(SelectableText))
+      .firstWhere(
+        (widget) => (widget.textSpan?.toPlainText() ?? widget.data ?? '')
+            .contains(text),
+      );
+  TextStyle? found;
+  void visit(InlineSpan span, TextStyle inherited) {
+    final style = inherited.merge(span.style);
+    if (span is TextSpan) {
+      if (found == null && (span.text ?? '').contains(text)) found = style;
+      for (final child in span.children ?? const <InlineSpan>[]) {
+        visit(child, style);
+      }
+    }
+  }
+
+  final root = selectable.textSpan ?? TextSpan(text: selectable.data);
+  visit(root, selectable.style ?? const TextStyle());
+  return found!;
 }
