@@ -1,22 +1,20 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
-/// Copies what is selected under it the way it reads. Flutter's own delegates
-/// butt one text against the next, so two paragraphs copy as one run-on line.
-///
-/// Texts on one line are joined with a space, lines with a newline, and blocks
-/// — anything drawn with air between — with a blank line. Two lines of several
-/// cells each are a list or a table, and stay single-spaced.
+/// Copies a selection the way it reads; Flutter's delegates butt texts together.
+/// One line joins with a space, lines with a newline, blocks drawn apart with a
+/// blank line — but not two many-celled lines, which are a list or a table.
 class ReadingOrderSelectionDelegate extends StaticSelectionContainerDelegate {
   ReadingOrderSelectionDelegate({this.trailing = '', this.outermost = false});
 
-  /// Written after the content: what separates this group from the next one,
-  /// which a parent delegate will butt against it.
+  /// Written after the content, because the parent will butt the next group on.
   final String trailing;
 
-  /// Whether this is the group the selection area itself talks to: the one
-  /// that drops the space at either end, and that always has edge points.
+  /// The group the selection area itself talks to: it trims the ends, and
+  /// always has edge points.
   final bool outermost;
 
   /// The least air between two lines that reads as a new block. Below the
@@ -55,10 +53,8 @@ class ReadingOrderSelectionDelegate extends StaticSelectionContainerDelegate {
     return SelectedContent(plainText: outermost ? text.trim() : text);
   }
 
-  /// A delegate takes in new text after the frame that built it, and only tells
-  /// its parent then — so each level of nesting waits for one more frame, which
-  /// nothing else asks for. Without these a row could sit drawn and unselectable
-  /// until the next thing moved.
+  /// Each nested delegate tells its parent a frame late, and nothing schedules
+  /// that frame: a drawn row stayed unselectable until something else moved.
   @override
   void add(Selectable selectable) {
     super.add(selectable);
@@ -74,10 +70,8 @@ class ReadingOrderSelectionDelegate extends StaticSelectionContainerDelegate {
   /// How far outside the container an edge that cannot be placed is put.
   static const double _offScreen = 10000;
 
-  /// A row scrolled away with a selection in it is kept alive off-screen, and
-  /// a selection that starts or ends there reports no edge point. Flutter's
-  /// own area assumes both exist and throws on select-all, so the outermost
-  /// group answers with a point far outside itself instead of none.
+  /// Flutter's area reads both edge points on select-all and throws when a row
+  /// kept alive off-screen has none; the outermost group always answers one.
   @override
   SelectionGeometry getSelectionGeometry() {
     final geometry = super.getSelectionGeometry();
@@ -107,8 +101,8 @@ class ReadingOrderSelectionDelegate extends StaticSelectionContainerDelegate {
     );
   }
 
-  /// The same gap one level down: the base class reads its children's edge
-  /// points without asking whether an off-screen child has any.
+  /// The same gap one level down: the base class reads edge points an
+  /// off-screen child does not have.
   @override
   void didReceiveSelectionBoundaryEvents() {
     final start = currentSelectionStartIndex;
@@ -120,24 +114,16 @@ class ReadingOrderSelectionDelegate extends StaticSelectionContainerDelegate {
         (first.hasSelection && first.startSelectionPoint == null) ||
         (last.hasSelection && last.endSelectionPoint == null);
     if (!offScreen) return super.didReceiveSelectionBoundaryEvents();
-    for (
-      var i = start < end ? start : end;
-      i <= (start < end ? end : start);
-      i++
-    ) {
+    for (var i = math.min(start, end); i <= math.max(start, end); i++) {
       didReceiveSelectionEventFor(selectable: selectables[i]);
     }
   }
 
   static double _bottomOf(List<(Rect, String)> line) =>
-      line.map((cell) => cell.$1.bottom).reduce((a, b) => a > b ? a : b);
+      line.map((cell) => cell.$1.bottom).reduce(math.max);
 
-  static bool _sameLine(Rect a, Rect b) {
-    final overlap =
-        (a.bottom < b.bottom ? a.bottom : b.bottom) -
-        (a.top > b.top ? a.top : b.top);
-    return overlap > 1;
-  }
+  static bool _sameLine(Rect a, Rect b) =>
+      math.min(a.bottom, b.bottom) - math.max(a.top, b.top) > 1;
 
   /// Within this container rather than on the screen: a row kept alive
   /// off-screen has no place there, and still has its layout.
@@ -186,11 +172,9 @@ class _TranscriptSelectionGroupState extends State<TranscriptSelectionGroup> {
       SelectionContainer(delegate: _delegate, child: widget.child);
 }
 
-/// One selection over a whole conversation: a drag runs across blocks and
-/// across messages, and the platform's copy and select-all chords work on it.
-///
-/// Rows under it draw plain [Text]; chrome that should not be copied sits in a
-/// [SelectionContainer.disabled]. Only rows that are built can be selected.
+/// One selection over a whole conversation, across blocks and across messages.
+/// Rows draw plain [Text] and put chrome in a [SelectionContainer.disabled];
+/// only built rows can be selected.
 class TranscriptSelectionArea extends StatefulWidget {
   const TranscriptSelectionArea({required this.child, super.key});
 
