@@ -23,8 +23,7 @@ class HostAttachment {
   final int sessionRef;
   final String sessionId;
 
-  /// The grid the host holds the session at: what its process was last told,
-  /// which for a session found running is whatever its previous pane had.
+  /// The grid the host holds the session at — its previous pane's, if found.
   final int columns;
   final int rows;
   final int replayFromOffset;
@@ -192,17 +191,15 @@ class HostPaneLink {
     _send(InputMessage(_sessionRef, bytes));
   }
 
-  /// Nothing before the host has named the session: a resize could only carry
-  /// ref 0, which the host refuses. [matchGrid] says the size once it has.
+  /// Nothing before the host names the session: ref 0 is refused. [matchGrid]
+  /// says the size once it has.
   void resize(int columns, int rows) {
     if (_closed || _sessionRef == 0) return;
     _send(ResizeMessage(_sessionRef, columns, rows));
   }
 
-  /// Tells the host the grid the pane is drawn at, when [attachment] found the
-  /// session at another. A pane is laid out before its link exists, so its own
-  /// resize never reaches the host: without this the process goes on wrapping
-  /// for its last pane's width inside a pane of a different one.
+  /// Tells the host the pane's grid when [attachment] found the session at
+  /// another: a pane is laid out before its link exists to carry the resize.
   void matchGrid(HostAttachment attachment, int columns, int rows) {
     if (!attachment.holdsWriteToken) return;
     if (attachment.columns == columns && attachment.rows == rows) return;

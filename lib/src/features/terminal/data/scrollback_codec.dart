@@ -5,8 +5,7 @@ import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 
 /// Re-emits [terminal]'s main-buffer scrollback as text plus SGR sequences,
 /// each row self-contained and newest first, so [maxBytes] can stop the walk.
-/// Rows of one soft-wrapped line are stored unbroken: the pane that reads them
-/// back wraps them at its own width, and reflows them at every width after.
+/// Rows of one soft-wrapped line are stored unbroken, to wrap where read back.
 String encodeScrollback(
   Terminal terminal, {
   int maxLines = kDurableScrollbackMaxLines,
@@ -61,10 +60,8 @@ String encodeScrollback(
   );
 }
 
-/// Whether [next] is the rest of the line [row] began, in a shape that reads
-/// back as that: [row] written to its last cell — or its last but one, when the
-/// wide glyph opening [next] is what did not fit — and [next] opening on text.
-/// A flag that outlived an erase fails this and stays a row of its own.
+/// Whether [next] continues [row] in a shape that reads back so: [row] full
+/// (but for a wide glyph that did not fit) and [next] opening on text.
 bool _continues(BufferLine row, BufferLine next) {
   if (!next.isWrapped || next.length == 0 || next.getCodePoint(0) == 0) {
     return false;
