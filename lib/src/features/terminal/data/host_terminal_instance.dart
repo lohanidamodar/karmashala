@@ -17,6 +17,7 @@ import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'package:karmashala_host/protocol.dart' show ProtocolErrorCode;
 import 'host_pane_link.dart';
+import 'pane_terminal.dart';
 import 'pty_output_coalescer.dart';
 import 'pty_launch.dart';
 import 'terminal_grid_text.dart';
@@ -59,7 +60,7 @@ class HostTerminalInstance
     AppLogger? logger,
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
        _cwd = WorkingDirectoryTracker(workingDirectory) {
-    terminal = adoptTerminal ?? Terminal(maxLines: kLiveScrollbackMaxLines)
+    terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
       ..inputHandler = const KarmashalaInputHandler()
       ..onPrivateOSC = _osc.dispatch
       ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);

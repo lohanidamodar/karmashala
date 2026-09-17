@@ -739,6 +739,14 @@ one is the one the process ends up on, so nothing here debounces badly or lands
 a size behind. That is the evidence that ruled the PTY out of the "resizing
 doesn't work as expected" report.
 
+Since 2026-09-17 a pane's **columns** settle (`PaneTerminal`,
+`pane_terminal.dart`): a change after a quiet spell lands at once, and the ones
+that follow within `kColumnResizeSettle` wait for the width to hold still. The
+buffer and the process are still told together and the last size still wins,
+but a drag is two reflows and two SIGWINCHes rather than one per column. So the
+burst of 60 now reaches the process as two sizes, the last up to 100 ms late —
+and this test has not been re-run on Windows since.
+
 `live_wsl_osc133_test.dart` answers whether a **WSL pane reports its own
 command boundaries**, which is what `terminal_run` needs to name an exit code.
 It is the test Loop 32 could not write: the bash rcfile was verified against

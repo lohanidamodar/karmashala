@@ -15,6 +15,7 @@ import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'cast_recorder.dart';
 import 'cold_screen.dart';
 import 'command_block_recorder.dart';
+import 'pane_terminal.dart';
 import 'process_shutdown.dart';
 import 'pty_launch.dart';
 import 'pty_output_coalescer.dart';
@@ -223,7 +224,7 @@ class PtyTerminalInstance
   }) : _cwd = WorkingDirectoryTracker(workingDirectory) {
     // Handlers are set on an adopted buffer as well as a fresh one: they are
     // the same values, and a branch here is a branch that can drift.
-    terminal = (adoptTerminal ?? Terminal(maxLines: kLiveScrollbackMaxLines))
+    terminal = (adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines))
       // `KarmashalaInputHandler` is ours: the package encodes every modified
       // Enter as a bare CR, so Shift+Enter is indistinguishable from submit.
       ..inputHandler = const KarmashalaInputHandler()
@@ -734,14 +735,14 @@ class DormantTerminalInstance
 
   Terminal _buildTerminal() {
     _bufferBuilt = true;
-    final built = Terminal(maxLines: kLiveScrollbackMaxLines)
+    final built = PaneTerminal(maxLines: kLiveScrollbackMaxLines)
       ..inputHandler = const KarmashalaInputHandler();
     final hint = gridHint;
     if (hint != null) {
       // Before the write, or the hint buys nothing: it is the *parse* that has
       // to happen at the width the text will be read at.
       if (hint.grid case (:final columns, :final rows)?) {
-        built.resize(columns, rows);
+        built.resizeNow(columns, rows);
       }
       // Nothing else claims `onResize` here, so this pane can report what the
       // workbench laid it out at, for the next one to parse into.

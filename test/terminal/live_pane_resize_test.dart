@@ -5,6 +5,7 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/terminal/data/pane_terminal.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
@@ -55,6 +56,8 @@ void main() {
     // and one that stops a size behind both look like "it did resize" if the
     // process is asked once.
     pane.instance.terminal.resize(132, 43);
+    // A second resize inside the settle lands late; ask after it has.
+    await Future<void>.delayed(kColumnResizeSettle * 2);
     expect(
       await pane.askPowerShell(),
       _size(132, 43),
@@ -64,6 +67,8 @@ void main() {
     );
 
     pane.instance.terminal.resize(96, 30);
+    // A second resize inside the settle lands late; ask after it has.
+    await Future<void>.delayed(kColumnResizeSettle * 2);
     expect(await pane.askPowerShell(), _size(96, 30));
   }, timeout: const Timeout(Duration(seconds: 180)));
 
@@ -73,14 +78,15 @@ void main() {
     await pane.settle();
 
     // What dragging a window edge produces: one geometry change per frame, not
-    // one at the end. Nothing here debounces them, so this is what the pane
-    // really sends — and the size the user stopped at is the only one that
-    // matters. A relay that dropped the last of a burst would leave the process
-    // permanently one size behind, which looks exactly like never sending it.
+    // one at the end. `PaneTerminal` lets the columns settle, so the pane sends
+    // the first and the last — and the size the user stopped at is the only one
+    // that matters. A relay that dropped the last of a burst would leave the
+    // process permanently one size behind, which looks like never sending it.
     for (var i = 0; i < 60; i++) {
       pane.instance.terminal.resize(80 + i, 25 + (i % 20));
       await Future<void>.delayed(const Duration(milliseconds: 8));
     }
+    await Future<void>.delayed(kColumnResizeSettle * 2);
 
     expect(await pane.askPowerShell(), _size(139, 44));
   }, timeout: const Timeout(Duration(seconds: 180)));
@@ -105,6 +111,8 @@ void main() {
     expect(await pane.askStty(), _size(80, 25));
 
     pane.instance.terminal.resize(132, 43);
+    // A second resize inside the settle lands late; ask after it has.
+    await Future<void>.delayed(kColumnResizeSettle * 2);
     expect(
       await pane.askStty(),
       _size(132, 43),
@@ -115,6 +123,8 @@ void main() {
     );
 
     pane.instance.terminal.resize(96, 30);
+    // A second resize inside the settle lands late; ask after it has.
+    await Future<void>.delayed(kColumnResizeSettle * 2);
     expect(await pane.askStty(), _size(96, 30));
   }, timeout: const Timeout(Duration(seconds: 180)));
 }
