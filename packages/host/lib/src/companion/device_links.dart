@@ -58,14 +58,28 @@ class DeviceLinks {
   /// device id → the highest generation already served. What makes the claim
   /// atomic: matching is async, so two hellos for one rendezvous can both get
   /// past a row that has not been written yet.
-  final Map<String, int> _served = {};
+  ///
+  /// Held with the key it was served under: a phone that pairs again has a new
+  /// key and starts its count over, and must not be held to the old one's.
+  final Map<String, ({Uint8List key, int generation})> _served = {};
 
   /// The first generation [device] may still use.
   int floorOf(PairedDevice device) {
     final served = _served[device.id];
-    return served == null || served < device.generation
-        ? device.generation
-        : served + 1;
+    if (served == null ||
+        served.generation < device.generation ||
+        !sameBytes(served.key, device.deviceKey)) {
+      return device.generation;
+    }
+    return served.generation + 1;
+  }
+
+  static bool sameBytes(List<int> a, List<int> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   /// Whose rendezvous [wanted] is, or null for nobody's.
@@ -90,7 +104,7 @@ class DeviceLinks {
   ServedLink? serve(RemoteTransport link, DeviceMatch match) {
     final device = match.device;
     if (match.generation < floorOf(device)) return null;
-    _served[device.id] = match.generation;
+    _served[device.id] = (key: device.deviceKey, generation: match.generation);
     onGeneration?.call(device.id, match.generation + 1);
 
     final served = ServedLink(link);

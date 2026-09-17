@@ -80,6 +80,11 @@ class CompanionListener {
   /// link when it arrives.
   void acceptPairing(HostPairingSession session) => _pairing = session;
 
+  /// Shuts the door [session] opened, unless a newer window has replaced it.
+  void endPairing(HostPairingSession session) {
+    if (identical(_pairing, session)) _pairing = null;
+  }
+
   void _accept(LanLink link) {
     // Nobody owns this link until the hello arrives, so the first frame routes
     // it and every frame after goes wherever that decided.

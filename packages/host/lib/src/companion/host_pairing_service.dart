@@ -52,6 +52,7 @@ class HostPairingService {
     required Uri relay,
     CapabilitySet? grant,
     List<Uri> relays = const [],
+    String? relayUrl,
   }) async {
     final payload = await PairingPayload.generateWithCode(
       relay: relay,
@@ -66,7 +67,11 @@ class HostPairingService {
       now: _now,
       // Persisted only once both ends have proved they hold the secret — the
       // session does the proving, this only writes what it hands over.
-      persist: (device) async => _devices.insert(device),
+      // [relayUrl] is the route this phone was offered: null is "dial this
+      // machine", and a URL is where `serve` will wait for it from now on.
+      persist: (device) async => _devices.insert(
+        relayUrl == null ? device : device.copyWith(relayUrl: relayUrl),
+      ),
     );
   }
 

@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:cryptography/cryptography.dart';
+
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:karmashala_host/src/companion/device_links.dart';
 import 'package:karmashala_remote/client.dart';
@@ -103,6 +105,32 @@ void main() {
       throwsA(anything),
     );
     expect(devices.getById('pixel-7')!.generation, 3, reason: 'never walked back');
+  });
+
+  test('a phone that pairs again starts its count over', () async {
+    await link(1);
+    await link(2);
+
+    // Same phone, new key, generation back at one — what a re-pair writes. The
+    // old key's count must not be held against it.
+    final fresh = Uint8List.fromList(List.generate(32, (i) => i + 77));
+    devices.insert(
+      PairedDevice(
+        id: 'pixel-7',
+        name: 'Pixel 7',
+        deviceKey: fresh,
+        capabilities: CapabilitySet.all,
+        generation: 1,
+        createdAt: DateTime.utc(2026, 9, 17),
+      ),
+    );
+
+    final row = devices.getById('pixel-7')!;
+    expect(listener.links.floorOf(row), 1);
+    final match = await listener.links.match(
+      (await rendezvousFor(SecretKeyData(fresh), 1)).value,
+    );
+    expect(match?.generation, 1);
   });
 
   test('a phone whose counter ran ahead is found inside the window', () async {

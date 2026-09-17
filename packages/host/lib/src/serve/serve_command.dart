@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../companion/companion_listener.dart';
+import '../companion/host_companion.dart';
 import '../companion/host_pairing_service.dart';
 import '../domain/session_registry.dart';
 import '../pty/pty.dart';
@@ -191,7 +191,15 @@ Future<_Companion?> _openCompanion(
       onLog: (message) => errSink.writeln('karmashala_host: $message'),
     );
     await listener.start(port: port);
-    return _Companion(database, pairing, listener);
+    final companion = HostCompanion(
+      pairing: pairing,
+      listener: listener,
+      onLog: (message) => errSink.writeln('karmashala_host: $message'),
+    );
+    // Phones paired through a relay are waited for there from the first moment,
+    // not from the next pairing.
+    await companion.start();
+    return _Companion(database, companion);
   } on SocketException catch (error) {
     database.close();
     errSink.writeln(
@@ -245,38 +253,25 @@ DeviceId _hostIdentity(AppDatabase database) {
   return minted;
 }
 
-/// The companion half of a serving host, held together so it closes together.
+/// The companion half of a serving host and the store under it, held together
+/// so they close together.
 class _Companion {
-  _Companion(this._database, this._pairing, this.listener);
+  _Companion(this._database, this._companion);
 
   final AppDatabase _database;
-  final HostPairingService _pairing;
-  final CompanionListener listener;
+  final HostCompanion _companion;
 
-  int paired() => _pairing.paired().length;
+  CompanionListener get listener => _companion.listener;
 
-  /// Opens a window and answers what to type. The listener routes the phone's
-  /// link when it arrives, which is why this lives beside it rather than in the
-  /// pairing service.
+  int paired() => _companion.paired();
+
   Future<({String code, DateTime expiresAt})> openPairing(
     int capabilities,
     String relay,
-  ) async {
-    final session = await _pairing.open(
-      // A box with its own address needs no relay, and says so by naming
-      // itself; the payload carries a rendezvous either way.
-      relay: relay.isEmpty ? Uri.parse('https://invalid.local') : Uri.parse(relay),
-      grant: CapabilitySet(capabilities),
-    );
-    listener.acceptPairing(session);
-    return (
-      code: PairingCode.encode(session.payload.typedSecret!),
-      expiresAt: session.deadline,
-    );
-  }
+  ) => _companion.openPairing(capabilities, relay);
 
   Future<void> close() async {
-    await listener.stop();
+    await _companion.close();
     _database.close();
   }
 }
