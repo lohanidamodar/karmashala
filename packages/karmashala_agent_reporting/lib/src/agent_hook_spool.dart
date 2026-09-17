@@ -23,6 +23,11 @@ class AgentHookSpoolEvent {
 
 /// Reads and clears the payloads a WSL agent's hook script wrote. Every payload
 /// is deleted once read, parsed or not; a `.json` name is always a whole file.
+///
+/// Two readers: [drain] opens the files from this process, and is what a
+/// spool on this machine's own filesystem uses; a spool inside a WSL
+/// distribution is read with [wslDrainScript] through `wsl.exe`, so a Windows
+/// host never opens one over `\\wsl.localhost`.
 class AgentHookSpool {
   const AgentHookSpool();
 
@@ -75,6 +80,113 @@ class AgentHookSpool {
       if (event != null) events.add(event);
     }
     return events;
+  }
+
+  /// Whether [directory] holds a finished payload, answered from its **names
+  /// alone**: nothing is opened. Never throws.
+  ///
+  /// This is the only look a Windows host takes at a WSL spool through
+  /// `\\wsl.localhost`. On-access antivirus scans a file when it is *opened*,
+  /// and a hook payload is the agent's own words — the prompt, a Bash command
+  /// it ran — so Bitdefender flagged a spool file read over the share as
+  /// `CMD:Heur…Boxter` and denied the read (docs/windows-antivirus.md). The
+  /// contents are read from inside the distribution instead: [wslDrainScript].
+  Future<bool> hasPayloads(Directory directory) async {
+    try {
+      if (!await directory.exists()) return false;
+      await for (final entry in directory.list(followLinks: false)) {
+        if (entry is File && p.extension(entry.path) == '.json') return true;
+      }
+    } on FileSystemException {
+      return false;
+    }
+    return false;
+  }
+
+  /// The `sh` that drains a spool **from inside its distribution**, so the
+  /// payloads cross to Windows over `wsl.exe`'s stdout pipe and are never
+  /// opened on a Windows-scanned path. `$1` is the directory, `$2` the limit.
+  ///
+  /// Oldest first (`ls -tr`, name breaking a tie, as [drain] orders), each
+  /// record `<name>\n<mtime seconds>\n<file bytes>` then a NUL — a byte no JSON
+  /// document and no header contains. Each file is removed as soon as it has
+  /// been copied out, and a `.part` older than two minutes (a hook killed
+  /// mid-write) is swept, so the directory stays small.
+  static const String wslDrainScript = r'''
+dir=$1
+limit=$2
+cd -- "$dir" 2>/dev/null || exit 0
+find . -maxdepth 1 -name '*.part' -mmin +2 -exec rm -f {} \; 2>/dev/null
+n=0
+ls -1tr 2>/dev/null | while IFS= read -r f; do
+  case $f in *.json) ;; *) continue ;; esac
+  [ "$n" -lt "$limit" ] || break
+  [ -f "$f" ] || continue
+  t=$(date -r "$f" +%s 2>/dev/null) || t=
+  [ -n "$t" ] || t=$(stat -c %Y "$f" 2>/dev/null) || t=0
+  printf '%s\n%s\n' "$f" "$t"
+  cat -- "$f" 2>/dev/null
+  rm -f -- "$f"
+  printf '\000'
+  n=$((n+1))
+done
+exit 0
+''';
+
+  /// The `wsl.exe` arguments that run [wslDrainScript] over [linuxDirectory]
+  /// in [distribution]. `--exec`, so no login shell re-parses the script.
+  static List<String> wslDrainArguments({
+    required String distribution,
+    required String linuxDirectory,
+    int limit = 64,
+  }) => [
+    '-d',
+    distribution,
+    '--exec',
+    'sh',
+    '-c',
+    wslDrainScript,
+    'karmashala-spool',
+    linuxDirectory,
+    '$limit',
+  ];
+
+  /// The events in what [wslDrainScript] printed, in the order it printed
+  /// them. A record cut short — the reader killed mid-file — is dropped.
+  List<AgentHookSpoolEvent> parseDrained(String output) {
+    final records = output.split('\u0000');
+    // Whatever follows the last NUL is either nothing or a record that never
+    // finished; neither is an event.
+    records.removeLast();
+    final events = <AgentHookSpoolEvent>[];
+    for (final record in records) {
+      final nameEnd = record.indexOf('\n');
+      if (nameEnd < 0) continue;
+      final timeEnd = record.indexOf('\n', nameEnd + 1);
+      if (timeEnd < 0) continue;
+      final seconds = int.tryParse(record.substring(nameEnd + 1, timeEnd));
+      final event = parse(
+        record.substring(timeEnd + 1),
+        firedAt: seconds == null || seconds <= 0
+            ? DateTime.now()
+            : DateTime.fromMillisecondsSinceEpoch(seconds * 1000, isUtc: true),
+      );
+      if (event != null) events.add(event);
+    }
+    return events;
+  }
+
+  /// The path inside the distribution of a `\\wsl.localhost\<distro>\…` (or
+  /// `\\wsl$\<distro>\…`) directory, or `null` when [path] is not one.
+  static String? wslLinuxPathOf(String path) {
+    final match = RegExp(
+      r'^[\\/]{2}wsl(?:\.localhost|\$)[\\/]+[^\\/]+(.*)$',
+      caseSensitive: false,
+    ).firstMatch(path);
+    if (match == null) return null;
+    final rest = match.group(1)!.replaceAll('\\', '/');
+    final trimmed = rest.replaceAll(RegExp(r'/+$'), '');
+    return trimmed.isEmpty ? '/' : trimmed;
   }
 
   /// `agent=` and `event=` headers, a blank line, then the payload verbatim —

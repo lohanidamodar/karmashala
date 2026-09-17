@@ -228,6 +228,114 @@ void main() {
     expect(seen, hasLength(1));
   });
 
+  group('a WSL store is read over wsl.exe, never opened over the share', () {
+    // The store's UNC path is only ever *listed by name*; its payloads are
+    // read from inside the distribution, so a Windows process never opens a
+    // file the on-access scanner would read as a malicious command.
+    late Directory unc;
+    setUp(() {
+      // A stand-in for `\\wsl.localhost\archlinux\home\u\.claude\…`: a real
+      // temp dir whose *path* the source reports as the UNC spelling, so
+      // `hasPayloads` can list it while `linuxDirectory` resolves.
+      unc = Directory.systemTemp.createTempSync('ks_unc_');
+    });
+    tearDown(() {
+      try {
+        unc.deleteSync(recursive: true);
+      } on FileSystemException {
+        // Already gone.
+      }
+    });
+
+    AgentHookSpoolSource uncSource() => AgentHookSpoolSource(
+      environmentId: 'wsl:archlinux',
+      directory: Directory(
+        r'\\wsl.localhost\archlinux\home\u\.claude\karmashala-agent-hook.spool',
+      ),
+      wslDistribution: 'archlinux',
+    );
+
+    test('linuxDirectory resolves from the UNC spelling', () {
+      expect(
+        uncSource().linuxDirectory,
+        '/home/u/.claude/karmashala-agent-hook.spool',
+      );
+    });
+
+    test(
+      'a share with a payload is read through wslDrain, listed once',
+      () async {
+        final seen = <AgentHookSpoolEvent>[];
+        final drainCalls = <(String, String)>[];
+        final listed = <String>[];
+        final drainer = AgentHookSpoolDrainer(
+          onEvent: seen.add,
+          spool: _ListingSpool(hasPayloadsResult: true, onList: listed.add),
+          runningDistributions: () async => {'archlinux'},
+          wslDrain:
+              ({
+                required String distribution,
+                required String linuxDirectory,
+                int limit = 64,
+              }) async {
+                drainCalls.add((distribution, linuxDirectory));
+                return [
+                  AgentHookSpoolEvent(
+                    agentId: 'claudeCode',
+                    event: 'PreToolUse',
+                    body: '{"tool_input":{"command":"rm -rf /"}}',
+                    firedAt: DateTime.now(),
+                  ),
+                ];
+              },
+        );
+        addTearDown(drainer.dispose);
+        drainer.watch([uncSource()]);
+
+        await drainer.drainOnce();
+
+        expect(drainCalls, [
+          ('archlinux', '/home/u/.claude/karmashala-agent-hook.spool'),
+        ]);
+        expect(seen.map((e) => e.event), ['PreToolUse']);
+        // The share was listed by name, and never handed to `drain`, which is
+        // what opens files.
+        expect(
+          listed,
+          isEmpty,
+          reason: 'drain() opens files; it was not called',
+        );
+      },
+    );
+
+    test(
+      'an empty share spends no wsl.exe: name-only look, then nothing',
+      () async {
+        var drained = false;
+        final drainer = AgentHookSpoolDrainer(
+          onEvent: (_) {},
+          spool: _ListingSpool(hasPayloadsResult: false, onList: (_) {}),
+          runningDistributions: () async => {'archlinux'},
+          wslDrain:
+              ({
+                required String distribution,
+                required String linuxDirectory,
+                int limit = 64,
+              }) async {
+                drained = true;
+                return const [];
+              },
+        );
+        addTearDown(drainer.dispose);
+        drainer.watch([uncSource()]);
+
+        await drainer.drainOnce();
+
+        expect(drained, isFalse);
+      },
+    );
+  });
+
   test('disposing stops it, so shutdown is not racing a share', () async {
     final loop = _StepSchedule();
     final seen = <AgentHookSpoolEvent>[];
@@ -252,6 +360,27 @@ void main() {
     expect(seen, isEmpty);
     expect(drainer.sources, isEmpty);
   });
+}
+
+/// A spool whose name-only look ([hasPayloads]) is scripted, and whose
+/// file-opening [drain] reports if it was ever called for a WSL source.
+class _ListingSpool extends AgentHookSpool {
+  const _ListingSpool({required this.hasPayloadsResult, required this.onList});
+
+  final bool hasPayloadsResult;
+  final void Function(String path) onList;
+
+  @override
+  Future<bool> hasPayloads(Directory directory) async => hasPayloadsResult;
+
+  @override
+  Future<List<AgentHookSpoolEvent>> drain(
+    Directory directory, {
+    int limit = 64,
+  }) async {
+    onList(directory.path);
+    return const [];
+  }
 }
 
 /// A spool that records whether the directory was listed at all.
