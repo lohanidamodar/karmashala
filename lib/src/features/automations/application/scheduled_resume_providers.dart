@@ -70,25 +70,32 @@ class ResumeBadge {
   int get hashCode => Object.hash(resumeId, label, tooltip, queued);
 }
 
-final sessionResumeBadgeProvider = Provider.family<ResumeBadge?, String>((
-  ref,
-  sessionId,
-) {
-  ref.watch(automationsRevisionProvider);
-  final resume = ref.watch(scheduledResumeDaoProvider).liveFor(sessionId);
-  if (resume == null) return null;
+/// Every waiting resume's badge by session id: one query per write, however
+/// many rows are on screen.
+final resumeBadgesProvider = Provider<Map<String, ResumeBadge>>((ref) {
   final now = ref.read(clockProvider).nowUtc().toLocal();
-  return ResumeBadge(
-    resumeId: resume.id,
-    label: switch (resume.state) {
-      ScheduledResumeState.queued => 'resume waiting',
-      ScheduledResumeState.firing => 'resuming',
-      _ => 'resumes ${formatResetClock(resume.fireAt, now)}',
-    },
-    tooltip: describeScheduledResume(resume, now: now),
-    queued: resume.state == ScheduledResumeState.queued,
-  );
+  return {
+    for (final resume in ref.watch(liveScheduledResumesProvider))
+      resume.sessionId: ResumeBadge(
+        resumeId: resume.id,
+        label: switch (resume.state) {
+          ScheduledResumeState.queued => 'resume waiting',
+          ScheduledResumeState.firing => 'resuming',
+          _ => 'resumes ${formatResetClock(resume.fireAt, now)}',
+        },
+        tooltip: describeScheduledResume(resume, now: now),
+        queued: resume.state == ScheduledResumeState.queued,
+      ),
+  };
 });
+
+/// One session's badge. Selected out of the map, so a row rebuilds only when
+/// its own words change.
+final sessionResumeBadgeProvider = Provider.autoDispose
+    .family<ResumeBadge?, String>(
+      (ref, sessionId) =>
+          ref.watch(resumeBadgesProvider.select((badges) => badges[sessionId])),
+    );
 
 /// One sentence or two: when, on what, and what will be said.
 String describeScheduledResume(
