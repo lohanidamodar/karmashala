@@ -324,6 +324,18 @@ void main() {
       expect(index.isFresh(root.path), isTrue);
     });
 
+    test('a share is never watched: a recursive watch held open on '
+        r'\\wsl.localhost is background access antivirus scans', () async {
+      final watcher = fake();
+      final index = build(watcher: watcher);
+
+      await index.index(r'\\wsl.localhost\Ubuntu\home\me\app');
+      await index.index(r'\\wsl$\Ubuntu\home\me\app');
+      await index.index('//wsl.localhost/Ubuntu/home/me/app');
+
+      expect(watcher.watched, isEmpty);
+    });
+
     test('watches are capped, oldest root dropped first', () async {
       final watcher = fake();
       final index = build(watcher: watcher, maxWatchedRoots: 2);

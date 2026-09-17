@@ -228,6 +228,10 @@ class RepoFileIndex {
   }
 
   void _ensureWatch(String root) {
+    // A share is walked again when stale and never watched: a recursive watch
+    // held on `\\wsl.localhost` is background access on the path Windows
+    // antivirus scans (docs/windows-antivirus.md).
+    if (root.startsWith(r'\\') || root.startsWith('//')) return;
     _watchOrder.remove(root);
     _watchOrder.addLast(root);
     if (!_watcher.isWatching(root)) {
