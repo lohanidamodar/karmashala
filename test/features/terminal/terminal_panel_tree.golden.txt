@@ -4891,118 +4891,120 @@ TerminalToolbar
                                                                                                               SizedBox
                                                                                                                 Center
                                                                                                                   RichText
-    IconButton
-      _SelectableIconButton
-        _IconButtonM3
-          Semantics
-            _InputPadding
-              ConstrainedBox
-                Material
-                  _MaterialInterior
-                    PhysicalShape
-                      _ShapeBorderPaint
-                        CustomPaint
-                          NotificationListener<LayoutChangedNotification>
-                            _InkFeatures key=[GlobalKey#… ink renderer]
-                              AnimatedDefaultTextStyle
-                                DefaultTextStyle
-                                  Tooltip tooltip="Split the workspace right (Ctrl+Shift+D)"
-                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                      OverlayPortal
-                                        _OverlayPortal
-                                          Semantics
-                                            _ExclusiveMouseRegion
-                                              Listener
-                                                Semantics
-                                                  MouseRegion
-                                                    AnimatedTheme
-                                                      Theme
-                                                        _InheritedTheme
-                                                          CupertinoTheme
-                                                            InheritedCupertinoTheme
-                                                              IconTheme
+    _SplitButton
+      IconButton
+        _SelectableIconButton
+          _IconButtonM3
+            Semantics
+              _InputPadding
+                ConstrainedBox
+                  Material
+                    _MaterialInterior
+                      PhysicalShape
+                        _ShapeBorderPaint
+                          CustomPaint
+                            NotificationListener<LayoutChangedNotification>
+                              _InkFeatures key=[GlobalKey#… ink renderer]
+                                AnimatedDefaultTextStyle
+                                  DefaultTextStyle
+                                    Tooltip tooltip="Split the workspace right (Ctrl+Shift+D)"
+                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                        OverlayPortal
+                                          _OverlayPortal
+                                            Semantics
+                                              _ExclusiveMouseRegion
+                                                Listener
+                                                  Semantics
+                                                    MouseRegion
+                                                      AnimatedTheme
+                                                        Theme
+                                                          _InheritedTheme
+                                                            CupertinoTheme
+                                                              InheritedCupertinoTheme
                                                                 IconTheme
-                                                                  DefaultSelectionStyle
-                                                                    InkWell
-                                                                      _InkResponseStateWidget
-                                                                        _ParentInkResponseProvider
-                                                                          Actions
-                                                                            _ActionsScope
-                                                                              Focus
-                                                                                _FocusInheritedScope
-                                                                                  Semantics
-                                                                                    MouseRegion
-                                                                                      Builder
-                                                                                        DefaultSelectionStyle
-                                                                                          Semantics
-                                                                                            GestureDetector
-                                                                                              RawGestureDetector
-                                                                                                Listener
-                                                                                                  Padding
-                                                                                                    Align
-                                                                                                      Semantics
-                                                                                                        Icon icon=IconData(U+0E870)
-                                                                                                          Semantics
-                                                                                                            ExcludeSemantics
-                                                                                                              SizedBox
-                                                                                                                Center
-                                                                                                                  RichText
-    IconButton
-      _SelectableIconButton
-        _IconButtonM3
-          Semantics
-            _InputPadding
-              ConstrainedBox
-                Material
-                  _MaterialInterior
-                    PhysicalShape
-                      _ShapeBorderPaint
-                        CustomPaint
-                          NotificationListener<LayoutChangedNotification>
-                            _InkFeatures key=[GlobalKey#… ink renderer]
-                              AnimatedDefaultTextStyle
-                                DefaultTextStyle
-                                  Tooltip tooltip="Split the workspace down (Ctrl+Shift+E)"
-                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                      OverlayPortal
-                                        _OverlayPortal
-                                          Semantics
-                                            _ExclusiveMouseRegion
-                                              Listener
-                                                Semantics
-                                                  MouseRegion
-                                                    AnimatedTheme
-                                                      Theme
-                                                        _InheritedTheme
-                                                          CupertinoTheme
-                                                            InheritedCupertinoTheme
-                                                              IconTheme
+                                                                  IconTheme
+                                                                    DefaultSelectionStyle
+                                                                      InkWell
+                                                                        _InkResponseStateWidget
+                                                                          _ParentInkResponseProvider
+                                                                            Actions
+                                                                              _ActionsScope
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Semantics
+                                                                                      MouseRegion
+                                                                                        Builder
+                                                                                          DefaultSelectionStyle
+                                                                                            Semantics
+                                                                                              GestureDetector
+                                                                                                RawGestureDetector
+                                                                                                  Listener
+                                                                                                    Padding
+                                                                                                      Align
+                                                                                                        Semantics
+                                                                                                          Icon icon=IconData(U+0E870)
+                                                                                                            Semantics
+                                                                                                              ExcludeSemantics
+                                                                                                                SizedBox
+                                                                                                                  Center
+                                                                                                                    RichText
+    _SplitButton
+      IconButton
+        _SelectableIconButton
+          _IconButtonM3
+            Semantics
+              _InputPadding
+                ConstrainedBox
+                  Material
+                    _MaterialInterior
+                      PhysicalShape
+                        _ShapeBorderPaint
+                          CustomPaint
+                            NotificationListener<LayoutChangedNotification>
+                              _InkFeatures key=[GlobalKey#… ink renderer]
+                                AnimatedDefaultTextStyle
+                                  DefaultTextStyle
+                                    Tooltip tooltip="Split the workspace down (Ctrl+Shift+E)"
+                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                        OverlayPortal
+                                          _OverlayPortal
+                                            Semantics
+                                              _ExclusiveMouseRegion
+                                                Listener
+                                                  Semantics
+                                                    MouseRegion
+                                                      AnimatedTheme
+                                                        Theme
+                                                          _InheritedTheme
+                                                            CupertinoTheme
+                                                              InheritedCupertinoTheme
                                                                 IconTheme
-                                                                  DefaultSelectionStyle
-                                                                    InkWell
-                                                                      _InkResponseStateWidget
-                                                                        _ParentInkResponseProvider
-                                                                          Actions
-                                                                            _ActionsScope
-                                                                              Focus
-                                                                                _FocusInheritedScope
-                                                                                  Semantics
-                                                                                    MouseRegion
-                                                                                      Builder
-                                                                                        DefaultSelectionStyle
-                                                                                          Semantics
-                                                                                            GestureDetector
-                                                                                              RawGestureDetector
-                                                                                                Listener
-                                                                                                  Padding
-                                                                                                    Align
-                                                                                                      Semantics
-                                                                                                        Icon icon=IconData(U+0E874)
-                                                                                                          Semantics
-                                                                                                            ExcludeSemantics
-                                                                                                              SizedBox
-                                                                                                                Center
-                                                                                                                  RichText
+                                                                  IconTheme
+                                                                    DefaultSelectionStyle
+                                                                      InkWell
+                                                                        _InkResponseStateWidget
+                                                                          _ParentInkResponseProvider
+                                                                            Actions
+                                                                              _ActionsScope
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Semantics
+                                                                                      MouseRegion
+                                                                                        Builder
+                                                                                          DefaultSelectionStyle
+                                                                                            Semantics
+                                                                                              GestureDetector
+                                                                                                RawGestureDetector
+                                                                                                  Listener
+                                                                                                    Padding
+                                                                                                      Align
+                                                                                                        Semantics
+                                                                                                          Icon icon=IconData(U+0E874)
+                                                                                                            Semantics
+                                                                                                              ExcludeSemantics
+                                                                                                                SizedBox
+                                                                                                                  Center
+                                                                                                                    RichText
     IconButton
       _SelectableIconButton
         _IconButtonM3
@@ -5234,118 +5236,120 @@ TerminalToolbar
                                                                                                               SizedBox
                                                                                                                 Center
                                                                                                                   RichText
-    IconButton
-      _SelectableIconButton
-        _IconButtonM3
-          Semantics
-            _InputPadding
-              ConstrainedBox
-                Material
-                  _MaterialInterior
-                    PhysicalShape
-                      _ShapeBorderPaint
-                        CustomPaint
-                          NotificationListener<LayoutChangedNotification>
-                            _InkFeatures key=[GlobalKey#… ink renderer]
-                              AnimatedDefaultTextStyle
-                                DefaultTextStyle
-                                  Tooltip tooltip="Split the workspace right (Ctrl+Shift+D)"
-                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                      OverlayPortal
-                                        _OverlayPortal
-                                          Semantics
-                                            _ExclusiveMouseRegion
-                                              Listener
-                                                Semantics
-                                                  MouseRegion
-                                                    AnimatedTheme
-                                                      Theme
-                                                        _InheritedTheme
-                                                          CupertinoTheme
-                                                            InheritedCupertinoTheme
-                                                              IconTheme
+    _SplitButton
+      IconButton
+        _SelectableIconButton
+          _IconButtonM3
+            Semantics
+              _InputPadding
+                ConstrainedBox
+                  Material
+                    _MaterialInterior
+                      PhysicalShape
+                        _ShapeBorderPaint
+                          CustomPaint
+                            NotificationListener<LayoutChangedNotification>
+                              _InkFeatures key=[GlobalKey#… ink renderer]
+                                AnimatedDefaultTextStyle
+                                  DefaultTextStyle
+                                    Tooltip tooltip="Split the workspace right (Ctrl+Shift+D)"
+                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                        OverlayPortal
+                                          _OverlayPortal
+                                            Semantics
+                                              _ExclusiveMouseRegion
+                                                Listener
+                                                  Semantics
+                                                    MouseRegion
+                                                      AnimatedTheme
+                                                        Theme
+                                                          _InheritedTheme
+                                                            CupertinoTheme
+                                                              InheritedCupertinoTheme
                                                                 IconTheme
-                                                                  DefaultSelectionStyle
-                                                                    InkWell
-                                                                      _InkResponseStateWidget
-                                                                        _ParentInkResponseProvider
-                                                                          Actions
-                                                                            _ActionsScope
-                                                                              Focus
-                                                                                _FocusInheritedScope
-                                                                                  Semantics
-                                                                                    MouseRegion
-                                                                                      Builder
-                                                                                        DefaultSelectionStyle
-                                                                                          Semantics
-                                                                                            GestureDetector
-                                                                                              RawGestureDetector
-                                                                                                Listener
-                                                                                                  Padding
-                                                                                                    Align
-                                                                                                      Semantics
-                                                                                                        Icon icon=IconData(U+0E870)
-                                                                                                          Semantics
-                                                                                                            ExcludeSemantics
-                                                                                                              SizedBox
-                                                                                                                Center
-                                                                                                                  RichText
-    IconButton
-      _SelectableIconButton
-        _IconButtonM3
-          Semantics
-            _InputPadding
-              ConstrainedBox
-                Material
-                  _MaterialInterior
-                    PhysicalShape
-                      _ShapeBorderPaint
-                        CustomPaint
-                          NotificationListener<LayoutChangedNotification>
-                            _InkFeatures key=[GlobalKey#… ink renderer]
-                              AnimatedDefaultTextStyle
-                                DefaultTextStyle
-                                  Tooltip tooltip="Split the workspace down (Ctrl+Shift+E)"
-                                    RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
-                                      OverlayPortal
-                                        _OverlayPortal
-                                          Semantics
-                                            _ExclusiveMouseRegion
-                                              Listener
-                                                Semantics
-                                                  MouseRegion
-                                                    AnimatedTheme
-                                                      Theme
-                                                        _InheritedTheme
-                                                          CupertinoTheme
-                                                            InheritedCupertinoTheme
-                                                              IconTheme
+                                                                  IconTheme
+                                                                    DefaultSelectionStyle
+                                                                      InkWell
+                                                                        _InkResponseStateWidget
+                                                                          _ParentInkResponseProvider
+                                                                            Actions
+                                                                              _ActionsScope
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Semantics
+                                                                                      MouseRegion
+                                                                                        Builder
+                                                                                          DefaultSelectionStyle
+                                                                                            Semantics
+                                                                                              GestureDetector
+                                                                                                RawGestureDetector
+                                                                                                  Listener
+                                                                                                    Padding
+                                                                                                      Align
+                                                                                                        Semantics
+                                                                                                          Icon icon=IconData(U+0E870)
+                                                                                                            Semantics
+                                                                                                              ExcludeSemantics
+                                                                                                                SizedBox
+                                                                                                                  Center
+                                                                                                                    RichText
+    _SplitButton
+      IconButton
+        _SelectableIconButton
+          _IconButtonM3
+            Semantics
+              _InputPadding
+                ConstrainedBox
+                  Material
+                    _MaterialInterior
+                      PhysicalShape
+                        _ShapeBorderPaint
+                          CustomPaint
+                            NotificationListener<LayoutChangedNotification>
+                              _InkFeatures key=[GlobalKey#… ink renderer]
+                                AnimatedDefaultTextStyle
+                                  DefaultTextStyle
+                                    Tooltip tooltip="Split the workspace down (Ctrl+Shift+E)"
+                                      RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
+                                        OverlayPortal
+                                          _OverlayPortal
+                                            Semantics
+                                              _ExclusiveMouseRegion
+                                                Listener
+                                                  Semantics
+                                                    MouseRegion
+                                                      AnimatedTheme
+                                                        Theme
+                                                          _InheritedTheme
+                                                            CupertinoTheme
+                                                              InheritedCupertinoTheme
                                                                 IconTheme
-                                                                  DefaultSelectionStyle
-                                                                    InkWell
-                                                                      _InkResponseStateWidget
-                                                                        _ParentInkResponseProvider
-                                                                          Actions
-                                                                            _ActionsScope
-                                                                              Focus
-                                                                                _FocusInheritedScope
-                                                                                  Semantics
-                                                                                    MouseRegion
-                                                                                      Builder
-                                                                                        DefaultSelectionStyle
-                                                                                          Semantics
-                                                                                            GestureDetector
-                                                                                              RawGestureDetector
-                                                                                                Listener
-                                                                                                  Padding
-                                                                                                    Align
-                                                                                                      Semantics
-                                                                                                        Icon icon=IconData(U+0E874)
-                                                                                                          Semantics
-                                                                                                            ExcludeSemantics
-                                                                                                              SizedBox
-                                                                                                                Center
-                                                                                                                  RichText
+                                                                  IconTheme
+                                                                    DefaultSelectionStyle
+                                                                      InkWell
+                                                                        _InkResponseStateWidget
+                                                                          _ParentInkResponseProvider
+                                                                            Actions
+                                                                              _ActionsScope
+                                                                                Focus
+                                                                                  _FocusInheritedScope
+                                                                                    Semantics
+                                                                                      MouseRegion
+                                                                                        Builder
+                                                                                          DefaultSelectionStyle
+                                                                                            Semantics
+                                                                                              GestureDetector
+                                                                                                RawGestureDetector
+                                                                                                  Listener
+                                                                                                    Padding
+                                                                                                      Align
+                                                                                                        Semantics
+                                                                                                          Icon icon=IconData(U+0E874)
+                                                                                                            Semantics
+                                                                                                              ExcludeSemantics
+                                                                                                                SizedBox
+                                                                                                                  Center
+                                                                                                                    RichText
     IconButton
       _SelectableIconButton
         _IconButtonM3
