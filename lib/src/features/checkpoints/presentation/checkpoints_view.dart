@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:agent_cli/descriptors.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/primitives.dart';
@@ -11,6 +13,9 @@ import '../../git/presentation/diff_line_tile.dart';
 import 'package:karmashala_git/git.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
+import '../../agents/application/agent_providers.dart';
+import '../../sessions/application/session_providers.dart';
+import '../application/agent_rewind_points.dart';
 import '../application/checkpoint_providers.dart';
 import '../application/checkpoint_service.dart';
 import '../application/session_checkpoint_recorder.dart';
@@ -74,72 +79,117 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
     }
 
     final checkpoints = ref.watch(sessionCheckpointsProvider(sessionId));
+    final skipped = ref.watch(
+      checkpointSkipReasonsProvider.select((reasons) => reasons[sessionId]),
+    );
+    final native = _AgentRewindNote(sessionId: sessionId);
     if (checkpoints.isEmpty) {
-      return const PanePlaceholder(
-        message:
-            'No checkpoints yet. One is recorded each time this session '
-            'finishes a turn, and Capture now records one on demand.',
-        icon: AppIcons.clockCounterClockwise,
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: PanePlaceholder(
+              message: checkpointsEmptyMessage(skipped),
+              icon: AppIcons.clockCounterClockwise,
+            ),
+          ),
+          native,
+        ],
       );
     }
 
     final now = ref.watch(clockProvider).nowUtc();
-    return ListView.separated(
-      itemCount: checkpoints.length,
-      separatorBuilder: (_, _) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final checkpoint = checkpoints[index];
-        final expanded = _expandedId == checkpoint.id;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ListTile(
-              dense: true,
-              title: Text(
-                checkpoint.label ??
-                    '${_reasonLabel(checkpoint.reason)} '
-                        '#${checkpoint.sequence}',
-                style: theme.textTheme.bodyMedium,
-              ),
-              // §19 at the line the reading is on: a turn is only pickable if
-              // you can tell how long ago it was.
-              subtitle: Text(
-                '${checkpoint.files.length} file'
-                '${checkpoint.files.length == 1 ? '' : 's'} · '
-                '${describeAge(now.difference(checkpoint.createdAt))}',
-                style: theme.textTheme.bodySmall,
-              ),
-              onTap: () =>
-                  setState(() => _expandedId = expanded ? null : checkpoint.id),
-              trailing: _busyId == checkpoint.id
-                  ? const InlineSpinner(size: InlineSpinnerSize.medium)
-                  : TextButton(
-                      onPressed: () => _restore(checkpoint),
-                      child: const Text('Restore'),
-                    ),
+    final repositories = {
+      for (final c in checkpoints)
+        (c.repository.environmentId, c.repository.path),
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (skipped != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              Insets.md,
+              Insets.xs,
+              Insets.md,
+              Insets.xs,
             ),
-            if (expanded) ...[
-              for (final file in checkpoint.files)
-                _FileRow(
-                  path: file.path,
-                  onRestore: _busyId == checkpoint.id
-                      ? null
-                      : () => _restore(checkpoint, paths: [file.path]),
-                ),
-              _CheckpointDiff(checkpoint: checkpoint),
-            ],
-          ],
-        );
-      },
+            child: Text(
+              'Not checkpointing right now: $skipped.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        Expanded(
+          child: ListView.separated(
+            itemCount: checkpoints.length,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final checkpoint = checkpoints[index];
+              final expanded = _expandedId == checkpoint.id;
+              final prompt = checkpoint.prompt;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListTile(
+                    dense: true,
+                    title: Text(
+                      checkpointTitle(checkpoint),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    // §19 at the line the reading is on: a turn is only
+                    // pickable if you can tell how long ago it was.
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (prompt != null)
+                          Text(
+                            '“${prompt.replaceAll(RegExp(r'\s+'), ' ')}'
+                            '”',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                        Text(
+                          checkpointSummary(
+                            checkpoint,
+                            now,
+                            showRepository: repositories.length > 1,
+                          ),
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                    onTap: () => setState(
+                      () => _expandedId = expanded ? null : checkpoint.id,
+                    ),
+                    trailing: _busyId == checkpoint.id
+                        ? const InlineSpinner(size: InlineSpinnerSize.medium)
+                        : TextButton(
+                            onPressed: () => _restore(checkpoint),
+                            child: const Text('Restore'),
+                          ),
+                  ),
+                  if (expanded) ...[
+                    for (final file in checkpoint.files)
+                      _FileRow(
+                        path: file.path,
+                        onRestore: _busyId == checkpoint.id
+                            ? null
+                            : () => _restore(checkpoint, paths: [file.path]),
+                      ),
+                    _CheckpointDiff(checkpoint: checkpoint),
+                  ],
+                ],
+              );
+            },
+          ),
+        ),
+        native,
+      ],
     );
   }
-
-  String _reasonLabel(CheckpointReason reason) => switch (reason) {
-    CheckpointReason.turnStart => 'Before turn',
-    CheckpointReason.turn => 'Turn',
-    CheckpointReason.safety => 'Before restore',
-    CheckpointReason.manual => 'Checkpoint',
-  };
 
   /// Puts [checkpoint] back — the whole tree, or only [paths], sent as one
   /// whole-file [HunkSelection] each exactly as `checkpoint_restore` does.
@@ -359,3 +409,109 @@ class _FileRow extends StatelessWidget {
     );
   }
 }
+
+/// A row's title: which turn it stands beside, or why it was taken.
+String checkpointTitle(Checkpoint checkpoint) {
+  final turn = checkpoint.turn;
+  return switch (checkpoint.reason) {
+    CheckpointReason.turnStart when turn != null => 'Before turn $turn',
+    CheckpointReason.turn when turn != null => 'After turn $turn',
+    CheckpointReason.turnStart => 'Before turn #${checkpoint.sequence}',
+    CheckpointReason.turn => 'Turn #${checkpoint.sequence}',
+    CheckpointReason.safety =>
+      checkpoint.label ?? 'Before restore #${checkpoint.sequence}',
+    CheckpointReason.manual =>
+      checkpoint.label ?? 'Checkpoint #${checkpoint.sequence}',
+  };
+}
+
+/// A row's facts: files, lines, where (when a session spans repositories), age.
+String checkpointSummary(
+  Checkpoint checkpoint,
+  DateTime now, {
+  bool showRepository = false,
+}) {
+  final count = checkpoint.files.length;
+  final parts = <String>['$count file${count == 1 ? '' : 's'}'];
+  final added = checkpoint.additions;
+  final removed = checkpoint.deletions;
+  if (count > 0 && (added != null || removed != null)) {
+    parts.add('+${added ?? 0} −${removed ?? 0}');
+  }
+  if (showRepository) parts.add(p.basename(checkpoint.repository.path));
+  parts.add(describeAge(now.difference(checkpoint.createdAt)));
+  return parts.join(' · ');
+}
+
+/// What an empty panel says: when checkpoints are taken, and — when the
+/// recorder knows one — why this session has none.
+String checkpointsEmptyMessage(String? skipReason) {
+  const when =
+      'Each repository this session’s agent works in is checkpointed as '
+      'a turn starts and as it ends, whenever its files changed. Capture now '
+      'records one on demand.';
+  if (skipReason != null) return 'No checkpoints yet: $skipReason.\n\n$when';
+  return 'No checkpoints yet. $when\n\nA session has none until it finishes a '
+      'turn, when its folder is not a git repository or is on an SSH host, '
+      'or when automatic checkpoints are off.';
+}
+
+/// What the agent's own undo offers beside these, or `null` when there is
+/// nothing to say about [agentId].
+String? agentRewindNote(String? agentId, AgentRewindPoints? points) {
+  switch (agentId) {
+    case AgentIds.claudeCode:
+      final count = points?.checkpoints;
+      final counted = count == null
+          ? 'Claude Code also keeps its own rewind points for this '
+                'conversation'
+          : 'Claude Code also keeps $count rewind point'
+                '${count == 1 ? '' : 's'} for this conversation'
+                '${points!.withFileEdits == count ? '' : ', ${points.withFileEdits} with file edits'}';
+      return '$counted. In its pane, press Esc twice or run /rewind to '
+          'restore code and conversation together. It tracks only its own '
+          'Edit and Write tools, not shell commands.';
+    case AgentIds.codex:
+      return 'Codex has no undo of its own: it removed its snapshots in '
+          'April 2026. These checkpoints are the way back.';
+  }
+  return null;
+}
+
+/// The agent-native half of undo, said under the list. Read-only.
+class _AgentRewindNote extends ConsumerWidget {
+  const _AgentRewindNote({required this.sessionId});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final agentId = ref.watch(_sessionAgentIdProvider(sessionId));
+    if (agentId != AgentIds.claudeCode && agentId != AgentIds.codex) {
+      return const SizedBox.shrink();
+    }
+    final points = agentId == AgentIds.claudeCode
+        ? ref.watch(agentRewindPointsProvider(sessionId)).value
+        : null;
+    final note = agentRewindNote(agentId, points);
+    if (note == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(Insets.md),
+      color: theme.colorScheme.surfaceContainerLow,
+      child: Text(note, style: theme.textTheme.bodySmall),
+    );
+  }
+}
+
+final _sessionAgentIdProvider = Provider.autoDispose.family<String?, String>((
+  ref,
+  sessionId,
+) {
+  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  if (session == null) return null;
+  return ref
+      .read(agentInstallationDaoProvider)
+      .getById(session.agentInstallationId)
+      ?.agentId;
+});

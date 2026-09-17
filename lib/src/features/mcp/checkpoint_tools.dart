@@ -147,9 +147,20 @@ class CheckpointControlTools {
     'repository': checkpoint.repository.path,
     'environmentId': checkpoint.repository.environmentId,
     'commit': checkpoint.commitSha,
+    'turn': checkpoint.turn,
+    'prompt': checkpoint.prompt,
+    'additions': checkpoint.additions,
+    'deletions': checkpoint.deletions,
     'files': [
       for (final file in checkpoint.files)
-        {'path': file.path, 'status': file.type.name},
+        {
+          'path': file.path,
+          'status': file.type.name,
+          if (checkpoint.lineStats[file.path] case final stat?) ...{
+            'additions': stat.added,
+            'deletions': stat.removed,
+          },
+        },
     ],
   };
 }
@@ -159,9 +170,11 @@ const List<Map<String, dynamic>> checkpointControlToolSchemas = [
     {
       'name': 'checkpoint_list',
       'description':
-          'List the checkpoints of a session — one per finished turn, plus the '
-          'safety checkpoints taken before a restore. Each entry says what '
-          'changed since the checkpoint before it. Defaults to the calling '
+          'List the checkpoints of a session — taken as each agent turn '
+          'starts and ends in every repository it changed, plus manual and '
+          'pre-restore safety checkpoints. Each entry says its turn, prompt '
+          'and what changed since the previous checkpoint of its repository. '
+          'Defaults to the calling '
           "session's own checkpoints.",
       'inputSchema': {
         'type': 'object',

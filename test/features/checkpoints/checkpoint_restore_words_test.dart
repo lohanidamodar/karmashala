@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
@@ -145,6 +146,7 @@ void main() {
       ProviderScope(
         overrides: [
           checkpointsPanelSessionIdProvider.overrideWithValue('s1'),
+          databaseProvider.overrideWithValue(db),
           checkpointDaoProvider.overrideWithValue(dao),
           checkpointServiceProvider.overrideWithValue(service),
           clockProvider.overrideWithValue(FixedClock(testTime)),
