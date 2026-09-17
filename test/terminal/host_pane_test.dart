@@ -272,6 +272,25 @@ void main() {
     expect((resized.columns, resized.rows), (100, 30));
   });
 
+  test('a session found at another size is told the size of the pane', () async {
+    // The host kept the session at the grid its last pane had. This pane was
+    // laid out before the link existed, so no resize of its own will say so.
+    final access = PaneAccess(readyDeployment())..liveSessions.add('karmashala_local_p1');
+    paneOn(access);
+    await settle();
+
+    final resized = access.channels.single.all<ResizeMessage>().toList();
+    expect([for (final r in resized) (r.sessionRef, r.columns, r.rows)], [(1, 120, 40)]);
+  });
+
+  test('a session opened at the size of the pane is not resized again', () async {
+    final access = PaneAccess(readyDeployment());
+    paneOn(access);
+    await settle();
+
+    expect(access.channels.single.all<ResizeMessage>(), isEmpty);
+  });
+
   test('an agent pane keeps its session id across pane replacement', () async {
     final access = PaneAccess(readyDeployment());
     final pane = HostTerminalInstance(

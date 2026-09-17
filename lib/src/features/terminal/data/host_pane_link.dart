@@ -10,6 +10,8 @@ class HostAttachment {
   const HostAttachment({
     required this.sessionRef,
     required this.sessionId,
+    required this.columns,
+    required this.rows,
     required this.replayFromOffset,
     required this.droppedBytes,
     required this.totalBytes,
@@ -20,6 +22,11 @@ class HostAttachment {
 
   final int sessionRef;
   final String sessionId;
+
+  /// The grid the host holds the session at: what its process was last told,
+  /// which for a session found running is whatever its previous pane had.
+  final int columns;
+  final int rows;
   final int replayFromOffset;
 
   /// How much the ring had already overwritten. Non-zero means the pane is
@@ -143,6 +150,8 @@ class HostPaneLink {
     return HostAttachment(
       sessionRef: attached.sessionRef,
       sessionId: attached.sessionId,
+      columns: attached.columns,
+      rows: attached.rows,
       replayFromOffset: attached.replayFromOffset,
       droppedBytes: attached.droppedBytes,
       totalBytes: attached.totalBytes,
@@ -183,9 +192,21 @@ class HostPaneLink {
     _send(InputMessage(_sessionRef, bytes));
   }
 
+  /// Nothing before the host has named the session: a resize could only carry
+  /// ref 0, which the host refuses. [matchGrid] says the size once it has.
   void resize(int columns, int rows) {
-    if (_closed) return;
+    if (_closed || _sessionRef == 0) return;
     _send(ResizeMessage(_sessionRef, columns, rows));
+  }
+
+  /// Tells the host the grid the pane is drawn at, when [attachment] found the
+  /// session at another. A pane is laid out before its link exists, so its own
+  /// resize never reaches the host: without this the process goes on wrapping
+  /// for its last pane's width inside a pane of a different one.
+  void matchGrid(HostAttachment attachment, int columns, int rows) {
+    if (!attachment.holdsWriteToken) return;
+    if (attachment.columns == columns && attachment.rows == rows) return;
+    resize(columns, rows);
   }
 
   Future<void> close() async {

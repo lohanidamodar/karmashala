@@ -320,6 +320,30 @@ void main() {
       expect(channel.only<ResizeMessage>().rows, 43);
     });
 
+    test('a resize before the host has named the session is not sent', () async {
+      // It could only carry ref 0, which the host answers with an error; the
+      // pane says its size once the attach has told it what the host holds.
+      final channel = ScriptedChannel();
+      final link = await connected(channel);
+
+      link.resize(132, 43);
+      expect(channel.all<ResizeMessage>(), isEmpty);
+
+      final attachment = await link.attachSession(sessionId: 's', sinceOffset: 0);
+      link.matchGrid(attachment, 132, 43);
+      expect(channel.only<ResizeMessage>().sessionRef, 4);
+      expect(channel.only<ResizeMessage>().columns, 132);
+    });
+
+    test('a session already at the size of the pane is left alone', () async {
+      final channel = ScriptedChannel();
+      final link = await connected(channel);
+      final attachment = await link.attachSession(sessionId: 's', sinceOffset: 0);
+
+      link.matchGrid(attachment, attachment.columns, attachment.rows);
+      expect(channel.all<ResizeMessage>(), isEmpty);
+    });
+
     test('an empty write costs no frame', () async {
       final channel = ScriptedChannel();
       final link = await connected(channel);

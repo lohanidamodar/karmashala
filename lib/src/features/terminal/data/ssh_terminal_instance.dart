@@ -435,6 +435,8 @@ class SshTerminalInstance
       // first: on a reconnect the session is already there and asking to open
       // it would be refused.
       final attachment = await _attachOrOpen(link, width, height, resumeFrom);
+      // Read now, not from `width`: the layout can land while the attach is out.
+      link.matchGrid(attachment, terminal.viewWidth, terminal.viewHeight);
       if (_resumed && _hasStoredHistory && attachment.totalBytes > 0) {
         // The replay is the more accurate record, so the stored copy goes.
         // Erase scrollback as well: a plain clear leaves it one scroll away.

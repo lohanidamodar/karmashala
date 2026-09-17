@@ -142,15 +142,15 @@ class ScriptedHostChannel implements RemoteChannel {
             break;
           }
           push(_attached(requestId, sessionId));
-        case OpenMessage(:final requestId, :final sessionId):
+        case OpenMessage(:final requestId, :final sessionId, :final columns, :final rows):
           liveSessions.add(sessionId);
           push(
             AttachedMessage(
               requestId: requestId,
               sessionRef: 1,
               sessionId: sessionId,
-              columns: 80,
-              rows: 24,
+              columns: columns,
+              rows: rows,
               replayFromOffset: 0,
               droppedBytes: 0,
               totalBytes: 0,
