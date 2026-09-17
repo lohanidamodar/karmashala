@@ -14,6 +14,7 @@ class LogcatTail {
 
   final List<LogcatEntry> _entries = <LogcatEntry>[];
   int _dropped = 0;
+  int _appended = 0;
 
   /// Lines discarded to stay within [capacity], since the last [clear].
   int get dropped => _dropped;
@@ -23,8 +24,27 @@ class LogcatTail {
   /// Oldest first — the order a log is read in.
   List<LogcatEntry> get entries => UnmodifiableListView(_entries);
 
+  /// Every entry ever added, never reset: an entry's sequence number is its
+  /// place in this count, so it survives both dropping and [clear].
+  int get appended => _appended;
+
+  /// The sequence number of the oldest entry still held.
+  int get firstSequence => _appended - _entries.length;
+
+  /// The entries numbered [sequence] and newer, oldest first. Levels and tags
+  /// are filtered by the view (`filterLogcat`), not here and not at adb:
+  /// `logcat` filters by tag and priority together, and a filter applied at
+  /// the source loses what it hid.
+  List<LogcatEntry> since(int sequence) {
+    final start = sequence - firstSequence;
+    if (start <= 0) return List<LogcatEntry>.unmodifiable(_entries);
+    if (start >= _entries.length) return const <LogcatEntry>[];
+    return List<LogcatEntry>.unmodifiable(_entries.sublist(start));
+  }
+
   void add(LogcatEntry entry) {
     _entries.add(entry);
+    _appended++;
     if (_entries.length > capacity) {
       _dropped += _entries.length - capacity;
       _entries.removeRange(0, _entries.length - capacity);

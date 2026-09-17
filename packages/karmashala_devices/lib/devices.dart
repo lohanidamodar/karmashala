@@ -48,6 +48,7 @@ export 'src/domain/device_recording.dart';
 export 'src/domain/device_target.dart';
 export 'src/domain/ios_simulator.dart';
 export 'src/domain/logcat_entry.dart';
+export 'src/domain/logcat_filter.dart';
 export 'src/domain/logcat_tail.dart';
 export 'src/domain/screen_observation.dart';
 export 'src/domain/simulator_backend.dart';
