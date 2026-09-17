@@ -61,18 +61,28 @@ jobs:
       - run: flutter config --enable-windows-desktop
       - run: flutter pub get
       - name: Build Windows release
-        run: flutter build windows --release
+        run: flutter build windows --release --dart-define=KARMASHALA_VERSION=${{ env.VERSION }}
+      # Mirrors tool/build_release.bat, the local recipe: keep the two in step.
       - name: Build and bundle the MCP bridge
         shell: pwsh
         run: |
-          # The launcher agent's MCP bridge is a standalone dependency-free
-          # package; compile it into the Release folder so the installer and the
-          # portable zip ship it next to karmashala.exe (the app looks for it
-          # there). Without this, the in-app agent chat has no tools.
-          Push-Location mcp_bridge
-          dart pub get
-          Pop-Location
-          dart compile exe mcp_bridge/bin/karmashala_mcp.dart -o build/windows/x64/runner/Release/karmashala_mcp.exe
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          # The MCP bridge ships next to karmashala.exe, where the app looks for
+          # it. Without it, agents get no Karmashala tools.
+          flutter pub get --directory packages/mcp_bridge
+          dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart -o build/windows/x64/runner/Release/karmashala_mcp.exe
+      - name: Build and bundle the session host
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          # `dart build cli`, not `compile exe`: the host depends on sqlite3,
+          # whose build hook `compile exe` refuses. The app looks for it at
+          # host\bin\karmashala_host.exe beside karmashala.exe, and the bundle
+          # keeps its SQLite at ..\lib, so it is copied whole.
+          dart build cli -t packages/host/bin/karmashala_host.dart -o build/host-windows
+          Copy-Item -Recurse -Force build/host-windows/bundle build/windows/x64/runner/Release/host
       - name: Build installer (Inno Setup)
         shell: pwsh
         run: |
@@ -148,7 +158,15 @@ jobs:
       - run: flutter config --enable-linux-desktop
       - run: flutter pub get
       - name: Build Linux release
-        run: flutter build linux --release
+        run: flutter build linux --release --dart-define=KARMASHALA_VERSION=${{ needs.prepare.outputs.version }}
+      - name: Build and bundle the MCP bridge and session host
+        run: |
+          set -euo pipefail
+          bundle=build/linux/x64/release/bundle
+          flutter pub get --directory packages/mcp_bridge
+          dart compile exe packages/mcp_bridge/bin/karmashala_mcp.dart -o "$bundle/karmashala_mcp"
+          dart build cli -t packages/host/bin/karmashala_host.dart -o build/host-linux-app
+          cp -R build/host-linux-app/bundle "$bundle/host"
       - name: Archive Linux build
         run: |
           mkdir -p build/artifacts
