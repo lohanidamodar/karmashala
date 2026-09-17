@@ -6,10 +6,11 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
 import '../application/remote_access_controller.dart';
+import '../application/ssh_relays.dart';
 import '../relay_local/relay_endpoints.dart';
 
 /// Where an endpoint's relay lives, which decides its icon and its story.
-enum PairingRelayKind { local, internet }
+enum PairingRelayKind { local, sshHost, internet }
 
 /// One relay the pairing dialog can root a code in.
 class PairingRelayEndpoint {
@@ -36,7 +37,8 @@ class PairingRelayEndpoint {
   int get hashCode => Object.hash(label, url, kind);
 
   @override
-  String toString() => 'PairingRelayEndpoint($label, $url, ${kind.name})';
+  String toString() =>
+      'PairingRelayEndpoint($label, ${redactRelayUrl(url)}, ${kind.name})';
 }
 
 /// The endpoints the dialog shows, one per relay the host is serving. **Empty
@@ -53,6 +55,7 @@ final pairingRelayEndpointsProvider = Provider<List<PairingRelayEndpoint>>((
           url: option.url,
           kind: switch (option.kind) {
             RelayEndpointKind.local => PairingRelayKind.local,
+            RelayEndpointKind.sshHost => PairingRelayKind.sshHost,
             RelayEndpointKind.internet => PairingRelayKind.internet,
           },
         ),

@@ -17,10 +17,12 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/projects/presentation/edit_project_dialog.dart';
 import 'package:karmashala/src/features/projects/presentation/new_project_dialog.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
+import 'package:karmashala/src/features/remote/application/ssh_relay_controller.dart';
 import 'package:karmashala/src/features/remote/pairing/pairing_relay_endpoints.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/remote/presentation/pairing_dialog.dart';
+import 'package:karmashala/src/features/remote/presentation/ssh_relays_panel.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
@@ -448,6 +450,119 @@ void main() {
     );
   });
 
+  group('relays on SSH hosts', () {
+    const token = '0123456789abcdef0123456789abcdef';
+    final longHost = SshHost(
+      id: 'h1',
+      name: 'build-box-in-the-basement-with-a-long-name',
+      host: 'build-server-01.internal.corp.example.popupbits.com',
+      port: 22,
+      username: 'dlohani',
+      authMethod: SshAuthMethod.password,
+      createdAt: testTime,
+    );
+    final url = Uri.parse('ws://${longHost.host}:8787/k/$token');
+
+    ProviderContainer containerFor(AppDatabase db, _RelayBox box) {
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          ...noProcessOverrides(),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          discoveredTerminalThemesProvider.overrideWithValue(const []),
+          localRelayStatusProvider.overrideWithValue(
+            const LocalRelayStatus.stopped(),
+          ),
+          remoteAccessControllerProvider.overrideWith(_PairingAccess.new),
+          sshRelaySetupFactoryProvider.overrideWithValue(
+            (host, port) async => box,
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    testWidgets('Remote access with a box that is shut from here, and a phone '
+        'paired through it', (tester) async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+      SshHostDao(db).upsert(longHost);
+      PairedDeviceDao(db).insert(
+        PairedDevice(
+          id: 'b' * 32,
+          name: "Damodar's Pixel 9 Pro XL (work profile, second SIM, travel)",
+          deviceKey: Uint8List(32),
+          capabilities: CapabilitySet.all,
+          generation: 1,
+          createdAt: testTime,
+          lastSeenAt: testTime,
+          relayUrl: '$url',
+        ),
+      );
+      final container = containerFor(db, _RelayBox(url));
+      container
+          .read(settingsControllerProvider.notifier)
+          .setRemoteAccessEnabled(true);
+      // The row, then a reading with a remedy and a command under it.
+      await container
+          .read(sshRelayControllerProvider.notifier)
+          .use(longHost, port: 8787);
+
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(
+          container,
+          const SettingsScreen(initialSection: SettingsSectionId.remote),
+        ),
+        matrix: settingsMatrix,
+        because:
+            'the row carries a name the user typed, a two-sentence verdict, a '
+            'command to copy and four buttons',
+      );
+    });
+
+    testWidgets('the dialog that sets one up, with its verdict', (
+      tester,
+    ) async {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      SshHostDao(db).upsert(longHost);
+      final container = containerFor(db, _RelayBox(url));
+
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => app(
+          container,
+          Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => UseSshHostAsRelayDialog.show(context),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+        warmUp: (tester) async {
+          await tester.tap(find.text('Open'));
+          await tester.pumpAndSettle();
+          // The container outlives a cell, so from the second one on the
+          // verdict is already there and the button has changed its words.
+          final setUp = find.text('Set up');
+          if (setUp.evaluate().isEmpty) return;
+          await tester.ensureVisible(setUp);
+          await tester.tap(setUp);
+          await tester.pumpAndSettle();
+        },
+        matrix: settingsMatrix,
+        because:
+            'a host picker, a port, the security paragraph and a verdict with '
+            'a command share a dialog in a window 560 tall',
+      );
+    });
+  });
+
   testWidgets('Editor & files page with a custom terminal and editor', (
     tester,
   ) async {
@@ -576,6 +691,32 @@ class _InvitingSetup implements SshCompanionSetup {
     reason: 'Open.',
     code: PairingCode.encode(List<int>.generate(20, (i) => i * 7)),
     expiresAt: testTime.add(const Duration(minutes: 10)),
+  );
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A relay that runs on the box and cannot be reached from here: the verdict
+/// with the most words in it, and the only one with a command.
+class _RelayBox implements SshRelaySetup {
+  _RelayBox(this.url);
+
+  final Uri url;
+
+  @override
+  Future<SshRelayReading> start() async => SshRelayReading(
+    status: SshRelayStatus.unreachable,
+    observedAt: testTime,
+    reason:
+        'The relay is running on build-box-in-the-basement-with-a-long-name. '
+        'A firewall is running on '
+        'build-server-01.internal.corp.example.popupbits.com and this cannot '
+        'change it without a password. Run the command below there, then '
+        'start again.',
+    command: "sudo ufw allow 8787/tcp   # or your firewall's equivalent",
+    port: 8787,
+    url: url,
   );
 
   @override

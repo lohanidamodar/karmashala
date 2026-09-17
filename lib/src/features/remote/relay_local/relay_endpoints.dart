@@ -6,11 +6,12 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
 import '../application/relay_prefs.dart';
+import '../application/ssh_relays.dart';
 import '../application/remote_access_controller.dart';
 import 'local_relay_providers.dart';
 import 'local_relay_service.dart';
 
-enum RelayEndpointKind { local, internet }
+enum RelayEndpointKind { local, sshHost, internet }
 
 /// One offerable relay endpoint: what a pairing tab shows and what the QR's
 /// `relay` field carries.
@@ -36,10 +37,11 @@ class RelayEndpointOption {
   int get hashCode => Object.hash(label, url, kind);
 
   @override
-  String toString() => 'RelayEndpointOption($label, $url, ${kind.name})';
+  String toString() =>
+      'RelayEndpointOption($label, ${redactRelayUrl(url)}, ${kind.name})';
 }
 
-/// Empty while remote access is off or neither relay is usable — a tab no phone
+/// Empty while remote access is off or no relay is usable — a tab no phone
 /// can dial would only pretend. Local first: it always works on a shared net.
 final relayEndpointsProvider = Provider<List<RelayEndpointOption>>((ref) {
   final settings = ref.watch(settingsControllerProvider);
@@ -59,6 +61,18 @@ final relayEndpointsProvider = Provider<List<RelayEndpointOption>>((ref) {
         ),
       );
     }
+  }
+  // The user's own boxes before somebody else's relay: if one is set up, it
+  // is what they would rather new phones pair through.
+  for (final entry in ref.watch(sshRelaysProvider)) {
+    if (!entry.enabled) continue;
+    options.add(
+      RelayEndpointOption(
+        label: entry.hostName,
+        url: entry.url,
+        kind: RelayEndpointKind.sshHost,
+      ),
+    );
   }
   if (prefs.hostedEnabled) {
     options.add(

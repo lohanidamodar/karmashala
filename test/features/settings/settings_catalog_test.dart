@@ -270,6 +270,23 @@ void main() {
     );
   });
 
+  test('the SSH relay and phone pairing are found by the words people use', () {
+    for (final query in ['relay', 'ssh relay']) {
+      expect(
+        searchSettings(query).map((e) => e.label),
+        contains('Use an SSH host as a relay'),
+        reason: query,
+      );
+    }
+    for (final query in ['pair phone', 'qr']) {
+      final hit = searchSettings(query).firstWhere(
+        (e) => e.label == 'Pair a phone with an SSH host',
+      );
+      // It lives where the machine is: the SSH host's card, on Environments.
+      expect(hit.anchor, SettingsAnchor.sshHosts, reason: query);
+    }
+  });
+
   test('a link naming the page a section used to be on still lands on it', () {
     final target = SettingsTarget(
       SettingsSectionId.tools,

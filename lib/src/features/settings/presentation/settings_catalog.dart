@@ -396,6 +396,8 @@ enum SettingsAnchor {
     'ssh',
     'hosts',
     'remote build',
+    'pair phone',
+    'qr',
   ]),
   flutterSdk(SettingsSectionId.environments, 'Flutter SDK', [
     'flutter',
@@ -417,6 +419,7 @@ enum SettingsAnchor {
     'phone',
     'pairing',
     'relay',
+    'ssh relay',
     'devices',
   ]),
   debugMode(SettingsSectionId.diagnostics, 'Debug mode', [
@@ -815,6 +818,14 @@ const settingsEntries = <SettingsEntry>[
     keywords: ['ssh', 'server', 'remote build'],
   ),
   SettingsEntry(
+    'Pair a phone with an SSH host',
+    anchor: SettingsAnchor.sshHosts,
+    description:
+        'A QR, or an address and a code, that connects the companion '
+        'straight to the machine.',
+    keywords: ['pair phone', 'qr', 'companion', 'phone', 'pairing', 'scan'],
+  ),
+  SettingsEntry(
     'Flutter SDK',
     anchor: SettingsAnchor.flutterSdk,
     description: 'Which flutter each environment uses.',
@@ -849,6 +860,14 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.remoteAccess,
     description: 'Reach a phone anywhere through an internet relay.',
     keywords: ['relay', 'relay url', 'internet'],
+  ),
+  SettingsEntry(
+    'Use an SSH host as a relay',
+    anchor: SettingsAnchor.remoteAccess,
+    description:
+        'Run the relay on a machine of your own, so phones meet this '
+        'desktop there.',
+    keywords: ['relay', 'ssh relay', 'ssh', 'self-hosted', 'own server', 'box'],
   ),
   SettingsEntry(
     'Debug mode',

@@ -31,6 +31,7 @@ class RemoteHostService {
     required this.relay,
     Uri? localRelayUrl,
     bool hostedEnabled = true,
+    List<Uri> extraRelays = const [],
     this.lanPort = kDefaultLanPort,
     this.advertise = true,
     this.transcriptPollInterval = const Duration(seconds: 2),
@@ -45,6 +46,7 @@ class RemoteHostService {
        _localRelayUrl = localRelayUrl,
        // ignore: prefer_initializing_formals — same.
        _hostedEnabled = hostedEnabled,
+       _extraRelays = List.unmodifiable(extraRelays),
        // ignore: prefer_initializing_formals — same.
        _pushPost = pushPost;
 
@@ -67,8 +69,13 @@ class RemoteHostService {
 
   bool _hostedEnabled;
 
+  /// Relays this desktop runs on its own SSH hosts. Served through whatever the
+  /// other two switches say: a meeting place of the user's own.
+  List<Uri> _extraRelays;
+
   Uri? get localRelayUrl => _localRelayUrl;
   bool get hostedEnabled => _hostedEnabled;
+  List<Uri> get extraRelays => _extraRelays;
 
   final int lanPort;
 
@@ -117,9 +124,17 @@ class RemoteHostService {
   /// relay its phone is known to poll. Null while that relay is off.
   Uri? relayUrlFor(PairedDevice device) {
     if (device.pairedViaLocalRelay) return _localRelayUrl;
+    final own = device.hostedRelayUri;
+    // A relay on a box forwards frames and nothing else: it holds no FCM
+    // credentials, so a push handed to it goes nowhere. The push is this
+    // desktop's POST, not the phone's, so the hosted relay can carry it.
+    if (own != null && _isExtraRelay(own)) return _hostedEnabled ? relay : null;
     if (!_hostedEnabled) return null;
-    return device.hostedRelayUri ?? relay;
+    return own ?? relay;
   }
+
+  bool _isExtraRelay(Uri url) =>
+      _extraRelays.any((extra) => extra.toString() == url.toString());
 
   /// Listens on every active relay for [device], not just the paired one: the
   /// rendezvous comes from the device key, so only that phone can meet it.
@@ -127,6 +142,9 @@ class RemoteHostService {
     final urls = <String, Uri>{};
     final local = _localRelayUrl;
     if (local != null) urls[local.toString()] = local;
+    for (final extra in _extraRelays) {
+      urls[extra.toString()] = extra;
+    }
     if (_hostedEnabled) {
       // Plus the configured relay, so a phone falling back to the app default
       // still finds somebody listening.
@@ -159,12 +177,17 @@ class RemoteHostService {
   Future<void> updateRelays({
     required Uri? localRelayUrl,
     required bool hostedEnabled,
+    List<Uri>? extraRelays,
   }) async {
-    if (_localRelayUrl == localRelayUrl && _hostedEnabled == hostedEnabled) {
+    final extras = extraRelays ?? _extraRelays;
+    if (_localRelayUrl == localRelayUrl &&
+        _hostedEnabled == hostedEnabled &&
+        _sameRelays(extras, _extraRelays)) {
       return;
     }
     _localRelayUrl = localRelayUrl;
     _hostedEnabled = hostedEnabled;
+    _extraRelays = List.unmodifiable(extras);
     // The announcement goes FIRST, on the links still up: re-pointing the
     // listeners closes the very socket a connected phone is holding.
     await Future.wait([
@@ -174,6 +197,14 @@ class RemoteHostService {
     for (final runtime in _runtimes.values.toList()) {
       await runtime.syncRelayListeners();
     }
+  }
+
+  static bool _sameRelays(List<Uri> a, List<Uri> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].toString() != b[i].toString()) return false;
+    }
+    return true;
   }
 
   /// Fired when the device list changed (paired, revoked, seen).
@@ -264,7 +295,7 @@ class RemoteHostService {
       capabilities: capabilities,
       // The tab's relay stays the payload's `relay` — an older companion reads
       // that alone — while the QR names every other relay this host serves.
-      relays: [?_localRelayUrl, if (_hostedEnabled) this.relay],
+      relays: [?_localRelayUrl, ..._extraRelays, if (_hostedEnabled) this.relay],
     );
     final session = HostPairingSession(
       payload: payload,

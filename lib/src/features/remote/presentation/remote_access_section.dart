@@ -8,16 +8,19 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/relay_prefs.dart';
 import '../application/remote_access_controller.dart';
 import '../application/remote_providers.dart';
+import '../application/ssh_relays.dart';
 import 'package:karmashala_remote/remote.dart';
 import '../relay_local/local_relay_providers.dart';
 import '../relay_local/local_relay_service.dart';
 import 'pairing_dialog.dart';
 import 'rename_device_dialog.dart';
+import 'ssh_relays_panel.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../../settings/presentation/settings_row.dart';
 
-/// Settings → Remote access: the enable switch, the two independent relays, the
-/// paired devices with last-seen and revoke, and the pairing button.
+/// Settings → Remote access: the enable switch, the local and hosted relays,
+/// the relays on SSH hosts, the paired devices with last-seen and revoke, and
+/// the pairing button.
 class RemoteAccessSection extends ConsumerStatefulWidget {
   const RemoteAccessSection({super.key});
 
@@ -94,6 +97,7 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
     final settings = ref.watch(settingsControllerProvider);
     final prefs = ref.watch(relayPrefsProvider);
     final devices = ref.watch(pairedDevicesProvider);
+    final sshRelays = ref.watch(sshRelaysProvider);
     // A device is parked while the relay it was paired through is off: the
     // row says so instead of leaving "last seen" to imply it is served.
     final localLive =
@@ -127,17 +131,35 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
               onRelayDone: _applyRelay,
             ),
             const SizedBox(height: Insets.md),
+            const SshRelaysPanel(),
+            const SizedBox(height: Insets.md),
             _PairedDevicesList(
               devices: devices,
-              parkedOf: (device) => device.pairedViaLocalRelay
-                  ? !localLive
-                  : !prefs.hostedEnabled,
+              relayOf: (device) => _sshRelayOf(device, sshRelays),
+              parkedOf: (device) {
+                if (device.pairedViaLocalRelay) return !localLive;
+                // Its own box relay while that is on; otherwise — and also —
+                // the hosted one, which every phone falls back to.
+                final box = _sshRelayOf(device, sshRelays);
+                return !(box?.enabled ?? false) && !prefs.hostedEnabled;
+              },
             ),
           ],
         ],
       ),
     );
   }
+}
+
+/// The SSH-host relay [device] was paired through, or null for the local and
+/// hosted ones — and for a box that has since been removed.
+SshRelayEntry? _sshRelayOf(PairedDevice device, List<SshRelayEntry> relays) {
+  final own = device.hostedRelayUri?.toString();
+  if (own == null) return null;
+  for (final relay in relays) {
+    if (relay.url.toString() == own) return relay;
+  }
+  return null;
 }
 
 /// The two independent relays: any combination is legal, and a phone is
@@ -240,9 +262,16 @@ class _RelaySwitches extends StatelessWidget {
 
 /// The paired devices under their heading, with the way to pair another.
 class _PairedDevicesList extends StatelessWidget {
-  const _PairedDevicesList({required this.devices, required this.parkedOf});
+  const _PairedDevicesList({
+    required this.devices,
+    required this.parkedOf,
+    required this.relayOf,
+  });
 
   final List<PairedDevice> devices;
+
+  /// The box relay [device] was paired through, when it was one.
+  final SshRelayEntry? Function(PairedDevice device) relayOf;
 
   /// Whether the relay [device] was paired through is switched off.
   final bool Function(PairedDevice device) parkedOf;
@@ -282,7 +311,11 @@ class _PairedDevicesList extends StatelessWidget {
           )
         else
           for (final device in devices)
-            _DeviceRow(device: device, parked: parkedOf(device)),
+            _DeviceRow(
+              device: device,
+              parked: parkedOf(device),
+              sshRelay: relayOf(device),
+            ),
       ],
     );
   }
@@ -300,30 +333,33 @@ class _LocalRelayStatusRow extends ConsumerWidget {
     final status = ref.watch(localRelayStatusProvider);
     final primary = status.primaryUrl;
 
-    final (IconData icon, SettingsNoticeTone tone, String message) =
-        switch (status.state) {
-          LocalRelayState.running when primary != null => (
-            AppIcons.checkCircle,
-            SettingsNoticeTone.positive,
-            'Relay running at $primary',
-          ),
-          LocalRelayState.running => (
-            AppIcons.warningCircle,
-            SettingsNoticeTone.danger,
-            'Relay running on port ${status.boundPort}, but this computer has '
-                'no local network address a phone could dial.',
-          ),
-          LocalRelayState.error => (
-            AppIcons.warningCircle,
-            SettingsNoticeTone.danger,
-            'Local relay: ${status.error}',
-          ),
-          LocalRelayState.stopped => (
-            AppIcons.pauseCircle,
-            SettingsNoticeTone.neutral,
-            'Local relay is starting…',
-          ),
-        };
+    final (
+      IconData icon,
+      SettingsNoticeTone tone,
+      String message,
+    ) = switch (status.state) {
+      LocalRelayState.running when primary != null => (
+        AppIcons.checkCircle,
+        SettingsNoticeTone.positive,
+        'Relay running at $primary',
+      ),
+      LocalRelayState.running => (
+        AppIcons.warningCircle,
+        SettingsNoticeTone.danger,
+        'Relay running on port ${status.boundPort}, but this computer has '
+            'no local network address a phone could dial.',
+      ),
+      LocalRelayState.error => (
+        AppIcons.warningCircle,
+        SettingsNoticeTone.danger,
+        'Local relay: ${status.error}',
+      ),
+      LocalRelayState.stopped => (
+        AppIcons.pauseCircle,
+        SettingsNoticeTone.neutral,
+        'Local relay is starting…',
+      ),
+    };
 
     final others = [
       for (final endpoint in status.endpoints)
@@ -372,9 +408,12 @@ class _LocalRelayStatusRow extends ConsumerWidget {
 }
 
 class _DeviceRow extends ConsumerWidget {
-  const _DeviceRow({required this.device, this.parked = false});
+  const _DeviceRow({required this.device, this.parked = false, this.sshRelay});
 
   final PairedDevice device;
+
+  /// The box this phone was paired through, when it was one.
+  final SshRelayEntry? sshRelay;
 
   /// The relay this device was paired through is switched off, so only a
   /// direct LAN link reaches it. It resumes when that relay returns.
@@ -427,6 +466,8 @@ class _DeviceRow extends ConsumerWidget {
                       : [
                           device.pairedViaLocalRelay
                               ? 'Local relay'
+                              : sshRelay != null
+                              ? 'Relay on ${sshRelay!.hostName}'
                               : 'Hosted relay',
                           if (parked) 'paused — that relay is off',
                           _lastSeen(device.lastSeenAt),

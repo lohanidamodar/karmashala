@@ -225,8 +225,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
                   payload: session.payload,
                   showPayload: _showCode,
                   copied: _copied,
-                  onTogglePayload: () =>
-                      setState(() => _showCode = !_showCode),
+                  onTogglePayload: () => setState(() => _showCode = !_showCode),
                   onCopy: () => _copyPayload(session.payload),
                 ),
               },
@@ -256,6 +255,14 @@ class _RelayEndpointTabs extends StatelessWidget {
   final int selected;
   final ValueChanged<int> onSelected;
 
+  /// A box is named by whoever added it, and three segments share a narrow
+  /// dialog: the tab says the start of the name and the tooltip all of it.
+  static const _labelLimit = 14;
+
+  static String _short(String label) => label.length <= _labelLimit
+      ? label
+      : '${label.substring(0, _labelLimit - 1)}…';
+
   @override
   Widget build(BuildContext context) {
     return SegmentedButton<int>(
@@ -264,13 +271,13 @@ class _RelayEndpointTabs extends StatelessWidget {
         for (var i = 0; i < endpoints.length; i++)
           ButtonSegment<int>(
             value: i,
-            icon: Icon(
-              endpoints[i].kind == PairingRelayKind.local
-                  ? AppIcons.linkSimple
-                  : AppIcons.globe,
-              size: Chrome.iconAction,
-            ),
-            label: Text(endpoints[i].label),
+            icon: Icon(switch (endpoints[i].kind) {
+              PairingRelayKind.local => AppIcons.linkSimple,
+              PairingRelayKind.sshHost => AppIcons.terminal,
+              PairingRelayKind.internet => AppIcons.globe,
+            }, size: Chrome.iconAction),
+            label: Text(_short(endpoints[i].label)),
+            tooltip: endpoints[i].label,
           ),
       ],
       selected: {selected},

@@ -18,6 +18,7 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
 import '../relay_local/local_relay_providers.dart';
 import 'relay_prefs.dart';
+import 'ssh_relays.dart';
 import 'remote_bindings.dart';
 import 'remote_host_service.dart';
 import 'remote_providers.dart';
@@ -80,6 +81,7 @@ class RemoteAccessController {
     // Both relays are brought to the state the prefs ask for, independently.
     final localUrl = await _syncLocalRelay(settings, prefs);
     final hosted = resolveRelayUri(settings.remoteRelayUrl);
+    final sshRelays = _ref.read(activeSshRelayUrlsProvider);
 
     final service = _service;
     if (service != null && service.relay == hosted) {
@@ -88,6 +90,7 @@ class RemoteAccessController {
       await service.updateRelays(
         localRelayUrl: localUrl,
         hostedEnabled: prefs.hostedEnabled,
+        extraRelays: sshRelays,
       );
       return;
     }
@@ -109,6 +112,7 @@ class RemoteAccessController {
     await started.updateRelays(
       localRelayUrl: localUrl,
       hostedEnabled: prefs.hostedEnabled,
+      extraRelays: sshRelays,
     );
     await started.start();
   }
