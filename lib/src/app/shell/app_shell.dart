@@ -13,6 +13,7 @@ import '../../core/database/database_providers.dart';
 import '../../core/lifecycle/before_quit.dart';
 import '../../features/automations/application/automation_runner.dart';
 import '../../features/automations/application/automation_scheduler.dart';
+import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
 import '../../features/flutter_apps/application/flutter_gate_observer.dart';
@@ -138,6 +139,10 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(automationRunObserverProvider);
     // And for note tabs, which close with their note and flush on the way out.
     ref.watch(noteTabsObserverProvider);
+    // And for file autosave, whose window-focus trigger has to be heard while
+    // no editor tab is on screen. Listened rather than watched: its state is a
+    // tab's business, not the shell's.
+    ref.listen(editorAutoSaveProvider, (_, _) {});
     // Focus mode: the workbench takes the window.
     final zen = ref.watch(terminalMaximizedProvider);
     final explorerWidth = ref.watch(

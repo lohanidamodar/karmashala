@@ -18,6 +18,8 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/settings/domain/editor_settings.dart';
 import 'package:karmashala/src/features/system/system_integration_service.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
@@ -144,6 +146,11 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
+    // These pin explicit save — the path autosave-off takes, and the one every
+    // refused autosave falls back to. `editor_autosave_test` owns the default.
+    container
+        .read(settingsControllerProvider.notifier)
+        .setEditorAutoSave(EditorAutoSave.off);
     return container;
   }
 

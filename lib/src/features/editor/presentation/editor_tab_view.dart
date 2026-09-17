@@ -14,6 +14,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/code_editor_providers.dart';
+import '../application/editor_auto_save.dart';
 import '../application/editor_tab_actions.dart';
 import '../application/open_documents.dart';
 import '../domain/source_document.dart';
@@ -71,6 +72,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   void initState() {
     super.initState();
     _controller.addListener(_onEdited);
+    _focus.addListener(_onFocusChanged);
     // A restored tab reaches this widget with nothing loaded; opening from the
     // Files panel has already asked. `open` is idempotent, so both paths call.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -83,9 +85,29 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   @override
   void dispose() {
     _controller.removeListener(_onEdited);
+    _focus.removeListener(_onFocusChanged);
     _controller.dispose();
     _focus.dispose();
     super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (_focus.hasFocus) return;
+    ref.read(editorAutoSaveProvider.notifier).focusLeft(widget.hostPath);
+  }
+
+  /// An autosave that did not land is said the way a Save's refusal is.
+  void _onAutoSaveRefused(SaveOutcome? outcome) {
+    if (outcome == null || !mounted) return;
+    switch (outcome.result) {
+      case SaveResult.stale:
+        _askAboutStale(outcome.message);
+      case SaveResult.failed:
+        _say(outcome.message ?? 'Could not save this file.');
+      case SaveResult.saved:
+      case SaveResult.unchanged:
+        break;
+    }
   }
 
   void _onEdited() {
@@ -238,6 +260,10 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   Widget build(BuildContext context) {
     final document = ref.watch(openDocumentProvider(widget.hostPath));
     if (document != null && document.isReadable) _adopt(document);
+    ref.listen(
+      editorAutoSaveProvider.select((refused) => refused[widget.hostPath]),
+      (_, outcome) => _onAutoSaveRefused(outcome),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

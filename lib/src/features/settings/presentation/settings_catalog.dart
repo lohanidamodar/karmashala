@@ -221,7 +221,12 @@ enum SettingsAnchor {
     'sidebar',
     'panel items',
   ]),
-  editor(SettingsSectionId.editorFiles, 'In-app editor', ['editor', 'wrap']),
+  editor(SettingsSectionId.editorFiles, 'In-app editor', [
+    'editor',
+    'wrap',
+    'auto save',
+    'autosave',
+  ]),
   fileBrowsing(SettingsSectionId.editorFiles, 'File browsing', [
     'file picker',
     'browse',
@@ -528,6 +533,18 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.editor,
     description: 'Soft-wrap instead of scrolling sideways.',
     keywords: ['word wrap', 'soft wrap', 'line numbers'],
+  ),
+  SettingsEntry(
+    'Auto save',
+    anchor: SettingsAnchor.editor,
+    description: 'Write a file tab without being asked.',
+    keywords: ['auto save', 'autosave', 'save', 'unsaved'],
+  ),
+  SettingsEntry(
+    'Auto save delay',
+    anchor: SettingsAnchor.editor,
+    description: 'How long typing has to pause before the file is written.',
+    keywords: ['auto save', 'autosave', 'delay'],
   ),
   SettingsEntry(
     'File picker',

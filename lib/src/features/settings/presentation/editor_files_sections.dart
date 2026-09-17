@@ -7,6 +7,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/settings_controller.dart';
+import '../domain/editor_settings.dart';
 import 'settings_catalog.dart';
 import 'settings_row.dart';
 import 'settings_section.dart';
@@ -15,24 +16,80 @@ import 'settings_section.dart';
 class EditorSection extends ConsumerWidget {
   const EditorSection({super.key});
 
+  /// The pauses offered; a hand-edited value outside them is shown as well.
+  static const autoSaveDelays = [250, 500, 1000, 2000, 5000, 10000];
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final wrap = ref.watch(
       settingsControllerProvider.select((s) => s.editorWordWrap),
     );
+    final autoSave = ref.watch(
+      settingsControllerProvider.select((s) => s.editorAutoSave),
+    );
+    final delay = ref.watch(
+      settingsControllerProvider.select((s) => s.editorAutoSaveDelayMs),
+    );
     final controller = ref.read(settingsControllerProvider.notifier);
     return SettingsSection(
       title: SettingsAnchor.editor.heading,
-      child: SettingsSwitchRow(
-        label: 'Wrap long lines in the editor',
-        help:
-            'Soft-wrap instead of scrolling sideways. Line numbers stay beside '
-            'the line they number, however many rows it wraps onto.',
-        value: wrap,
-        onChanged: controller.setEditorWordWrap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsSwitchRow(
+            label: 'Wrap long lines in the editor',
+            help:
+                'Soft-wrap instead of scrolling sideways. Line numbers stay '
+                'beside the line they number, however many rows it wraps onto.',
+            value: wrap,
+            onChanged: controller.setEditorWordWrap,
+          ),
+          SettingsRow(
+            label: 'Auto save',
+            help:
+                'Write a file tab without being asked. A file changed on disk '
+                'is never overwritten this way, and quitting writes what is '
+                'still waiting instead of asking.',
+            control: DropdownButtonFormField<EditorAutoSave>(
+              initialValue: autoSave,
+              isExpanded: true,
+              items: [
+                for (final mode in EditorAutoSave.values)
+                  DropdownMenuItem(value: mode, child: Text(mode.label)),
+              ],
+              onChanged: (value) =>
+                  value == null ? null : controller.setEditorAutoSave(value),
+            ),
+          ),
+          if (autoSave == EditorAutoSave.afterDelay)
+            SettingsRow(
+              label: 'Auto save delay',
+              help: 'How long typing has to pause before the file is written.',
+              control: DropdownButtonFormField<int>(
+                initialValue: delay,
+                isExpanded: true,
+                items: [
+                  for (final ms in {...autoSaveDelays, delay}.toList()..sort())
+                    DropdownMenuItem(
+                      value: ms,
+                      child: Text(_describeDelay(ms)),
+                    ),
+                ],
+                onChanged: (value) => value == null
+                    ? null
+                    : controller.setEditorAutoSaveDelay(value),
+              ),
+            ),
+        ],
       ),
     );
   }
+
+  static String _describeDelay(int ms) => ms < 1000
+      ? '$ms ms'
+      : ms % 1000 == 0
+      ? '${ms ~/ 1000} s'
+      : '${(ms / 1000).toStringAsFixed(1)} s';
 }
 
 /// What the file-picker choice means on *this* desktop. A machine with no WSL

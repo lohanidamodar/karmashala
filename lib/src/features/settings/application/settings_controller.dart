@@ -6,6 +6,7 @@ import '../../../core/logging/diagnostics_providers.dart';
 import '../data/settings_repository.dart';
 import '../domain/app_theme_mode.dart';
 import '../domain/diagnostics_settings.dart';
+import '../domain/editor_settings.dart';
 import '../domain/settings.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
@@ -197,6 +198,22 @@ class SettingsController extends Notifier<Settings> {
 
   void setEditorWordWrap(bool value) {
     state = state.copyWith(editorWordWrap: value);
+    _save();
+  }
+
+  void setEditorAutoSave(EditorAutoSave value) {
+    state = state.copyWith(editorAutoSave: value);
+    _save();
+  }
+
+  /// Clamped to what [EditorAutoSave.afterDelay] can sensibly mean.
+  void setEditorAutoSaveDelay(int milliseconds) {
+    state = state.copyWith(
+      editorAutoSaveDelayMs: milliseconds.clamp(
+        kMinEditorAutoSaveDelayMs,
+        kMaxEditorAutoSaveDelayMs,
+      ),
+    );
     _save();
   }
 

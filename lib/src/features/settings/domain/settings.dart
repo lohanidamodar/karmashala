@@ -2,6 +2,7 @@ import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'app_theme_mode.dart';
 import 'diagnostics_settings.dart';
+import 'editor_settings.dart';
 
 /// Per-agent permission preferences in each agent's own vocabulary. Null means
 /// "use the mode that agent declares as its default", never "pass no flag".
@@ -69,6 +70,8 @@ class Settings {
     this.detailSidebarWidth = 320,
     this.compactDensity = true,
     this.editorWordWrap = false,
+    this.editorAutoSave = kDefaultEditorAutoSave,
+    this.editorAutoSaveDelayMs = kDefaultEditorAutoSaveDelayMs,
     this.collapsedExplorerNodes = const [],
     this.windowWidth,
     this.windowHeight,
@@ -162,6 +165,12 @@ class Settings {
   /// numbers go with it: the gutter paints at a fixed row height, so a wrapped
   /// line would put every number below it against the wrong row.
   final bool editorWordWrap;
+
+  /// When a file tab writes without being asked; see [EditorAutoSave].
+  final EditorAutoSave editorAutoSave;
+
+  /// The pause [EditorAutoSave.afterDelay] waits for, clamped when read.
+  final int editorAutoSaveDelayMs;
 
   /// Explorer rows the user has folded away, by [ExplorerNode.id] — a machine,
   /// one of its sections, or a context inside it. Absent means expanded, so a
@@ -296,6 +305,8 @@ class Settings {
     double? detailSidebarWidth,
     bool? compactDensity,
     bool? editorWordWrap,
+    EditorAutoSave? editorAutoSave,
+    int? editorAutoSaveDelayMs,
     List<String>? collapsedExplorerNodes,
     double? windowWidth,
     double? windowHeight,
@@ -356,6 +367,8 @@ class Settings {
     detailSidebarWidth: detailSidebarWidth ?? this.detailSidebarWidth,
     compactDensity: compactDensity ?? this.compactDensity,
     editorWordWrap: editorWordWrap ?? this.editorWordWrap,
+    editorAutoSave: editorAutoSave ?? this.editorAutoSave,
+    editorAutoSaveDelayMs: editorAutoSaveDelayMs ?? this.editorAutoSaveDelayMs,
     collapsedExplorerNodes:
         collapsedExplorerNodes ?? this.collapsedExplorerNodes,
     windowWidth: windowWidth ?? this.windowWidth,
@@ -443,6 +456,8 @@ class Settings {
     'detailSidebarWidth': detailSidebarWidth,
     'compactDensity': compactDensity,
     'editorWordWrap': editorWordWrap,
+    'editorAutoSave': editorAutoSave.name,
+    'editorAutoSaveDelayMs': editorAutoSaveDelayMs,
     'collapsedExplorerNodes': collapsedExplorerNodes,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
@@ -546,9 +561,7 @@ class Settings {
       // `!= false`: absent must read as on, or every install loses slimming.
       simulatorSlimming: json['simulatorSlimming'] != false,
       simulatorSlimmingKept: json['simulatorSlimmingKept'] is List
-          ? (json['simulatorSlimmingKept'] as List)
-                .whereType<String>()
-                .toList()
+          ? (json['simulatorSlimmingKept'] as List).whereType<String>().toList()
           : kDefaultSlimmingKept,
       androidSlimming: json['androidSlimming'] != false,
       androidSlimmingEnabled: json['androidSlimmingEnabled'] is List
@@ -572,6 +585,13 @@ class Settings {
       editorWordWrap: json['editorWordWrap'] is bool
           ? json['editorWordWrap'] as bool
           : false,
+      editorAutoSave: EditorAutoSave.fromName(json['editorAutoSave']),
+      editorAutoSaveDelayMs: json['editorAutoSaveDelayMs'] is int
+          ? (json['editorAutoSaveDelayMs'] as int).clamp(
+              kMinEditorAutoSaveDelayMs,
+              kMaxEditorAutoSaveDelayMs,
+            )
+          : kDefaultEditorAutoSaveDelayMs,
       windowWidth: toDouble(json['windowWidth']),
       windowHeight: toDouble(json['windowHeight']),
       defaultSystemTerminalId: json['defaultSystemTerminalId'] is String
@@ -683,6 +703,8 @@ class Settings {
       other.detailSidebarWidth == detailSidebarWidth &&
       other.compactDensity == compactDensity &&
       other.editorWordWrap == editorWordWrap &&
+      other.editorAutoSave == editorAutoSave &&
+      other.editorAutoSaveDelayMs == editorAutoSaveDelayMs &&
       other.windowWidth == windowWidth &&
       other.windowHeight == windowHeight &&
       other.defaultSystemTerminalId == defaultSystemTerminalId &&
@@ -766,6 +788,8 @@ class Settings {
         showHiddenFiles,
         androidSlimming,
         editorWordWrap,
+        editorAutoSave,
+        editorAutoSaveDelayMs,
         hideEmptySections,
         Object.hashAll(explorerAgentFilter),
         Object.hashAll(hiddenSidePanelSurfaces),

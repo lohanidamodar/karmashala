@@ -7,6 +7,7 @@ import '../../notes/application/note_tabs.dart';
 import '../../notes/presentation/note_close_guard.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../application/editor_auto_save.dart';
 import '../application/editor_tab_actions.dart';
 import '../application/open_documents.dart';
 import 'discard_unsaved_dialog.dart';
@@ -58,12 +59,19 @@ Future<bool> confirmEditorsClosable(
   return true;
 }
 
-/// The before-quit guard: files are saved only when asked to, so quitting with
-/// unsaved files or conflicted notes in any tab asks, with the window raised.
+/// The before-quit guard. With autosave on, pending autosaves are written
+/// instead of asked about; whatever is still unsaved after that — autosave off,
+/// a file changed on disk, a failed write — or a conflicted note asks, with the
+/// window raised.
 Future<bool> confirmQuitWithUnsavedWork(
   BuildContext context,
   WidgetRef ref,
 ) async {
+  final autoSave = ref.read(editorAutoSaveProvider.notifier);
+  if (autoSave.isOn) {
+    await autoSave.saveAll(announce: false);
+    if (!context.mounted) return true;
+  }
   final tabs = ref.read(terminalSessionsControllerProvider).tabs;
   final tabIds = [for (final tab in tabs) tab.id];
   final conflicted = ref
