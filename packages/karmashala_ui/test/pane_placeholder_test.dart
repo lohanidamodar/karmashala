@@ -140,6 +140,49 @@ void main() {
     }
   });
 
+  group('the one-line form', () {
+    testWidgets('sets the glyph beside a sentence that starts a column', (
+      tester,
+    ) async {
+      await pumpInBox(
+        tester,
+        width: 320,
+        child: const SingleChildScrollView(
+          child: PanePlaceholder.inline(
+            message: 'No device connected.',
+            icon: AppIcons.folder,
+          ),
+        ),
+      );
+      final glyph = tester.getRect(find.byIcon(AppIcons.folder));
+      final words = tester.getRect(find.text('No device connected.'));
+      expect(tester.widget<Icon>(find.byIcon(AppIcons.folder)).size, 16);
+      expect(glyph.left, 12);
+      expect(words.left, greaterThan(glyph.right));
+      expect(words.top, lessThan(glyph.bottom), reason: 'beside, not under');
+      expect(tester.getSize(find.byType(PanePlaceholder)).height, lessThan(48));
+    });
+
+    for (final scale in sweepScales) {
+      testWidgets('fits 240px wide at ${scale}x', (tester) async {
+        final overflows = await pumpInBox(
+          tester,
+          width: 240,
+          textScale: scale,
+          child: const SingleChildScrollView(
+            child: PanePlaceholder.inline(
+              message:
+                  'No device connected. Plug one in, pair one over Wi-Fi from '
+                  'the toolbar, or start one below.',
+              icon: AppIcons.folder,
+            ),
+          ),
+        );
+        expect(overflows, isEmpty);
+      });
+    }
+  });
+
   testWidgets('still lays out with no height bound', (tester) async {
     final overflows = await pumpInBox(
       tester,

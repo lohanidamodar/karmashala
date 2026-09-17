@@ -200,9 +200,25 @@ class PanePlaceholder extends StatelessWidget {
     this.action,
     this.fillHeight = true,
     super.key,
-  });
+  }) : inline = false;
+
+  /// The same glyph and the same muted voice as one line *above* content: a
+  /// pane with nothing connected that still has a list to offer. The glyph
+  /// sits beside the sentence at [Chrome.icon], and the sentence starts a
+  /// column rather than being centred over one.
+  const PanePlaceholder.inline({
+    required this.message,
+    this.icon,
+    this.iconColor,
+    super.key,
+  }) : action = null,
+       fillHeight = false,
+       inline = true;
 
   final String message;
+
+  /// Whether this is the one-line form; see [PanePlaceholder.inline].
+  final bool inline;
 
   /// The one picture on a surface with nothing on it, at [Chrome.iconHero].
   final IconData? icon;
@@ -222,6 +238,29 @@ class PanePlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
+    if (inline) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.md,
+          vertical: Insets.sm,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (icon case final glyph?) ...[
+              Icon(glyph, size: Chrome.icon, color: iconColor ?? muted),
+              const SizedBox(width: Insets.sm),
+            ],
+            Expanded(
+              child: Text(
+                message,
+                style: theme.textTheme.bodySmall?.copyWith(color: muted),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     final content = Center(
       heightFactor: fillHeight ? null : 1,
       child: Padding(
