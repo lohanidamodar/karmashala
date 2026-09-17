@@ -17,7 +17,9 @@ void main() {
     String permissionEvidence = '',
     UnattendedReach reach = UnattendedReach.reachable,
     String reachReason = '',
+    bool requiresChecks = true,
   }) => UnattendedGateInput(
+    requiresChecks: requiresChecks,
     repositoryName: 'app',
     verificationEnabled: verificationEnabled,
     projectCheckCount: projectCheckCount,
@@ -51,6 +53,38 @@ void main() {
 
     test('one check is enough', () {
       expect(unattendedRefusal(input(projectCheckCount: 1)), isNull);
+    });
+  });
+
+  group('a scheduled resume is excused the checks, and nothing else', () {
+    test('verification off and no check are not refused', () {
+      expect(
+        unattendedRefusal(
+          input(
+            verificationEnabled: false,
+            projectCheckCount: 0,
+            requiresChecks: false,
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('a mode that prompts still is, in the same sentence', () {
+      final resume = unattendedRefusal(
+        input(permits: PermissionRisk.ask, requiresChecks: false),
+      );
+      expect(resume?.kind, UnattendedRefusalKind.permissionModeCanPrompt);
+      expect(resume, unattendedRefusal(input(permits: PermissionRisk.ask)));
+    });
+
+    test('and so is a machine this app cannot reach', () {
+      expect(
+        unattendedRefusal(
+          input(reach: UnattendedReach.unreachable, requiresChecks: false),
+        )?.kind,
+        UnattendedRefusalKind.environmentUnreachable,
+      );
     });
   });
 

@@ -61,6 +61,9 @@ enum DecisionOrigin {
   /// A row in the session event log, by rowid.
   sessionEvent('session event'),
 
+  /// A resume the user scheduled in advance, by its id.
+  scheduledResume('scheduled resume'),
+
   /// An origin this build does not know. Never written, only read.
   unrecognised('an act this build does not recognise');
 

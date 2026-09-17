@@ -54,7 +54,9 @@ class UnattendedRefusal {
 
   @override
   bool operator ==(Object other) =>
-      other is UnattendedRefusal && other.kind == kind && other.reason == reason;
+      other is UnattendedRefusal &&
+      other.kind == kind &&
+      other.reason == reason;
 
   @override
   int get hashCode => Object.hash(kind, reason);
@@ -73,6 +75,7 @@ class UnattendedGateInput {
     required this.permits,
     required this.reach,
     this.agentInstalled = true,
+    this.requiresChecks = true,
     this.permissionLabel = '',
     this.permissionEvidence = '',
     this.reachReason = '',
@@ -84,6 +87,10 @@ class UnattendedGateInput {
   final bool verificationEnabled;
 
   final int projectCheckCount;
+
+  /// Whether the two verification rules apply. False for a scheduled resume:
+  /// it continues a conversation its user was already reviewing.
+  final bool requiresChecks;
 
   final String agentName;
 
@@ -123,7 +130,7 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
       ? 'this agent'
       : input.agentName.trim();
 
-  if (!input.verificationEnabled) {
+  if (input.requiresChecks && !input.verificationEnabled) {
     return UnattendedRefusal(
       UnattendedRefusalKind.verificationDisabled,
       'Verification is off for $repository. Nobody is watching an automation '
@@ -132,7 +139,7 @@ UnattendedRefusal? unattendedRefusal(UnattendedGateInput input) {
       'arming.',
     );
   }
-  if (input.projectCheckCount <= 0) {
+  if (input.requiresChecks && input.projectCheckCount <= 0) {
     return UnattendedRefusal(
       UnattendedRefusalKind.noProjectChecks,
       '$repository has no project check. An unattended run needs at least one '

@@ -13,6 +13,7 @@ import '../../core/database/database_providers.dart';
 import '../../core/lifecycle/before_quit.dart';
 import '../../features/automations/application/automation_runner.dart';
 import '../../features/automations/application/automation_scheduler.dart';
+import '../../features/automations/application/scheduled_resume_observer.dart';
 import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
@@ -137,6 +138,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     // no timer and an unwatched observer records no verdict, both silently.
     ref.watch(automationSchedulerProvider);
     ref.watch(automationRunObserverProvider);
+    // And for scheduled resumes, which share that scheduler's one timer.
+    ref.watch(scheduledResumeObserverProvider);
     // And for note tabs, which close with their note and flush on the way out.
     ref.watch(noteTabsObserverProvider);
     // And for file autosave, whose window-focus trigger has to be heard while

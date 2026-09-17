@@ -103,6 +103,24 @@ class DecisionRecorder {
     origin: DecisionOrigin.decisionTool,
   );
 
+  /// A scheduled resume fired: the approval was given in advance, so the
+  /// record says who armed it and what was typed with nobody there.
+  DecisionRecord? recordScheduledResume({
+    required String sessionId,
+    required String resumeId,
+    required String summary,
+    required String scheduledBy,
+    String? detail,
+  }) => _append(
+    sessionId: sessionId,
+    kind: DecisionKind.approvalGranted,
+    summary: summary,
+    detail: detail,
+    decidedBy: scheduledBy,
+    origin: DecisionOrigin.scheduledResume,
+    originId: resumeId,
+  );
+
   /// The user wrote one down by hand — the only act whose author is a person
   /// typing, so the panel restricts [kind] to what they can assert alone.
   DecisionRecord? recordByHand({

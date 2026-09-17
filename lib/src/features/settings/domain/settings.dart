@@ -3,6 +3,7 @@ import 'package:karmashala_devices/devices.dart';
 import 'app_theme_mode.dart';
 import 'diagnostics_settings.dart';
 import 'editor_settings.dart';
+import 'usage_limit_settings.dart';
 
 /// Per-agent permission preferences in each agent's own vocabulary. Null means
 /// "use the mode that agent declares as its default", never "pass no flag".
@@ -72,6 +73,9 @@ class Settings {
     this.editorWordWrap = false,
     this.editorAutoSave = kDefaultEditorAutoSave,
     this.editorAutoSaveDelayMs = kDefaultEditorAutoSaveDelayMs,
+    this.usageLimitBehavior = UsageLimitBehavior.ask,
+    this.resumeMessage = kDefaultResumeMessage,
+    this.resumeMessages = const {},
     this.collapsedExplorerNodes = const [],
     this.windowWidth,
     this.windowHeight,
@@ -175,6 +179,15 @@ class Settings {
 
   /// The pause [EditorAutoSave.afterDelay] waits for, clamped when read.
   final int editorAutoSaveDelayMs;
+
+  /// What happens when a session's turn ends on a usage limit.
+  final UsageLimitBehavior usageLimitBehavior;
+
+  /// What a scheduled resume sends by default. Empty resumes without a word.
+  final String resumeMessage;
+
+  /// The message last used per agent id, so the dialog opens on it.
+  final Map<String, String> resumeMessages;
 
   /// Explorer rows the user has folded away, by [ExplorerNode.id] — a machine,
   /// one of its sections, or a context inside it. Absent means expanded, so a
@@ -333,6 +346,9 @@ class Settings {
     bool? editorWordWrap,
     EditorAutoSave? editorAutoSave,
     int? editorAutoSaveDelayMs,
+    UsageLimitBehavior? usageLimitBehavior,
+    String? resumeMessage,
+    Map<String, String>? resumeMessages,
     List<String>? collapsedExplorerNodes,
     double? windowWidth,
     double? windowHeight,
@@ -400,6 +416,9 @@ class Settings {
     editorWordWrap: editorWordWrap ?? this.editorWordWrap,
     editorAutoSave: editorAutoSave ?? this.editorAutoSave,
     editorAutoSaveDelayMs: editorAutoSaveDelayMs ?? this.editorAutoSaveDelayMs,
+    usageLimitBehavior: usageLimitBehavior ?? this.usageLimitBehavior,
+    resumeMessage: resumeMessage ?? this.resumeMessage,
+    resumeMessages: resumeMessages ?? this.resumeMessages,
     collapsedExplorerNodes:
         collapsedExplorerNodes ?? this.collapsedExplorerNodes,
     windowWidth: windowWidth ?? this.windowWidth,
@@ -455,6 +474,13 @@ class Settings {
   Settings withPermissions(String agentId, AgentPermissions value) =>
       copyWith(permissions: {...permissions, agentId: value});
 
+  /// The message a resume of [agentId] opens on: its last, else the default.
+  String resumeMessageFor(String agentId) =>
+      resumeMessages[agentId] ?? resumeMessage;
+
+  Settings withResumeMessage(String agentId, String message) =>
+      copyWith(resumeMessages: {...resumeMessages, agentId: message});
+
   /// Sets [agentId]'s default model; a null [modelId] removes the key.
   Settings withDefaultModel(String agentId, String? modelId) => copyWith(
     defaultModels: {
@@ -497,6 +523,9 @@ class Settings {
     'editorWordWrap': editorWordWrap,
     'editorAutoSave': editorAutoSave.name,
     'editorAutoSaveDelayMs': editorAutoSaveDelayMs,
+    'usageLimitBehavior': usageLimitBehavior.name,
+    'resumeMessage': resumeMessage,
+    if (resumeMessages.isNotEmpty) 'resumeMessages': resumeMessages,
     'collapsedExplorerNodes': collapsedExplorerNodes,
     if (windowWidth != null) 'windowWidth': windowWidth,
     if (windowHeight != null) 'windowHeight': windowHeight,
@@ -632,6 +661,18 @@ class Settings {
           ? json['editorWordWrap'] as bool
           : false,
       editorAutoSave: EditorAutoSave.fromName(json['editorAutoSave']),
+      usageLimitBehavior: UsageLimitBehavior.fromName(
+        json['usageLimitBehavior'],
+      ),
+      resumeMessage: json['resumeMessage'] is String
+          ? json['resumeMessage'] as String
+          : kDefaultResumeMessage,
+      resumeMessages: {
+        if (json['resumeMessages'] case final Map<dynamic, dynamic> messages)
+          for (final entry in messages.entries)
+            if (entry.key is String && entry.value is String)
+              entry.key as String: entry.value as String,
+      },
       editorAutoSaveDelayMs: json['editorAutoSaveDelayMs'] is int
           ? (json['editorAutoSaveDelayMs'] as int).clamp(
               kMinEditorAutoSaveDelayMs,
@@ -763,6 +804,9 @@ class Settings {
       other.editorWordWrap == editorWordWrap &&
       other.editorAutoSave == editorAutoSave &&
       other.editorAutoSaveDelayMs == editorAutoSaveDelayMs &&
+      other.usageLimitBehavior == usageLimitBehavior &&
+      other.resumeMessage == resumeMessage &&
+      _stringMapEquals(other.resumeMessages, resumeMessages) &&
       other.windowWidth == windowWidth &&
       other.windowHeight == windowHeight &&
       other.defaultSystemTerminalId == defaultSystemTerminalId &&
@@ -853,6 +897,13 @@ class Settings {
         editorWordWrap,
         editorAutoSave,
         editorAutoSaveDelayMs,
+        Object.hash(
+          usageLimitBehavior,
+          resumeMessage,
+          Object.hashAllUnordered(
+            resumeMessages.entries.map((e) => Object.hash(e.key, e.value)),
+          ),
+        ),
         hideEmptySections,
         Object.hashAll(explorerAgentFilter),
         Object.hashAll(hiddenSidePanelSurfaces),

@@ -4,14 +4,19 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../sessions/application/session_providers.dart';
 import '../data/automation_dao.dart';
+import '../data/scheduled_resume_dao.dart';
 import '../domain/automation.dart';
 import '../domain/automation_run.dart';
 import '../domain/cron_schedule.dart';
 import '../domain/missed_fires.dart';
+import '../domain/scheduled_resume.dart';
 import 'automation_providers.dart';
 import 'automation_runner.dart';
 import 'automation_timer.dart';
+import 'scheduled_resume_providers.dart';
+import 'scheduled_resume_runner.dart';
 
 /// What happens when an occurrence comes due. It must always record a run for
 /// the occurrence, even a refusal, or the fire would repeat on every tick.
@@ -35,8 +40,8 @@ final automationFiringProvider = Provider<AutomationFiring>(
 /// it exists so a schedule six months out is not one `Timer` across a suspend.
 const Duration kMaxTimerDelay = Duration(hours: 24);
 
-/// One armed timer for the next occurrence across every automation; nothing
-/// polls (§19). Must be watched, or Riverpod 3 pauses it and it arms nothing.
+/// One armed timer for the next occurrence across every automation and every
+/// scheduled resume; nothing polls (§19). Must be watched, or Riverpod 3 pauses it and it arms nothing.
 class AutomationScheduler extends Notifier<int> {
   /// Whether the one boot sweep this process gets has run. Kept on the
   /// notifier rather than in [state], because [build] re-runs on every change.
@@ -60,6 +65,7 @@ class AutomationScheduler extends Notifier<int> {
   }
 
   AutomationDao get _dao => ref.read(automationDaoProvider);
+  ScheduledResumeDao get _resumes => ref.read(scheduledResumeDaoProvider);
   DateTime get _now => ref.read(clockProvider).nowUtc();
   String _newId() => ref.read(idGeneratorProvider).newId();
 
@@ -70,6 +76,11 @@ class AutomationScheduler extends Notifier<int> {
     for (final automation in _dao.enabled()) {
       final next = _nextFor(automation, after);
       if (next == null) continue;
+      if (soonest == null || next.isBefore(soonest)) soonest = next;
+    }
+    for (final resume in _resumes.inState(ScheduledResumeState.pending)) {
+      // One already due is next right now, not never.
+      final next = resume.fireAt.isAfter(after) ? resume.fireAt : after;
       if (soonest == null || next.isBefore(soonest)) soonest = next;
     }
     return soonest;
@@ -135,7 +146,94 @@ class AutomationScheduler extends Notifier<int> {
           changed = true;
       }
     }
+    if (await _reconcileResumes(now)) changed = true;
     if (changed) ref.read(automationsRevisionProvider.notifier).bump();
+  }
+
+  /// The same catch-up rule, per resume: inside the grace it runs, beyond it
+  /// the row says `missed` — unless its owner said to resume however late.
+  Future<bool> _reconcileResumes(DateTime now) async {
+    var changed = false;
+    for (final resume in _resumes.inState(ScheduledResumeState.queued)) {
+      if (_resumeBlocker(resume) != null) continue;
+      await fireResume(resume);
+      changed = true;
+    }
+    for (final resume in _resumes.inState(ScheduledResumeState.pending)) {
+      if (resume.fireAt.isAfter(now)) continue;
+      final decision = missedFireDecision(
+        schedule: AutomationSchedule.once(resume.fireAt),
+        since: resume.scheduledAt.isBefore(resume.fireAt)
+            ? resume.scheduledAt
+            : resume.fireAt.subtract(const Duration(seconds: 1)),
+        now: now,
+        grace: resume.latePolicy == ResumeLatePolicy.resume
+            ? now.difference(resume.fireAt) + kMissedFireGrace
+            : kMissedFireGrace,
+      );
+      changed = true;
+      if (decision is MissedFires) {
+        final missed = ref
+            .read(scheduledResumeControllerProvider)
+            .end(
+              resume,
+              ScheduledResumeState.missed,
+              missedResumeReason(decision.lateBy),
+            );
+        ref
+            .read(resumeAnnouncerProvider)
+            .announce(
+              missed,
+              ref.read(sessionDaoProvider).getById(resume.sessionId),
+            );
+        continue;
+      }
+      final late = now.difference(resume.fireAt);
+      await fireResume(
+        resume,
+        note: late > kMissedFireGrace
+            ? 'Karmashala was not running at the time, and you chose to '
+                  'resume however late.'
+            : '',
+      );
+    }
+    return changed;
+  }
+
+  /// Fires [resume], or leaves it `queued` with the reason when its checkout
+  /// already has an unattended owner.
+  Future<void> fireResume(ScheduledResume resume, {String note = ''}) async {
+    final blocker = _resumeBlocker(resume);
+    if (blocker != null) {
+      if (resume.state != ScheduledResumeState.queued ||
+          resume.reason != blocker) {
+        _resumes.update(
+          resume.copyWith(state: ScheduledResumeState.queued, reason: blocker),
+        );
+        ref.read(automationsRevisionProvider.notifier).bump();
+      }
+      return;
+    }
+    await ref.read(scheduledResumeFiringProvider).fire(resume, note: note);
+  }
+
+  /// Why [resume] has to wait for its checkout, or null. A session in its own
+  /// worktree shares the checkout with nobody.
+  String? _resumeBlocker(ScheduledResume resume) {
+    final session = ref.read(sessionDaoProvider).getById(resume.sessionId);
+    if (session == null || session.worktree != null) return null;
+    final run = _liveInCheckout(session.repositoryId);
+    if (run != null) return queuedReason(run);
+    for (final other in _resumes.inState(ScheduledResumeState.firing)) {
+      if (other.id == resume.id) continue;
+      final theirs = ref.read(sessionDaoProvider).getById(other.sessionId);
+      if (theirs == null || theirs.worktree != null) continue;
+      if (theirs.repositoryId != session.repositoryId) continue;
+      return 'This checkout is busy: "${theirs.title}" is being resumed there. '
+          'One unattended run owns a checkout at a time, so this one is '
+          'waiting rather than racing it.';
+    }
+    return null;
   }
 
   DateTime _floorFor(Automation automation) {
@@ -224,7 +322,10 @@ class AutomationScheduler extends Notifier<int> {
       if (run.state == AutomationRunState.running) return;
       waiting ??= run;
     }
-    if (waiting == null) return;
+    if (waiting == null) {
+      await _drainResumes(repositoryId);
+      return;
+    }
     final automation = _dao.getById(waiting.automationId)!;
     // The waiting row *becomes* the run rather than a second row beside it.
     await ref
@@ -232,12 +333,38 @@ class AutomationScheduler extends Notifier<int> {
         .fire(
           automation,
           waiting.scheduledFor,
-          note: 'Queued behind another run in this checkout, then started when '
+          note:
+              'Queued behind another run in this checkout, then started when '
               'it came free.',
           queued: waiting,
         );
     ref.read(automationsRevisionProvider.notifier).bump();
   }
+
+  /// Starts the oldest resume waiting on [repositoryId], now it is free.
+  Future<void> _drainResumes(String repositoryId) async {
+    for (final resume in _resumes.inState(ScheduledResumeState.queued)) {
+      final session = ref.read(sessionDaoProvider).getById(resume.sessionId);
+      if (session?.repositoryId != repositoryId) continue;
+      if (_resumeBlocker(resume) != null) return;
+      await fireResume(
+        resume,
+        note: 'Waited for the checkout to come free first.',
+      );
+      return;
+    }
+  }
+}
+
+/// The reason a `missed` resume carries. Never empty.
+String missedResumeReason(Duration lateBy) {
+  final minutes = lateBy.inMinutes;
+  final late = minutes < 60
+      ? '$minutes minute${minutes == 1 ? '' : 's'}'
+      : '${lateBy.inHours} hour${lateBy.inHours == 1 ? '' : 's'}';
+  return 'Karmashala was not running when this was due, $late ago. Only a '
+      'resume within ${kMissedFireGrace.inMinutes} minutes is caught up '
+      'unasked — resume it now if you still want it.';
 }
 
 final automationSchedulerProvider = NotifierProvider<AutomationScheduler, int>(

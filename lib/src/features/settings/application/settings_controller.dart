@@ -8,6 +8,7 @@ import '../domain/app_theme_mode.dart';
 import '../domain/diagnostics_settings.dart';
 import '../domain/editor_settings.dart';
 import '../domain/settings.dart';
+import '../domain/usage_limit_settings.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
   (ref) => SettingsRepository(ref.watch(databaseProvider)),
@@ -218,6 +219,23 @@ class SettingsController extends Notifier<Settings> {
 
   void setEditorWordWrap(bool value) {
     state = state.copyWith(editorWordWrap: value);
+    _save();
+  }
+
+  void setUsageLimitBehavior(UsageLimitBehavior value) {
+    state = state.copyWith(usageLimitBehavior: value);
+    _save();
+  }
+
+  void setResumeMessage(String value) {
+    state = state.copyWith(resumeMessage: value.trim());
+    _save();
+  }
+
+  /// Remembers what a resume of [agentId] last said, for the next dialog.
+  void rememberResumeMessage(String agentId, String message) {
+    if (state.resumeMessages[agentId] == message) return;
+    state = state.withResumeMessage(agentId, message);
     _save();
   }
 
