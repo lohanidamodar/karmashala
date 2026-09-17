@@ -25,7 +25,29 @@ Flags (each also readable from the environment):
 | `--lone-timeout-s` | `RELAY_LONE_TIMEOUT_S` | 120 |
 | `--connections-per-minute` | `RELAY_CONNECTIONS_PER_MINUTE` | 60 |
 | `--max-rendezvous` | `RELAY_MAX_RENDEZVOUS` | 10000 |
+| `--token-file` | `RELAY_TOKEN_FILE` | none — the relay is open |
 | `--quiet` | `RELAY_QUIET=1` | off |
+
+## Access token (optional)
+
+An open relay on a public address is a free forwarder for anybody who finds it:
+any two sockets that agree on 32 hex characters get a pipe. `--token-file PATH`
+names a file holding 32 or more url-safe characters, and the relay then serves
+**every** route — the rendezvous WebSocket, both push endpoints and `/healthz` —
+only under `/k/<token>/`. Everything else, a wrong token included, answers the
+same `404` an unknown path does.
+
+Clients need no change: they are given the base URL `ws://host:8787/k/<token>`
+and append `/v1/<rendezvous>` to it, keeping the prefix.
+
+It is a file and never a flag, because argv is readable by every user on the
+machine. The relay never logs it.
+
+**What it is not.** Over plain `ws://` the token is in the request line, so
+anyone on the path between a client and the relay can read it. It stops
+drive-by use by whoever scans for the port; it is not confidentiality and adds
+none — the frames are sealed end to end with or without it. Put the relay behind
+a TLS terminator if the token itself has to stay private.
 
 ## Endpoints
 

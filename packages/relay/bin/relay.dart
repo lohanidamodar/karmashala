@@ -23,7 +23,8 @@ Future<void> main(List<String> arguments) async {
     stderr.writeln('relay: ${error.message}');
     stderr.writeln(
       'usage: relay [--port N] [--address HOST] [--lone-timeout-s N] '
-      '[--connections-per-minute N] [--fcm-service-account PATH] [--quiet]',
+      '[--connections-per-minute N] [--fcm-service-account PATH] '
+      '[--token-file PATH] [--quiet]',
     );
     exitCode = 64;
     return;
@@ -44,6 +45,26 @@ Future<void> main(List<String> arguments) async {
       );
     } on Object catch (error) {
       stderr.writeln('relay: could not load the FCM service account: $error');
+      exitCode = 64;
+      return;
+    }
+  }
+
+  // From a file, never a flag: argv is readable by every user on the machine.
+  String? accessToken;
+  final tokenPath = _stringArg(arguments, '--token-file', 'RELAY_TOKEN_FILE');
+  if (tokenPath != null) {
+    try {
+      accessToken = File(tokenPath).readAsStringSync().trim();
+    } on Object catch (error) {
+      stderr.writeln('relay: could not read the token file: $error');
+      exitCode = 64;
+      return;
+    }
+    if (!isUsableRelayToken(accessToken)) {
+      stderr.writeln(
+        'relay: the token file must hold 32 or more url-safe characters',
+      );
       exitCode = 64;
       return;
     }
@@ -72,6 +93,7 @@ Future<void> main(List<String> arguments) async {
           _intArg(arguments, '--max-rendezvous', 'RELAY_MAX_RENDEZVOUS') ??
           kDefaultMaxRendezvous,
       delivery: delivery,
+      accessToken: accessToken,
       trustedProxy:
           arguments.contains('--trusted-proxy') ||
           Platform.environment['RELAY_TRUSTED_PROXY'] == '1',
@@ -82,6 +104,9 @@ Future<void> main(List<String> arguments) async {
   stdout.writeln('relay: listening on ${relay.address.address}:${relay.port}');
   stdout.writeln(
     'relay: push delivery ${delivery == null ? 'not configured' : 'via fcm'}',
+  );
+  stdout.writeln(
+    'relay: ${accessToken == null ? 'open to anyone' : 'serving under its access token only'}',
   );
 
   final done = Completer<void>();

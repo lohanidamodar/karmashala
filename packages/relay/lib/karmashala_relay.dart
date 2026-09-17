@@ -13,6 +13,7 @@ export 'src/relay_server.dart'
     show
         RelayOptions,
         RelayServer,
+        isUsableRelayToken,
         kCloseBusy,
         kCloseFrameTooLarge,
         kCloseImpatient,

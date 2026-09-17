@@ -56,6 +56,13 @@ final RegExp _rendezvousPattern = RegExp(r'^v1/([0-9a-f]{32})$');
 /// and it is never a device id or a rendezvous.
 final RegExp _pushTagPattern = RegExp(r'^[0-9a-f]{32}$');
 
+/// An access token: 32 or more url-safe characters, so it is one path segment
+/// that needs no escaping and is long enough not to be guessed.
+final RegExp _accessTokenPattern = RegExp(r'^[A-Za-z0-9_-]{32,}$');
+
+/// Whether [token] can be a relay's access token.
+bool isUsableRelayToken(String token) => _accessTokenPattern.hasMatch(token);
+
 /// What a base64url payload may contain.
 final RegExp _base64UrlPattern = RegExp(r'^[A-Za-z0-9_=-]+$');
 
@@ -71,8 +78,15 @@ class RelayOptions {
     this.maxPushTokens = kDefaultMaxPushTokens,
     this.maxPushPayloadBytes = kDefaultMaxPushPayloadBytes,
     this.trustedProxy = false,
+    this.accessToken,
     this.onLog,
   });
+
+  /// When set, every route is served only under `/k/<token>/` and anything
+  /// else is an unknown path. Null — the default — leaves the relay open. An
+  /// open relay on a public address forwards for whoever finds it; this stops
+  /// that. Over plain `ws://` it is visible on the wire, so it is not secrecy.
+  final String? accessToken;
 
   /// Whether a reverse proxy in front of the relay is trusted to say who the
   /// client is (`fly-client-ip`, or the last `x-forwarded-for` hop it added).
@@ -112,6 +126,12 @@ class RelayServer {
     int port = kDefaultRelayPort,
     RelayOptions options = const RelayOptions(),
   }) async {
+    final token = options.accessToken;
+    if (token != null && !isUsableRelayToken(token)) {
+      // Refused rather than served: a short or empty token is an open relay
+      // that believes it is a closed one.
+      throw ArgumentError('the access token must be 32+ url-safe characters');
+    }
     final relay = RelayServer._(options);
     relay._server = await shelf_io.serve(
       relay._handle,
@@ -152,11 +172,13 @@ class RelayServer {
   }
 
   FutureOr<Response> _handle(Request request) {
-    if (request.url.path == 'healthz') return _health();
-    if (request.url.path == 'v1/push/register') return _pushRegister(request);
-    if (request.url.path == 'v1/push') return _pushSend(request);
+    final path = _gatedPath(request.url.path);
+    if (path == null) return Response.notFound('not found\n');
+    if (path == 'healthz') return _health();
+    if (path == 'v1/push/register') return _pushRegister(request);
+    if (path == 'v1/push') return _pushSend(request);
 
-    final match = _rendezvousPattern.firstMatch(request.url.path);
+    final match = _rendezvousPattern.firstMatch(path);
     if (match == null) return Response.notFound('not found\n');
     final id = match.group(1)!;
 
@@ -179,6 +201,17 @@ class RelayServer {
       (WebSocketChannel socket, _) => _join(id, socket),
       pingInterval: options.pingInterval,
     )(request);
+  }
+
+  /// The route inside the token prefix, or null when the request is not under
+  /// it. Every miss reads the same — a wrong token is an unknown path.
+  String? _gatedPath(String path) {
+    final token = options.accessToken;
+    if (token == null) return path;
+    final segments = path.split('/');
+    if (segments.length < 3 || segments[0] != 'k') return null;
+    if (!_constantTimeEquals(segments[1], token)) return null;
+    return segments.skip(2).join('/');
   }
 
   Response _health() => Response.ok(
@@ -400,6 +433,18 @@ class _Rendezvous {
     _second?.sink.close(code, reason);
     onEmpty();
   }
+}
+
+/// Compares without stopping at the first difference, so how long a refusal
+/// took says nothing about how much of the token was right.
+bool _constantTimeEquals(String a, String b) {
+  final left = utf8.encode(a);
+  final right = utf8.encode(b);
+  var diff = left.length ^ right.length;
+  for (var i = 0; i < left.length; i++) {
+    diff |= left[i] ^ right[i % right.length];
+  }
+  return diff == 0;
 }
 
 /// A token bucket per client IP, refilled continuously.
