@@ -287,6 +287,7 @@ List<PopupMenuEntry<String>> projectMenuItems({
     value: 'edit',
     label: 'Edit project…',
     icon: AppIcons.pencilSimple,
+    shortcut: 'F2',
   ),
   DesktopMenuItem(
     value: 'pin',

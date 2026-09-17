@@ -12,7 +12,9 @@ import '../application/environment_terminals_providers.dart';
 import '../application/explorer_tree_nodes.dart';
 import '../application/explorer_tree_state.dart';
 import '../application/session_selection.dart';
+import 'explorer_project_row.dart';
 import 'explorer_selection_actions.dart';
+import 'session_rows.dart';
 
 /// What the search field and the list know of each other: `↓` leaves the field
 /// for the first row, `↑` on the first row returns to the field. One column,
@@ -227,11 +229,16 @@ class ExplorerTreeKeyboard {
     if (primary.findAncestorWidgetOfExactType<EditableText>() != null) {
       return KeyEventResult.ignored;
     }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.f2) {
+      return event is KeyDownEvent && _rename(primary)
+          ? KeyEventResult.handled
+          : KeyEventResult.ignored;
+    }
     final nodes = readNodes();
     final index = nodes.indexWhere((node) => node.id == id);
     if (index < 0) return KeyEventResult.ignored;
 
-    final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowDown) {
       return _step(nodes, index, 1, extend: keys.isShiftPressed);
     }
@@ -258,6 +265,27 @@ class ExplorerTreeKeyboard {
       return _type(nodes, index, character);
     }
     return KeyEventResult.ignored;
+  }
+
+  /// `F2`, as the menus say: a session's "Rename", a project's editor. Read
+  /// off the row that is drawn, so it names what the row names now.
+  bool _rename(BuildContext focused) {
+    var handled = false;
+    focused.visitAncestorElements((element) {
+      final row = element.widget;
+      if (row is NativeSessionRow) {
+        unawaited(renameNativeSession(element, ref, row.session));
+      } else if (row is ImportedSessionRow) {
+        unawaited(renameImportedSession(element, ref, row.session));
+      } else if (row is ExplorerProjectRow) {
+        ProjectRowActions(ref, element, row.project).onMenu('edit');
+      } else {
+        return row is! ExplorerKeyboardRow;
+      }
+      handled = true;
+      return false;
+    });
+    return handled;
   }
 
   KeyEventResult _go(List<ExplorerNode> nodes, int? index) {

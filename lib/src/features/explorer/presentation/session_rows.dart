@@ -77,11 +77,6 @@ class NativeSessionRow extends ConsumerWidget {
     final terminals =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
 
-    Future<void> rename() async {
-      final name = await _promptRename(context, session.title);
-      if (name != null) await actions.renameNative(session.id, name);
-    }
-
     Future<void> delete() async {
       final deleteFromCli = await _confirmDelete(context, session.title);
       if (deleteFromCli == null) return;
@@ -271,7 +266,6 @@ class NativeSessionRow extends ConsumerWidget {
               shortcut: 'F2',
             ),
             selectRowMenuItem(),
-            selectRowMenuItem(),
             const DesktopMenuDivider(),
             DesktopMenuItem(
               value: 'delete',
@@ -321,7 +315,7 @@ class NativeSessionRow extends ConsumerWidget {
               ),
             );
           case 'rename':
-            unawaited(rename());
+            unawaited(renameNativeSession(context, ref, session));
           case 'delete':
             unawaited(delete());
         }
@@ -426,8 +420,7 @@ class ImportedSessionRow extends ConsumerWidget {
             ),
           );
         case 'rename':
-          final name = await _promptRename(context, session.displayTitle);
-          if (name != null) await actions.renameImported(session, name);
+          await renameImportedSession(context, ref, session);
         case 'delete':
           final deleteFromCli = await _confirmDelete(
             context,
@@ -518,6 +511,7 @@ class ImportedSessionRow extends ConsumerWidget {
               icon: AppIcons.pencilSimple,
               shortcut: 'F2',
             ),
+            selectRowMenuItem(),
             const DesktopMenuDivider(),
             DesktopMenuItem(
               value: 'delete',
@@ -604,6 +598,27 @@ Future<void> copyCommandToClipboard(
     message = e is StateError ? e.message : '$e';
   }
   messenger.showSnackBar(SnackBar(content: Text(message)));
+}
+
+/// "Rename", from the row's menu and from `F2` on the row.
+Future<void> renameNativeSession(
+  BuildContext context,
+  WidgetRef ref,
+  Session session,
+) async {
+  final actions = ref.read(sessionActionsProvider);
+  final name = await _promptRename(context, session.title);
+  if (name != null) await actions.renameNative(session.id, name);
+}
+
+Future<void> renameImportedSession(
+  BuildContext context,
+  WidgetRef ref,
+  ImportedSession session,
+) async {
+  final actions = ref.read(sessionActionsProvider);
+  final name = await _promptRename(context, session.displayTitle);
+  if (name != null) await actions.renameImported(session, name);
 }
 
 Future<String?> _promptRename(BuildContext context, String current) {
