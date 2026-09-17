@@ -117,11 +117,9 @@ class FocusRevealGroup extends StatelessWidget {
 
 /// The confirm button of an action that cannot be taken back: a filled button
 /// in the error colours. Pair it with a plain `TextButton` to cancel.
-/// Focuses [node] and scrolls it into view **from either side**. Flutter's own
-/// callback keeps only the edge on the side Tab is moving towards, so wrapping
-/// from the last stop back to the first leaves focus on a control scrolled off
-/// the top. Each call scrolls only when its edge is out, so a stop already in
-/// view does not move.
+/// Focuses [node] and scrolls it into view **from either side**: Flutter's own
+/// callback keeps only the edge Tab moves towards, so a wrap to the first stop
+/// leaves it off the top. Each edge scrolls only when it is out.
 void _revealFocused(
   FocusNode node, {
   ScrollPositionAlignmentPolicy? alignmentPolicy,

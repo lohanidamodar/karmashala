@@ -173,9 +173,8 @@ class SshRelaySetup {
 
   /// Idempotent. Already running from this bundle: only proved. Running from
   /// another: stopped and started again, which is "Update". Then the port is
-  /// opened against evidence and proved with a health check from here.
-  /// [ruleAddedByHand] is "Check again" after the firewall command was run in
-  /// a terminal on the box.
+  /// opened against evidence and proved from here. [ruleAddedByHand] is
+  /// "Check again" after the firewall command was run on the box.
   Future<SshRelayReading> start({bool ruleAddedByHand = false}) async {
     var state = await _inspect();
     if (state == null) return _unasked();

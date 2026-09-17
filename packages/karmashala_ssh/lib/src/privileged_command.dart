@@ -1,10 +1,8 @@
 import 'package:meta/meta.dart';
 
-/// A step only root can take on a machine that wants a password for `sudo`.
-///
-/// Never run from here: an exec channel has no terminal to type a password
-/// into, and the app never asks for one. It is shown to copy, and typed — not
-/// submitted — at the prompt of a real terminal on that machine.
+/// A step only root can take on a machine whose `sudo` wants a password.
+/// Never run from here and never given a password: it is shown to copy, and
+/// typed — not submitted — at the prompt of a real terminal there.
 @immutable
 class PrivilegedCommand {
   const PrivilegedCommand({

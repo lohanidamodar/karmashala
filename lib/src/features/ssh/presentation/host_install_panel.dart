@@ -15,12 +15,9 @@ import '../application/host_install_controller.dart';
 import 'copyable_command.dart';
 import 'privileged_command_block.dart';
 
-/// "Karmashala host: installed 1.25.0 (running)" and what can be done about it
-/// — for one SSH machine, wherever that machine is shown.
-///
-/// A reading with its age, taken when somebody presses Check and after each
-/// action; nothing here asks the machine on its own (§19). Everything it
-/// installs goes under the remote home, so none of these buttons needs root.
+/// "Karmashala host: installed 1.25.0 (running)" and its buttons, for one SSH
+/// machine. A reading with its age, taken by Check and after each action —
+/// never on its own (§19) — and nothing here needs root.
 class HostInstallPanel extends ConsumerWidget {
   const HostInstallPanel({
     required this.host,

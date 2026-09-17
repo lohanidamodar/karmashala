@@ -99,11 +99,9 @@ class CompanionPortSetup {
   final AppLogger _logger;
 
   /// The host must already be listening, or a dial says "shut" about a port
-  /// nothing was ever going to answer on. The caller deploys and starts first.
-  ///
-  /// [ruleAddedByHand] is "Check again" after somebody ran the command this
-  /// gave them: the dial still decides, and a machine that still wants a
-  /// password is not handed the same command a second time.
+  /// nothing was ever going to answer on. [ruleAddedByHand] is "Check again"
+  /// after the command this gave was run: the dial still decides, and the same
+  /// command is not handed back.
   Future<PortOpening> ensureOpen(
     int port, {
     bool ruleAddedByHand = false,
@@ -263,11 +261,9 @@ class CompanionPortSetup {
     };
   }
 
-  /// Detects and opens in one shell round trip, and prints **one word** saying
-  /// what it did. `sudo -n` never prompts: an SSH session that stopped for a
-  /// password would hang a deploy with nobody there to type one. Root needs no
-  /// sudo at all, and a firewall that is installed and off is not acted on —
-  /// `ufw.conf` and `firewall-cmd --state` both read without root.
+  /// Detects and opens in one round trip, and prints **one word**. `sudo -n`
+  /// never prompts — a channel that stopped for a password would hang. Root
+  /// needs no sudo, and a firewall that is off (read without root) is left.
   String _openScript(int port) =>
       '''
 if [ "\$(id -u)" = 0 ]; then s=""; elif sudo -n true 2>/dev/null; then s="sudo -n"; else s=no; fi

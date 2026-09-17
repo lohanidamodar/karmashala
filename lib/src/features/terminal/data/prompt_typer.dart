@@ -7,12 +7,9 @@ String unsubmittable(String text) => text
     .replaceAll(RegExp(r'[\x00-\x1f\x7f]'), '')
     .trim();
 
-/// Types a command at a pane's prompt and leaves it there for the person to
-/// read, run and answer — `sudo`'s password goes into the real terminal.
-///
-/// A pane that was just opened is not connected yet, and what is typed before
-/// then is dropped. So the text waits for the shell's first output and then
-/// for a quiet spell: a banner and a slow prompt restart it.
+/// Types a command at a pane's prompt and leaves it for the person to run. A
+/// new pane drops what is typed before it connects, so the text waits for the
+/// shell's first output and then a quiet spell, which a banner restarts.
 class PromptTyper {
   PromptTyper({
     required this.send,
