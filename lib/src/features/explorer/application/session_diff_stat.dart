@@ -9,6 +9,7 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'checkout.dart';
+import 'project_working.dart';
 
 /// The branch and change count of one checkout, keyed by the *checkout*: twenty
 /// sessions in one working tree would otherwise run `git status` twenty times.
@@ -91,6 +92,21 @@ final projectAttentionCountsProvider = Provider<Map<String, int>>((ref) {
   return Map.unmodifiable(counts);
 });
 
+/// How many sessions are *working* — in a turn right now — in each project.
+/// Headers select their own integer, so a turn starting wakes one row; with
+/// nothing working it reads no table at all.
+final projectWorkingCountsProvider = Provider<Map<String, int>>((ref) {
+  final working = ref.watch(workingSessionsProvider);
+  if (working.isEmpty) return const {};
+  final projectIds = ref.watch(sessionProjectIdsProvider);
+  final counts = <String, int>{};
+  for (final id in working) {
+    final projectId = projectIds[id];
+    if (projectId != null) counts[projectId] = (counts[projectId] ?? 0) + 1;
+  }
+  return Map.unmodifiable(counts);
+});
+
 /// Sessions, changed files, running sessions and waiting work under one
 /// project. `ref.exists`, never `ref.watch`, which on an autoDispose family
 /// *creates*: that once ran 345 git processes for an unexpanded header.
@@ -115,6 +131,10 @@ final projectSummaryProvider = Provider.autoDispose
         projectAttentionCountsProvider.select(
           (counts) => counts[projectId] ?? 0,
         ),
+      );
+      // Whether the running mark turns. The same narrowing, for the same reason.
+      final working = ref.watch(
+        projectWorkingCountsProvider.select((counts) => counts[projectId] ?? 0),
       );
 
       // Two statements for the whole project and no session decoded. Over eight
@@ -151,6 +171,7 @@ final projectSummaryProvider = Provider.autoDispose
         sessions: sessions,
         changedFiles: changed,
         running: running,
+        working: working,
         needsAttention: needsAttention,
         branch: branch,
         commitsAhead: ahead,

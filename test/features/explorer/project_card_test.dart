@@ -1,6 +1,7 @@
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/rows.dart';
+import 'package:karmashala_ui/tokens.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -54,10 +55,17 @@ void main() {
       bool missing = false,
       bool detail = true,
       String? environment,
+      bool reducedMotion = false,
     }) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(disableAnimations: reducedMotion),
+            child: child!,
+          ),
           home: Scaffold(
             // Unbounded below, as the tree's list is.
             body: SingleChildScrollView(
@@ -308,6 +316,141 @@ void main() {
 
       await pump(tester, width: 400, summary: summary);
       expect(find.text('2 running'), findsOneWidget);
+    });
+
+    group('the running mark', () {
+      final clock = StatusSpinnerClock.instance;
+      Finder inBadge(String tooltip, Finder matching) =>
+          find.descendant(of: find.byTooltip(tooltip), matching: matching);
+
+      testWidgets('is a filled dot while its sessions are running and none is '
+          'working — never the hollow ring', (tester) async {
+        const summary = ProjectSummary(sessions: 6, running: 2);
+        for (final width in [200.0, 400.0]) {
+          await pump(tester, width: width, summary: summary);
+          const tooltip = '2 sessions are running';
+          expect(
+            inBadge(tooltip, find.byIcon(AppIcons.circleFill)),
+            findsOneWidget,
+          );
+          expect(find.byIcon(AppIcons.circle), findsNothing);
+          expect(find.byType(WorkingSpinner), findsNothing);
+          expect(clock.isRunning, isFalse, reason: 'a dot needs no clock');
+        }
+        final dot = tester.widget<Icon>(find.byIcon(AppIcons.circleFill));
+        expect(
+          dot.color,
+          SemanticColors.of(tester.element(find.byType(ProjectCard))).working,
+        );
+      });
+
+      testWidgets('is the shared spinner, then the count, while a session is '
+          'working', (tester) async {
+        const summary = ProjectSummary(sessions: 6, running: 2, working: 1);
+        const tooltip = '2 sessions are running · 1 working';
+        await pump(tester, width: 400, summary: summary);
+
+        expect(inBadge(tooltip, find.byType(WorkingSpinner)), findsOneWidget);
+        expect(find.byIcon(AppIcons.circleFill), findsNothing);
+        expect(inBadge(tooltip, find.text('2 running')), findsOneWidget);
+        expect(clock.isRunning, isTrue, reason: 'it turns');
+        expect(clock.debugSubscriberCount, 1);
+        expect(
+          tester.getCenter(find.byType(WorkingSpinner)).dx,
+          lessThan(tester.getCenter(find.text('2 running')).dx),
+          reason: 'the glyph, then the count',
+        );
+
+        await pump(tester, width: 200, summary: summary);
+        expect(inBadge(tooltip, find.byType(WorkingSpinner)), findsOneWidget);
+        expect(inBadge(tooltip, find.text('2')), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox());
+        expect(clock.isRunning, isFalse);
+      });
+
+      testWidgets('stands still under reduced motion', (tester) async {
+        await pump(
+          tester,
+          width: 400,
+          summary: const ProjectSummary(sessions: 6, running: 2, working: 2),
+          reducedMotion: true,
+        );
+        expect(find.byType(WorkingSpinner), findsOneWidget);
+        expect(clock.isRunning, isFalse);
+        expect(clock.debugSubscriberCount, 0);
+      });
+
+      testWidgets('counts a session that works without being ours to run', (
+        tester,
+      ) async {
+        // An imported conversation, driven from a terminal outside the app.
+        const summary = ProjectSummary(sessions: 3, working: 1);
+        await pump(tester, width: 400, summary: summary);
+        const tooltip = '1 session is working';
+        expect(inBadge(tooltip, find.byType(WorkingSpinner)), findsOneWidget);
+        expect(inBadge(tooltip, find.text('1 working')), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+      });
+
+      testWidgets('takes the same room either way, so a turn starting moves '
+          'nothing on the line', (tester) async {
+        await pump(
+          tester,
+          width: 400,
+          summary: const ProjectSummary(sessions: 6, running: 2),
+        );
+        final idle = tester.getRect(find.text('2 running'));
+        final path = tester.getRect(find.textContaining('popupbits').last);
+        await pump(
+          tester,
+          width: 400,
+          summary: const ProjectSummary(sessions: 6, running: 2, working: 1),
+        );
+        expect(tester.getRect(find.text('2 running')), idle);
+        expect(tester.getRect(find.textContaining('popupbits').last), path);
+        await tester.pumpWidget(const SizedBox());
+      });
+
+      testWidgets('needs-you keeps its warning glyph and its count', (
+        tester,
+      ) async {
+        await pump(
+          tester,
+          width: 400,
+          summary: const ProjectSummary(
+            sessions: 6,
+            running: 2,
+            working: 1,
+            needsAttention: 1,
+          ),
+        );
+        expect(
+          inBadge('1 needs you', find.byIcon(AppIcons.warningCircle)),
+          findsOneWidget,
+        );
+        await tester.pumpWidget(const SizedBox());
+      });
+
+      testWidgets('one line, without details, follows the same rule', (
+        tester,
+      ) async {
+        await pump(
+          tester,
+          width: 400,
+          detail: false,
+          summary: const ProjectSummary(sessions: 6, running: 2),
+        );
+        expect(find.byIcon(AppIcons.circleFill), findsOneWidget);
+        await pump(
+          tester,
+          width: 400,
+          detail: false,
+          summary: const ProjectSummary(sessions: 6, running: 2, working: 1),
+        );
+        expect(find.byType(WorkingSpinner), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+      });
     });
 
     testWidgets('a missing folder is said once, where the path was', (

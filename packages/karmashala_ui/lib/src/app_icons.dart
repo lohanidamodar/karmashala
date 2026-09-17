@@ -764,4 +764,13 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// A solid dot — something is running and waiting on nobody. Not [circle],
+  /// the hollow ring, which reads as "empty" beside a count.
+  static const IconData circleFill = IconData(
+    0xe18a,
+    fontFamily: 'PhosphorFill',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
 }

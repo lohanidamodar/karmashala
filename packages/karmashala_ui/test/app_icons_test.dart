@@ -37,6 +37,7 @@ void main() {
     'file': (AppIcons.file, 0xe230, regular),
     'arrowClockwise': (AppIcons.arrowClockwise, 0xe036, regular),
     'dotsThree': (AppIcons.dotsThree, 0xe1fe, regular),
+    'circleFill': (AppIcons.circleFill, 0xe18a, fill),
   };
 
   expected.forEach((name, entry) {

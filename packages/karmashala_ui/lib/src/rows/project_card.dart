@@ -9,6 +9,7 @@ import 'row_stats.dart';
 import 'explorer_row.dart';
 import 'path_abbreviation.dart';
 import 'session_card.dart';
+import 'status_glyph.dart';
 
 /// A project, drawn to the same standard as the session cards beneath it: line
 /// one is the name and how many sessions it holds, line two — muted, hanging
@@ -183,7 +184,7 @@ class ProjectCard extends StatelessWidget {
             if (!detail && summary.needsAttention > 0)
               ProjectStateBadge.needsYou(summary),
             if (!detail &&
-                summary.running > 0 &&
+                summary.active > 0 &&
                 constraints.maxWidth >= runningWidth)
               ProjectStateBadge.running(summary),
           ],
@@ -288,7 +289,7 @@ class ProjectCard extends StatelessWidget {
                     style: density.title(theme),
                   ),
                 ),
-                if (summary.running > 0) ...[
+                if (summary.active > 0) ...[
                   const SizedBox(width: Insets.sm),
                   ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: badgeMax),
@@ -350,18 +351,18 @@ class ProjectCard extends StatelessWidget {
     SemanticColors semantic,
     UiDensity density,
   ) => Tooltip(
-    message: summary.running == 1
-        ? '1 session is running'
-        : '${summary.running} sessions are running',
+    message: summary.runningTooltip ?? '',
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // A bullet in front of the count, not a glyph: at Chrome.iconSmall it
-        // reads as an icon the count belongs to rather than as a dot.
-        Icon(AppIcons.circle, size: 8, color: semantic.working),
-        const SizedBox(width: 3),
+        ProjectRunningMark(
+          working: summary.working > 0,
+          slot: density.iconSmall,
+          color: semantic.working,
+        ),
+        const SizedBox(width: ProjectRunningMark.gap),
         Text(
-          '${summary.running}',
+          '${summary.active}',
           style: muted?.copyWith(color: semantic.working),
         ),
       ],
@@ -763,7 +764,7 @@ class ProjectDetailLine extends StatelessWidget {
             ],
             // The state ends on the row's right edge, under the count above.
             const Spacer(),
-            if (summary.running > 0)
+            if (summary.active > 0)
               ProjectStateBadge.running(summary, inWords: inWords),
             if (summary.needsAttention > 0)
               ProjectStateBadge.needsYou(summary, inWords: inWords),
@@ -774,14 +775,49 @@ class ProjectDetailLine extends StatelessWidget {
   }
 }
 
-/// `● 2` or `⚠ 1` — and, [inWords], `● 2 running` or `⚠ 1 needs you`. A glyph
-/// with its count, never a colour alone, and the sentence as the tooltip.
+/// What says "running" ahead of its count: the shared [WorkingSpinner] while a
+/// session is in a turn, a filled dot while what runs is waiting. Both stand in
+/// one [slot], so a turn starting moves nothing on the line.
+class ProjectRunningMark extends StatelessWidget {
+  const ProjectRunningMark({
+    required this.working,
+    required this.slot,
+    required this.color,
+    super.key,
+  });
+
+  final bool working;
+  final double slot;
+  final Color color;
+
+  /// A bullet, not a glyph: at the slot's full size a dot reads as an icon the
+  /// count belongs to.
+  static const _dot = 8.0;
+
+  /// Between the mark and its count.
+  static const gap = 3.0;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: slot,
+    child: Center(
+      child: working
+          ? WorkingSpinner(size: slot, color: color)
+          : Icon(AppIcons.circleFill, size: _dot, color: color),
+    ),
+  );
+}
+
+/// `● 2` or `⚠ 1` — and, [inWords], `● 2 running` or `⚠ 1 needs you`; the dot
+/// is the turning [WorkingSpinner] while a session works. A glyph with its
+/// count, never a colour alone, and the sentence as the tooltip.
 class ProjectStateBadge extends StatelessWidget {
   const ProjectStateBadge._({
     required this.running,
     required this.count,
     required this.words,
     required this.tooltip,
+    this.working = false,
     super.key,
   });
 
@@ -792,11 +828,10 @@ class ProjectStateBadge extends StatelessWidget {
   }) => ProjectStateBadge._(
     key: key,
     running: true,
-    count: summary.running,
+    working: summary.working > 0,
+    count: summary.active,
     words: inWords ? summary.runningLabel : null,
-    tooltip: summary.running == 1
-        ? '1 session is running'
-        : '${summary.running} sessions are running',
+    tooltip: summary.runningTooltip ?? '',
   );
 
   factory ProjectStateBadge.needsYou(
@@ -812,14 +847,15 @@ class ProjectStateBadge extends StatelessWidget {
   );
 
   final bool running;
+
+  /// Whether the running mark turns: a session is in a turn right now.
+  final bool working;
   final int count;
   final String? words;
   final String tooltip;
 
   /// Ahead of every badge, so a line that has none reserves nothing.
   static const _gapBefore = Insets.sm;
-  static const _bullet = 8.0;
-  static const _bulletGap = 3.0;
 
   /// How wide [summary]'s badges draw, [measure] being the caller's painter —
   /// the arithmetic of [build], so a line can decide what else fits.
@@ -830,12 +866,12 @@ class ProjectStateBadge extends StatelessWidget {
     required bool inWords,
   }) {
     var width = 0.0;
-    if (summary.running > 0) {
+    if (summary.active > 0) {
       width +=
           _gapBefore +
-          _bullet +
-          _bulletGap +
-          measure(inWords ? summary.runningLabel! : '${summary.running}');
+          density.iconSmall +
+          ProjectRunningMark.gap +
+          measure(inWords ? summary.runningLabel! : '${summary.active}');
     }
     if (summary.needsAttention > 0) {
       width +=
@@ -869,13 +905,15 @@ class ProjectStateBadge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const SizedBox(width: _gapBefore),
-          // A bullet in front of the running count, not a glyph: at
-          // Chrome.iconSmall it reads as an icon the count belongs to.
           if (running)
-            Icon(AppIcons.circle, size: _bullet, color: color)
+            ProjectRunningMark(
+              working: working,
+              slot: density.iconSmall,
+              color: color,
+            )
           else
             Icon(AppIcons.warningCircle, size: density.iconSmall, color: color),
-          SizedBox(width: running ? _bulletGap : Insets.hair),
+          SizedBox(width: running ? ProjectRunningMark.gap : Insets.hair),
           Text(words ?? '$count', maxLines: 1, softWrap: false, style: style),
         ],
       ),
