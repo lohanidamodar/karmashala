@@ -6,6 +6,7 @@ import '../../environments/application/environment_providers.dart';
 import '../../explorer/application/where_you_are.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_working_directory.dart';
 import '../data/checkpoint_dao.dart';
 import 'checkpoint_providers.dart';
 
@@ -42,7 +43,13 @@ Future<List<EnvironmentPath>> checkpointTargetsFor(
   }
 
   if (primary != null) add(primary);
-  final known = ref.read(checkpointDaoProvider).repositoriesFor(sessionId);
+  // A removed worktree stays in the history and is not revisited: its rows
+  // are a record, and a capture there can only fail, every turn.
+  final present = ref.read(sessionDirectoryPresentProvider);
+  final known = ref
+      .read(checkpointDaoProvider)
+      .repositoriesFor(sessionId)
+      .where(present);
   for (final repo in known.take(kCheckpointKnownRepositoryLimit)) {
     add(repo);
   }

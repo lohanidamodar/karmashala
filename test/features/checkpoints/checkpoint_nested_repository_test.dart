@@ -9,6 +9,7 @@ import 'package:karmashala/src/features/agents/application/agent_status_provider
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
+import 'package:karmashala/src/features/checkpoints/application/checkpoint_targets.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
@@ -37,6 +38,12 @@ import '../terminal/fake_instance.dart';
 /// whose projects are nested clones the workspace's `.gitignore` hides. Every
 /// edit lands in a clone, so a checkpoint of the session's own repository is
 /// the same tree every turn — the "turn #1 · 0 files" and nothing after it.
+/// `checkpointTargetsFor` wants a `Ref`; a throwaway provider lends one.
+final checkpointTargetsProbe =
+    FutureProvider.family<List<EnvironmentPath>, String>(
+      (ref, sessionId) => checkpointTargetsFor(ref, sessionId),
+    );
+
 void main() {
   final hasGit = Process.runSync('git', ['--version']).exitCode == 0;
 
@@ -248,6 +255,53 @@ void main() {
 
       expect(ofRepo(outside), isEmpty);
       expect(ofRepo(hub), hasLength(1), reason: 'its own checkout, once');
+    },
+    skip: hasGit ? false : 'git is not on PATH',
+  );
+
+  test(
+    'a checkpointed repository whose directory is gone is not tried again',
+    () async {
+      // A removed git worktree: checkpointed once, then deleted from disk.
+      final worktree = p.join(hub, 'projects', 'gone');
+      Directory(worktree).createSync(recursive: true);
+      File(p.join(worktree, 'a.txt')).writeAsStringSync('a\n');
+      git(worktree, ['init', '-q']);
+      git(worktree, ['add', '-A']);
+      git(worktree, ['commit', '-q', '-m', 'gone']);
+      final envId = ExecutionEnvironmentDao(db).getAll().first.id;
+      final gone = EnvironmentPath(environmentId: envId, path: worktree);
+      File(p.join(worktree, 'a.txt')).writeAsStringSync('b\n');
+      expect(
+        await container
+            .read(checkpointServiceProvider)
+            .capture(gone, sessionId: 's1'),
+        isNotNull,
+      );
+      Directory(worktree).deleteSync(recursive: true);
+
+      expect(
+        await container.read(checkpointTargetsProbe('s1').future),
+        isNot(contains(gone)),
+      );
+
+      container.read(sessionCheckpointRecorderProvider.notifier).start();
+      await hook(
+        AgentActivityStatus.working,
+        'UserPromptSubmit',
+        '{"session_id":"cli-1","prompt":"Carry on"}',
+      );
+      await hook(AgentActivityStatus.idle, 'Stop', '{"session_id":"cli-1"}');
+      await container
+          .read(sessionCheckpointRecorderProvider.notifier)
+          .settled('s1');
+
+      expect(
+        container.read(checkpointSkipReasonsProvider)['s1'] ?? '',
+        isNot(contains('failed')),
+      );
+      // History is kept: forgetting where to look is not deleting what was seen.
+      expect(ofRepo(worktree), hasLength(1));
     },
     skip: hasGit ? false : 'git is not on PATH',
   );
