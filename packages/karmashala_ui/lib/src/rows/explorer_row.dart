@@ -15,7 +15,8 @@ enum ExplorerRowKind {
   checkout,
   session,
 
-  /// A machine, a `PROJECTS` section, a context — a row that folds others.
+  /// A context's header, a machine's `TERMINALS`, a saved section — a row that
+  /// folds the rows under it.
   group,
 
   /// A shell under a machine's `Terminals`.
