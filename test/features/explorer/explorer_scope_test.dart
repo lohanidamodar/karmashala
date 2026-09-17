@@ -36,6 +36,7 @@ import 'package:karmashala/src/features/workspaces/domain/workspace_scope.dart';
 import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialog.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -321,6 +322,96 @@ void main() {
         findsNothing,
         reason: 'the scope bar says it; the row does not repeat it',
       );
+    });
+
+    testWidgets('with every machine listed it says "All environments" — the '
+        'app\'s own word — and "All" where that does not fit', (tester) async {
+      seed();
+      final container = newContainer();
+      Finder face(String text) => find.descendant(
+        of: find.byType(ExplorerEnvironmentSwitcher),
+        matching: find.text(text),
+      );
+
+      await pump(tester, container: container);
+      expect(face('All environments'), findsOneWidget);
+      expect(face('Everywhere'), findsNothing);
+      expect(
+        find.bySemanticsLabel(RegExp('Environment: All environments')),
+        findsOneWidget,
+      );
+
+      // The test font is a square per glyph, twice the width of the shipped
+      // one: at 200px even "All" does not fit it, and the case below says what
+      // is drawn then.
+      for (final width in [320.0, 240.0]) {
+        await pump(tester, size: Size(width, 900), container: container);
+        expect(tester.takeException(), isNull);
+        expect(face('All'), findsOneWidget, reason: 'at ${width}px');
+        expect(face('All environments'), findsNothing);
+        expect(
+          find.descendant(
+            of: find.byType(ExplorerEnvironmentSwitcher),
+            matching: find.byIcon(AppIcons.stack),
+          ),
+          findsOneWidget,
+        );
+        // Whole, never "A…": a word that does not fit is not drawn at all.
+        final text = tester.renderObject<RenderParagraph>(face('All'));
+        expect(text.didExceedMaxLines, isFalse);
+        expect(
+          find.bySemanticsLabel(RegExp('Environment: All environments')),
+          findsOneWidget,
+          reason: 'the short face is still named in full',
+        );
+      }
+
+      // With no room for a word, no word: the glyph, and the name in full to a
+      // screen reader and in the tooltip. Never half of one.
+      await pump(
+        tester,
+        size: const Size(200, 900),
+        textScale: 2,
+        container: container,
+      );
+      expect(tester.takeException(), isNull);
+      expect(
+        find.descendant(
+          of: find.byType(ExplorerEnvironmentSwitcher),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+      );
+      expect(find.byTooltip('Showing every environment'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp('Environment: All environments')),
+        findsOneWidget,
+      );
+
+      // The menu says it in full whatever the face had room for.
+      await tester.tap(find.byType(ExplorerEnvironmentSwitcher));
+      await tester.pumpAndSettle();
+      expect(inMenu('All environments'), findsOneWidget);
+    });
+
+    testWidgets('a machine in scope is named while the bar has room, and is '
+        'its glyph under that', (tester) async {
+      seed();
+      final container = newContainer();
+      container
+          .read(settingsControllerProvider.notifier)
+          .setExplorerEnvironmentScope('ssh:h1');
+      Finder face(String text) => find.descendant(
+        of: find.byType(ExplorerEnvironmentSwitcher),
+        matching: find.text(text),
+      );
+
+      await pump(tester, container: container);
+      expect(face('build-box'), findsOneWidget);
+
+      await pump(tester, size: const Size(240, 900), container: container);
+      expect(face('build-box'), findsNothing);
+      expect(find.byTooltip('Showing build-box only'), findsOneWidget);
     });
 
     testWidgets('a stored machine that has gone shows everything', (

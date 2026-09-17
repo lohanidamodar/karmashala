@@ -26,8 +26,14 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
   static const _all = '';
   static const _terminal = 'terminal:';
 
-  /// Under this the button is its glyph and caret, and the name its tooltip.
+  /// Under this a machine's button is its glyph and caret, and the name its
+  /// tooltip.
   static const nameFloor = 260.0;
+
+  /// Every machine at once, and what the button says of it where that does not
+  /// fit — a whole word either way, never an ellipsised one.
+  static const allLabel = 'All environments';
+  static const allShortLabel = 'All';
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,9 +43,10 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
     final current = environments
         .where((choice) => choice.environmentId == scope.environmentId)
         .firstOrNull;
-    // Short on the button, which shares its row with the search field; the
-    // menu and the tooltip say it in full.
-    final label = current?.label ?? 'Everywhere';
+    // "Environment" is the app's word for a machine (Settings › Environments),
+    // so every one of them is "All environments" — here, in the menu and to a
+    // screen reader.
+    final label = current?.label ?? allLabel;
     final total = environments.fold(0, (sum, e) => sum + e.projectCount);
 
     return PopupMenuButton<String>(
@@ -61,7 +68,7 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
       itemBuilder: (context) => [
         DesktopMenuDetailItem(
           value: _all,
-          label: 'All environments',
+          label: allLabel,
           detail: projectCountWords(total),
           icon: AppIcons.stack,
           selected: current == null,
@@ -94,23 +101,37 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
       child: _SwitcherFace(
         icon: current == null ? AppIcons.stack : environmentGlyph(current.kind),
         label: label,
+        shortLabel: current == null ? allShortLabel : null,
       ),
     );
   }
 }
 
 class _SwitcherFace extends StatelessWidget {
-  const _SwitcherFace({required this.icon, required this.label});
+  const _SwitcherFace({
+    required this.icon,
+    required this.label,
+    this.shortLabel,
+  });
 
   final IconData icon;
   final String label;
+
+  /// Said in [label]'s place where that does not fit. With one the face is
+  /// measured and says a whole word or none; without, a machine's name is
+  /// ellipsised, and dropped under [ExplorerEnvironmentSwitcher.nameFloor].
+  final String? shortLabel;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
-    final named =
+    final style = density.rowTitle(theme, strong: true);
+    final short = shortLabel;
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final roomy =
         (ExplorerScopeBar.widthOf(context) ?? double.infinity) >=
         ExplorerEnvironmentSwitcher.nameFloor;
     return Semantics(
@@ -120,29 +141,63 @@ class _SwitcherFace extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: Chrome.control),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: Insets.xs),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: Chrome.icon, color: scheme.onSurfaceVariant),
-              if (named) ...[
-                SizedBox(width: density.glyphGap),
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: density.rowTitle(theme, strong: true),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              var text = roomy ? label : null;
+              if (short != null) {
+                final room =
+                    constraints.maxWidth -
+                    Chrome.icon -
+                    density.glyphGap * 1.5 -
+                    Chrome.iconSmall;
+                final painter = TextPainter(
+                  textDirection: direction,
+                  textScaler: scaler,
+                  maxLines: 1,
+                );
+                try {
+                  text = [label, short]
+                      .where(
+                        (candidate) =>
+                            (painter
+                                  ..text = TextSpan(
+                                    text: candidate,
+                                    style: style,
+                                  )
+                                  ..layout())
+                                .width <=
+                            room,
+                      )
+                      .firstOrNull;
+                } finally {
+                  painter.dispose();
+                }
+              }
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: Chrome.icon, color: scheme.onSurfaceVariant),
+                  if (text != null) ...[
+                    SizedBox(width: density.glyphGap),
+                    Flexible(
+                      child: Text(
+                        text,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: style,
+                      ),
+                    ),
+                  ],
+                  SizedBox(width: density.glyphGap / 2),
+                  Icon(
+                    AppIcons.caretDown,
+                    size: Chrome.iconSmall,
+                    color: scheme.onSurfaceVariant,
                   ),
-                ),
-              ],
-              SizedBox(width: density.glyphGap / 2),
-              Icon(
-                AppIcons.caretDown,
-                size: Chrome.iconSmall,
-                color: scheme.onSurfaceVariant,
-              ),
-            ],
+                ],
+              );
+            },
           ),
         ),
       ),
