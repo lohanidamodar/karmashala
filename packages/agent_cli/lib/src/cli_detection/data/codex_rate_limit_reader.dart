@@ -101,7 +101,7 @@ CodexRateLimitSnapshot? _parseRecord(String line) {
   final recordedAt = stamp is String ? DateTime.tryParse(stamp)?.toUtc() : null;
   final windows = <UsageWindow>[
     for (final key in const ['primary', 'secondary'])
-      if (_window(limits[key], recordedAt) case final window?) window,
+      ?_window(limits[key], recordedAt),
   ];
   final reached = limits['rate_limit_reached_type'];
   return CodexRateLimitSnapshot(

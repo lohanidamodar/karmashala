@@ -4,6 +4,7 @@ library;
 
 import 'package:riverpod/riverpod.dart';
 
+import '../../automations/application/scheduled_resume_providers.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
@@ -50,7 +51,16 @@ final remoteSessionPresenceProvider =
       return (sessionId) {
         try {
           final whereabouts = ref.read(sessionWhereaboutsProvider(sessionId));
-          return (note: whereabouts.note, lastSeen: whereabouts.lastSeen);
+          // Worded here like the rest of the clause, so the phone draws a
+          // waiting resume with no field of its own.
+          final clauses = [
+            ?ref.read(sessionResumeBadgeProvider(sessionId))?.label,
+            ?whereabouts.note,
+          ];
+          return (
+            note: clauses.isEmpty ? null : clauses.join('  ·  '),
+            lastSeen: whereabouts.lastSeen,
+          );
         } on Object {
           return (note: null, lastSeen: null);
         }

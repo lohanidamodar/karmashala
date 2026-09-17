@@ -286,7 +286,7 @@ class ScheduledResumeController {
           .read(settingsControllerProvider.notifier)
           .rememberResumeMessage(installation.agentId, resume.message);
     }
-    _changed();
+    _changed(resume.sessionId);
     return resume;
   }
 
@@ -310,7 +310,7 @@ class ScheduledResumeController {
       finishedAt: _now,
     );
     _dao.update(ended);
-    _changed();
+    _changed(ended.sessionId);
     return ended;
   }
 
@@ -335,7 +335,7 @@ class ScheduledResumeController {
       accountEmail: accountEmail,
     );
     _dao.update(waiting);
-    _changed();
+    _changed(waiting.sessionId);
     return waiting;
   }
 
@@ -360,7 +360,13 @@ class ScheduledResumeController {
     _changed();
   }
 
-  void _changed() => _ref.read(automationsRevisionProvider.notifier).bump();
+  void _changed([String? sessionId]) {
+    _ref.read(automationsRevisionProvider.notifier).bump();
+    // The session's own row moved too: that is what a paired phone hears.
+    if (sessionId != null) {
+      _ref.publishSessionChange(SessionChange.reconfigured(sessionId));
+    }
+  }
 }
 
 final scheduledResumeControllerProvider = Provider<ScheduledResumeController>(

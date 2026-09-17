@@ -1,5 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
+import '../automations/application/scheduled_resume_providers.dart';
 import '../agents/application/agent_providers.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
 import '../projects/application/projects_controller.dart';
@@ -57,6 +58,12 @@ class InventoryTools {
     final registry = _container.read(agentRegistryProvider);
     final installDao = _container.read(agentInstallationDaoProvider);
 
+    // Read-only: an agent can see a resume is waiting, never arm one.
+    final resumes = {
+      for (final resume in _container.read(scheduledResumeDaoProvider).live())
+        resume.sessionId: resume,
+    };
+
     final sessions = <Map<String, dynamic>>[];
     for (final project in projects) {
       for (final repo in repositoryDao.getByProject(project.id)) {
@@ -93,6 +100,12 @@ class InventoryTools {
             if (session.parentSessionId != null)
               'parentSessionId': session.parentSessionId,
             'createdAt': session.createdAt.toIso8601String(),
+            if (resumes[session.id] case final resume?)
+              'scheduledResume': {
+                'state': resume.state.name,
+                'fireAt': resume.fireAt.toIso8601String(),
+                if (resume.windowLabel != null) 'window': resume.windowLabel,
+              },
           });
         }
         for (final session in importedDao.getByRepository(repo.id)) {

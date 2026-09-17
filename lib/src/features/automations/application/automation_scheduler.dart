@@ -5,6 +5,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../data/automation_dao.dart';
 import '../data/scheduled_resume_dao.dart';
 import '../domain/automation.dart';
@@ -211,6 +212,7 @@ class AutomationScheduler extends Notifier<int> {
           resume.copyWith(state: ScheduledResumeState.queued, reason: blocker),
         );
         ref.read(automationsRevisionProvider.notifier).bump();
+        ref.publishSessionChange(SessionChange.reconfigured(resume.sessionId));
       }
       return;
     }
