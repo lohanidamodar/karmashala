@@ -121,35 +121,39 @@ class _CompanionTranscriptViewState extends State<CompanionTranscriptView> {
                         emptyHint: widget.emptyHint,
                         onSuggestionTap: widget.onSuggestionTap,
                       )
-              : ListView.builder(
-                  controller: _scroll,
-                  reverse: true,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: Insets.md,
-                    vertical: Insets.sm,
+              // One selection over the built turns: a long press picks a word
+              // and its handles drag across blocks and into the next turn.
+              : TranscriptSelectionArea(
+                  child: ListView.builder(
+                    controller: _scroll,
+                    reverse: true,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Insets.md,
+                      vertical: Insets.sm,
+                    ),
+                    itemCount: total,
+                    // Keyed by position in the whole window, so a message
+                    // shifted by a newer arrival keeps its element and the
+                    // sliver corrects offsets instead of redrawing under it.
+                    findChildIndexCallback: (key) {
+                      if (key is! ValueKey<int>) return null;
+                      final index = total - 1 - key.value;
+                      return index >= 0 && index < total ? index : null;
+                    },
+                    itemBuilder: (context, index) {
+                      final ordinal = total - 1 - index;
+                      final message = turns[ordinal];
+                      return message.role == kCompanionNoticeRole
+                          ? _WindowTopNotice(
+                              key: ValueKey<int>(ordinal),
+                              text: message.text,
+                            )
+                          : _MessageTile(
+                              key: ValueKey<int>(ordinal),
+                              message: message,
+                            );
+                    },
                   ),
-                  itemCount: total,
-                  // Keyed by position in the whole window, so a message
-                  // shifted by a newer arrival keeps its element and the
-                  // sliver corrects offsets instead of redrawing under it.
-                  findChildIndexCallback: (key) {
-                    if (key is! ValueKey<int>) return null;
-                    final index = total - 1 - key.value;
-                    return index >= 0 && index < total ? index : null;
-                  },
-                  itemBuilder: (context, index) {
-                    final ordinal = total - 1 - index;
-                    final message = turns[ordinal];
-                    return message.role == kCompanionNoticeRole
-                        ? _WindowTopNotice(
-                            key: ValueKey<int>(ordinal),
-                            text: message.text,
-                          )
-                        : _MessageTile(
-                            key: ValueKey<int>(ordinal),
-                            message: message,
-                          );
-                  },
                 ),
         ),
         // Above the composer rather than floating in the list, so it cannot
@@ -261,26 +265,29 @@ class _WindowTopNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: Insets.sm),
-      child: Container(
-        padding: const EdgeInsets.all(Insets.md),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(Radii.md),
-          border: Border.all(color: theme.colorScheme.outlineVariant),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              AppIcons.caretUp,
-              size: density.iconSmall,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            SizedBox(width: density.glyphGap),
-            Expanded(child: Text(text, style: density.muted(theme))),
-          ],
+    // Not the conversation's words, so not part of a selection of them.
+    return SelectionContainer.disabled(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: Insets.sm),
+        child: Container(
+          padding: const EdgeInsets.all(Insets.md),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(Radii.md),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                AppIcons.caretUp,
+                size: density.iconSmall,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              SizedBox(width: density.glyphGap),
+              Expanded(child: Text(text, style: density.muted(theme))),
+            ],
+          ),
         ),
       ),
     );
@@ -354,8 +361,9 @@ CompanionTurnStyle companionTurnStyle(
 const _faintEdge = 0.35;
 const _avatarRing = 0.4;
 
-/// One turn, at a thumb's sizes. Copying is a long press: a copy button at the
-/// touch floor made every gutter 48px tall for an 11px label.
+/// One turn, at a thumb's sizes. Copying is a long press, through the list's
+/// one selection area: a copy button at the touch floor made every gutter 48px
+/// tall for an 11px label.
 class _MessageTile extends StatelessWidget {
   const _MessageTile({required this.message, super.key});
 
@@ -382,24 +390,27 @@ class _MessageTile extends StatelessWidget {
     return _TurnFrame(
       fill: style.fill,
       edge: style.edge,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _RoleGutter(style: style),
-          if (thinking != null && thinking.isNotEmpty) ...[
+      child: TranscriptSelectionGroup(
+        endsTurn: true,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _RoleGutter(style: style),
+            if (thinking != null && thinking.isNotEmpty) ...[
+              const SizedBox(height: Insets.xs),
+              ThinkingAccordion(thinking: thinking),
+            ],
             const SizedBox(height: Insets.xs),
-            ThinkingAccordion(thinking: thinking),
+            switch (message.role) {
+              'tool' => Text(clean, style: mono),
+              'error' => Text(
+                clean,
+                style: mono?.copyWith(color: style.colour),
+              ),
+              _ => MarkdownMessage(clean, selectable: false),
+            },
           ],
-          const SizedBox(height: Insets.xs),
-          switch (message.role) {
-            'tool' => SelectableText(clean, style: mono),
-            'error' => SelectableText(
-              clean,
-              style: mono?.copyWith(color: style.colour),
-            ),
-            _ => MarkdownMessage(clean),
-          },
-        ],
+        ),
       ),
     );
   }

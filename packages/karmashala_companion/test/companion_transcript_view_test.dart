@@ -21,7 +21,8 @@ void main() {
     for (var i = 0; i < 10; i++)
       CompanionChatMessage(
         role: 'agent',
-        text: 'tall-$i\n${List.filled(30, 'a long paragraph line').join('\n\n')}',
+        text:
+            'tall-$i\n${List.filled(30, 'a long paragraph line').join('\n\n')}',
       ),
   ];
 
@@ -126,7 +127,9 @@ void main() {
     expect(find.textContaining('tall-9', findRichText: true), findsOneWidget);
   });
 
-  testWidgets('a short transcript that fits offers no way back', (tester) async {
+  testWidgets('a short transcript that fits offers no way back', (
+    tester,
+  ) async {
     await openSession(
       tester,
       gatewayWith(const [
@@ -151,7 +154,8 @@ void main() {
       gatewayWith(const [
         CompanionChatMessage(
           role: kCompanionNoticeRole,
-          text: '2,400 earlier messages are not loaded — this is the top of '
+          text:
+              '2,400 earlier messages are not loaded — this is the top of '
               'what the phone has. The desktop holds the whole conversation.',
         ),
         CompanionChatMessage(role: 'user', text: 'hello'),
@@ -251,35 +255,36 @@ void main() {
     });
 
     for (final scale in const [1.0, 2.0]) {
-      testWidgets('a folded task notification reads as machinery at ${scale}x', (
-        tester,
-      ) async {
-        // What the host now sends in place of 7 KB of envelope.
-        await openSession(
-          tester,
-          gatewayWith(const [
-            CompanionChatMessage(role: 'user', text: 'go on then'),
-            CompanionChatMessage(
-              role: 'tool',
-              text: 'Agent "Mobile chat scroll to latest" finished',
-            ),
-          ]),
-          textScale: scale,
-        );
+      testWidgets(
+        'a folded task notification reads as machinery at ${scale}x',
+        (tester) async {
+          // What the host now sends in place of 7 KB of envelope.
+          await openSession(
+            tester,
+            gatewayWith(const [
+              CompanionChatMessage(role: 'user', text: 'go on then'),
+              CompanionChatMessage(
+                role: 'tool',
+                text: 'Agent "Mobile chat scroll to latest" finished',
+              ),
+            ]),
+            textScale: scale,
+          );
 
-        expect(
-          find.textContaining(
-            'Agent "Mobile chat scroll to latest" finished',
-            findRichText: true,
-          ),
-          findsOneWidget,
-        );
-        // Gutter and label say machine, not person — the point of the choice.
-        expect(find.text('TOOL'), findsOneWidget);
-        expect(find.text('YOU'), findsOneWidget);
-        expect(find.textContaining('subagent_tokens'), findsNothing);
-        expect(tester.takeException(), isNull);
-      });
+          expect(
+            find.textContaining(
+              'Agent "Mobile chat scroll to latest" finished',
+              findRichText: true,
+            ),
+            findsOneWidget,
+          );
+          // Gutter and label say machine, not person — the point of the choice.
+          expect(find.text('TOOL'), findsOneWidget);
+          expect(find.text('YOU'), findsOneWidget);
+          expect(find.textContaining('subagent_tokens'), findsNothing);
+          expect(tester.takeException(), isNull);
+        },
+      );
     }
   });
 
@@ -293,7 +298,8 @@ void main() {
   group('an empty transcript says which nothing it is', () {
     const reason = CompanionChatMessage(
       role: kCompanionAbsenceRole,
-      text: 'This agent keeps no transcript this app can read, so there is no '
+      text:
+          'This agent keeps no transcript this app can read, so there is no '
           'chat view for it — on the desktop or here.',
     );
 
@@ -341,7 +347,8 @@ void main() {
           messages: const [
             CompanionChatMessage(
               role: kCompanionAbsenceRole,
-              text: 'This session\'s store kept the conversation and no '
+              text:
+                  'This session\'s store kept the conversation and no '
                   'transcript this app can read beside it, so there is no '
                   'chat view for it — on the desktop or here.',
             ),
@@ -449,12 +456,17 @@ void main() {
       );
       await tester.pump();
 
-      // What the copy button was for. `MarkdownMessage` is already
-      // `selectable: true` and its own long press raises the platform's
-      // selection toolbar — a target the system draws, at its own sizes —
-      // so a tool row is selectable too rather than being the one role a
-      // reader cannot get text out of.
-      expect(find.byType(SelectableText), findsWidgets);
+      // What the copy button was for. One selection area over the list: a
+      // long press raises the platform's selection toolbar — a target the
+      // system draws, at its own sizes — on every role, tool rows included.
+      // `companion_transcript_selection_test` drives it.
+      expect(
+        find.ancestor(
+          of: find.text('three'),
+          matching: find.byType(SelectionArea),
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('message text is not the app\'s smallest step', (tester) async {
@@ -466,13 +478,12 @@ void main() {
       await tester.pump();
 
       final theme = Theme.of(tester.element(find.byType(ListView)));
-      final tool = tester.widget<SelectableText>(
-        find.widgetWithText(SelectableText, 'three'),
-      );
+      final tool = tester.widget<Text>(find.text('three'));
       expect(
         tool.style?.fontSize,
         theme.textTheme.bodyMedium?.fontSize,
-        reason: 'a tool row was `bodySmall`, the ramp\'s 12, on the phone\'s '
+        reason:
+            'a tool row was `bodySmall`, the ramp\'s 12, on the phone\'s '
             'most-read screen',
       );
     });
