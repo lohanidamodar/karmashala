@@ -128,7 +128,7 @@ final checkoutDeliveryProvider = FutureProvider.autoDispose
         probe(() => changes.diffStat(dir, base: base)),
       ).wait;
 
-      return SessionDelivery(
+      final delivery = SessionDelivery(
         branch: status.branch,
         baseBranch: base,
         upstream: status.upstream,
@@ -141,7 +141,28 @@ final checkoutDeliveryProvider = FutureProvider.autoDispose
         behindBase: aheadBehind?.behind,
         unpushed: status.aheadOfUpstream,
       );
+      if (ref.mounted) {
+        ref.read(checkoutReadingsProvider.notifier).arrived(checkout);
+      }
+      return delivery;
     });
+
+/// How many readings of each checkout have arrived. A reader that only
+/// *borrows* warm readings — `ref.exists`, never `ref.watch`, which would run
+/// git for it — cannot be told by `exists` that one has become warm; selecting
+/// its own checkout's count out of this tells it.
+class CheckoutReadings extends Notifier<Map<Checkout, int>> {
+  @override
+  Map<Checkout, int> build() => const {};
+
+  void arrived(Checkout checkout) =>
+      state = {...state, checkout: (state[checkout] ?? 0) + 1};
+}
+
+final checkoutReadingsProvider =
+    NotifierProvider<CheckoutReadings, Map<Checkout, int>>(
+      CheckoutReadings.new,
+    );
 
 /// A worktree's delivery state, measured against the repository it came from
 /// when no default branch is recorded locally. Shared by its sessions.

@@ -21,6 +21,8 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
@@ -46,6 +48,12 @@ import '../terminal/fake_instance.dart';
 /// twice. Measured on the real panel, not on the kit widgets alone.
 const _width = 360.0;
 const _long = 'popupbits-ai-workspace-with-a-long-name';
+const _path = '/Users/me/Documents/projects/popupbits-ai-workspace';
+
+class _OneLineProjects extends SettingsController {
+  @override
+  Settings build() => const Settings(explorerProjectDetails: false);
+}
 
 class _Inbox extends AttentionInboxController {
   @override
@@ -68,17 +76,17 @@ class _Inbox extends AttentionInboxController {
 void main() {
   AppDatabase seeded() {
     final db = AppDatabase.memory();
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    ExecutionEnvironmentDao(db).upsert(posixEnv());
     WorkspaceDao(
       db,
     ).insert(Workspace(id: 'w1', name: 'Game dev', createdAt: testTime));
-    ProjectDao(db).insert(
-      project(id: 'p1', name: _long, path: r'C:\src\p1', workspaceId: 'w1'),
-    );
-    ProjectDao(db).insert(project(id: 'p2', name: 'Loose', path: r'C:\p2'));
+    ProjectDao(
+      db,
+    ).insert(project(id: 'p1', name: _long, path: _path, workspaceId: 'w1'));
+    ProjectDao(db).insert(project(id: 'p2', name: 'Loose', path: '/srv/p2'));
     RepositoryDao(
       db,
-    ).insert(repository(id: 'r1', projectId: 'p1', path: r'C:\src\p1'));
+    ).insert(repository(id: 'r1', projectId: 'p1', path: _path));
     AgentInstallationDao(db).insert(agentInstallation());
     for (final (id, title, status) in [
       ('s-run', 'Running session', SessionStatus.running),
@@ -91,7 +99,11 @@ void main() {
     return db;
   }
 
-  Future<void> pumpExplorer(WidgetTester tester) async {
+  Future<void> pumpExplorer(
+    WidgetTester tester, {
+    double width = _width,
+    bool details = true,
+  }) async {
     tester.view.physicalSize = const Size(1000, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -99,6 +111,8 @@ void main() {
     addTearDown(db.close);
     await tester.pumpWidget(
       ProviderScope(
+        // A second pump in one test is a second scope, not new overrides.
+        key: UniqueKey(),
         overrides: [
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
@@ -116,6 +130,8 @@ void main() {
             (_) async => const ImportSummary(),
           ),
           attentionInboxProvider.overrideWith(_Inbox.new),
+          if (!details)
+            settingsControllerProvider.overrideWith(_OneLineProjects.new),
         ],
         child: MaterialApp(
           theme: AppTheme.light().copyWith(platform: TargetPlatform.macOS),
@@ -124,7 +140,7 @@ void main() {
             body: Align(
               alignment: Alignment.topLeft,
               child: SizedBox(
-                width: _width,
+                width: width,
                 height: 800,
                 child: Material(child: ExplorerPanel()),
               ),
@@ -266,6 +282,117 @@ void main() {
         reason: '${entry.key} ends at ${entry.value}, sessions at $column',
       );
     }
+  });
+
+  Finder projectRow() => find.ancestor(
+    of: find.text(_long),
+    matching: find.byType(ExplorerProjectRow),
+  );
+
+  testWidgets('a project says where it is and what is going on, at rest', (
+    tester,
+  ) async {
+    await pumpExplorer(tester, width: 520);
+
+    final row = projectRow();
+    final path = find.descendant(
+      of: row,
+      matching: find.textContaining('popupbits-ai-workspace'),
+    );
+    // The name, and under it the path with its last folder whole.
+    expect(path, findsNWidgets(2));
+    final line = tester.widgetList<Text>(path).last.data!;
+    expect(line, endsWith('/popupbits-ai-workspace'));
+    expect(line, isNot(contains('/Users/me')), reason: 'home is written ~');
+    // Words, not a bare number with its meaning in a tooltip.
+    expect(
+      find.descendant(of: row, matching: find.text('4 sessions')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.byTooltip('1 session is running'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: row, matching: find.byTooltip('1 needs you')),
+      findsOneWidget,
+    );
+    expect(find.text('2 projects'), findsOneWidget, reason: 'the machine');
+    expect(find.text('1 project'), findsOneWidget, reason: 'the context');
+  });
+
+  testWidgets('the second line hangs at the name and leaves the right-hand '
+      'column where it was', (tester) async {
+    await pumpExplorer(tester);
+    final row = projectRow();
+    final name = tester.getTopLeft(find.text(_long));
+    final path = tester.getTopLeft(
+      find.descendant(
+        of: row,
+        matching: find.textContaining('/popupbits-ai-workspace'),
+      ),
+    );
+    expect(path.dx, moreOrLessEquals(name.dx, epsilon: 0.5));
+    expect(path.dy, greaterThan(name.dy));
+
+    // A session's own second line hangs one step further in, like its glyph.
+    final title = tester.getTopLeft(find.text('Running session')).dx;
+    expect(title - name.dx, moreOrLessEquals(ExplorerRow.indent, epsilon: 0.5));
+
+    // Line two's state ends on the edge the counts and ages end on.
+    final column = metaRight(tester, sessionRow('Running session'));
+    final state = find.descendant(
+      of: row,
+      matching: find.byType(ProjectStateBadge),
+    );
+    expect(state, findsWidgets);
+    expect(
+      tester.getTopRight(state.last).dx,
+      moreOrLessEquals(column, epsilon: 0.5),
+    );
+  });
+
+  testWidgets('at the pane\'s minimum the counts are bare numbers on the same '
+      'edge, and the path still keeps its last folder', (tester) async {
+    await pumpExplorer(tester, width: 240);
+    expect(tester.takeException(), isNull);
+
+    final row = projectRow();
+    expect(find.text('4 sessions'), findsNothing);
+    expect(find.descendant(of: row, matching: find.text('4')), findsOneWidget);
+    expect(find.text('2 projects'), findsNothing);
+    expect(find.byTooltip('2 projects'), findsOneWidget);
+    expect(
+      find.descendant(of: row, matching: find.byType(ProjectStateBadge)),
+      findsNWidgets(2),
+      reason: 'running and needs-you never leave the row',
+    );
+    final path = tester
+        .widgetList<Text>(
+          find.descendant(of: row, matching: find.textContaining('…/')),
+        )
+        .single;
+    expect(path.data, '…/popupbits-ai-workspace');
+  });
+
+  testWidgets('with project details off a project is one line again', (
+    tester,
+  ) async {
+    await pumpExplorer(tester);
+    final detailed = tester.getSize(projectRow()).height;
+
+    await pumpExplorer(tester, details: false);
+    expect(tester.getSize(projectRow()).height, lessThan(detailed));
+    expect(
+      find.descendant(
+        of: projectRow(),
+        matching: find.textContaining('/popupbits-ai-workspace'),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('a session row draws exactly one status glyph', (tester) async {

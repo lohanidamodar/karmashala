@@ -51,24 +51,32 @@ void main() {
       String name = 'popupbits',
       String path = r'C:\Users\me\projects\popupbits',
       bool missing = false,
+      bool detail = true,
     }) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
           home: Scaffold(
-            body: SizedBox(
-              width: width,
-              child: ProjectCard(
-                name: name,
-                path: path,
-                expanded: false,
-                selected: false,
-                missing: missing,
-                summary: summary,
-                onTap: () {},
-                onNewSession: () {},
-                menuItemsBuilder: () => const [],
-                onMenu: (_) {},
+            // Unbounded below, as the tree's list is.
+            body: SingleChildScrollView(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: width,
+                  child: ProjectCard(
+                    name: name,
+                    path: path,
+                    expanded: false,
+                    selected: false,
+                    missing: missing,
+                    detail: detail,
+                    summary: summary,
+                    onTap: () {},
+                    onNewSession: () {},
+                    menuItemsBuilder: () => const [],
+                    onMenu: (_) {},
+                  ),
+                ),
               ),
             ),
           ),
@@ -87,26 +95,144 @@ void main() {
             changedFiles: 148,
             running: 4,
             needsAttention: 3,
+            branch: 'feature/a-branch-name-longer-than-its-share',
+            commitsAhead: 12,
           ),
           name: 'a-project-name-longer-than-any-pane-is-wide',
+          path: '/Users/me/src/a-folder-name-longer-than-any-pane-is-wide',
         );
+        expect(tester.takeException(), isNull);
+        await pump(tester, width: width, missing: true);
         expect(tester.takeException(), isNull);
       });
     }
 
-    testWidgets('the count is a number, and the aggregate is its tooltip', (
+    testWidgets('the count is in words while the name keeps its room, and a '
+        'bare number under that', (tester) async {
+      await pump(tester, width: 400);
+      expect(find.text('6 sessions'), findsOneWidget);
+      expect(find.text('popupbits'), findsOneWidget);
+
+      // The name wins the row: `6 sessions` beside it left "popupb…".
+      await pump(tester, width: 200);
+      expect(find.text('6 sessions'), findsNothing);
+      expect(find.text('6'), findsOneWidget);
+      expect(find.byTooltip('6 sessions · 3 changed'), findsOneWidget);
+      expect(find.text('popupbits'), findsOneWidget);
+    });
+
+    testWidgets('the path is on the row at rest, its last folder kept', (
       tester,
     ) async {
-      // The name wins the row: `12 sessions` beside a `+` left "popupb…".
-      for (final width in [200.0, 400.0]) {
-        await pump(tester, width: width);
-        expect(find.text('6'), findsOneWidget);
-        expect(find.byTooltip('6 sessions · 3 changed'), findsOneWidget);
-        expect(find.text('popupbits'), findsOneWidget);
+      // The test font is a square per glyph; 560 is its "room for the path".
+      await pump(tester, width: 560);
+      expect(find.text(r'~\projects\popupbits'), findsOneWidget);
+
+      for (final width in [240.0, 200.0]) {
+        await pump(
+          tester,
+          width: width,
+          path: '/Users/me/Documents/projects/popupbits-ai-workspace',
+          summary: const ProjectSummary(sessions: 6, running: 2),
+        );
+        final line = tester.widget<Text>(
+          find.textContaining('popupbits-ai-workspace'),
+        );
+        expect(
+          line.data,
+          anyOf('~/D/p/popupbits-ai-workspace', '…/popupbits-ai-workspace'),
+          reason: 'cut from the middle at ${width}px, never from the end',
+        );
       }
     });
 
-    testWidgets('waiting work is a glyph and a count beside the name', (
+    testWidgets('line two hangs at the name, under it', (tester) async {
+      await pump(tester, width: 560);
+      final name = tester.getTopLeft(find.text('popupbits'));
+      final path = tester.getTopLeft(find.text(r'~\projects\popupbits'));
+      expect(path.dx, moreOrLessEquals(name.dx, epsilon: 0.5));
+      expect(path.dy, greaterThan(name.dy));
+    });
+
+    testWidgets('a narrowing row drops the changed count, then the state\'s '
+        'words, then the branch — and never the state', (tester) async {
+      const summary = ProjectSummary(
+        sessions: 6,
+        changedFiles: 3,
+        running: 2,
+        needsAttention: 1,
+        branch: 'main',
+        commitsAhead: 2,
+      );
+      ({bool changed, bool words, bool branch, bool state}) at(double width) =>
+          (
+            changed: find.text('3 changed').evaluate().isNotEmpty,
+            words: find.text('2 running').evaluate().isNotEmpty,
+            branch: find.text('main ↑2').evaluate().isNotEmpty,
+            state:
+                find
+                    .byTooltip('2 sessions are running')
+                    .evaluate()
+                    .isNotEmpty &&
+                find.byTooltip('1 needs you').evaluate().isNotEmpty,
+          );
+
+      final seen = <({bool changed, bool words, bool branch, bool state})>[];
+      // The test font is a square per glyph, so "room for everything" is wide.
+      tester.view.physicalSize = const Size(1400, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      for (var width = 1300.0; width >= 200; width -= 20) {
+        await pump(tester, width: width, summary: summary);
+        expect(tester.takeException(), isNull);
+        seen.add(at(width));
+      }
+      expect(seen.first, (
+        changed: true,
+        words: true,
+        branch: true,
+        state: true,
+      ));
+      expect(seen.last.state, isTrue);
+      expect(seen.last.branch, isFalse);
+      for (final row in seen) {
+        expect(row.state, isTrue);
+        // Nothing is kept over a clause that outranks it.
+        if (row.changed) expect(row.words, isTrue);
+        if (row.words) expect(row.branch, isTrue);
+      }
+      // Each goes once and stays gone.
+      for (final pick
+          in <
+            bool Function(({bool changed, bool words, bool branch, bool state}))
+          >[(r) => r.changed, (r) => r.words, (r) => r.branch]) {
+        final flags = seen.map(pick).toList();
+        final gone = flags.indexOf(false);
+        expect(gone, greaterThan(0));
+        expect(flags.sublist(gone), everyElement(isFalse));
+      }
+    });
+
+    testWidgets('without details it is one line, as it was', (tester) async {
+      const summary = ProjectSummary(sessions: 6, changedFiles: 3, running: 2);
+      await pump(tester, width: 400, summary: summary, detail: false);
+      final oneLine = tester.getSize(find.byType(ProjectCard)).height;
+      expect(find.textContaining('popupbits'), findsOneWidget);
+      expect(find.byTooltip('2 sessions are running'), findsOneWidget);
+      expect(find.text('6 sessions'), findsOneWidget);
+
+      // The running badge waits for a title slot wide enough.
+      await pump(tester, width: 200, summary: summary, detail: false);
+      expect(find.byTooltip('2 sessions are running'), findsNothing);
+
+      await pump(tester, width: 400, summary: summary);
+      expect(
+        tester.getSize(find.byType(ProjectCard)).height,
+        greaterThan(oneLine),
+      );
+    });
+
+    testWidgets('waiting work is a glyph and its words, and a strong name', (
       tester,
     ) async {
       await pump(
@@ -130,15 +256,13 @@ void main() {
       );
     });
 
-    testWidgets('the running badge waits for a title slot wide enough', (
-      tester,
-    ) async {
+    testWidgets('what is running is on the row at every width', (tester) async {
       const summary = ProjectSummary(sessions: 6, changedFiles: 3, running: 2);
       await pump(tester, width: 200, summary: summary);
-      expect(find.byTooltip('2 sessions are running'), findsNothing);
+      expect(find.byTooltip('2 sessions are running'), findsOneWidget);
 
       await pump(tester, width: 400, summary: summary);
-      expect(find.byTooltip('2 sessions are running'), findsOneWidget);
+      expect(find.text('2 running'), findsOneWidget);
     });
 
     testWidgets('a missing folder is said once, where the path was', (

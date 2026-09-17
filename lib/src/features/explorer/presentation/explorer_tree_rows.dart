@@ -37,6 +37,8 @@ class ExplorerTreeRow extends StatelessWidget {
       project: node.project,
       depth: node.depth,
       expanded: node.expanded,
+      pathCandidates: node.pathCandidates,
+      environmentBadge: node.environmentBadge,
       anchorKey: anchorKey,
     ),
     final SessionRowNode node => ExplorerNativeSessionRow(node: node),
@@ -72,7 +74,7 @@ class ExplorerEnvironmentRow extends ConsumerWidget {
     icon: environmentGlyph(node.kind),
     emphasis: HeaderEmphasis.machine,
     trailingText: node.projectCount == 0 ? null : '${node.projectCount}',
-    trailingTooltip: environmentSummary(node),
+    trailingWords: environmentSummary(node),
     tooltip: node.environment == null
         ? 'This environment is no longer in the workspace.'
         : null,
@@ -156,7 +158,7 @@ class ExplorerContextRow extends ConsumerWidget {
     icon: AppIcons.stack,
     emphasis: HeaderEmphasis.context,
     trailingText: '${node.projectCount}',
-    trailingTooltip:
+    trailingWords:
         '${node.projectCount} project${node.projectCount == 1 ? '' : 's'}',
     onTap: () => _toggleCollapsed(ref, node.id),
   );

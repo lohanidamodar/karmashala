@@ -560,13 +560,13 @@ void main() {
     testWidgets('the header does not overflow at the width it opens at', (
       tester,
     ) async {
-      // 304px is the width the Explorer opens at. The count is a number in the
-      // right-hand column, its words in the tooltip, at every width.
+      // 304px is the width the Explorer opens at: room for the count in
+      // words beside the name, and for the path under it.
       addSession('s1', repositoryId: 'r1', title: 'Running');
       await pump(tester, size: const Size(304, 900));
 
       expect(tester.takeException(), isNull);
-      expect(find.byTooltip('1 session'), findsOneWidget);
+      expect(find.text('1 session'), findsOneWidget);
     });
 
     testWidgets('a wide pane shows the running badge as well', (tester) async {

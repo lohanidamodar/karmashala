@@ -2,6 +2,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_ui/rows.dart' show abbreviatePath;
 
 import '../../projects/domain/project.dart';
 import '../../workspaces/domain/workspace.dart';
@@ -138,20 +139,40 @@ final class ProjectNode extends ExplorerNode {
     required this.project,
     required this.expanded,
     required super.depth,
-  }) : super(id: 'project:${project.id}');
+    this.environmentBadge,
+  }) : pathCandidates = _abbreviated(project.root.path),
+       super(id: 'project:${project.id}');
 
   final Project project;
   final bool expanded;
+
+  /// The project's path as its row may shorten it, longest first — cut here,
+  /// once, so no build of the row cuts it again.
+  final List<String> pathCandidates;
+
+  /// The machine, for the path's tooltip. The row draws no badge: it already
+  /// stands under its machine's row.
+  final String? environmentBadge;
 
   @override
   bool operator ==(Object other) =>
       other is ProjectNode &&
       other.project == project &&
       other.expanded == expanded &&
-      other.depth == depth;
+      other.depth == depth &&
+      other.environmentBadge == environmentBadge;
 
   @override
-  int get hashCode => Object.hash(project, expanded, depth);
+  int get hashCode => Object.hash(project, expanded, depth, environmentBadge);
+}
+
+/// A tree is rebuilt whole on every fold, and a path cuts to the same strings
+/// every time. Bounded: a workspace that outgrows it starts over.
+final _abbreviations = <String, List<String>>{};
+
+List<String> _abbreviated(String path) {
+  if (_abbreviations.length > 4096) _abbreviations.clear();
+  return _abbreviations[path] ??= List.unmodifiable(abbreviatePath(path));
 }
 
 /// A session started here, under the project it belongs to.
@@ -383,6 +404,10 @@ List<ExplorerNode> _projectsSection({
   );
   final nodes = <ExplorerNode>[section];
   if (!section.expanded) return nodes;
+  final badge = switch (group.environment) {
+    final ExecutionEnvironment environment => environmentBadge(environment),
+    null => null,
+  };
   if (group.projects.isEmpty) {
     nodes.add(
       HintNode(
@@ -427,6 +452,7 @@ List<ExplorerNode> _projectsSection({
         _project(
           project,
           depth: 3,
+          environmentBadge: badge,
           expandedProjects: expandedProjects,
           childrenOf: childrenOf,
         ),
@@ -438,6 +464,7 @@ List<ExplorerNode> _projectsSection({
       _project(
         project,
         depth: 2,
+        environmentBadge: badge,
         expandedProjects: expandedProjects,
         childrenOf: childrenOf,
       ),
@@ -449,13 +476,19 @@ List<ExplorerNode> _projectsSection({
 List<ExplorerNode> _project(
   Project project, {
   required int depth,
+  required String? environmentBadge,
   required Set<String> expandedProjects,
   required List<ExplorerNode> Function(ProjectNode node)? childrenOf,
 }) {
   // Expansion is the panel's, not the collapse set's: a project's tree is
   // session state and is deliberately not persisted.
   final expanded = expandedProjects.contains(project.id);
-  final node = ProjectNode(project: project, expanded: expanded, depth: depth);
+  final node = ProjectNode(
+    project: project,
+    expanded: expanded,
+    depth: depth,
+    environmentBadge: environmentBadge,
+  );
   if (!expanded || childrenOf == null) return [node];
   return [node, ...childrenOf(node)];
 }

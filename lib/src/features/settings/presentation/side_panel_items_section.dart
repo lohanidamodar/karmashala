@@ -8,6 +8,7 @@ import '../../../app/shell/side_panel_state.dart';
 import '../../notes/application/notes_providers.dart';
 import '../application/settings_controller.dart';
 import 'settings_catalog.dart';
+import 'settings_row.dart';
 import 'settings_section.dart';
 
 /// Settings → Appearance → Side panel: which surfaces keep a glyph on the rail.
@@ -51,6 +52,20 @@ class SidePanelItemsSection extends ConsumerWidget {
                 hidden: !visible,
               ),
             ),
+          const SizedBox(height: Insets.sm),
+          SettingsSwitchRow(
+            label: 'Project details in the Explorer',
+            help:
+                'A second line under each project: its folder, its branch, '
+                'and what is running or waiting for you. Turn off for '
+                'one-line rows, with the same facts in tooltips.',
+            value: ref.watch(
+              settingsControllerProvider.select(
+                (s) => s.explorerProjectDetails,
+              ),
+            ),
+            onChanged: controller.setExplorerProjectDetails,
+          ),
         ],
       ),
     );

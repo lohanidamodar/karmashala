@@ -7,11 +7,14 @@ import '../design_tokens.dart';
 import '../row_menu.dart';
 import 'row_stats.dart';
 import 'explorer_row.dart';
+import 'path_abbreviation.dart';
 import 'session_card.dart';
 
 /// A project, drawn to the same standard as the session cards beneath it: line
-/// one is the name and what the project is worth opening for, line two the
-/// path, muted, and the only place a missing folder is reported.
+/// one is the name and how many sessions it holds, line two — muted, hanging
+/// at the name — where it is and what is going on in it: the path with its last
+/// folder kept, the branch, what is running and what needs you. Line two is
+/// also the only place a missing folder is reported.
 class ProjectCard extends StatelessWidget {
   const ProjectCard({
     required this.name,
@@ -29,6 +32,8 @@ class ProjectCard extends StatelessWidget {
     this.showMenu = true,
     this.environmentBadge,
     this.depth = 0,
+    this.detail = true,
+    this.pathCandidates,
     this.selecting = false,
     this.ticked = false,
     this.tickEnabled = true,
@@ -77,6 +82,14 @@ class ProjectCard extends StatelessWidget {
   /// Where the tree draws this row. The companion's cards stand at zero.
   final int depth;
 
+  /// Whether a pointer row draws its second line. Off is the one-line row:
+  /// the path in the name's tooltip, the counts as badges beside the name.
+  final bool detail;
+
+  /// [path] as [abbreviatePath] cuts it, longest first. A tree computes it once
+  /// per row and hands it in; null computes it here.
+  final List<String>? pathCandidates;
+
   /// The narrowest title slot that still has room for the running count beside
   /// the name. Under it the name wins, and the count is in the tooltip.
   static const runningWidth = 120.0;
@@ -101,9 +114,10 @@ class ProjectCard extends StatelessWidget {
     );
   }
 
-  /// One line under a pointer: caret, folder, the name, what needs you, and
-  /// the session count in the right-hand column — `+` and `⋮` in its place on
-  /// hover. The path is the name's tooltip; a missing folder gets a line.
+  /// Under a pointer: caret, folder, the name and the session count in the
+  /// right-hand column — in words while the row has room, `+` and `⋮` in its
+  /// place on hover. With [detail], a second line hangs at the name; without
+  /// it the running and needs-you badges sit beside the name instead.
   Widget _pointerBody(
     BuildContext context,
     TextStyle? muted,
@@ -131,27 +145,22 @@ class ProjectCard extends StatelessWidget {
         color: missing ? scheme.error : scheme.onSurfaceVariant,
       ),
     );
+    final title = Text(
+      name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: density.rowTitle(theme, strong: summary.needsAttention > 0),
+    );
     final line = ExplorerRowLine(
       lead: lead,
       title: LayoutBuilder(
         builder: (context, constraints) => Row(
           children: [
             Flexible(
-              child: Tooltip(
-                message: [
-                  ?environmentBadge,
-                  path,
-                ].where((part) => part.isNotEmpty).join('\n'),
-                child: Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: density.rowTitle(
-                    theme,
-                    strong: summary.needsAttention > 0,
-                  ),
-                ),
-              ),
+              // With a second line the path is on it, and said in full there.
+              child: detail
+                  ? title
+                  : Tooltip(message: _whereTooltip, child: title),
             ),
             if (pinned) ...[
               SizedBox(width: density.glyphGap),
@@ -164,32 +173,12 @@ class ProjectCard extends StatelessWidget {
                 ),
               ),
             ],
-            if (summary.needsAttention > 0) ...[
-              SizedBox(width: density.glyphGap),
-              Tooltip(
-                message: summary.attentionLabel!,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      AppIcons.warningCircle,
-                      size: density.iconSmall,
-                      color: semantic.attention,
-                    ),
-                    const SizedBox(width: Insets.hair),
-                    Text(
-                      '${summary.needsAttention}',
-                      style: muted?.copyWith(color: semantic.attention),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (summary.running > 0 &&
-                constraints.maxWidth >= runningWidth) ...[
-              SizedBox(width: density.glyphGap),
-              _runningBadge(muted, semantic, density),
-            ],
+            if (!detail && summary.needsAttention > 0)
+              ProjectStateBadge.needsYou(summary),
+            if (!detail &&
+                summary.running > 0 &&
+                constraints.maxWidth >= runningWidth)
+              ProjectStateBadge.running(summary),
           ],
         ),
       ),
@@ -197,6 +186,9 @@ class ProjectCard extends StatelessWidget {
         meta: summary.sessions == 0
             ? null
             : ExplorerRowMeta('${summary.sessions}', tooltip: count),
+        wideMeta: summary.sessions == 0
+            ? null
+            : ExplorerRowMeta(summary.sessionsLabel, tooltip: count),
         action: onNewSession == null
             ? null
             : ExplorerRowAction(
@@ -213,7 +205,7 @@ class ProjectCard extends StatelessWidget {
             : null,
       ),
     );
-    if (!missing) return line;
+    if (!detail && !missing) return line;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -221,11 +213,22 @@ class ProjectCard extends StatelessWidget {
         line,
         Padding(
           padding: EdgeInsets.only(left: lead.width),
-          child: _pathLine,
+          child: detail
+              ? ProjectDetailLine(
+                  candidates: pathCandidates ?? abbreviatePath(path),
+                  tooltip: _whereTooltip,
+                  missing: missing,
+                  summary: summary,
+                )
+              : _pathLine,
         ),
       ],
     );
   }
+
+  /// The environment and the whole path, for whichever text stands for them.
+  String get _whereTooltip =>
+      [?environmentBadge, path].where((part) => part.isNotEmpty).join('\n');
 
   /// The same facts, stacked. A 390px phone cannot fit name, aggregate, badge
   /// and chevron on one row without ellipsising the name to nothing.
@@ -482,6 +485,321 @@ class ProjectPathLine extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// A project's second line under a pointer: **where** on the left — the path,
+/// cut from the middle with its last folder kept, then the branch — and
+/// **what is going on** at the right edge: running, needs you.
+///
+/// **What a narrow row drops, in order.** Every clause is measured against the
+/// line, and each is kept only while the path's *shortest* spelling still fits
+/// beside it:
+///
+/// 1. the changed-file count;
+/// 2. the state's words — `● 2 running` becomes `● 2`;
+/// 3. the branch;
+/// 4. then the path shortens — whole, fish-style, last folder alone — and only
+///    that last spelling is ever ellipsised.
+///
+/// The state's glyph and number never go. Room left over goes to the path,
+/// which takes the longest spelling that fits.
+class ProjectDetailLine extends StatelessWidget {
+  const ProjectDetailLine({
+    required this.candidates,
+    required this.summary,
+    this.tooltip = '',
+    this.missing = false,
+    super.key,
+  });
+
+  /// The path as [abbreviatePath] cuts it. Empty when none was recorded.
+  final List<String> candidates;
+  final ProjectSummary summary;
+
+  /// The path in full, and the machine it is on.
+  final String tooltip;
+  final bool missing;
+
+  /// The most of the line a branch name may take before it is ellipsised.
+  static const branchMax = 96.0;
+
+  static const _separator = '  ·  ';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final muted = density.muted(theme);
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    final branch = missing ? null : summary.branch;
+    final ahead = summary.commitsAhead ?? 0;
+    final changed = missing ? 0 : summary.changedFiles ?? 0;
+    final branchText = branch == null
+        ? null
+        : (ahead > 0 ? '$branch ↑$ahead' : branch);
+    final where = missing
+        ? [
+            for (final candidate in candidates) 'Folder not found — $candidate',
+            'Folder not found',
+          ]
+        : candidates;
+    final whereStyle = missing ? muted?.copyWith(color: scheme.error) : muted;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          textDirection: direction,
+          textScaler: scaler,
+          maxLines: 1,
+        );
+        double measure(String text, [TextStyle? style]) {
+          painter
+            ..text = TextSpan(text: text, style: muted?.merge(style) ?? style)
+            ..layout();
+          return painter.width;
+        }
+
+        final String? path;
+        final double pathMax;
+        final bool showBranch;
+        final bool showChanged;
+        final bool inWords;
+        try {
+          final lead = missing ? density.iconSmall + density.glyphGap : 0.0;
+          final separator = measure(_separator);
+          final stateCompact = ProjectStateBadge.widthOf(
+            summary,
+            density,
+            measure,
+            inWords: false,
+          );
+          final stateWords = ProjectStateBadge.widthOf(
+            summary,
+            density,
+            measure,
+            inWords: true,
+          );
+          final branchWidth = branchText == null
+              ? 0.0
+              : (where.isEmpty ? 0.0 : separator) +
+                    density.iconSmall +
+                    density.glyphGap / 2 +
+                    math.min(measure(branchText), scaler.scale(branchMax));
+          final changedWidth = changed == 0
+              ? 0.0
+              : separator + measure('$changed changed');
+          final pathMin = where.isEmpty ? 0.0 : measure(where.last, whereStyle);
+
+          // A pixel kept back: tabular figures are not what was measured.
+          final room = constraints.maxWidth - lead - stateCompact - 1;
+          var used = pathMin;
+          showBranch = branchText != null && used + branchWidth <= room;
+          if (showBranch) used += branchWidth;
+          final wordsExtra = stateWords - stateCompact;
+          // Strictly in order: a clause is not kept over one that outranks it.
+          final branchKept = showBranch || branchText == null;
+          inWords = branchKept && wordsExtra > 0 && used + wordsExtra <= room;
+          if (inWords) used += wordsExtra;
+          showChanged =
+              branchKept &&
+              (inWords || wordsExtra == 0) &&
+              changed > 0 &&
+              used + changedWidth <= room;
+          if (showChanged) used += changedWidth;
+
+          final forPath = room - (used - pathMin);
+          pathMax = math.max(0, forPath);
+          path = where.isEmpty
+              ? null
+              : where.firstWhere(
+                  (candidate) => measure(candidate, whereStyle) <= forPath,
+                  orElse: () => where.last,
+                );
+        } finally {
+          painter.dispose();
+        }
+
+        final separatorText = Text(
+          _separator,
+          style: muted?.copyWith(
+            color: scheme.onSurfaceVariant.withValues(
+              alpha: ExplorerRow.separatorAlpha,
+            ),
+          ),
+        );
+        return Row(
+          children: [
+            if (missing) ...[
+              Icon(
+                AppIcons.warningCircle,
+                size: density.iconSmall,
+                color: scheme.error,
+              ),
+              SizedBox(width: density.glyphGap),
+            ],
+            // As wide as its text and no wider, so the branch sits beside a
+            // short path rather than at the far edge of a long one's room.
+            if (path != null)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: pathMax),
+                child: Tooltip(
+                  message: missing && tooltip.isNotEmpty
+                      ? 'Folder not found\n$tooltip'
+                      : tooltip,
+                  child: Text(
+                    path,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: whereStyle,
+                  ),
+                ),
+              ),
+            if (showBranch) ...[
+              if (path != null) separatorText,
+              Icon(
+                AppIcons.gitBranch,
+                size: density.iconSmall,
+                color: scheme.onSurfaceVariant,
+              ),
+              SizedBox(width: density.glyphGap / 2),
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: scaler.scale(branchMax)),
+                child: Text(
+                  branchText!,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted,
+                ),
+              ),
+            ],
+            if (showChanged) ...[
+              separatorText,
+              Text('$changed changed', maxLines: 1, style: muted),
+            ],
+            // The state ends on the row's right edge, under the count above.
+            const Spacer(),
+            if (summary.running > 0)
+              ProjectStateBadge.running(summary, inWords: inWords),
+            if (summary.needsAttention > 0)
+              ProjectStateBadge.needsYou(summary, inWords: inWords),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// `● 2` or `⚠ 1` — and, [inWords], `● 2 running` or `⚠ 1 needs you`. A glyph
+/// with its count, never a colour alone, and the sentence as the tooltip.
+class ProjectStateBadge extends StatelessWidget {
+  const ProjectStateBadge._({
+    required this.running,
+    required this.count,
+    required this.words,
+    required this.tooltip,
+    super.key,
+  });
+
+  factory ProjectStateBadge.running(
+    ProjectSummary summary, {
+    bool inWords = false,
+    Key? key,
+  }) => ProjectStateBadge._(
+    key: key,
+    running: true,
+    count: summary.running,
+    words: inWords ? summary.runningLabel : null,
+    tooltip: summary.running == 1
+        ? '1 session is running'
+        : '${summary.running} sessions are running',
+  );
+
+  factory ProjectStateBadge.needsYou(
+    ProjectSummary summary, {
+    bool inWords = false,
+    Key? key,
+  }) => ProjectStateBadge._(
+    key: key,
+    running: false,
+    count: summary.needsAttention,
+    words: inWords ? summary.attentionLabel : null,
+    tooltip: summary.attentionLabel ?? '',
+  );
+
+  final bool running;
+  final int count;
+  final String? words;
+  final String tooltip;
+
+  /// Ahead of every badge, so a line that has none reserves nothing.
+  static const _gapBefore = Insets.sm;
+  static const _bullet = 8.0;
+  static const _bulletGap = 3.0;
+
+  /// How wide [summary]'s badges draw, [measure] being the caller's painter —
+  /// the arithmetic of [build], so a line can decide what else fits.
+  static double widthOf(
+    ProjectSummary summary,
+    UiDensity density,
+    double Function(String text, [TextStyle? style]) measure, {
+    required bool inWords,
+  }) {
+    var width = 0.0;
+    if (summary.running > 0) {
+      width +=
+          _gapBefore +
+          _bullet +
+          _bulletGap +
+          measure(inWords ? summary.runningLabel! : '${summary.running}');
+    }
+    if (summary.needsAttention > 0) {
+      width +=
+          _gapBefore +
+          density.iconSmall +
+          Insets.hair +
+          measure(
+            inWords ? summary.attentionLabel! : '${summary.needsAttention}',
+            const TextStyle(fontWeight: FontWeight.w600),
+          );
+    }
+    return width;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final semantic = SemanticColors.of(context);
+    final density = UiDensity.of(context);
+    final color = running ? semantic.working : semantic.attention;
+    final style = density
+        .muted(theme)
+        ?.copyWith(
+          color: color,
+          fontWeight: running ? null : FontWeight.w600,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        );
+    return Tooltip(
+      message: tooltip,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(width: _gapBefore),
+          // A bullet in front of the running count, not a glyph: at
+          // Chrome.iconSmall it reads as an icon the count belongs to.
+          if (running)
+            Icon(AppIcons.circle, size: _bullet, color: color)
+          else
+            Icon(AppIcons.warningCircle, size: density.iconSmall, color: color),
+          SizedBox(width: running ? _bulletGap : Insets.hair),
+          Text(words ?? '$count', maxLines: 1, softWrap: false, style: style),
+        ],
+      ),
     );
   }
 }

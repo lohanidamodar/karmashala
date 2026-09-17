@@ -7,6 +7,7 @@ library;
 export 'src/rows/activity_format.dart';
 export 'src/rows/agent_status_appearance.dart';
 export 'src/rows/explorer_row.dart';
+export 'src/rows/path_abbreviation.dart';
 export 'src/rows/project_card.dart';
 export 'src/rows/row_stats.dart';
 export 'src/rows/session_card.dart';

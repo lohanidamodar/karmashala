@@ -18,7 +18,7 @@ class ExplorerHeaderRow extends StatelessWidget {
     required this.onTap,
     this.icon,
     this.trailingText,
-    this.trailingTooltip,
+    this.trailingWords,
     this.detail,
     this.action,
     this.emphasis = HeaderEmphasis.section,
@@ -36,8 +36,9 @@ class ExplorerHeaderRow extends StatelessWidget {
   /// where nothing has been measured (§19).
   final String? trailingText;
 
-  /// What the count counts, in words.
-  final String? trailingTooltip;
+  /// What the count counts, in words — `18 projects`. Drawn in the count's
+  /// place while the row has room, and its tooltip when it has not.
+  final String? trailingWords;
 
   /// A muted clause after the label — "read 21 minutes ago" — too long for the
   /// right-hand column.
@@ -100,7 +101,10 @@ class ExplorerHeaderRow extends StatelessWidget {
           trailing: ExplorerRowTrailing(
             meta: trailing == null
                 ? null
-                : ExplorerRowMeta(trailing, tooltip: trailingTooltip),
+                : ExplorerRowMeta(trailing, tooltip: trailingWords),
+            wideMeta: trailing == null || trailingWords == null
+                ? null
+                : ExplorerRowMeta(trailingWords!),
             action: action,
           ),
         );
@@ -230,7 +234,7 @@ class TerminalRow extends StatelessWidget {
   );
 }
 
-/// What a machine's row says, in words, when its count is hovered.
+/// What a machine's count counts, in words.
 ///
 /// Projects only: a folded machine has not been asked what it is running, and
 /// a count nobody measured would read as "idle" (§19).

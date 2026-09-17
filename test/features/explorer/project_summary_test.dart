@@ -15,6 +15,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:flutter/material.dart';
@@ -187,8 +188,29 @@ void main() {
     // Once, now that the Explorer lists sessions rather than checkouts: the
     // card is the only row describing this working tree. It states the branch
     // and change count the checkout's one measurement produced.
-    expect(find.textContaining('feature/cards'), findsOneWidget);
-    expect(find.text('3 changed'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(SessionCard),
+        matching: find.textContaining('feature/cards'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(SessionCard),
+        matching: find.text('3 changed'),
+      ),
+      findsOneWidget,
+    );
+    // And the project's own line borrows the same reading, the moment it
+    // arrives — it never asks git itself.
+    expect(
+      find.descendant(
+        of: find.byType(ProjectCard),
+        matching: find.textContaining('feature/cards'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('the card draws +N −M, from one numstat for the checkout', (
@@ -311,10 +333,10 @@ void main() {
       find.text('A title long enough to need the whole card width'),
       findsOneWidget,
     );
-    // The count is a number in the right-hand column at every width, so there
-    // is no aggregate left to squeeze into an ellipsis.
+    // At the pane's minimum the count is the bare number; its words, and the
+    // change count the open card's reading brought, are its tooltip.
     expect(find.textContaining('1 session'), findsNothing);
-    expect(find.byTooltip('1 session'), findsOneWidget);
+    expect(find.byTooltip('1 session · 3 changed'), findsOneWidget);
   });
 
   testWidgets('a session in its own worktree gets a stat of its own', (

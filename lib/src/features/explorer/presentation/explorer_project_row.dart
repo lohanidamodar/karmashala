@@ -57,6 +57,8 @@ class ExplorerProjectRow extends ConsumerWidget {
     required this.project,
     required this.depth,
     required this.expanded,
+    this.pathCandidates,
+    this.environmentBadge,
     this.anchorKey,
     super.key,
   });
@@ -64,6 +66,10 @@ class ExplorerProjectRow extends ConsumerWidget {
   final Project project;
   final int depth;
   final bool expanded;
+
+  /// From the tree's node, which cut the path and named the machine once.
+  final List<String>? pathCandidates;
+  final String? environmentBadge;
 
   /// Held while this is the selected project, so the panel can finish a
   /// reveal exactly rather than at its estimate.
@@ -82,12 +88,9 @@ class ExplorerProjectRow extends ConsumerWidget {
     // Sessions come from the database; changed files are whatever the
     // per-checkout providers already answered, so no header starts a git wave.
     final summary = ref.watch(projectSummaryProvider(project.id));
-    final badge = switch (ref
-        .watch(executionEnvironmentDaoProvider)
-        .getById(project.environmentId)) {
-      final ExecutionEnvironment env => environmentBadge(env),
-      null => null,
-    };
+    final detail = ref.watch(
+      settingsControllerProvider.select((s) => s.explorerProjectDetails),
+    );
     final actions = ProjectRowActions(ref, context, project);
     // Each its own `.select`, so ticking one project moves that row alone.
     final selecting = ref.watch(
@@ -110,7 +113,9 @@ class ExplorerProjectRow extends ConsumerWidget {
         selected: selected,
         missing: missing,
         pinned: pinned,
-        environmentBadge: badge,
+        environmentBadge: environmentBadge,
+        pathCandidates: pathCandidates,
+        detail: detail,
         summary: summary,
         onTap: () {
           if (!handleSelectableClick(

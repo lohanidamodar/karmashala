@@ -138,6 +138,19 @@ class ExplorerRow extends StatelessWidget {
     return math.max(slots, MediaQuery.textScalerOf(context).scale(slots));
   }
 
+  /// The right-hand column when it says its count in words — `18 projects`,
+  /// `12 sessions`. Right-aligned like the bare number, so it grows leftwards
+  /// and every row still ends on one edge.
+  static double wordsWidthOf(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(wordsColumn);
+
+  /// Wide enough for `118 projects` in the muted hand.
+  static const wordsColumn = 84.0;
+
+  /// What a title keeps before a count may be spelled out beside it. Under it
+  /// the name wins and the count is the bare number.
+  static const wordsTitleFloor = 112.0;
+
   /// A floor, never a fixed height: every row still grows with its text.
   double _minHeight(UiDensity density) {
     if (density.isTouch) return Touch.target;
@@ -324,6 +337,9 @@ class ExplorerRowLead extends StatelessWidget {
 /// One line of a pointer row: [ExplorerRowLead], the flexible [title], and the
 /// right-hand [trailing] column at [ExplorerRow.trailingWidthOf] — capped at
 /// half of what the lead leaves, so a 200px pane at 2× text still fits.
+///
+/// A trailing column that has [ExplorerRowTrailing.wideMeta] says it instead
+/// of the bare number while the title keeps [ExplorerRow.wordsTitleFloor].
 class ExplorerRowLine extends StatelessWidget {
   const ExplorerRowLine({
     required this.lead,
@@ -351,12 +367,22 @@ class ExplorerRowLine extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final room = math.max(0.0, constraints.maxWidth - lead.width);
-        final width = math.min(wanted, room / 2);
+        final words = ExplorerRow.wordsWidthOf(context);
+        final inWords =
+            trailing.wideMeta != null &&
+            room - words >=
+                MediaQuery.textScalerOf(
+                  context,
+                ).scale(ExplorerRow.wordsTitleFloor);
+        final width = inWords ? words : math.min(wanted, room / 2);
         return Row(
           children: [
             lead,
             Expanded(child: title),
-            SizedBox(width: width, child: trailing),
+            SizedBox(
+              width: width,
+              child: inWords ? trailing.inWords() : trailing,
+            ),
           ],
         );
       },
@@ -368,10 +394,24 @@ class ExplorerRowLine extends StatelessWidget {
 /// place while a pointer or the keyboard is on the row. [action] and [menu]
 /// have fixed slots, so every `+` in the tree shares one centre-line.
 class ExplorerRowTrailing extends StatelessWidget {
-  const ExplorerRowTrailing({this.meta, this.action, this.menu, super.key});
+  const ExplorerRowTrailing({
+    this.meta,
+    this.wideMeta,
+    this.action,
+    this.menu,
+    super.key,
+  });
 
   /// Right-aligned, scaled down rather than ellipsised: half a number is wrong.
   final Widget? meta;
+
+  /// [meta] in words — `18 projects` for `18` — drawn in its place by
+  /// [ExplorerRowLine] while the row has the room.
+  final Widget? wideMeta;
+
+  /// This column with [wideMeta] as its meta. The verbs keep their slots.
+  ExplorerRowTrailing inWords() =>
+      ExplorerRowTrailing(meta: wideMeta ?? meta, action: action, menu: menu);
 
   /// The row's verb — `+` — in the slot left of [menu].
   final Widget? action;

@@ -191,6 +191,12 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  void setExplorerProjectDetails(bool value) {
+    if (state.explorerProjectDetails == value) return;
+    state = state.copyWith(explorerProjectDetails: value);
+    _save();
+  }
+
   void setCompactDensity(bool value) {
     state = state.copyWith(compactDensity: value);
     _save();

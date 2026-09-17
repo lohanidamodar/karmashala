@@ -220,6 +220,8 @@ enum SettingsAnchor {
     'activity bar',
     'sidebar',
     'panel items',
+    'explorer',
+    'project path',
   ]),
   editor(SettingsSectionId.editorFiles, 'In-app editor', [
     'editor',
@@ -545,6 +547,12 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.sidePanel,
     description: 'Which tools keep a glyph on the side panel’s rail.',
     keywords: ['hide', 'show', 'rail', 'activity bar', 'icons', 'glyphs'],
+  ),
+  SettingsEntry(
+    'Project details in the Explorer',
+    anchor: SettingsAnchor.sidePanel,
+    description: 'A second line under each project: folder, branch, state.',
+    keywords: ['explorer', 'path', 'branch', 'compact', 'rows', 'density'],
   ),
   SettingsEntry(
     'Wrap long lines in the editor',

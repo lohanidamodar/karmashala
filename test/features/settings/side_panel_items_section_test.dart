@@ -12,6 +12,7 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/data/settings_repository.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
+import 'package:karmashala/src/features/settings/presentation/settings_row.dart';
 import 'package:karmashala/src/features/settings/presentation/side_panel_items_section.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
@@ -82,6 +83,32 @@ void main() {
 
   List<String> stored() =>
       SettingsRepository(db).load().hiddenSidePanelSurfaces;
+
+  testWidgets('the Explorer\'s project details are a switch here, on until '
+      'turned off', (tester) async {
+    final container = await pump(
+      tester,
+      const Scaffold(
+        body: SingleChildScrollView(child: SidePanelItemsSection()),
+      ),
+    );
+    final toggle = find.descendant(
+      of: find.ancestor(
+        of: find.text('Project details in the Explorer'),
+        matching: find.byType(SettingsSwitchRow),
+      ),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(
+      container.read(settingsControllerProvider).explorerProjectDetails,
+      isFalse,
+    );
+    expect(SettingsRepository(db).load().explorerProjectDetails, isFalse);
+  });
 
   testWidgets('lists each surface checked, and a tap hides and shows it', (
     tester,

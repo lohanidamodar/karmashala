@@ -15,6 +15,10 @@ import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dar
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
+import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
+import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
+import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -23,7 +27,9 @@ import 'package:karmashala/src/features/terminal/application/system_terminal_pro
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -34,6 +40,39 @@ import '../terminal/fake_instance.dart';
 
 const _long =
     'An exceptionally long project name that will never fit a narrow pane';
+
+/// One session waiting, so the project's second line has its whole state to
+/// fit: running and needs-you, beside a deep path and a long branch.
+class _Inbox extends AttentionInboxController {
+  @override
+  AttentionInbox build() => AttentionInbox(
+    items: [
+      InboxItem(
+        session: const WatchedSession(
+          key: AgentSessionKey('claude-code', 's1'),
+          label: 'Waiting',
+          openId: 's1',
+          imported: false,
+        ),
+        kind: InboxItemKind.finished,
+        at: testTime,
+      ),
+    ],
+  );
+}
+
+/// A branch longer than its share of any line.
+CommandResult _git(CommandRequest request) => CommandResult(
+  exitCode: 0,
+  stdout: request.arguments.contains('status')
+      ? porcelainV2(
+          branch: 'feature/a-branch-name-longer-than-its-share-of-the-line',
+          ahead: 12,
+          modified: ['lib/a.dart', 'lib/b.dart'],
+        )
+      : '',
+  stderr: '',
+);
 
 /// The Explorer where the shell puts it: a column [width] wide on the left.
 Widget _column(double width, Widget surface) => MaterialApp(
@@ -83,6 +122,7 @@ void main() {
         session(
           id: 's$i',
           title: 'A session title long enough to need truncating, number $i',
+          status: i == 0 ? SessionStatus.running : SessionStatus.completed,
         ),
       );
     }
@@ -98,7 +138,9 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('n-')),
         commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+          FakeCommandRunnerFactory(
+            fallback: FakeCommandRunner(responder: _git),
+          ),
         ),
         agentSessionStatusProvider.overrideWith(
           (ref, id) => const Stream<AgentStatusReport>.empty(),
@@ -109,6 +151,7 @@ void main() {
         autoImportRunnerProvider.overrideWithValue(
           (_) async => const ImportSummary(),
         ),
+        attentionInboxProvider.overrideWith(_Inbox.new),
       ],
       child: _column(width, const ExplorerPanel()),
     );
@@ -117,6 +160,9 @@ void main() {
   Future<void> openProject(WidgetTester tester) async {
     await tester.tap(find.text(_long));
     await tester.pumpAndSettle();
+    // The control: line two is there, with its state, to be squeezed.
+    expect(find.byType(ProjectDetailLine), findsWidgets);
+    expect(find.byType(ProjectStateBadge), findsNWidgets(2));
   }
 
   testWidgets('the Explorer at its 200px minimum, a project open', (

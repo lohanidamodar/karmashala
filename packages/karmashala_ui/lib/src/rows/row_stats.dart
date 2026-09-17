@@ -90,9 +90,20 @@ class ProjectSummary {
     this.changedFiles,
     this.running = 0,
     this.needsAttention = 0,
+    this.branch,
+    this.commitsAhead,
   });
 
   final int sessions;
+
+  /// The branch checked out in the project's one repository, from a reading
+  /// something else already paid for. Null for a project with several
+  /// repositories — no one branch is the project's — and while nothing has
+  /// read it.
+  final String? branch;
+
+  /// Commits ahead of base, across the repositories that have been read.
+  final int? commitsAhead;
 
   /// Changed files across the project's repositories, or null while unknown.
   final int? changedFiles;
@@ -115,6 +126,12 @@ class ProjectSummary {
     ].join(' · ');
   }
 
+  /// `12 sessions`, the count in words.
+  String get sessionsLabel => '$sessions session${sessions == 1 ? '' : 's'}';
+
+  /// `2 running`, or null when nothing is.
+  String? get runningLabel => running == 0 ? null : '$running running';
+
   /// How the attention count reads beside [label]. Worded exactly as the status
   /// bar words it, because it is the same number.
   String? get attentionLabel => switch (needsAttention) {
@@ -129,9 +146,17 @@ class ProjectSummary {
       other.sessions == sessions &&
       other.changedFiles == changedFiles &&
       other.running == running &&
-      other.needsAttention == needsAttention;
+      other.needsAttention == needsAttention &&
+      other.branch == branch &&
+      other.commitsAhead == commitsAhead;
 
   @override
-  int get hashCode =>
-      Object.hash(sessions, changedFiles, running, needsAttention);
+  int get hashCode => Object.hash(
+    sessions,
+    changedFiles,
+    running,
+    needsAttention,
+    branch,
+    commitsAhead,
+  );
 }

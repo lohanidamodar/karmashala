@@ -68,7 +68,8 @@ final sessionProjectIdsProvider = Provider<Map<String, String>>((ref) {
   // Two columns per row, not a decoded session: parsing an ISO timestamp per
   // row is 8% of the app's CPU under load (see `dateFromIso`).
   return Map.unmodifiable({
-    for (final entry in ref.read(sessionDaoProvider).repositoryIdsById().entries)
+    for (final entry
+        in ref.read(sessionDaoProvider).repositoryIdsById().entries)
       entry.key: ?repositories[entry.value],
     for (final entry
         in ref.read(importedSessionDaoProvider).repositoryIdsById().entries)
@@ -125,18 +126,33 @@ final projectSummaryProvider = Provider.autoDispose
       final running = counts.running;
 
       int? changed;
+      int? ahead;
+      String? branch;
       for (final repository in repositories) {
         // The shared producer rather than this file's projection: cards, the
         // delivery strip and the Changes panel all warm this one.
-        final provider = checkoutDeliveryProvider(Checkout(repository.path));
+        final checkout = Checkout(repository.path);
+        final provider = checkoutDeliveryProvider(checkout);
+        // Woken when anyone's reading of this checkout arrives, which
+        // `exists` alone would never report.
+        ref.watch(checkoutReadingsProvider.select((r) => r[checkout]));
         if (!ref.exists(provider)) continue;
-        final files = ref.watch(provider).asData?.value.dirtyFiles;
+        final delivery = ref.watch(provider).asData?.value;
+        if (delivery == null) continue;
+        final files = delivery.dirtyFiles;
         if (files != null) changed = (changed ?? 0) + files;
+        final commits = delivery.aheadOfBase;
+        if (commits != null) ahead = (ahead ?? 0) + commits;
+        // One repository has one branch; several have no branch that is the
+        // project's, and naming the first would be a guess.
+        if (repositories.length == 1) branch = delivery.branch;
       }
       return ProjectSummary(
         sessions: sessions,
         changedFiles: changed,
         running: running,
         needsAttention: needsAttention,
+        branch: branch,
+        commitsAhead: ahead,
       );
     });

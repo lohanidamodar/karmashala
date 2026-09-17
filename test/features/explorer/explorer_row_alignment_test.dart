@@ -27,7 +27,7 @@ void main() {
         icon: AppIcons.terminalWindow,
         emphasis: HeaderEmphasis.machine,
         trailingText: '4',
-        trailingTooltip: '4 projects',
+        trailingWords: '4 projects',
         onTap: () {},
         action: ExplorerRowAction(
           tooltip: 'Open a terminal on archlinux',
@@ -141,7 +141,9 @@ void main() {
     await pumpTree(tester);
 
     final column = rightOf(tester, find.text('22h 3m'));
-    for (final text in ['4', '1', '34']) {
+    // Words where the row has room, numbers where it has not — one edge.
+    for (final text in ['4 projects', '4', '1', '34 sessions']) {
+      expect(find.text(text), findsWidgets, reason: '"$text" is not drawn');
       for (final element in find.text(text).evaluate()) {
         expect(
           rightOf(tester, find.byWidget(element.widget)),
@@ -150,6 +152,55 @@ void main() {
         );
       }
     }
+  });
+
+  testWidgets('a count is said in words while the title keeps its room, and '
+      'as a bare number under that — on the same edge', (tester) async {
+    await pumpTree(tester);
+    final wide = rightOf(tester, find.text('4 projects'));
+    expect(find.text('34 sessions'), findsOneWidget);
+
+    await pumpTree(tester, width: 240);
+    expect(find.text('4 projects'), findsNothing);
+    expect(find.text('34 sessions'), findsNothing);
+    expect(find.byTooltip('4 projects'), findsOneWidget);
+    expect(find.text('34'), findsOneWidget);
+    // The pane is 160px narrower, and so is where its counts end.
+    expect(
+      rightOf(tester, find.text('34')),
+      moreOrLessEquals(wide - 160, epsilon: 0.5),
+    );
+    expect(
+      rightOf(tester, find.text('34')),
+      moreOrLessEquals(rightOf(tester, find.text('22h 3m')), epsilon: 0.5),
+    );
+  });
+
+  testWidgets('a second line hangs at its own title, on every kind', (
+    tester,
+  ) async {
+    await pumpTree(tester);
+    double leftOf(Finder finder) => tester.getTopLeft(finder).dx;
+
+    expect(
+      leftOf(find.textContaining('popupbits')),
+      moreOrLessEquals(leftOf(find.text('popubits')), epsilon: 0.5),
+      reason: 'the project\'s path hangs at the project\'s name',
+    );
+    expect(
+      leftOf(find.textContaining('Claude Code')),
+      moreOrLessEquals(
+        leftOf(find.text('Benchmark arcade games')),
+        epsilon: 0.5,
+      ),
+      reason: 'the session\'s meta hangs at the session\'s title',
+    );
+    // One indent apart, as their carets and glyphs are.
+    expect(
+      leftOf(find.textContaining('Claude Code')) -
+          leftOf(find.textContaining('popupbits')),
+      ExplorerRow.indent,
+    );
   });
 
   testWidgets('carets step in by one indent per depth', (tester) async {

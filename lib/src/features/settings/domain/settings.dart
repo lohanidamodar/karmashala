@@ -100,6 +100,7 @@ class Settings {
     this.hideEmptySections = true,
     this.explorerAgentFilter = const [],
     this.hiddenSidePanelSurfaces = const [],
+    this.explorerProjectDetails = true,
     this.debugMode = kDefaultDebugMode,
     this.logVerbosity = LogVerbosity.normal,
     this.logToFile = true,
@@ -271,6 +272,10 @@ class Settings {
   /// build does not know is kept for the build that does.
   final List<String> hiddenSidePanelSurfaces;
 
+  /// Whether an Explorer project row draws its second line — path, branch,
+  /// what is running. Off is the one-line row, with those in tooltips.
+  final bool explorerProjectDetails;
+
   /// Debug mode: root logger to `ALL`, Logs panel shown. Never gates logging.
   final bool debugMode;
 
@@ -350,6 +355,7 @@ class Settings {
     bool? hideEmptySections,
     List<String>? explorerAgentFilter,
     List<String>? hiddenSidePanelSurfaces,
+    bool? explorerProjectDetails,
     bool? debugMode,
     LogVerbosity? logVerbosity,
     bool? logToFile,
@@ -423,6 +429,8 @@ class Settings {
     explorerAgentFilter: explorerAgentFilter ?? this.explorerAgentFilter,
     hiddenSidePanelSurfaces:
         hiddenSidePanelSurfaces ?? this.hiddenSidePanelSurfaces,
+    explorerProjectDetails:
+        explorerProjectDetails ?? this.explorerProjectDetails,
     debugMode: debugMode ?? this.debugMode,
     logVerbosity: logVerbosity ?? this.logVerbosity,
     logToFile: logToFile ?? this.logToFile,
@@ -506,6 +514,7 @@ class Settings {
     'explorerAgentFilter': explorerAgentFilter,
     if (hiddenSidePanelSurfaces.isNotEmpty)
       'hiddenSidePanelSurfaces': hiddenSidePanelSurfaces,
+    if (!explorerProjectDetails) 'explorerProjectDetails': false,
     'debugMode': debugMode,
     'logVerbosity': logVerbosity.name,
     'logToFile': logToFile,
@@ -691,6 +700,9 @@ class Settings {
                 .toList()
               ..sort())
           : const [],
+      explorerProjectDetails: json['explorerProjectDetails'] is bool
+          ? json['explorerProjectDetails'] as bool
+          : true,
       debugMode: json['debugMode'] is bool
           ? json['debugMode'] as bool
           : kDefaultDebugMode,
@@ -751,6 +763,7 @@ class Settings {
       other.hideEmptySections == hideEmptySections &&
       _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
       _listEquals(other.hiddenSidePanelSurfaces, hiddenSidePanelSurfaces) &&
+      other.explorerProjectDetails == explorerProjectDetails &&
       other.debugMode == debugMode &&
       other.logVerbosity == logVerbosity &&
       other.logToFile == logToFile &&
@@ -816,6 +829,7 @@ class Settings {
         hideEmptySections,
         Object.hashAll(explorerAgentFilter),
         Object.hashAll(hiddenSidePanelSurfaces),
+        explorerProjectDetails,
         Object.hashAll(androidSlimmingEnabled),
         androidEmulatorGpu,
         Object.hashAllUnordered(
