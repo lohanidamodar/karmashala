@@ -243,10 +243,8 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
             'No projects match "${ref.watch(explorerSearchQueryProvider)}".',
       );
     }
-    // One lazy list, headers and all: only the rows on screen are inflated, so
-    // the tree costs what is visible rather than what the workspace holds. The
-    // header that is pinned is a second, drawn-over copy — see
-    // [ExplorerPinnedHeader] for why it is not a pinned sliver.
+    // One lazy list, headers and all: the tree costs what is on screen, not
+    // what the workspace holds.
     final list = ListView.builder(
       key: ValueKey(_generation),
       controller: _scroll,
@@ -289,16 +287,10 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
   }
 }
 
-/// **The group header the list has scrolled past, drawn over its top edge**
-/// until the next header pushes it out.
-///
-/// Not a pinned sliver. One list per group (`SliverMainAxisGroup` over a
-/// `PinnedHeaderSliver` and a `SliverList`) was built and measured first: every
-/// `SliverList` inflates its first row whether or not it is on screen, so ten
-/// contexts cost ten rows nobody could see — 103 → 143 statements on a first
-/// build at 500 projects. This keeps the one lazy list exactly as it was, and
-/// reads where its rows already are: no row is built for it, and a scroll tick
-/// walks the screenful of rows that exist.
+/// The group header the list has scrolled past, drawn over its top edge until
+/// the next header pushes it out. Not a pinned sliver: a `SliverList` per group
+/// inflates a row per group off screen, and this builds none (SETTLED, "The
+/// Explorer is two levels").
 class ExplorerPinnedHeader extends StatefulWidget {
   const ExplorerPinnedHeader({
     required this.controller,
@@ -389,10 +381,8 @@ class _ExplorerPinnedHeaderState extends State<ExplorerPinnedHeader> {
     });
   }
 
-  /// Now, against the rows as they were laid out last frame — so the header
-  /// moves with the scroll rather than a frame behind it — and again once
-  /// this frame has laid out its own: a jump lands among rows that did not
-  /// exist when it was made.
+  /// Now, so the header moves with the scroll and not a frame behind it; and
+  /// again after layout, because a jump lands among rows that did not exist.
   void _onScroll() {
     _measure(laidOut: false);
     _measureAfterLayout();

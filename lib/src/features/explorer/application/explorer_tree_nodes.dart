@@ -345,18 +345,14 @@ List<String> explorerAncestorsOf({String? workspaceId}) => [
   contextHeaderId(workspaceId),
 ];
 
-/// **The Explorer's shape, as a flat list.** Context headers over their
-/// projects — contexts by name, then the projects in none — and each machine's
-/// `Terminals` last. A row appears only when its header is expanded, so the
-/// list is exactly what is drawn.
+/// **The Explorer's shape, as a flat list**: contexts by name over their
+/// projects, then the projects in none, then each machine's `Terminals`. A row
+/// appears only while its header is expanded.
 ///
-/// [projects] is already narrowed by the search. [environmentScope] and
-/// [contextScope] narrow it further, and [keepProjectId] survives both: a
-/// filter is a view, and hiding the selected project would leave the session
-/// pane showing work whose project is nowhere on screen.
-///
-/// [childrenOf] and [terminalsOf] are asked **only for an expanded node**,
-/// which is what keeps a folded group free of both a session query and a dial.
+/// [projects] is what the search left. [keepProjectId] survives both scopes: a
+/// filter must not hide the project the session pane is showing.
+/// [childrenOf] and [terminalsOf] are asked only for an expanded node, which
+/// keeps a folded group free of both a session query and a dial.
 List<ExplorerNode> buildExplorerTree({
   required List<Project> projects,
   required List<EnvironmentChoice> environments,

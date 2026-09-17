@@ -1,6 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -444,6 +445,25 @@ void main() {
       expect(drawn(tester), hasLength(7));
     });
 
+    testWidgets('narrowing to a folded context opens it', (tester) async {
+      seed(machines: false);
+      final container = newContainer();
+      container
+          .read(settingsControllerProvider.notifier)
+          .toggleExplorerNodeCollapsed(contextHeaderId('w2'));
+      await pump(tester, container: container);
+      expect(drawn(tester), isNot(contains('roguelike')));
+
+      await tester.tap(chip('Game dev'));
+      await tester.pumpAndSettle();
+
+      expect(drawn(tester), [
+        'GAME DEV',
+        'roguelike',
+        'TERMINALS',
+      ], reason: 'a filter that shows one folded header shows nothing');
+    });
+
     testWidgets('a context holding nothing has a chip, and says so', (
       tester,
     ) async {
@@ -526,6 +546,27 @@ void main() {
         'TERMINALS',
       ]);
       expect(container.read(selectedProjectIdProvider), 'p3');
+    });
+
+    testWidgets('the chip in force is whole while the row has room for it', (
+      tester,
+    ) async {
+      seed(machines: false);
+      WorkspaceDao(
+        db,
+      ).insert(Workspace(id: 'long', name: 'Zebra cross', createdAt: testTime));
+      final container = newContainer();
+      container
+          .read(workspaceScopeProvider.notifier)
+          .select(const WorkspaceScope.of('long'));
+      await pump(tester, size: const Size(520, 900), container: container);
+
+      final label = tester.renderObject<RenderParagraph>(chip('Zebra cross'));
+      expect(
+        label.didExceedMaxLines,
+        isFalse,
+        reason: 'it was measured to fit; half the spare room is not its share',
+      );
     });
 
     testWidgets('chips that do not fit fold into the … menu, and the one in '

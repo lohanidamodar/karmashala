@@ -219,6 +219,14 @@ class ExplorerContextChips extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Narrowing to a folded context would show a header and nothing else —
+    // from here, or from Quick Open, which switches the same scope.
+    ref.listen(workspaceScopeProvider, (_, scope) {
+      if (scope.isAll) return;
+      ref.read(settingsControllerProvider.notifier).revealExplorerNodes([
+        contextHeaderId(scope.workspaceId),
+      ]);
+    });
     final contexts = [...ref.watch(workspacesControllerProvider)]
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     if (contexts.isEmpty) return const SizedBox.shrink();
@@ -292,13 +300,13 @@ class ExplorerContextChips extends ConsumerWidget {
             selected: entries.indexWhere((entry) => entry.scope == scope),
             room: constraints.maxWidth - _OverflowButton.width - Insets.xs,
           );
-          return Row(
+          final chips = Row(
             children: [
               for (final index in visible) ...[
                 Flexible(
                   // The chip in force is drawn whether or not it fits, so it
-                  // is the one that gives: only ever under the narrowest
-                  // panes at the largest text.
+                  // is the one that gives — under the narrowest panes at the
+                  // largest text. Alone in flexing, it has all the spare room.
                   flex: entries[index].scope == scope ? 1 : 0,
                   child: _ScopeChip(
                     entry: entries[index],
@@ -320,7 +328,11 @@ class ExplorerContextChips extends ConsumerWidget {
                 ),
                 const SizedBox(width: Insets.xs),
               ],
-              const Spacer(),
+            ],
+          );
+          return Row(
+            children: [
+              Expanded(child: chips),
               _OverflowButton(
                 hidden: entries.length - visible.length,
                 itemBuilder: () => [

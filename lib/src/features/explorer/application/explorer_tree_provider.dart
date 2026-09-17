@@ -56,13 +56,9 @@ class ExplorerEnvironmentScope {
   int get hashCode => Object.hash(environmentId, Object.hashAll(environments));
 }
 
-/// **Which machine the Explorer lists**, read by the scope bar and by the
-/// tree. Its own provider rather than a field of the tree: the scope bar
-/// watching the tree was measured at 500 open projects, and a second
-/// subscriber there cost a status tick a quarter more.
-///
-/// The environments are the app's own list — refreshed by discovery and by an
-/// SSH host being saved or removed — so the table is not swept per tree.
+/// Which machine the Explorer lists, for the scope bar and the tree. Its own
+/// provider so that the scope bar does not subscribe to the tree — measured,
+/// in SETTLED — and fed by the app's own list of environments.
 final explorerEnvironmentScopeProvider =
     Provider.autoDispose<ExplorerEnvironmentScope>((ref) {
       final environments = environmentChoices(
