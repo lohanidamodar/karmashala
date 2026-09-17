@@ -95,6 +95,7 @@ class Settings {
     this.notesEnabled = true,
     this.hideEmptySections = true,
     this.explorerAgentFilter = const [],
+    this.hiddenSidePanelSurfaces = const [],
     this.debugMode = kDefaultDebugMode,
     this.logVerbosity = LogVerbosity.normal,
     this.logToFile = true,
@@ -245,6 +246,11 @@ class Settings {
   /// agent". Persisted, so the header names what it is holding back.
   final List<String> explorerAgentFilter;
 
+  /// Side-panel surfaces left off the rail, by `SidePanelSurface.name`, sorted.
+  /// Ids, not positions, so a surface added later arrives visible; an id this
+  /// build does not know is kept for the build that does.
+  final List<String> hiddenSidePanelSurfaces;
+
   /// Debug mode: root logger to `ALL`, Logs panel shown. Never gates logging.
   final bool debugMode;
 
@@ -319,6 +325,7 @@ class Settings {
     bool? notesEnabled,
     bool? hideEmptySections,
     List<String>? explorerAgentFilter,
+    List<String>? hiddenSidePanelSurfaces,
     bool? debugMode,
     LogVerbosity? logVerbosity,
     bool? logToFile,
@@ -385,6 +392,8 @@ class Settings {
     notesEnabled: notesEnabled ?? this.notesEnabled,
     hideEmptySections: hideEmptySections ?? this.hideEmptySections,
     explorerAgentFilter: explorerAgentFilter ?? this.explorerAgentFilter,
+    hiddenSidePanelSurfaces:
+        hiddenSidePanelSurfaces ?? this.hiddenSidePanelSurfaces,
     debugMode: debugMode ?? this.debugMode,
     logVerbosity: logVerbosity ?? this.logVerbosity,
     logToFile: logToFile ?? this.logToFile,
@@ -462,6 +471,8 @@ class Settings {
     'notesEnabled': notesEnabled,
     'hideEmptySections': hideEmptySections,
     'explorerAgentFilter': explorerAgentFilter,
+    if (hiddenSidePanelSurfaces.isNotEmpty)
+      'hiddenSidePanelSurfaces': hiddenSidePanelSurfaces,
     'debugMode': debugMode,
     'logVerbosity': logVerbosity.name,
     'logToFile': logToFile,
@@ -631,6 +642,14 @@ class Settings {
       explorerAgentFilter: json['explorerAgentFilter'] is List
           ? (json['explorerAgentFilter'] as List).whereType<String>().toList()
           : const [],
+      hiddenSidePanelSurfaces: json['hiddenSidePanelSurfaces'] is List
+          ? ((json['hiddenSidePanelSurfaces'] as List)
+                .whereType<String>()
+                .where((id) => id.isNotEmpty)
+                .toSet()
+                .toList()
+              ..sort())
+          : const [],
       debugMode: json['debugMode'] is bool
           ? json['debugMode'] as bool
           : kDefaultDebugMode,
@@ -687,6 +706,7 @@ class Settings {
       other.notesEnabled == notesEnabled &&
       other.hideEmptySections == hideEmptySections &&
       _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
+      _listEquals(other.hiddenSidePanelSurfaces, hiddenSidePanelSurfaces) &&
       other.debugMode == debugMode &&
       other.logVerbosity == logVerbosity &&
       other.logToFile == logToFile &&
@@ -748,6 +768,7 @@ class Settings {
         editorWordWrap,
         hideEmptySections,
         Object.hashAll(explorerAgentFilter),
+        Object.hashAll(hiddenSidePanelSurfaces),
         Object.hashAll(androidSlimmingEnabled),
         androidEmulatorGpu,
         Object.hashAllUnordered(
