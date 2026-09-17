@@ -29,8 +29,24 @@ class ProjectCard extends StatelessWidget {
     this.showMenu = true,
     this.environmentBadge,
     this.depth = 0,
+    this.selecting = false,
+    this.ticked = false,
+    this.tickEnabled = true,
+    this.tickDisabledTooltip,
+    this.onDisclosure,
     super.key,
   });
+
+  /// Whether the Explorer is asking which rows to act on: draws the tick box.
+  /// Under a pointer only; see [SessionCard.selecting].
+  final bool selecting;
+  final bool ticked;
+  final bool tickEnabled;
+  final String? tickDisabledTooltip;
+
+  /// Folds the project from its caret alone, which is how a project is opened
+  /// while a click on the row means *tick*.
+  final VoidCallback? onDisclosure;
 
   final String name;
   final String path;
@@ -97,15 +113,26 @@ class ProjectCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final count = [?summary.label, ?summary.attentionLabel].join(' · ');
-    final line = ExplorerRowLine(
-      lead: ExplorerRowLead(
-        expanded: expanded,
-        glyph: Icon(
-          expanded ? AppIcons.folderOpen : AppIcons.folder,
-          size: ExplorerRow.glyphSize,
-          color: missing ? scheme.error : scheme.onSurfaceVariant,
-        ),
+    final onTap = this.onTap;
+    final lead = ExplorerRowLead(
+      expanded: expanded,
+      onDisclosure: onDisclosure,
+      tick: selecting
+          ? ExplorerRowTick(
+              value: ticked,
+              semanticLabel: 'Select "$name"',
+              onChanged: tickEnabled ? onTap : null,
+              disabledTooltip: tickDisabledTooltip,
+            )
+          : null,
+      glyph: Icon(
+        expanded ? AppIcons.folderOpen : AppIcons.folder,
+        size: ExplorerRow.glyphSize,
+        color: missing ? scheme.error : scheme.onSurfaceVariant,
       ),
+    );
+    final line = ExplorerRowLine(
+      lead: lead,
       title: LayoutBuilder(
         builder: (context, constraints) => Row(
           children: [
@@ -193,7 +220,7 @@ class ProjectCard extends StatelessWidget {
       children: [
         line,
         Padding(
-          padding: const EdgeInsets.only(left: ExplorerRow.lead),
+          padding: EdgeInsets.only(left: lead.width),
           child: _pathLine,
         ),
       ],

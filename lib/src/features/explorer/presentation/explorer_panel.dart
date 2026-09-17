@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
@@ -13,6 +14,7 @@ import '../application/explorer_tree_state.dart';
 import '../application/explorer_view_mode.dart';
 import '../application/session_selection.dart';
 import 'explorer_header_actions.dart';
+import 'explorer_selection_actions.dart';
 import 'explorer_sections_view.dart';
 import 'explorer_tree_rows.dart';
 import 'session_selection_bar.dart';
@@ -54,22 +56,54 @@ class ExplorerPanel extends ConsumerWidget {
               onChanged: (query) =>
                   ref.read(explorerSearchQueryProvider.notifier).set(query),
             ),
-          if (selecting) const SessionSelectionBar(),
+          // Not a stop of its own: it hears keys from the rows and the strip,
+          // and never from the search field above it.
           Expanded(
-            child: showingViews
-                ? const ExplorerSectionsList()
-                : hasProjects
-                ? const ExplorerTreeView()
-                : const PanePlaceholder(
-                    message:
-                        'No projects yet.\nUse + to create one from a folder, '
-                        'then its CLI sessions are imported automatically.',
+            child: Focus(
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: (_, event) => _selectionKeys(ref, event),
+              child: Column(
+                children: [
+                  if (selecting) const SessionSelectionBar(),
+                  Expanded(
+                    child: showingViews
+                        ? const ExplorerSectionsList()
+                        : hasProjects
+                        ? const ExplorerTreeView()
+                        : const PanePlaceholder(
+                            message:
+                                'No projects yet.\nUse + to create one from a '
+                                'folder, then its CLI sessions are imported '
+                                'automatically.',
+                          ),
                   ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+/// Escape leaves selection mode; Cmd or Ctrl+A selects every visible row of the
+/// focused row's kind. Space ticks a focused row through the row's own tap.
+KeyEventResult _selectionKeys(WidgetRef ref, KeyEvent event) {
+  if (event is! KeyDownEvent) return KeyEventResult.ignored;
+  final keys = HardwareKeyboard.instance;
+  if (event.logicalKey == LogicalKeyboardKey.escape &&
+      ref.read(sessionSelectionProvider).active) {
+    ref.read(sessionSelectionProvider.notifier).leave();
+    return KeyEventResult.handled;
+  }
+  if (event.logicalKey == LogicalKeyboardKey.keyA &&
+      (keys.isMetaPressed || keys.isControlPressed) &&
+      selectAllVisible(ref)) {
+    return KeyEventResult.handled;
+  }
+  return KeyEventResult.ignored;
 }
 
 /// The search box above the tree.

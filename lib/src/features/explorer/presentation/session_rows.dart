@@ -28,6 +28,7 @@ import '../application/explorer_actions.dart';
 import '../application/session_diff_stat.dart';
 import '../application/session_row_attention.dart';
 import '../application/session_selection.dart';
+import 'explorer_selection_actions.dart';
 import 'section_membership_dialog.dart';
 import 'package:karmashala_ui/rows.dart';
 
@@ -67,6 +68,10 @@ class NativeSessionRow extends ConsumerWidget {
     );
     final ticked = ref.watch(
       sessionSelectionProvider.select((s) => s.contains(session.id)),
+    );
+    // Flips only when the selection's kind does, so a tick moves no other row.
+    final tickEnabled = ref.watch(
+      sessionSelectionProvider.select((s) => s.canTick(SelectionKind.sessions)),
     );
     final actions = ref.read(sessionActionsProvider);
     final terminals =
@@ -193,71 +198,98 @@ class NativeSessionRow extends ConsumerWidget {
       lineageBroken: lineageBroken,
       selecting: selecting,
       ticked: ticked,
+      tickEnabled: tickEnabled,
+      tickDisabledTooltip: SelectionKind.projects.holdsLabel,
       // In selection mode a plain click ticks — the whole trade the mode makes,
-      // which is why leaving it is one click away in two places.
-      onTap: selecting
-          ? () => ref.read(sessionSelectionProvider.notifier).toggle(session.id)
-          : open,
-      menuItemsBuilder: () => [
-        // Moving a session to another agent belongs on the session, not only on
-        // the delivery strip, which needs the session already on screen.
-        DesktopMenuItem(
-          value: 'continue-with',
-          label: 'Continue with…',
-          icon: AppIcons.gitBranch,
-        ),
-        // The row you come back to a day later and have not opened. It spends a
-        // turn, so it is picked, never done by the row itself.
-        DesktopMenuItem(value: 'recap', label: 'Recap', icon: AppIcons.article),
-        // One entry, not one per installed terminal: three of eight items here
-        // used to be external openers. The rest is a setting.
-        if (terminals.isNotEmpty)
-          DesktopMenuItem(
-            value: 'terminal:${terminals.first.id}',
-            label: 'Open in system terminal',
-            icon: AppIcons.terminal,
-          ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'pin',
-          label: pinned ? 'Unpin' : 'Pin to top',
-          icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
-        ),
-        // Beside "Pin to top" because they are the same kind of act, which is
-        // what stops Pin being read as a third way into a section.
-        if (hasSections)
-          DesktopMenuItem(
-            value: 'sections',
-            label: 'Add to section…',
-            icon: AppIcons.folder,
-          ),
-        // Every session gets this, including one whose agent keeps no record of
-        // its own — that case is *why* the dialog exists.
-        DesktopMenuItem(
-          value: 'changed-files',
-          label: 'Files changed…',
-          icon: AppIcons.gitDiff,
-        ),
-        DesktopMenuItem(
-          value: 'copy-cmd',
-          label: 'Copy resume command',
-          icon: AppIcons.copy,
-        ),
-        DesktopMenuItem(
-          value: 'rename',
-          label: 'Rename',
-          icon: AppIcons.pencilSimple,
-          shortcut: 'F2',
-        ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'delete',
-          label: 'Delete',
-          icon: AppIcons.trash,
-          destructive: true,
-        ),
-      ],
+      // which is why leaving it is one click away in two places. Cmd/Ctrl and
+      // Shift select from outside it.
+      onTap: () {
+        if (!handleSelectableClick(
+          ref,
+          id: session.id,
+          kind: SelectionKind.sessions,
+        )) {
+          open();
+        }
+      },
+      // A ticked row's menu acts on the whole selection.
+      menuItemsBuilder: () =>
+          selectionRowMenu(ref, context, session.id) ??
+          [
+            // Moving a session to another agent belongs on the session, not only on
+            // the delivery strip, which needs the session already on screen.
+            DesktopMenuItem(
+              value: 'continue-with',
+              label: 'Continue with…',
+              icon: AppIcons.gitBranch,
+            ),
+            // The row you come back to a day later and have not opened. It spends a
+            // turn, so it is picked, never done by the row itself.
+            DesktopMenuItem(
+              value: 'recap',
+              label: 'Recap',
+              icon: AppIcons.article,
+            ),
+            // One entry, not one per installed terminal: three of eight items here
+            // used to be external openers. The rest is a setting.
+            if (terminals.isNotEmpty)
+              DesktopMenuItem(
+                value: 'terminal:${terminals.first.id}',
+                label: 'Open in system terminal',
+                icon: AppIcons.terminal,
+              ),
+            const DesktopMenuDivider(),
+            DesktopMenuItem(
+              value: 'pin',
+              label: pinned ? 'Unpin' : 'Pin to top',
+              icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
+            ),
+            // Beside "Pin to top" because they are the same kind of act, which is
+            // what stops Pin being read as a third way into a section.
+            if (hasSections)
+              DesktopMenuItem(
+                value: 'sections',
+                label: 'Add to section…',
+                icon: AppIcons.folder,
+              ),
+            // Every session gets this, including one whose agent keeps no record of
+            // its own — that case is *why* the dialog exists.
+            DesktopMenuItem(
+              value: 'changed-files',
+              label: 'Files changed…',
+              icon: AppIcons.gitDiff,
+            ),
+            DesktopMenuItem(
+              value: 'copy-cmd',
+              label: 'Copy resume command',
+              icon: AppIcons.copy,
+            ),
+            DesktopMenuItem(
+              value: 'rename',
+              label: 'Rename',
+              icon: AppIcons.pencilSimple,
+              shortcut: 'F2',
+            ),
+            selectRowMenuItem(),
+            selectRowMenuItem(),
+            const DesktopMenuDivider(),
+            DesktopMenuItem(
+              value: 'delete',
+              label: 'Delete',
+              icon: AppIcons.trash,
+              destructive: true,
+            ),
+          ],
       onMenu: (action) async {
+        if (runSelectionRowAction(
+          ref,
+          context,
+          action,
+          id: session.id,
+          kind: SelectionKind.sessions,
+        )) {
+          return;
+        }
         if (action.startsWith('terminal:')) {
           final id = action.substring('terminal:'.length);
           final terminal = terminals.where((t) => t.id == id).firstOrNull;
@@ -342,6 +374,10 @@ class ImportedSessionRow extends ConsumerWidget {
     final actions = ref.read(sessionActionsProvider);
     final terminals =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
+    // Flips only when the selection's kind does, so a tick moves no other row.
+    final tickEnabled = ref.watch(
+      sessionSelectionProvider.select((s) => s.canTick(SelectionKind.sessions)),
+    );
     final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
     final attention = ref.watch(
       sessionRowAttentionProvider.select(
@@ -358,6 +394,15 @@ class ImportedSessionRow extends ConsumerWidget {
         : compactAge(now.difference(lastActive.at!));
 
     Future<void> onMenu(String action) async {
+      if (runSelectionRowAction(
+        ref,
+        context,
+        action,
+        id: session.id,
+        kind: SelectionKind.sessions,
+      )) {
+        return;
+      }
       switch (action) {
         case final value when value.startsWith('terminal:'):
           final id = value.substring('terminal:'.length);
@@ -425,48 +470,62 @@ class ImportedSessionRow extends ConsumerWidget {
       statPending: pending,
       selecting: selecting,
       ticked: ticked,
-      onTap: selecting
-          ? () => ref.read(sessionSelectionProvider.notifier).toggle(session.id)
-          : () => _open(context, ref, session),
-      menuItemsBuilder: () => [
-        DesktopMenuItem(value: 'resume', label: 'Resume', icon: AppIcons.play),
-        if (terminals.isNotEmpty)
-          DesktopMenuItem(
-            value: 'terminal:${terminals.first.id}',
-            label: 'Open in system terminal',
-            icon: AppIcons.terminal,
-          ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'pin',
-          label: pinned ? 'Unpin' : 'Pin to top',
-          icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
-        ),
-        if (hasSections)
-          DesktopMenuItem(
-            value: 'sections',
-            label: 'Add to section…',
-            icon: AppIcons.folder,
-          ),
-        DesktopMenuItem(
-          value: 'copy-cmd',
-          label: 'Copy resume command',
-          icon: AppIcons.copy,
-        ),
-        DesktopMenuItem(
-          value: 'rename',
-          label: 'Rename',
-          icon: AppIcons.pencilSimple,
-          shortcut: 'F2',
-        ),
-        const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'delete',
-          label: 'Delete from CLI store',
-          icon: AppIcons.trash,
-          destructive: true,
-        ),
-      ],
+      tickEnabled: tickEnabled,
+      tickDisabledTooltip: SelectionKind.projects.holdsLabel,
+      onTap: () {
+        if (!handleSelectableClick(
+          ref,
+          id: session.id,
+          kind: SelectionKind.sessions,
+        )) {
+          _open(context, ref, session);
+        }
+      },
+      menuItemsBuilder: () =>
+          selectionRowMenu(ref, context, session.id) ??
+          [
+            DesktopMenuItem(
+              value: 'resume',
+              label: 'Resume',
+              icon: AppIcons.play,
+            ),
+            if (terminals.isNotEmpty)
+              DesktopMenuItem(
+                value: 'terminal:${terminals.first.id}',
+                label: 'Open in system terminal',
+                icon: AppIcons.terminal,
+              ),
+            const DesktopMenuDivider(),
+            DesktopMenuItem(
+              value: 'pin',
+              label: pinned ? 'Unpin' : 'Pin to top',
+              icon: pinned ? AppIcons.pushPinFill : AppIcons.pushPin,
+            ),
+            if (hasSections)
+              DesktopMenuItem(
+                value: 'sections',
+                label: 'Add to section…',
+                icon: AppIcons.folder,
+              ),
+            DesktopMenuItem(
+              value: 'copy-cmd',
+              label: 'Copy resume command',
+              icon: AppIcons.copy,
+            ),
+            DesktopMenuItem(
+              value: 'rename',
+              label: 'Rename',
+              icon: AppIcons.pencilSimple,
+              shortcut: 'F2',
+            ),
+            const DesktopMenuDivider(),
+            DesktopMenuItem(
+              value: 'delete',
+              label: 'Delete from CLI store',
+              icon: AppIcons.trash,
+              destructive: true,
+            ),
+          ],
       onMenu: onMenu,
     );
   }

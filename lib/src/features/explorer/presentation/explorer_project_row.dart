@@ -36,7 +36,9 @@ import '../application/checkout_picker.dart';
 import '../application/explorer_actions.dart';
 import '../application/explorer_tree_state.dart';
 import '../application/session_diff_stat.dart';
+import '../application/session_selection.dart';
 import '../application/where_you_are.dart';
+import 'explorer_selection_actions.dart';
 import 'session_rows.dart';
 
 /// Prefix on a "put this project in a context" menu value, so one `startsWith`
@@ -87,6 +89,16 @@ class ExplorerProjectRow extends ConsumerWidget {
       null => null,
     };
     final actions = ProjectRowActions(ref, context, project);
+    // Each its own `.select`, so ticking one project moves that row alone.
+    final selecting = ref.watch(
+      sessionSelectionProvider.select((s) => s.active),
+    );
+    final ticked = ref.watch(
+      sessionSelectionProvider.select((s) => s.contains(project.id)),
+    );
+    final tickEnabled = ref.watch(
+      sessionSelectionProvider.select((s) => s.canTick(SelectionKind.projects)),
+    );
 
     return KeyedSubtree(
       key: anchorKey,
@@ -100,25 +112,60 @@ class ExplorerProjectRow extends ConsumerWidget {
         pinned: pinned,
         environmentBadge: badge,
         summary: summary,
-        onTap: actions.toggle,
+        onTap: () {
+          if (!handleSelectableClick(
+            ref,
+            id: project.id,
+            kind: SelectionKind.projects,
+          )) {
+            actions.toggle();
+          }
+        },
+        selecting: selecting,
+        ticked: ticked,
+        tickEnabled: tickEnabled,
+        tickDisabledTooltip: SelectionKind.sessions.holdsLabel,
+        // While a click means *tick*, the caret alone still folds.
+        onDisclosure: selecting
+            ? () => ref
+                  .read(explorerExpandedProjectsProvider.notifier)
+                  .toggle(project.id)
+            : null,
         // Starts one; the menu is where the dialog lives.
         onNewSession: actions.startWithDefaults,
         onTogglePin: actions.togglePin,
         // Built when the menu opens, so the readings behind it are current.
-        menuItemsBuilder: () => projectMenuItems(
-          project: project,
-          pinned: pinned,
-          workspaces: ref.read(workspacesControllerProvider),
-          workspaceCounts: ref.read(workspaceProjectCountsProvider),
-          installations: ref
-              .read(agentInstallationDaoProvider)
-              .getByEnvironment(project.root.environmentId),
-          canReveal: ref
-              .read(revealInFileManagerProvider)
-              .canReveal(project.root),
-          checkedSuffix: actions.checkedSuffix(),
-        ),
-        onMenu: actions.onMenu,
+        menuItemsBuilder: () =>
+            selectionRowMenu(ref, context, project.id) ??
+            [
+              ...projectMenuItems(
+                project: project,
+                pinned: pinned,
+                workspaces: ref.read(workspacesControllerProvider),
+                workspaceCounts: ref.read(workspaceProjectCountsProvider),
+                installations: ref
+                    .read(agentInstallationDaoProvider)
+                    .getByEnvironment(project.root.environmentId),
+                canReveal: ref
+                    .read(revealInFileManagerProvider)
+                    .canReveal(project.root),
+                checkedSuffix: actions.checkedSuffix(),
+              ),
+              const DesktopMenuDivider(),
+              selectRowMenuItem(),
+            ],
+        onMenu: (action) async {
+          if (runSelectionRowAction(
+            ref,
+            context,
+            action,
+            id: project.id,
+            kind: SelectionKind.projects,
+          )) {
+            return;
+          }
+          actions.onMenu(action);
+        },
       ),
     );
   }

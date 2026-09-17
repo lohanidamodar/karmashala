@@ -10,18 +10,25 @@ import '../domain/workspace.dart';
 /// Names a new context and returns it, so the caller can put something in it
 /// straight away: "file this" and "there is no context yet" are one moment.
 class NewContextDialog extends ConsumerStatefulWidget {
-  const NewContextDialog({this.forProjectNamed, super.key});
+  const NewContextDialog({this.forProjectNamed, this.movingCount, super.key});
 
   /// Whose sake this is being created for, named in the subtitle so the dialog
   /// says what will happen when it closes.
   final String? forProjectNamed;
 
+  /// How many selected projects will move into it, when it is for several.
+  final int? movingCount;
+
   static Future<Workspace?> show(
     BuildContext context, {
     String? forProjectNamed,
+    int? movingCount,
   }) => showDialog<Workspace>(
     context: context,
-    builder: (_) => NewContextDialog(forProjectNamed: forProjectNamed),
+    builder: (_) => NewContextDialog(
+      forProjectNamed: forProjectNamed,
+      movingCount: movingCount,
+    ),
   );
 
   @override
@@ -67,9 +74,13 @@ class _NewContextDialogState extends ConsumerState<NewContextDialog> {
       title: DesktopDialogTitle(
         icon: AppIcons.folderPlus,
         title: 'New context',
-        subtitle: project == null
-            ? 'Group projects by what they are for.'
-            : 'Create it and move "$project" into it.',
+        subtitle: switch ((project, widget.movingCount)) {
+          (final String project, _) => 'Create it and move "$project" into it.',
+          (_, final int count) =>
+            'Create it and move ${count == 1 ? '1 project' : '$count projects'} '
+                'into it.',
+          _ => 'Group projects by what they are for.',
+        },
       ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),

@@ -97,6 +97,10 @@ class ExplorerRow extends StatelessWidget {
   /// Everything left of a row's title at depth zero. Second lines hang here.
   static const lead = disclosureSlot + glyphSlot + textGap;
 
+  /// The selection box's column, drawn ahead of [lead] while selecting: a
+  /// compact checkbox's 32px and a gap.
+  static const tickSlot = disclosureSlot + glyphSlot + textGap;
+
   static const disclosureSize = Chrome.iconSmall;
   static const glyphSize = Chrome.iconAction;
 
@@ -240,7 +244,13 @@ class _ExplorerRowFill extends StatelessWidget {
 /// A row's disclosure and glyph columns plus the gap before its title — the
 /// same 36px on every kind, so carets and glyphs form one column per depth.
 class ExplorerRowLead extends StatelessWidget {
-  const ExplorerRowLead({this.expanded, this.glyph, this.tick, super.key});
+  const ExplorerRowLead({
+    this.expanded,
+    this.glyph,
+    this.tick,
+    this.onDisclosure,
+    super.key,
+  });
 
   /// Null reserves the disclosure column and draws nothing in it.
   final bool? expanded;
@@ -248,46 +258,62 @@ class ExplorerRowLead extends StatelessWidget {
   /// Centred in [ExplorerRow.glyphSlot]; size it [ExplorerRow.glyphSize].
   final Widget? glyph;
 
-  /// A selection box, which takes both columns while a selection is open.
+  /// A selection box, in its own column ahead of the disclosure while a
+  /// selection is open, so carets and glyphs stay where they were relative to
+  /// each other.
   final Widget? tick;
+
+  /// Makes the caret its own target — folding a row without the row's tap.
+  final VoidCallback? onDisclosure;
+
+  /// How wide this lead is: [ExplorerRow.lead], plus [ExplorerRow.tickSlot]
+  /// while a tick is drawn.
+  double get width =>
+      ExplorerRow.lead + (tick == null ? 0 : ExplorerRow.tickSlot);
 
   @override
   Widget build(BuildContext context) {
     final expanded = this.expanded;
     final tick = this.tick;
+    Widget? caret = expanded == null
+        ? null
+        : Center(
+            child: Icon(
+              expanded ? AppIcons.caretDown : AppIcons.caretRight,
+              size: ExplorerRow.disclosureSize,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          );
+    if (caret != null && onDisclosure != null) {
+      caret = MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onDisclosure,
+          child: caret,
+        ),
+      );
+    }
     return SizedBox(
-      width: ExplorerRow.lead,
+      width: width,
       child: Row(
         children: [
           if (tick != null)
             SizedBox(
-              width: ExplorerRow.disclosureSlot + ExplorerRow.glyphSlot,
+              width: ExplorerRow.tickSlot,
               child: Center(child: tick),
-            )
-          else ...[
-            SizedBox(
-              width: ExplorerRow.disclosureSlot,
-              child: expanded == null
-                  ? null
-                  : Center(
-                      child: Icon(
-                        expanded ? AppIcons.caretDown : AppIcons.caretRight,
-                        size: ExplorerRow.disclosureSize,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
             ),
-            // Square, and a wider badge is scaled into it rather than
-            // pushing the title off the row.
-            SizedBox.square(
-              dimension: ExplorerRow.glyphSlot,
-              child: glyph == null
-                  ? null
-                  : Center(
-                      child: FittedBox(fit: BoxFit.scaleDown, child: glyph),
-                    ),
-            ),
-          ],
+          SizedBox(width: ExplorerRow.disclosureSlot, child: caret),
+          // Square, and a wider badge is scaled into it rather than pushing
+          // the title off the row.
+          SizedBox.square(
+            dimension: ExplorerRow.glyphSlot,
+            child: glyph == null
+                ? null
+                : Center(
+                    child: FittedBox(fit: BoxFit.scaleDown, child: glyph),
+                  ),
+          ),
           const SizedBox(width: ExplorerRow.textGap),
         ],
       ),
@@ -306,7 +332,7 @@ class ExplorerRowLine extends StatelessWidget {
     super.key,
   });
 
-  final Widget lead;
+  final ExplorerRowLead lead;
   final Widget title;
   final ExplorerRowTrailing? trailing;
 
@@ -324,7 +350,7 @@ class ExplorerRowLine extends StatelessWidget {
     final wanted = ExplorerRow.trailingWidthOf(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final room = math.max(0.0, constraints.maxWidth - ExplorerRow.lead);
+        final room = math.max(0.0, constraints.maxWidth - lead.width);
         final width = math.min(wanted, room / 2);
         return Row(
           children: [
@@ -432,6 +458,46 @@ class _TrailingSwap extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// A row's selection box. Drawn disabled, with [disabledTooltip] saying why,
+/// for a row the selection cannot take — so the rule is visible, not silent.
+class ExplorerRowTick extends StatelessWidget {
+  const ExplorerRowTick({
+    required this.value,
+    required this.semanticLabel,
+    required this.onChanged,
+    this.disabledTooltip,
+    super.key,
+  });
+
+  final bool value;
+  final String semanticLabel;
+
+  /// Null draws the box disabled.
+  final VoidCallback? onChanged;
+  final String? disabledTooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final density = UiDensity.of(context);
+    final onChanged = this.onChanged;
+    final box = Checkbox(
+      value: value,
+      semanticLabel: semanticLabel,
+      visualDensity: density.isTouch
+          ? VisualDensity.standard
+          : VisualDensity.compact,
+      materialTapTargetSize: density.isTouch
+          ? MaterialTapTargetSize.padded
+          : MaterialTapTargetSize.shrinkWrap,
+      onChanged: onChanged == null ? null : (_) => onChanged(),
+    );
+    final why = disabledTooltip;
+    return onChanged != null || why == null
+        ? box
+        : Tooltip(message: why, child: box);
   }
 }
 

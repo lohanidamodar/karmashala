@@ -1,5 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../projects/application/project_providers.dart';
@@ -75,6 +76,17 @@ class WorkspacesController extends Notifier<List<Workspace>> {
   /// `UPDATE`, not remove-then-add, so a project is never briefly homeless.
   void assign(String projectId, String? workspaceId) {
     ref.read(projectDaoProvider).setWorkspace(projectId, workspaceId);
+    ref.read(projectsControllerProvider.notifier).refreshFromStore();
+  }
+
+  /// Files many projects at once — [placements] maps a project id to its
+  /// context, or null to unassign — in one transaction and one refresh.
+  void assignAll(Map<String, String?> placements) {
+    if (placements.isEmpty) return;
+    final dao = ref.read(projectDaoProvider);
+    ref.read(databaseProvider).transaction(() {
+      placements.forEach(dao.setWorkspace);
+    });
     ref.read(projectsControllerProvider.notifier).refreshFromStore();
   }
 

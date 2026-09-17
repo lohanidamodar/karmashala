@@ -46,7 +46,7 @@ class ExplorerHeaderActions extends ConsumerWidget {
         IconButton(
           // A toggle rather than Ctrl-click, which is invisible until
           // somebody tells you about it.
-          tooltip: selecting ? 'Leave selection' : 'Select sessions',
+          tooltip: selecting ? 'Leave selection' : 'Select',
           isSelected: selecting,
           icon: Icon(selecting ? AppIcons.x : AppIcons.check),
           onPressed: () =>

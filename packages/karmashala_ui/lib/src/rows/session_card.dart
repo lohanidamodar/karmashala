@@ -57,8 +57,15 @@ class SessionCard extends StatelessWidget {
     this.unread = false,
     this.needsYou = false,
     this.settled = false,
+    this.tickEnabled = true,
+    this.tickDisabledTooltip,
     super.key,
   });
+
+  /// Whether this row may join the selection as it stands. See
+  /// [ExplorerRowTick].
+  final bool tickEnabled;
+  final String? tickDisabledTooltip;
 
   /// What [agentIcon] means, for its tooltip and screen reader, when it is the
   /// row's status glyph.
@@ -283,11 +290,12 @@ class SessionCard extends StatelessWidget {
         ? null
         : ExplorerRowMeta(age, tooltip: ageTooltip);
 
+    final lead = ExplorerRowLead(
+      glyph: glyph,
+      tick: selecting ? _tickBox(density) : null,
+    );
     final line1 = ExplorerRowLine(
-      lead: ExplorerRowLead(
-        glyph: glyph,
-        tick: selecting ? _tickBox(density) : null,
-      ),
+      lead: lead,
       title: Row(
         children: [
           Flexible(
@@ -331,7 +339,7 @@ class SessionCard extends StatelessWidget {
       children: [
         line1,
         Padding(
-          padding: const EdgeInsets.only(left: ExplorerRow.lead),
+          padding: EdgeInsets.only(left: lead.width),
           child: _PointerMetaLine(
             agentLabel: agentLabel,
             branch: branch,
@@ -349,7 +357,7 @@ class SessionCard extends StatelessWidget {
         if (third.isNotEmpty) ...[
           SizedBox(height: density.lineGap),
           Padding(
-            padding: const EdgeInsets.only(left: ExplorerRow.lead),
+            padding: EdgeInsets.only(left: lead.width),
             child: Row(
               children: [
                 Icon(
@@ -385,20 +393,15 @@ class SessionCard extends StatelessWidget {
 
   /// The tick, sized by density rather than by [ExplorerRow.slotOf]: a checkbox
   /// has Material's own hit area and would overflow the menu button's slot.
-  Widget _tickBox(UiDensity density) => Checkbox(
+  Widget _tickBox(UiDensity density) => ExplorerRowTick(
     value: ticked,
     // Named so Narrator says which row it is on. The row itself is not a
     // button, so nothing else in the semantics tree carries the title here.
     semanticLabel: 'Select "$title"',
-    visualDensity: density.isTouch
-        ? VisualDensity.standard
-        : VisualDensity.compact,
-    materialTapTargetSize: density.isTouch
-        ? MaterialTapTargetSize.padded
-        : MaterialTapTargetSize.shrinkWrap,
     // The same callback the row's own tap runs, so ticking the box and
     // clicking the card cannot come to mean two different things.
-    onChanged: (_) => onTap(),
+    onChanged: tickEnabled ? onTap : null,
+    disabledTooltip: tickDisabledTooltip,
   );
 }
 

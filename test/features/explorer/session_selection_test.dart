@@ -127,7 +127,7 @@ void main() {
   }
 
   Future<void> enterSelection(WidgetTester tester) async {
-    await tester.tap(find.byTooltip('Select sessions'));
+    await tester.tap(find.byTooltip('Select'));
     await tester.pumpAndSettle();
   }
 
@@ -159,7 +159,15 @@ void main() {
       await pump(tester);
       await enterSelection(tester);
 
-      expect(find.byType(Checkbox), findsNWidgets(3));
+      // One per session card; the project row above them has its own, since a
+      // selection may hold projects instead.
+      expect(
+        find.descendant(
+          of: find.byType(SessionCard),
+          matching: find.byType(Checkbox),
+        ),
+        findsNWidgets(3),
+      );
       expect(find.text('0 selected'), findsOneWidget);
       // Both kinds are selectable — an imported conversation is as deletable as
       // a native row, and a mode that could only tick half of them would be a
@@ -186,7 +194,7 @@ void main() {
       );
       expect(cardFor(tester, 'Two').ticked, isTrue);
       expect(cardFor(tester, 'One').ticked, isFalse);
-      expect(find.text('1 selected'), findsOneWidget);
+      expect(find.text('1 session selected'), findsOneWidget);
     });
 
     testWidgets('the checkbox itself ticks the same row', (tester) async {
@@ -194,7 +202,12 @@ void main() {
       final container = await pump(tester);
       await enterSelection(tester);
 
-      await tester.tap(find.byType(Checkbox));
+      await tester.tap(
+        find.descendant(
+          of: find.byType(SessionCard),
+          matching: find.byType(Checkbox),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(container.read(sessionSelectionProvider).ids, {'n0'});
@@ -369,7 +382,7 @@ void main() {
       expect(container.read(sessionSelectionProvider).ids, {
         'n0',
       }, reason: 'both gone rows drop; the survivor stays ticked');
-      expect(find.text('1 selected'), findsOneWidget);
+      expect(find.text('1 session selected'), findsOneWidget);
       expect(cardFor(tester, 'One').ticked, isTrue);
     });
 
@@ -393,7 +406,7 @@ void main() {
 
       expect(find.byType(SessionCard), findsNothing);
       expect(container.read(sessionSelectionProvider).ids, {'n0'});
-      expect(find.text('1 selected'), findsOneWidget);
+      expect(find.text('1 session selected'), findsOneWidget);
     });
   });
 
@@ -503,9 +516,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('1 selected'), findsOneWidget);
-      expect(find.widgetWithText(TextButton, 'Delete'), findsOneWidget);
+      expect(find.text('1 session selected'), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'Done'), findsOneWidget);
+      // Too narrow for the verb as a button: it folds into the strip's menu.
+      expect(find.widgetWithText(TextButton, 'Delete'), findsNothing);
+      await tester.tap(find.byTooltip('Selection actions'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete…'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('the selection strip survives the window matrix', (
@@ -520,7 +538,7 @@ void main() {
         warmUp: (tester) async {
           await tester.tap(find.text('Hub'));
           await tester.pumpAndSettle();
-          await tester.tap(find.byTooltip('Select sessions'));
+          await tester.tap(find.byTooltip('Select'));
           await tester.pumpAndSettle();
           await tester.tap(find.text('One'));
           await tester.pumpAndSettle();
