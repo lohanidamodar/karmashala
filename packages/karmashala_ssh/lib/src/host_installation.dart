@@ -71,12 +71,28 @@ class HostInstallReading {
 
   bool get canInstall => offeredVersion != null;
 
+  /// Whether what is on the machine is a *later* build than this app carries —
+  /// a downgraded app, or a second desktop ahead of this one. Installing this
+  /// app's is then not an update, and is not called one.
+  bool get hostIsNewer =>
+      state == HostInstallState.outdated &&
+      installedVersion != null &&
+      offeredVersion != null &&
+      DirectoryHostBinaries.compareFilenameVersions(
+            installedVersion,
+            offeredVersion,
+          ) >
+          0;
+
   /// `installed 1.25.0 (running)` — what follows "Karmashala host:".
   String get label => switch (state) {
     HostInstallState.notInstalled => 'not installed',
     HostInstallState.installed =>
       'installed ${installedVersion ?? 'unversioned'} '
           '(${running ? 'running' : 'stopped'})',
+    HostInstallState.outdated when hostIsNewer =>
+      'newer than this app ($installedVersion; this app carries '
+          '$offeredVersion), ${running ? 'running' : 'stopped'}',
     HostInstallState.outdated =>
       'older than this app (${installedVersion ?? 'unversioned'} → '
           '${offeredVersion ?? 'unknown'}), ${running ? 'running' : 'stopped'}',
@@ -379,9 +395,9 @@ class HostInstaller {
         availableTargets: targets,
         reason: outdated
             ? 'The session host on ${host.name} is ${version ?? 'unversioned'}, '
-                  '$where; this app carries ${binary!.version}. Update installs '
-                  'it beside the old one and moves over when the old one holds '
-                  'no sessions.'
+                  '$where; this app carries ${binary!.version}. '
+                  '${_isNewer(version, binary.version) ? 'A later build put it there. Installing this app\'s puts ${binary.version} beside it' : 'Update installs it beside the old one'} '
+                  'and moves over when the running one holds no sessions.'
             : 'The session host ${version ?? 'unversioned'} on ${host.name} is '
                   '$where'
                   '${held == null || held == 0 ? '' : ', holding $held session(s)'}.'
@@ -390,6 +406,10 @@ class HostInstaller {
       home: home,
     );
   }
+
+  static bool _isNewer(String? installed, String offered) =>
+      installed != null &&
+      DirectoryHostBinaries.compareFilenameVersions(installed, offered) > 0;
 
   /// `1.25.0` out of `…/karmashala_host-1.25.0-linux-x64.d/bin/karmashala_host`.
   static String? _versionOf(String? path) {

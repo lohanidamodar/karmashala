@@ -197,6 +197,27 @@ void main() {
     expect(box.runningServe, boxExecutable(kBoxThisBundle));
   });
 
+  testWidgets('a host newer than this app is said to be newer, and going back '
+      'is not called Update', (tester) async {
+    const newer = 'karmashala_host-1.26.0-linux-x64.d';
+    box
+      ..installed.add(newer)
+      ..runningServe = boxExecutable(newer);
+    await pump(tester);
+
+    await press(tester, 'Check');
+
+    expect(
+      find.text(
+        'Karmashala host: newer than this app (1.26.0; this app carries '
+        '1.25.0), running',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Update'), findsNothing);
+    expect(find.text('Install 1.25.0'), findsOneWidget);
+  });
+
   testWidgets('Stop asks first when the host holds work, and Start brings it '
       'back', (tester) async {
     box

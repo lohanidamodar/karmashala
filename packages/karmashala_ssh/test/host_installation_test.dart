@@ -154,6 +154,26 @@ void main() {
       expect(reading.reason, contains('Update'));
     });
 
+    test('a host newer than this app is not called older, nor "updated" '
+        'downwards by that name', () async {
+      // An app that was downgraded, or a second desktop on a newer build.
+      const newer = 'karmashala_host-0.2.0-linux-x64.d';
+      box
+        ..installed.add(newer)
+        ..runningServe = _exe(newer);
+
+      final reading = await installer().check();
+
+      expect(reading.state, HostInstallState.outdated);
+      expect(reading.hostIsNewer, isTrue);
+      expect(
+        reading.label,
+        'newer than this app (0.2.0; this app carries 0.1.0), running',
+      );
+      expect(reading.reason, isNot(contains('Update')));
+      expect(reading.reason, contains('0.1.0'));
+    });
+
     test(
       'this build installed beside a running older one is still older',
       () async {

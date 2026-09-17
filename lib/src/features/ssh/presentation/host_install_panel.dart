@@ -200,7 +200,12 @@ class HostInstallPanel extends ConsumerWidget {
         FilledButton.tonalIcon(
           onPressed: idle ? () => controller.install(host) : null,
           icon: const Icon(AppIcons.downloadSimple),
-          label: const Text('Update'),
+          // Going back a version is not an update, and is not called one.
+          label: Text(
+            reading.hostIsNewer
+                ? 'Install ${reading.offeredVersion}'
+                : 'Update',
+          ),
         ),
       if (!compact &&
           reading.state == HostInstallState.installed &&
