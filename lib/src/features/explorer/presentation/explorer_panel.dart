@@ -165,6 +165,9 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
   /// can finish exactly rather than at its estimate.
   final _selectedRow = GlobalKey();
 
+  /// Names the list. A new name is a new list, at the top.
+  int _generation = 0;
+
   @override
   void dispose() {
     _scroll.dispose();
@@ -201,6 +204,15 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
 
   @override
   Widget build(BuildContext context) {
+    // A search starts at its first match — by a *new* list, not a jump. Rows
+    // have no fixed extent, so a list crosses a distance by building every row
+    // in it: a jump to the top from row 300 built 300 rows, and a tree that
+    // shrank under an offset past its new end built every match to find it.
+    ref.listen(explorerSearchQueryProvider, (_, _) {
+      if (_scroll.hasClients && _scroll.offset != 0) {
+        setState(() => _generation++);
+      }
+    });
     final nodes = ref.watch(explorerTreeProvider).nodes;
     // A selection that moved — by a click, or by the pane on screen going
     // somewhere — is brought into view once, after this frame.
@@ -223,6 +235,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
       );
     }
     return ListView.builder(
+      key: ValueKey(_generation),
       // Only the rows on screen are inflated, so the tree costs what is
       // visible rather than what the workspace holds.
       controller: _scroll,

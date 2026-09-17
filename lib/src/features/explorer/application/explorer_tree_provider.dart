@@ -95,7 +95,9 @@ final explorerTreeProvider = Provider.autoDispose<ExplorerTree>((ref) {
       // A machine holding nothing is worth a row; a machine holding nothing
       // that *matches a search* is noise.
       includeEmptyEnvironments: query.isEmpty,
-      childrenOf: (node) => _projectChildren(ref, node),
+      childrenOf: (node) => ref.watch(
+        _projectChildrenProvider((project: node.project, depth: node.depth)),
+      ),
       terminalsOf: (node) => _terminalNodes(ref, node),
       terminalCountOf: terminalCount,
       terminalDetailOf: terminalDetail,
@@ -134,11 +136,17 @@ List<ExplorerNode> _terminalNodes(Ref ref, EnvironmentNode node) {
   ];
 }
 
+/// One open project's rows, kept apart from the tree so that folding *another*
+/// project, or typing in the search field, re-reads and re-sorts nothing here:
+/// at 500 open projects a fold was 500 repository reads and 500 forests.
+final _projectChildrenProvider = Provider.autoDispose
+    .family<List<ExplorerNode>, ({Project project, int depth})>(
+      (ref, key) => _projectChildren(ref, key.project, key.depth + 1),
+    );
+
 /// Everything under one expanded project. Asked by the tree only for an open
 /// project, so a closed one costs neither indexed read below.
-List<ExplorerNode> _projectChildren(Ref ref, ProjectNode node) {
-  final project = node.project;
-  final depth = node.depth + 1;
+List<ExplorerNode> _projectChildren(Ref ref, Project project, int depth) {
   // No git at any depth: the checkouts a session works in are the right
   // sidebar's subject now, not a row here.
   final visible = ref.watch(visibleProjectSessionsProvider(project.id));
