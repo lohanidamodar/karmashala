@@ -76,7 +76,7 @@ class _Box implements HostDeployTarget {
         '',
       );
     }
-    if (command.contains('command -v ufw')) {
+    if (command.contains('has ufw')) {
       return RemoteRun(0, '$firewall\n', '');
     }
     throw StateError('unscripted: $command');
@@ -239,7 +239,7 @@ void main() {
       );
       final order = box.commands;
       expect(
-        order.indexWhere((c) => c.contains('command -v ufw')),
+        order.indexWhere((c) => c.contains('has ufw')),
         greaterThan(order.indexWhere((c) => c.contains('setsid nohup'))),
       );
     },
@@ -263,12 +263,50 @@ void main() {
 
   test('no sudo surfaces the command to run by hand', () async {
     probeAnswers = [false];
-    box.firewall = 'nosudo';
+    box.firewall = 'nosudo-ufw';
 
     final reading = await setup().start();
 
     expect(reading.status, SshRelayStatus.unreachable);
     expect(reading.command, contains('sudo ufw allow 8787/tcp'));
+    // The terminal step, with what it does and why — and never the token.
+    expect(reading.privileged?.command, 'sudo ufw allow 8787/tcp');
+    expect(reading.privileged?.why, contains('password'));
+    expect(
+      '${reading.privileged?.command} ${reading.privileged?.does} '
+      '${reading.privileged?.why} ${everythingSaid(reading)}',
+      isNot(contains(_token)),
+    );
+  });
+
+  test('checking again after the command was run blames the provider, not '
+      'sudo', () async {
+    box
+      ..runningFrom = _current
+      ..token = _token;
+    probeAnswers = [false];
+    box.firewall = 'nosudo-ufw';
+
+    final reading = await setup().start(ruleAddedByHand: true);
+
+    expect(reading.status, SshRelayStatus.unreachable);
+    expect(reading.privileged, isNull);
+    expect(reading.outsideTheMachine, isTrue);
+    expect(reading.reason, contains('DigitalOcean'));
+    expect(everythingSaid(reading), isNot(contains(_token)));
+  });
+
+  test('checking again after the command was run finds it open', () async {
+    box
+      ..runningFrom = _current
+      ..token = _token;
+    probeAnswers = [true];
+    box.firewall = 'nosudo-ufw';
+
+    final reading = await setup().start(ruleAddedByHand: true);
+
+    expect(reading.status, SshRelayStatus.running);
+    expect(box.commands.where((c) => c.contains('has ufw')), isEmpty);
   });
 
   test(

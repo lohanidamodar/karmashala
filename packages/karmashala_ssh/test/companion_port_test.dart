@@ -74,31 +74,127 @@ void main() {
     expect(dials, 2, reason: 'opened is a claim about the second dial');
   });
 
-  test('a rule that went in while the port stayed shut names the provider', () async {
-    // The case this whole class exists for: `ufw allow` exits 0, and a security
-    // group nothing on the machine can see is still dropping the packets.
-    dialAnswers = [false, false];
-    box.firewall = 'ufw';
+  test(
+    'a rule that went in while the port stayed shut names the provider',
+    () async {
+      // The case this whole class exists for: `ufw allow` exits 0, and a security
+      // group nothing on the machine can see is still dropping the packets.
+      dialAnswers = [false, false];
+      box.firewall = 'ufw';
 
-    final reading = await setupOn(box).ensureOpen(47820);
+      final reading = await setupOn(box).ensureOpen(47820);
 
-    expect(reading.status, PortStatus.ruleAddedStillShut);
-    expect(reading.isReachable, isFalse);
-    expect(reading.reason, contains('outside the machine'));
-    expect(reading.reason, contains('provider'));
+      expect(reading.status, PortStatus.ruleAddedStillShut);
+      expect(reading.isReachable, isFalse);
+      expect(reading.reason, contains('outside the machine'));
+      expect(reading.reason, contains('provider'));
+      expect(reading.outsideTheMachine, isTrue);
+      expect(reading.privileged, isNull);
+    },
+  );
+
+  test('a sudo that wants a password is a command for a terminal, exactly', () async {
+    for (final (said, command) in [
+      ('nosudo-ufw', 'sudo ufw allow 47820/tcp'),
+      (
+        'nosudo-firewalld',
+        'sudo firewall-cmd --add-port=47820/tcp --permanent && sudo firewall-cmd --reload',
+      ),
+    ]) {
+      dialAnswers = [false, false];
+      dials = 0;
+      box.firewall = said;
+
+      final reading = await setupOn(box).ensureOpen(47820);
+
+      expect(reading.status, PortStatus.couldNotOpen, reason: said);
+      // The machine's own firewall, named — never "or your firewall's equivalent".
+      expect(reading.privileged?.command, command);
+      expect(reading.command, command);
+      expect(reading.privileged?.does, contains('47820'));
+      expect(reading.privileged?.why, contains('password'));
+      expect(reading.outsideTheMachine, isFalse);
+      // Never dialled a second time: nothing was changed, so nothing could have.
+      expect(dials, 1);
+    }
   });
 
-  test('no sudo is a command to run, not a failure to puzzle over', () async {
-    dialAnswers = [false, false];
-    box.firewall = 'nosudo';
+  test(
+    'after the command was run by hand, a still-shut port is the provider\'s',
+    () async {
+      dialAnswers = [false];
+      box.firewall = 'nosudo-ufw';
+
+      final reading = await setupOn(
+        box,
+      ).ensureOpen(47820, ruleAddedByHand: true);
+
+      expect(reading.status, PortStatus.ruleAddedStillShut);
+      expect(reading.outsideTheMachine, isTrue);
+      // More sudo is not the remedy for a firewall the machine cannot see.
+      expect(reading.privileged, isNull);
+      expect(reading.reason, contains('DigitalOcean'));
+      expect(reading.reason, contains('security group'));
+      expect(reading.reason, contains('sudo ufw allow 47820/tcp'));
+    },
+  );
+
+  test(
+    '"check again" is the dial, and an open port needs nothing else',
+    () async {
+      dialAnswers = [true];
+      box.firewall = 'nosudo-ufw';
+
+      final reading = await setupOn(
+        box,
+      ).ensureOpen(47820, ruleAddedByHand: true);
+
+      expect(reading.status, PortStatus.alreadyReachable);
+      expect(box.commands, isEmpty);
+    },
+  );
+
+  test('a firewall that is installed and switched off is not blamed', () async {
+    // Ubuntu ships ufw installed and inactive; a rule there changes nothing.
+    dialAnswers = [false];
+    box.firewall = 'inactive';
 
     final reading = await setupOn(box).ensureOpen(47820);
 
     expect(reading.status, PortStatus.couldNotOpen);
-    expect(reading.command, contains('47820'));
-    // Never dialled a second time: nothing was changed, so nothing could have.
-    expect(dials, 1);
+    expect(reading.privileged, isNull);
+    expect(reading.command, isNull);
+    expect(reading.outsideTheMachine, isTrue);
+    expect(reading.reason, contains('switched off'));
+    expect(reading.reason, contains('DigitalOcean'));
   });
+
+  test('a rule the firewall refused says so rather than "failed"', () async {
+    dialAnswers = [false];
+    box.firewall = 'failed-ufw';
+
+    final reading = await setupOn(box).ensureOpen(47820);
+
+    expect(reading.status, PortStatus.couldNotOpen);
+    expect(reading.reason, contains('ufw refused'));
+    expect(reading.privileged?.command, 'sudo ufw allow 47820/tcp');
+  });
+
+  test(
+    'root needs no sudo, and the script reads evidence before acting',
+    () async {
+      dialAnswers = [false, true];
+      box.firewall = 'ufw';
+
+      await setupOn(box).ensureOpen(47820);
+
+      final script = box.commands.single;
+      expect(script, contains('id -u'));
+      // Installed is not running: ufw's own switch and firewalld's own state.
+      expect(script, contains('/etc/ufw/ufw.conf'));
+      expect(script, contains('firewall-cmd --state'));
+    },
+  );
 
   test('a firewall this does not know quotes what the machine said', () async {
     dialAnswers = [false, false];
@@ -129,7 +225,11 @@ void main() {
       isNot(contains('No firewall is running')),
       reason: 'two absent binaries do not prove a machine filters nothing',
     );
-    expect(dials, 1, reason: 'nothing changed, so there was nothing to re-dial');
+    expect(
+      dials,
+      1,
+      reason: 'nothing changed, so there was nothing to re-dial',
+    );
   });
 
   test('a box that filters with nftables is told, not guessed at', () async {

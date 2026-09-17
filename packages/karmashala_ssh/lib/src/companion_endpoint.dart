@@ -3,6 +3,7 @@ import 'package:karmashala_host/protocol.dart';
 import 'companion_port.dart';
 import 'remote_pairing.dart';
 import 'host_deploy_target.dart';
+import 'privileged_command.dart';
 import 'ssh_host.dart';
 
 /// Where a phone reaches one box, and how sure we are that it can.
@@ -19,6 +20,9 @@ class CompanionEndpoint {
     required this.hostName,
     required this.reachable,
     required this.reason,
+    this.command,
+    this.privileged,
+    this.outsideTheMachine = false,
   });
 
   /// The same address the SSH connection used — `SshHost.host`, verbatim.
@@ -39,11 +43,21 @@ class CompanionEndpoint {
   /// One sentence about the last reading, with its remedy when it has one.
   final String reason;
 
+  /// What to run on the machine by hand, when that is the remedy.
+  final String? command;
+
+  /// [command] as a step for a terminal there, when `sudo` wants a password.
+  final PrivilegedCommand? privileged;
+
+  /// Whether what shuts the port is a firewall no command on the box can see.
+  final bool outsideTheMachine;
+
   /// What a person types into the phone, and what a QR would encode.
   String get authority => '$address:$port';
 
   @override
-  String toString() => 'CompanionEndpoint($authority, ${reachable ? 'reachable' : 'unproven'})';
+  String toString() =>
+      'CompanionEndpoint($authority, ${reachable ? 'reachable' : 'unproven'})';
 }
 
 /// Prepares one box to be reached by a phone, and answers where.
@@ -80,16 +94,24 @@ class SshCompanionSetup {
 
   /// The host must already be deployed and serving: a dial at a port nothing
   /// listens on says "shut" about something that was never going to answer.
-  Future<CompanionEndpoint> prepare() async {
-    final opening = await _ports.ensureOpen(port);
+  ///
+  /// [ruleAddedByHand] is "Check again" after the firewall command was run in
+  /// a terminal on the machine.
+  Future<CompanionEndpoint> prepare({bool ruleAddedByHand = false}) async {
+    final opening = await _ports.ensureOpen(
+      port,
+      ruleAddedByHand: ruleAddedByHand,
+    );
     return CompanionEndpoint(
       address: host.host,
       port: port,
       hostName: host.name,
       reachable: opening.isReachable,
-      reason: opening.command == null
-          ? opening.reason
-          : '${opening.reason} Run: ${opening.command}',
+      reason: opening.reason,
+      // Only a command still worth running: one that already ran is history.
+      command: opening.isReachable ? null : opening.command,
+      privileged: opening.privileged,
+      outsideTheMachine: opening.outsideTheMachine,
     );
   }
 

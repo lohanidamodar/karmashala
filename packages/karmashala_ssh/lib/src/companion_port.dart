@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:karmashala_core/logging.dart';
 
 import 'host_deploy_target.dart';
+import 'privileged_command.dart';
 
 /// How a machine's companion port ended up, separated — like the store probe's
 /// verdicts — by **who can fix it**.
@@ -35,6 +36,8 @@ class PortOpening {
     required this.observedAt,
     required this.reason,
     this.command,
+    this.privileged,
+    this.outsideTheMachine = false,
   });
 
   final PortStatus status;
@@ -45,6 +48,14 @@ class PortOpening {
 
   /// What to run by hand, when that is the remedy.
   final String? command;
+
+  /// [command] with what it does and why it was not run from here, when the
+  /// machine wants a password for it. Null when nothing is left to run there.
+  final PrivilegedCommand? privileged;
+
+  /// Whether what is shutting the port is past the machine's own firewall — a
+  /// provider's — so more `sudo` on the box is not the remedy.
+  final bool outsideTheMachine;
 
   bool get isReachable =>
       status == PortStatus.alreadyReachable || status == PortStatus.opened;
@@ -89,7 +100,14 @@ class CompanionPortSetup {
 
   /// The host must already be listening, or a dial says "shut" about a port
   /// nothing was ever going to answer on. The caller deploys and starts first.
-  Future<PortOpening> ensureOpen(int port) async {
+  ///
+  /// [ruleAddedByHand] is "Check again" after somebody ran the command this
+  /// gave them: the dial still decides, and a machine that still wants a
+  /// password is not handed the same command a second time.
+  Future<PortOpening> ensureOpen(
+    int port, {
+    bool ruleAddedByHand = false,
+  }) async {
     if (await _reachable(port)) {
       return PortOpening(
         status: PortStatus.alreadyReachable,
@@ -102,11 +120,26 @@ class CompanionPortSetup {
 
     final attempt = await _addRule(port);
     if (!attempt.ran) {
+      final byHand = attempt.privileged;
+      if (ruleAddedByHand && byHand != null) {
+        return PortOpening(
+          status: PortStatus.ruleAddedStillShut,
+          observedAt: _now(),
+          reason:
+              '$machine:$port still does not answer. If `${byHand.command}` '
+              'ran without an error, the machine\'s own firewall is open and '
+              'something outside the machine is dropping it. '
+              '${providerFirewallHint(port)}',
+          outsideTheMachine: true,
+        );
+      }
       return PortOpening(
         status: PortStatus.couldNotOpen,
         observedAt: _now(),
         reason: attempt.reason,
         command: attempt.command,
+        privileged: byHand,
+        outsideTheMachine: attempt.outside,
       );
     }
 
@@ -125,15 +158,18 @@ class CompanionPortSetup {
       reason:
           '${attempt.reason} $machine:$port still does not answer, so '
           'something outside the machine is dropping it — a provider firewall '
-          'or security group is the usual one, and nothing here can open that.',
+          'or security group is the usual one. ${providerFirewallHint(port)}',
       command: attempt.command,
+      outsideTheMachine: true,
     );
   }
 
   Future<bool> _reachable(int port) async {
     try {
       final answered = await _dial(machine, port, dialTimeout);
-      _logger.debug('$machine:$port ${answered ? 'answered' : 'did not answer'}');
+      _logger.debug(
+        '$machine:$port ${answered ? 'answered' : 'did not answer'}',
+      );
       return answered;
     } on Object catch (error) {
       _logger.debug('$machine:$port did not answer: $error');
@@ -141,19 +177,64 @@ class CompanionPortSetup {
     }
   }
 
+  static String _ufwCommand(int port) => 'sudo ufw allow $port/tcp';
+
+  static String _firewalldCommand(int port) =>
+      'sudo firewall-cmd --add-port=$port/tcp --permanent && '
+      'sudo firewall-cmd --reload';
+
+  PrivilegedCommand _byHand(String firewall, String command, int port) =>
+      PrivilegedCommand(
+        command: command,
+        does:
+            'Allows inbound TCP $port through $firewall on $machine, and keeps '
+            'the rule across restarts.',
+        why:
+            '`sudo` on $machine asks for a password, and Karmashala never asks '
+            'for one or sends one — so this is yours to run, in a terminal '
+            'there.',
+      );
+
   /// Adds the rule with whichever firewall the machine runs. One command, so a
   /// machine running none is one round trip and no `sudo` prompt.
-  Future<({bool ran, String reason, String? command})> _addRule(int port) async {
+  Future<_RuleAttempt> _addRule(int port) async {
     final result = await target.run(_openScript(port));
     final said = result.stdout.trim().split('\n').last.trim();
+    final isUfw = said.endsWith('ufw');
+    final firewall = isUfw ? 'ufw' : 'firewalld';
+    final command = isUfw ? _ufwCommand(port) : _firewalldCommand(port);
     return switch (said) {
-      'ufw' => (ran: true, reason: 'Opened $port with ufw.', command: 'sudo ufw allow $port/tcp'),
-      'firewalld' => (
+      'ufw' || 'firewalld' => _RuleAttempt(
         ran: true,
-        reason: 'Opened $port with firewalld.',
-        command: 'sudo firewall-cmd --add-port=$port/tcp --permanent && sudo firewall-cmd --reload',
+        reason: 'Opened $port with $firewall.',
+        command: command,
       ),
-      'none' => (
+      'nosudo-ufw' || 'nosudo-firewalld' => _RuleAttempt(
+        ran: false,
+        reason:
+            '$firewall is running on $machine and `sudo` there asks for a '
+            'password, so $port/tcp was not opened. Run the command below in '
+            'a terminal on $machine, then check again.',
+        command: command,
+        privileged: _byHand(firewall, command, port),
+      ),
+      'failed-ufw' || 'failed-firewalld' => _RuleAttempt(
+        ran: false,
+        reason:
+            '$firewall refused the rule for $port/tcp on $machine. Running '
+            'the command below in a terminal there shows why.',
+        command: command,
+        privileged: _byHand(firewall, command, port),
+      ),
+      'inactive' => _RuleAttempt(
+        ran: false,
+        reason:
+            'The firewall on $machine is installed and switched off, so it is '
+            'not what is shutting $port/tcp, and nothing there was changed. '
+            '${providerFirewallHint(port)}',
+        outside: true,
+      ),
+      'none' => _RuleAttempt(
         ran: false,
         // **Not** "no firewall is running" — all that was looked for is `ufw`
         // and `firewall-cmd`, and a box can drop packets with nftables, with
@@ -164,51 +245,63 @@ class CompanionPortSetup {
             'Found no `ufw` or `firewall-cmd` on $machine, so nothing '
             'there was changed. If it filters with nftables or iptables, or your '
             'provider has a firewall, $port/tcp has to be opened there.',
-        command: null,
       ),
-      'unknown' => (
+      'unknown' => _RuleAttempt(
         ran: false,
         reason:
             '$machine filters with nftables or iptables, which this '
             'does not open by hand — the rule depends on the chain it is going '
             'into. Open $port/tcp there.',
-        command: null,
       ),
-      'nosudo' => (
-        ran: false,
-        reason:
-            'A firewall is running on $machine and this cannot change it '
-            'without a password. Run the command below there, then deploy again.',
-        command: 'sudo ufw allow $port/tcp   # or your firewall\'s equivalent',
-      ),
-      _ => (
+      _ => _RuleAttempt(
         ran: false,
         reason:
             '$machine answered "${said.isEmpty ? 'nothing' : said}" when '
             'asked about its firewall, which this does not understand. Open '
             '$port/tcp there by hand.',
-        command: null,
       ),
     };
   }
 
   /// Detects and opens in one shell round trip, and prints **one word** saying
   /// what it did. `sudo -n` never prompts: an SSH session that stopped for a
-  /// password would hang a deploy with nobody there to type one.
+  /// password would hang a deploy with nobody there to type one. Root needs no
+  /// sudo at all, and a firewall that is installed and off is not acted on —
+  /// `ufw.conf` and `firewall-cmd --state` both read without root.
   String _openScript(int port) =>
       '''
-if command -v ufw >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-  sudo -n ufw allow $port/tcp >/dev/null 2>&1 && echo ufw || echo failed
-elif command -v firewall-cmd >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
-  sudo -n firewall-cmd --add-port=$port/tcp --permanent >/dev/null 2>&1 &&
-    sudo -n firewall-cmd --reload >/dev/null 2>&1 && echo firewalld || echo failed
-elif command -v ufw >/dev/null 2>&1 || command -v firewall-cmd >/dev/null 2>&1; then
-  echo nosudo
-elif command -v nft >/dev/null 2>&1 || command -v iptables >/dev/null 2>&1; then
+if [ "\$(id -u)" = 0 ]; then s=""; elif sudo -n true 2>/dev/null; then s="sudo -n"; else s=no; fi
+has() { command -v "\$1" >/dev/null 2>&1; }
+if has ufw && ! grep -q '^ENABLED=no' /etc/ufw/ufw.conf 2>/dev/null; then
+  if [ "\$s" = no ]; then echo nosudo-ufw
+  else \$s ufw allow $port/tcp >/dev/null 2>&1 && echo ufw || echo failed-ufw; fi
+elif has firewall-cmd && firewall-cmd --state >/dev/null 2>&1; then
+  if [ "\$s" = no ]; then echo nosudo-firewalld
+  else \$s firewall-cmd --add-port=$port/tcp --permanent >/dev/null 2>&1 &&
+    \$s firewall-cmd --reload >/dev/null 2>&1 && echo firewalld || echo failed-firewalld; fi
+elif has ufw || has firewall-cmd; then
+  echo inactive
+elif has nft || has iptables; then
   echo unknown
 else
   echo none
 fi''';
+}
+
+class _RuleAttempt {
+  const _RuleAttempt({
+    required this.ran,
+    required this.reason,
+    this.command,
+    this.privileged,
+    this.outside = false,
+  });
+
+  final bool ran;
+  final String reason;
+  final String? command;
+  final PrivilegedCommand? privileged;
+  final bool outside;
 }
 
 /// A real dial, which is the only thing that answers the question.

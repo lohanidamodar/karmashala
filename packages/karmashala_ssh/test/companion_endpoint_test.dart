@@ -41,7 +41,8 @@ void main() {
   SshCompanionSetup setupWith(_Box box, List<bool> dials) => SshCompanionSetup(
     host: host,
     target: box,
-    remotePath: '/home/x/.karmashala/bin/karmashala_host-1.0.0-linux-x64.d/bin/karmashala_host',
+    remotePath:
+        '/home/x/.karmashala/bin/karmashala_host-1.0.0-linux-x64.d/bin/karmashala_host',
     ports: CompanionPortSetup(
       target: box,
       clock: () => DateTime.utc(2026, 9, 16),
@@ -77,7 +78,10 @@ void main() {
 
     expect(dialled, ['203.0.113.9:$kHostCompanionPort']);
     expect(endpoint.reachable, isTrue);
-    expect(endpoint.reason, contains('203.0.113.9:$kHostCompanionPort answered'));
+    expect(
+      endpoint.reason,
+      contains('203.0.113.9:$kHostCompanionPort answered'),
+    );
     expect(endpoint.reason, isNot(contains('dlohani@')));
     expect(box.ran, isEmpty, reason: 'an open port changes nothing on the box');
   });
@@ -89,22 +93,46 @@ void main() {
     expect(
       endpoint.port,
       isNot(host.port),
-      reason: 'frames go straight to the host; ssh only provisioned the machine',
+      reason:
+          'frames go straight to the host; ssh only provisioned the machine',
     );
     expect(endpoint.authority, '203.0.113.9:$kHostCompanionPort');
   });
 
-  test('an unreachable port is still an endpoint, and says what to do', () async {
-    final box = _Box()..firewall = 'nosudo';
+  test(
+    'an unreachable port is still an endpoint, and says what to do',
+    () async {
+      final box = _Box()..firewall = 'nosudo-ufw';
 
-    final endpoint = await setupWith(box, [false]).prepare();
+      final endpoint = await setupWith(box, [false]).prepare();
 
-    // The address and port are right; something between is not. A phone may
-    // also sit somewhere this desktop does not, so this is not a refusal.
-    expect(endpoint.address, '203.0.113.9');
+      // The address and port are right; something between is not. A phone may
+      // also sit somewhere this desktop does not, so this is not a refusal.
+      expect(endpoint.address, '203.0.113.9');
+      expect(endpoint.reachable, isFalse);
+      expect(endpoint.reason, contains('$kHostCompanionPort'));
+      // The command is its own field now, so a dialog can offer it to a terminal
+      // rather than bury it in a sentence.
+      expect(endpoint.reason, isNot(contains('Run: ')));
+      expect(
+        endpoint.privileged?.command,
+        'sudo ufw allow $kHostCompanionPort/tcp',
+      );
+      expect(endpoint.outsideTheMachine, isFalse);
+    },
+  );
+
+  test('checking again after the command was run names the provider', () async {
+    final box = _Box()..firewall = 'nosudo-ufw';
+
+    final endpoint = await setupWith(box, [
+      false,
+    ]).prepare(ruleAddedByHand: true);
+
     expect(endpoint.reachable, isFalse);
-    expect(endpoint.reason, contains('Run: '));
-    expect(endpoint.reason, contains('$kHostCompanionPort'));
+    expect(endpoint.privileged, isNull);
+    expect(endpoint.outsideTheMachine, isTrue);
+    expect(endpoint.reason, contains('security group'));
   });
 
   test('a port already open needs no remedy in its sentence', () async {

@@ -6,6 +6,7 @@ import 'package:karmashala_core/logging.dart';
 
 import 'companion_port.dart';
 import 'host_deploy_target.dart';
+import 'privileged_command.dart';
 import 'remote_home.dart';
 import 'ssh_host.dart';
 
@@ -47,6 +48,8 @@ class SshRelayReading {
     required this.reason,
     required this.port,
     this.command,
+    this.privileged,
+    this.outsideTheMachine = false,
     this.url,
     this.runningPath,
   });
@@ -59,6 +62,13 @@ class SshRelayReading {
 
   /// What to run by hand, when that is the remedy.
   final String? command;
+
+  /// [command] as a step for a terminal on the box, when `sudo` there wants a
+  /// password. Built from the port alone — never the token.
+  final PrivilegedCommand? privileged;
+
+  /// Whether what shuts the port is a firewall no command on the box can see.
+  final bool outsideTheMachine;
 
   /// `ws://<address>:<port>/k/<token>` — what the desktop serves through and a
   /// pairing carries. Present whenever the token could be read. **Holds the
@@ -164,7 +174,9 @@ class SshRelaySetup {
   /// Idempotent. Already running from this bundle: only proved. Running from
   /// another: stopped and started again, which is "Update". Then the port is
   /// opened against evidence and proved with a health check from here.
-  Future<SshRelayReading> start() async {
+  /// [ruleAddedByHand] is "Check again" after the firewall command was run in
+  /// a terminal on the box.
+  Future<SshRelayReading> start({bool ruleAddedByHand = false}) async {
     var state = await _inspect();
     if (state == null) return _unasked();
 
@@ -198,7 +210,10 @@ class SshRelaySetup {
     }
     if (state.token == null) return _noTokenReading(state);
 
-    final opening = await _ports.ensureOpen(port);
+    final opening = await _ports.ensureOpen(
+      port,
+      ruleAddedByHand: ruleAddedByHand,
+    );
     if (opening.isReachable) {
       return _reading(
         SshRelayStatus.running,
@@ -213,6 +228,8 @@ class SshRelaySetup {
       'The relay is running on ${host.name}. ${opening.reason}',
       state: state,
       command: opening.command,
+      privileged: opening.privileged,
+      outsideTheMachine: opening.outsideTheMachine,
     );
   }
 
@@ -402,6 +419,8 @@ class SshRelaySetup {
     String reason, {
     _RelayState? state,
     String? command,
+    PrivilegedCommand? privileged,
+    bool outsideTheMachine = false,
   }) {
     final token = state?.token;
     return SshRelayReading(
@@ -409,6 +428,8 @@ class SshRelaySetup {
       observedAt: _now(),
       reason: _scrub(reason),
       command: command,
+      privileged: privileged,
+      outsideTheMachine: outsideTheMachine,
       url: token == null ? null : _base(token, scheme: 'ws'),
       port: port,
       runningPath: state?.runningPath,
