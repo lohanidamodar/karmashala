@@ -7,9 +7,11 @@ import 'package:karmashala/src/features/agents/application/agent_status_provider
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
+import 'package:karmashala/src/features/checkpoints/application/checkpoint_settings.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
+import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -430,4 +432,73 @@ void main() {
       );
     },
   );
+
+  test(
+    'with automatic checkpoints off a turn records nothing, and says so',
+    () async {
+      container.read(checkpointSettingsProvider.notifier).setAutomatic(false);
+      startRecorder();
+      await turn('cli-1');
+      expect(reasonsFor('s1'), isEmpty);
+      expect(
+        container.read(checkpointSkipReasonsProvider)['s1'],
+        kAutomaticCheckpointsOff,
+      );
+      // Manual capture is still there.
+      await container
+          .read(sessionCheckpointRecorderProvider.notifier)
+          .captureNow('s1');
+      expect(reasonsFor('s1'), ['manual']);
+    },
+  );
+
+  test('the setting is kept in the store', () {
+    container.read(checkpointSettingsProvider.notifier)
+      ..setAutomatic(false)
+      ..setKeepPerRepository(null);
+    container.invalidate(checkpointSettingsProvider);
+    final read = container.read(checkpointSettingsProvider);
+    expect(read.automatic, isFalse);
+    expect(read.keepPerRepository, isNull);
+  });
+
+  test('a repository past its limit is pruned to it, in batches', () async {
+    const repo = EnvironmentPath(
+      environmentId: 'windows',
+      path: r'C:\src\demo\app',
+    );
+    final dao = CheckpointDao(db);
+    for (var i = 0; i < 59; i++) {
+      dao.insert(
+        Checkpoint(
+          id: 'old$i',
+          sessionId: 's1',
+          repository: repo,
+          sequence: 0,
+          treeSha: 'old-tree$i',
+          commitSha: 'old-commit$i',
+          parentCommitSha: null,
+          headSha: null,
+          reason: CheckpointReason.turn,
+          createdAt: testTime,
+        ),
+      );
+    }
+    container
+        .read(checkpointSettingsProvider.notifier)
+        .setKeepPerRepository(50);
+    startRecorder();
+    await turn('cli-1');
+    // 61 rows is past 50 and its slack of 10: back to the newest 50.
+    final kept = dao.forRepository('s1', repo);
+    expect(kept, hasLength(50));
+    expect(kept.last.reason, CheckpointReason.turn);
+    expect(kept.first.parentCommitSha, isNull, reason: 'the chain restarts');
+    await turn('cli-1');
+    expect(
+      dao.forRepository('s1', repo),
+      hasLength(52),
+      reason: 'within the slack nothing is re-committed',
+    );
+  });
 }

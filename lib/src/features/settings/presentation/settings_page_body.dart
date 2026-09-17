@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../app_projects/presentation/project_kinds_section.dart';
 import '../../automations/presentation/automations_page.dart';
+import '../../checkpoints/presentation/checkpoint_settings_section.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../environments/presentation/environments_section.dart';
 import '../../environments/presentation/toolchains_section.dart';
@@ -93,6 +94,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.defaultModel => const DefaultModelSection(),
   SettingsAnchor.detection => const AgentDetectionSection(),
   SettingsAnchor.executables => const AgentPathSection(),
+  SettingsAnchor.checkpoints => const CheckpointSettingsSection(),
   SettingsAnchor.claudeAccounts => const InstalledClaudeAccountsSection(),
   SettingsAnchor.codexAccounts => const InstalledCodexAccountsSection(),
   SettingsAnchor.usage => const InstalledUsageSection(),

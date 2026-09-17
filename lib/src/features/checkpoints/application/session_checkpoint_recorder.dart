@@ -11,6 +11,7 @@ import '../data/checkpoint_dao.dart';
 import '../domain/checkpoint.dart';
 import '../domain/turn_boundary.dart';
 import 'checkpoint_providers.dart';
+import 'checkpoint_settings.dart';
 import 'checkpoint_targets.dart';
 import 'checkpoint_turn_hints.dart';
 
@@ -41,6 +42,13 @@ final checkpointSkipReasonsProvider =
     NotifierProvider<CheckpointSkipReasons, Map<String, String>>(
       CheckpointSkipReasons.new,
     );
+
+/// What the panel says when turns are not being checkpointed on purpose.
+const String kAutomaticCheckpointsOff =
+    'automatic checkpoints are off in Settings › Agents › Checkpoints';
+
+/// How far past its limit a repository's chain may grow before it is pruned.
+int checkpointPruneSlack(int keep) => keep ~/ 10 < 10 ? 10 : keep ~/ 10;
 
 typedef _Turn = ({int number, String? prompt});
 
@@ -159,6 +167,11 @@ class SessionCheckpointRecorder extends Notifier<int> {
   Future<void> _captureTurn(String sessionId, TurnEdge edge) async {
     if (!ref.mounted) return;
     final starting = edge == TurnEdge.started;
+    final settings = ref.read(checkpointSettingsProvider);
+    if (!settings.automatic) {
+      _skip(sessionId, kAutomaticCheckpointsOff);
+      return;
+    }
     final turn = starting
         ? _beginTurn(sessionId)
         : _current.remove(sessionId) ?? _beginTurn(sessionId);
@@ -187,6 +200,12 @@ class SessionCheckpointRecorder extends Notifier<int> {
         turn,
         starting ? 'before turn ${turn.number}' : 'after turn ${turn.number}',
       );
+    }
+    final keep = settings.keepPerRepository;
+    if (!starting && keep != null) {
+      for (final repo in targets) {
+        await _prune(sessionId, repo, keep);
+      }
     }
   }
 
@@ -229,6 +248,29 @@ class SessionCheckpointRecorder extends Notifier<int> {
       );
     } on Object catch (error) {
       _skip(sessionId, 'capturing ${repo.path} failed: $error', repo: repo);
+    }
+  }
+
+  /// Prunes in batches, so a session at its limit does not re-commit the whole
+  /// chain on every turn.
+  Future<void> _prune(String sessionId, EnvironmentPath repo, int keep) async {
+    final count = ref
+        .read(checkpointDaoProvider)
+        .forRepository(sessionId, repo)
+        .length;
+    if (count <= keep + checkpointPruneSlack(keep) || !ref.mounted) return;
+    try {
+      final dropped = await ref
+          .read(checkpointServiceProvider)
+          .prune(repo, sessionId: sessionId, keep: keep);
+      if (!ref.mounted) return;
+      ref.read(checkpointsRevisionProvider.notifier).bump();
+      _log.info(
+        'Pruned $dropped checkpoints of session $sessionId in ${repo.path}, '
+        'keeping the newest $keep.',
+      );
+    } on Object catch (error) {
+      _log.warning('Could not prune checkpoints of ${repo.path}: $error');
     }
   }
 

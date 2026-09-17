@@ -338,6 +338,14 @@ enum SettingsAnchor {
     'path',
     'cli',
   ]),
+  checkpoints(SettingsSectionId.agents, 'Checkpoints', [
+    'checkpoint',
+    'checkpoints',
+    'rewind',
+    'undo',
+    'rollback',
+    'snapshot',
+  ]),
   claudeAccounts(SettingsSectionId.accounts, 'Claude accounts', [
     'claude',
     'accounts',
@@ -702,6 +710,12 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.executables,
     description: 'Where each agent CLI lives, and whether it still opens.',
     keywords: ['path', 'executable', 'not found', 'repoint'],
+  ),
+  SettingsEntry(
+    'Automatic checkpoints',
+    anchor: SettingsAnchor.checkpoints,
+    description: 'Snapshot every agent turn, and how many snapshots to keep.',
+    keywords: ['checkpoint', 'rewind', 'undo', 'retention', 'keep'],
   ),
   SettingsEntry(
     'Claude accounts',

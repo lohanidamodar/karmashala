@@ -251,4 +251,38 @@ void main() {
     },
     skip: hasGit ? false : 'git is not on PATH',
   );
+
+  test('pruning leaves a chain git holds, of only the kept trees', () async {
+    final service = container.read(checkpointServiceProvider);
+    final envId =
+        CheckpointDao(db).latestFor('s1')?.repository.environmentId ??
+        ExecutionEnvironmentDao(db).getAll().first.id;
+    final repo = EnvironmentPath(environmentId: envId, path: app);
+    for (var i = 0; i < 3; i++) {
+      File(p.join(app, 'main.txt')).writeAsStringSync('v$i\n');
+      expect(await service.capture(repo, sessionId: 's1'), isNotNull);
+    }
+    expect(await service.prune(repo, sessionId: 's1', keep: 1), 2);
+
+    final kept = CheckpointDao(db).forRepository('s1', repo).single;
+    final count = Process.runSync('git', [
+      '-C',
+      app,
+      'rev-list',
+      '--count',
+      Checkpoint.refFor('s1'),
+    ]);
+    expect((count.stdout as String).trim(), '1');
+    final tree = Process.runSync('git', [
+      '-C',
+      app,
+      'rev-parse',
+      '${kept.commitSha}^{tree}',
+    ]);
+    expect((tree.stdout as String).trim(), kept.treeSha);
+    // And it still restores.
+    File(p.join(app, 'main.txt')).writeAsStringSync('later\n');
+    await service.restore(kept, confirm: true);
+    expect(File(p.join(app, 'main.txt')).readAsStringSync(), 'v2\n');
+  }, skip: hasGit ? false : 'git is not on PATH');
 }

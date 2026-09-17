@@ -169,6 +169,38 @@ class CheckpointService {
     );
   }
 
+  /// Keeps the newest [keep] checkpoints of [repo] for [sessionId]. The chain
+  /// is re-committed over the kept trees so the dropped ones stop being
+  /// reachable and git can collect them. Returns how many were dropped.
+  Future<int> prune(
+    EnvironmentPath repo, {
+    required String sessionId,
+    required int keep,
+  }) async {
+    final chain = dao.forRepository(sessionId, repo);
+    if (keep <= 0 || chain.length <= keep) return 0;
+    final dropped = chain.sublist(0, chain.length - keep);
+    final kept = chain.sublist(chain.length - keep);
+    final git = _gitFor(repo);
+    final rewritten = <String, ({String commit, String? parent})>{};
+    String? parent;
+    for (final checkpoint in kept) {
+      final commit = await git.commitTree(
+        repo,
+        tree: checkpoint.treeSha,
+        parent: parent,
+        message:
+            checkpoint.label ??
+            '${checkpoint.reason.name} checkpoint for session $sessionId',
+      );
+      rewritten[checkpoint.id] = (commit: commit, parent: parent);
+      parent = commit;
+    }
+    await git.updateRef(repo, Checkpoint.refFor(sessionId), parent!);
+    dao.prune(dropIds: [for (final c in dropped) c.id], rewritten: rewritten);
+    return dropped.length;
+  }
+
   /// Why [repo] cannot be checkpointed from here, or `null` when it can.
   String? unsupportedReason(EnvironmentPath repo) {
     final env = environmentDao.getById(repo.environmentId);
