@@ -15,6 +15,7 @@ import '../../agents/presentation/usage_chip.dart' show formatResetClock;
 import '../../environments/application/environment_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_signals.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/usage_limit_settings.dart';
 import '../data/scheduled_resume_dao.dart';
@@ -164,6 +165,14 @@ ResumeUsageAccess resumeUsageAccess(Ref ref, Session session) {
   }
   return ResumeUsageAccess(installation: installation, accountKey: key);
 }
+
+/// [resumeUsageAccess] for one session, for the dialog. Follows its row.
+final resumeUsageAccessProvider = Provider.autoDispose
+    .family<ResumeUsageAccess?, String>((ref, sessionId) {
+      ref.watchSession(sessionId);
+      final session = ref.read(sessionDaoProvider).getById(sessionId);
+      return session == null ? null : resumeUsageAccess(ref, session);
+    });
 
 /// Thrown when a resume may not be armed. [reason] is the gate's own sentence.
 class ScheduledResumeRefused implements Exception {

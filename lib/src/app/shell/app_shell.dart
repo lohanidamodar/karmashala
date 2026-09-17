@@ -15,6 +15,7 @@ import '../../features/automations/application/automation_runner.dart';
 import '../../features/automations/application/automation_scheduler.dart';
 import '../../features/automations/application/scheduled_resume_observer.dart';
 import '../../features/automations/application/usage_limit_watcher.dart';
+import '../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
@@ -161,6 +162,15 @@ class _AppShellState extends ConsumerState<AppShell> {
     // registers it lives outside the tree, so it bumps a counter for the shell.
     ref.listen(quickOpenRequestProvider, (_, _) {
       if (mounted) QuickOpen.show(context);
+    });
+    // A limit notice's "Options…" is pressed in a bar that holds no dialog.
+    ref.listen(resumeDialogRequestProvider, (_, request) {
+      if (request == null || !mounted) return;
+      ResumeOnResetDialog.show(
+        context,
+        request.sessionIds,
+        namedWindow: request.namedWindow,
+      );
     });
     return ShellShortcuts(
       child: Scaffold(
