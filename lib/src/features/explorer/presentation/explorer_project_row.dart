@@ -59,6 +59,8 @@ class ExplorerProjectRow extends ConsumerWidget {
     required this.expanded,
     this.pathCandidates,
     this.environmentBadge,
+    this.environmentLabel,
+    this.environmentIcon,
     this.anchorKey,
     super.key,
   });
@@ -70,6 +72,10 @@ class ExplorerProjectRow extends ConsumerWidget {
   /// From the tree's node, which cut the path and named the machine once.
   final List<String>? pathCandidates;
   final String? environmentBadge;
+
+  /// The machine, named on the row — only where the scope bar does not say it.
+  final String? environmentLabel;
+  final IconData? environmentIcon;
 
   /// Held while this is the selected project, so the panel can finish a
   /// reveal exactly rather than at its estimate.
@@ -114,6 +120,8 @@ class ExplorerProjectRow extends ConsumerWidget {
         missing: missing,
         pinned: pinned,
         environmentBadge: environmentBadge,
+        environmentLabel: environmentLabel,
+        environmentIcon: environmentIcon,
         pathCandidates: pathCandidates,
         detail: detail,
         summary: summary,

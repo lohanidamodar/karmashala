@@ -5,7 +5,7 @@ import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_session/session.dart';
 
 import '../../../core/util/clock_provider.dart';
-import '../../environments/application/environment_providers.dart';
+import '../../environments/application/environments_controller.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -36,6 +36,50 @@ class ExplorerTree {
   @override
   int get hashCode => Object.hashAll(nodes);
 }
+
+/// The machines on offer and the one the Explorer is narrowed to, null for
+/// all of them.
+@immutable
+class ExplorerEnvironmentScope {
+  const ExplorerEnvironmentScope(this.environments, this.environmentId);
+
+  final List<EnvironmentChoice> environments;
+  final String? environmentId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ExplorerEnvironmentScope &&
+      other.environmentId == environmentId &&
+      listEquals(other.environments, environments);
+
+  @override
+  int get hashCode => Object.hash(environmentId, Object.hashAll(environments));
+}
+
+/// **Which machine the Explorer lists**, read by the scope bar and by the
+/// tree. Its own provider rather than a field of the tree: the scope bar
+/// watching the tree was measured at 500 open projects, and a second
+/// subscriber there cost a status tick a quarter more.
+///
+/// The environments are the app's own list — refreshed by discovery and by an
+/// SSH host being saved or removed — so the table is not swept per tree.
+final explorerEnvironmentScopeProvider =
+    Provider.autoDispose<ExplorerEnvironmentScope>((ref) {
+      final environments = environmentChoices(
+        ref.watch(sortedProjectsProvider),
+        ref.watch(environmentsControllerProvider),
+      );
+      final stored = ref.watch(
+        settingsControllerProvider.select((s) => s.explorerEnvironmentScope),
+      );
+      // One machine needs no narrowing, and a machine that has gone cannot be
+      // narrowed to: either way the stored choice waits rather than being
+      // erased.
+      final valid =
+          environments.length > 1 &&
+          environments.any((choice) => choice.environmentId == stored);
+      return ExplorerEnvironmentScope(environments, valid ? stored : null);
+    });
 
 /// Projects matching the search field, in the sidebar's order.
 final explorerFilteredProjectsProvider = Provider<List<Project>>((ref) {
@@ -84,17 +128,28 @@ final explorerTreeProvider = Provider.autoDispose<ExplorerTree>((ref) {
     return 'read ${describeAge(age)}';
   }
 
+  final scope = ref.watch(explorerEnvironmentScopeProvider);
+  final environments = scope.environments;
+  final environmentScope = scope.environmentId;
+  final contextScope = ref.watch(workspaceScopeProvider);
+  // Watched only while something narrows the list, so an ordinary selection
+  // recomputes no tree.
+  final keepProjectId = environmentScope == null && contextScope.isAll
+      ? null
+      : ref.watch(selectedProjectIdProvider);
+
   return ExplorerTree(
     buildExplorerTree(
       projects: ref.watch(explorerFilteredProjectsProvider),
-      environments: ref.watch(executionEnvironmentDaoProvider).getAll(),
+      environments: environments,
       contexts: ref.watch(workspacesControllerProvider),
       collapsed: collapsed,
       expandedProjects: ref.watch(explorerExpandedProjectsProvider),
       expandedTerminals: expandedTerminals,
-      // A machine holding nothing is worth a row; a machine holding nothing
-      // that *matches a search* is noise.
-      includeEmptyEnvironments: query.isEmpty,
+      environmentScope: environmentScope,
+      contextScope: contextScope,
+      keepProjectId: keepProjectId,
+      searching: query.isNotEmpty,
       childrenOf: (node) => ref.watch(
         _projectChildrenProvider((project: node.project, depth: node.depth)),
       ),
@@ -105,18 +160,16 @@ final explorerTreeProvider = Provider.autoDispose<ExplorerTree>((ref) {
   );
 });
 
-List<ExplorerNode> _terminalNodes(Ref ref, EnvironmentNode node) {
+List<ExplorerNode> _terminalNodes(Ref ref, TerminalsHeaderNode node) {
   final reading = ref.watch(environmentTerminalsProvider(node.environmentId));
   if (reading.problem case final String problem) {
-    return [
-      HintNode(id: '${node.id}/terminals/problem', depth: 2, message: problem),
-    ];
+    return [HintNode(id: '${node.id}/problem', depth: 0, message: problem)];
   }
   if (!reading.asked) {
     return [
       HintNode(
-        id: '${node.id}/terminals/asking',
-        depth: 2,
+        id: '${node.id}/asking',
+        depth: 0,
         message: 'Asking this machine what it is running…',
       ),
     ];
@@ -124,8 +177,8 @@ List<ExplorerNode> _terminalNodes(Ref ref, EnvironmentNode node) {
   if (reading.terminals.isEmpty) {
     return [
       HintNode(
-        id: '${node.id}/terminals/empty',
-        depth: 2,
+        id: '${node.id}/empty',
+        depth: 0,
         message: 'Nothing is running here.',
       ),
     ];

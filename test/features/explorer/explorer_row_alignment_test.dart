@@ -9,9 +9,10 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-/// **One gutter down each side of the tree**, for every row kind the Explorer
-/// draws: carets step in by [ExplorerRow.indent] per depth, and counts, ages,
-/// `+` and `⋮` end in one right-hand column. `explorer_tree_alignment_test`
+/// **One gutter down each side of the list**, for every row kind the Explorer
+/// draws: a group's header and the projects under it share depth zero, a
+/// session steps in by [ExplorerRow.indent], and counts, ages, `+` and `⋮` end
+/// in one right-hand column. `explorer_tree_alignment_test`
 /// measures the same on the real panel; this pins the kit rows at the edges —
 /// the pane minimum and large text.
 const double _width = 400;
@@ -20,35 +21,26 @@ void main() {
   Widget tree() => Column(
     mainAxisSize: MainAxisSize.min,
     children: [
-      ExplorerHeaderRow(
-        depth: 0,
+      ExplorerGroupHeader(
         expanded: true,
-        label: 'archlinux',
-        icon: AppIcons.terminalWindow,
-        emphasis: HeaderEmphasis.machine,
+        label: 'Game dev',
         trailingText: '4',
         trailingWords: '4 projects',
+        onTap: () {},
+        menuItemsBuilder: () => const [],
+        onMenu: (_) {},
+      ),
+      ExplorerGroupHeader(
+        expanded: true,
+        label: 'archlinux · Terminals',
+        detail: 'read 21 minutes ago',
+        trailingText: '1',
         onTap: () {},
         action: ExplorerRowAction(
           tooltip: 'Open a terminal on archlinux',
           icon: AppIcons.plus,
           onPressed: () {},
         ),
-      ),
-      ExplorerHeaderRow(
-        depth: 1,
-        expanded: true,
-        label: 'Projects',
-        trailingText: '4',
-        onTap: () {},
-      ),
-      ExplorerHeaderRow(
-        depth: 1,
-        expanded: true,
-        label: 'Terminals',
-        detail: 'read 21 minutes ago',
-        trailingText: '1',
-        onTap: () {},
       ),
       TerminalRow(
         terminal: const EnvironmentTerminal(
@@ -57,11 +49,11 @@ void main() {
           running: true,
           paneId: 'p1',
         ),
-        depth: 2,
+        depth: 0,
         onOpen: () {},
       ),
       ProjectCard(
-        depth: 2,
+        depth: 0,
         name: 'popubits',
         path: r'/mnt/c/Users/me/projects/popupbits',
         expanded: true,
@@ -73,7 +65,7 @@ void main() {
         onMenu: (_) {},
       ),
       SessionCard(
-        depth: 3,
+        depth: 1,
         selected: false,
         agentIcon: AppIcons.checkCircle,
         agentLabel: 'Claude Code',
@@ -141,8 +133,8 @@ void main() {
     await pumpTree(tester);
 
     final column = rightOf(tester, find.text('22h 3m'));
-    // Words where the row has room, numbers where it has not — one edge.
-    for (final text in ['4 projects', '4', '1', '34 sessions']) {
+    // Words where the row has room, a header's bare number — one edge.
+    for (final text in ['4', '1', '34 sessions']) {
       expect(find.text(text), findsWidgets, reason: '"$text" is not drawn');
       for (final element in find.text(text).evaluate()) {
         expect(
@@ -157,11 +149,13 @@ void main() {
   testWidgets('a count is said in words while the title keeps its room, and '
       'as a bare number under that — on the same edge', (tester) async {
     await pumpTree(tester);
-    final wide = rightOf(tester, find.text('4 projects'));
-    expect(find.text('34 sessions'), findsOneWidget);
+    final wide = rightOf(tester, find.text('34 sessions'));
+    // A header's label already says what it counts: a number, and the words
+    // as its tooltip, at every width.
+    expect(find.text('4 projects'), findsNothing);
+    expect(find.byTooltip('4 projects'), findsOneWidget);
 
     await pumpTree(tester, width: 240);
-    expect(find.text('4 projects'), findsNothing);
     expect(find.text('34 sessions'), findsNothing);
     expect(find.byTooltip('4 projects'), findsOneWidget);
     expect(find.text('34'), findsOneWidget);
@@ -203,24 +197,33 @@ void main() {
     );
   });
 
-  testWidgets('carets step in by one indent per depth', (tester) async {
+  testWidgets('a header and the projects under it share one caret column', (
+    tester,
+  ) async {
     await pumpTree(tester);
 
-    final carets =
-        find
-            .byWidgetPredicate((w) => w is Icon && w.icon == AppIcons.caretDown)
-            .evaluate()
-            .map((e) => tester.getCenter(find.byWidget(e.widget)).dx)
-            .toSet()
-            .toList()
-          ..sort();
-    // Depth 0, 1 and the project at 2.
-    expect(carets, hasLength(3));
-    expect(carets[1] - carets[0], ExplorerRow.indent);
-    expect(carets[2] - carets[1], ExplorerRow.indent);
+    final carets = find
+        .byWidgetPredicate((w) => w is Icon && w.icon == AppIcons.caretDown)
+        .evaluate()
+        .map((e) => tester.getCenter(find.byWidget(e.widget)).dx)
+        .toSet();
+    // Two headers and a project: a header is a label, not a level.
+    expect(carets, hasLength(1));
   });
 
-  testWidgets('a machine and a project put their + in one column on hover', (
+  testWidgets('a header\'s words start right after its caret', (tester) async {
+    await pumpTree(tester);
+
+    final label = tester.getTopLeft(find.text('GAME DEV')).dx;
+    final name = tester.getTopLeft(find.text('popubits')).dx;
+    expect(
+      name - label,
+      ExplorerRow.glyphSlot,
+      reason: 'a header has no glyph, so it keeps no column for one',
+    );
+  });
+
+  testWidgets('a header and a project put their + in one column on hover', (
     tester,
   ) async {
     await pumpTree(tester);
@@ -228,7 +231,7 @@ void main() {
     const projectPlus = 'Start a session here with the default agent';
     expect(find.byTooltip(machinePlus), findsNothing);
 
-    await hover(tester, find.text('archlinux'));
+    await hover(tester, find.text('ARCHLINUX · TERMINALS'));
     final machine = tester.getCenter(find.byTooltip(machinePlus)).dx;
     await hover(tester, find.text('popubits'));
     final project = tester.getCenter(find.byTooltip(projectPlus)).dx;

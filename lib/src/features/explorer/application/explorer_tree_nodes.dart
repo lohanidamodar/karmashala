@@ -1,4 +1,5 @@
 import 'package:agent_cli/process.dart';
+import 'package:flutter/foundation.dart' show immutable;
 import 'package:agent_cli/read.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
@@ -6,6 +7,7 @@ import 'package:karmashala_ui/rows.dart' show abbreviatePath;
 
 import '../../projects/domain/project.dart';
 import '../../workspaces/domain/workspace.dart';
+import '../../workspaces/domain/workspace_scope.dart';
 import 'environment_grouping.dart';
 import 'environment_terminals.dart';
 
@@ -22,15 +24,16 @@ sealed class ExplorerNode {
   final int depth;
 }
 
-/// A machine. Drawn even when it holds nothing — it is where a terminal is
-/// opened, and an absent row would say the machine is not there (§19).
-final class EnvironmentNode extends ExplorerNode {
-  EnvironmentNode({
+/// One machine the scope bar can narrow the Explorer to, with how many
+/// projects run there. Listed even when it holds nothing — it is where a
+/// terminal is opened, and leaving it out would say it is not there (§19).
+@immutable
+final class EnvironmentChoice {
+  const EnvironmentChoice({
     required this.environmentId,
     required this.environment,
     required this.projectCount,
-    required this.expanded,
-  }) : super(id: 'env:$environmentId', depth: 0);
+  });
 
   final String environmentId;
 
@@ -39,107 +42,113 @@ final class EnvironmentNode extends ExplorerNode {
   final ExecutionEnvironment? environment;
 
   final int projectCount;
-  final bool expanded;
 
   String get label => environment?.name ?? environmentId;
   EnvironmentKind? get kind => environment?.kind;
 
   @override
   bool operator ==(Object other) =>
-      other is EnvironmentNode &&
+      other is EnvironmentChoice &&
       other.environmentId == environmentId &&
       other.environment == environment &&
+      other.projectCount == projectCount;
+
+  @override
+  int get hashCode => Object.hash(environmentId, environment, projectCount);
+}
+
+/// A sticky group label at depth zero: a context, or a machine's terminals.
+/// The rows under it are not indented — the header is a label over the list,
+/// not a level of it.
+sealed class ExplorerHeaderNode extends ExplorerNode {
+  const ExplorerHeaderNode({required super.id, required this.expanded})
+    : super(depth: 0);
+
+  final bool expanded;
+}
+
+/// A context, over the projects filed in it — or, with no [workspace], over
+/// the projects filed nowhere. Drawn only while it holds a project.
+final class ContextHeaderNode extends ExplorerHeaderNode {
+  ContextHeaderNode({
+    required this.workspace,
+    required this.projectCount,
+    required super.expanded,
+  }) : super(id: contextHeaderId(workspace?.id));
+
+  /// Null for the projects in no context.
+  final Workspace? workspace;
+  final int projectCount;
+
+  String get label => workspace?.name ?? noContextLabel;
+
+  static const noContextLabel = 'No context';
+
+  @override
+  bool operator ==(Object other) =>
+      other is ContextHeaderNode &&
+      other.workspace == workspace &&
       other.projectCount == projectCount &&
       other.expanded == expanded;
 
   @override
-  int get hashCode =>
-      Object.hash(environmentId, environment, projectCount, expanded);
+  int get hashCode => Object.hash(workspace, projectCount, expanded);
 }
 
-enum EnvironmentSection {
-  projects,
-  terminals;
-
-  String get slug => name;
-  String get label => this == projects ? 'Projects' : 'Terminals';
-}
-
-/// `Projects` or `Terminals` under one machine.
-final class EnvironmentSectionNode extends ExplorerNode {
-  EnvironmentSectionNode({
+/// What one machine is running, asked for when opened and never before.
+final class TerminalsHeaderNode extends ExplorerHeaderNode {
+  TerminalsHeaderNode({
     required this.environmentId,
-    required this.section,
-    required this.expanded,
+    required this.environment,
+    required this.named,
+    required super.expanded,
     this.count,
     this.detail,
-  }) : super(id: 'env:$environmentId/${section.name}', depth: 1);
+  }) : super(id: 'env:$environmentId/terminals');
 
   final String environmentId;
-  final EnvironmentSection section;
-  final bool expanded;
+  final ExecutionEnvironment? environment;
 
-  /// How many the section holds, or **null for not asked**. A terminals
-  /// section that has not dialled must not read as empty (§19).
+  /// Whether the label names its machine — only while the scope bar does not.
+  final bool named;
+
+  /// How many are running, or **null for not asked**. A machine that has not
+  /// been dialled must not read as idle (§19).
   final int? count;
 
-  /// The muted line on the right — an age, a refusal. Null where there is
-  /// nothing measured to say.
+  /// The muted clause after the label — an age, "asking…".
   final String? detail;
 
-  String get label => section.label;
+  String get environmentLabel => environment?.name ?? environmentId;
+
+  /// The machine first: it is what tells three of these apart, so it is what
+  /// a narrow pane must not cut.
+  String get label => named ? '$environmentLabel · Terminals' : 'Terminals';
 
   @override
   bool operator ==(Object other) =>
-      other is EnvironmentSectionNode &&
+      other is TerminalsHeaderNode &&
       other.environmentId == environmentId &&
-      other.section == section &&
+      other.environment == environment &&
+      other.named == named &&
       other.expanded == expanded &&
       other.count == count &&
       other.detail == detail;
 
   @override
   int get hashCode =>
-      Object.hash(environmentId, section, expanded, count, detail);
+      Object.hash(environmentId, environment, named, expanded, count, detail);
 }
 
-/// A context, inside the machine its projects run on. One spanning two
-/// machines is drawn under each: that is the truth, not a duplicate.
-final class ContextNode extends ExplorerNode {
-  ContextNode({
-    required this.environmentId,
-    required this.workspace,
-    required this.projectCount,
-    required this.expanded,
-  }) : super(id: 'env:$environmentId/ctx:${workspace.id}', depth: 2);
-
-  final String environmentId;
-  final Workspace workspace;
-  final int projectCount;
-  final bool expanded;
-
-  String get label => workspace.name;
-
-  @override
-  bool operator ==(Object other) =>
-      other is ContextNode &&
-      other.environmentId == environmentId &&
-      other.workspace == workspace &&
-      other.projectCount == projectCount &&
-      other.expanded == expanded;
-
-  @override
-  int get hashCode =>
-      Object.hash(environmentId, workspace, projectCount, expanded);
-}
-
-/// A project, at depth 2 loose under its machine or 3 inside a context.
+/// A project, at depth zero under its context's header.
 final class ProjectNode extends ExplorerNode {
   ProjectNode({
     required this.project,
     required this.expanded,
-    required super.depth,
+    super.depth = 0,
     this.environmentBadge,
+    this.environmentLabel,
+    this.environmentKind,
   }) : pathCandidates = _abbreviated(project.root.path),
        super(id: 'project:${project.id}');
 
@@ -150,9 +159,14 @@ final class ProjectNode extends ExplorerNode {
   /// once, so no build of the row cuts it again.
   final List<String> pathCandidates;
 
-  /// The machine, for the path's tooltip. The row draws no badge: it already
-  /// stands under its machine's row.
+  /// The machine, for the path's tooltip.
   final String? environmentBadge;
+
+  /// The machine's name, for the row's second line — set only while the scope
+  /// bar does not already say it: every machine is listed together, or this
+  /// project was kept from another one.
+  final String? environmentLabel;
+  final EnvironmentKind? environmentKind;
 
   @override
   bool operator ==(Object other) =>
@@ -160,10 +174,19 @@ final class ProjectNode extends ExplorerNode {
       other.project == project &&
       other.expanded == expanded &&
       other.depth == depth &&
-      other.environmentBadge == environmentBadge;
+      other.environmentBadge == environmentBadge &&
+      other.environmentLabel == environmentLabel &&
+      other.environmentKind == environmentKind;
 
   @override
-  int get hashCode => Object.hash(project, expanded, depth, environmentBadge);
+  int get hashCode => Object.hash(
+    project,
+    expanded,
+    depth,
+    environmentBadge,
+    environmentLabel,
+    environmentKind,
+  );
 }
 
 /// A tree is rebuilt whole on every fold, and a path cuts to the same strings
@@ -273,7 +296,7 @@ bool _sameImported(ImportedSession a, ImportedSession b) =>
 /// One row under a machine's `Terminals`.
 final class TerminalRowNode extends ExplorerNode {
   TerminalRowNode({required this.environmentId, required this.terminal})
-    : super(id: 'terminal:$environmentId:${terminal.id}', depth: 2);
+    : super(id: 'terminal:$environmentId:${terminal.id}', depth: 0);
 
   final String environmentId;
   final EnvironmentTerminal terminal;
@@ -310,128 +333,94 @@ final class HintNode extends ExplorerNode {
   int get hashCode => Object.hash(id, depth, message);
 }
 
-/// The collapse ids that must be open for a project on [environmentId] — and
-/// filed under [workspaceId], when it is — to be drawn at all.
+/// A context header's collapse id; [workspaceId] null is *No context*.
 ///
-/// One spelling of these strings: a reveal that built them itself would drift
-/// from the tree that reads them, and the row would stay hidden.
-List<String> explorerAncestorsOf({
-  required String environmentId,
-  String? workspaceId,
-}) => [
-  'env:$environmentId',
-  'env:$environmentId/${EnvironmentSection.projects.name}',
-  if (workspaceId != null) 'env:$environmentId/ctx:$workspaceId',
+/// One spelling: a reveal that built the string itself would drift from the
+/// tree that reads it, and the row would stay hidden.
+String contextHeaderId(String? workspaceId) => 'ctx:${workspaceId ?? 'none'}';
+
+/// The collapse ids that must be open for a project filed under
+/// [workspaceId] — or under nothing — to be drawn at all.
+List<String> explorerAncestorsOf({String? workspaceId}) => [
+  contextHeaderId(workspaceId),
 ];
 
-/// **The Explorer's shape, as a flat list.** Machine, then its `Projects` and
-/// `Terminals`, then contexts before loose projects — each row appearing only
-/// when everything above it is expanded, so the list is exactly what is drawn.
+/// **The Explorer's shape, as a flat list.** Context headers over their
+/// projects — contexts by name, then the projects in none — and each machine's
+/// `Terminals` last. A row appears only when its header is expanded, so the
+/// list is exactly what is drawn.
+///
+/// [projects] is already narrowed by the search. [environmentScope] and
+/// [contextScope] narrow it further, and [keepProjectId] survives both: a
+/// filter is a view, and hiding the selected project would leave the session
+/// pane showing work whose project is nowhere on screen.
 ///
 /// [childrenOf] and [terminalsOf] are asked **only for an expanded node**,
-/// which is what keeps a collapsed machine free of both a session query and a
-/// dial.
+/// which is what keeps a folded group free of both a session query and a dial.
 List<ExplorerNode> buildExplorerTree({
   required List<Project> projects,
-  required List<ExecutionEnvironment> environments,
+  required List<EnvironmentChoice> environments,
   required List<Workspace> contexts,
   required Set<String> collapsed,
   required Set<String> expandedProjects,
   Set<String> expandedTerminals = const {},
+  String? environmentScope,
+  WorkspaceScope contextScope = WorkspaceScope.all,
+  String? keepProjectId,
+  bool searching = false,
   List<ExplorerNode> Function(ProjectNode node)? childrenOf,
-  List<ExplorerNode> Function(EnvironmentNode node)? terminalsOf,
+  List<ExplorerNode> Function(TerminalsHeaderNode node)? terminalsOf,
   int? Function(String environmentId)? terminalCountOf,
   String? Function(String environmentId)? terminalDetailOf,
-  bool includeEmptyEnvironments = true,
 }) {
   final contextsById = {for (final context in contexts) context.id: context};
+  final environmentsById = {
+    for (final choice in environments) choice.environmentId: choice,
+  };
+  // The scope bar names the machine, so a row repeats it only when it cannot:
+  // every machine is listed together, or the row was kept from another one.
+  final severalListed = environmentScope == null && environments.length > 1;
   final nodes = <ExplorerNode>[];
 
-  for (final group in groupProjectsByEnvironment(
-    projects,
-    environments,
-    includeEmpty: includeEmptyEnvironments,
-  )) {
-    final environment = EnvironmentNode(
-      environmentId: group.environmentId,
-      environment: group.environment,
-      projectCount: group.projects.length,
-      expanded: !collapsed.contains('env:${group.environmentId}'),
-    );
-    nodes.add(environment);
-    if (!environment.expanded) continue;
+  // A project whose context row has gone reads as loose rather than vanishing.
+  String? contextOf(Project project) {
+    final id = project.workspaceId;
+    return id != null && contextsById.containsKey(id) ? id : null;
+  }
 
-    nodes.addAll(
-      _projectsSection(
-        group: group,
-        contextsById: contextsById,
-        collapsed: collapsed,
+  final filed = <String, List<Project>>{};
+  final loose = <Project>[];
+  for (final project in projects) {
+    final context = contextOf(project);
+    final inScope =
+        (environmentScope == null ||
+            project.root.environmentId == environmentScope) &&
+        (contextScope.isAll ||
+            (contextScope.unassignedOnly
+                ? context == null
+                : context == contextScope.workspaceId));
+    if (!inScope && project.id != keepProjectId) continue;
+    if (context == null) {
+      loose.add(project);
+    } else {
+      filed.putIfAbsent(context, () => []).add(project);
+    }
+  }
+
+  List<ExplorerNode> rows(List<Project> group) => [
+    for (final project in group)
+      ..._project(
+        project,
+        environment: environmentsById[project.root.environmentId],
+        showEnvironment:
+            severalListed ||
+            (environmentScope != null &&
+                project.root.environmentId != environmentScope),
         expandedProjects: expandedProjects,
         childrenOf: childrenOf,
       ),
-    );
+  ];
 
-    final terminals = EnvironmentSectionNode(
-      environmentId: group.environmentId,
-      section: EnvironmentSection.terminals,
-      // Not from [collapsed], and deliberately not persisted: opening this
-      // dials a machine, and a fold restored at launch would dial every host
-      // on the first frame (§19).
-      expanded: expandedTerminals.contains(group.environmentId),
-      count: terminalCountOf?.call(group.environmentId),
-      detail: terminalDetailOf?.call(group.environmentId),
-    );
-    nodes.add(terminals);
-    if (terminals.expanded && terminalsOf != null) {
-      nodes.addAll(terminalsOf(environment));
-    }
-  }
-  return nodes;
-}
-
-List<ExplorerNode> _projectsSection({
-  required EnvironmentGroup group,
-  required Map<String, Workspace> contextsById,
-  required Set<String> collapsed,
-  required Set<String> expandedProjects,
-  List<ExplorerNode> Function(ProjectNode node)? childrenOf,
-}) {
-  final section = EnvironmentSectionNode(
-    environmentId: group.environmentId,
-    section: EnvironmentSection.projects,
-    expanded: !collapsed.contains('env:${group.environmentId}/projects'),
-    count: group.projects.length,
-  );
-  final nodes = <ExplorerNode>[section];
-  if (!section.expanded) return nodes;
-  final badge = switch (group.environment) {
-    final ExecutionEnvironment environment => environmentBadge(environment),
-    null => null,
-  };
-  if (group.projects.isEmpty) {
-    nodes.add(
-      HintNode(
-        id: 'env:${group.environmentId}/projects/empty',
-        depth: 2,
-        message: 'No projects on this machine yet.',
-      ),
-    );
-    return nodes;
-  }
-
-  // A project whose context row has gone reads as loose rather than vanishing.
-  final filed = <String, List<Project>>{};
-  final loose = <Project>[];
-  for (final project in group.projects) {
-    final context = project.workspaceId;
-    if (context != null && contextsById.containsKey(context)) {
-      filed.putIfAbsent(context, () => []).add(project);
-    } else {
-      loose.add(project);
-    }
-  }
-
-  // Contexts before loose projects, the way folders sort above files.
   final ordered = filed.keys.toList()
     ..sort(
       (a, b) => contextsById[a]!.name.toLowerCase().compareTo(
@@ -439,44 +428,106 @@ List<ExplorerNode> _projectsSection({
       ),
     );
   for (final id in ordered) {
-    final context = ContextNode(
-      environmentId: group.environmentId,
-      workspace: contextsById[id]!,
+    final header = ContextHeaderNode(
+      workspace: contextsById[id],
       projectCount: filed[id]!.length,
-      expanded: !collapsed.contains('env:${group.environmentId}/ctx:$id'),
+      expanded: !collapsed.contains(contextHeaderId(id)),
     );
-    nodes.add(context);
-    if (!context.expanded) continue;
-    for (final project in filed[id]!) {
-      nodes.addAll(
-        _project(
-          project,
-          depth: 3,
-          environmentBadge: badge,
-          expandedProjects: expandedProjects,
-          childrenOf: childrenOf,
-        ),
+    nodes.add(header);
+    if (header.expanded) nodes.addAll(rows(filed[id]!));
+  }
+  if (loose.isNotEmpty) {
+    // With no contexts at all there is nothing to tell these apart from, and a
+    // header would be a label over the whole list.
+    if (contexts.isEmpty) {
+      nodes.addAll(rows(loose));
+    } else {
+      final header = ContextHeaderNode(
+        workspace: null,
+        projectCount: loose.length,
+        expanded: !collapsed.contains(contextHeaderId(null)),
       );
+      nodes.add(header);
+      if (header.expanded) nodes.addAll(rows(loose));
     }
   }
-  for (final project in loose) {
-    nodes.addAll(
-      _project(
-        project,
-        depth: 2,
-        environmentBadge: badge,
-        expandedProjects: expandedProjects,
-        childrenOf: childrenOf,
+
+  // A search is for projects: nothing here could match it.
+  if (searching) return nodes;
+
+  if (nodes.isEmpty) {
+    nodes.add(
+      HintNode(
+        id: 'hint-scope-empty',
+        depth: 0,
+        message: _emptyScopeMessage(
+          environment: environmentsById[environmentScope],
+          context: contextsById[contextScope.workspaceId],
+          unassignedOnly: contextScope.unassignedOnly,
+        ),
       ),
     );
+  }
+
+  for (final choice in environments) {
+    if (environmentScope != null && choice.environmentId != environmentScope) {
+      continue;
+    }
+    final terminals = TerminalsHeaderNode(
+      environmentId: choice.environmentId,
+      environment: choice.environment,
+      named: severalListed,
+      // Never from [collapsed], and deliberately not persisted: opening this
+      // dials a machine, and a fold restored at launch would dial every host
+      // on the first frame (§19).
+      expanded: expandedTerminals.contains(choice.environmentId),
+      count: terminalCountOf?.call(choice.environmentId),
+      detail: terminalDetailOf?.call(choice.environmentId),
+    );
+    nodes.add(terminals);
+    if (terminals.expanded && terminalsOf != null) {
+      nodes.addAll(terminalsOf(terminals));
+    }
   }
   return nodes;
 }
 
+String _emptyScopeMessage({
+  required EnvironmentChoice? environment,
+  required Workspace? context,
+  required bool unassignedOnly,
+}) {
+  final where = environment == null ? '' : ' on ${environment.label}';
+  if (context != null) return 'No projects in ${context.name}$where yet.';
+  if (unassignedOnly) return 'Every project$where is in a context.';
+  return environment == null
+      ? 'No projects yet.'
+      : 'No projects on this machine yet.';
+}
+
+/// The machines the scope bar lists, in the order a person reads them — see
+/// [groupProjectsByEnvironment] — counted over [projects], which is every
+/// project rather than what a search left.
+List<EnvironmentChoice> environmentChoices(
+  List<Project> projects,
+  List<ExecutionEnvironment> environments,
+) => [
+  for (final group in groupProjectsByEnvironment(
+    projects,
+    environments,
+    includeEmpty: true,
+  ))
+    EnvironmentChoice(
+      environmentId: group.environmentId,
+      environment: group.environment,
+      projectCount: group.projects.length,
+    ),
+];
+
 List<ExplorerNode> _project(
   Project project, {
-  required int depth,
-  required String? environmentBadge,
+  required EnvironmentChoice? environment,
+  required bool showEnvironment,
   required Set<String> expandedProjects,
   required List<ExplorerNode> Function(ProjectNode node)? childrenOf,
 }) {
@@ -486,8 +537,16 @@ List<ExplorerNode> _project(
   final node = ProjectNode(
     project: project,
     expanded: expanded,
-    depth: depth,
-    environmentBadge: environmentBadge,
+    environmentBadge: switch (environment?.environment) {
+      final ExecutionEnvironment row => environmentBadge(row),
+      null => null,
+    },
+    // A machine whose row is gone is named by its id, never folded into this
+    // one.
+    environmentLabel: showEnvironment
+        ? environment?.label ?? project.root.environmentId
+        : null,
+    environmentKind: environment?.kind,
   );
   if (!expanded || childrenOf == null) return [node];
   return [node, ...childrenOf(node)];

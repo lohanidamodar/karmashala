@@ -1,87 +1,83 @@
 import 'package:flutter/material.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../application/environment_terminals.dart';
-import '../application/explorer_tree_nodes.dart';
 
-/// The three folding rows above a project — machine, section, context — drawn
-/// in the same row model as the projects and sessions under them: one indent
-/// per depth, a disclosure and a glyph column, and the right-hand column.
-class ExplorerHeaderRow extends StatelessWidget {
-  const ExplorerHeaderRow({
-    required this.depth,
+/// A group's label over the rows it holds — a context, a machine's terminals.
+/// Flat: it stands at depth zero and indents nothing beneath it, and the list
+/// pins it while its rows scroll under it. It is drawn in the same row model
+/// as those rows — caret column, the right-hand column, `+` and `⋮` on hover.
+class ExplorerGroupHeader extends StatelessWidget {
+  const ExplorerGroupHeader({
     required this.expanded,
     required this.label,
     required this.onTap,
-    this.icon,
     this.trailingText,
     this.trailingWords,
     this.detail,
     this.action,
-    this.emphasis = HeaderEmphasis.section,
+    this.menuLabel,
+    this.menuItemsBuilder,
+    this.onMenu,
     this.tooltip,
     super.key,
   });
 
-  final int depth;
   final bool expanded;
   final String label;
   final VoidCallback onTap;
-  final IconData? icon;
 
   /// The count in the right-hand column. Never a fabricated zero: pass null
   /// where nothing has been measured (§19).
   final String? trailingText;
 
-  /// What the count counts, in words — `18 projects`. Drawn in the count's
-  /// place while the row has room, and its tooltip when it has not.
+  /// What the count counts, in words — `3 projects` — as its tooltip.
   final String? trailingWords;
 
   /// A muted clause after the label — "read 21 minutes ago" — too long for the
   /// right-hand column.
   final String? detail;
 
-  /// The row's verb, in the `+` slot while the row is hovered or focused.
+  /// The group's verb, in the `+` slot while the row is hovered or focused.
   final Widget? action;
-  final HeaderEmphasis emphasis;
+
+  final String? menuLabel;
+  final RowMenuItemBuilder? menuItemsBuilder;
+  final ValueChanged<String>? onMenu;
   final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
+    final menuItemsBuilder = this.menuItemsBuilder;
+    final onMenu = this.onMenu;
     final row = ExplorerRow(
       kind: ExplorerRowKind.group,
-      depth: depth,
+      depth: 0,
       selected: false,
       onTap: onTap,
+      menuItemsBuilder: menuItemsBuilder,
+      onMenu: onMenu,
       builder: (context) {
         final theme = Theme.of(context);
-        final scheme = theme.colorScheme;
         final density = UiDensity.of(context);
-        final icon = this.icon;
         final detail = this.detail;
         final trailing = trailingText;
         return ExplorerRowLine(
-          lead: ExplorerRowLead(
-            expanded: expanded,
-            glyph: icon == null
-                ? null
-                : Icon(
-                    icon,
-                    size: ExplorerRow.glyphSize,
-                    color: scheme.onSurfaceVariant,
-                  ),
-          ),
+          lead: ExplorerRowLead(expanded: expanded, glyphColumn: false),
           title: Row(
             children: [
               Flexible(
                 child: Text(
-                  emphasis.write(label),
+                  label.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: emphasis.style(theme, density),
+                  style: theme.textTheme.labelSmall
+                      ?.merge(Chrome.groupLabel)
+                      .copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
               ),
               if (detail != null) ...[
@@ -102,46 +98,20 @@ class ExplorerHeaderRow extends StatelessWidget {
             meta: trailing == null
                 ? null
                 : ExplorerRowMeta(trailing, tooltip: trailingWords),
-            wideMeta: trailing == null || trailingWords == null
-                ? null
-                : ExplorerRowMeta(trailingWords!),
             action: action,
+            menu: menuItemsBuilder == null || onMenu == null
+                ? null
+                : RowMenuButton(
+                    tooltip: menuLabel ?? ExplorerRowKind.group.menuLabel,
+                    itemBuilder: menuItemsBuilder,
+                    onSelected: onMenu,
+                  ),
           ),
         );
       },
     );
-    final spaced = emphasis.spaceAbove == 0
-        ? row
-        : Padding(
-            padding: EdgeInsets.only(top: emphasis.spaceAbove),
-            child: row,
-          );
-    return tooltip == null ? spaced : Tooltip(message: tooltip!, child: spaced);
+    return tooltip == null ? row : Tooltip(message: tooltip!, child: row);
   }
-}
-
-/// Three ranks: the machine is a heading, its sections are group labels, and a
-/// context is a row among the projects it holds.
-enum HeaderEmphasis {
-  machine,
-  section,
-  context;
-
-  TextStyle? style(ThemeData theme, UiDensity density) => switch (this) {
-    HeaderEmphasis.machine => density.rowTitle(theme, strong: true),
-    HeaderEmphasis.section =>
-      theme.textTheme.labelSmall
-          ?.merge(Chrome.groupLabel)
-          .copyWith(color: theme.colorScheme.onSurfaceVariant),
-    HeaderEmphasis.context => density.rowTitle(theme),
-  };
-
-  /// A machine wants air above it; nothing else does.
-  double get spaceAbove => this == HeaderEmphasis.machine ? Insets.sm : 0;
-
-  /// `PROJECTS`, not `Projects` — a group label, not a thing in the list.
-  String write(String label) =>
-      this == HeaderEmphasis.section ? label.toUpperCase() : label;
 }
 
 /// The glyph for a machine, by what it is rather than by what it is called.
@@ -234,10 +204,5 @@ class TerminalRow extends StatelessWidget {
   );
 }
 
-/// What a machine's count counts, in words.
-///
-/// Projects only: a folded machine has not been asked what it is running, and
-/// a count nobody measured would read as "idle" (§19).
-String? environmentSummary(EnvironmentNode node) => node.projectCount == 0
-    ? null
-    : '${node.projectCount} project${node.projectCount == 1 ? '' : 's'}';
+/// `3 projects`, `1 project`.
+String projectCountWords(int count) => '$count project${count == 1 ? '' : 's'}';

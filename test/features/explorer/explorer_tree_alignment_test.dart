@@ -39,13 +39,13 @@ import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
-/// **One indentation rhythm and one right-hand column, for every row kind.**
+/// **Two visible levels and one right-hand column, for every row kind.**
 ///
-/// The owner's screenshot of the Explorer: the machine, `PROJECTS`, the context
-/// groups, the project and its sessions each stepped in by a different amount;
-/// counts, `+` and ages ended in different columns; project and session rows
-/// were tinted cards among flat headers; a running session drew its status
-/// twice. Measured on the real panel, not on the kit widgets alone.
+/// The owner's screenshot of the Explorer had five levels — machine,
+/// `PROJECTS`, context, project, session — each stepped in by a different
+/// amount, with counts, `+` and ages ending in different columns. A context is
+/// a header over its projects now, so a project stands at depth zero and only
+/// its sessions step in. Measured on the real panel, not on the kit widgets.
 const _width = 360.0;
 const _long = 'popupbits-ai-workspace-with-a-long-name';
 const _path = '/Users/me/Documents/projects/popupbits-ai-workspace';
@@ -218,15 +218,14 @@ void main() {
       .where((c) => c.a > 0)
       .toList();
 
-  testWidgets('every depth steps in by one constant', (tester) async {
+  testWidgets('a project starts at depth zero, under a header that indents '
+      'nothing', (tester) async {
     await pumpExplorer(tester);
 
-    final machine = centreX(tester, chevronIn(rowOf(ExplorerEnvironmentRow)));
-    final section = centreX(
+    final header = centreX(
       tester,
-      chevronIn(rowOf(ExplorerSectionHeaderRow)).first,
+      chevronIn(rowOf(ExplorerContextHeader).first),
     );
-    final group = centreX(tester, chevronIn(rowOf(ExplorerContextRow)));
     final project = centreX(
       tester,
       chevronIn(
@@ -236,10 +235,27 @@ void main() {
         ),
       ),
     );
-    final step = section - machine;
-    expect(step, greaterThan(0));
-    expect(group - section, moreOrLessEquals(step, epsilon: 0.5));
-    expect(project - group, moreOrLessEquals(step, epsilon: 0.5));
+    final loose = centreX(
+      tester,
+      chevronIn(
+        find.ancestor(
+          of: find.text('Loose'),
+          matching: find.byType(ExplorerProjectRow),
+        ),
+      ),
+    );
+    expect(project, moreOrLessEquals(header, epsilon: 0.5));
+    expect(loose, moreOrLessEquals(header, epsilon: 0.5));
+    expect(
+      header,
+      moreOrLessEquals(
+        ExplorerRow.contentStartOf(UiDensity.pointer) +
+            ExplorerRow.disclosureSlot / 2,
+        epsilon: 0.5,
+      ),
+      reason: 'depth zero: the first caret column from the pane\'s edge',
+    );
+    const step = ExplorerRow.indent;
 
     // A session's one glyph sits one step right of its project's folder glyph.
     final folder = centreX(
@@ -262,9 +278,7 @@ void main() {
     await pumpExplorer(tester);
 
     final edges = {
-      'machine': metaRight(tester, rowOf(ExplorerEnvironmentRow)),
-      'section': metaRight(tester, rowOf(ExplorerSectionHeaderRow).first),
-      'group': metaRight(tester, rowOf(ExplorerContextRow)),
+      'header': metaRight(tester, rowOf(ExplorerContextHeader).first),
       'project': metaRight(
         tester,
         find.ancestor(
@@ -320,8 +334,14 @@ void main() {
       find.descendant(of: row, matching: find.byTooltip('1 needs you')),
       findsOneWidget,
     );
-    expect(find.text('2 projects'), findsOneWidget, reason: 'the machine');
-    expect(find.text('1 project'), findsOneWidget, reason: 'the context');
+    // A header's count is a bare number: its label says what is counted.
+    expect(
+      find.descendant(
+        of: rowOf(ExplorerContextHeader),
+        matching: find.byTooltip('1 project'),
+      ),
+      findsNWidgets(2),
+    );
   });
 
   testWidgets('the second line hangs at the name and leaves the right-hand '
@@ -363,8 +383,6 @@ void main() {
     final row = projectRow();
     expect(find.text('4 sessions'), findsNothing);
     expect(find.descendant(of: row, matching: find.text('4')), findsOneWidget);
-    expect(find.text('2 projects'), findsNothing);
-    expect(find.byTooltip('2 projects'), findsOneWidget);
     expect(
       find.descendant(of: row, matching: find.byType(ProjectStateBadge)),
       findsNWidgets(2),
@@ -432,8 +450,7 @@ void main() {
     await pumpExplorer(tester);
 
     for (final row in [
-      rowOf(ExplorerEnvironmentRow),
-      rowOf(ExplorerContextRow),
+      rowOf(ExplorerContextHeader).first,
       sessionRow('Running session'),
       sessionRow('Finished session'),
     ]) {
@@ -443,9 +460,9 @@ void main() {
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);
     addTearDown(gesture.removePointer);
-    await gesture.moveTo(tester.getCenter(find.text('Game dev')));
+    await gesture.moveTo(tester.getCenter(find.text('GAME DEV')));
     await tester.pumpAndSettle();
-    expect(fillsIn(tester, rowOf(ExplorerContextRow)), isNotEmpty);
+    expect(fillsIn(tester, rowOf(ExplorerContextHeader).first), isNotEmpty);
   });
 }
 

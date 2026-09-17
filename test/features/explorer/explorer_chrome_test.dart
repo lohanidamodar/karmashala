@@ -13,6 +13,9 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
+import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
+import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
+import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/workspaces/application/workspaces_controller.dart';
 
@@ -38,9 +41,11 @@ import '../../support/fixtures.dart';
 /// with the menu row that set it.
 ///
 /// **The chrome is measured because it is taken from the list.** Two rows sit
-/// above the tree — the pane header and the search field. The scope bar was the
-/// third until the context became a node inside its machine; the ratchet only
-/// turns down, so a row coming back has to argue with a failing test first.
+/// above the tree — the pane header and the search field, which the machine's
+/// switcher shares rather than adding to. The context chips are a third, drawn
+/// only while there are contexts; they came back on 2026-09-17 in exchange for
+/// three levels of the tree (SETTLED, "The Explorer is two levels"), and they
+/// are ratcheted here like the other two.
 void main() {
   late AppDatabase db;
 
@@ -136,6 +141,39 @@ void main() {
       });
     }
 
+    testWidgets('with no contexts the chips take nothing', (tester) async {
+      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
+      expect(find.byType(ExplorerContextChips), findsOneWidget);
+      expect(heightOf(tester, find.byType(ExplorerContextChips)), 0);
+    });
+
+    testWidgets('the context chips are one more row, and 27px', (tester) async {
+      final c = container();
+      c.read(workspacesControllerProvider.notifier).create('Game dev');
+      await pumpPanel(
+        tester,
+        window: const Size(1440, 900),
+        paneWidth: 304,
+        scope: c,
+      );
+      expect(
+        heightOf(tester, find.byType(ExplorerContextChips)),
+        lessThanOrEqualTo(27),
+      );
+    });
+
+    testWidgets('a second machine adds its switcher to the search row, not a '
+        'row of its own', (tester) async {
+      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
+      expect(find.byType(ExplorerEnvironmentSwitcher), findsOneWidget);
+      expect(
+        heightOf(tester, find.byType(ExplorerScopeBar)),
+        heightOf(tester, searchBlock()),
+        reason: 'the row is as tall as the search field made it',
+      );
+    });
+
     testWidgets('leaves the list the rest of the column', (tester) async {
       await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
       // Nothing else may quietly take a slice: chrome plus list is the column.
@@ -191,28 +229,45 @@ void main() {
       }
     });
 
-    /// Every glyph the tree is drawing, in row order.
-    List<IconData> glyphs(WidgetTester tester) => [
+    /// Every glyph [within] is drawing, in order.
+    List<IconData> glyphs(WidgetTester tester, Finder within) => [
       for (final icon in tester.widgetList<Icon>(
-        find.descendant(
-          of: find.byType(ListView),
-          matching: find.byType(Icon),
-        ),
+        find.descendant(of: within, matching: find.byType(Icon)),
       ))
         if (icon.icon case final IconData data) data,
     ];
 
-    testWidgets('a machine wears the mark of what it is', (tester) async {
-      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
-
+    testWidgets('the machine in scope wears the mark of what it is', (
+      tester,
+    ) async {
+      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      final c = container();
+      await pumpPanel(
+        tester,
+        window: const Size(1440, 900),
+        paneWidth: 304,
+        scope: c,
+      );
       expect(
-        glyphs(tester),
+        glyphs(tester, find.byType(ExplorerEnvironmentSwitcher)),
+        contains(AppIcons.stack),
+        reason: 'every machine together is a stack of them',
+      );
+
+      c
+          .read(settingsControllerProvider.notifier)
+          .setExplorerEnvironmentScope('windows');
+      await tester.pumpAndSettle();
+      expect(
+        glyphs(tester, find.byType(ExplorerEnvironmentSwitcher)),
         contains(AppIcons.terminal),
-        reason: 'this machine is a local one, and says so on its own row',
+        reason: 'this machine is a local one, and the switcher says so',
       );
     });
 
-    testWidgets('a context is a stack', (tester) async {
+    testWidgets('a context is a label over its projects, with no glyph', (
+      tester,
+    ) async {
       final c = container();
       final games = c
           .read(workspacesControllerProvider.notifier)
@@ -225,12 +280,10 @@ void main() {
         scope: c,
       );
 
-      expect(find.text('Game dev'), findsOneWidget);
-      expect(
-        glyphs(tester),
-        contains(AppIcons.stack),
-        reason: 'the same mark the rest of the app gives a context',
-      );
+      expect(find.text('GAME DEV'), findsOneWidget);
+      expect(glyphs(tester, find.byType(ExplorerContextHeader).first), [
+        AppIcons.caretDown,
+      ], reason: 'a header is words and a caret; the stack is in the menus');
     });
   });
 }

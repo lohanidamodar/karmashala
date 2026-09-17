@@ -153,18 +153,16 @@ class SessionContext {
     return repository;
   }
 
-  /// Opens the machine, its `Projects` section and the context above
-  /// [projectId], so a selected row is not highlighted off screen.
+  /// Opens the context header above [projectId], so a selected row is not
+  /// highlighted off screen. The scope bar's filters need no opening: the
+  /// tree keeps the selected project whatever they are.
   void reveal(String projectId) {
     final project = _ref.read(projectDaoProvider).getById(projectId);
     if (project == null) return;
     _ref
         .read(settingsControllerProvider.notifier)
         .revealExplorerNodes(
-          explorerAncestorsOf(
-            environmentId: project.environmentId,
-            workspaceId: project.workspaceId,
-          ),
+          explorerAncestorsOf(workspaceId: project.workspaceId),
         );
   }
 

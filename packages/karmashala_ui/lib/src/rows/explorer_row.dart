@@ -107,6 +107,11 @@ class ExplorerRow extends StatelessWidget {
   /// The fill's margin from the pane's edges.
   static const inset = Insets.xs;
 
+  /// Kept clear inside a pointer row's right edge: the scrollbar's lane. The
+  /// fill still spans the pane — only the content stays out from under the
+  /// thumb, so a count is never drawn beneath it.
+  static const scrollbarGutter = Insets.sm;
+
   /// What separates one row from the next under a thumb, and the list's own
   /// padding top and bottom.
   static const gap = Insets.xs;
@@ -173,7 +178,7 @@ class ExplorerRow extends StatelessWidget {
           : EdgeInsets.fromLTRB(
               density.padX + depth * indent,
               kind == ExplorerRowKind.session ? Insets.xs : Insets.hair,
-              density.padX,
+              density.padX + scrollbarGutter,
               kind == ExplorerRowKind.session ? Insets.xs : Insets.hair,
             ),
       child: body,
@@ -262,8 +267,13 @@ class ExplorerRowLead extends StatelessWidget {
     this.glyph,
     this.tick,
     this.onDisclosure,
+    this.glyphColumn = true,
     super.key,
   });
+
+  /// False for a group label, which has no glyph to draw: its words start
+  /// right after the caret instead of a column further in.
+  final bool glyphColumn;
 
   /// Null reserves the disclosure column and draws nothing in it.
   final bool? expanded;
@@ -282,7 +292,9 @@ class ExplorerRowLead extends StatelessWidget {
   /// How wide this lead is: [ExplorerRow.lead], plus [ExplorerRow.tickSlot]
   /// while a tick is drawn.
   double get width =>
-      ExplorerRow.lead + (tick == null ? 0 : ExplorerRow.tickSlot);
+      ExplorerRow.lead -
+      (glyphColumn ? 0 : ExplorerRow.glyphSlot) +
+      (tick == null ? 0 : ExplorerRow.tickSlot);
 
   @override
   Widget build(BuildContext context) {
@@ -319,14 +331,15 @@ class ExplorerRowLead extends StatelessWidget {
           SizedBox(width: ExplorerRow.disclosureSlot, child: caret),
           // Square, and a wider badge is scaled into it rather than pushing
           // the title off the row.
-          SizedBox.square(
-            dimension: ExplorerRow.glyphSlot,
-            child: glyph == null
-                ? null
-                : Center(
-                    child: FittedBox(fit: BoxFit.scaleDown, child: glyph),
-                  ),
-          ),
+          if (glyphColumn)
+            SizedBox.square(
+              dimension: ExplorerRow.glyphSlot,
+              child: glyph == null
+                  ? null
+                  : Center(
+                      child: FittedBox(fit: BoxFit.scaleDown, child: glyph),
+                    ),
+            ),
           const SizedBox(width: ExplorerRow.textGap),
         ],
       ),

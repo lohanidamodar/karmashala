@@ -31,7 +31,8 @@ import '../../support/fixtures.dart';
 /// pass over a list that is in memory anyway, and the *unfiltered*
 /// `sortedProjectsProvider` — which Quick Open, the phone bindings and the
 /// repositories provider all hang off — is left alone. Switching contexts
-/// therefore touches SQLite zero times, at any number of projects.
+/// therefore *reads* SQLite zero times, at any number of projects. It writes
+/// once: the scope is kept in settings now that the Explorer's chips show it.
 ///
 /// Counted, never timed, like every other `*_cost_test.dart` here: wall-clock
 /// over a few milliseconds fails whenever the machine is busy, and statements
@@ -154,7 +155,7 @@ void main() {
       });
     }
 
-    test('the cost of a switch is zero, and stays zero', () {
+    test('a switch reads nothing and writes its one setting, at any scale', () {
       expect(measured.keys.toSet(), scale.toSet(),
           reason: 'every case above must have run');
       // ignore: avoid_print
@@ -163,9 +164,9 @@ void main() {
       for (final count in scale) {
         expect(
           measured[count]!.statements,
-          0,
-          reason: 'at $count projects: switching contexts reads the list '
-              'already in memory — no statement, and certainly not one per '
+          4,
+          reason: 'at $count projects: four switches, four settings writes — '
+              'the list is already in memory, and nothing is asked per '
               'project',
         );
         expect(

@@ -191,6 +191,20 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Narrows the Explorer to one machine; empty is every machine.
+  void setExplorerEnvironmentScope(String environmentId) {
+    if (state.explorerEnvironmentScope == environmentId) return;
+    state = state.copyWith(explorerEnvironmentScope: environmentId);
+    _save();
+  }
+
+  /// See [Settings.explorerContextScope] for the spelling.
+  void setExplorerContextScope(String scope) {
+    if (state.explorerContextScope == scope) return;
+    state = state.copyWith(explorerContextScope: scope);
+    _save();
+  }
+
   void setExplorerProjectDetails(bool value) {
     if (state.explorerProjectDetails == value) return;
     state = state.copyWith(explorerProjectDetails: value);

@@ -10,7 +10,15 @@ import '../domain/workspace.dart';
 /// Names a new context and returns it, so the caller can put something in it
 /// straight away: "file this" and "there is no context yet" are one moment.
 class NewContextDialog extends ConsumerStatefulWidget {
-  const NewContextDialog({this.forProjectNamed, this.movingCount, super.key});
+  const NewContextDialog({
+    this.forProjectNamed,
+    this.movingCount,
+    this.editing,
+    super.key,
+  });
+
+  /// The context being renamed or re-described; null creates one.
+  final Workspace? editing;
 
   /// Whose sake this is being created for, named in the subtitle so the dialog
   /// says what will happen when it closes.
@@ -31,13 +39,22 @@ class NewContextDialog extends ConsumerStatefulWidget {
     ),
   );
 
+  /// Renames or re-describes [workspace], and returns it as saved.
+  static Future<Workspace?> edit(BuildContext context, Workspace workspace) =>
+      showDialog<Workspace>(
+        context: context,
+        builder: (_) => NewContextDialog(editing: workspace),
+      );
+
   @override
   ConsumerState<NewContextDialog> createState() => _NewContextDialogState();
 }
 
 class _NewContextDialogState extends ConsumerState<NewContextDialog> {
-  final _name = TextEditingController();
-  final _description = TextEditingController();
+  late final _name = TextEditingController(text: widget.editing?.name);
+  late final _description = TextEditingController(
+    text: widget.editing?.description,
+  );
   String? _error;
 
   @override
@@ -54,10 +71,21 @@ class _NewContextDialogState extends ConsumerState<NewContextDialog> {
       return;
     }
     try {
-      final workspace = ref
-          .read(workspacesControllerProvider.notifier)
-          .create(name, description: _description.text);
-      Navigator.of(context).pop(workspace);
+      final controller = ref.read(workspacesControllerProvider.notifier);
+      final editing = widget.editing;
+      if (editing == null) {
+        Navigator.of(
+          context,
+        ).pop(controller.create(name, description: _description.text));
+        return;
+      }
+      controller.edit(editing.id, name: name, description: _description.text);
+      Navigator.of(context).pop(
+        ref
+            .read(workspacesControllerProvider)
+            .where((w) => w.id == editing.id)
+            .firstOrNull,
+      );
     } on DuplicateWorkspaceName catch (e) {
       setState(() => _error = e.toString());
     } on ArgumentError catch (e) {
@@ -72,9 +100,12 @@ class _NewContextDialogState extends ConsumerState<NewContextDialog> {
       // At 720x560 with text at 1.3x the buttons would otherwise leave the window.
       scrollable: true,
       title: DesktopDialogTitle(
-        icon: AppIcons.folderPlus,
-        title: 'New context',
+        icon: widget.editing == null
+            ? AppIcons.folderPlus
+            : AppIcons.pencilSimple,
+        title: widget.editing == null ? 'New context' : 'Edit context',
         subtitle: switch ((project, widget.movingCount)) {
+          _ when widget.editing != null => 'Its projects stay where they are.',
           (final String project, _) => 'Create it and move "$project" into it.',
           (_, final int count) =>
             'Create it and move ${count == 1 ? '1 project' : '$count projects'} '
@@ -118,7 +149,10 @@ class _NewContextDialogState extends ConsumerState<NewContextDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(onPressed: _create, child: const Text('Create')),
+        FilledButton(
+          onPressed: _create,
+          child: Text(widget.editing == null ? 'Create' : 'Save'),
+        ),
       ],
     );
   }

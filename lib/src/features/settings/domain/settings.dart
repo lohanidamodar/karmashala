@@ -101,6 +101,8 @@ class Settings {
     this.explorerAgentFilter = const [],
     this.hiddenSidePanelSurfaces = const [],
     this.explorerProjectDetails = true,
+    this.explorerEnvironmentScope = '',
+    this.explorerContextScope = '',
     this.debugMode = kDefaultDebugMode,
     this.logVerbosity = LogVerbosity.normal,
     this.logToFile = true,
@@ -276,6 +278,14 @@ class Settings {
   /// what is running. Off is the one-line row, with those in tooltips.
   final bool explorerProjectDetails;
 
+  /// The machine the Explorer is narrowed to, by environment id; empty is
+  /// every machine. An id the workspace no longer has reads as empty.
+  final String explorerEnvironmentScope;
+
+  /// The context the Explorer is narrowed to — `ctx:<id>`, or `none` for the
+  /// projects in no context; empty is every project.
+  final String explorerContextScope;
+
   /// Debug mode: root logger to `ALL`, Logs panel shown. Never gates logging.
   final bool debugMode;
 
@@ -356,6 +366,8 @@ class Settings {
     List<String>? explorerAgentFilter,
     List<String>? hiddenSidePanelSurfaces,
     bool? explorerProjectDetails,
+    String? explorerEnvironmentScope,
+    String? explorerContextScope,
     bool? debugMode,
     LogVerbosity? logVerbosity,
     bool? logToFile,
@@ -431,6 +443,9 @@ class Settings {
         hiddenSidePanelSurfaces ?? this.hiddenSidePanelSurfaces,
     explorerProjectDetails:
         explorerProjectDetails ?? this.explorerProjectDetails,
+    explorerEnvironmentScope:
+        explorerEnvironmentScope ?? this.explorerEnvironmentScope,
+    explorerContextScope: explorerContextScope ?? this.explorerContextScope,
     debugMode: debugMode ?? this.debugMode,
     logVerbosity: logVerbosity ?? this.logVerbosity,
     logToFile: logToFile ?? this.logToFile,
@@ -515,6 +530,10 @@ class Settings {
     if (hiddenSidePanelSurfaces.isNotEmpty)
       'hiddenSidePanelSurfaces': hiddenSidePanelSurfaces,
     if (!explorerProjectDetails) 'explorerProjectDetails': false,
+    if (explorerEnvironmentScope.isNotEmpty)
+      'explorerEnvironmentScope': explorerEnvironmentScope,
+    if (explorerContextScope.isNotEmpty)
+      'explorerContextScope': explorerContextScope,
     'debugMode': debugMode,
     'logVerbosity': logVerbosity.name,
     'logToFile': logToFile,
@@ -703,6 +722,12 @@ class Settings {
       explorerProjectDetails: json['explorerProjectDetails'] is bool
           ? json['explorerProjectDetails'] as bool
           : true,
+      explorerEnvironmentScope: json['explorerEnvironmentScope'] is String
+          ? json['explorerEnvironmentScope'] as String
+          : '',
+      explorerContextScope: json['explorerContextScope'] is String
+          ? json['explorerContextScope'] as String
+          : '',
       debugMode: json['debugMode'] is bool
           ? json['debugMode'] as bool
           : kDefaultDebugMode,
@@ -764,6 +789,8 @@ class Settings {
       _listEquals(other.explorerAgentFilter, explorerAgentFilter) &&
       _listEquals(other.hiddenSidePanelSurfaces, hiddenSidePanelSurfaces) &&
       other.explorerProjectDetails == explorerProjectDetails &&
+      other.explorerEnvironmentScope == explorerEnvironmentScope &&
+      other.explorerContextScope == explorerContextScope &&
       other.debugMode == debugMode &&
       other.logVerbosity == logVerbosity &&
       other.logToFile == logToFile &&
@@ -830,6 +857,8 @@ class Settings {
         Object.hashAll(explorerAgentFilter),
         Object.hashAll(hiddenSidePanelSurfaces),
         explorerProjectDetails,
+        explorerEnvironmentScope,
+        explorerContextScope,
         Object.hashAll(androidSlimmingEnabled),
         androidEmulatorGpu,
         Object.hashAllUnordered(

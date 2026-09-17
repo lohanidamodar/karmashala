@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
@@ -10,11 +11,13 @@ import '../../environments/application/environment_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../ssh/application/ssh_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../../workspaces/application/workspaces_controller.dart';
 import '../application/environment_terminals_providers.dart';
 import '../application/explorer_tree_nodes.dart';
 import '../application/explorer_tree_provider.dart';
 import '../application/explorer_tree_state.dart';
 import 'environment_rows.dart';
+import 'explorer_context_actions.dart';
 import 'explorer_project_row.dart';
 import 'session_rows.dart';
 
@@ -30,15 +33,18 @@ class ExplorerTreeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (node) {
-    final EnvironmentNode node => ExplorerEnvironmentRow(node: node),
-    final EnvironmentSectionNode node => ExplorerSectionHeaderRow(node: node),
-    final ContextNode node => ExplorerContextRow(node: node),
+    final ContextHeaderNode node => ExplorerContextHeader(node: node),
+    final TerminalsHeaderNode node => ExplorerTerminalsHeader(node: node),
     final ProjectNode node => ExplorerProjectRow(
       project: node.project,
       depth: node.depth,
       expanded: node.expanded,
       pathCandidates: node.pathCandidates,
       environmentBadge: node.environmentBadge,
+      environmentLabel: node.environmentLabel,
+      environmentIcon: node.environmentLabel == null
+          ? null
+          : environmentGlyph(node.environmentKind),
       anchorKey: anchorKey,
     ),
     final SessionRowNode node => ExplorerNativeSessionRow(node: node),
@@ -56,83 +62,98 @@ class ExplorerTreeRow extends StatelessWidget {
   };
 }
 
-void _toggleCollapsed(WidgetRef ref, String nodeId) => ref
-    .read(settingsControllerProvider.notifier)
-    .toggleExplorerNodeCollapsed(nodeId);
+/// A context's label over its projects — or *No context*, over the rest.
+class ExplorerContextHeader extends ConsumerWidget {
+  const ExplorerContextHeader({required this.node, super.key});
 
-/// A machine.
-class ExplorerEnvironmentRow extends ConsumerWidget {
-  const ExplorerEnvironmentRow({required this.node, super.key});
-
-  final EnvironmentNode node;
+  final ContextHeaderNode node;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => ExplorerHeaderRow(
-    depth: node.depth,
-    expanded: node.expanded,
-    label: node.label,
-    icon: environmentGlyph(node.kind),
-    emphasis: HeaderEmphasis.machine,
-    trailingText: node.projectCount == 0 ? null : '${node.projectCount}',
-    trailingWords: environmentSummary(node),
-    tooltip: node.environment == null
-        ? 'This environment is no longer in the workspace.'
-        : null,
-    onTap: () => _toggleCollapsed(ref, node.id),
-    // Not offered for a machine whose row is gone: we cannot say what it is,
-    // and the fallback would quietly open a shell on this one.
-    action: node.environment == null
-        ? null
-        : ExplorerRowAction(
-            tooltip: 'Open a terminal on ${node.label}',
-            icon: AppIcons.plus,
-            onPressed: () => _openTerminalOn(ref),
-          ),
-  );
-
-  void _openTerminalOn(WidgetRef ref) {
-    final controller = ref.read(terminalSessionsControllerProvider.notifier);
-    final environment = node.environment;
-    final distro = environment?.wslDistribution ?? environment?.name ?? '';
-    controller.openTab(switch (environment?.kind) {
-      EnvironmentKind.ssh when environment?.sshHostId != null =>
-        TerminalProfile.ssh(
-          environment!.sshHostId!,
-          hostName: environment.name,
-        ),
-      EnvironmentKind.wsl => TerminalProfile(
-        id: TerminalProfile.wslId(distro),
-        label: '$distro (WSL)',
-        shell: TerminalShell.wsl,
-        wslDistribution: distro,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final workspace = node.workspace;
+    return ExplorerGroupHeader(
+      expanded: node.expanded,
+      label: node.label,
+      trailingText: '${node.projectCount}',
+      trailingWords: projectCountWords(node.projectCount),
+      tooltip: workspace?.description,
+      onTap: () => ref
+          .read(settingsControllerProvider.notifier)
+          .toggleExplorerNodeCollapsed(node.id),
+      menuLabel: 'Context actions',
+      // Built when the menu opens, so "show only" reads the scope as it is.
+      menuItemsBuilder: () => contextMenuItems(
+        workspace: workspace,
+        scope: ref.read(workspaceScopeProvider),
       ),
-      _ => TerminalProfile.powerShell,
-    });
-    controller.showTerminalHere();
+      onMenu: (action) => runContextAction(ref, context, action, workspace),
+    );
   }
 }
 
-/// `Projects` or `Terminals` under a machine.
-class ExplorerSectionHeaderRow extends ConsumerWidget {
-  const ExplorerSectionHeaderRow({required this.node, super.key});
+/// `Terminals`, for one machine. It carries what the machine's own row used
+/// to: the `+` that opens a shell there, and the word that it has gone.
+class ExplorerTerminalsHeader extends ConsumerWidget {
+  const ExplorerTerminalsHeader({required this.node, super.key});
 
-  final EnvironmentSectionNode node;
+  final TerminalsHeaderNode node;
+
+  static const _open = 'open';
+  static const _refresh = 'refresh';
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => ExplorerHeaderRow(
-    depth: node.depth,
-    expanded: node.expanded,
-    label: node.label,
-    trailingText: node.count == null ? null : '${node.count}',
-    detail: node.detail,
-    onTap: () => node.section == EnvironmentSection.terminals
-        ? _toggleTerminals(ref)
-        : _toggleCollapsed(ref, node.id),
-  );
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Not offered for a machine whose row is gone: we cannot say what it is,
+    // and the fallback would quietly open a shell on this one.
+    final known = node.environment != null;
+    return ExplorerGroupHeader(
+      expanded: node.expanded,
+      label: node.label,
+      trailingText: node.count == null ? null : '${node.count}',
+      trailingWords: node.count == null ? null : '${node.count} running',
+      detail: node.detail,
+      tooltip: known ? null : 'This environment is no longer in the workspace.',
+      onTap: () => _toggle(ref),
+      action: known
+          ? ExplorerRowAction(
+              tooltip: 'Open a terminal on ${node.environmentLabel}',
+              icon: AppIcons.plus,
+              onPressed: () => openTerminalOn(ref, node.environment!),
+            )
+          : null,
+      menuLabel: 'Terminal actions',
+      menuItemsBuilder: !known && !node.expanded
+          ? null
+          : () => [
+              if (known)
+                DesktopMenuItem(
+                  value: _open,
+                  label: 'Open a terminal on ${node.environmentLabel}',
+                  icon: AppIcons.terminal,
+                ),
+              if (node.expanded)
+                DesktopMenuItem(
+                  value: _refresh,
+                  label: 'Ask again',
+                  icon: AppIcons.arrowsClockwise,
+                ),
+            ],
+      onMenu: (action) {
+        switch (action) {
+          case _open:
+            openTerminalOn(ref, node.environment!);
+          case _refresh:
+            ref
+                .read(environmentTerminalsProvider(node.environmentId).notifier)
+                .refresh();
+        }
+      },
+    );
+  }
 
   /// Opening a machine's terminals asks it; closing one asks nothing. The
   /// answer is never refreshed on a timer (§19).
-  void _toggleTerminals(WidgetRef ref) {
+  void _toggle(WidgetRef ref) {
     final opening = ref
         .read(explorerExpandedTerminalsProvider.notifier)
         .toggle(node.environmentId);
@@ -144,24 +165,22 @@ class ExplorerSectionHeaderRow extends ConsumerWidget {
   }
 }
 
-/// A context among a machine's projects.
-class ExplorerContextRow extends ConsumerWidget {
-  const ExplorerContextRow({required this.node, super.key});
-
-  final ContextNode node;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) => ExplorerHeaderRow(
-    depth: node.depth,
-    expanded: node.expanded,
-    label: node.label,
-    icon: AppIcons.stack,
-    emphasis: HeaderEmphasis.context,
-    trailingText: '${node.projectCount}',
-    trailingWords:
-        '${node.projectCount} project${node.projectCount == 1 ? '' : 's'}',
-    onTap: () => _toggleCollapsed(ref, node.id),
-  );
+/// Opens a shell on [environment], in the terminal pane.
+void openTerminalOn(WidgetRef ref, ExecutionEnvironment environment) {
+  final controller = ref.read(terminalSessionsControllerProvider.notifier);
+  final distro = environment.wslDistribution ?? environment.name;
+  controller.openTab(switch (environment.kind) {
+    EnvironmentKind.ssh when environment.sshHostId != null =>
+      TerminalProfile.ssh(environment.sshHostId!, hostName: environment.name),
+    EnvironmentKind.wsl => TerminalProfile(
+      id: TerminalProfile.wslId(distro),
+      label: '$distro (WSL)',
+      shell: TerminalShell.wsl,
+      wslDistribution: distro,
+    ),
+    _ => TerminalProfile.powerShell,
+  });
+  controller.showTerminalHere();
 }
 
 /// A native session. Draws the session as it is *now*, selected out of its
@@ -270,7 +289,7 @@ class ExplorerTreeHint extends StatelessWidget {
             depth * ExplorerRow.indent +
             ExplorerRow.lead,
         Insets.xs,
-        Insets.sm,
+        Insets.sm + ExplorerRow.scrollbarGutter,
         Insets.sm,
       ),
       child: Text(message, style: density.muted(theme)),

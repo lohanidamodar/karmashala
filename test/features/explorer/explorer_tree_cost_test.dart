@@ -8,6 +8,7 @@ import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
@@ -15,6 +16,8 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
+import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
 import 'package:karmashala_ssh/connection.dart';
 
 import '../../support/fake_command_runner.dart';
@@ -33,7 +36,8 @@ import '../terminal/fake_instance.dart';
 /// swept `execution_environments` once per WSL project, 34 times at a hundred.
 ///
 /// Two claims, both about growth rather than about absolute numbers:
-/// the sweep is per build, and a machine nobody opened costs nothing.
+/// the sweep is per build — the scope bar's list of machines is read in the
+/// same pass as the tree — and a group nobody opened costs nothing.
 bool _isEnvSweep(String sql) =>
     sql.startsWith('SELECT * FROM execution_environments ORDER BY');
 
@@ -51,8 +55,8 @@ void main() {
   const scale = [1, 10, 100];
 
   /// [count] projects spread evenly over this machine, a WSL distribution and
-  /// a host reached over SSH — three groups whatever the count, so the number
-  /// below is about the projects and not about the headers.
+  /// a host reached over SSH, all in one context — one header and three
+  /// machines whatever the count, so the number below is about the projects.
   CountingDatabase seed(int count) {
     final db = CountingDatabase();
     final environments = ExecutionEnvironmentDao(db);
@@ -61,6 +65,9 @@ void main() {
     environments.upsert(sshEnvFixture());
     SshHostDao(db).upsert(_buildBox());
     const ids = ['windows', 'wsl:Ubuntu', 'ssh:h1'];
+    WorkspaceDao(
+      db,
+    ).insert(Workspace(id: 'w1', name: 'Client work', createdAt: testTime));
     final projects = ProjectDao(db);
     for (var i = 0; i < count; i++) {
       projects.insert(
@@ -68,7 +75,10 @@ void main() {
           id: 'p$i',
           name: 'Project $i',
           environmentId: ids[i % ids.length],
-          path: r'C:\src\p' '$i',
+          workspaceId: 'w1',
+          path:
+              r'C:\src\p'
+              '$i',
         ),
       );
     }
@@ -107,13 +117,10 @@ void main() {
     );
     addTearDown(container.dispose);
     if (!grouped) {
-      // The spine is always the machine now, so the "ungrouped" arm of this
-      // measurement is the tree with every machine folded away.
-      for (final id in ['windows', 'wsl:Ubuntu', 'ssh:h1']) {
-        container
-            .read(settingsControllerProvider.notifier)
-            .toggleExplorerNodeCollapsed('env:$id');
-      }
+      // The control arm: the one context folded away, so no project is drawn.
+      container
+          .read(settingsControllerProvider.notifier)
+          .toggleExplorerNodeCollapsed(contextHeaderId('w1'));
     }
     db.reset();
     await tester.pumpWidget(
@@ -126,24 +133,23 @@ void main() {
     return (
       sweeps: db.statements.where(_isEnvSweep).length,
       statements: db.statements.length,
-      // The first group's own name, which only the grouped spine draws as a
-      // heading. `findsWidgets`: a project row carries an environment badge
-      // with the same word on it.
+      // A project's own second line names its machine while every machine is
+      // listed together — drawn only when the group is open.
       headerShown: find.text('Windows').evaluate().isNotEmpty,
     );
   }
 
-  group('drawing the Explorer by machine', () {
+  group('drawing the Explorer across machines', () {
     final on = <int, ({int sweeps, int statements})>{};
     final off = <int, ({int sweeps, int statements})>{};
 
     for (final count in scale) {
-      testWidgets('over $count projects, by project', (tester) async {
+      testWidgets('over $count projects, folded', (tester) async {
         final result = await pump(tester, count, grouped: false);
         off[count] = (sweeps: result.sweeps, statements: result.statements);
       });
 
-      testWidgets('over $count projects, by environment', (tester) async {
+      testWidgets('over $count projects, open', (tester) async {
         final result = await pump(tester, count, grouped: true);
         on[count] = (sweeps: result.sweeps, statements: result.statements);
         expect(
@@ -162,7 +168,8 @@ void main() {
       // ignore: avoid_print
       print('GROUPING sweeps on=$on off=$off');
       final sweeps = {
-        for (final count in scale) count: on[count]!.sweeps - off[count]!.sweeps,
+        for (final count in scale)
+          count: on[count]!.sweeps - off[count]!.sweeps,
       };
       final extra = {
         for (final count in scale)
@@ -174,20 +181,23 @@ void main() {
       expect(
         on[100]!.sweeps,
         lessThanOrEqualTo(on[10]!.sweeps),
-        reason: 'a sweep that grows with the workspace is the per-row read '
+        reason:
+            'a sweep that grows with the workspace is the per-row read '
             'this test exists to catch: $sweeps',
       );
-      // A folded machine draws no project, so it pays for none of them.
+      // A folded group draws no project, so it pays for none of them.
       expect(
         off[100]!.statements,
         lessThan(on[100]!.statements),
-        reason: 'folding every machine away must actually save the work: '
+        reason:
+            'folding the group away must actually save the work: '
             '${off[100]} against ${on[100]}',
       );
       expect(
         off[100]!.statements - off[10]!.statements,
         lessThan(10),
-        reason: 'and what is left when everything is folded does not grow '
+        reason:
+            'and what is left when everything is folded does not grow '
             'with the workspace either: $extra',
       );
     });

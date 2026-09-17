@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -14,6 +15,7 @@ import '../application/explorer_tree_state.dart';
 import '../application/explorer_view_mode.dart';
 import '../application/session_selection.dart';
 import 'explorer_header_actions.dart';
+import 'explorer_scope_bar.dart';
 import 'explorer_selection_actions.dart';
 import 'explorer_sections_view.dart';
 import 'explorer_tree_rows.dart';
@@ -42,6 +44,10 @@ class ExplorerPanel extends ConsumerWidget {
       sessionSelectionProvider.select((s) => s.active),
     );
     final showingViews = ref.watch(explorerShowingViewsProvider);
+    final search = ExplorerSearchField(
+      onChanged: (query) =>
+          ref.read(explorerSearchQueryProvider.notifier).set(query),
+    );
 
     return PaneScaffold(
       title: 'Explorer',
@@ -51,11 +57,14 @@ class ExplorerPanel extends ConsumerWidget {
       actions: const [ExplorerHeaderActions()],
       body: Column(
         children: [
-          if (hasProjects)
-            ExplorerSearchField(
-              onChanged: (query) =>
-                  ref.read(explorerSearchQueryProvider.notifier).set(query),
-            ),
+          // The scope — which machine, which context — narrows the tree and
+          // not the saved views, which cross both; it is not drawn over them.
+          if (hasProjects && showingViews)
+            search
+          else if (hasProjects) ...[
+            ExplorerScopeBar(search: search),
+            const ExplorerContextChips(),
+          ],
           // Not a stop of its own: it hears keys from the rows and the strip,
           // and never from the search field above it.
           Expanded(
@@ -145,7 +154,7 @@ class ExplorerSectionsList extends ConsumerWidget {
   );
 }
 
-/// The Machine → Project → Session tree, built lazily.
+/// Context headers over Project → Session, built lazily.
 class ExplorerTreeView extends ConsumerStatefulWidget {
   const ExplorerTreeView({super.key});
 
@@ -234,10 +243,12 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
             'No projects match "${ref.watch(explorerSearchQueryProvider)}".',
       );
     }
-    return ListView.builder(
+    // One lazy list, headers and all: only the rows on screen are inflated, so
+    // the tree costs what is visible rather than what the workspace holds. The
+    // header that is pinned is a second, drawn-over copy — see
+    // [ExplorerPinnedHeader] for why it is not a pinned sliver.
+    final list = ListView.builder(
       key: ValueKey(_generation),
-      // Only the rows on screen are inflated, so the tree costs what is
-      // visible rather than what the workspace holds.
       controller: _scroll,
       padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
       itemCount: nodes.length,
@@ -251,6 +262,258 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
               : null,
         );
       },
+    );
+    // The scrollbar is drawn here rather than by the list, so that it stays
+    // over the pinned header instead of passing under it.
+    return Scrollbar(
+      controller: _scroll,
+      child: Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          ScrollConfiguration(
+            behavior: ScrollConfiguration.of(
+              context,
+            ).copyWith(scrollbars: false),
+            child: list,
+          ),
+          ExplorerPinnedHeader(
+            // A new list starts at the top, with nothing pinned.
+            key: ValueKey(_generation),
+            controller: _scroll,
+            nodes: nodes,
+            topPadding: ExplorerRow.gap,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// **The group header the list has scrolled past, drawn over its top edge**
+/// until the next header pushes it out.
+///
+/// Not a pinned sliver. One list per group (`SliverMainAxisGroup` over a
+/// `PinnedHeaderSliver` and a `SliverList`) was built and measured first: every
+/// `SliverList` inflates its first row whether or not it is on screen, so ten
+/// contexts cost ten rows nobody could see — 103 → 143 statements on a first
+/// build at 500 projects. This keeps the one lazy list exactly as it was, and
+/// reads where its rows already are: no row is built for it, and a scroll tick
+/// walks the screenful of rows that exist.
+class ExplorerPinnedHeader extends StatefulWidget {
+  const ExplorerPinnedHeader({
+    required this.controller,
+    required this.nodes,
+    required this.topPadding,
+    super.key,
+  });
+
+  final ScrollController controller;
+  final List<ExplorerNode> nodes;
+
+  /// The list's own padding above its first row.
+  final double topPadding;
+
+  @override
+  State<ExplorerPinnedHeader> createState() => _ExplorerPinnedHeaderState();
+}
+
+class _ExplorerPinnedHeaderState extends State<ExplorerPinnedHeader> {
+  final _box = GlobalKey();
+
+  /// Index of the pinned header in [ExplorerPinnedHeader.nodes], or null.
+  int? _pinned;
+
+  /// How far the next header has pushed this one up; zero or negative.
+  double _shift = 0;
+
+  bool _scheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onScroll);
+    FocusManager.instance.addListener(_onFocus);
+    _measureAfterLayout();
+  }
+
+  @override
+  void didUpdateWidget(ExplorerPinnedHeader old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_onScroll);
+      widget.controller.addListener(_onScroll);
+    }
+    if (!identical(old.nodes, widget.nodes)) {
+      // The rows have not been laid out against the new tree yet.
+      final pinned = _pinned;
+      if (pinned != null &&
+          (pinned >= widget.nodes.length ||
+              widget.nodes[pinned] is! ExplorerHeaderNode)) {
+        _pinned = null;
+      }
+      _measureAfterLayout();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onScroll);
+    FocusManager.instance.removeListener(_onFocus);
+    super.dispose();
+  }
+
+  /// A row the keyboard reaches is brought to the list's top edge — see
+  /// `RevealOnFocus` — and the top edge is under this header. Moved clear.
+  void _onFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.controller.hasClients) return;
+      final focused = FocusManager.instance.primaryFocus?.context;
+      final header = _box.currentContext?.findRenderObject();
+      if (focused == null || !focused.mounted || header is! RenderBox) return;
+      final position = widget.controller.position;
+      if (Scrollable.maybeOf(focused)?.position != position) return;
+      final row = focused.findRenderObject();
+      if (row is! RenderBox || !row.attached) return;
+      final under =
+          header.localToGlobal(Offset(0, header.size.height)).dy -
+          row.localToGlobal(Offset.zero).dy;
+      // Only a row whose top is behind the header, and that is not the list
+      // scrolling away from a row left focused.
+      if (under <= 0 || under > header.size.height) return;
+      position.jumpTo(
+        (position.pixels - under).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        ),
+      );
+    });
+  }
+
+  /// Now, against the rows as they were laid out last frame — so the header
+  /// moves with the scroll rather than a frame behind it — and again once
+  /// this frame has laid out its own: a jump lands among rows that did not
+  /// exist when it was made.
+  void _onScroll() {
+    _measure(laidOut: false);
+    _measureAfterLayout();
+  }
+
+  void _measureAfterLayout() {
+    if (_scheduled) return;
+    _scheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scheduled = false;
+      if (mounted) _measure(laidOut: true);
+    });
+  }
+
+  /// The list's own sliver, found under the viewport the controller drives.
+  RenderSliverMultiBoxAdaptor? _sliver() {
+    final context = widget.controller.position.context.notificationContext;
+    RenderSliverMultiBoxAdaptor? found;
+    void visit(RenderObject object) {
+      if (found != null) return;
+      if (object is RenderSliverMultiBoxAdaptor) {
+        found = object;
+        return;
+      }
+      object.visitChildren(visit);
+    }
+
+    context?.findRenderObject()?.visitChildren(visit);
+    return found;
+  }
+
+  /// Reads the rows the list has laid out against where the scroll position
+  /// is now. Builds nothing and asks nothing: a walk over a screenful.
+  void _measure({required bool laidOut}) {
+    if (!mounted) return;
+    final controller = widget.controller;
+    if (!controller.hasClients) return _show(null, 0);
+    final offset = controller.position.pixels - widget.topPadding;
+    final sliver = offset <= 0 ? null : _sliver();
+    if (sliver == null) return _show(null, 0);
+
+    int? first;
+    double? firstTop;
+    final headerTops = <int, double>{};
+    for (
+      var child = sliver.firstChild;
+      child != null;
+      child = sliver.childAfter(child)
+    ) {
+      final data = child.parentData! as SliverMultiBoxAdaptorParentData;
+      final index = data.index;
+      final top = data.layoutOffset;
+      if (index == null || top == null || index >= widget.nodes.length) {
+        continue;
+      }
+      if (first == null && top + child.size.height > offset) {
+        first = index;
+        firstTop = top;
+      }
+      if (widget.nodes[index] is ExplorerHeaderNode) headerTops[index] = top;
+    }
+    // A jump lands past every row laid out so far: that is not yet known to
+    // be "nothing pinned", so what is drawn stays until the frame is.
+    if (first == null) return laidOut ? _show(null, 0) : null;
+
+    var pinned = first;
+    while (pinned >= 0 && widget.nodes[pinned] is! ExplorerHeaderNode) {
+      pinned--;
+    }
+    // Nothing above, or the header itself is still wholly on screen.
+    if (pinned < 0 || (pinned == first && firstTop! >= offset)) {
+      return _show(null, 0);
+    }
+
+    var shift = 0.0;
+    final height = _box.currentContext?.size?.height;
+    if (height != null) {
+      for (final entry in headerTops.entries) {
+        if (entry.key <= pinned) continue;
+        final pushed = entry.value - offset - height;
+        if (pushed < shift) shift = pushed;
+      }
+    }
+    _show(pinned, shift);
+  }
+
+  void _show(int? pinned, double shift) {
+    if (pinned == _pinned && shift == _shift) return;
+    final appeared = pinned != null && _pinned == null;
+    setState(() {
+      _pinned = pinned;
+      _shift = shift;
+    });
+    // Its height is unknown until it has been laid out once, and the push
+    // from the next header is measured against it.
+    if (appeared) _measureAfterLayout();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pinned = _pinned;
+    if (pinned == null || pinned >= widget.nodes.length) {
+      return const SizedBox.shrink();
+    }
+    final node = widget.nodes[pinned];
+    if (node is! ExplorerHeaderNode) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    return Positioned(
+      top: _shift,
+      left: 0,
+      right: 0,
+      child: DecoratedBox(
+        key: _box,
+        // Opaque, where every other row rests transparent: rows pass under
+        // it. The hairline says so.
+        decoration: BoxDecoration(
+          color: scheme.surface,
+          border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+        ),
+        child: ExplorerTreeRow(key: ValueKey('pinned:${node.id}'), node: node),
+      ),
     );
   }
 }

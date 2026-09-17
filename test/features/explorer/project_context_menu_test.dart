@@ -98,6 +98,13 @@ void main() {
     ),
   );
 
+  /// A context is named twice now — on its chip above the list and in the
+  /// menu — so the menu's own entry is asked for by where it is.
+  Finder inMenu(String label) => find.descendant(
+    of: find.byWidgetPredicate((widget) => widget is PopupMenuEntry),
+    matching: find.text(label),
+  );
+
   Future<void> openProjectMenu(WidgetTester tester) async {
     await tester.tap(find.byType(ProjectCard).first, buttons: kSecondaryButton);
     await tester.pumpAndSettle();
@@ -121,7 +128,7 @@ void main() {
     expect(find.text('Weekend things'), findsOneWidget);
     expect(find.text('0 projects'), findsOneWidget);
 
-    await tester.tap(find.text('Game dev'));
+    await tester.tap(inMenu('Game dev'));
     await tester.pumpAndSettle();
 
     expect(workspaceOfProject(), ids.games);
@@ -139,7 +146,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await openProjectMenu(tester);
-    await tester.tap(find.text('Game dev'));
+    await tester.tap(inMenu('Game dev'));
     await tester.pumpAndSettle();
 
     expect(
@@ -160,7 +167,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await openProjectMenu(tester);
-    await tester.tap(find.text('No context'));
+    await tester.tap(inMenu('No context'));
     await tester.pumpAndSettle();
 
     expect(workspaceOfProject(), isNull);
@@ -185,7 +192,7 @@ void main() {
 
     await openProjectMenu(tester);
     expect(
-      find.text('No context'),
+      inMenu('No context'),
       findsNothing,
       reason: 'a verb that would do nothing is not a verb',
     );

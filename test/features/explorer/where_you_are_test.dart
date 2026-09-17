@@ -2,6 +2,9 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_tree_nodes.dart';
 import 'package:karmashala/src/features/explorer/application/where_you_are.dart';
+import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
+
+import '../../support/fixtures.dart';
 
 /// **Where the sidebar thinks you are.**
 ///
@@ -22,15 +25,18 @@ void main() {
           recorded: at(r'C:\src\app'),
         )?.path,
         r'C:\src\app\packages\core',
-        reason: 'an agent pane never emits OSC 7, so the pane is stale by '
+        reason:
+            'an agent pane never emits OSC 7, so the pane is stale by '
             'construction the moment the agent moves',
       );
     });
 
     test("a shell's own cd outranks where its session was launched", () {
       expect(
-        whereYouAre(paneReported: at(r'C:\src\other'), recorded: at(r'C:\src\app'))
-            ?.path,
+        whereYouAre(
+          paneReported: at(r'C:\src\other'),
+          recorded: at(r'C:\src\app'),
+        )?.path,
         r'C:\src\other',
       );
     });
@@ -45,35 +51,30 @@ void main() {
   });
 
   group('the ancestors a reveal has to open', () {
-    test('a loose project needs its machine and its Projects section', () {
-      expect(explorerAncestorsOf(environmentId: 'wsl:arch'), [
-        'env:wsl:arch',
-        'env:wsl:arch/projects',
-      ]);
+    test('a loose project needs the No context header open', () {
+      expect(explorerAncestorsOf(), ['ctx:none']);
     });
 
-    test('a filed project needs its context as well', () {
-      expect(
-        explorerAncestorsOf(environmentId: 'windows', workspaceId: 'c1'),
-        ['env:windows', 'env:windows/projects', 'env:windows/ctx:c1'],
-      );
+    test('a filed project needs its context open', () {
+      expect(explorerAncestorsOf(workspaceId: 'c1'), ['ctx:c1']);
     });
 
     test('the ids are the ones the tree itself builds', () {
       // The reveal and the tree must spell these the same way or the row stays
       // hidden — which is why one function builds them.
+      final filed = project(id: 'p1', workspaceId: 'c1');
+      final loose = project(id: 'p2');
       final nodes = buildExplorerTree(
-        projects: const [],
-        environments: const [],
-        contexts: const [],
+        projects: [filed, loose],
+        environments: environmentChoices([filed, loose], [windowsEnv()]),
+        contexts: [Workspace(id: 'c1', name: 'Client', createdAt: testTime)],
         collapsed: const {},
         expandedProjects: const {},
       );
-      expect(nodes, isEmpty);
-      expect(
-        explorerAncestorsOf(environmentId: 'windows').first,
-        'env:windows',
-      );
+      expect(nodes.whereType<ContextHeaderNode>().map((node) => node.id), [
+        ...explorerAncestorsOf(workspaceId: 'c1'),
+        ...explorerAncestorsOf(),
+      ]);
     });
   });
 }

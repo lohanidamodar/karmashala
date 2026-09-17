@@ -31,6 +31,8 @@ class ProjectCard extends StatelessWidget {
     this.onTogglePin,
     this.showMenu = true,
     this.environmentBadge,
+    this.environmentLabel,
+    this.environmentIcon,
     this.depth = 0,
     this.detail = true,
     this.pathCandidates,
@@ -60,6 +62,11 @@ class ProjectCard extends StatelessWidget {
   final bool missing;
   final bool pinned;
   final String? environmentBadge;
+
+  /// The machine's name, first on a pointer row's second line. Set only where
+  /// the list around the row does not already say which machine it is.
+  final String? environmentLabel;
+  final IconData? environmentIcon;
   final ProjectSummary summary;
 
   /// Opens the project. Null draws the same card as a plain header, which is
@@ -221,6 +228,8 @@ class ProjectCard extends StatelessWidget {
                   tooltip: _whereTooltip,
                   missing: missing,
                   summary: summary,
+                  environment: environmentLabel,
+                  environmentIcon: environmentIcon,
                 )
               : _pathLine,
         ),
@@ -229,8 +238,10 @@ class ProjectCard extends StatelessWidget {
   }
 
   /// The environment and the whole path, for whichever text stands for them.
-  String get _whereTooltip =>
-      [?environmentBadge, path].where((part) => part.isNotEmpty).join('\n');
+  String get _whereTooltip => [
+    ?(environmentBadge ?? environmentLabel),
+    path,
+  ].where((part) => part.isNotEmpty).join('\n');
 
   /// The same facts, stacked. A 390px phone cannot fit name, aggregate, badge
   /// and chevron on one row without ellipsising the name to nothing.
@@ -513,8 +524,19 @@ class ProjectDetailLine extends StatelessWidget {
     required this.summary,
     this.tooltip = '',
     this.missing = false,
+    this.environment,
+    this.environmentIcon,
     super.key,
   });
+
+  /// The machine, ahead of the path. It outranks every other clause, the path
+  /// included: line one already names the folder, and nothing else on the row
+  /// says which machine. A short line ellipsises the path, then drops it.
+  final String? environment;
+  final IconData? environmentIcon;
+
+  /// The most of the line a machine's name may take before it is ellipsised.
+  static const environmentMax = 72.0;
 
   /// The path as [abbreviatePath] cuts it. Empty when none was recorded.
   final List<String> candidates;
@@ -537,6 +559,8 @@ class ProjectDetailLine extends StatelessWidget {
     final muted = density.muted(theme);
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
+    final environment = this.environment;
+    final environmentIcon = this.environmentIcon;
     final branch = missing ? null : summary.branch;
     final ahead = summary.commitsAhead ?? 0;
     final changed = missing ? 0 : summary.changedFiles ?? 0;
@@ -567,6 +591,7 @@ class ProjectDetailLine extends StatelessWidget {
 
         final String? path;
         final double pathMax;
+        final double environmentMaxWidth;
         final bool showBranch;
         final bool showChanged;
         final bool inWords;
@@ -598,7 +623,38 @@ class ProjectDetailLine extends StatelessWidget {
 
           // A pixel kept back: tabular figures are not what was measured.
           final room = constraints.maxWidth - lead - stateCompact - 1;
-          var used = pathMin;
+          var showPath = where.isNotEmpty;
+          var environmentName = 0.0;
+          var environmentWidth = 0.0;
+          if (environment != null) {
+            final fixed = environmentIcon == null
+                ? 0.0
+                : density.iconSmall + density.glyphGap / 2;
+            environmentName = math.min(
+              measure(environment),
+              scaler.scale(environmentMax),
+            );
+            if (showPath &&
+                fixed + environmentName + separator + pathMin > room) {
+              environmentName = math.min(
+                environmentName,
+                math.max(0, (room - fixed) / 2),
+              );
+              // A path with no room for more than its ellipsis says nothing.
+              showPath = fixed + environmentName + separator * 2 <= room;
+            }
+            if (!showPath) {
+              environmentName = math.min(
+                environmentName,
+                math.max(0, room - fixed),
+              );
+            }
+            environmentWidth =
+                fixed + environmentName + (showPath ? separator : 0.0);
+          }
+          environmentMaxWidth = environmentName;
+          final pathFloor = showPath ? pathMin : 0.0;
+          var used = pathFloor + environmentWidth;
           showBranch = branchText != null && used + branchWidth <= room;
           if (showBranch) used += branchWidth;
           final wordsExtra = stateWords - stateCompact;
@@ -613,9 +669,9 @@ class ProjectDetailLine extends StatelessWidget {
               used + changedWidth <= room;
           if (showChanged) used += changedWidth;
 
-          final forPath = room - (used - pathMin);
+          final forPath = room - (used - pathFloor);
           pathMax = math.max(0, forPath);
-          path = where.isEmpty
+          path = !showPath
               ? null
               : where.firstWhere(
                   (candidate) => measure(candidate, whereStyle) <= forPath,
@@ -642,6 +698,27 @@ class ProjectDetailLine extends StatelessWidget {
                 color: scheme.error,
               ),
               SizedBox(width: density.glyphGap),
+            ],
+            if (environment != null) ...[
+              if (environmentIcon != null) ...[
+                Icon(
+                  environmentIcon,
+                  size: density.iconSmall,
+                  color: scheme.onSurfaceVariant,
+                ),
+                SizedBox(width: density.glyphGap / 2),
+              ],
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: environmentMaxWidth),
+                child: Text(
+                  environment,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: muted,
+                ),
+              ),
+              if (path != null) separatorText,
             ],
             // As wide as its text and no wider, so the branch sits beside a
             // short path rather than at the far edge of a long one's room.

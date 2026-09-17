@@ -6,6 +6,7 @@ import '../../../core/util/id_generator_provider.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
+import '../../settings/application/settings_controller.dart';
 import '../domain/workspace.dart';
 import '../domain/workspace_scope.dart';
 import 'workspace_providers.dart';
@@ -131,13 +132,31 @@ String describeWorkspace(Workspace workspace, {required int projectCount}) =>
     workspace.description ??
     (projectCount == 1 ? '1 project' : '$projectCount projects');
 
-/// Holds the scope the project list is narrowed to. In memory by design: a
-/// filter that outlives its session is a project list mysteriously short.
+/// Holds the scope the project list is narrowed to. Kept across launches now
+/// that the Explorer's chips say which one is in force: a filter nobody can
+/// see was a project list mysteriously short, and this one can be seen.
 class WorkspaceScopeController extends Notifier<WorkspaceScope> {
   @override
-  WorkspaceScope build() => WorkspaceScope.all;
+  WorkspaceScope build() {
+    // Read, not watched: the scope is written from here and nowhere else.
+    final scope = WorkspaceScope.parse(
+      ref.read(settingsControllerProvider).explorerContextScope,
+    );
+    final id = scope.workspaceId;
+    // A context deleted since the scope was stored shows everything.
+    if (id != null &&
+        !ref.read(workspacesControllerProvider).any((w) => w.id == id)) {
+      return WorkspaceScope.all;
+    }
+    return scope;
+  }
 
-  void select(WorkspaceScope scope) => state = scope;
+  void select(WorkspaceScope scope) {
+    state = scope;
+    ref
+        .read(settingsControllerProvider.notifier)
+        .setExplorerContextScope(scope.stored);
+  }
 }
 
 final workspaceScopeProvider =

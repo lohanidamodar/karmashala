@@ -23,11 +23,13 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
 import 'package:karmashala/src/features/workspaces/data/workspace_dao.dart';
 import 'package:karmashala/src/features/workspaces/domain/workspace.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
@@ -92,10 +94,26 @@ Widget _column(double width, Widget surface) => MaterialApp(
   ),
 );
 
+const _longHost = 'a-build-box-with-a-long-host-name';
+
 void main() {
   AppDatabase seeded() {
     final db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    // A second machine: the switcher joins the search row, and every project
+    // names its machine on line two — both with a name too long to fit.
+    SshHostDao(db).upsert(
+      SshHost(
+        id: 'h1',
+        name: _longHost,
+        host: 'build.example.com',
+        port: 22,
+        username: 'dev',
+        authMethod: SshAuthMethod.password,
+        createdAt: testTime,
+      ),
+    );
+    ExecutionEnvironmentDao(db).upsert(sshEnvFixture(name: _longHost));
     WorkspaceDao(db).insert(
       Workspace(
         id: 'w1',
@@ -108,6 +126,15 @@ void main() {
     );
     ProjectDao(db).insert(
       project(id: 'p2', name: 'Filed', path: r'C:\src\p2', workspaceId: 'w1'),
+    );
+    ProjectDao(db).insert(
+      project(
+        id: 'p3',
+        name: 'Remote',
+        path: '/srv/a/very/deep/path/p3',
+        environmentId: 'ssh:h1',
+        workspaceId: 'w1',
+      ),
     );
     RepositoryDao(db).insert(
       repository(

@@ -1,3 +1,4 @@
+import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:flutter/gestures.dart';
@@ -52,6 +53,7 @@ void main() {
       String path = r'C:\Users\me\projects\popupbits',
       bool missing = false,
       bool detail = true,
+      String? environment,
     }) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -70,6 +72,10 @@ void main() {
                     selected: false,
                     missing: missing,
                     detail: detail,
+                    environmentLabel: environment,
+                    environmentIcon: environment == null
+                        ? null
+                        : AppIcons.globe,
                     summary: summary,
                     onTap: () {},
                     onNewSession: () {},
@@ -211,6 +217,44 @@ void main() {
         expect(gone, greaterThan(0));
         expect(flags.sublist(gone), everyElement(isFalse));
       }
+    });
+
+    testWidgets('among several machines it says which one first, and the '
+        'machine outlasts the path', (tester) async {
+      const busy = ProjectSummary(
+        sessions: 12,
+        running: 4,
+        needsAttention: 3,
+        branch: 'main',
+      );
+      await pump(tester, width: 560, summary: busy, environment: 'build-box');
+      final machine = tester.getTopLeft(find.text('build-box'));
+      final where = tester.getTopLeft(find.textContaining('popupbits').last);
+      expect(machine.dx, lessThan(where.dx), reason: 'ahead of the path');
+      expect(machine.dy, moreOrLessEquals(where.dy, epsilon: 2));
+      expect(find.byIcon(AppIcons.globe), findsOneWidget);
+
+      // Line one already names the folder; nothing else names the machine.
+      for (final width in [294.0, 240.0, 200.0]) {
+        await pump(
+          tester,
+          width: width,
+          summary: busy,
+          environment: 'a-build-box-with-a-long-host-name',
+          path: '/srv/a-folder-name-longer-than-any-pane-is-wide',
+        );
+        expect(tester.takeException(), isNull, reason: 'at $width');
+        expect(
+          find.text('a-build-box-with-a-long-host-name'),
+          findsOneWidget,
+          reason: 'the machine is still said at $width',
+        );
+      }
+    });
+
+    testWidgets('under one machine it does not say which', (tester) async {
+      await pump(tester, width: 560);
+      expect(find.byIcon(AppIcons.globe), findsNothing);
     });
 
     testWidgets('without details it is one line, as it was', (tester) async {
