@@ -95,6 +95,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.detection => const AgentDetectionSection(),
   SettingsAnchor.executables => const AgentPathSection(),
   SettingsAnchor.checkpoints => const CheckpointSettingsSection(),
+  SettingsAnchor.agentUpdates => const AgentUpdatesSection(),
   SettingsAnchor.claudeAccounts => const InstalledClaudeAccountsSection(),
   SettingsAnchor.codexAccounts => const InstalledCodexAccountsSection(),
   SettingsAnchor.usage => const InstalledUsageSection(),

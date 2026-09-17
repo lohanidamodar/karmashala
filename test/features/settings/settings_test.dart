@@ -74,7 +74,10 @@ void main() {
     });
 
     test('participates in equality', () {
-      expect(const Settings(hostBackedLocalPanes: true), isNot(const Settings()));
+      expect(
+        const Settings(hostBackedLocalPanes: true),
+        isNot(const Settings()),
+      );
       expect(
         const Settings(hostBackedLocalPanes: true).hashCode,
         isNot(const Settings().hashCode),
@@ -89,12 +92,72 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      container.read(settingsControllerProvider.notifier).setHostBackedLocalPanes(true);
+      container
+          .read(settingsControllerProvider.notifier)
+          .setHostBackedLocalPanes(true);
 
-      expect(container.read(settingsControllerProvider).hostBackedLocalPanes, isTrue);
+      expect(
+        container.read(settingsControllerProvider).hostBackedLocalPanes,
+        isTrue,
+      );
       expect(
         SettingsRepository(db).load().hostBackedLocalPanes,
         isTrue,
+        reason: 'the change must reach the database, not just the notifier',
+      );
+    });
+  });
+
+  group('let-agents-update-themselves setting', () {
+    test('is unset by default, so the platform decides', () {
+      // Tri-state: null means "nobody has said", resolved by platform where it
+      // is read (agentsMayUpdateThemselvesProvider) — off on Windows, on else.
+      expect(const Settings().letAgentsUpdateThemselves, isNull);
+      expect(Settings.fromJson(const {}).letAgentsUpdateThemselves, isNull);
+    });
+
+    test('survives a JSON round-trip, both concrete values', () {
+      const on = Settings(letAgentsUpdateThemselves: true);
+      const off = Settings(letAgentsUpdateThemselves: false);
+      expect(Settings.fromJson(on.toJson()).letAgentsUpdateThemselves, isTrue);
+      expect(
+        Settings.fromJson(off.toJson()).letAgentsUpdateThemselves,
+        isFalse,
+      );
+      expect(Settings.fromJson(on.toJson()), on);
+      expect(Settings.fromJson(off.toJson()), off);
+    });
+
+    test('participates in equality', () {
+      expect(
+        const Settings(letAgentsUpdateThemselves: false),
+        isNot(const Settings()),
+      );
+      expect(
+        const Settings(letAgentsUpdateThemselves: true),
+        isNot(const Settings(letAgentsUpdateThemselves: false)),
+      );
+    });
+
+    test('the controller persists a concrete choice', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+      final container = ProviderContainer(
+        overrides: [databaseProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+
+      container
+          .read(settingsControllerProvider.notifier)
+          .setLetAgentsUpdateThemselves(false);
+
+      expect(
+        container.read(settingsControllerProvider).letAgentsUpdateThemselves,
+        isFalse,
+      );
+      expect(
+        SettingsRepository(db).load().letAgentsUpdateThemselves,
+        isFalse,
         reason: 'the change must reach the database, not just the notifier',
       );
     });
@@ -443,7 +506,10 @@ void _simulatorSlimmingTests() {
 
     expect(settings.simulatorSlimmingKept, hasLength(2));
     expect(
-      {for (final id in settings.simulatorSlimmingKept) ?SlimmingCategory.byId(id)},
+      {
+        for (final id in settings.simulatorSlimmingKept)
+          ?SlimmingCategory.byId(id),
+      },
       {SlimmingCategory.store},
     );
   });

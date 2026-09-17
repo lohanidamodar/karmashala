@@ -45,6 +45,20 @@ const _claudeCode = AgentDescriptor(
       'stream-json',
       '--verbose',
     ],
+    // A native Claude Code install updates itself in the background — a startup
+    // and periodic check that downloads and installs a new build. Under an
+    // unsigned parent that is a behavioural-antivirus dropper signal, so the
+    // launched process is given DISABLE_AUTOUPDATER=1, the documented switch
+    // that stops the background check while leaving `claude update` working.
+    selfUpdate: AgentSelfUpdate.declared(
+      disableEnvironment: {'DISABLE_AUTOUPDATER': '1'},
+      updateCommand: ['claude', 'update'],
+      evidence:
+          'code.claude.com/docs setup ("Disable auto-updates": set '
+          'DISABLE_AUTOUPDATER to "1" in settings env; only stops the '
+          'background check, `claude update` still works) and env-vars page; '
+          'manual update `claude update`. Verified 2026-09-17.',
+    ),
     // Claude Code has **six** permission modes, not three, and the CLI enforces
     // the list at parse time — so this is the whole set rather than a sample.
     //
@@ -764,6 +778,24 @@ const _codex = AgentDescriptor(
   ),
   launch: AgentLaunchSpec(
     baseArguments: ['app-server'],
+    // Codex checks for an update at startup and, on "Update now" or `codex
+    // update`, replaces its own executable — an npm/installer self-update that
+    // behavioural antivirus reads as the tail of a dropper chain. The global
+    // `-c check_for_update_on_startup=false` suppresses the check (the popup
+    // and banner); it does not touch `codex update`, and the `app-server` here
+    // does not check for updates at all, so it is a belt-and-braces override.
+    selfUpdate: AgentSelfUpdate.declared(
+      disableArguments: ['-c', 'check_for_update_on_startup=false'],
+      updateCommand: ['codex', 'update'],
+      evidence:
+          'openai/codex config.toml key check_for_update_on_startup (default '
+          'true; codex-rs/config/src/config_toml.rs, core/src/config/mod.rs '
+          'unwrap_or(true)), a -c global override (utils/cli config_override); '
+          '`codex update` subcommand (cli/src/main.rs, docs config-reference). '
+          'Verified against rust-v0.154.0, 2026-09-17. app-server itself does '
+          'not check (only tui/src/updates.rs does); the standalone daemon '
+          'updater is separate and unaffected by this key.',
+    ),
     // **Codex is two axes, not one**, and squeezing them into a single picker
     // is what made "accept edits" an approximation with an apology attached. A
     // *sandbox* decides what may be written; an *approval policy* decides what

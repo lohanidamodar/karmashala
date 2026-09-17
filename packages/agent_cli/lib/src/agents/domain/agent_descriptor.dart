@@ -822,9 +822,15 @@ class AgentLaunchSpec {
     this.mcp = const AgentMcpSupport.unsupported(),
     this.model = const AgentModelSupport.unsupported(),
     this.recap = const AgentRecapSupport.unchecked(),
+    this.selfUpdate = const AgentSelfUpdate.unknown(),
   });
 
   final List<String> baseArguments;
+
+  /// How this agent updates itself, and how Karmashala turns that off for the
+  /// processes it launches. See [AgentSelfUpdate]. Defaults to "nobody
+  /// established one", which suppresses nothing.
+  final AgentSelfUpdate selfUpdate;
 
   /// How this CLI is asked, non-interactively, to recap a conversation.
   ///
@@ -931,6 +937,70 @@ class AgentLaunchSpec {
   /// they always did; what widened underneath them is the *how*.
   bool get acceptsPromptArgument => prompt.isSupported;
 
+}
+
+/// **How an agent updates itself, and how to stop it doing so in a
+/// Karmashala-launched process.**
+///
+/// The behaviour this exists to defend against: a coding-agent CLI that checks
+/// for a new version at startup and can replace its own executable — an npm or
+/// installer self-update. Launched under an unsigned desktop app, through a
+/// shell, that download-and-replace-an-exe step is the tail of a chain
+/// behavioural antivirus reads as a dropper, and on the owner's managed machine
+/// Bitdefender killed the whole process tree for it (docs/windows-antivirus.md).
+///
+/// Karmashala does not disable the user's updates in general — only in the
+/// processes it launches, and only when the setting says so. Each field is
+/// **declared per agent from that agent's own source or docs**, with
+/// [evidence], so a version bump can be re-checked rather than trusted.
+class AgentSelfUpdate {
+  /// Nobody has established how this agent updates: suppress nothing, offer no
+  /// update command. The conservative default.
+  const AgentSelfUpdate.unknown()
+    : disableArguments = const [],
+      disableEnvironment = const {},
+      updateCommand = const [],
+      evidence = '';
+
+  /// This agent checks for or performs updates, and can be told not to.
+  ///
+  /// [disableArguments] are added to the agent's own command line (Codex's
+  /// global `-c check_for_update_on_startup=false`); [disableEnvironment] is
+  /// layered over the launched process's environment (Claude Code's
+  /// `DISABLE_AUTOUPDATER=1`). [updateCommand] is the documented command that
+  /// updates the agent by hand, which Karmashala can offer to run visibly in
+  /// its place.
+  const AgentSelfUpdate.declared({
+    this.disableArguments = const [],
+    this.disableEnvironment = const {},
+    this.updateCommand = const [],
+    required this.evidence,
+  });
+
+  /// Global command-line arguments that stop the startup update check. They
+  /// must be safe to place **left of** any resume/fork subcommand — Codex's
+  /// `-c` is a global option, so it is.
+  final List<String> disableArguments;
+
+  /// Environment variables that stop the agent updating itself, layered over
+  /// the launched process's environment only.
+  final Map<String, String> disableEnvironment;
+
+  /// The documented command that updates this agent by hand, executable first.
+  /// Empty when none is established.
+  final List<String> updateCommand;
+
+  /// Where [disableArguments]/[disableEnvironment]/[updateCommand] were read
+  /// off — the agent's source or docs, and the version. Empty for
+  /// [AgentSelfUpdate.unknown].
+  final String evidence;
+
+  /// Whether anything here suppresses an update at all.
+  bool get canSuppress =>
+      disableArguments.isNotEmpty || disableEnvironment.isNotEmpty;
+
+  /// Whether a manual update command is known.
+  bool get hasUpdateCommand => updateCommand.isNotEmpty;
 }
 
 /// The on-disk layout of an agent's session store.

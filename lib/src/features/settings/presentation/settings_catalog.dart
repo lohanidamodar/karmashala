@@ -346,6 +346,16 @@ enum SettingsAnchor {
     'rollback',
     'snapshot',
   ]),
+  agentUpdates(SettingsSectionId.agents, 'Agent updates', [
+    'update',
+    'updates',
+    'self-update',
+    'auto-update',
+    'autoupdate',
+    'upgrade',
+    'antivirus',
+    'bitdefender',
+  ]),
   claudeAccounts(SettingsSectionId.accounts, 'Claude accounts', [
     'claude',
     'accounts',
@@ -716,6 +726,23 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.checkpoints,
     description: 'Snapshot every agent turn, and how many snapshots to keep.',
     keywords: ['checkpoint', 'rewind', 'undo', 'retention', 'keep'],
+  ),
+  SettingsEntry(
+    'Let agents update themselves in Karmashala sessions',
+    anchor: SettingsAnchor.agentUpdates,
+    description:
+        'Off on Windows by default: a self-updating CLI under an unsigned '
+        'app can trip behavioural antivirus. Update each agent from here '
+        'instead.',
+    keywords: [
+      'update',
+      'self-update',
+      'auto-update',
+      'antivirus',
+      'bitdefender',
+      'disable_autoupdater',
+      'check_for_update_on_startup',
+    ],
   ),
   SettingsEntry(
     'Claude accounts',

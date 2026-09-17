@@ -200,6 +200,9 @@ PtyLaunch agentPtyLaunchFor(
     workingDirectory: launch.workingDirectory,
     environment: {
       ...environment,
+      // The launch's own volatile environment — the self-update switch — over
+      // the host overlay, and under the session id, which nothing else sets.
+      ...launch.environment,
       if (launch.sessionId != null) ...{
         kSessionIdEnvironmentVariable: launch.sessionId!,
         // Beside the id and through the same `WSLENV` plumbing. A

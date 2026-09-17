@@ -118,7 +118,16 @@ void main() {
     expect(runner.startRequests, hasLength(1));
     final request = runner.startRequests.single;
     expect(request.executable, endsWith('codex.exe'));
-    expect(request.arguments, ['app-server', '--listen', 'stdio://']);
+    // Led by the global that stops the startup update check — a
+    // behavioural-antivirus dropper signal — left of the `app-server`
+    // subcommand (docs/windows-antivirus.md).
+    expect(request.arguments, [
+      '-c',
+      'check_for_update_on_startup=false',
+      'app-server',
+      '--listen',
+      'stdio://',
+    ]);
   });
 
   test('two renames share one app-server', () async {

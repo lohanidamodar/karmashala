@@ -18,6 +18,7 @@ List<String> agentPaneArguments(
   String? systemPromptFilePath,
   String? mcpUrl,
   String? mcpConfigPath,
+  bool suppressSelfUpdate = false,
 }) {
   final launch = descriptor?.launch;
   final trimmedPrompt = prompt?.trim();
@@ -26,6 +27,9 @@ List<String> agentPaneArguments(
     // First, because Codex's `-c` is a global and its resume a *subcommand*:
     // everything global has to be on the left of it, and none of it variadic.
     ...agentMcpArguments(descriptor, url: mcpUrl, configPath: mcpConfigPath),
+    // Global too, and for the same reason left of any subcommand: the switch
+    // that stops the agent updating itself in a Karmashala-launched process.
+    if (suppressSelfUpdate) ...?launch?.selfUpdate.disableArguments,
     ...?launch?.permission.argumentsFor(permissionMode),
     // Beside the permission flags and for the same reason: a global option, so
     // it has to be left of Codex's `resume`/`fork` subcommand.

@@ -43,6 +43,7 @@ class AgentPaneLaunch {
     required this.executable,
     this.arguments = const [],
     this.mcpArguments = const [],
+    this.environment = const {},
     this.workingDirectory,
     this.wslDistribution,
     this.sshHostId,
@@ -63,6 +64,12 @@ class AgentPaneLaunch {
   /// The **volatile** arguments: this run's MCP flags. Never stored — a
   /// restored pane that replayed yesterday's made the agent refuse to start.
   final List<String> mcpArguments;
+
+  /// **Volatile** environment layered over the launched process only: the
+  /// switch that stops the agent updating itself (Claude Code's
+  /// `DISABLE_AUTOUPDATER`). Never stored — it is policy of *now*, re-derived
+  /// each launch from the setting, exactly like [mcpArguments].
+  final Map<String, String> environment;
 
   /// The command line as it is actually run: the volatile flags, then the
   /// durable ones. MCP first, because Codex's `-c` is a global option and its
@@ -100,6 +107,7 @@ class AgentPaneLaunch {
         executable: executable,
         arguments: arguments,
         mcpArguments: mcpArguments,
+        environment: environment,
         workingDirectory: workingDirectory,
         wslDistribution: wslDistribution,
         sshHostId: sshHostId,

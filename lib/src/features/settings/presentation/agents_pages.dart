@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../agents/application/agent_installations_controller.dart';
+import '../../agents/application/agent_providers.dart';
+import '../../agents/application/agent_self_update_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environments_controller.dart';
 import '../application/settings_controller.dart';
@@ -66,6 +68,79 @@ class DefaultAgentSection extends ConsumerWidget {
                 },
               ),
             ),
+    );
+  }
+}
+
+/// Settings → Agents → Agent updates: whether a launched agent may update
+/// itself, and the command to update each one by hand instead.
+class AgentUpdatesSection extends ConsumerWidget {
+  const AgentUpdatesSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final mayUpdate = ref.watch(agentsMayUpdateThemselvesProvider);
+    final controller = ref.read(settingsControllerProvider.notifier);
+    final registry = ref.watch(agentRegistryProvider);
+    // One row per installed agent that both has a documented update command and
+    // can be told not to self-update — the agents this setting governs.
+    final updatable = <(String agentId, List<String> command)>[
+      for (final id
+          in ref
+              .watch(agentInstallationsControllerProvider)
+              .map((i) => i.agentId)
+              .toSet())
+        if (registry.byId(id)?.launch.selfUpdate case final u?)
+          if (u.canSuppress && u.hasUpdateCommand) (id, u.updateCommand),
+    ];
+    return SettingsSection(
+      title: SettingsAnchor.agentUpdates.heading,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsSwitchRow(
+            label: 'Let agents update themselves in Karmashala sessions',
+            help:
+                'When an agent CLI starts inside Karmashala, let it check for '
+                'and install its own updates. Off on Windows by default: a '
+                'self-updating CLI launched under an unsigned app is a pattern '
+                'behavioural antivirus (such as Bitdefender ATC) can read as a '
+                'threat and kill. Turning this off does not touch updates you '
+                'run yourself outside Karmashala. Applies to the next launch.',
+            value: mayUpdate,
+            onChanged: controller.setLetAgentsUpdateThemselves,
+          ),
+          if (!mayUpdate && updatable.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Update an agent yourself by running its own command in a '
+              'terminal:',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 6),
+            for (final (agentId, command) in updatable)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      TextSpan(text: '${agentLabel(agentId)}:  '),
+                      TextSpan(
+                        text: command.join(' '),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'monospace',
+                          fontFeatures: const [],
+                        ),
+                      ),
+                    ],
+                  ),
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+          ],
+        ],
+      ),
     );
   }
 }

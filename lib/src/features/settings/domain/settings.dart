@@ -88,6 +88,7 @@ class Settings {
     this.shellIntegrationEnabled = false,
     this.restoreLivePanes = true,
     this.hostBackedLocalPanes = false,
+    this.letAgentsUpdateThemselves,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
     this.remoteAccessEnabled = false,
@@ -227,6 +228,16 @@ class Settings {
   /// reports no command boundaries and `terminal_run` claims no exit code.
   final bool hostBackedLocalPanes;
 
+  /// Whether an agent CLI Karmashala launches may update itself in that
+  /// session. **`null` means unset**, resolved by platform where it is read
+  /// (`agentsMayUpdateThemselvesProvider`): default off on Windows, on
+  /// elsewhere. A self-updating CLI (npm/installer download-and-replace) under
+  /// an unsigned parent is a behavioural-antivirus dropper signal, and on the
+  /// owner's managed Windows machine it killed the whole process tree. Off, the
+  /// launched agent is passed the switch that stops its self-update; the user's
+  /// own updates outside Karmashala are untouched (docs/windows-antivirus.md).
+  final bool? letAgentsUpdateThemselves;
+
   /// The imported terminal theme as `<format>:<path>`, or `null` for built-in.
   final String? terminalThemeSource;
 
@@ -324,6 +335,8 @@ class Settings {
     bool? shellIntegrationEnabled,
     bool? restoreLivePanes,
     bool? hostBackedLocalPanes,
+    bool? letAgentsUpdateThemselves,
+    bool clearLetAgentsUpdateThemselves = false,
     Map<String, bool>? terminalChordOverrides,
     String? terminalThemeSource,
     bool clearTerminalThemeSource = false,
@@ -390,6 +403,9 @@ class Settings {
         shellIntegrationEnabled ?? this.shellIntegrationEnabled,
     restoreLivePanes: restoreLivePanes ?? this.restoreLivePanes,
     hostBackedLocalPanes: hostBackedLocalPanes ?? this.hostBackedLocalPanes,
+    letAgentsUpdateThemselves: clearLetAgentsUpdateThemselves
+        ? null
+        : (letAgentsUpdateThemselves ?? this.letAgentsUpdateThemselves),
     terminalChordOverrides:
         terminalChordOverrides ?? this.terminalChordOverrides,
     terminalThemeSource: clearTerminalThemeSource
@@ -475,6 +491,8 @@ class Settings {
     'shellIntegrationEnabled': shellIntegrationEnabled,
     'restoreLivePanes': restoreLivePanes,
     'hostBackedLocalPanes': hostBackedLocalPanes,
+    if (letAgentsUpdateThemselves != null)
+      'letAgentsUpdateThemselves': letAgentsUpdateThemselves,
     if (terminalChordOverrides.isNotEmpty)
       'terminalChordOverrides': terminalChordOverrides,
     if (terminalThemeSource != null) 'terminalThemeSource': terminalThemeSource,
@@ -627,6 +645,9 @@ class Settings {
       restoreLivePanes: json['restoreLivePanes'] != false,
       // `== true`: defaults off, so an older file reads as off.
       hostBackedLocalPanes: json['hostBackedLocalPanes'] == true,
+      letAgentsUpdateThemselves: json['letAgentsUpdateThemselves'] is bool
+          ? json['letAgentsUpdateThemselves'] as bool
+          : null,
       terminalChordOverrides: {
         if (json['terminalChordOverrides'] is Map)
           for (final entry in (json['terminalChordOverrides'] as Map).entries)
@@ -718,6 +739,7 @@ class Settings {
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
       other.restoreLivePanes == restoreLivePanes &&
       other.hostBackedLocalPanes == hostBackedLocalPanes &&
+      other.letAgentsUpdateThemselves == letAgentsUpdateThemselves &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
       other.remoteAccessEnabled == remoteAccessEnabled &&
@@ -784,6 +806,7 @@ class Settings {
       // Folded in: the outer call is already at `Object.hash`'s 20-arg limit.
       Object.hash(
         hostBackedLocalPanes,
+        letAgentsUpdateThemselves,
         useInAppFilePicker,
         showHiddenFiles,
         androidSlimming,

@@ -393,6 +393,14 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// Whether an agent Karmashala launches may update itself in that session.
+  /// Written concretely, so a machine that later flips its platform default
+  /// keeps the user's explicit choice. Applies to the *next* launch.
+  void setLetAgentsUpdateThemselves(bool value) {
+    state = state.copyWith(letAgentsUpdateThemselves: value);
+    _save();
+  }
+
   void setTerminalThemeSource(String? id) {
     state = state.copyWith(
       terminalThemeSource: id,

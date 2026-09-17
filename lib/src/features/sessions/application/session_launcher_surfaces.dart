@@ -22,6 +22,13 @@ extension SessionSurfaceStarters on SessionLauncher {
         .resolveFor(workingDirectory)
         .require;
     final mcp = _mcpAccessFor(session, descriptor, environment);
+    // Off by default on Windows: a self-updating agent under an unsigned
+    // parent is a behavioural-antivirus dropper signal. Re-derived per launch,
+    // so it is stored as neither an argument nor an env value.
+    final suppressUpdate =
+        descriptor != null &&
+        descriptor.launch.selfUpdate.canSuppress &&
+        !_ref.read(agentsMayUpdateThemselvesProvider);
     final launch = AgentPaneLaunch(
       agentId: request.installation.agentId,
       executable: request.installation.executable.path,
@@ -36,12 +43,17 @@ extension SessionSurfaceStarters on SessionLauncher {
         forkSessionId: request.forkExternalSessionId,
         prompt: firstMessage,
         systemPromptFilePath: systemPromptFilePath,
+        suppressSelfUpdate: suppressUpdate,
       ),
       mcpArguments: agentMcpArguments(
         descriptor,
         url: mcp?.url,
         configPath: mcp?.configPath,
       ),
+      // Volatile, like the MCP flags: the self-update env of *now*.
+      environment: suppressUpdate
+          ? descriptor.launch.selfUpdate.disableEnvironment
+          : const {},
       workingDirectory: workingDirectory.path,
       wslDistribution: environment.wslDistribution,
       sshHostId: environment.sshHostId,
@@ -109,6 +121,13 @@ extension SessionSurfaceStarters on SessionLauncher {
       throw StateError('No external terminal is configured.');
     }
     final mcp = _mcpAccessFor(session, descriptor, environment);
+    // The argument half of the self-update suppression (Codex's `-c`); the
+    // env half (Claude's DISABLE_AUTOUPDATER) is not layered on a terminal
+    // Karmashala does not own, and is noted in docs/windows-antivirus.md.
+    final suppressUpdate =
+        descriptor != null &&
+        descriptor.launch.selfUpdate.disableArguments.isNotEmpty &&
+        !_ref.read(agentsMayUpdateThemselvesProvider);
     final agentCommand = [
       request.installation.executable.path,
       ...agentPaneArguments(
@@ -122,6 +141,7 @@ extension SessionSurfaceStarters on SessionLauncher {
         systemPromptFilePath: systemPromptFilePath,
         mcpUrl: mcp?.url,
         mcpConfigPath: mcp?.configPath,
+        suppressSelfUpdate: suppressUpdate,
       ),
     ];
     final distro = environment.wslDistribution;
