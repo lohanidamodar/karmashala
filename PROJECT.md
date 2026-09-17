@@ -1242,6 +1242,12 @@ The deployed box needs **no `libsqlite3` of its own** — SQLite is bundled. The
 deployer uploads one tarball per target and unpacks it; `probe-store` says which
 of four things is wrong when a machine cannot hold a store.
 
+**The bundle is also the relay.** `karmashala_host relay` runs
+`packages/relay`'s server, so an SSH host used as the desktop's relay needs no
+second artifact and CI builds none (`docs/SETTLED.md`, *An SSH host can be the
+desktop's relay*). `packages/relay` stays out of the workspace and is reached by
+path, as the app already reaches it.
+
 **In tests, never `dart run` the host.** Every spawn stages the bundled library
 into `.dart_tool/`, and parallel workers collide on the locked library. The live
 harnesses build once per isolate instead.
