@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_self_update_providers.dart';
@@ -129,8 +130,8 @@ class AgentUpdatesSection extends ConsumerWidget {
                       TextSpan(
                         text: command.join(' '),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          fontFamily: 'monospace',
-                          fontFeatures: const [],
+                          fontFamily: kMonoFamily,
+                          fontFamilyFallback: kMonoFallback,
                         ),
                       ),
                     ],
