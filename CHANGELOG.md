@@ -22,6 +22,12 @@ installs claim the same version name.
 **Browsing for a file is Karmashala's own job now, and a project can be
 edited.** Schema head moves to **v49**.
 
+- **A session can be resumed when its usage window resets** (on `main`, past
+  1.25.0; schema head moves to **v53**). Right-click a session, or take the
+  offer its bar makes when a turn ends on a limit: the account is read again at
+  the reset, the session resumed on its own conversation and told to continue,
+  or the wait moved to the new reset. Every waiting one is listed under
+  Settings › Automations. `docs/SETTLED.md`, *A session can be resumed…*.
 - **The host's file dialog is gone from the desktop.** It had stopped drawing
   at all in this process: measured on a hung app, `IFileDialog::Show` had been
   entered and **no dialog window ever existed**, while the same dialog opened
