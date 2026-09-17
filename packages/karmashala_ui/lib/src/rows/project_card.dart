@@ -672,7 +672,7 @@ class ProjectDetailLine extends StatelessWidget {
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: scaler.scale(branchMax)),
                 child: Text(
-                  branchText!,
+                  branchText,
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.ellipsis,

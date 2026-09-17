@@ -1,5 +1,6 @@
 import 'package:karmashala/src/app/karmashala_app.dart';
 import 'package:karmashala/src/app/shell/side_panel_state.dart';
+import 'package:karmashala/src/app/shell/status_bar_items.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -133,6 +134,13 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // The status bar's own count. The Explorer's project row says the same
+  // words for the same number, on purpose, so the text alone names two things.
+  final statusBarCount = find.descendant(
+    of: find.byType(StatusBarItem),
+    matching: find.text('1 needs you'),
+  );
+
   testWidgets('the status bar says nothing while nothing is waiting', (
     tester,
   ) async {
@@ -148,7 +156,7 @@ void main() {
     queue();
     await tester.pumpAndSettle();
 
-    expect(find.text('1 needs you'), findsOneWidget);
+    expect(statusBarCount, findsOneWidget);
     expect(container.read(attentionCountProvider), 1);
     // The rail's tooltip carries the same number, so a collapsed panel still
     // tells the truth.
@@ -167,7 +175,7 @@ void main() {
     queue();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('1 needs you'));
+    await tester.tap(statusBarCount);
     await tester.pumpAndSettle();
 
     expect(container.read(sidePanelProvider), SidePanelSurface.inbox);
