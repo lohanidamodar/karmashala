@@ -506,6 +506,85 @@ void main() {
     }, timeout: const Timeout(Duration(minutes: 5)));
   });
 
+  group('the relay on a box', () {
+    // What no fake can answer: whether `setsid nohup … relay` stays up once
+    // the SSH channel that launched it closes, whether the token file the box
+    // minted is owner-only and readable back, what `ps -o args=` really prints
+    // for the running path, and whether the health check under the token
+    // answers from this computer. It takes a spare port and takes everything
+    // away again, so a real relay on 8787 there is never touched.
+    const livePort = 18787;
+    late HostBinarySource binaries;
+
+    setUp(() {
+      final directory = _env('KARMASHALA_HOST_BINARIES');
+      binaries = directory == null
+          ? DirectoryHostBinaries.standard()
+          : DirectoryHostBinaries([Directory(directory)]);
+    });
+
+    test('starts from the deployed bundle, answers under its token, and is '
+        'removed without a trace', () async {
+      final target = SshHostDeployTarget(await trusted());
+      final deployment = await HostDeployer(target: target, binaries: binaries).deploy();
+      final remotePath = deployment.remotePath;
+      if (remotePath == null) {
+        // ignore: avoid_print
+        print('  skipped: ${deployment.status.name} — ${deployment.reason}');
+        return;
+      }
+      final setup = SshRelaySetup(
+        host: host,
+        target: target,
+        remotePath: remotePath,
+        port: livePort,
+      );
+      try {
+        final started = await setup.start();
+        // ignore: avoid_print
+        print('  ${started.status.name}: ${started.reason}');
+        if (started.status == SshRelayStatus.cannotStart) {
+          // A bundle from before `relay` existed: said, never a silent pass.
+          // ignore: avoid_print
+          print('  skipped: the bundle in KARMASHALA_HOST_BINARIES has no relay command');
+          return;
+        }
+        expect(started.status, SshRelayStatus.running, reason: started.reason);
+        expect(started.url!.host, host.host);
+        expect(started.url!.path, startsWith('/k/'));
+        expect(started.runningPath, remotePath);
+        expect(started.reason, isNot(contains(started.url!.pathSegments[1])));
+
+        // Owner-only, and not on any command line.
+        final home = (await target.run(r'echo "$HOME"')).stdout.trim();
+        final mode = await target.run(
+          'stat -c %a $home/.karmashala/relay.token 2>/dev/null || '
+          'stat -f %Lp $home/.karmashala/relay.token',
+        );
+        expect(mode.stdout.trim(), '600');
+        final args = await target.run(
+          'ps -o args= -p \$(cat $home/.karmashala/relay.pid)',
+        );
+        expect(args.stdout, isNot(contains(started.url!.pathSegments[1])));
+
+        // Idempotent, and a second look agrees with the first.
+        expect((await setup.start()).status, SshRelayStatus.running);
+        expect((await setup.check()).status, SshRelayStatus.running);
+
+        expect((await setup.stop()).status, SshRelayStatus.stopped);
+        expect((await setup.check()).status, SshRelayStatus.stopped);
+      } finally {
+        final removed = await setup.remove();
+        // ignore: avoid_print
+        print('  ${removed.status.name}: ${removed.reason}');
+        final left = await target.run(
+          r'ls "$HOME/.karmashala" | grep -c "^relay\." || true',
+        );
+        expect(left.stdout.trim(), '0', reason: 'token, pid and log are gone');
+      }
+    }, timeout: const Timeout(Duration(minutes: 5)));
+  });
+
   group('remote file browsing over SFTP', () {
     late RemoteFileBrowser browser;
 
