@@ -166,6 +166,8 @@ class _SessionFactsRow extends StatelessWidget {
         SessionStatsButton(sessionId: sessionId),
         const SizedBox(width: Insets.xs),
       ],
+      // Beside the quota it waits on. Nothing, and no width, until one is armed.
+      Flexible(child: ScheduledResumeChip(sessionId: sessionId)),
       Flexible(child: UsageChip(sessionId: sessionId)),
     ],
   );

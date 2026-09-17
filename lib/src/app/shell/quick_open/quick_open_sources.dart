@@ -9,6 +9,8 @@ import '../../../features/agents/application/agent_providers.dart';
 import '../../../features/cli_detection/application/cli_detection_providers.dart';
 import '../../../features/cli_detection/data/conversation_index_dao.dart';
 import '../../../features/environments/presentation/environment_health_dialog.dart';
+import '../../../features/automations/application/scheduled_resume_providers.dart';
+import '../../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../../features/fanout/presentation/fanout_dialog.dart';
 import '../../../features/git/application/changes_providers.dart';
 import '../../../features/notes/application/notes_providers.dart';
@@ -22,6 +24,7 @@ import '../../../features/explorer/application/explorer_actions.dart';
 import '../../../features/explorer/presentation/unresumable_sessions_dialog.dart';
 import '../../../features/sessions/application/session_last_active_providers.dart';
 import '../../../features/sessions/application/session_providers.dart';
+import '../../../features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_session/launch.dart';
@@ -143,6 +146,55 @@ class QuickOpenSources {
     onSelect: () => dismiss(onSelect),
   );
 
+  /// The session on screen's resume, and the list of all of them — each only
+  /// while it has something to act on.
+  List<QuickOpenItem> _resumeCommands() {
+    final sessionId = ref.read(selectedSessionIdProvider);
+    final native =
+        sessionId != null &&
+        ref.read(sessionDaoProvider).getById(sessionId) != null;
+    final waiting = native
+        ? ref.read(sessionResumeBadgeProvider(sessionId))
+        : null;
+    final all = ref.read(liveScheduledResumesProvider).length;
+    const keywords = ['usage', 'limit', 'rate limit', 'reset', 'continue'];
+    return [
+      if (native)
+        _command(
+          waiting == null
+              ? 'Resume when usage resets…'
+              : 'Change scheduled resume…',
+          subtitle:
+              waiting?.label ??
+              'This session, at its limit\'s reset or a time you choose',
+          icon: AppIcons.clock,
+          keywords: keywords,
+          onSelect: () => ResumeOnResetDialog.show(context, [sessionId]),
+        ),
+      if (native && waiting != null)
+        _command(
+          'Cancel scheduled resume',
+          subtitle: waiting.label,
+          icon: AppIcons.x,
+          keywords: keywords,
+          onSelect: () => ref
+              .read(scheduledResumeControllerProvider)
+              .cancelFor(sessionId),
+        ),
+      if (all > 0)
+        _command(
+          'Scheduled resumes',
+          subtitle: all == 1 ? '1 waiting' : '$all waiting',
+          icon: AppIcons.clock,
+          keywords: keywords,
+          onSelect: () => openSettingsTab(
+            ref,
+            anchor: SettingsAnchor.scheduledResumes,
+          ),
+        ),
+    ];
+  }
+
   List<QuickOpenItem> _commands() {
     final panel = ref.read(sidePanelProvider.notifier);
     final shell = ref.read(shellControllerProvider.notifier);
@@ -168,6 +220,7 @@ class QuickOpenSources {
           icon: AppIcons.gitBranch,
           onSelect: () => FanOutDialog.show(context),
         ),
+      ..._resumeCommands(),
       // Listed as verbs, not places: "Notes · Side panel" only answers if you
       // already know the name. Each opens its surface on the way.
       if (ref.read(notesEnabledProvider))

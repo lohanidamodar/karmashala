@@ -2,6 +2,8 @@ import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
 import 'package:karmashala/src/app/shell/quick_open/quick_open_list.dart';
 import 'package:karmashala/src/app/shell/tab_picker.dart';
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
+import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -661,6 +663,63 @@ void main() {
     expect(container.exists(githubIssuesProvider), isFalse);
     expect(container.exists(repositoryChangesProvider), isFalse);
     expect(container.exists(repoWorktreesProvider), isFalse);
+  });
+
+  group('a scheduled resume', () {
+    void select(ProviderContainer container) =>
+        container.read(selectedSessionIdProvider.notifier).select('s1');
+
+    testWidgets('the session on screen can be armed from the palette', (
+      tester,
+    ) async {
+      await open(tester, before: select);
+      await type(tester, 'usage resets');
+      expect(find.text('Resume when usage resets…'), findsOneWidget);
+      expect(find.text('Cancel scheduled resume'), findsNothing);
+      expect(find.text('Scheduled resumes'), findsNothing);
+
+      await tester.tap(find.text('Resume when usage resets…'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ResumeOnResetDialog), findsOneWidget);
+    });
+
+    testWidgets('with nothing on screen there is nothing to arm', (
+      tester,
+    ) async {
+      await open(tester);
+      await type(tester, 'usage resets');
+      expect(find.text('Resume when usage resets…'), findsNothing);
+    });
+
+    testWidgets('one that is waiting can be changed, cancelled, and found in '
+        'the list of them all', (tester) async {
+      final container = await open(
+        tester,
+        before: (container) {
+          select(container);
+          SessionDao(db).updatePermissionMode('s1', 'mode=bypassPermissions');
+          container
+              .read(scheduledResumeControllerProvider)
+              .schedule(
+                ResumeRequest(
+                  sessionId: 's1',
+                  fireAt: DateTime.now().toUtc().add(const Duration(hours: 2)),
+                ),
+              );
+        },
+      );
+      await type(tester, 'scheduled resume');
+      expect(find.text('Change scheduled resume…'), findsOneWidget);
+      expect(find.text('Scheduled resumes'), findsOneWidget);
+      expect(find.text('1 waiting'), findsOneWidget);
+
+      await tester.tap(find.text('Cancel scheduled resume'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(scheduledResumeDaoProvider).liveFor('s1'),
+        isNull,
+      );
+    });
   });
 }
 

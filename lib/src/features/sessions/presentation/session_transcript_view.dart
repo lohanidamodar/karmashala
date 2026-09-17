@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show mapEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../automations/presentation/scheduled_resume_chip.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import '../../../app/shell/side_panel_state.dart';
 import 'package:karmashala_ui/icons.dart';
@@ -304,23 +305,33 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
         SizedBox(
           // Grows with the text: the badge's label follows the text scale.
           height: Chrome.tabStripOf(context),
-          child: Row(
-            children: [
-              const SizedBox(width: Insets.md),
-              AgentStatusBadge(sessionId: widget.sessionId, showLabel: true),
-              const Spacer(),
-              // On the header rather than in the composer's chip row: a recap
-              // costs a turn, so it sits with the other deliberate acts.
-              _RecapButton(sessionId: widget.sessionId),
-              _OpenInTerminalButton(sessionId: widget.sessionId),
-              if (active)
-                IconButton(
-                  tooltip: 'Stop session',
-                  icon: const Icon(AppIcons.stopCircle),
-                  onPressed: _stop,
-                ),
-              const SizedBox(width: Insets.xs),
-            ],
+          child: LayoutBuilder(
+            builder: (context, header) => Row(
+              children: [
+                const SizedBox(width: Insets.md),
+                AgentStatusBadge(sessionId: widget.sessionId, showLabel: true),
+                const Spacer(),
+                // The first to go in a side-panel-wide pane: the session bar's
+                // chip and the row menu still reach it there.
+                if (header.maxWidth >=
+                    WidthClass.scaleBreakpoint(
+                      _resumeButtonMinWidth,
+                      MediaQuery.textScalerOf(context),
+                    ))
+                  ScheduledResumeButton(sessionId: widget.sessionId),
+                // On the header rather than in the composer's chip row: a recap
+                // costs a turn, so it sits with the other deliberate acts.
+                _RecapButton(sessionId: widget.sessionId),
+                _OpenInTerminalButton(sessionId: widget.sessionId),
+                if (active)
+                  IconButton(
+                    tooltip: 'Stop session',
+                    icon: const Icon(AppIcons.stopCircle),
+                    onPressed: _stop,
+                  ),
+                const SizedBox(width: Insets.xs),
+              ],
+            ),
           ),
         ),
         SessionRepositoriesBar(sessionId: widget.sessionId),
@@ -603,6 +614,10 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
     return '';
   }
 }
+
+/// The narrowest header, at 1x text, with room for the resume clock beside
+/// the status badge and the other three actions.
+const double _resumeButtonMinWidth = 320;
 
 /// The header's Recap action: asks this session's own CLI what it concluded.
 /// Inert while it answers — a second press spends a second turn.

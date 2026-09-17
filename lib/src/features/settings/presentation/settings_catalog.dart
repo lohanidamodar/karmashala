@@ -327,6 +327,13 @@ enum SettingsAnchor {
     'checks',
     'verification',
   ]),
+  scheduledResumes(SettingsSectionId.automations, 'Scheduled resumes', [
+    'resume',
+    'usage limit',
+    'rate limit',
+    'reset',
+    'continue',
+  ]),
   defaultAgent(SettingsSectionId.agents, 'Default agent', ['default agent']),
   defaultModel(SettingsSectionId.agents, 'Default model', [
     'default model',
@@ -707,6 +714,25 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.automations,
     description: 'Arm, pause and review agent runs on a schedule.',
     keywords: ['cron', 'nightly', 'schedule', 'project check'],
+  ),
+  SettingsEntry(
+    'Scheduled resumes',
+    anchor: SettingsAnchor.scheduledResumes,
+    description:
+        'Sessions waiting to be resumed when their usage window resets.',
+    keywords: ['resume', 'pending', 'cancel', 'reset', 'limit'],
+  ),
+  SettingsEntry(
+    'When an agent hits its usage limit',
+    anchor: SettingsAnchor.scheduledResumes,
+    description: 'Ask, always schedule a resume, or do nothing.',
+    keywords: ['usage limit', 'rate limit', 'codex', 'claude'],
+  ),
+  SettingsEntry(
+    'Default resume message',
+    anchor: SettingsAnchor.scheduledResumes,
+    description: 'What a resumed session is told, unless you say otherwise.',
+    keywords: ['continue', 'message', 'prompt'],
   ),
   SettingsEntry(
     'Default agent',

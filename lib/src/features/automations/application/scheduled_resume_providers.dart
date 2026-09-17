@@ -339,6 +339,22 @@ class ScheduledResumeController {
     return waiting;
   }
 
+  /// Arms [missed] again for this moment: what "ask me" asked for.
+  ScheduledResume runNow(ScheduledResume missed) => schedule(
+    ResumeRequest(
+      sessionId: missed.sessionId,
+      fireAt: _now,
+      windowLabel: missed.windowLabel,
+      resetsAt: missed.resetsAt,
+      message: missed.message,
+      permissionMode: missed.permissionMode,
+      notify: missed.notify,
+      // Asked for by hand, so it is not missed a second time.
+      latePolicy: ResumeLatePolicy.resume,
+      scheduledBy: missed.scheduledBy,
+    ),
+  );
+
   void forget(String id) {
     _dao.delete(id);
     _changed();

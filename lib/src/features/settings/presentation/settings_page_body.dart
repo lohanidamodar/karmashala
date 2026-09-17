@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../app_projects/presentation/project_kinds_section.dart';
 import '../../automations/presentation/automations_page.dart';
+import '../../automations/presentation/scheduled_resumes_section.dart';
 import '../../checkpoints/presentation/checkpoint_settings_section.dart';
 import '../../env_secrets/presentation/env_secrets_page.dart';
 import '../../environments/presentation/environments_section.dart';
@@ -90,6 +91,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.snippets => const SnippetsSettingsPage(),
   SettingsAnchor.variables => const EnvSecretsPage(),
   SettingsAnchor.automations => const AutomationsPage(),
+  SettingsAnchor.scheduledResumes => const ScheduledResumesSection(),
   SettingsAnchor.defaultAgent => const DefaultAgentSection(),
   SettingsAnchor.defaultModel => const DefaultModelSection(),
   SettingsAnchor.detection => const AgentDetectionSection(),
