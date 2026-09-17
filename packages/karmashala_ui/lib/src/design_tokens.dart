@@ -357,9 +357,7 @@ enum UiDensity {
 
   /// The density in effect for [context]; [UiDensity.pointer] with no scope.
   static UiDensity of(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<UiDensityScope>()
-          ?.density ??
+      context.dependOnInheritedWidgetOfExactType<UiDensityScope>()?.density ??
       UiDensity.pointer;
 
   bool get isTouch => this == UiDensity.touch;
@@ -553,8 +551,7 @@ enum WidthClass {
   /// width to hold the same words. Never shrunk — smaller text does not earn a
   /// layout more room than its design width.
   static double scaleBreakpoint(double breakpoint, TextScaler textScaler) {
-    final factor =
-        textScaler.scale(_referenceFontSize) / _referenceFontSize;
+    final factor = textScaler.scale(_referenceFontSize) / _referenceFontSize;
     return breakpoint * (factor < 1 ? 1 : factor);
   }
 
@@ -724,20 +721,17 @@ class Chrome {
   /// [titleBar] grown with the ambient text scale, and never shrunk below the
   /// design height: a 150% menu label does not fit a 30px row, and clipping
   /// the menu bar was exactly the "menus ignore text sizing" bug.
-  static double titleBarOf(BuildContext context) => MediaQuery.textScalerOf(
-    context,
-  ).scale(titleBar).clamp(titleBar, 52.0);
+  static double titleBarOf(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(titleBar).clamp(titleBar, 52.0);
 
   /// [tabStrip], same treatment, for a row whose label follows the text scale —
   /// a pane header's eyebrow does; a tab chip's [tabLabel] deliberately does not.
-  static double tabStripOf(BuildContext context) => MediaQuery.textScalerOf(
-    context,
-  ).scale(tabStrip).clamp(tabStrip, 52.0);
+  static double tabStripOf(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(tabStrip).clamp(tabStrip, 52.0);
 
   /// [statusBar], same treatment.
-  static double statusBarOf(BuildContext context) => MediaQuery.textScalerOf(
-    context,
-  ).scale(statusBar).clamp(statusBar, 38.0);
+  static double statusBarOf(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(statusBar).clamp(statusBar, 38.0);
 }
 
 /// The monospace family for the "ledger hand" — paths, ids, event types,
@@ -788,4 +782,13 @@ class MonoStyles {
 
   /// A ledger value promoted to sit beside body text (a hotkey combo).
   static TextStyle get label => _mono(13);
+}
+
+/// How long a pause in typing is waited for before work that follows typing
+/// runs again. A latency, not motion, so reduced motion does not shorten it.
+class Latency {
+  const Latency._();
+
+  /// A search over a buffer, re-run as its query or its text changes.
+  static const searchDebounce = Duration(milliseconds: 150);
 }
