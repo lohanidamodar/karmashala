@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:karmashala_host/protocol.dart';
+import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:test/test.dart';
 
@@ -85,6 +86,37 @@ void main() {
     // The grant travels untouched: a desktop that widened it would be granting
     // what nobody offered.
     expect(host.asked.single.capabilities, 0x7);
+  });
+
+  test('the route travels with the request: a relay for one, nothing for the other', () async {
+    final host = _RemoteHost(
+      (request) => PairedMessage(
+        requestId: request.requestId,
+        code: 'K7QM-3X2W-ABCD-EFGH-2345-6789-JKLM-NPQR',
+        expiresAt: DateTime.utc(2026, 9, 16, 0, 3),
+      ),
+    );
+    final setup = SshCompanionSetup(
+      host: SshHost(
+        id: 'h1',
+        name: 'do-box',
+        host: '203.0.113.9',
+        port: 22,
+        username: 'dlohani',
+        authMethod: SshAuthMethod.privateKey,
+        createdAt: DateTime.utc(2026, 9, 16),
+      ),
+      target: host,
+      remotePath: '/x/karmashala_host',
+      pairing: pairingOn(host),
+    );
+
+    await setup.openWindow(capabilities: 0x7);
+    await setup.openWindow(capabilities: 0x7, relay: 'wss://relay.example');
+
+    // Direct says nothing, so the host dials nothing on a phone's behalf.
+    expect(host.asked.first.relay, isEmpty);
+    expect(host.asked.last.relay, 'wss://relay.example');
   });
 
   test('a host older than pairing is named as that, not as a refusal', () async {

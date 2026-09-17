@@ -101,7 +101,16 @@ class SshCompanionSetup {
     String relay = '',
   }) async {
     final endpoint = await prepare();
-    final window = await _pairing.open(capabilities: capabilities, relay: relay);
+    final window = await openWindow(capabilities: capabilities, relay: relay);
     return (endpoint: endpoint, window: window);
   }
+
+  /// The second half of [invite] on its own, for a caller that decides the
+  /// route from [prepare]'s reading. [relay] empty is the direct route, and the
+  /// host then dials nothing; a URL is where it meets a phone that cannot reach
+  /// it.
+  Future<PairingWindow> openWindow({
+    required int capabilities,
+    String relay = '',
+  }) => _pairing.open(capabilities: capabilities, relay: relay);
 }
