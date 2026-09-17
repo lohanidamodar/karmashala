@@ -4,7 +4,9 @@ import 'package:xterm2/xterm.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 
 /// Re-emits [terminal]'s main-buffer scrollback as text plus SGR sequences,
-/// each line self-contained and newest first, so [maxBytes] can stop the walk.
+/// each row self-contained and newest first, so [maxBytes] can stop the walk.
+/// Rows of one soft-wrapped line are stored unbroken: the pane that reads them
+/// back wraps them at its own width, and reflows them at every width after.
 String encodeScrollback(
   Terminal terminal, {
   int maxLines = kDurableScrollbackMaxLines,
@@ -40,20 +42,41 @@ String encodeScrollback(
   final newestFirst = <String>[];
   var total = 0;
   for (var i = end - 1; i >= start; i--) {
+    // Every row but the newest also carries what joins the next one on.
+    final joint = i == end - 1 || _continues(lines[i], lines[i + 1])
+        ? ''
+        : '\r\n';
     final line = _encodeLine(lines[i]);
-    // Every line but the first also carries the `\r\n` that joins it on.
-    final cost = newestFirst.isEmpty ? line.length : line.length + 2;
+    final cost = line.length + joint.length;
     if (newestFirst.isNotEmpty && total + cost > maxBytes) break;
-    newestFirst.add(line);
+    newestFirst.add('$line$joint');
     total += cost;
   }
 
   // Only reachable if a single line exceeds the cap, which 200 columns cannot.
   if (total > maxBytes) return (encoded: '', linesEncoded: newestFirst.length);
   return (
-    encoded: newestFirst.reversed.join('\r\n'),
+    encoded: newestFirst.reversed.join(),
     linesEncoded: newestFirst.length,
   );
+}
+
+/// Whether [next] is the rest of the line [row] began, in a shape that reads
+/// back as that: [row] written to its last cell — or its last but one, when the
+/// wide glyph opening [next] is what did not fit — and [next] opening on text.
+/// A flag that outlived an erase fails this and stays a row of its own.
+bool _continues(BufferLine row, BufferLine next) {
+  if (!next.isWrapped || next.length == 0 || next.getCodePoint(0) == 0) {
+    return false;
+  }
+  var end = row.length;
+  while (end > 0 && row.getCodePoint(end - 1) == 0) {
+    // A wide glyph's second cell is empty too, and is not a gap.
+    if (end > 1 && row.getWidth(end - 2) == 2) break;
+    end--;
+  }
+  if (end == row.length) return true;
+  return end == row.length - 1 && next.getWidth(0) == 2;
 }
 
 bool _isBlank(BufferLine line) {
