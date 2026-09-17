@@ -8,6 +8,7 @@ import 'package:karmashala_ui/rows.dart' show abbreviatePath;
 import '../../projects/domain/project.dart';
 import '../../workspaces/domain/workspace.dart';
 import '../../workspaces/domain/workspace_scope.dart';
+import '../domain/explorer_section.dart';
 import 'environment_grouping.dart';
 import 'environment_terminals.dart';
 
@@ -138,6 +139,27 @@ final class TerminalsHeaderNode extends ExplorerHeaderNode {
   @override
   int get hashCode =>
       Object.hash(environmentId, environment, named, expanded, count, detail);
+}
+
+/// A saved section, over the sessions it holds — in the saved views, which
+/// are a list of their own and not part of the tree.
+final class SectionHeaderNode extends ExplorerHeaderNode {
+  SectionHeaderNode({required this.section, this.count})
+    : super(id: 'section:${section.id}', expanded: !section.collapsed);
+
+  final ExplorerSection section;
+
+  /// How many rows it holds, or null while it is collapsed and matches nothing.
+  final int? count;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SectionHeaderNode &&
+      other.section == section &&
+      other.count == count;
+
+  @override
+  int get hashCode => Object.hash(section, count);
 }
 
 /// A project, at depth zero under its context's header.

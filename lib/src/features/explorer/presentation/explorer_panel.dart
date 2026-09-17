@@ -9,6 +9,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/shell_state.dart';
 import '../../projects/application/projects_controller.dart';
+import '../application/explorer_section_nodes.dart';
 import '../application/explorer_tree_nodes.dart';
 import '../application/explorer_tree_provider.dart';
 import '../application/explorer_tree_state.dart';
@@ -18,8 +19,8 @@ import 'explorer_header_actions.dart';
 import 'explorer_keyboard.dart';
 import 'explorer_scope_bar.dart';
 import 'explorer_selection_actions.dart';
-import 'explorer_sections_view.dart';
 import 'explorer_tree_rows.dart';
+import 'session_rows.dart';
 import 'session_selection_bar.dart';
 
 /// The unified left pane: Project → Session, and deliberately nothing else;
@@ -170,15 +171,53 @@ class ExplorerSearchField extends StatelessWidget {
   }
 }
 
-/// The saved sections, in place of the tree.
-class ExplorerSectionsList extends ConsumerWidget {
+/// The saved sections, in place of the tree — a list of rows like it, built
+/// lazily and driven by the same keys.
+class ExplorerSectionsList extends ConsumerStatefulWidget {
   const ExplorerSectionsList({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => ListView(
-    padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
-    children: explorerSectionNodes(ref),
-  );
+  ConsumerState<ExplorerSectionsList> createState() =>
+      _ExplorerSectionsListState();
+}
+
+class _ExplorerSectionsListState extends ConsumerState<ExplorerSectionsList>
+    with ExplorerKeyboardList {
+  @override
+  List<ExplorerNode> readNodes() => ref.read(explorerSectionNodesProvider);
+
+  @override
+  Widget build(BuildContext context) {
+    final nodes = ref.watch(explorerSectionNodesProvider);
+    return Focus(
+      canRequestFocus: false,
+      skipTraversal: true,
+      onKeyEvent: keyboard.onKey,
+      child: ListView.builder(
+        controller: scroll,
+        padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
+        itemCount: nodes.length,
+        itemBuilder: (context, index) {
+          final node = nodes[index];
+          return ExplorerKeyboardRow(
+            key: ValueKey(node.id),
+            id: node.id,
+            keyboard: keyboard,
+            // The session is the section's own reading of it: the tree's row
+            // would mount a project's session list to ask for a newer one.
+            child: node is SessionRowNode
+                ? NativeSessionRow(
+                    session: node.session,
+                    depth: node.depth,
+                    subPath: node.subPath,
+                    pinned: node.pinned,
+                  )
+                : ExplorerTreeRow(node: node),
+          );
+        },
+      ),
+    );
+  }
 }
 
 /// Context headers over Project → Session, built lazily.
@@ -189,8 +228,10 @@ class ExplorerTreeView extends ConsumerStatefulWidget {
   ConsumerState<ExplorerTreeView> createState() => _ExplorerTreeViewState();
 }
 
-class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
-  final _scroll = ScrollController();
+class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView>
+    with ExplorerKeyboardList {
+  @override
+  List<ExplorerNode> readNodes() => ref.read(explorerTreeProvider).nodes;
 
   /// The row the selection was last scrolled to. A reveal happens on a
   /// *change* of selection, never on every build, or the list would fight the
@@ -204,37 +245,11 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
   /// Names the list. A new name is a new list, at the top.
   int _generation = 0;
 
-  /// The arrow keys. It holds rows by id and asks for the tree when a key
-  /// arrives, so it outlives every rebuild and causes none.
-  late final _keyboard = ExplorerTreeKeyboard(
-    ref: ref,
-    scroll: _scroll,
-    readNodes: () => ref.read(explorerTreeProvider).nodes,
-  );
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final links = ExplorerKeyboardScope.maybeOf(context);
-    if (identical(links, _keyboard.links)) return;
-    _keyboard.links?.enterList = null;
-    _keyboard.links = links;
-    links?.enterList = _keyboard.enter;
-  }
-
-  @override
-  void dispose() {
-    _keyboard.links?.enterList = null;
-    _keyboard.dispose();
-    _scroll.dispose();
-    super.dispose();
-  }
-
   /// Brings the selected project into view. The list is built lazily, so an
   /// off-screen row has no context to scroll to: jump by the proportion of the
   /// list it sits at, then settle exactly once it exists.
   void _revealSelected(int index, int total) {
-    if (!mounted || !_scroll.hasClients || total == 0) return;
+    if (!mounted || !scroll.hasClients || total == 0) return;
     void settle() {
       final target = _selectedRow.currentContext;
       if (target == null) return;
@@ -249,10 +264,10 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
       settle();
       return;
     }
-    final position = _scroll.position;
+    final position = scroll.position;
     final content = position.maxScrollExtent + position.viewportDimension;
     final guess = content * index / total - position.viewportDimension / 3;
-    _scroll.jumpTo(guess.clamp(0.0, position.maxScrollExtent));
+    scroll.jumpTo(guess.clamp(0.0, position.maxScrollExtent));
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) settle();
     });
@@ -265,7 +280,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
     // in it: a jump to the top from row 300 built 300 rows, and a tree that
     // shrank under an offset past its new end built every match to find it.
     ref.listen(explorerSearchQueryProvider, (_, _) {
-      if (_scroll.hasClients && _scroll.offset != 0) {
+      if (scroll.hasClients && scroll.offset != 0) {
         setState(() => _generation++);
       }
     });
@@ -294,7 +309,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
     // what the workspace holds.
     final list = ListView.builder(
       key: ValueKey(_generation),
-      controller: _scroll,
+      controller: scroll,
       padding: const EdgeInsets.symmetric(vertical: ExplorerRow.gap),
       itemCount: nodes.length,
       itemBuilder: (context, index) {
@@ -302,7 +317,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
         return ExplorerKeyboardRow(
           key: ValueKey(node.id),
           id: node.id,
-          keyboard: _keyboard,
+          keyboard: keyboard,
           child: ExplorerTreeRow(
             node: node,
             anchorKey:
@@ -316,14 +331,14 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
     // The scrollbar is drawn here rather than by the list, so that it stays
     // over the pinned header instead of passing under it.
     return Scrollbar(
-      controller: _scroll,
+      controller: scroll,
       // Not a stop of its own: it hears the keys of whichever row has focus,
       // the pinned header's copy included — and so never a text field's, a
       // menu's or the terminal's, which are not under it.
       child: Focus(
         canRequestFocus: false,
         skipTraversal: true,
-        onKeyEvent: _keyboard.onKey,
+        onKeyEvent: keyboard.onKey,
         child: Stack(
           clipBehavior: Clip.hardEdge,
           children: [
@@ -336,10 +351,10 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView> {
             ExplorerPinnedHeader(
               // A new list starts at the top, with nothing pinned.
               key: ValueKey(_generation),
-              controller: _scroll,
+              controller: scroll,
               nodes: nodes,
               topPadding: ExplorerRow.gap,
-              keyboard: _keyboard,
+              keyboard: keyboard,
             ),
           ],
         ),

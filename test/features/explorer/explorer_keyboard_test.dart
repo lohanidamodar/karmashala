@@ -170,6 +170,7 @@ void main() {
   String? focused() => switch (focusedTreeRow()?.node) {
     final ContextHeaderNode node => node.label.toUpperCase(),
     final TerminalsHeaderNode node => node.label.toUpperCase(),
+    final SectionHeaderNode node => node.section.name,
     final ProjectNode node => node.project.name,
     final SessionRowNode node => node.session.title,
     final ImportedRowNode node => node.session.displayTitle,

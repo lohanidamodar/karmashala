@@ -21,6 +21,7 @@ List<String> sketch(List<ExplorerNode> nodes) => [
     '${'  ' * node.depth}${switch (node) {
       ContextHeaderNode(:final label, :final expanded, :final projectCount) => '${expanded ? '=' : '≠'} $label [$projectCount]',
       TerminalsHeaderNode(:final label, :final expanded, :final count) => '${expanded ? '=' : '≠'} $label${count == null ? '' : ' ($count)'}',
+      SectionHeaderNode(:final section, :final expanded) => '${expanded ? '=' : '≠'} ${section.name}',
       ProjectNode(:final project, :final expanded, :final environmentLabel) => '${expanded ? '-' : '+'} ${project.name}'
           '${environmentLabel == null ? '' : ' @$environmentLabel'}',
       SessionRowNode(:final session) => '. ${session.title}',

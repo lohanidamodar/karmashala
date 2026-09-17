@@ -11,8 +11,10 @@ import '../../projects/application/project_providers.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/presentation/new_context_dialog.dart';
 import '../application/bulk_session_delete.dart';
+import '../application/explorer_section_nodes.dart';
 import '../application/explorer_tree_nodes.dart';
 import '../application/explorer_tree_provider.dart';
+import '../application/explorer_view_mode.dart';
 import '../application/session_selection.dart';
 import 'bulk_delete_dialog.dart';
 import 'explorer_project_row.dart';
@@ -30,6 +32,13 @@ List<String> selectableOrder(List<ExplorerNode> nodes, SelectionKind kind) => [
     },
 ];
 
+/// The rows of the list on screen — the tree, or the saved views in its
+/// place — in the order it draws them.
+List<ExplorerNode> explorerVisibleNodes(WidgetRef ref) =>
+    ref.read(explorerShowingViewsProvider)
+    ? ref.read(explorerSectionNodesProvider)
+    : ref.read(explorerTreeProvider).nodes;
+
 /// What a click on a selectable row means, given the keys held: Shift ranges
 /// from the anchor, Cmd or Ctrl toggles (entering the mode), and a plain click
 /// in the mode ticks. Answers whether the click was spent here; when not, the
@@ -46,7 +55,7 @@ bool handleSelectableClick(
     controller.extendTo(
       id,
       kind: kind,
-      order: selectableOrder(ref.read(explorerTreeProvider).nodes, kind),
+      order: selectableOrder(explorerVisibleNodes(ref), kind),
     );
     return true;
   }
@@ -88,10 +97,7 @@ bool selectAllVisible(WidgetRef ref, [SelectionKind? kind]) {
   if (chosen == null) return false;
   return ref
       .read(sessionSelectionProvider.notifier)
-      .selectAll(
-        selectableOrder(ref.read(explorerTreeProvider).nodes, chosen),
-        chosen,
-      );
+      .selectAll(selectableOrder(explorerVisibleNodes(ref), chosen), chosen);
 }
 
 /// The bulk verbs over the selection, as menu entries and as their effect.

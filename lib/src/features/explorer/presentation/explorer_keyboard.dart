@@ -9,12 +9,49 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../settings/application/settings_controller.dart';
 import '../application/environment_terminals_providers.dart';
+import '../application/explorer_sections.dart';
 import '../application/explorer_tree_nodes.dart';
 import '../application/explorer_tree_state.dart';
 import '../application/session_selection.dart';
 import 'explorer_project_row.dart';
 import 'explorer_selection_actions.dart';
 import 'session_rows.dart';
+
+/// A list the arrow keys drive: it owns the [keyboard] over [readNodes] and
+/// ties it to the search field above for as long as it is mounted.
+mixin ExplorerKeyboardList<T extends ConsumerStatefulWidget>
+    on ConsumerState<T> {
+  final scroll = ScrollController();
+
+  /// The rows as they are when a key arrives, in the order drawn.
+  List<ExplorerNode> readNodes();
+
+  /// It holds rows by id and asks for them when a key arrives, so it outlives
+  /// every rebuild and causes none.
+  late final keyboard = ExplorerTreeKeyboard(
+    ref: ref,
+    scroll: scroll,
+    readNodes: readNodes,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final links = ExplorerKeyboardScope.maybeOf(context);
+    if (identical(links, keyboard.links)) return;
+    keyboard.links?.enterList = null;
+    keyboard.links = links;
+    links?.enterList = keyboard.enter;
+  }
+
+  @override
+  void dispose() {
+    keyboard.links?.enterList = null;
+    keyboard.dispose();
+    scroll.dispose();
+    super.dispose();
+  }
+}
 
 /// What the search field and the list know of each other: `↓` leaves the field
 /// for the first row, `↑` on the first row returns to the field. One column,
@@ -68,6 +105,7 @@ class _KeyboardLinks extends InheritedWidget {
 String explorerNodeTitle(ExplorerNode node) => switch (node) {
   final ContextHeaderNode node => node.label,
   final TerminalsHeaderNode node => node.label,
+  final SectionHeaderNode node => node.section.name,
   final ProjectNode node => node.project.name,
   final SessionRowNode node => node.session.title,
   final ImportedRowNode node => node.session.displayTitle,
@@ -382,6 +420,10 @@ class ExplorerTreeKeyboard {
             .toggleExplorerNodeCollapsed(node.id);
       case TerminalsHeaderNode():
         toggleExplorerTerminals(ref, node.environmentId);
+      case SectionHeaderNode():
+        ref
+            .read(explorerSectionsProvider.notifier)
+            .toggleCollapsed(node.section.id);
       case ProjectNode():
         ref
             .read(explorerExpandedProjectsProvider.notifier)

@@ -5,98 +5,17 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
-import '../../projects/application/projects_controller.dart';
-import '../../projects/domain/project.dart';
-import '../application/checkout.dart';
 import '../application/explorer_sections.dart';
 import '../domain/explorer_section.dart';
 import 'package:karmashala_ui/rows.dart';
-import 'session_rows.dart';
-
-/// The saved sections, drawn above the project tree. Returns a list, never a
-/// widget: the Explorer's body is one `ListView`, and a `Column` would build
-/// every row of every open section. A collapsed one matches nothing, so no count.
-List<Widget> explorerSectionNodes(WidgetRef ref) {
-  final sections = ref.watch(explorerSectionLayoutProvider).shown;
-  if (sections.isEmpty) return const [];
-
-  final nodes = <Widget>[];
-  for (final section in sections) {
-    if (section.collapsed) {
-      nodes.add(_SectionHeader(section: section));
-      continue;
-    }
-    final members = ref.watch(explorerSectionMembersProvider(section.id));
-    nodes.add(_SectionHeader(section: section, count: members.length));
-    if (members.isEmpty) {
-      nodes.add(_SectionEmpty(section: section));
-      continue;
-    }
-    // Where each row is, in the sidebar's own terms: a section crosses
-    // projects, so "which one is this" is a fact the tree never supplies.
-    final candidates = {
-      for (final candidate in ref.watch(sectionCandidatesProvider))
-        candidate.id: candidate,
-    };
-    final projects = {
-      for (final project in ref.watch(sortedProjectsProvider))
-        project.id: project,
-    };
-    final pinned = section.isPinned;
-    for (final facts in members) {
-      final candidate = candidates[facts.id];
-      // A member of a hand-filled group whose session has been deleted. The DAO
-      // keeps no foreign key on `sessions`, so this is expected, not broken.
-      if (candidate == null) continue;
-      final where = _whereLabel(candidate, projects);
-      final native = candidate.native;
-      if (native != null) {
-        nodes.add(
-          NativeSessionRow(
-            key: ValueKey('section:${section.id}:${facts.id}'),
-            session: native,
-            depth: 1,
-            subPath: where,
-            pinned: pinned,
-          ),
-        );
-      } else if (candidate.imported case final imported?) {
-        nodes.add(
-          ImportedSessionRow(
-            key: ValueKey('section:${section.id}:${facts.id}'),
-            session: imported,
-            depth: 1,
-            subPath: where,
-            pinned: pinned,
-          ),
-        );
-      }
-    }
-  }
-  return nodes;
-}
-
-/// Where a section's row lives, as `project/sub/path` — the project name is
-/// included here and not in the tree, where it is already established. Falls
-/// back to the bare path when the project is not in the sidebar's list.
-String? _whereLabel(SectionCandidate candidate, Map<String, Project> projects) {
-  final project = projects[candidate.projectId];
-  final directory = candidate.worktree ?? candidate.repositoryPath;
-  if (project == null) return directory?.path;
-  final sub = directory == null
-      ? null
-      : relativeSubPath(project.root, directory);
-  return sub == null || sub.isEmpty ? project.name : '${project.name}/$sub';
-}
 
 /// One section's header: the disclosure, the name, what it holds, its menu.
-class _SectionHeader extends ConsumerWidget {
-  const _SectionHeader({required this.section, this.count});
+class ExplorerSectionHeader extends ConsumerWidget {
+  const ExplorerSectionHeader({required this.section, this.count, super.key});
 
   final ExplorerSection section;
 
-  /// How many rows the section holds, or null while it is collapsed — see
-  /// [explorerSectionNodes].
+  /// How many rows the section holds, or null while it is collapsed.
   final int? count;
 
   @override
@@ -174,54 +93,6 @@ class _SectionHeader extends ConsumerWidget {
     );
   }
 }
-
-/// What an open, empty section says — *why* it is empty, because "nothing
-/// matches" and "nothing has been measured yet" have different fixes, and the
-/// second is real: a pull request is read when a strip asks, never on a sweep.
-class _SectionEmpty extends StatelessWidget {
-  const _SectionEmpty({required this.section});
-
-  final ExplorerSection section;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final density = UiDensity.of(context);
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        ExplorerRow.contentStartOf(density) +
-            ExplorerRow.indent +
-            ExplorerRow.lead,
-        Insets.xs,
-        Insets.sm,
-        Insets.sm,
-      ),
-      child: Text(
-        emptySectionMessage(section.rule),
-        style: density.muted(theme),
-      ),
-    );
-  }
-}
-
-/// The sentence an empty [rule] deserves.
-String emptySectionMessage(SectionRule rule) => switch (rule.kind) {
-  SectionRuleKind.pinned =>
-    'Nothing pinned. Use "Pin to top" on a session to keep it here.',
-  SectionRuleKind.manual =>
-    'Nothing here yet. Use "Add to section…" on a session.',
-  SectionRuleKind.checksFailing =>
-    'No failing checks among the pull requests this app has read. Open a '
-        "session's Delivery strip to have its checks fetched.",
-  SectionRuleKind.pullRequestOpen =>
-    'No open pull requests among the ones this app has read. Open a '
-        "session's Delivery strip to have its pull request fetched.",
-  SectionRuleKind.awaitingInput => 'No agent is waiting on you.',
-  SectionRuleKind.endedInFailure => 'Nothing has ended in failure.',
-  SectionRuleKind.branchGlob =>
-    'No session is on a branch matching this pattern. A branch is only known '
-        'once something has looked at that checkout.',
-};
 
 IconData _glyphFor(SectionRuleKind kind) => switch (kind) {
   SectionRuleKind.pinned => AppIcons.pushPinFill,

@@ -19,6 +19,7 @@ import 'environment_rows.dart';
 import 'explorer_context_actions.dart';
 import 'explorer_keyboard.dart';
 import 'explorer_project_row.dart';
+import 'explorer_sections_view.dart';
 import 'session_rows.dart';
 
 /// One Explorer row for [node]. Each kind is its own widget so that the
@@ -35,6 +36,10 @@ class ExplorerTreeRow extends StatelessWidget {
   Widget build(BuildContext context) => switch (node) {
     final ContextHeaderNode node => ExplorerContextHeader(node: node),
     final TerminalsHeaderNode node => ExplorerTerminalsHeader(node: node),
+    final SectionHeaderNode node => ExplorerSectionHeader(
+      section: node.section,
+      count: node.count,
+    ),
     final ProjectNode node => ExplorerProjectRow(
       project: node.project,
       depth: node.depth,
