@@ -6,6 +6,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/primitives.dart';
+import '../../ssh/application/ssh_failure.dart';
 import '../application/remote_access_controller.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
@@ -109,7 +110,10 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     } on Object catch (error) {
       // Anything else would leave the spinner up for good.
       if (mounted && serial == _beginSerial && _paired == null) {
-        setState(() => _error = 'Pairing could not start: $error');
+        setState(
+          () =>
+              _error = 'Pairing could not start: ${describeSshFailure(error)}',
+        );
       }
     }
   }

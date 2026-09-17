@@ -55,7 +55,8 @@ class _Setup implements SshRelaySetup {
   }
 
   @override
-  Future<SshRelayReading> start() => _answer('start');
+  Future<SshRelayReading> start({bool ruleAddedByHand = false}) =>
+      _answer('start');
   @override
   Future<SshRelayReading> check() => _answer('check');
   @override

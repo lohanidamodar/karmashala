@@ -9,6 +9,8 @@ import 'package:karmashala/src/features/remote/application/remote_access_control
 import 'package:karmashala/src/features/remote/application/ssh_relay_controller.dart';
 import 'package:karmashala/src/features/remote/application/ssh_relays.dart';
 import 'package:karmashala/src/features/remote/presentation/ssh_relays_panel.dart';
+import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
+import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
@@ -16,6 +18,7 @@ import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../ssh/fake_host_box.dart';
 
 const _token = '0123456789abcdef0123456789abcdef';
 final _url = Uri.parse('ws://203.0.113.9:8787/k/$_token');
@@ -33,13 +36,22 @@ class _Setup implements SshRelaySetup {
   final Map<String, SshRelayReading> answers;
   final asked = <String>[];
 
+  /// Whether each `start` was a check after the firewall command was run.
+  final byHand = <bool>[];
+
   Future<SshRelayReading> _answer(String action) async {
     asked.add(action);
     return answers[action]!;
   }
 
   @override
-  Future<SshRelayReading> start() => _answer('start');
+  Future<SshRelayReading> start({bool ruleAddedByHand = false}) {
+    byHand.add(ruleAddedByHand);
+    // A second answer, when a test gives one, is what checking again finds.
+    final again = answers['start again'];
+    return _answer(ruleAddedByHand && again != null ? 'start again' : 'start');
+  }
+
   @override
   Future<SshRelayReading> check() => _answer('check');
   @override
@@ -55,12 +67,16 @@ SshRelayReading _reading(
   SshRelayStatus status, {
   String? reason,
   String? command,
+  PrivilegedCommand? privileged,
+  bool outside = false,
   bool withUrl = true,
 }) => SshRelayReading(
   status: status,
   observedAt: testTime.subtract(const Duration(minutes: 3)),
   reason: reason ?? 'The relay on do-box answered on port 8787.',
-  command: command,
+  command: command ?? privileged?.command,
+  privileged: privileged,
+  outsideTheMachine: outside,
   port: 8787,
   url: withUrl ? _url : null,
 );
@@ -89,10 +105,15 @@ void main() {
     '"enabled":$enabled}]',
   );
 
+  final terminals = <({String host, String? typed})>[];
+  setUp(terminals.clear);
+
   Future<ProviderContainer> pump(
     WidgetTester tester, {
     _Setup? setup,
     List<int>? ports,
+    SshRelaySetupFactory? factory,
+    FakeHostBox? box,
   }) async {
     tester.view.physicalSize = const Size(1000, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -102,10 +123,21 @@ void main() {
         databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         remoteAccessControllerProvider.overrideWith(_Access.new),
-        sshRelaySetupFactoryProvider.overrideWithValue((host, port) async {
-          ports?.add(port);
-          return setup ?? (throw StateError('no box in this test'));
+        sshRelaySetupFactoryProvider.overrideWithValue(
+          factory ??
+              (host, port) async {
+                ports?.add(port);
+                return setup ?? (throw StateError('no box in this test'));
+              },
+        ),
+        sshTerminalOpenerProvider.overrideWithValue((host, {typed}) {
+          terminals.add((host: host.name, typed: typed));
+          return true;
         }),
+        if (box != null)
+          hostInstallerFactoryProvider.overrideWithValue(
+            (host) => installerOver(box),
+          ),
       ],
     );
     addTearDown(container.dispose);
@@ -219,6 +251,176 @@ void main() {
     expect(find.text('sudo ufw allow 8787/tcp'), findsWidgets);
     expect(find.widgetWithText(FilledButton, 'Try again'), findsOneWidget);
     expect(container.read(activeSshRelayUrlsProvider), isEmpty);
+  });
+
+  group('a box the session host could not be put on', () {
+    HostDeployment noBundle() => HostDeployment(
+      status: HostDeploymentStatus.noBinary,
+      observedAt: testTime.subtract(const Duration(minutes: 1)),
+      reason: 'No host binary for linux-x64 in this build.',
+      platform: HostPlatform(
+        operatingSystem: 'linux',
+        architecture: 'x64',
+        libc: HostLibc.glibc,
+        observedAt: testTime,
+      ),
+    );
+
+    testWidgets('reads as a sentence, a remedy and a button — the 2026-09-17 '
+        '"Bad state:" is gone', (tester) async {
+      addHost();
+      await pump(
+        tester,
+        factory: (host, port) async => throw HostDeployFailure(
+          hostName: host.name,
+          deployment: noBundle(),
+        ),
+      );
+      await tester.tap(useButton());
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Set up'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Bad state'), findsNothing);
+      expect(find.textContaining('could not be put on'), findsNothing);
+      // What the box is, what this build carries, and what to do about it.
+      expect(find.textContaining('linux/x64 (glibc)'), findsOneWidget);
+      expect(find.textContaining('it carries none at all'), findsOneWidget);
+      expect(
+        find.textContaining('ships the linux-x64 host bundle'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
+    });
+
+    testWidgets('its button installs, and the relay is then set up without '
+        'being asked twice', (tester) async {
+      addHost();
+      final box = FakeHostBox();
+      final setup = _Setup({'start': _reading(SshRelayStatus.running)});
+      var deployed = false;
+      await pump(
+        tester,
+        box: box,
+        factory: (host, port) async {
+          if (!deployed && box.installed.isEmpty) {
+            throw HostDeployFailure(
+              hostName: host.name,
+              deployment: HostDeployment(
+                status: HostDeploymentStatus.cannotInstall,
+                observedAt: testTime.subtract(const Duration(minutes: 1)),
+                reason: 'Could not write the bundle on do-box.',
+              ),
+            );
+          }
+          deployed = true;
+          return setup;
+        },
+      );
+      await tester.tap(useButton());
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Set up'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Could not write the bundle'), findsOneWidget);
+      expect(find.textContaining('no root is needed'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Install'));
+      await settleHostBox(tester);
+
+      expect(box.uploads, hasLength(1));
+      expect(setup.asked, ['start']);
+      expect(find.textContaining('answered on port 8787'), findsWidgets);
+    });
+  });
+
+  group('a firewall that wants a password', () {
+    const command = 'sudo ufw allow 8787/tcp';
+    final needsSudo = _reading(
+      SshRelayStatus.unreachable,
+      reason:
+          'The relay is running on do-box. ufw is running on 203.0.113.9 and '
+          '`sudo` there asks for a password, so 8787/tcp was not opened.',
+      privileged: const PrivilegedCommand(
+        command: command,
+        does: 'Allows inbound TCP 8787 through ufw on 203.0.113.9.',
+        why:
+            '`sudo` on 203.0.113.9 asks for a password, and Karmashala never '
+            'asks for one.',
+      ),
+    );
+
+    testWidgets('the dialog shows the command and opens a terminal with it '
+        'typed — never the token, never a password field', (tester) async {
+      addHost();
+      final setup = _Setup({'start': needsSudo});
+      await pump(tester, setup: setup);
+      await tester.tap(useButton());
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Set up'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(command), findsWidgets);
+      expect(find.textContaining('never asks for one'), findsWidgets);
+      expect(find.textContaining(_token), findsNothing);
+      expect(find.byType(TextField), findsOneWidget, reason: 'the port, only');
+
+      await tester.tap(find.text('Open a terminal on do-box').last);
+      await tester.pumpAndSettle();
+
+      expect(terminals, [(host: 'do-box', typed: command)]);
+      expect(terminals.single.typed, isNot(contains(_token)));
+      expect(terminals.single.typed!.endsWith('\n'), isFalse);
+      // The dialog made way for the terminal; the row carries on from here.
+      expect(find.text('Use an SSH host as a relay'), findsNothing);
+      expect(find.text('Check again'), findsOneWidget);
+    });
+
+    testWidgets('"Check again" re-reads, and a port still shut after the '
+        'command is the provider\'s — not more sudo', (tester) async {
+      addHost();
+      addRelay(enabled: false);
+      final setup = _Setup({
+        'start': needsSudo,
+        'start again': _reading(
+          SshRelayStatus.unreachable,
+          reason:
+              'The relay is running on do-box. 203.0.113.9:8787 still does '
+              'not answer. Allow inbound TCP 8787 in the provider\'s console — '
+              'DigitalOcean: Networking › Firewalls.',
+          outside: true,
+        ),
+      });
+      await pump(tester, setup: setup);
+      await tester.tap(find.widgetWithText(TextButton, 'Start'));
+      await tester.pumpAndSettle();
+      expect(find.text(command), findsOneWidget);
+
+      await tester.tap(find.text('Check again'));
+      await tester.pumpAndSettle();
+
+      expect(setup.byHand, [false, true]);
+      expect(find.textContaining('DigitalOcean'), findsOneWidget);
+      expect(find.text(command), findsNothing);
+      expect(find.text('Open a terminal on do-box'), findsNothing);
+    });
+
+    testWidgets('Start after the terminal step is a check again too', (
+      tester,
+    ) async {
+      addHost();
+      addRelay(enabled: false);
+      final setup = _Setup({'start': needsSudo});
+      await pump(tester, setup: setup);
+      await tester.tap(find.widgetWithText(TextButton, 'Start'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open a terminal on do-box'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Start'));
+      await tester.pumpAndSettle();
+
+      expect(setup.byHand, [false, true]);
+    });
   });
 
   testWidgets('a row claims nothing it has not measured this launch', (

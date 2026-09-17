@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../ssh/presentation/host_install_panel.dart';
 import '../../ssh/presentation/pair_phone_entry.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/environment_health.dart';
@@ -98,9 +100,8 @@ class _ReadingAge extends ConsumerWidget {
     final label = switch ((report.running, checkedAt)) {
       (true, _) => 'Checking now — this spawns a process per check.',
       (false, null) => 'Nothing has been checked yet.',
-      (false, final at?) => 'Checked ${describeAge(
-        ref.read(clockProvider).nowUtc().difference(at),
-      )}. Nothing here is re-checked on its own.',
+      (false, final at?) =>
+        'Checked ${describeAge(ref.read(clockProvider).nowUtc().difference(at))}. Nothing here is re-checked on its own.',
     };
     return Row(
       children: [
@@ -141,22 +142,26 @@ class _Body extends StatelessWidget {
         ),
       );
     }
-    return ListView(
-      children: [
-        for (final check in report.checks) _CheckRow(check: check),
-        if (report.environments.isNotEmpty) ...[
-          const Divider(height: Insets.lg),
-          Padding(
-            padding: const EdgeInsets.only(bottom: Insets.xs),
-            child: Text(
-              'EXECUTION ENVIRONMENTS',
-              style: Theme.of(context).textTheme.labelSmall,
+    // A row can be taller than the list is at the minimum window, and Tab
+    // moving forward does not scroll up to a button above the viewport.
+    return FocusRevealGroup(
+      child: ListView(
+        children: [
+          for (final check in report.checks) _CheckRow(check: check),
+          if (report.environments.isNotEmpty) ...[
+            const Divider(height: Insets.lg),
+            Padding(
+              padding: const EdgeInsets.only(bottom: Insets.xs),
+              child: Text(
+                'EXECUTION ENVIRONMENTS',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
             ),
-          ),
-          for (final environment in report.environments)
-            _EnvironmentRow(health: environment),
+            for (final environment in report.environments)
+              _EnvironmentRow(health: environment),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -235,9 +240,8 @@ class _CheckRow extends StatelessWidget {
 
   /// Sub-millisecond checks exist (the endpoint row reads state rather than
   /// probing), and "0 ms" beside them would read as a failed measurement.
-  static String _tookLabel(Duration took) => took.inMilliseconds < 1
-      ? 'not probed'
-      : '${took.inMilliseconds} ms';
+  static String _tookLabel(Duration took) =>
+      took.inMilliseconds < 1 ? 'not probed' : '${took.inMilliseconds} ms';
 }
 
 /// The line that fixes it, offered to copy rather than to retype.
@@ -294,7 +298,8 @@ class _EnvironmentRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final pairable = sshHostOf(ref, health.environment) != null;
+    final sshHost = sshHostOf(ref, health.environment);
+    final pairable = sshHost != null;
     // Versions, not just names. Which version of a CLI is installed decides
     // which modes a session there can use — that is a property of the
     // installation, and this app has learned it the hard way.
@@ -333,6 +338,11 @@ class _EnvironmentRow extends ConsumerWidget {
                   Text(
                     [?health.gitVersion, ...agents].join(' · '),
                     style: MonoStyles.small,
+                  ),
+                if (sshHost != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: Insets.xs),
+                    child: HostInstallPanel(host: sshHost, compact: true),
                   ),
               ],
             ),

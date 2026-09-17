@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_connection_providers.dart';
 import 'package:karmashala/src/features/ssh/application/ssh_failure.dart';
@@ -142,6 +144,26 @@ void main() {
     test('the root has none, so "up" can be disabled rather than lie', () {
       expect(parentRemotePath('/'), isNull);
       expect(parentRemotePath(''), isNull);
+    });
+  });
+
+  group('an error nobody typed for', () {
+    test('never leads with the class\'s own words', () {
+      expect(describeSshFailure(StateError('no such pane')), 'no such pane');
+      expect(
+        describeSshFailure(TimeoutException('x', const Duration(seconds: 20))),
+        'The machine did not answer in time (20 s).',
+      );
+      for (final error in <Object>[
+        StateError('a'),
+        TimeoutException('b'),
+        ArgumentError('c'),
+      ]) {
+        final said = describeSshFailure(error);
+        expect(said, isNot(contains('Bad state')));
+        expect(said, isNot(contains('TimeoutException')));
+        expect(said, isNot(contains('Invalid argument')));
+      }
     });
   });
 

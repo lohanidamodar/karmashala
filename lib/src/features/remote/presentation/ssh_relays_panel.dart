@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import 'package:karmashala_ssh/connection.dart';
@@ -12,6 +11,10 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';
+import '../../ssh/application/ssh_terminal_opener.dart';
+import '../../ssh/presentation/copyable_command.dart';
+import '../../ssh/presentation/host_deploy_failure_notice.dart';
+import '../../ssh/presentation/privileged_command_block.dart';
 import '../application/ssh_relay_controller.dart';
 import '../application/ssh_relays.dart';
 
@@ -138,10 +141,21 @@ class _SshRelayRow extends ConsumerWidget {
                 Expanded(child: Text('Asking the machine…')),
               ],
             )
+          else if (view?.deployment != null && host != null)
+            HostDeployFailureNotice(
+              host: host,
+              deployment: view!.deployment!,
+              onInstalled: () => controller.use(host, port: entry.port),
+            )
           else
             _Verdict(entry: entry, view: view, hostGone: host == null),
-          if (reading?.command case final command?)
-            _CopyableCommand(command: command),
+          if (!busy && host != null && reading != null)
+            _Remedy(
+              host: host,
+              reading: reading,
+              onCheckAgain: () =>
+                  controller.use(host, port: entry.port, ruleAddedByHand: true),
+            ),
           const SizedBox(height: Insets.xs),
           Wrap(
             spacing: Insets.xs,
@@ -175,7 +189,14 @@ class _SshRelayRow extends ConsumerWidget {
                   TextButton.icon(
                     onPressed: busy
                         ? null
-                        : () => controller.use(host, port: entry.port),
+                        : () => controller.use(
+                            host,
+                            port: entry.port,
+                            // Start after the terminal step is a check again.
+                            ruleAddedByHand: ref
+                                .read(sudoTerminalsOpenedProvider.notifier)
+                                .openedForPort(host.id, entry.port),
+                          ),
                     icon: const Icon(AppIcons.play),
                     label: const Text('Start'),
                   ),
@@ -313,41 +334,35 @@ class _Verdict extends ConsumerWidget {
   }
 }
 
-/// The line that fixes it, offered to copy rather than to retype.
-class _CopyableCommand extends StatelessWidget {
-  const _CopyableCommand({required this.command});
+/// What is left for a person to do after a reading: the `sudo` step for a
+/// terminal on the box, or — for anything else — the line to copy.
+class _Remedy extends StatelessWidget {
+  const _Remedy({
+    required this.host,
+    required this.reading,
+    required this.onCheckAgain,
+    this.closeDialogFirst = false,
+  });
 
-  final String command;
+  final SshHost host;
+  final SshRelayReading reading;
+  final VoidCallback onCheckAgain;
+  final bool closeDialogFirst;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: Insets.xs),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: Insets.xs,
-                vertical: 2,
-              ),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(Radii.sm),
-              ),
-              child: SelectableText(command, style: MonoStyles.small),
-            ),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Copy command',
-            icon: const Icon(AppIcons.copySimple, size: Chrome.icon),
-            onPressed: () => Clipboard.setData(ClipboardData(text: command)),
-          ),
-        ],
-      ),
-    );
+    if (reading.privileged case final step?) {
+      return PrivilegedCommandBlock(
+        host: host,
+        step: step,
+        onCheckAgain: onCheckAgain,
+        closeDialogFirst: closeDialogFirst,
+      );
+    }
+    if (reading.command case final command?) {
+      return CopyableCommand(command: command);
+    }
+    return const SizedBox.shrink();
   }
 }
 
@@ -377,7 +392,7 @@ class _UseSshHostAsRelayDialogState
     super.dispose();
   }
 
-  Future<void> _setUp(SshHost host) async {
+  Future<void> _setUp(SshHost host, {bool? ruleAddedByHand}) async {
     final port = int.tryParse(_port.text.trim());
     if (port == null || port < 1 || port > 65535) {
       setState(() => _portError = 'A port is a number from 1 to 65535.');
@@ -388,7 +403,17 @@ class _UseSshHostAsRelayDialogState
       return;
     }
     setState(() => _portError = null);
-    await ref.read(sshRelayControllerProvider.notifier).use(host, port: port);
+    await ref
+        .read(sshRelayControllerProvider.notifier)
+        .use(
+          host,
+          port: port,
+          ruleAddedByHand:
+              ruleAddedByHand ??
+              ref
+                  .read(sudoTerminalsOpenedProvider.notifier)
+                  .openedForPort(host.id, port),
+        );
   }
 
   @override
@@ -484,6 +509,13 @@ class _UseSshHostAsRelayDialogState
                   ),
                 ],
               )
+            else if (selected != null && view?.deployment != null)
+              HostDeployFailureNotice(
+                host: selected,
+                deployment: view!.deployment!,
+                onInstalled: () => _setUp(selected),
+                closeDialogFirst: true,
+              )
             else if (view?.failure case final failure?)
               SettingsNotice(tone: SettingsNoticeTone.danger, message: failure)
             else if (reading != null) ...[
@@ -500,8 +532,15 @@ class _UseSshHostAsRelayDialogState
                           'the next time they connect.'
                     : null,
               ),
-              if (reading.command case final command?)
-                _CopyableCommand(command: command),
+              if (selected != null)
+                _Remedy(
+                  host: selected,
+                  reading: reading,
+                  onCheckAgain: () => _setUp(selected, ruleAddedByHand: true),
+                  // The box's row is behind this dialog, with the same command
+                  // and its own Check again.
+                  closeDialogFirst: true,
+                ),
             ],
           ],
         ),

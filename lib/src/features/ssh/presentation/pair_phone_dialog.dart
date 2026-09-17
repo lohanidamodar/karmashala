@@ -18,6 +18,11 @@ import '../../settings/application/settings_controller.dart';
 import '../../settings/presentation/settings_notice.dart';
 import '../application/companion_route_store.dart';
 import '../application/host_session_providers.dart';
+import '../application/ssh_failure.dart';
+import '../application/ssh_terminal_opener.dart';
+import 'copyable_command.dart';
+import 'host_deploy_failure_notice.dart';
+import 'privileged_command_block.dart';
 
 /// Invites a phone to one machine: proves the port, settles the route, asks the
 /// host for a code, and shows what the phone needs — as one QR, and as values.
@@ -50,6 +55,10 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
   PairingWindow? _window;
   HostRoute? _route;
   String? _failure;
+
+  /// The deploy that put no host on the machine, when that is the failure: a
+  /// sentence, a remedy and an Install button rather than an exception's text.
+  HostDeployment? _notDeployed;
   bool _busy = false;
   bool _showQr = false;
   bool _expired = false;
@@ -79,12 +88,20 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
   Uri get _hostedRelay =>
       resolveRelayUri(ref.read(settingsControllerProvider).remoteRelayUrl);
 
-  Future<void> _invite({bool probe = true}) async {
+  Future<void> _invite({
+    bool probe = true,
+    bool ruleAddedByHand = false,
+  }) async {
     final serial = ++_serial;
     _expiry?.cancel();
+    // A provider that failed keeps its failure; asking again means a new one.
+    if (_failure != null || _notDeployed != null) {
+      ref.invalidate(sshCompanionSetupProvider(widget.host));
+    }
     setState(() {
       _busy = true;
       _failure = null;
+      _notDeployed = null;
       _expired = false;
       // A QR is never carried over to a code it was not drawn from.
       _showQr = false;
@@ -95,7 +112,15 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
         sshCompanionSetupProvider(widget.host).future,
       );
       final endpoint = probe || _endpoint == null
-          ? await setup.prepare()
+          ? await setup.prepare(
+              // Reopened after the terminal step: the rule is presumed added,
+              // so a port still shut is not answered with the same command.
+              ruleAddedByHand:
+                  ruleAddedByHand ||
+                  ref
+                      .read(sudoTerminalsOpenedProvider.notifier)
+                      .openedForPort(widget.host.id, setup.port),
+            )
           : _endpoint!;
       final route = routeFor(
         chosen: ref.read(companionRouteStoreProvider).read(widget.host.id),
@@ -114,8 +139,14 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
         _window = window;
       });
       _armExpiry(window);
+    } on HostDeployFailure catch (failure) {
+      if (mounted && serial == _serial) {
+        setState(() => _notDeployed = failure.deployment);
+      }
     } on Object catch (error) {
-      if (mounted && serial == _serial) setState(() => _failure = '$error');
+      if (mounted && serial == _serial) {
+        setState(() => _failure = describeSshFailure(error));
+      }
     } finally {
       if (mounted && serial == _serial) setState(() => _busy = false);
     }
@@ -203,6 +234,20 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
                 soft: route == HostRoute.relay,
                 text: endpoint.reason,
               ),
+              if (!_busy && !endpoint.reachable)
+                if (endpoint.privileged case final step?)
+                  PrivilegedCommandBlock(
+                    host: widget.host,
+                    step: step,
+                    // Reopening this dialog dials again, which is the check.
+                    closeDialogFirst: true,
+                    onCheckAgain: () {
+                      _autoRenewals = 0;
+                      _invite(ruleAddedByHand: true);
+                    },
+                  )
+                else if (endpoint.command case final command?)
+                  CopyableCommand(command: command),
               const SizedBox(height: Insets.md),
             ],
             if (_busy)
@@ -219,6 +264,16 @@ class _PairPhoneDialogState extends ConsumerState<PairPhoneDialog> {
                     ),
                   ],
                 ),
+              )
+            else if (_notDeployed case final deployment?)
+              HostDeployFailureNotice(
+                host: widget.host,
+                deployment: deployment,
+                closeDialogFirst: true,
+                onInstalled: () {
+                  _autoRenewals = 0;
+                  _invite();
+                },
               )
             else if (_failure != null)
               Text(

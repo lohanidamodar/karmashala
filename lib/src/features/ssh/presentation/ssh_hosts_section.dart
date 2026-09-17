@@ -12,6 +12,7 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/ssh_hosts_controller.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'ssh_connection_status_chip.dart';
+import 'host_install_panel.dart';
 import 'host_sessions_dialog.dart';
 import 'pair_phone_dialog.dart';
 import 'pair_phone_entry.dart';
@@ -236,6 +237,8 @@ class _HostCard extends ConsumerWidget {
                 ),
               ],
             ),
+            const Divider(height: Insets.lg),
+            HostInstallPanel(host: host),
           ],
         ),
       ),

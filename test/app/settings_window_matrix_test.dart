@@ -31,7 +31,9 @@ import 'package:karmashala/src/features/settings/presentation/choose_application
 import 'package:karmashala/src/features/settings/presentation/external_app_section.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
+import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
+import 'package:karmashala/src/features/ssh/presentation/host_install_panel.dart';
 import 'package:karmashala/src/features/ssh/presentation/host_sessions_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala/src/features/ssh/application/host_sessions.dart';
@@ -49,6 +51,7 @@ import 'package:karmashala_store/devices.dart';
 import '../support/fake_command_runner.dart';
 import '../support/fakes.dart';
 import '../support/fixtures.dart';
+import '../features/ssh/fake_host_box.dart';
 import '../support/window_matrix.dart';
 
 /// The settings surfaces — pages, their cards and the dialogs they open — with
@@ -137,6 +140,64 @@ void main() {
       matrix: settingsMatrix,
       because:
           'host names, WSL distro names and paths are user data of any length',
+    );
+  });
+
+  testWidgets('Environments section with the SSH host card at its wordiest: a '
+      'failed install and the sudo step for a terminal', (tester) async {
+    final db = AppDatabase.memory();
+    addTearDown(db.close);
+    ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    final host = SshHost(
+      id: 'h1',
+      name: 'build-box-in-the-basement-with-a-long-name',
+      host: 'build-server-01.internal.corp.example.popupbits.com',
+      port: 2222,
+      username: 'dlohani-service-account',
+      authMethod: SshAuthMethod.password,
+      createdAt: testTime,
+    );
+    SshHostDao(db).upsert(host);
+    ExecutionEnvironmentDao(db).upsert(sshEnvFixture(name: host.name));
+    final box = FakeHostBox()..tools = 'missing=tar\npm=apt-get\nuid=1000\n';
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(db),
+        ...noProcessOverrides(),
+        clockProvider.overrideWithValue(FixedClock(testTime)),
+        idGeneratorProvider.overrideWithValue(SequentialIdGenerator()),
+        discoveredTerminalThemesProvider.overrideWithValue(const []),
+        hostInstallerFactoryProvider.overrideWithValue(
+          (host) => installerOver(box, host: host),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    Finder inPanel(String label) => find.descendant(
+      of: find.byType(HostInstallPanel),
+      matching: find.text(label),
+    );
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => app(
+        container,
+        const SettingsScreen(initialSection: SettingsSectionId.environments),
+      ),
+      warmUp: (tester) async {
+        for (final label in ['Check', 'Install']) {
+          await tester.ensureVisible(inPanel(label));
+          await tester.pump();
+          await tester.tap(inPanel(label));
+          await settleHostBox(tester);
+        }
+        expect(find.text('sudo apt-get install -y tar'), findsOneWidget);
+        expect(find.text('Open a terminal on ${host.name}'), findsOneWidget);
+      },
+      matrix: settingsMatrix,
+      because:
+          'a sentence, a remedy, a command, a terminal button with the host\'s '
+          'name in it, and the card\'s own six buttons above',
     );
   });
 
@@ -662,6 +723,22 @@ void main() {
   });
 }
 
+/// The longest of the `sudo` steps: firewalld's two commands in one line, with
+/// the sentences that say what it does and why it was not run from here.
+const _firewallStep = PrivilegedCommand(
+  command:
+      'sudo firewall-cmd --add-port=8787/tcp --permanent && '
+      'sudo firewall-cmd --reload',
+  does:
+      'Allows inbound TCP 8787 through firewalld on '
+      'build-server-01.internal.corp.example.popupbits.com, and keeps the rule '
+      'across restarts.',
+  why:
+      '`sudo` on build-server-01.internal.corp.example.popupbits.com asks for '
+      'a password, and Karmashala never asks for one or sends one — so this '
+      'is yours to run, in a terminal there.',
+);
+
 /// A companion setup that answers at once with a long address and an open
 /// window, so the dialog's loaded state can be measured without a host.
 class _InvitingSetup implements SshCompanionSetup {
@@ -671,15 +748,23 @@ class _InvitingSetup implements SshCompanionSetup {
   final SshHost host;
 
   @override
-  Future<CompanionEndpoint> prepare() async => CompanionEndpoint(
-    address: host.host,
-    port: 7422,
-    hostName: host.name,
-    reachable: false,
-    reason:
-        'Nothing answered on port 7422 from this desktop. Open it in the '
-        "host's firewall, or pair from a network that can reach it.",
-  );
+  int get port => 7422;
+
+  /// Shut, with the `sudo` step for a terminal: the most this dialog holds.
+  @override
+  Future<CompanionEndpoint> prepare({bool ruleAddedByHand = false}) async =>
+      CompanionEndpoint(
+        address: host.host,
+        port: 7422,
+        hostName: host.name,
+        reachable: false,
+        reason:
+            'ufw is running on ${host.host} and `sudo` there asks for a '
+            'password, so 7422/tcp was not opened. Run the command below in a '
+            'terminal on ${host.host}, then check again.',
+        command: _firewallStep.command,
+        privileged: _firewallStep,
+      );
 
   @override
   Future<PairingWindow> openWindow({
@@ -705,19 +790,21 @@ class _RelayBox implements SshRelaySetup {
   final Uri url;
 
   @override
-  Future<SshRelayReading> start() async => SshRelayReading(
-    status: SshRelayStatus.unreachable,
-    observedAt: testTime,
-    reason:
-        'The relay is running on build-box-in-the-basement-with-a-long-name. '
-        'A firewall is running on '
-        'build-server-01.internal.corp.example.popupbits.com and this cannot '
-        'change it without a password. Run the command below there, then '
-        'start again.',
-    command: "sudo ufw allow 8787/tcp   # or your firewall's equivalent",
-    port: 8787,
-    url: url,
-  );
+  Future<SshRelayReading> start({bool ruleAddedByHand = false}) async =>
+      SshRelayReading(
+        status: SshRelayStatus.unreachable,
+        observedAt: testTime,
+        reason:
+            'The relay is running on '
+            'build-box-in-the-basement-with-a-long-name. firewalld is running '
+            'on build-server-01.internal.corp.example.popupbits.com and `sudo` '
+            'there asks for a password, so 8787/tcp was not opened. Run the '
+            'command below in a terminal there, then check again.',
+        command: _firewallStep.command,
+        privileged: _firewallStep,
+        port: 8787,
+        url: url,
+      );
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

@@ -9,6 +9,7 @@ import 'package:karmashala_ssh/host.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../ssh/application/host_session_providers.dart';
+import '../../ssh/application/ssh_failure.dart';
 import '../../ssh/application/ssh_providers.dart';
 import 'remote_access_controller.dart';
 import 'ssh_relays.dart';
@@ -24,11 +25,10 @@ final sshRelaySetupFactoryProvider = Provider<SshRelaySetupFactory>(
     final access = ref.read(hostSessionAccessRegistryProvider).forHost(host);
     final deployment = await access.deployment();
     final remotePath = deployment.remotePath;
+    // A path is enough: the relay runs from the bundle whether or not `serve`
+    // came up, so only a deploy that put nothing there stops it.
     if (remotePath == null) {
-      throw StateError(
-        'The Karmashala host could not be put on ${host.name} — '
-        '${deployment.reason}',
-      );
+      throw HostDeployFailure(hostName: host.name, deployment: deployment);
     }
     return SshRelaySetup(
       host: host,
@@ -44,13 +44,23 @@ final sshRelaySetupFactoryProvider = Provider<SshRelaySetupFactory>(
 /// What is known about one box's relay since this launch. A reading, with its
 /// time — nothing here is re-checked on its own (§19).
 class SshRelayView {
-  const SshRelayView({this.reading, this.busy = false, this.failure});
+  const SshRelayView({
+    this.reading,
+    this.busy = false,
+    this.failure,
+    this.deployment,
+  });
 
   final SshRelayReading? reading;
   final bool busy;
 
-  /// Why the box could not even be asked: no connection, a refused deploy.
+  /// Why the box could not even be asked, worded for a person: no connection,
+  /// a host key that changed.
   final String? failure;
+
+  /// The deploy that put nothing on the box — a sentence, a remedy and an
+  /// Install button, rather than a [failure] string.
+  final HostDeployment? deployment;
 }
 
 class SshRelayController extends Notifier<Map<String, SshRelayView>> {
@@ -59,8 +69,17 @@ class SshRelayController extends Notifier<Map<String, SshRelayView>> {
 
   /// Sets the relay up on [host] — or updates or restarts it; `start` is all
   /// three — and serves through it once it has answered from here.
-  Future<SshRelayReading?> use(SshHost host, {required int port}) =>
-      _run(host, port, (setup) => setup.start());
+  /// [ruleAddedByHand] is "Check again" after the firewall command was run in
+  /// a terminal on the box.
+  Future<SshRelayReading?> use(
+    SshHost host, {
+    required int port,
+    bool ruleAddedByHand = false,
+  }) => _run(
+    host,
+    port,
+    (setup) => setup.start(ruleAddedByHand: ruleAddedByHand),
+  );
 
   /// Looks, and changes nothing on the box.
   Future<SshRelayReading?> check(SshHost host, {required int port}) =>
@@ -103,10 +122,24 @@ class SshRelayController extends Notifier<Map<String, SshRelayView>> {
       _record(host, port, reading);
       _set(host.id, SshRelayView(reading: reading));
       return reading;
+    } on HostDeployFailure catch (failure) {
+      // Dropped, or Install-then-retry would be handed the same reading back.
+      ref.read(hostSessionAccessRegistryProvider).forgetReading(host.id);
+      _set(
+        host.id,
+        SshRelayView(
+          reading: state[host.id]?.reading,
+          deployment: failure.deployment,
+        ),
+      );
+      return null;
     } on Object catch (error) {
       _set(
         host.id,
-        SshRelayView(reading: state[host.id]?.reading, failure: '$error'),
+        SshRelayView(
+          reading: state[host.id]?.reading,
+          failure: describeSshFailure(error),
+        ),
       );
       return null;
     }

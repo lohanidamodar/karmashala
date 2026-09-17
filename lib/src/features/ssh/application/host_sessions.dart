@@ -5,6 +5,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../terminal/data/host_pane_link.dart';
 import 'host_session_providers.dart';
+import 'ssh_failure.dart';
 
 /// What one machine's session host is holding, and the two things a person can
 /// do about it from here. The host outlives this app by design, so a session it
@@ -36,12 +37,15 @@ class HostSessionsService {
     try {
       deployment = await access.deployment();
     } on Object catch (e) {
-      throw HostSessionsUnavailable('Could not ask ${host.address}: $e');
+      throw HostSessionsUnavailable(
+        'Could not ask ${host.address}: ${describeSshFailure(e)}',
+      );
     }
     final remotePath = deployment.remotePath;
     if (!deployment.isReady || remotePath == null) {
       throw HostSessionsUnavailable(
         'No session host on ${host.address}: ${deployment.reason}',
+        deployment: deployment,
       );
     }
     HostPaneLink? link;
@@ -61,8 +65,12 @@ class HostSessionsService {
 }
 
 class HostSessionsUnavailable implements Exception {
-  const HostSessionsUnavailable(this.message);
+  const HostSessionsUnavailable(this.message, {this.deployment});
   final String message;
+
+  /// The deploy that did not end ready, when that is why — so the dialog can
+  /// offer its remedy and an Install button rather than only the sentence.
+  final HostDeployment? deployment;
   @override
   String toString() => message;
 }

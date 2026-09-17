@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala_ssh/connection.dart';
+import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -10,6 +11,8 @@ import 'package:karmashala_ui/dialogs.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/host_sessions.dart';
+import '../application/ssh_failure.dart';
+import 'host_deploy_failure_notice.dart';
 
 /// **What a machine is still running, and the two things you can do about it.**
 ///
@@ -38,6 +41,10 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
 
   List<SessionSummary>? _sessions;
   String? _error;
+
+  /// Why there is no host to ask, when that is the failure — shown with its
+  /// remedy and an Install button instead of [_error]'s sentence alone.
+  HostDeployment? _notDeployed;
   var _busy = true;
 
   @override
@@ -52,11 +59,21 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
       final found = await ref
           .read(hostSessionsServiceProvider)
           .list(widget.host);
-      if (mounted) setState(() => (_sessions = found, _error = null, _busy = false));
+      if (mounted) {
+        setState(() {
+          _sessions = found;
+          _error = null;
+          _notDeployed = null;
+          _busy = false;
+        });
+      }
     } on Object catch (e) {
       if (mounted) {
         setState(() {
-          _error = e is HostSessionsUnavailable ? e.message : '$e';
+          _error = e is HostSessionsUnavailable
+              ? e.message
+              : describeSshFailure(e);
+          _notDeployed = e is HostSessionsUnavailable ? e.deployment : null;
           _busy = false;
         });
       }
@@ -70,7 +87,7 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
           .read(hostSessionsServiceProvider)
           .end(widget.host, session.id);
     } on Object catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('$e')));
+      messenger.showSnackBar(SnackBar(content: Text(describeSshFailure(e))));
     }
     await _refresh();
   }
@@ -101,6 +118,15 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
           (true, _, null) => const Padding(
             padding: EdgeInsets.all(Insets.lg),
             child: Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
+          ),
+          (false, _, _) when _notDeployed != null => Padding(
+            padding: const EdgeInsets.all(Insets.md),
+            child: HostDeployFailureNotice(
+              host: widget.host,
+              deployment: _notDeployed!,
+              closeDialogFirst: true,
+              onInstalled: _refresh,
+            ),
           ),
           (_, final String message, _) => Padding(
             padding: const EdgeInsets.all(Insets.md),

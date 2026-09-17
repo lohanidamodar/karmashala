@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/shell/app_shell.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'settings_nav.dart';
@@ -215,20 +216,24 @@ class _SectionContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      // A fresh scroll position per section, not one shared offset.
-      key: PageStorageKey('settings-${section.name}'),
-      padding: const EdgeInsets.symmetric(
-        horizontal: Insets.xl,
-        vertical: Insets.lg,
-      ),
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(
-            maxWidth: SettingsScreen.contentMaxWidth,
+    // A page is longer than the window, and Tab wrapping back to its first
+    // control does not scroll up to it on Flutter's own policy.
+    return FocusRevealGroup(
+      child: SingleChildScrollView(
+        // A fresh scroll position per section, not one shared offset.
+        key: PageStorageKey('settings-${section.name}'),
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.xl,
+          vertical: Insets.lg,
+        ),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: SettingsScreen.contentMaxWidth,
+            ),
+            child: SettingsPageBody(page: section),
           ),
-          child: SettingsPageBody(page: section),
         ),
       ),
     );

@@ -64,9 +64,7 @@ final sshCompanionSetupProvider =
       final deployment = await access.deployment();
       final remotePath = deployment.remotePath;
       if (remotePath == null) {
-        throw StateError(
-          'No session host is deployed on ${host.name} yet — ${deployment.reason}',
-        );
+        throw HostDeployFailure(hostName: host.name, deployment: deployment);
       }
       return SshCompanionSetup(
         host: host,
@@ -75,4 +73,7 @@ final sshCompanionSetupProvider =
         ),
         remotePath: remotePath,
       );
-    });
+      // Never retried on its own: Riverpod retries an `Exception` ten times,
+      // and each would be another deploy at somebody's machine while the
+      // dialog spins. The dialog has a button for it.
+    }, retry: (_, _) => null);

@@ -77,6 +77,27 @@ class BoundedDialogContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return FocusRevealGroup(
+      // A SizedBox rather than a LayoutBuilder: AlertDialog sizes its body by
+      // intrinsics, which a LayoutBuilder cannot answer.
+      child: SizedBox(
+        width: width,
+        child: SingleChildScrollView(primary: false, child: child),
+      ),
+    );
+  }
+}
+
+/// A [FocusTraversalGroup] around a scrolling body, whose focused control is
+/// always scrolled into view — for a dialog's list that is not a
+/// [BoundedDialogContent]. See [_revealFocused] for what Flutter's own misses.
+class FocusRevealGroup extends StatelessWidget {
+  const FocusRevealGroup({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
     return FocusTraversalGroup(
       policy: ReadingOrderTraversalPolicy(requestFocusCallback: _revealFocused),
       // Focus *arriving* here is moved by the dialog's policy, not this one —
@@ -88,12 +109,7 @@ class BoundedDialogContent extends StatelessWidget {
           final node = FocusManager.instance.primaryFocus;
           if (entered && node != null) _reveal(node);
         },
-        // A SizedBox rather than a LayoutBuilder: AlertDialog sizes its body by
-        // intrinsics, which a LayoutBuilder cannot answer.
-        child: SizedBox(
-          width: width,
-          child: SingleChildScrollView(primary: false, child: child),
-        ),
+        child: child,
       ),
     );
   }

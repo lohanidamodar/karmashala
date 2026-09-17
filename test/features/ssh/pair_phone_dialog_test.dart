@@ -6,7 +6,9 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/remote/application/remote_access_controller.dart';
 import 'package:karmashala/src/features/ssh/application/companion_route_store.dart';
+import 'package:karmashala/src/features/ssh/application/host_install_controller.dart';
 import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
+import 'package:karmashala/src/features/ssh/application/ssh_terminal_opener.dart';
 import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_ssh/connection.dart';
@@ -16,6 +18,7 @@ import 'package:karmashala_ui/primitives.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import 'fake_host_box.dart';
 
 /// A box that answers the two questions the dialog asks, and remembers how it
 /// was asked the second one.
@@ -24,20 +27,32 @@ class _Setup implements SshCompanionSetup {
     this.host, {
     required this.reachable,
     this.ttl = const Duration(minutes: 5),
+    this.privileged,
   });
 
   @override
   final SshHost host;
-  final bool reachable;
+  bool reachable;
   final Duration ttl;
+
+  /// The firewall step a shut port is answered with — until it was run by hand.
+  final PrivilegedCommand? privileged;
+
+  /// Whether each dial was a check after that step.
+  final byHand = <bool>[];
+
+  @override
+  int get port => 47820;
 
   /// The relay each pairing window was opened with; empty is the direct route.
   final relays = <String>[];
   int dials = 0;
 
   @override
-  Future<CompanionEndpoint> prepare() async {
+  Future<CompanionEndpoint> prepare({bool ruleAddedByHand = false}) async {
     dials++;
+    byHand.add(ruleAddedByHand);
+    final step = ruleAddedByHand ? null : privileged;
     return CompanionEndpoint(
       address: host.host,
       port: 47820,
@@ -45,8 +60,14 @@ class _Setup implements SshCompanionSetup {
       reachable: reachable,
       reason: reachable
           ? '${host.host}:47820 answered.'
+          : step != null
+          ? 'ufw is running on ${host.host} and `sudo` there asks for a '
+                'password, so 47820/tcp was not opened.'
           : '${host.host}:47820 still does not answer — a provider firewall '
                 'is the usual one.',
+      command: step?.command,
+      privileged: step,
+      outsideTheMachine: !reachable && step == null,
     );
   }
 
@@ -92,6 +113,18 @@ void main() {
     }
   }
 
+  final terminals = <({String host, String? typed})>[];
+  setUp(terminals.clear);
+
+  /// What the scope is built with beyond the setup: a test that needs the
+  /// setup to fail, or a machine to install on, hands them in here.
+  Future<SshCompanionSetup> Function(SshHost host)? setupFor;
+  FakeHostBox? box;
+  setUp(() {
+    setupFor = null;
+    box = null;
+  });
+
   Future<void> open(WidgetTester tester, _Setup setup) async {
     // Tall enough that nothing the tests tap is scrolled out of the dialog.
     tester.view.physicalSize = const Size(1200, 1100);
@@ -105,7 +138,17 @@ void main() {
         overrides: [
           databaseProvider.overrideWithValue(db),
           clockProvider.overrideWithValue(FixedClock(testTime)),
-          sshCompanionSetupProvider.overrideWith((ref, host) async => setup),
+          sshCompanionSetupProvider.overrideWith(
+            (ref, host) async => await (setupFor?.call(host) ?? setup),
+          ),
+          sshTerminalOpenerProvider.overrideWithValue((host, {typed}) {
+            terminals.add((host: host.name, typed: typed));
+            return true;
+          }),
+          if (box != null)
+            hostInstallerFactoryProvider.overrideWithValue(
+              (host) => installerOver(box!),
+            ),
         ],
         child: MaterialApp(
           home: Scaffold(
@@ -138,6 +181,98 @@ void main() {
 
   SegmentedButton<HostRoute> routeButton(WidgetTester tester) =>
       tester.widget(find.byType(SegmentedButton<HostRoute>));
+
+  group('a machine with no session host to pair with', () {
+    testWidgets('says why and what to do, and its button installs and carries '
+        'on to a code', (tester) async {
+      box = FakeHostBox();
+      final setup = _Setup(host, reachable: true);
+      setupFor = (host) async {
+        if (box!.installed.isEmpty) {
+          throw HostDeployFailure(
+            hostName: host.name,
+            deployment: HostDeployment(
+              status: HostDeploymentStatus.cannotInstall,
+              observedAt: testTime.subtract(const Duration(minutes: 1)),
+              reason: 'Could not write the bundle on do-box.',
+            ),
+          );
+        }
+        return setup;
+      };
+      await open(tester, setup);
+
+      expect(find.textContaining('Bad state'), findsNothing);
+      expect(find.textContaining('No session host is deployed'), findsNothing);
+      expect(find.textContaining('Could not write the bundle'), findsOneWidget);
+      expect(find.textContaining('no root is needed'), findsOneWidget);
+      expect(setup.relays, isEmpty, reason: 'no code was asked for');
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Install'));
+      await settleHostBox(tester);
+
+      expect(box!.uploads, hasLength(1));
+      expect(setup.relays, [''], reason: 'installed, so the code is fetched');
+      expect(find.text('Code'), findsOneWidget);
+    });
+  });
+
+  group('a firewall that wants a password', () {
+    const step = PrivilegedCommand(
+      command: 'sudo ufw allow 47820/tcp',
+      does: 'Allows inbound TCP 47820 through ufw on 203.0.113.9.',
+      why:
+          '`sudo` on 203.0.113.9 asks for a password, and Karmashala never '
+          'asks for one.',
+    );
+
+    testWidgets('the command is offered to a terminal, typed and not run', (
+      tester,
+    ) async {
+      final setup = _Setup(host, reachable: false, privileged: step);
+      await open(tester, setup);
+
+      expect(find.text(step.command), findsOneWidget);
+      expect(find.textContaining('never asks for one'), findsOneWidget);
+
+      await tester.tap(find.text('Open a terminal on do-box'));
+      await tester.pumpAndSettle();
+
+      expect(terminals, [(host: 'do-box', typed: step.command)]);
+      expect(terminals.single.typed!.endsWith('\n'), isFalse);
+      expect(find.text('Pair a phone with do-box'), findsNothing);
+    });
+
+    testWidgets('"Check again" dials again, and finds the port open', (
+      tester,
+    ) async {
+      final setup = _Setup(host, reachable: false, privileged: step);
+      await open(tester, setup);
+      setup.reachable = true;
+
+      await tester.tap(find.text('Check again'));
+      await settle(tester);
+
+      expect(setup.byHand, [false, true]);
+      expect(find.text(step.command), findsNothing);
+      expect(find.textContaining('47820 answered'), findsOneWidget);
+    });
+
+    testWidgets('reopened after the terminal step, a port still shut is the '
+        'provider\'s and the command is not offered again', (tester) async {
+      final setup = _Setup(host, reachable: false, privileged: step);
+      await open(tester, setup);
+      await tester.tap(find.text('Open a terminal on do-box'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open'));
+      await settle(tester);
+
+      expect(setup.byHand, [false, true]);
+      expect(find.text(step.command), findsNothing);
+      expect(find.textContaining('provider firewall'), findsOneWidget);
+    });
+  });
 
   group('the route', () {
     testWidgets('a box that answered is reached at itself', (tester) async {

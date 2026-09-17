@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ssh/files.dart';
 import 'package:karmashala_ssh/connection.dart';
@@ -31,6 +33,13 @@ String describeSshFailure(Object error) {
       final SshConnectionException inner => inner.message,
       _ => e.message,
     },
+    // `toString` on these leads with the class's own words — "Bad state: …",
+    // "TimeoutException after …" — which mean nothing to the person reading.
+    StateError e => e.message,
+    ArgumentError e => '${e.message ?? e}',
+    TimeoutException e =>
+      'The machine did not answer in time'
+          '${e.duration == null ? '' : ' (${e.duration!.inSeconds} s)'}.',
     _ => error.toString(),
   };
 }
