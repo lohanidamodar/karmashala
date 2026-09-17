@@ -569,6 +569,9 @@ const _claudeCode = AgentDescriptor(
     // is then `isEnded`, so nothing later can correct it, and a rate limit at
     // hour one filed an eight-hour session under "ended in failure".
     eventEnding: {'SessionEnd': AgentSessionEnding.completed},
+    // `StopFailure`'s own field; `rate_limit` is how a usage limit is told
+    // from an overload, which both arrive as the one event.
+    failureReasonPath: ['error'],
     // **What is left out, and why — checked against 2.1.260's own hook-event
     // table, which lists 33 events.** Each installed event is a process the
     // user's agent spawns on every firing, so the bar is a question this app

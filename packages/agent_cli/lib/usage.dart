@@ -17,5 +17,6 @@ export 'src/agents/domain/claude_auth_snapshot.dart';
 export 'src/agents/domain/codex_account.dart';
 export 'src/agents/domain/usage_failure.dart';
 export 'src/cli_detection/data/agent_lifetime_reader.dart';
+export 'src/cli_detection/data/codex_rate_limit_reader.dart';
 export 'src/cli_detection/data/codex_stats_reader.dart';
 export 'src/cli_detection/domain/session_stats.dart';

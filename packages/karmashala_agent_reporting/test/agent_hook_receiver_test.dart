@@ -506,20 +506,21 @@ void main() {
 
       expect(failed.status, AgentActivityStatus.failed);
       expect(failed.detail, 'StopFailure');
+      // The cause rides along: a usage limit and an overload are one event.
+      expect(failed.failureReason, 'rate_limit');
       // A failure holds the user up but offers nothing to press.
       expect(failed.waiting, AgentWaitKind.unrecorded);
       expect(reports.latest('claudeCode', 's1')!.status,
           AgentActivityStatus.failed);
 
       // And an ordinary finished turn is untouched by any of it.
-      expect(
-        receiver.handle(
-          agentId: 'claudeCode',
-          event: 'Stop',
-          body: body('s1'),
-        ).status,
-        AgentActivityStatus.idle,
+      final stopped = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Stop',
+        body: body('s1'),
       );
+      expect(stopped.status, AgentActivityStatus.idle);
+      expect(stopped.failureReason, isNull);
     });
 
     /// An `agy` `Stop` payload in the shape 1.1.23 actually sends — protojson,

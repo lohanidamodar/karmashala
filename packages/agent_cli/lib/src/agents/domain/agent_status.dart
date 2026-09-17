@@ -81,6 +81,7 @@ class AgentStatusReport {
     this.evidence = const [],
     this.waiting = AgentWaitKind.unrecorded,
     this.ending,
+    this.failureReason,
   });
 
   /// Registry id of the agent (`AgentDescriptor.id`).
@@ -143,6 +144,10 @@ class AgentStatusReport {
   /// what a session is *doing*, and neither can witness it stopping; see
   /// `SessionOutcomeWriter`, the one consumer.
   final AgentSessionEnding? ending;
+
+  /// The agent's own word for why a turn failed — Claude Code's `rate_limit`,
+  /// `server_error` — or null when it gave none. Opaque: compared, never shown.
+  final String? failureReason;
 
   /// **Whether a prompt with options is on this session's screen right now.**
   ///
@@ -361,6 +366,7 @@ class AgentHookSpec {
     this.eventKindMeaning = const {},
     this.inFlightPath = const {},
     this.eventEnding = const {},
+    this.failureReasonPath = const [],
     this.trustsCommandByHash = false,
     required this.eventStatus,
   });
@@ -496,6 +502,9 @@ class AgentHookSpec {
   /// that said `completed` after each turn would be wrong for the whole of
   /// every session but the last turn of it.
   final Map<String, AgentSessionEnding> eventEnding;
+
+  /// Where a failing event's payload names its cause. Empty: it names none.
+  final List<String> failureReasonPath;
 
   /// Whether this agent gates each hook entry on a hash of the entry itself, so
   /// the installed **command string must not change between launches**.

@@ -82,6 +82,7 @@ class AgentHookReceiver {
       detail: kind.isEmpty ? (name.isEmpty ? null : name) : '$name/$kind',
       evidence: message.isEmpty ? const [] : [message],
       ending: ending,
+      failureReason: _failureReason(spec, status, payload),
       // Only a session that stopped *for the user* is asked: otherwise an agent
       // writing "it needs your permission" would claim an open prompt.
       waiting: spec == null || status != AgentActivityStatus.awaitingApproval
@@ -92,6 +93,17 @@ class AgentHookReceiver {
     );
     if (status != AgentActivityStatus.unknown) reports.record(report);
     return report;
+  }
+
+  static String? _failureReason(
+    AgentHookSpec? spec,
+    AgentActivityStatus status,
+    Object? payload,
+  ) {
+    if (spec == null || status != AgentActivityStatus.failed) return null;
+    if (spec.failureReasonPath.isEmpty) return null;
+    final reason = _stringAt(spec.failureReasonPath, payload);
+    return reason.isEmpty ? null : reason;
   }
 
   /// What [message] says the agent is waiting on — `Notification` covers both a
