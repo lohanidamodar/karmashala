@@ -69,6 +69,57 @@ class DesktopMenuItem<T> extends PopupMenuItem<T> {
        );
 }
 
+/// A row in a show-or-hide list: a check slot, then the thing's own glyph and
+/// name. Unlike [DesktopMenuItem]'s `selected`, several can be checked at once,
+/// so a checked row is not emphasised — the check alone says it.
+class DesktopMenuCheckItem<T> extends PopupMenuItem<T> {
+  DesktopMenuCheckItem({
+    required super.value,
+    required String label,
+    required IconData icon,
+    required bool checked,
+    super.enabled,
+    super.key,
+  }) : super(
+         height: Chrome.menuRow,
+         padding: _menuRowPadding,
+         child: Builder(
+           builder: (context) {
+             final theme = Theme.of(context);
+             final color = theme.colorScheme.onSurface;
+             return Semantics(
+               checked: checked,
+               child: Row(
+                 children: [
+                   SizedBox(
+                     width: Chrome.icon,
+                     child: checked
+                         ? Icon(AppIcons.check, size: Chrome.icon, color: color)
+                         : null,
+                   ),
+                   const SizedBox(width: _menuGlyphGap),
+                   Icon(
+                     icon,
+                     size: Chrome.icon,
+                     color: theme.colorScheme.onSurfaceVariant,
+                   ),
+                   const SizedBox(width: _menuGlyphGap),
+                   Expanded(
+                     child: Text(
+                       label,
+                       maxLines: 1,
+                       overflow: TextOverflow.ellipsis,
+                       style: theme.textTheme.bodySmall?.copyWith(color: color),
+                     ),
+                   ),
+                 ],
+               ),
+             );
+           },
+         ),
+       );
+}
+
 /// The two-line sibling of [DesktopMenuItem], for pickers whose choices cannot
 /// be named in one word, on the same gutter and type ramp as every other menu.
 class DesktopMenuDetailItem<T> extends PopupMenuItem<T> {

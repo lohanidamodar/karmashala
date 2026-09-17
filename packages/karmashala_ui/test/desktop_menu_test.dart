@@ -128,6 +128,52 @@ void main() {
     });
   });
 
+  group('the check row', () {
+    testWidgets('keeps its own glyph and checks several at once, plainly', (
+      tester,
+    ) async {
+      String? picked;
+      await open(tester, [
+        DesktopMenuCheckItem(
+          value: 'a',
+          label: 'Media',
+          icon: AppIcons.image,
+          checked: true,
+        ),
+        DesktopMenuCheckItem(
+          value: 'b',
+          label: 'Plan',
+          icon: AppIcons.clipboardText,
+          checked: true,
+        ),
+        DesktopMenuCheckItem(
+          value: 'c',
+          label: 'Notes',
+          icon: AppIcons.note,
+          checked: false,
+        ),
+      ], onSelected: (value) => picked = value);
+
+      expect(find.byIcon(AppIcons.check), findsNWidgets(2));
+      expect(find.byIcon(AppIcons.note), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(DesktopMenuCheckItem<String>).first).height,
+        Chrome.menuRow,
+      );
+      final scheme = Theme.of(tester.element(find.text('Media'))).colorScheme;
+      expect(renderedTextColor(tester, find.text('Media')), scheme.onSurface);
+      // The label starts in the same place whether the row is checked or not.
+      expect(
+        tester.getTopLeft(find.text('Media')).dx,
+        tester.getTopLeft(find.text('Notes')).dx,
+      );
+
+      await tester.tap(find.text('Notes'));
+      await tester.pumpAndSettle();
+      expect(picked, 'c');
+    });
+  });
+
   group('the two-line row', () {
     testWidgets('says both lines, on the taller rhythm', (tester) async {
       await open(tester, [
