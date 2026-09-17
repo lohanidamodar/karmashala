@@ -181,6 +181,8 @@ void main() {
     AppIcons.xCircle,
     AppIcons.circleHalf,
     AppIcons.circle,
+    // Unread: a finished turn nobody has seen.
+    AppIcons.circleFill,
   ];
 
   Finder statusGlyphsIn(Finder row) => find.descendant(
