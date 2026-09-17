@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import '../app_icons.dart';
 import '../design_tokens.dart';
 
-/// An interactive accordion for agent reasoning / chain-of-thought.
+/// An interactive accordion for agent reasoning / chain-of-thought. Drawn under
+/// a transcript's selection area: the reasoning selects, the header does not.
 class ThinkingAccordion extends StatefulWidget {
   const ThinkingAccordion({required this.thinking, super.key});
   final String thinking;
@@ -33,45 +34,47 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: BorderRadius.circular(Radii.sm),
-            child: ConstrainedBox(
-              // A 24px header is a pointer's target; a thumb needs the floor.
-              constraints: BoxConstraints(minHeight: density.minRow),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Insets.sm,
-                  vertical: Insets.xs,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      AppIcons.chatCircleDots,
-                      size: Chrome.iconAction,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    // Expanded, not a Text beside a Spacer: the summary is the
-                    // one thing in this row that can give way.
-                    Expanded(
-                      child: Text(
-                        summary,
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
+          SelectionContainer.disabled(
+            child: InkWell(
+              onTap: () => setState(() => _expanded = !_expanded),
+              borderRadius: BorderRadius.circular(Radii.sm),
+              child: ConstrainedBox(
+                // A 24px header is a pointer's target; a thumb needs the floor.
+                constraints: BoxConstraints(minHeight: density.minRow),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Insets.sm,
+                    vertical: Insets.xs,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        AppIcons.chatCircleDots,
+                        size: Chrome.iconAction,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: Insets.xs),
+                      // Expanded, not a Text beside a Spacer: the summary is the
+                      // one thing in this row that can give way.
+                      Expanded(
+                        child: Text(
+                          summary,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
-                    Icon(
-                      _expanded ? AppIcons.caretDown : AppIcons.caretRight,
-                      size: Chrome.iconAction,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ],
+                      Icon(
+                        _expanded ? AppIcons.caretDown : AppIcons.caretRight,
+                        size: Chrome.iconAction,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -83,7 +86,7 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
             ),
             Padding(
               padding: const EdgeInsets.all(Insets.sm),
-              child: SelectableText(
+              child: Text(
                 widget.thinking,
                 style: MonoStyles.small.copyWith(
                   color: scheme.onSurfaceVariant,
@@ -97,4 +100,3 @@ class _ThinkingAccordionState extends State<ThinkingAccordion> {
     );
   }
 }
-

@@ -60,13 +60,17 @@ class _SubagentTurnsTileState extends ConsumerState<SubagentTurnsTile> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SubagentHeader(
-            reference: widget.reference,
-            expanded: _expanded,
-            // Null until it has been read: inventing a count would mean
-            // reading every delegate to print a number nobody asked for.
-            turnCount: _read ? turns.value?.length : null,
-            onToggle: _toggle,
+          // A control, so outside the transcript's selection; the turns under
+          // it are the delegate's words and select with the rest.
+          SelectionContainer.disabled(
+            child: _SubagentHeader(
+              reference: widget.reference,
+              expanded: _expanded,
+              // Null until it has been read: inventing a count would mean
+              // reading every delegate to print a number nobody asked for.
+              turnCount: _read ? turns.value?.length : null,
+              onToggle: _toggle,
+            ),
           ),
           if (_expanded)
             Padding(
@@ -149,7 +153,11 @@ class _SubagentHeader extends StatelessWidget {
               size: Chrome.iconSmall,
             ),
             const SizedBox(width: Insets.xs),
-            Icon(AppIcons.robot, size: Chrome.iconSmall, color: scheme.tertiary),
+            Icon(
+              AppIcons.robot,
+              size: Chrome.iconSmall,
+              color: scheme.tertiary,
+            ),
             const SizedBox(width: Insets.sm),
             Expanded(
               child: Text(
@@ -172,14 +180,18 @@ class _SubagentHeader extends StatelessWidget {
               const SizedBox(width: Insets.sm),
               Text(
                 'depth ${reference.spawnDepth}',
-                style: MonoStyles.small.copyWith(color: scheme.onSurfaceVariant),
+                style: MonoStyles.small.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ],
             if (turnCount != null) ...[
               const SizedBox(width: Insets.sm),
               Text(
                 '$turnCount turn${turnCount == 1 ? '' : 's'}',
-                style: MonoStyles.small.copyWith(color: scheme.onSurfaceVariant),
+                style: MonoStyles.small.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ],
           ],
@@ -219,11 +231,13 @@ class _SubagentTurn extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: Chrome.icon,
-            child: Text(
-              gutter,
-              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+          SelectionContainer.disabled(
+            child: SizedBox(
+              width: Chrome.icon,
+              child: Text(
+                gutter,
+                style: TextStyle(color: color, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
           const SizedBox(width: Insets.xs),
@@ -231,11 +245,13 @@ class _SubagentTurn extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  (activity?.name ?? label).toUpperCase(),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w700,
+                SelectionContainer.disabled(
+                  child: Text(
+                    (activity?.name ?? label).toUpperCase(),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -245,7 +261,7 @@ class _SubagentTurn extends StatelessWidget {
                     resolveHostPath: resolveHostPath,
                   )
                 else
-                  MarkdownMessage(message.text),
+                  MarkdownMessage(message.text, selectable: false),
                 // A delegate that delegated. The cap is the guard against an
                 // index that points back at an ancestor.
                 if (reference != null && nesting + 1 < kMaxSubagentNesting)
@@ -273,10 +289,12 @@ class _Note extends StatelessWidget {
     final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-      child: Text(
-        text,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
+      child: SelectionContainer.disabled(
+        child: Text(
+          text,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
         ),
       ),
     );

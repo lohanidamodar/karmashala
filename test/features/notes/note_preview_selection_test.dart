@@ -51,9 +51,8 @@ void main() {
     await tester.pump();
 
     expect(copied, isNotEmpty, reason: 'the chord reached nothing');
-    expect(copied.last, contains('Plan'));
-    expect(copied.last, contains('First paragraph.'));
-    expect(copied.last, contains('Second paragraph.'));
+    // A block to a paragraph, not one run-on line.
+    expect(copied.last, 'Plan\n\nFirst paragraph.\n\nSecond paragraph.');
   });
 
   testWidgets('one drag runs across two paragraphs', (tester) async {

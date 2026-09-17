@@ -10,6 +10,7 @@ import 'transcript_image_preview.dart';
 
 /// The body of a transcript row that is a tool call: the command, the file, the
 /// picture. Expanding *replaces* the truncated head, never adding a second copy.
+/// Plain text throughout: the transcript's one selection area selects it.
 class ToolActivityBody extends StatefulWidget {
   const ToolActivityBody({
     required this.activity,
@@ -78,7 +79,6 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
                     color: theme.colorScheme.onSurface,
                   ),
                   onPathTap: widget.onPathTap,
-                  selectable: showWhole,
                   maxLines: showWhole ? null : 1,
                 ),
               ),
@@ -95,9 +95,13 @@ class _ToolActivityBodyState extends State<ToolActivityBody> {
           ),
         if (imagePath != null) ...[
           const SizedBox(height: Insets.xs),
-          TranscriptImagePreview(
-            path: imagePath,
-            resolveHostPath: widget.resolveHostPath,
+          // A picture, or a line saying why there is none: neither is text
+          // the agent wrote.
+          SelectionContainer.disabled(
+            child: TranscriptImagePreview(
+              path: imagePath,
+              resolveHostPath: widget.resolveHostPath,
+            ),
           ),
         ],
         if (widget.activity.output != null || widget.activity.isError) ...[
@@ -155,23 +159,25 @@ class _OutputPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (activity.isError) ...[
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  AppIcons.warningCircle,
-                  size: Chrome.iconSmall,
-                  color: failure,
-                ),
-                const SizedBox(width: Insets.xs),
-                Text(
-                  'Failed',
-                  style: theme.textTheme.labelSmall?.copyWith(
+            SelectionContainer.disabled(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    AppIcons.warningCircle,
+                    size: Chrome.iconSmall,
                     color: failure,
-                    fontWeight: FontWeight.w700,
                   ),
-                ),
-              ],
+                  const SizedBox(width: Insets.xs),
+                  Text(
+                    'Failed',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: failure,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
             if (output.isNotEmpty) const SizedBox(height: Insets.xs),
           ],
@@ -186,7 +192,7 @@ class _OutputPanel extends StatelessWidget {
                     // Rendered terminal output: re-flowing it would break the
                     // columns it was drawn with, so it scrolls sideways.
                     scrollDirection: Axis.horizontal,
-                    child: SelectableText(output, style: mono),
+                    child: Text(output, style: mono),
                   ),
                 ),
               )
@@ -200,11 +206,13 @@ class _OutputPanel extends StatelessWidget {
           if (activity.outputTruncated)
             Padding(
               padding: const EdgeInsets.only(top: Insets.xs),
-              child: Text(
-                'This output was truncated on the way in — the terminal has '
-                'the whole of it.',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              child: SelectionContainer.disabled(
+                child: Text(
+                  'This output was truncated on the way in — the terminal has '
+                  'the whole of it.',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
@@ -248,25 +256,27 @@ class _MoreToggle extends StatelessWidget {
     final label = expanded ? collapseTooltip : expandTooltip;
     return Padding(
       padding: const EdgeInsets.only(left: Insets.xs),
-      child: Tooltip(
-        message: label,
-        child: TextButton.icon(
-          onPressed: onPressed,
-          icon: Icon(
-            expanded ? AppIcons.caretUp : AppIcons.caretDown,
-            size: Chrome.iconSmall,
-          ),
-          label: Text(
-            expanded
-                ? 'Less'
-                : '+$hiddenLines line${hiddenLines == 1 ? '' : 's'}',
-          ),
-          style: TextButton.styleFrom(
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
-            minimumSize: const Size(0, Chrome.row),
-            textStyle: theme.textTheme.labelSmall,
-            foregroundColor: theme.colorScheme.onSurfaceVariant,
+      child: SelectionContainer.disabled(
+        child: Tooltip(
+          message: label,
+          child: TextButton.icon(
+            onPressed: onPressed,
+            icon: Icon(
+              expanded ? AppIcons.caretUp : AppIcons.caretDown,
+              size: Chrome.iconSmall,
+            ),
+            label: Text(
+              expanded
+                  ? 'Less'
+                  : '+$hiddenLines line${hiddenLines == 1 ? '' : 's'}',
+            ),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: Insets.sm),
+              minimumSize: const Size(0, Chrome.row),
+              textStyle: theme.textTheme.labelSmall,
+              foregroundColor: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
       ),
@@ -280,19 +290,15 @@ class _PathLinkText extends StatefulWidget {
   const _PathLinkText(
     this.text, {
     required this.style,
-    required this.selectable,
     this.onPathTap,
     this.maxLines,
   });
 
   final String text;
   final TextStyle style;
-
-  /// The expanded form stays selectable, as it was before there were links; the
-  /// collapsed single line ellipsises instead, which `SelectableText` will not.
-  final bool selectable;
-
   final PathLinkCallback? onPathTap;
+
+  /// Null draws the whole of it; a limit ellipsises what it cuts.
   final int? maxLines;
 
   @override
@@ -373,13 +379,14 @@ class _PathLinkTextState extends State<_PathLinkText> {
 
   @override
   Widget build(BuildContext context) {
-    final span = _span(context);
-    return widget.selectable
-        ? SelectableText.rich(span, maxLines: widget.maxLines)
-        : Text.rich(
-            span,
-            maxLines: widget.maxLines,
-            overflow: TextOverflow.ellipsis,
-          );
+    // An ellipsis with no line limit cuts at the first line, so only a
+    // limited text asks for one.
+    return Text.rich(
+      _span(context),
+      maxLines: widget.maxLines,
+      overflow: widget.maxLines == null
+          ? TextOverflow.clip
+          : TextOverflow.ellipsis,
+    );
   }
 }

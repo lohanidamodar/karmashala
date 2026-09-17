@@ -279,45 +279,51 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                         ),
                         child: _TranscriptNow(
                           now: DateTime.now(),
-                          child: ListView.builder(
-                            controller: _scroll,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: Insets.md,
-                              vertical: Insets.sm,
-                            ),
-                            itemCount: rows.length + lead,
-                            findChildIndexCallback: (key) =>
-                                key is ValueKey<int>
-                                ? indexOfOrdinal[key.value]
-                                : null,
-                            itemBuilder: (context, index) {
-                              if (lead == 1 && index == 0) {
-                                return Center(
-                                  child: TextButton.icon(
-                                    onPressed: () => setState(
-                                      () => _shown = math.min(
-                                        _shown + _page,
-                                        total,
+                          // One selection over every built row: a drag runs
+                          // from one message into the next.
+                          child: TranscriptSelectionArea(
+                            child: ListView.builder(
+                              controller: _scroll,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: Insets.md,
+                                vertical: Insets.sm,
+                              ),
+                              itemCount: rows.length + lead,
+                              findChildIndexCallback: (key) =>
+                                  key is ValueKey<int>
+                                  ? indexOfOrdinal[key.value]
+                                  : null,
+                              itemBuilder: (context, index) {
+                                if (lead == 1 && index == 0) {
+                                  return SelectionContainer.disabled(
+                                    child: Center(
+                                      child: TextButton.icon(
+                                        onPressed: () => setState(
+                                          () => _shown = math.min(
+                                            _shown + _page,
+                                            total,
+                                          ),
+                                        ),
+                                        icon: const Icon(AppIcons.caretUp),
+                                        label: Text(
+                                          'Load $start earlier message'
+                                          '${start == 1 ? '' : 's'}',
+                                        ),
                                       ),
                                     ),
-                                    icon: const Icon(AppIcons.caretUp),
-                                    label: Text(
-                                      'Load $start earlier message'
-                                      '${start == 1 ? '' : 's'}',
-                                    ),
-                                  ),
+                                  );
+                                }
+                                final row = rows[index - lead];
+                                if (!row.isBatch) return rowAt(row.from);
+                                return _ToolBatchTile(
+                                  key: ValueKey<int>(start + row.from),
+                                  // The run itself, so the line can name the calls.
+                                  messages: visible.sublist(row.from, row.to),
+                                  rowAt: rowAt,
+                                  from: row.from,
                                 );
-                              }
-                              final row = rows[index - lead];
-                              if (!row.isBatch) return rowAt(row.from);
-                              return _ToolBatchTile(
-                                key: ValueKey<int>(start + row.from),
-                                // The run itself, so the line can name the calls.
-                                messages: visible.sublist(row.from, row.to),
-                                rowAt: rowAt,
-                                from: row.from,
-                              );
-                            },
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -572,27 +578,32 @@ class _ChatMessageTile extends StatelessWidget {
     ChatTranscriptView.debugMessageBuildCount++;
     return Padding(
       padding: _tileMargin,
-      child: switch (message.role) {
-        'user' => _UserMessageCard(
-          message: message,
-          onSaveNote: onSaveNote,
-          onPathTap: onPathTap,
-        ),
-        'agent' => _AgentMessageBlock(
-          message: message,
-          onSaveNote: onSaveNote,
-          onPathTap: onPathTap,
-          detail: detail,
-        ),
-        'error' => _ErrorMessageCard(message: message),
-        _ => _ToolMessageCard(
-          message: message,
-          onSaveNote: onSaveNote,
-          resolveHostPath: resolveHostPath,
-          onPathTap: onPathTap,
-          detail: detail,
-        ),
-      },
+      // Its own group, so a selection that runs into the next message copies
+      // with a blank line between the two.
+      child: TranscriptSelectionGroup(
+        endsTurn: true,
+        child: switch (message.role) {
+          'user' => _UserMessageCard(
+            message: message,
+            onSaveNote: onSaveNote,
+            onPathTap: onPathTap,
+          ),
+          'agent' => _AgentMessageBlock(
+            message: message,
+            onSaveNote: onSaveNote,
+            onPathTap: onPathTap,
+            detail: detail,
+          ),
+          'error' => _ErrorMessageCard(message: message),
+          _ => _ToolMessageCard(
+            message: message,
+            onSaveNote: onSaveNote,
+            resolveHostPath: resolveHostPath,
+            onPathTap: onPathTap,
+            detail: detail,
+          ),
+        },
+      ),
     );
   }
 }
@@ -677,7 +688,11 @@ class _UserMessageCard extends StatelessWidget {
             actions: _messageActions(onSaveNote, message.text),
           ),
           const SizedBox(height: Insets.xs),
-          MarkdownMessage(message.text, onPathTap: onPathTap),
+          MarkdownMessage(
+            message.text,
+            onPathTap: onPathTap,
+            selectable: false,
+          ),
         ],
       ),
     );
@@ -723,7 +738,7 @@ class _AgentMessageBlock extends StatelessWidget {
         ],
         // Flush with the eyebrow above it: the 2px indent was too small to
         // read as one and enough to stop the body lining up with the glyph.
-        MarkdownMessage(cleanText, onPathTap: onPathTap),
+        MarkdownMessage(cleanText, onPathTap: onPathTap, selectable: false),
         ?detail,
       ],
     );
@@ -752,15 +767,17 @@ class _ErrorMessageCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'ERROR',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: failure,
-                    fontWeight: FontWeight.w700,
+                SelectionContainer.disabled(
+                  child: Text(
+                    'ERROR',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: failure,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 const SizedBox(height: Insets.xs),
-                SelectableText(
+                Text(
                   message.text,
                   style: theme.textTheme.bodySmall?.copyWith(color: failure),
                 ),
@@ -850,10 +867,7 @@ class _ToolMessageCard extends StatelessWidget {
               onPathTap: onPathTap,
             )
           else
-            SelectableText(
-              message.text,
-              style: MonoStyles.label.copyWith(height: 1.35),
-            ),
+            Text(message.text, style: MonoStyles.label.copyWith(height: 1.35)),
           ?detail,
         ],
       ),
@@ -922,45 +936,47 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(
-            button: true,
-            expanded: _open,
-            label: '$label. $summary',
-            child: InkWell(
-              onTap: () => setState(() => _open = !_open),
-              borderRadius: BorderRadius.circular(Radii.sm),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: Insets.sm,
-                  vertical: Insets.xs,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _open ? AppIcons.caretDown : AppIcons.caretRight,
-                      size: Chrome.iconAction,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    Text(
-                      label,
-                      style: theme.textTheme.labelSmall?.copyWith(
+          SelectionContainer.disabled(
+            child: Semantics(
+              button: true,
+              expanded: _open,
+              label: '$label. $summary',
+              child: InkWell(
+                onTap: () => setState(() => _open = !_open),
+                borderRadius: BorderRadius.circular(Radii.sm),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Insets.sm,
+                    vertical: Insets.xs,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _open ? AppIcons.caretDown : AppIcons.caretRight,
+                        size: Chrome.iconAction,
                         color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
                       ),
-                    ),
-                    const SizedBox(width: Insets.xs),
-                    Expanded(
-                      child: Text(
-                        summary,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      const SizedBox(width: Insets.xs),
+                      Text(
+                        label,
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: Insets.xs),
+                      Expanded(
+                        child: Text(
+                          summary,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

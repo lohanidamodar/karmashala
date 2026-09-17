@@ -6,6 +6,7 @@ import '../code/code_spans.dart';
 import '../code/code_theme.dart';
 import '../design_tokens.dart';
 import 'package:karmashala_session/transcript.dart';
+import 'transcript_selection.dart';
 
 /// What tells a link this app made out of a bare path from one the author
 /// wrote. Carried in the element's `title`, which nothing else here uses.
@@ -39,7 +40,8 @@ class MarkdownMessage extends StatelessWidget {
   final PathLinkCallback? onPathTap;
 
   /// Whether each block selects on its own. False under a [SelectionArea],
-  /// which selects across blocks and would otherwise be shut out of each one.
+  /// which selects across blocks and would otherwise be shut out of each one;
+  /// the blocks then copy a line each rather than as one run-on.
   final bool selectable;
 
   @override
@@ -72,7 +74,7 @@ class MarkdownMessage extends StatelessWidget {
       ),
     );
 
-    return MarkdownBody(
+    final body = MarkdownBody(
       data: data,
       selectable: selectable,
       styleSheet: sheet,
@@ -84,6 +86,7 @@ class MarkdownMessage extends StatelessWidget {
         codeHighlightTheme(dark ? Brightness.dark : Brightness.light),
       ),
     );
+    return selectable ? body : TranscriptSelectionGroup(child: body);
   }
 }
 

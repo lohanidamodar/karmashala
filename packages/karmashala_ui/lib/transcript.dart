@@ -4,6 +4,7 @@ library;
 
 export 'src/transcript/markdown_message.dart';
 export 'src/transcript/thinking_accordion.dart';
+export 'src/transcript/transcript_selection.dart';
 export 'src/chat/thinking_split.dart';
 export 'src/chat/transcript_role_header.dart';
 export 'src/chat/transcript_turn_frame.dart';

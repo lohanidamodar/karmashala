@@ -5,6 +5,8 @@ import '../design_tokens.dart';
 /// Who wrote a turn: glyph, eyebrow and whatever trails them. The eyebrow and
 /// [meta] give way before [actions] do. Sizes are parameters, not a fork: the
 /// desktop takes the defaults and the phone passes its density's.
+///
+/// Chrome, so never part of a selection: a copied conversation is its words.
 class TranscriptRoleHeader extends StatelessWidget {
   const TranscriptRoleHeader({
     required this.icon,
@@ -84,27 +86,29 @@ class TranscriptRoleHeader extends StatelessWidget {
         child: glyph,
       );
     }
-    return Row(
-      children: [
-        glyph,
-        SizedBox(width: gap),
-        Expanded(
-          child: Row(
-            children: [
-              Flexible(child: eyebrow),
-              if (badge case final badge?) ...[
-                const SizedBox(width: Insets.xs),
-                badge,
+    return SelectionContainer.disabled(
+      child: Row(
+        children: [
+          glyph,
+          SizedBox(width: gap),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(child: eyebrow),
+                if (badge case final badge?) ...[
+                  const SizedBox(width: Insets.xs),
+                  badge,
+                ],
+                if (meta case final meta?) ...[
+                  const SizedBox(width: Insets.sm),
+                  Flexible(child: meta),
+                ],
               ],
-              if (meta case final meta?) ...[
-                const SizedBox(width: Insets.sm),
-                Flexible(child: meta),
-              ],
-            ],
+            ),
           ),
-        ),
-        ...actions,
-      ],
+          ...actions,
+        ],
+      ),
     );
   }
 }

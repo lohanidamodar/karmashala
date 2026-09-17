@@ -134,10 +134,9 @@ void main() {
   /// Clicks the first path link in the conversation.
   Future<void> clickPath(WidgetTester tester) async {
     TapGestureRecognizer? link;
-    for (final widget in tester.widgetList<SelectableText>(
-      find.byType(SelectableText),
-    )) {
-      widget.textSpan?.visitChildren((span) {
+    // Plain rich text: the transcript's one selection area does the selecting.
+    for (final widget in tester.widgetList<RichText>(find.byType(RichText))) {
+      widget.text.visitChildren((span) {
         if (span is TextSpan && span.recognizer is TapGestureRecognizer) {
           link ??= span.recognizer! as TapGestureRecognizer;
         }
