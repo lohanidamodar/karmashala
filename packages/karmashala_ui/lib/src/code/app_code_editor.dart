@@ -316,14 +316,16 @@ class AppCodeEditorState extends State<AppCodeEditor> {
             _findPrevious,
       },
       const SingleActivator(LogicalKeyboardKey.keyG, control: true): goToLine,
-      SingleActivator(
-        LogicalKeyboardKey.keyW,
-        alt: true,
-        control: !mac,
-        meta: mac,
-      ): () {
-        if (_find.isOpen) _find.toggleWholeWord();
-      },
+      // Case and regex are re_editor's own chords inside the buffer; these
+      // reach them from the find strip too, and whole word is ours throughout.
+      for (final (key, toggle) in [
+        (LogicalKeyboardKey.keyC, _find.toggleCaseSensitive),
+        (LogicalKeyboardKey.keyW, _find.toggleWholeWord),
+        (LogicalKeyboardKey.keyR, _find.toggleRegex),
+      ])
+        SingleActivator(key, alt: true, control: !mac, meta: mac): () {
+          if (_find.isOpen) toggle();
+        },
       const SingleActivator(LogicalKeyboardKey.f10, shift: true):
           openMenuAtCaret,
       const SingleActivator(LogicalKeyboardKey.contextMenu): openMenuAtCaret,

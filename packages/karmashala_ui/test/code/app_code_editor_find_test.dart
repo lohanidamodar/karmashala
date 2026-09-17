@@ -195,6 +195,35 @@ void main() {
     await teardown(tester);
   }, variant: linux);
 
+  testWidgets('the option chords work from the find field and the buffer', (
+    tester,
+  ) async {
+    await open(tester);
+    await chord(tester, LogicalKeyboardKey.keyF, control: true);
+    final search = findOf(tester);
+    expect(search.findInputFocusNode.hasFocus, isTrue);
+
+    await chord(tester, LogicalKeyboardKey.keyC, control: true, alt: true);
+    await chord(tester, LogicalKeyboardKey.keyW, control: true, alt: true);
+    await chord(tester, LogicalKeyboardKey.keyR, control: true, alt: true);
+    expect(
+      (search.caseSensitive, search.wholeWord, search.regex),
+      (true, true, true),
+    );
+
+    focus.requestFocus();
+    await tester.pump();
+    await chord(tester, LogicalKeyboardKey.keyC, control: true, alt: true);
+    await chord(tester, LogicalKeyboardKey.keyW, control: true, alt: true);
+    await chord(tester, LogicalKeyboardKey.keyR, control: true, alt: true);
+    expect(
+      (search.caseSensitive, search.wholeWord, search.regex),
+      (false, false, false),
+      reason: 'each chord toggles once, not once per binding',
+    );
+    await teardown(tester);
+  }, variant: linux);
+
   testWidgets('an invalid regex says so inline and never throws', (
     tester,
   ) async {
