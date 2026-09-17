@@ -42,7 +42,10 @@ enum InboxItemKind {
   readyToMerge,
 
   /// A session ended and left something behind — see `FollowUp`.
-  followUp;
+  followUp,
+
+  /// An agent's turn ended on its account's usage limit.
+  usageLimit;
 
   /// Who is entitled to take an item of this kind off the list.
   InboxRetirement get retirement => switch (this) {
@@ -54,7 +57,8 @@ enum InboxItemKind {
     InboxItemKind.finished ||
     InboxItemKind.checksFailed ||
     InboxItemKind.changesRequested ||
-    InboxItemKind.readyToMerge => InboxRetirement.viewing,
+    InboxItemKind.readyToMerge ||
+    InboxItemKind.usageLimit => InboxRetirement.viewing,
     // Neither: the watcher would sweep this away on its next poll, and glancing
     // at a crashed session does not deal with what it left.
     InboxItemKind.followUp => InboxRetirement.source,
@@ -72,6 +76,7 @@ enum InboxItemKind {
     InboxItemKind.changesRequested => 'Changes requested',
     InboxItemKind.readyToMerge => 'Ready to merge',
     InboxItemKind.followUp => 'Needs a follow-up',
+    InboxItemKind.usageLimit => 'Usage limit reached',
   };
 
   static InboxItemKind of(NotificationReason reason) => switch (reason) {
@@ -379,6 +384,14 @@ class AttentionInbox {
     if (!retired && arriving.isEmpty) return this;
     return _index([...arriving.values, ...kept]);
   }
+
+  /// Files [item], or replaces the one with its id: a second limit on one
+  /// session is the same item with newer words.
+  AttentionInbox raise(InboxItem item) => _index([
+    item,
+    for (final listed in items)
+      if (listed.id != item.id) listed,
+  ]);
 
   AttentionInbox dismiss(String id) {
     if (!_byId.containsKey(id)) return this;

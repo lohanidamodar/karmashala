@@ -124,6 +124,7 @@ class _ContinueAction extends StatelessWidget {
     icon: AppIcons.clockCounterClockwise,
     color: semantic.attention,
   ),
+  InboxItemKind.usageLimit => (icon: AppIcons.clock, color: semantic.attention),
 };
 
 /// One waiting thing, and the two verbs it is for. No `⋮`: every action this

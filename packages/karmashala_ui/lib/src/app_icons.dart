@@ -148,6 +148,12 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+  static const IconData clock = IconData(
+    0xe19a,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData clockCounterClockwise = IconData(
     0xe1a0,
     fontFamily: 'PhosphorRegular',

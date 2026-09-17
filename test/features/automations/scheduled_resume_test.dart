@@ -129,40 +129,29 @@ void main() {
   });
 
   group('firing', () {
-    test('usage is re-read, the session resumed, and the message sent once '
-        'the agent shows its input', () async {
+    test('usage is re-read, and the session resumed with the message as its '
+        'opening prompt — handed to the CLI once, never typed', () async {
       h.scheduler();
       final resume = arm(notify: true);
       h.usage.answer = h.reading(percent: 2, resetsIn: const Duration(hours: 5));
 
       await comeDue(resume);
       expect(h.usage.calls, hasLength(1));
-      expect(h.launcher.requests, hasLength(1));
       final request = h.launcher.requests.single;
       expect(request.purpose, SessionPurpose.existingSession);
       expect(request.resumeExternalSessionId, 'conv-s1');
-      // Launched, and nothing typed: the CLI is still starting.
+      expect(request.firstMessage, 'continue');
+      // Nothing is typed at a TUI that is still starting.
       expect(h.typedInto('s1'), isEmpty);
-      expect(h.dao.getById(resume.id)!.state, ScheduledResumeState.firing);
-
-      // The transcript's old "idle" is not the agent's input.
-      h.reports.add(h.report('s1', source: AgentStatusSource.stateFile));
-      await h.settle();
-      expect(h.typedInto('s1'), isEmpty);
-
-      h.reports.add(h.report('s1'));
-      await h.settle();
-      expect(h.typedInto('s1'), startsWith('continue'));
-      expect(h.typedInto('s1'), endsWith('\r'));
 
       final done = h.dao.getById(resume.id)!;
       expect(done.state, ScheduledResumeState.done);
       expect(done.reason, contains('sent "continue"'));
 
-      // No second send, whatever is reported next.
-      h.reports.add(h.report('s1'));
+      // A second tick finds nothing due: one fire, one message.
+      h.timer.fire();
       await h.settle();
-      expect('continue'.allMatches(h.typedInto('s1')), hasLength(1));
+      expect(h.launcher.requests, hasLength(1));
 
       final decisions = h.container
           .read(decisionRecordDaoProvider)
@@ -172,12 +161,12 @@ void main() {
       expect(h.presenter.shown.single.title, 'Session resumed');
     });
 
-    test('an empty message resumes and types nothing', () async {
+    test('an empty message resumes and says nothing', () async {
       h.scheduler();
       final resume = arm(message: '');
       h.usage.answer = h.reading(percent: 2);
       await comeDue(resume);
-      expect(h.launcher.requests, hasLength(1));
+      expect(h.launcher.requests.single.firstMessage, isNull);
       expect(h.typedInto('s1'), isEmpty);
       expect(h.dao.getById(resume.id)!.state, ScheduledResumeState.done);
     });
@@ -193,6 +182,8 @@ void main() {
       await comeDue(resume);
       expect(h.launcher.requests, isEmpty);
       expect(h.typedInto('s1'), startsWith('continue'));
+      expect(h.typedInto('s1'), endsWith('\r'));
+      expect('continue'.allMatches(h.typedInto('s1')), hasLength(1));
       expect(
         h.dao.getById(resume.id)!.reason,
         contains('already open'),
@@ -216,11 +207,10 @@ void main() {
       h.statuses['s1'] = h.report('s1');
 
       await comeDue(resume);
-      expect(h.launcher.requests, hasLength(1));
+      final request = h.launcher.requests.single;
+      expect(request.firstMessage, 'continue');
+      expect(request.permissionOverride?.canonical, armed);
       expect(SessionDao(h.db).getById('s1')!.permissionMode, armed);
-      h.reports.add(h.report('s1'));
-      await h.settle();
-      expect(h.typedInto('s1'), startsWith('continue'));
       expect(h.dao.getById(resume.id)!.state, ScheduledResumeState.done);
     });
 
@@ -236,22 +226,22 @@ void main() {
       );
       await comeDue(resume);
       expect(h.typedInto('s1'), isEmpty);
-      expect(h.dao.getById(resume.id)!.state, ScheduledResumeState.failed);
+      final failed = h.dao.getById(resume.id)!;
+      expect(failed.state, ScheduledResumeState.failed);
+      // A failure is announced whether or not the box was ticked.
+      expect(h.presenter.shown.single.title, 'Scheduled resume failed');
     });
 
-    test('an agent that never shows its input is not typed at', () async {
+    test('a launch that is refused fails the row in the launcher\'s words',
+        () async {
       h.scheduler();
       final resume = arm();
       h.usage.answer = h.reading(percent: 2);
+      h.launcher.failure = StateError('another process holds it');
       await comeDue(resume);
-      h.deadline.complete();
-      await h.settle();
-      expect(h.typedInto('s1'), isEmpty);
       final failed = h.dao.getById(resume.id)!;
       expect(failed.state, ScheduledResumeState.failed);
-      expect(failed.reason, contains('did not show its input'));
-      // A failure is announced whether or not the box was ticked.
-      expect(h.presenter.shown.single.title, 'Scheduled resume failed');
+      expect(failed.reason, contains('another process holds it'));
     });
 
     test('a resume resumed by hand in the meantime is cancelled', () async {

@@ -238,7 +238,9 @@ class RemoteAccessController {
         InboxItemKind.checksFailed ||
         InboxItemKind.changesRequested ||
         InboxItemKind.readyToMerge ||
-        InboxItemKind.followUp => null,
+        InboxItemKind.followUp ||
+        // The turn ending already pushed; a limit has no word on the phone yet.
+        InboxItemKind.usageLimit => null,
       };
       if (kind == null) continue;
       unawaited(

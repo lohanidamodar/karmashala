@@ -38,6 +38,12 @@ class AttentionInboxController extends Notifier<AttentionInbox> {
     _syncViewed();
   }
 
+  /// Files one item nothing polls for. The same viewed rule applies.
+  void raise(InboxItem item) {
+    state = state.raise(item);
+    _syncViewed();
+  }
+
   void markAllSeen() => state = state.markAllSeen();
 
   /// Takes an item off the list for good. A follow-up is resolved in its table

@@ -8,13 +8,22 @@ class SessionNotice {
   const SessionNotice({
     required this.message,
     this.action,
+    this.secondaryAction,
     this.tone = SessionNoticeTone.neutral,
+    this.sticky = false,
   });
 
   final String message;
 
   /// The one thing the message offers to do, if it offers anything.
   final SessionNoticeAction? action;
+
+  /// The way into the same offer's options, drawn after [action].
+  final SessionNoticeAction? secondaryAction;
+
+  /// Stays until dismissed or taken up: it describes something still true,
+  /// and the person it is for may be away for hours.
+  final bool sticky;
 
   final SessionNoticeTone tone;
 }

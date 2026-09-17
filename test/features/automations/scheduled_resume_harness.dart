@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -20,7 +21,6 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
-import 'package:karmashala/src/features/sessions/application/session_wait.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -73,9 +73,12 @@ class ResumingLauncher extends SessionLauncher {
 }
 
 /// Everything a scheduled-resume test needs, with nothing that waits: the
-/// clock is moved, the timer is fired and the ready bound is an event.
+/// clock is moved and the one timer is fired by hand.
 class ResumeHarness {
-  ResumeHarness({String agentId = AgentIds.codex}) {
+  ResumeHarness({
+    String agentId = AgentIds.codex,
+    List<Override> extra = const [],
+  }) {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
@@ -95,7 +98,7 @@ class ResumeHarness {
         ),
         sessionStatusLookupProvider.overrideWithValue((id) => statuses[id]),
         sessionStatusStreamProvider.overrideWithValue((_) => reports.stream),
-        waitDeadlineProvider.overrideWithValue((_) => deadline.future),
+        ...extra,
       ],
     );
   }
@@ -107,7 +110,6 @@ class ResumeHarness {
   final timer = ManualAutomationTimer();
   final presenter = RecordingPresenter();
   final reports = StreamController<AgentStatusReport>.broadcast();
-  final deadline = Completer<void>();
   final Map<String, AgentStatusReport> statuses = {};
   final Map<String, List<String>> typed = {};
 

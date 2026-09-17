@@ -19,17 +19,12 @@ import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_notice.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
-import '../../sessions/application/session_wait.dart';
-import '../../terminal/application/pane_exit_signal.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import '../domain/resume_window.dart';
 import '../domain/scheduled_resume.dart';
 import 'automation_scheduler.dart';
 import 'scheduled_resume_providers.dart';
 import 'unattended_preflight.dart';
-
-/// How long a resumed agent gets to show its own input before the message is
-/// withheld. A bound, not a sleep: the wait ends on the first ready screen.
-const Duration kResumeReadyBound = Duration(minutes: 3);
 
 /// What happens when a scheduled resume comes due. Every call must leave the
 /// row out of `pending`, or the same fire would repeat on every tick.
@@ -288,7 +283,7 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
     final repository = _ref
         .read(repositoryDaoProvider)
         .getById(session.repositoryId);
-    final installation = _ref
+    var installation = _ref
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId);
     final externalId = session.externalSessionId;
@@ -310,8 +305,8 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
     }
 
     final launcher = _ref.read(sessionLauncherProvider);
-    final restarting = launcher.livePaneFor(session.id) != null;
-    if (restarting) {
+    final livePane = launcher.livePaneFor(session.id);
+    if (livePane != null) {
       final report = _ref.read(sessionStatusLookupProvider)(session.id);
       if (report != null && report.status == AgentActivityStatus.working) {
         _finish(
@@ -324,35 +319,45 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
       }
     }
 
-    final launchedAt = _now;
-    // Listening before the launch, so the first ready screen cannot be missed.
-    final ready = _ReadyWait(_ref, session.id, launchedAt)..start();
+    // The message rides the command line where the agent takes one there: the
+    // CLI submits it when it is ready, and nothing is typed at a starting TUI.
+    final message = resume.message.trim();
+    final asArgument =
+        message.isNotEmpty &&
+        (_ref
+                .read(agentRegistryProvider)
+                .byId(installation.agentId)
+                ?.launch
+                .acceptsPromptArgument ??
+            false);
+
     try {
-      if (restarting) {
-        // Open under another mode than the one armed: the row is given the
-        // armed mode and the agent restarted on the same conversation.
+      if (livePane != null) {
+        // Open under another mode than the one armed. Every refusal comes
+        // before the kill, which cannot be undone.
+        installation = await launcher.usableInstallation(installation);
         launcher.setPermissionMode(
           session.id,
           PermissionSelection.parse(resume.permissionMode),
         );
-        await launcher.restartSession(session.id);
-      } else {
-        await launcher.launch(
-          SessionLaunchRequest(
-            repository: repository,
-            installation: installation,
-            title: session.title,
-            purpose: SessionPurpose.existingSession,
-            resumeExternalSessionId: externalId,
-            existingWorktree: session.worktree,
-            permissionOverride: PermissionSelection.parse(
-              resume.permissionMode,
-            ),
-          ),
-        );
+        _ref
+            .read(terminalSessionsControllerProvider.notifier)
+            .endSession(livePane);
       }
+      await launcher.launch(
+        SessionLaunchRequest(
+          repository: repository,
+          installation: installation,
+          title: session.title,
+          purpose: SessionPurpose.existingSession,
+          resumeExternalSessionId: externalId,
+          existingWorktree: session.worktree,
+          surface: session.surface,
+          firstMessage: asArgument ? message : null,
+          permissionOverride: PermissionSelection.parse(resume.permissionMode),
+        ),
+      );
     } on Object catch (error) {
-      await ready.cancel();
       _finish(
         resume,
         ScheduledResumeState.failed,
@@ -361,8 +366,7 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
       return;
     }
 
-    if (!resume.sendsMessage) {
-      await ready.cancel();
+    if (message.isEmpty) {
       _finish(
         resume,
         ScheduledResumeState.done,
@@ -370,55 +374,20 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
       );
       return;
     }
-
-    // Not awaited: the scheduler's one timer re-arms after a fire, and must
-    // not sit behind an agent that takes minutes to show its input.
-    unawaited(_sendWhenReady(resume, session, notes, ready));
-  }
-
-  Future<void> _sendWhenReady(
-    ScheduledResume resume,
-    Session session,
-    List<String> notes,
-    _ReadyWait ready,
-  ) async {
-    final _Readiness outcome;
-    try {
-      outcome = await ready.outcome;
-    } on Object catch (error) {
-      _finish(
-        resume,
-        ScheduledResumeState.failed,
-        'Resumed, but waiting for the agent stopped on an error: $error',
-      );
-      return;
-    }
-    switch (outcome) {
-      case _Readiness.ready:
-        _send(resume, session, notes, opened: true);
-      case _Readiness.prompt:
-        _finish(
-          resume,
-          ScheduledResumeState.failed,
-          'Resumed, but the agent opened on a prompt, and a message typed '
-          'there would answer it. Nothing was sent — it is waiting for you.',
-        );
-      case _Readiness.ended:
-        _finish(
-          resume,
-          ScheduledResumeState.failed,
-          'Resumed, but the agent exited before it was ready. Nothing was '
-          'sent.',
-        );
-      case _Readiness.timedOut:
-        _finish(
-          resume,
-          ScheduledResumeState.failed,
-          'Resumed, but the agent did not show its input within '
-          '${kResumeReadyBound.inMinutes} minutes, so nothing was typed. The '
-          'session is open — say it there.',
-        );
-    }
+    _finish(
+      resume,
+      ScheduledResumeState.done,
+      asArgument
+          ? _join(['Resumed, and sent "$message".', ...notes])
+          // Typing at a TUI that is still starting is how a message gets lost
+          // or answers a prompt, so it is not tried.
+          : _join([
+              'Resumed. This agent takes no opening message on its command '
+                  'line, so "$message" was not sent — say it in the session.',
+              ...notes,
+            ]),
+      sent: asArgument ? message : null,
+    );
   }
 
   void _send(
@@ -541,70 +510,3 @@ class ResumeAnnouncer {
 }
 
 final resumeAnnouncerProvider = Provider<ResumeAnnouncer>(ResumeAnnouncer.new);
-
-enum _Readiness { ready, prompt, ended, timedOut }
-
-/// Waits for a just-resumed agent to show its own input. Only a screen or a
-/// hook read *after* the launch counts: the transcript's last word is the old
-/// run's, and would say "idle" while the CLI is still starting.
-class _ReadyWait {
-  _ReadyWait(this._ref, this._sessionId, this._since);
-
-  final Ref _ref;
-  final String _sessionId;
-  final DateTime _since;
-  final Completer<_Readiness> _done = Completer<_Readiness>();
-  StreamSubscription<AgentStatusReport>? _statuses;
-  void Function()? _closeExits;
-
-  Future<_Readiness> get outcome async {
-    try {
-      return await _done.future;
-    } finally {
-      await cancel();
-    }
-  }
-
-  void start() {
-    _statuses = _ref
-        .read(sessionStatusStreamProvider)(_sessionId)
-        .listen(_consider);
-    final exits = _ref.listen(paneExitProvider, (_, exit) {
-      if (exit == null || exit.sessionId != _sessionId) return;
-      _settle(_Readiness.ended);
-    });
-    _closeExits = exits.close;
-    unawaited(
-      _ref.read(waitDeadlineProvider)(kResumeReadyBound).then((_) {
-        _settle(_Readiness.timedOut);
-      }),
-    );
-  }
-
-  void _consider(AgentStatusReport report) {
-    final live =
-        report.source == AgentStatusSource.terminalGrid ||
-        report.source == AgentStatusSource.hook;
-    if (!live || report.observedAt.isBefore(_since)) return;
-    if (report.hasOpenPrompt) {
-      _settle(_Readiness.prompt);
-      return;
-    }
-    if (report.status == AgentActivityStatus.idle ||
-        report.status == AgentActivityStatus.awaitingApproval) {
-      _settle(_Readiness.ready);
-    }
-  }
-
-  void _settle(_Readiness readiness) {
-    if (!_done.isCompleted) _done.complete(readiness);
-  }
-
-  Future<void> cancel() async {
-    _settle(_Readiness.timedOut);
-    await _statuses?.cancel();
-    _statuses = null;
-    _closeExits?.call();
-    _closeExits = null;
-  }
-}

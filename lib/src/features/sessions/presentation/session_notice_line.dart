@@ -34,7 +34,7 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
     if (identical(notice, _showing)) return;
     _showing = notice;
     _expiry?.cancel();
-    if (notice == null) return;
+    if (notice == null || notice.sticky) return;
     _expiry = Timer(sessionNoticeLifetime, () {
       if (mounted) {
         ref.read(sessionNoticesProvider.notifier).dismiss(widget.sessionId);
@@ -78,23 +78,28 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
             ),
             child: LayoutBuilder(
               builder: (context, box) {
-                final action = notice.action;
-                final actionButton = action == null
+                final actions = [?notice.action, ?notice.secondaryAction];
+                final actionButton = actions.isEmpty
                     ? null
-                    : TextButton(
-                        onPressed: () {
-                          // Cleared here rather than by the action, so the
-                          // offer is gone the moment it is taken.
-                          ref
-                              .read(sessionNoticesProvider.notifier)
-                              .dismiss(sessionId);
-                          action.onPressed();
-                        },
-                        style: TextButton.styleFrom(
-                          visualDensity: VisualDensity.compact,
-                          textStyle: theme.textTheme.labelMedium,
-                        ),
-                        child: Text(action.label),
+                    : Wrap(
+                        children: [
+                          for (final action in actions)
+                            TextButton(
+                              onPressed: () {
+                                // Cleared here rather than by the action, so
+                                // the offer is gone the moment it is taken.
+                                ref
+                                    .read(sessionNoticesProvider.notifier)
+                                    .dismiss(sessionId);
+                                action.onPressed();
+                              },
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                textStyle: theme.textTheme.labelMedium,
+                              ),
+                              child: Text(action.label),
+                            ),
+                        ],
                       );
                 // In a side panel the action goes under the sentence: beside
                 // it, "Restart to apply" alone is wider than the text column.
@@ -102,7 +107,7 @@ class _SessionNoticeLineState extends ConsumerState<SessionNoticeLine> {
                     actionButton != null &&
                     box.maxWidth <
                         WidthClass.scaleBreakpoint(
-                          kNoticeInlineActionMinWidth,
+                          kNoticeInlineActionMinWidth * actions.length,
                           MediaQuery.textScalerOf(context),
                         );
                 final message = Padding(

@@ -140,4 +140,78 @@ void main() {
     // first one just started.
     expect(find.text('Restart to apply'), findsNothing);
   });
+
+  testWidgets('a second action is drawn after the first, and either retires '
+      'the notice', (tester) async {
+    await tester.pumpWidget(_twoBars());
+    final taken = <String>[];
+    _notices(tester).post(
+      'a',
+      SessionNotice(
+        message: 'Codex hit its 5-hour limit. Resets 14:05.',
+        action: SessionNoticeAction(
+          label: 'Resume then',
+          onPressed: () => taken.add('resume'),
+        ),
+        secondaryAction: SessionNoticeAction(
+          label: 'Options…',
+          onPressed: () => taken.add('options'),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.getTopLeft(find.text('Resume then')).dx,
+      lessThan(tester.getTopLeft(find.text('Options…')).dx),
+    );
+    await tester.tap(find.text('Options…'));
+    await tester.pump();
+    expect(taken, ['options']);
+    expect(find.text('Resume then'), findsNothing);
+  });
+
+  testWidgets('a sticky notice outlasts the clock, and is still dismissable', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_twoBars());
+    _notices(tester).post(
+      'a',
+      const SessionNotice(message: 'Limit reached', sticky: true),
+    );
+    await tester.pump();
+    await tester.pump(sessionNoticeLifetime * 3);
+    expect(find.text('Limit reached'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pump();
+    expect(find.text('Limit reached'), findsNothing);
+  });
+
+  testWidgets('two actions fit a side panel\'s width without overflowing', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(240, 400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(_twoBars());
+    _notices(tester).post(
+      'a',
+      SessionNotice(
+        message: 'Codex hit its 5-hour limit. Resets 14:05.',
+        sticky: true,
+        action: SessionNoticeAction(label: 'Resume then', onPressed: () {}),
+        secondaryAction: SessionNoticeAction(
+          label: 'Options…',
+          onPressed: () {},
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    // Under the sentence, not squeezed beside it.
+    expect(
+      tester.getTopLeft(find.text('Resume then')).dy,
+      greaterThan(tester.getTopLeft(find.textContaining('Codex hit')).dy),
+    );
+  });
 }
