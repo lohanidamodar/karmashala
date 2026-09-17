@@ -25,13 +25,22 @@ TextStyle pathLinkStyle(ColorScheme scheme) => TextStyle(
 /// Renders an agent/user message as Markdown. Paths become links through an
 /// *inline syntax*, never a rewritten string, which would relink code fences.
 class MarkdownMessage extends StatelessWidget {
-  const MarkdownMessage(this.data, {this.onPathTap, super.key});
+  const MarkdownMessage(
+    this.data, {
+    this.onPathTap,
+    this.selectable = true,
+    super.key,
+  });
 
   final String data;
 
   /// Where a clicked path goes. Null renders the paths as plain prose — a link
   /// nobody can follow is worse than no link.
   final PathLinkCallback? onPathTap;
+
+  /// Whether each block selects on its own. False under a [SelectionArea],
+  /// which selects across blocks and would otherwise be shut out of each one.
+  final bool selectable;
 
   @override
   Widget build(BuildContext context) {
@@ -65,7 +74,7 @@ class MarkdownMessage extends StatelessWidget {
 
     return MarkdownBody(
       data: data,
-      selectable: true,
+      selectable: selectable,
       styleSheet: sheet,
       inlineSyntaxes: onPathTap == null ? null : kPathLinkSyntaxes,
       onTapLink: (text, href, title) {

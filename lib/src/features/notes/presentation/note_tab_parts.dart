@@ -210,26 +210,54 @@ class NoteMetadata extends ConsumerWidget {
 }
 
 /// The note rendered the way a transcript renders a message.
-class NotePreview extends StatelessWidget {
+///
+/// One [SelectionArea] over the whole note, so a drag runs across paragraphs
+/// and select-all takes every block. It holds focus from the moment it shows:
+/// the chords have to work before anything has been clicked.
+class NotePreview extends StatefulWidget {
   const NotePreview({required this.body, super.key});
 
   final String body;
 
   @override
+  State<NotePreview> createState() => _NotePreviewState();
+}
+
+class _NotePreviewState extends State<NotePreview> {
+  final _focus = FocusNode(debugLabel: 'note preview');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (body.trim().isEmpty) {
+    if (widget.body.trim().isEmpty) {
       return const PanePlaceholder(
         icon: AppIcons.note,
         message: 'Nothing written yet. Switch to Edit to write this note.',
       );
     }
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(Insets.md),
-      child: Align(
-        alignment: Alignment.topLeft,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
-          child: MarkdownMessage(body),
+    return SelectionArea(
+      focusNode: _focus,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(Insets.md),
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: Chrome.readableWidth),
+            child: MarkdownMessage(widget.body, selectable: false),
+          ),
         ),
       ),
     );
