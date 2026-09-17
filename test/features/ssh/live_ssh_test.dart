@@ -506,6 +506,110 @@ void main() {
     }, timeout: const Timeout(Duration(minutes: 5)));
   });
 
+  group('the session host, read and acted on from its card', () {
+    // What no fake can answer about the explicit verbs: whether the listing
+    // script reads a real `~/.karmashala/bin` the way the deployer wrote it,
+    // whether `ps -o args=` names the running bundle in a form the version can
+    // be read out of, and whether the tools question parses on that machine's
+    // `sh`. **Nothing here uninstalls, and nothing stops a host that holds
+    // sessions** — the box is somebody's, and its sessions are theirs.
+    late HostBinarySource binaries;
+
+    setUp(() {
+      final directory = _env('KARMASHALA_HOST_BINARIES');
+      binaries = directory == null
+          ? DirectoryHostBinaries.standard()
+          : DirectoryHostBinaries([Directory(directory)]);
+    });
+
+    Future<HostInstaller> installer() async => HostInstaller(
+      host: host,
+      deployer: HostDeployer(
+        target: SshHostDeployTarget(await trusted()),
+        binaries: binaries,
+      ),
+    );
+
+    test('the reading agrees with what a deploy just put there', () async {
+      final it = await installer();
+      final before = await it.check();
+      // ignore: avoid_print
+      print('  before: ${before.label} — ${before.reason}');
+      expect(before.state, isNot(HostInstallState.unknown), reason: before.reason);
+      if (!before.canInstall) {
+        // ignore: avoid_print
+        print('  skipped: this build carries no bundle for ${before.platform}');
+        return;
+      }
+
+      final after = await it.install();
+      // ignore: avoid_print
+      print('  after install: ${after.label} — ${after.reason}');
+      expect(after.deployment, isNull, reason: after.reason);
+      expect(after.running, isTrue);
+      expect(after.installedVersion, isNotNull);
+      expect(after.remotePath, contains('/.karmashala/bin/karmashala_host-'));
+      final exists = await SshHostDeployTarget(
+        await trusted(),
+      ).run('test -x ${after.remotePath} && echo executable');
+      expect(exists.stdout, contains('executable'));
+      // An older `serve` holding sessions is left alone, and then the label
+      // says so rather than claiming this version runs.
+      if (after.state == HostInstallState.installed) {
+        expect(after.installedVersion, after.offeredVersion);
+      } else {
+        expect(after.state, HostInstallState.outdated);
+        expect(after.sessionsHeld, isNot(0));
+      }
+    }, timeout: const Timeout(Duration(minutes: 5)));
+
+    test('Stop and Start, only on a host that holds nothing', () async {
+      final it = await installer();
+      final reading = await it.check();
+      if (!reading.running || reading.sessionsHeld != 0) {
+        // ignore: avoid_print
+        print(
+          '  skipped: ${reading.label}, holding '
+          '${reading.sessionsHeld ?? 'an unknown number of'} session(s) — '
+          'stopping it would end somebody\'s work',
+        );
+        return;
+      }
+
+      final stopped = await it.stop();
+      expect(stopped.running, isFalse, reason: stopped.reason);
+      expect(stopped.label, contains('(stopped)'));
+
+      final started = await it.start();
+      // ignore: avoid_print
+      print('  ${started.label} — ${started.reason}');
+      expect(started.running, isTrue, reason: started.reason);
+    }, timeout: const Timeout(Duration(minutes: 5)));
+
+    test('the `sudo -n` evidence is a word this understands — and nothing is '
+        'changed to get it', () async {
+      // Only the reading half of the port script: whether root, whether sudo
+      // would prompt, which firewall is *running*. No rule is added here.
+      final target = SshHostDeployTarget(await trusted());
+      final said = await target.run(
+        'if [ "\$(id -u)" = 0 ]; then echo root; '
+        'elif sudo -n true 2>/dev/null; then echo passwordless; '
+        'else echo needs-password; fi; '
+        'command -v ufw >/dev/null 2>&1 && '
+        "{ grep -q '^ENABLED=no' /etc/ufw/ufw.conf 2>/dev/null && echo ufw-off || echo ufw-on; }; "
+        'command -v firewall-cmd >/dev/null 2>&1 && '
+        '{ firewall-cmd --state >/dev/null 2>&1 && echo firewalld-on || echo firewalld-off; }; '
+        'true',
+      );
+      // ignore: avoid_print
+      print('  ${said.stdout.trim().split('\n').join(', ')}');
+      expect(
+        said.stdout,
+        anyOf(contains('root'), contains('passwordless'), contains('needs-password')),
+      );
+    });
+  });
+
   group('the relay on a box', () {
     // What no fake can answer: whether `setsid nohup … relay` stays up once
     // the SSH channel that launched it closes, whether the token file the box
