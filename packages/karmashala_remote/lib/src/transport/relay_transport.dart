@@ -21,6 +21,16 @@ const Duration kDefaultConnectTimeout = Duration(seconds: 15);
 /// transport does not depend on the relay server.
 const int kRelayCloseNoPeer = 4408;
 
+/// A log line with what a relay URL must not leave behind taken out: a box
+/// relay's access token (`/k/<token>`) and the rendezvous id (`/v1/<id>`).
+/// `dart:io` quotes the whole URL when an upgrade is refused.
+String scrubRelayLog(String message) => message
+    .replaceAll(_tokenInPath, '/k/…')
+    .replaceAll(_rendezvousInPath, '/v1/…');
+
+final RegExp _tokenInPath = RegExp(r'/k/[A-Za-z0-9_-]{16,}');
+final RegExp _rendezvousInPath = RegExp(r'/v1/[0-9a-f]{32}');
+
 /// An outbound WebSocket to a relay rendezvous, with reconnect and heartbeat.
 class RelayTransport extends ReconnectingTransport {
   RelayTransport({
@@ -30,8 +40,12 @@ class RelayTransport extends ReconnectingTransport {
     super.backoff,
     super.maxQueuedFrames,
     super.maxQueuedBytes,
-    super.onLog,
-  });
+    void Function(String message)? onLog,
+  }) : super(
+         // Every line this transport or its base writes: a failed dial's
+         // exception quotes the URL, and the URL holds two things no log may.
+         onLog: onLog == null ? null : (line) => onLog(scrubRelayLog(line)),
+       );
 
   /// Builds the transport for [rendezvous] on [relay] and starts connecting.
   factory RelayTransport.connect({

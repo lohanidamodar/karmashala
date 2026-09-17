@@ -224,7 +224,8 @@ extension _GatewayDial on RemoteCompanionGateway {
       _noteTrouble(null);
       return client;
     } on Object catch (error) {
-      onLog?.call('connect over $url failed: $error');
+      // The host alone: a box relay's URL carries its access token.
+      onLog?.call(scrubRelayLog('connect over ${url.host} failed: $error'));
       // Why it failed, while the transport that failed is still around to
       // say so — a relay hanging up with "no peer" is not a network fault.
       final trouble = _troubleFor(error);
