@@ -78,11 +78,22 @@ class BoundedDialogContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return FocusTraversalGroup(
-      // A SizedBox rather than a LayoutBuilder: AlertDialog sizes its body by
-      // intrinsics, which a LayoutBuilder cannot answer.
-      child: SizedBox(
-        width: width,
-        child: SingleChildScrollView(primary: false, child: child),
+      policy: ReadingOrderTraversalPolicy(requestFocusCallback: _revealFocused),
+      // Focus *arriving* here is moved by the dialog's policy, not this one —
+      // Tab from the actions back to a first stop scrolled off the top.
+      child: Focus(
+        canRequestFocus: false,
+        skipTraversal: true,
+        onFocusChange: (entered) {
+          final node = FocusManager.instance.primaryFocus;
+          if (entered && node != null) _reveal(node);
+        },
+        // A SizedBox rather than a LayoutBuilder: AlertDialog sizes its body by
+        // intrinsics, which a LayoutBuilder cannot answer.
+        child: SizedBox(
+          width: width,
+          child: SingleChildScrollView(primary: false, child: child),
+        ),
       ),
     );
   }
@@ -90,6 +101,38 @@ class BoundedDialogContent extends StatelessWidget {
 
 /// The confirm button of an action that cannot be taken back: a filled button
 /// in the error colours. Pair it with a plain `TextButton` to cancel.
+/// Focuses [node] and scrolls it into view **from either side**. Flutter's own
+/// callback keeps only the edge on the side Tab is moving towards, so wrapping
+/// from the last stop back to the first leaves focus on a control scrolled off
+/// the top. Each call scrolls only when its edge is out, so a stop already in
+/// view does not move.
+void _revealFocused(
+  FocusNode node, {
+  ScrollPositionAlignmentPolicy? alignmentPolicy,
+  double? alignment,
+  Duration? duration,
+  Curve? curve,
+}) {
+  node.requestFocus();
+  _reveal(node, duration: duration, curve: curve);
+}
+
+void _reveal(FocusNode node, {Duration? duration, Curve? curve}) {
+  final context = node.context;
+  if (context == null) return;
+  for (final edge in const [
+    ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+    ScrollPositionAlignmentPolicy.keepVisibleAtStart,
+  ]) {
+    Scrollable.ensureVisible(
+      context,
+      alignmentPolicy: edge,
+      duration: duration ?? Duration.zero,
+      curve: curve ?? Curves.ease,
+    );
+  }
+}
+
 class DestructiveButton extends StatelessWidget {
   const DestructiveButton({
     required this.onPressed,
