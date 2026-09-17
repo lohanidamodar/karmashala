@@ -51,22 +51,6 @@ class LogcatTail {
     }
   }
 
-  /// The newest [limit] entries at [minLevel] or above, oldest first. The level
-  /// is applied here, not at adb: `logcat` filters by tag and priority together.
-  List<LogcatEntry> tail({
-    int limit = 400,
-    LogLevel minLevel = LogLevel.verbose,
-  }) {
-    final matching = minLevel == LogLevel.verbose
-        ? _entries
-        : [
-            for (final entry in _entries)
-              if (entry.level.atLeast(minLevel)) entry,
-          ];
-    if (matching.length <= limit) return List.unmodifiable(matching);
-    return List.unmodifiable(matching.sublist(matching.length - limit));
-  }
-
   /// Empties the tail **and** the dropped count: a count of what was lost before
   /// a fresh reading would describe nothing on screen.
   void clear() {

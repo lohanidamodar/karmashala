@@ -10,6 +10,7 @@ export 'src/application/device_clipboard_bridge.dart';
 export 'src/application/device_file_actions.dart';
 export 'src/application/device_fleet.dart';
 export 'src/application/device_logcat_session.dart';
+export 'src/application/device_logcat_view.dart';
 export 'src/application/device_providers.dart';
 export 'src/application/device_recording_controller.dart';
 export 'src/application/device_screen_memory.dart';

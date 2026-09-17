@@ -42,7 +42,6 @@ class DeviceLogcatSession extends ChangeNotifier {
   int _generation = 0;
 
   String? _package;
-  LogLevel _minLevel = LogLevel.verbose;
   bool _starting = false;
   DateTime? _startedAt;
   DateTime? _lastLineAt;
@@ -51,8 +50,6 @@ class DeviceLogcatSession extends ChangeNotifier {
   /// The package whose process the stream is pinned to, or null for everything
   /// on the device.
   String? get packageFilter => _package;
-
-  LogLevel get minLevel => _minLevel;
 
   /// Whether a `logcat` process is attached right now.
   bool get streaming => _process != null;
@@ -75,8 +72,18 @@ class DeviceLogcatSession extends ChangeNotifier {
 
   int get kept => _tail.length;
 
-  List<LogcatEntry> lines({int limit = 400}) =>
-      _tail.tail(limit: limit, minLevel: _minLevel);
+  /// Lines ever read; the sequence number the next one will get.
+  int get appended => _tail.appended;
+
+  /// The whole tail under [query], kept current by [cache] — only lines
+  /// numbered [hideBefore] and newer. Levels and tags are applied here, to
+  /// what is already collected, so changing them costs no restart and loses
+  /// nothing.
+  LogcatFilterResult filter(
+    LogcatFilterCache cache,
+    LogcatQuery query, {
+    int hideBefore = 0,
+  }) => cache.update(_tail, query, hideBefore: hideBefore);
 
   /// Attaches to the device's log, replacing any stream already attached.
   Future<void> start() async {
@@ -151,20 +158,6 @@ class DeviceLogcatSession extends ChangeNotifier {
       return;
     }
     await start();
-  }
-
-  /// The lowest priority drawn. Applied to what is already collected rather
-  /// than at adb, so raising and lowering it costs no restart and loses nothing.
-  void setMinLevel(LogLevel level) {
-    if (_minLevel == level) return;
-    _minLevel = level;
-    notifyListeners();
-  }
-
-  void clear() {
-    _tail.clear();
-    _lastLineAt = null;
-    notifyListeners();
   }
 
   void _onLine(String line) {

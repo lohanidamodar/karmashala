@@ -157,7 +157,7 @@ void main() {
           await tester.pumpAndSettle();
 
           // The log really is open, under a picture region that is still one.
-          expect(find.textContaining('kept'), findsOneWidget);
+          expect(find.textContaining('no line yet'), findsOneWidget);
           // `_LiveView` is the picture's region whether or not a stream is up:
           // the pane hands it everything the controls and the log do not take.
           // Fixed-height controls, app controls and a 220px log above it once

@@ -12,6 +12,7 @@ export 'src/presentation/device_clipboard_controls.dart';
 export 'src/presentation/device_controls.dart';
 export 'src/presentation/device_keyboard_surface.dart';
 export 'src/presentation/device_logcat_section.dart';
+export 'src/presentation/device_logcat_toolbar.dart';
 export 'src/presentation/device_recording_banner.dart';
 export 'src/presentation/device_recording_indicator.dart';
 export 'src/presentation/device_section_header.dart';
