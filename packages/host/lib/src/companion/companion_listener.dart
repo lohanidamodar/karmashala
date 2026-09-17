@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:cryptography/cryptography.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 
 import '../domain/session_registry.dart';
-import 'companion_server.dart';
-import 'sealed_link.dart';
+import 'device_links.dart';
 
 /// Accepts companion links and gives each one to whoever it is for.
 ///
@@ -22,19 +20,25 @@ import 'sealed_link.dart';
 /// apart by which rendezvous it asked for.
 class CompanionListener {
   CompanionListener({
-    required this.registry,
-    required this.hostName,
-    required this.devices,
+    required SessionRegistry registry,
+    required String hostName,
+    required List<PairedDevice> Function() devices,
+    void Function(String deviceId, int generation)? onGeneration,
+    DeviceLinks? links,
     this.onLog,
-  });
+  }) : links =
+           links ??
+           DeviceLinks(
+             registry: registry,
+             hostName: hostName,
+             devices: devices,
+             onGeneration: onGeneration,
+             onLog: onLog,
+           );
 
-  final SessionRegistry registry;
-  final String hostName;
-
-  /// Every phone this host has paired with. Read at accept time rather than
-  /// captured, so a pairing that happens while this is listening is routable on
-  /// the next link without a restart.
-  final List<PairedDevice> Function() devices;
+  /// Who a rendezvous belongs to and how it is served. Shared with the relay
+  /// listener, so a phone is recognised by one rule however it arrived.
+  final DeviceLinks links;
 
   final void Function(String message)? onLog;
 
@@ -80,6 +84,7 @@ class CompanionListener {
     // Nobody owns this link until the hello arrives, so the first frame routes
     // it and every frame after goes wherever that decided.
     void Function(Uint8List frame)? route;
+    void Function()? onGone;
     // Resolving is async — a rendezvous is derived per device — and a phone
     // does not wait to be recognised before it speaks. Frames that arrive in
     // that window are held, not read as a second hello and not dropped.
@@ -121,71 +126,50 @@ class CompanionListener {
         return;
       }
       resolving = true;
-      _routeHello(link, hello).then((forward) {
+      _routeHello(link, hello).then((routed) {
         deadline.cancel();
-        if (forward == null) {
+        if (routed == null) {
           refuse('a link asked for a rendezvous nobody here answers');
           return;
         }
+        final forward = routed.deliver;
         owned = true;
         route = forward;
+        onGone = routed.gone;
         for (final held in waiting) {
           forward(held);
         }
         waiting.clear();
       });
-    }, onDone: deadline.cancel);
+    }, onDone: () {
+      deadline.cancel();
+      // The socket closing is the only news a served link gets that the phone
+      // has gone, and without it the server behind it waits for ever.
+      onGone?.call();
+    });
   }
 
   /// Who this rendezvous belongs to, or null for nobody. The hello itself is
   /// delivered here when its owner wants it — a pairing session reads it, and a
   /// sealed link must never be handed a frame that was never sealed.
-  Future<void Function(Uint8List frame)?> _routeHello(
-    LanLink link,
-    LinkHello hello,
-  ) async {
+  Future<({void Function(Uint8List frame) deliver, void Function()? gone})?>
+  _routeHello(LanLink link, LinkHello hello) async {
     final wanted = hello.rendezvous.value;
 
     final pairing = _pairing;
     if (pairing != null && pairing.payload.rendezvous.value == wanted) {
       pairing.handleFrame(link, hello.encode());
-      return (frame) => pairing.handleFrame(link, frame);
-    }
-
-    for (final device in devices()) {
-      if (device.deviceKey.isEmpty) continue;
-      final key = SecretKeyData(device.deviceKey);
-      final rendezvous = await rendezvousFor(key, device.generation);
-      if (rendezvous.value != wanted) continue;
-      return _serveDevice(link, device, key);
-    }
-
-    return null;
-  }
-
-  /// Serves one paired phone: its own sealed channel, its own grant, and the
-  /// sessions this machine owns.
-  void Function(Uint8List frame) _serveDevice(
-    LanLink link,
-    PairedDevice device,
-    SecretKeyData key,
-  ) {
-    final sealed = _PendingLink(link);
-    unawaited(() async {
-      final channel = await SealedChannel.forDevice(
-        deviceKey: key,
-        role: ChannelRole.host,
-        generation: device.generation,
+      return (
+        deliver: (Uint8List frame) => pairing.handleFrame(link, frame),
+        gone: null,
       );
-      final plain = SealedLink(sealed, channel, onLog: onLog);
-      await CompanionServer(
-        registry: registry,
-        hostName: hostName,
-        clientId: device.id,
-        capabilities: device.capabilities,
-      ).serve(plain);
-    }());
-    return sealed.deliver;
+    }
+
+    final match = await links.match(wanted);
+    if (match == null) return null;
+    final served = links.serve(link, match);
+    if (served == null) return null;
+    return (deliver: served.deliver, gone: served.end);
   }
 
   Future<void> stop() async {
@@ -194,44 +178,5 @@ class CompanionListener {
     await _server?.close();
     _server = null;
     _pairing = null;
-  }
-}
-
-/// The accepted link, re-exposed as a transport the sealed layer can read.
-///
-/// The hello has already been taken off the wire by the time anybody decides
-/// who the link is for, so frames arrive through [deliver] rather than by
-/// listening again — a second `listen` on a single-subscription stream is an
-/// error, and re-listening would lose the frames that arrived while the device
-/// was being resolved.
-class _PendingLink implements RemoteTransport {
-  _PendingLink(this._link);
-
-  final LanLink _link;
-  final _frames = StreamController<Uint8List>();
-
-  void deliver(Uint8List frame) {
-    if (!_frames.isClosed) _frames.add(frame);
-  }
-
-  @override
-  Stream<Uint8List> get frames => _frames.stream;
-
-  @override
-  void send(List<int> frame) => _link.send(frame);
-
-  @override
-  Stream<TransportState> get states => _link.states;
-
-  @override
-  TransportState get state => _link.state;
-
-  @override
-  bool get isConnected => _link.isConnected;
-
-  @override
-  Future<void> close() async {
-    if (!_frames.isClosed) await _frames.close();
-    await _link.close();
   }
 }

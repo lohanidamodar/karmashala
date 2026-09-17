@@ -187,6 +187,7 @@ Future<_Companion?> _openCompanion(
       registry: registry,
       hostName: name,
       devices: pairing.paired,
+      onGeneration: pairing.advance,
       onLog: (message) => errSink.writeln('karmashala_host: $message'),
     );
     await listener.start(port: port);

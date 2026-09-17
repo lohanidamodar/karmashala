@@ -70,6 +70,11 @@ class HostPairingService {
     );
   }
 
+  /// Moves a phone's row to the next generation it will be recognised from, so
+  /// a restarted host still finds a phone that has been back since pairing.
+  void advance(String deviceId, int generation) =>
+      _devices.updateGeneration(deviceId, generation);
+
   /// Every phone this host has paired with, newest first. What `serve` reads to
   /// know whose key a link is sealed with and what that phone was granted.
   List<PairedDevice> paired() => _devices.getActive();
