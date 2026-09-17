@@ -94,18 +94,25 @@ extension TerminalPaneRegions on TerminalSessionsController {
     ref.read(terminalFacesProvider.notifier).show(groupId, terminal: terminal);
   }
 
-  /// The empty **workspace group**, if the user has cleared one.
+  /// The empty **workspace group** a command with none in hand means: the one
+  /// holding the keyboard, else the first of however many there are.
   String? emptyWorkspaceGroup() {
+    final focused = _focusedGroup;
+    if (focused != null && _isEmptyGroup(focused)) return focused.id;
     for (final group in _workspace?.groups ?? const <WorkspaceGroup>[]) {
       if (_isEmptyGroup(group)) return group.id;
     }
     return null;
   }
 
-  /// Whether there is a focused group with a tab in it to divide.
-  bool canSplitWorkspace() {
+  /// Whether the focused group, empty or not, has room to be halved along
+  /// [axis] — see [groupHasRoomToSplit].
+  bool canSplitWorkspace(SplitAxis axis) {
+    final tree = _workspace;
     final group = _focusedGroup;
-    return group != null && !_isEmptyGroup(group);
+    return tree != null &&
+        group != null &&
+        groupHasRoomToSplit(tree, group.activePaneId, axis);
   }
 
   /// Whether the focused pane could be divided inside its own tab.

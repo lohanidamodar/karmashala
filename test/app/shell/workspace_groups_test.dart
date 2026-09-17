@@ -28,6 +28,7 @@ import '../../features/terminal/fake_instance.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../../support/window_matrix.dart';
 
 /// Two groups, two sessions, and the assertion that carries the whole weight:
 /// **the neighbour does not move.**
@@ -317,6 +318,72 @@ void main() {
     expect(find.text('Close group'), findsOneWidget);
     // The tab that is already open is somewhere it could come from.
     expect(find.text('Move a tab here…'), findsOneWidget);
+  });
+
+  testWidgets('every empty group has its own invitation and way out', (
+    tester,
+  ) async {
+    openSessionTab('s1');
+    final first = terminals().splitWorkspace(SplitAxis.horizontal)!;
+    final second = terminals().splitWorkspace(SplitAxis.vertical)!;
+
+    await pump(tester);
+
+    expect(find.text('Empty group'), findsNWidgets(2));
+    expect(find.text('New terminal'), findsNWidgets(2));
+    expect(find.text('Move a tab here…'), findsNWidgets(2));
+    expect(find.text('Close group'), findsNWidgets(2));
+
+    // The button drawn in a group closes that group, not the focused one.
+    expect(container.read(focusedWorkspaceGroupProvider), second);
+    await tester.tap(find.text('Close group').first);
+    await tester.pumpAndSettle();
+
+    final state = container.read(terminalSessionsControllerProvider);
+    expect(state.workspace!.groups.map((g) => g.id), isNot(contains(first)));
+    expect(terminals().isEmptyGroup(second), isTrue);
+    expect(find.text('Empty group'), findsOneWidget);
+  });
+
+  testWidgets('a terminal started from one empty group opens in that one', (
+    tester,
+  ) async {
+    openSessionTab('s1');
+    final first = terminals().splitWorkspace(SplitAxis.horizontal)!;
+    final second = terminals().splitWorkspace(SplitAxis.vertical)!;
+    await pump(tester);
+
+    await tester.tap(find.text('New terminal').first);
+    await tester.pumpAndSettle();
+
+    expect(terminals().tabsInGroup(first), hasLength(1));
+    expect(terminals().isEmptyGroup(second), isTrue);
+    expect(find.text('Empty group'), findsOneWidget);
+  });
+
+  testWidgets('a workspace split to its floor survives the window matrix', (
+    tester,
+  ) async {
+    openSessionTab('s1');
+    // The smallest group a split can leave: a sixteenth of each axis.
+    for (final axis in SplitAxis.values) {
+      for (var i = 0; i < 4; i++) {
+        expect(terminals().splitWorkspace(axis), isNotNull);
+      }
+      expect(terminals().canSplitWorkspace(axis), isFalse);
+    }
+
+    await expectSurvivesWindowMatrix(
+      tester,
+      build: () => UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: Scaffold(body: WorkbenchView())),
+      ),
+      // Tab is the shell's once it reaches the one terminal, so the ring ends
+      // there by design — the same with a single empty group beside a tab.
+      checkFocus: false,
+      because: 'a held split chord reaches this layout in eight presses',
+    );
   });
 
   testWidgets('closing a group\'s last tab collapses it', (tester) async {

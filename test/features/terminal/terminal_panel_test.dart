@@ -218,6 +218,78 @@ void main() {
     expect(state.tabs.single.layout.panes, hasLength(1));
   });
 
+  testWidgets('the split buttons divide an empty group too', (tester) async {
+    final container = panelContainer();
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .openTab(TerminalProfile.powerShell);
+    await pumpWindowChrome(tester, container);
+
+    await tester.tap(
+      find.byTooltip('Split the workspace right (Ctrl+Shift+D)'),
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Split the workspace down (Ctrl+Shift+E)'));
+    await tester.pump();
+
+    final state = container.read(terminalSessionsControllerProvider);
+    expect(state.workspace!.groups, hasLength(3));
+    expect(state.tabs, hasLength(1));
+    expect(find.text('Empty group'), findsNWidgets(2));
+  });
+
+  testWidgets('a group too narrow to halve says so on the button it disables', (
+    tester,
+  ) async {
+    final container = panelContainer();
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
+    controller.openTab(TerminalProfile.powerShell);
+    for (var i = 0; i < 4; i++) {
+      controller.splitWorkspace(SplitAxis.horizontal);
+    }
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await pumpWindowChrome(tester, container);
+
+    final refused = find.byTooltip('This group is too narrow to split again');
+    expect(refused, findsOneWidget);
+    expect(
+      tester
+          .widget<IconButton>(
+            find.ancestor(of: refused, matching: find.byType(IconButton)),
+          )
+          .onPressed,
+      isNull,
+    );
+    // Only the axis that ran out.
+    await tester.tap(find.byTooltip('Split the workspace down (Ctrl+Shift+E)'));
+    await tester.pump();
+    expect(
+      container.read(terminalSessionsControllerProvider).workspace!.groups,
+      hasLength(6),
+    );
+
+    // Somewhere with room, the same button is back.
+    controller.focusGroup(
+      container
+          .read(terminalSessionsControllerProvider)
+          .workspace!
+          .groups
+          .first
+          .id,
+    );
+    await tester.pump();
+    expect(refused, findsNothing);
+    expect(
+      find.byTooltip('Split the workspace right (Ctrl+Shift+D)'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('the find button opens the search bar for the focused pane', (
     tester,
   ) async {

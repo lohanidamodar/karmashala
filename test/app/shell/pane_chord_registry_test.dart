@@ -313,6 +313,28 @@ void main() {
       expect(toShell, isEmpty);
     });
 
+    testWidgets('the chord splits the empty group it just made, to a floor', (
+      tester,
+    ) async {
+      final (container, toShell) = await pumpFocusedTerminal(tester);
+
+      await chord(tester, LogicalKeyboardKey.keyD);
+      await chord(tester, LogicalKeyboardKey.keyE);
+
+      var state = container.read(terminalSessionsControllerProvider);
+      expect(state.workspace!.groups, hasLength(3));
+      expect(state.activeTabId, isNull);
+
+      // What a held key amounts to: size stops it, four halvings in.
+      for (var i = 0; i < 8; i++) {
+        await chord(tester, LogicalKeyboardKey.keyD);
+      }
+      state = container.read(terminalSessionsControllerProvider);
+      expect(state.workspace!.groups, hasLength(6));
+      expect(toShell, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('Ctrl+Shift+E splits the workspace down', (tester) async {
       final (container, toShell) = await pumpFocusedTerminal(tester);
 

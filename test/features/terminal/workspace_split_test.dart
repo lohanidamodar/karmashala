@@ -91,16 +91,6 @@ void main() {
       expect(other.panes, [first]);
     });
 
-    test('an empty group cannot itself be split', () {
-      final container = makeContainer();
-      final controller = controllerOf(container);
-      controller.openTab(TerminalProfile.powerShell);
-      controller.splitWorkspace(SplitAxis.horizontal);
-
-      expect(controller.splitWorkspace(SplitAxis.vertical), isNull);
-      expect(stateOf(container).workspace!.groups, hasLength(2));
-    });
-
     test('the empty room carries an id nothing can mistake for a tab', () {
       final container = makeContainer();
       final controller = controllerOf(container);
@@ -111,6 +101,219 @@ void main() {
         (group) => controller.isEmptyGroup(group.id),
       );
       expect(isEmptyGroupSlot(empty.panes.single), isTrue);
+    });
+  });
+
+  // The owner, 2026-09-17: "empty workspace group cannot further split, but it
+  // should be able to." What refuses a split is size, never emptiness.
+  group('an empty group splits like any other', () {
+    test('into two empty groups, with the keyboard in the new one', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      controller.openTab(TerminalProfile.powerShell);
+      final first = controller.splitWorkspace(SplitAxis.horizontal)!;
+
+      final second = controller.splitWorkspace(SplitAxis.vertical);
+
+      final state = stateOf(container);
+      expect(second, isNotNull);
+      expect(second, isNot(first));
+      expect(state.workspace!.groups, hasLength(3));
+      expect(controller.isEmptyGroup(first), isTrue);
+      expect(controller.isEmptyGroup(second!), isTrue);
+      expect(state.focusedGroupId, second);
+      expect(state.activeTabId, isNull);
+      expect(state.tabs, hasLength(1), reason: 'a split starts nothing');
+    });
+
+    test('nested along both axes, each half where the cut put it', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      final tab = controller.openTab(TerminalProfile.powerShell);
+      final right = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final below = controller.splitWorkspace(SplitAxis.vertical)!;
+      final corner = controller.splitWorkspace(SplitAxis.horizontal)!;
+
+      final tree = stateOf(container).workspace!;
+      final rects = tree.rects();
+      PaneRect rectOf(String groupId) =>
+          rects[tree.groupById(groupId)!.activePaneId]!;
+
+      expect(tree.groups, hasLength(4));
+      expect(rects[tab]!.width, 0.5);
+      expect(rectOf(right).height, 0.5);
+      expect(rectOf(right).width, 0.5);
+      expect(rectOf(below).width, 0.25);
+      expect(rectOf(corner).width, 0.25);
+      expect(rectOf(corner).top, 0.5);
+      expect(rectOf(corner).left, 0.75);
+    });
+
+    test('until the new group would be under the floor a divider keeps', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      controller.openTab(TerminalProfile.powerShell);
+
+      // 1 → 1/2 → 1/4 → 1/8 → 1/16: a held chord stops itself after four.
+      for (var i = 0; i < 4; i++) {
+        expect(controller.splitWorkspace(SplitAxis.horizontal), isNotNull);
+      }
+      final before = stateOf(container).workspace;
+
+      expect(controller.canSplitWorkspace(SplitAxis.horizontal), isFalse);
+      expect(controller.canSplitWorkspace(SplitAxis.vertical), isTrue);
+      expect(controller.splitWorkspace(SplitAxis.horizontal), isNull);
+
+      expect(stateOf(container).workspace!.groups, hasLength(5));
+      expect(identical(stateOf(container).workspace, before), isTrue);
+      // Only the axis that ran out: the sliver is still the window's height.
+      expect(controller.splitWorkspace(SplitAxis.vertical), isNotNull);
+    });
+
+    test('a divider dragged back makes the room a split needs', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      controller.openTab(TerminalProfile.powerShell);
+      controller.splitWorkspace(SplitAxis.horizontal);
+      final row = stateOf(container).workspace!.root as PaneSplit;
+
+      // The size on screen is what is asked, not how many cuts made it.
+      controller.resizeWorkspace(row.id, 0, 0.42);
+      expect(controller.canSplitWorkspace(SplitAxis.horizontal), isFalse);
+
+      controller.resizeWorkspace(row.id, 0, -0.05);
+      expect(controller.canSplitWorkspace(SplitAxis.horizontal), isTrue);
+    });
+
+    test('before anything is open there is nothing to split', () {
+      final controller = controllerOf(makeContainer());
+
+      expect(controller.canSplitWorkspace(SplitAxis.horizontal), isFalse);
+      expect(controller.splitWorkspace(SplitAxis.horizontal), isNull);
+    });
+
+    test('the floor is the same for a group holding tabs', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      controller.openTab(TerminalProfile.powerShell);
+      for (var i = 0; i < 4; i++) {
+        controller.splitWorkspace(SplitAxis.horizontal);
+      }
+      final sliver = stateOf(container).focusedGroupId!;
+      final tab = controller.openTab(TerminalProfile.powerShell);
+      expect(controller.tabsInGroup(sliver).map((t) => t.id), [tab]);
+
+      expect(controller.splitWorkspace(SplitAxis.horizontal), isNull);
+    });
+
+    test('each one closes on its own and hands the keyboard next door', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      final tab = controller.openTab(TerminalProfile.powerShell);
+      final first = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final second = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final third = controller.splitWorkspace(SplitAxis.horizontal)!;
+
+      expect(controller.closeGroup(third), isTrue);
+      expect(stateOf(container).workspace!.groups, hasLength(3));
+      expect(
+        stateOf(container).focusedGroupId,
+        second,
+        reason: 'the group that took its room back, not the first in the tree',
+      );
+      expect(stateOf(container).activeTabId, isNull);
+
+      // One that does not hold the keyboard leaves it where it was.
+      expect(controller.closeGroup(first), isTrue);
+      expect(stateOf(container).focusedGroupId, second);
+      expect(controller.isEmptyGroup(second), isTrue);
+
+      expect(controller.closeGroup(second), isTrue);
+      final state = stateOf(container);
+      expect(state.workspace!.groups, hasLength(1));
+      expect(state.activeTabId, tab);
+      expect(state.tabs, hasLength(1));
+    });
+
+    test('a tab dropped into one leaves the other empty', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      controller.openTab(TerminalProfile.powerShell);
+      final dropped = controller.openTab(TerminalProfile.powerShell);
+      final first = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final second = controller.splitWorkspace(SplitAxis.vertical)!;
+      controller.focusGroup(first);
+
+      expect(controller.moveTabToGroup(dropped, second), isTrue);
+
+      expect(controller.tabsInGroup(second).map((t) => t.id), [dropped]);
+      expect(controller.isEmptyGroup(first), isTrue);
+      expect(stateOf(container).workspace!.groups, hasLength(3));
+      expect(stateOf(container).focusedGroupId, second);
+      expect(stateOf(container).activeTabId, dropped);
+    });
+
+    test('the next tab opens in the one holding the keyboard', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      controller.openTab(TerminalProfile.powerShell);
+      final first = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final second = controller.splitWorkspace(SplitAxis.vertical)!;
+      controller.focusGroup(first);
+
+      final opened = controller.openTab(TerminalProfile.powerShell);
+
+      expect(controller.tabsInGroup(first).map((t) => t.id), [opened]);
+      expect(controller.isEmptyGroup(second), isTrue);
+    });
+
+    test('"the empty group" is the focused one, else the first', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      final tab = controller.openTab(TerminalProfile.powerShell);
+      final first = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final second = controller.splitWorkspace(SplitAxis.vertical)!;
+
+      expect(controller.emptyWorkspaceGroup(), second);
+
+      controller.activateTab(tab);
+      expect(controller.emptyWorkspaceGroup(), first);
+    });
+
+    test('the arrows step from one empty group to the next', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      final tab = controller.openTab(TerminalProfile.powerShell);
+      final top = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final bottom = controller.splitWorkspace(SplitAxis.vertical)!;
+
+      expect(controller.moveGroupFocus(PaneDirection.up), isTrue);
+      expect(stateOf(container).focusedGroupId, top);
+      expect(stateOf(container).activeTabId, isNull);
+
+      // The chord's own path, which has no active tab to ask first.
+      controller.movePaneFocus(PaneDirection.down);
+      expect(stateOf(container).focusedGroupId, bottom);
+
+      controller.movePaneFocus(PaneDirection.left);
+      expect(stateOf(container).activeTabId, tab);
+    });
+
+    test('closing the last tab beside them leaves them, and one to split', () {
+      final container = makeContainer();
+      final controller = controllerOf(container);
+      final tab = controller.openTab(TerminalProfile.powerShell);
+      final first = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final second = controller.splitWorkspace(SplitAxis.vertical)!;
+
+      controller.closeTab(tab);
+
+      final state = stateOf(container);
+      expect(state.tabs, isEmpty);
+      expect(state.workspace!.groups.map((g) => g.id), [first, second]);
+      expect(state.activeTabId, isNull);
+      expect(controller.isEmptyGroup(state.focusedGroupId!), isTrue);
+      expect(controller.splitWorkspace(SplitAxis.horizontal), isNotNull);
     });
   });
 
@@ -374,6 +577,45 @@ void main() {
           [moved],
         ],
       );
+    });
+
+    test('several empty groups come back where they were', () {
+      final db = AppDatabase.memory();
+      addTearDown(db.close);
+
+      final first = ProviderContainer(
+        overrides: fakeTerminalOverrides(database: db),
+      );
+      final controller = first.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final left = controller.openTab(TerminalProfile.powerShell);
+      final right = controller.splitWorkspace(SplitAxis.horizontal)!;
+      final below = controller.splitWorkspace(SplitAxis.vertical)!;
+      controller.persistLayout();
+      final stored = first
+          .read(terminalSessionsControllerProvider)
+          .workspace!
+          .toJson();
+      first.dispose();
+
+      final next = ProviderContainer(
+        overrides: fakeTerminalOverrides(database: db, restoreLivePanes: false),
+      );
+      addTearDown(next.dispose);
+      final restored = next.read(terminalSessionsControllerProvider);
+      final restoredController = next.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+
+      expect(restored.workspace!.toJson(), stored);
+      expect(restored.workspace!.groups.map((g) => g.id), [
+        restored.workspace!.groupOf(left)!.id,
+        right,
+        below,
+      ]);
+      expect(restoredController.isEmptyGroup(right), isTrue);
+      expect(restoredController.isEmptyGroup(below), isTrue);
     });
 
     test('a group whose tabs all went is not restored as empty room', () {

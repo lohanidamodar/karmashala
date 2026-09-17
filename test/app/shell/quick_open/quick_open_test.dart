@@ -572,6 +572,70 @@ void main() {
     }
   });
 
+  testWidgets('an empty group is offered the same two splits', (tester) async {
+    late ProviderContainer scope;
+    await open(tester, before: (container) {
+      scope = container;
+      container.read(terminalSessionsControllerProvider.notifier)
+        ..openTab(TerminalProfile.powerShell)
+        ..splitWorkspace(SplitAxis.horizontal);
+    });
+
+    await type(tester, 'split the workspace');
+    expect(find.text('Split the workspace right'), findsOneWidget);
+    await tester.tap(find.text('Split the workspace down'));
+    await tester.pumpAndSettle();
+
+    final state = scope.read(terminalSessionsControllerProvider);
+    expect(state.workspace!.groups, hasLength(3));
+    expect(state.tabs, hasLength(1));
+  });
+
+  testWidgets('a split the group has no room for is left off the list', (
+    tester,
+  ) async {
+    await open(tester, before: (container) {
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      )..openTab(TerminalProfile.powerShell);
+      for (var i = 0; i < 4; i++) {
+        terminals.splitWorkspace(SplitAxis.horizontal);
+      }
+    });
+
+    await type(tester, 'split the workspace');
+
+    expect(find.text('Split the workspace right'), findsNothing);
+    expect(find.text('Split the workspace down'), findsOneWidget);
+  });
+
+  testWidgets('with several empty groups a tab moves into the focused one', (
+    tester,
+  ) async {
+    late ProviderContainer scope;
+    late String first;
+    late String second;
+    await open(tester, before: (container) {
+      scope = container;
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      terminals.openTab(TerminalProfile.powerShell);
+      terminals.openTab(TerminalProfile.powerShell);
+      first = terminals.splitWorkspace(SplitAxis.horizontal)!;
+      second = terminals.splitWorkspace(SplitAxis.vertical)!;
+    });
+
+    await type(tester, 'move a tab into');
+    await tester.tap(find.text('Move a tab into the empty group…'));
+    await tester.pumpAndSettle();
+    await press(tester, LogicalKeyboardKey.enter);
+
+    final terminals = scope.read(terminalSessionsControllerProvider.notifier);
+    expect(terminals.tabsInGroup(second), hasLength(1));
+    expect(terminals.isEmptyGroup(first), isTrue);
+  });
+
   testWidgets('neither is listed while there is nothing to move', (
     tester,
   ) async {

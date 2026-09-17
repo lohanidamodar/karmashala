@@ -38,12 +38,12 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     return group.activePaneId;
   }
 
-  /// Divides the focused group along [axis], leaving the new group **empty** and
-  /// focused with no active tab — the honest answer to "what am I typing into".
+  /// Divides the focused group — empty or not — along [axis], leaving the new
+  /// group **empty** and focused. Null when it is too small: [canSplitWorkspace].
   String? splitWorkspace(SplitAxis axis) {
     final tree = _workspace;
     final group = _focusedGroup;
-    if (tree == null || group == null || _isEmptyGroup(group)) return null;
+    if (tree == null || group == null || !canSplitWorkspace(axis)) return null;
 
     final slot = emptyGroupSlotId(_newId());
     final next = tree.split(group.activePaneId, axis, slot, _newId());
@@ -174,7 +174,14 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     });
     if (next == null) return false;
     _workspace = next;
-    if (_focusedGroupId == groupId) _focusedGroupId = null;
+    if (_focusedGroupId == groupId) {
+      // The group before it in the tree is the one it was split from; "the
+      // first group" would throw the keyboard across a window of empty rooms.
+      final index = tree.groups.indexOf(group);
+      final heir = tree.groups[index > 0 ? index - 1 : 1];
+      _focusedGroupId = heir.id;
+      _activeTabId = _isEmptyGroup(heir) ? null : heir.activePaneId;
+    }
     _publish();
     persistStructure();
     _focusActivePane();

@@ -16,3 +16,12 @@ bool isEmptyGroupSlot(String id) => id.startsWith(kEmptyGroupPrefix);
 
 /// The id an empty group made from [seed] carries.
 String emptyGroupSlotId(String seed) => '$kEmptyGroupPrefix$seed';
+
+/// Whether the group holding [tabId] can be halved along [axis]: each half must
+/// keep [kMinPaneWeight] of the **workspace**. Size refuses, never emptiness.
+bool groupHasRoomToSplit(WorkspaceLayout tree, String tabId, SplitAxis axis) {
+  final rect = tree.rects()[tabId];
+  if (rect == null) return false;
+  final extent = axis == SplitAxis.horizontal ? rect.width : rect.height;
+  return extent / 2 >= kMinPaneWeight;
+}

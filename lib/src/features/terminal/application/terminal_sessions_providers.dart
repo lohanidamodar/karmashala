@@ -50,6 +50,21 @@ final workspaceGroupActiveTabProvider = Provider.autoDispose
           .activeTabInGroup(groupId);
     });
 
+/// Whether the focused group has room to be split along an axis. A bool per
+/// axis, so dragging a divider wakes a button only as it crosses the floor.
+final workspaceSplitRoomProvider = Provider.autoDispose.family<bool, SplitAxis>(
+  (ref, axis) {
+    ref.watch(
+      terminalSessionsControllerProvider.select(
+        (s) => (s.workspace, s.focusedGroupId),
+      ),
+    );
+    return ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .canSplitWorkspace(axis);
+  },
+);
+
 /// Which tab is in front.
 final terminalActiveTabIdProvider = Provider<String?>(
   (ref) => ref.watch(

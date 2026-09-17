@@ -326,10 +326,10 @@ class QuickOpenSources {
     final emptyGroup = sessions.emptyWorkspaceGroup();
     final slot = sessions.emptySlotInActiveTab();
     final pane = sessions.paneMovableToNewTab();
-    final canSplitWorkspace = sessions.canSplitWorkspace();
     final canSplitPane = sessions.focusedPaneIsSplittable();
     return [
-      if (canSplitWorkspace) ...[
+      // Left out one axis at a time: a sliver too narrow to halve is still tall.
+      if (sessions.canSplitWorkspace(SplitAxis.horizontal))
         _command(
           'Split the workspace right',
           subtitle: 'A new group beside this one, with a strip and a bar',
@@ -337,6 +337,7 @@ class QuickOpenSources {
           keywords: const ['split', 'group', 'workspace', 'right', 'column'],
           onSelect: () => sessions.splitWorkspace(SplitAxis.horizontal),
         ),
+      if (sessions.canSplitWorkspace(SplitAxis.vertical))
         _command(
           'Split the workspace down',
           subtitle: 'A new group under this one, with a strip and a bar',
@@ -344,7 +345,6 @@ class QuickOpenSources {
           keywords: const ['split', 'group', 'workspace', 'down', 'row'],
           onSelect: () => sessions.splitWorkspace(SplitAxis.vertical),
         ),
-      ],
       if (canSplitPane) ...[
         _command(
           'Split this pane right',

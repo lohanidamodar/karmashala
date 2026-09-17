@@ -57,22 +57,8 @@ class TerminalToolbar extends ConsumerWidget {
           icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
           onPressed: hasTabs ? actions.openSearch : null,
         ),
-        if (!compact) IconButton(
-          tooltip:
-              'Split the workspace right'
-              '${_chord(_splitChord(SplitAxis.horizontal))}',
-          // `sidebarSimple` means the side panel everywhere else in the
-          // chrome, so a split gets its own shape.
-          icon: const Icon(AppIcons.squareSplitHorizontal, size: Chrome.icon),
-          onPressed: hasTabs ? () => actions.split(SplitAxis.horizontal) : null,
-        ),
-        if (!compact) IconButton(
-          tooltip:
-              'Split the workspace down'
-              '${_chord(_splitChord(SplitAxis.vertical))}',
-          icon: const Icon(AppIcons.squareSplitVertical, size: Chrome.icon),
-          onPressed: hasTabs ? () => actions.split(SplitAxis.vertical) : null,
-        ),
+        if (!compact) _SplitButton(SplitAxis.horizontal),
+        if (!compact) _SplitButton(SplitAxis.vertical),
         // Two controls, the way VS Code splits them: one button that could only
         // open a menu made the common case cost a choice.
         IconButton(
@@ -104,6 +90,36 @@ class TerminalToolbar extends ConsumerWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Splits the focused group along [axis] — an empty one too. What disables it is
+/// room, and its tooltip says so; before any tab there is no group to divide.
+class _SplitButton extends ConsumerWidget {
+  const _SplitButton(this.axis);
+
+  final SplitAxis axis;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final right = axis == SplitAxis.horizontal;
+    final hasGroup = ref.watch(
+      focusedWorkspaceGroupProvider.select((id) => id != null),
+    );
+    final hasRoom = ref.watch(workspaceSplitRoomProvider(axis));
+    return IconButton(
+      tooltip: hasGroup && !hasRoom
+          ? 'This group is too ${right ? 'narrow' : 'short'} to split again'
+          : 'Split the workspace ${right ? 'right' : 'down'}'
+                '${_chord(_splitChord(axis))}',
+      // `sidebarSimple` means the side panel everywhere else in the chrome, so
+      // a split gets its own shape.
+      icon: Icon(
+        right ? AppIcons.squareSplitHorizontal : AppIcons.squareSplitVertical,
+        size: Chrome.icon,
+      ),
+      onPressed: hasRoom ? () => TerminalActions(ref).split(axis) : null,
     );
   }
 }
