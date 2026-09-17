@@ -26,9 +26,11 @@ import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/data/system_terminal_service.dart';
 import '../application/explorer_actions.dart';
 import '../application/session_diff_stat.dart';
+import '../application/session_row_attention.dart';
 import '../application/session_selection.dart';
 import 'section_membership_dialog.dart';
 import 'package:karmashala_ui/rows.dart';
+
 /// The two rows that stand for a session, wherever the app draws one: the tree
 /// and the sections must be the same object. Both watch inside their own
 /// `build`, so a list of five hundred that shows thirty pays for thirty.
@@ -84,9 +86,9 @@ class NativeSessionRow extends ConsumerWidget {
           deleteFromCli: deleteFromCli,
         );
         if (notice != null && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(notice)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(notice)));
         }
       } catch (error) {
         if (!context.mounted) return;
@@ -125,6 +127,14 @@ class NativeSessionRow extends ConsumerWidget {
         .getById(session.agentInstallationId)
         ?.agentId;
     final (statusIcon, statusColor) = _status(session.status, context);
+    final attention = ref.watch(
+      sessionRowAttentionProvider.select(
+        (rows) => rows[session.id] ?? SessionRowAttention.none,
+      ),
+    );
+    final lifecycle = session.status.labelWhen(
+      hostedLive: whereabouts.hostedLive,
+    );
     // A list the user maintains by hand — five entries, not five hundred — so
     // this costs a rebuild when they add a section and nothing otherwise.
     final hasSections = SectionMembershipDialog.hasManualSections(ref);
@@ -141,24 +151,34 @@ class NativeSessionRow extends ConsumerWidget {
       pinned: pinned,
       agentIcon: statusIcon,
       agentColor: statusColor,
+      statusLabel: _capitalised(lifecycle),
       agentLabel: [
         agentId == null
             ? 'Agent'
             : AgentRegistry.builtIn.displayNameFor(agentId),
-        // Not `status.name`. A row claiming to be live with nothing of ours
-        // running it says so in words instead — see `SessionStatus.labelWhen`.
-        session.status.labelWhen(hostedLive: whereabouts.hostedLive),
+        // The glyph says the lifecycle; a row claiming to be live with nothing
+        // of ours running it still says so in words (`SessionStatus.labelWhen`).
+        if (lifecycle != session.status.name) lifecycle,
       ].join('  ·  '),
-      // Both shown deliberately: the badge is what the agent is doing *now*,
-      // the word beside its name is the session's own lifecycle.
-      badge: AgentStatusBadge(sessionId: session.id),
+      // One status glyph: what the agent is doing now while the session claims
+      // to be live, its recorded lifecycle once it is not.
+      badge: session.status.claimsLive
+          ? AgentStatusBadge(sessionId: session.id, size: ExplorerRow.glyphSize)
+          : null,
+      unread: attention == SessionRowAttention.unread,
+      needsYou: attention == SessionRowAttention.needsYou,
+      settled:
+          session.status.isEnded &&
+          session.status != SessionStatus.failed &&
+          attention == SessionRowAttention.none,
       age: compactAge(now.difference(since)),
       // The corner has room for a number, not for how much to trust it; the
       // words survive on hover, in `describeAge`'s wording.
       ageTooltip: switch (lastActive.label(now)) {
         final label? => _capitalised(label),
-        _ => 'Created ${describeAge(now.difference(session.createdAt))} — '
-            'nothing this session did has been observed.',
+        _ =>
+          'Created ${describeAge(now.difference(session.createdAt))} — '
+              'nothing this session did has been observed.',
       },
       title: session.title,
       branch: stat?.branch,
@@ -188,11 +208,7 @@ class NativeSessionRow extends ConsumerWidget {
         ),
         // The row you come back to a day later and have not opened. It spends a
         // turn, so it is picked, never done by the row itself.
-        DesktopMenuItem(
-          value: 'recap',
-          label: 'Recap',
-          icon: AppIcons.article,
-        ),
+        DesktopMenuItem(value: 'recap', label: 'Recap', icon: AppIcons.article),
         // One entry, not one per installed terminal: three of eight items here
         // used to be external openers. The rest is a setting.
         if (terminals.isNotEmpty)
@@ -266,10 +282,12 @@ class NativeSessionRow extends ConsumerWidget {
           case 'changed-files':
             await SessionChangedFilesDialog.show(context, session.id);
           case 'copy-cmd':
-            unawaited(copyCommandToClipboard(
-              context,
-              () => actions.nativeResumeShellCommand(session.id),
-            ));
+            unawaited(
+              copyCommandToClipboard(
+                context,
+                () => actions.nativeResumeShellCommand(session.id),
+              ),
+            );
           case 'rename':
             unawaited(rename());
           case 'delete':
@@ -325,6 +343,11 @@ class ImportedSessionRow extends ConsumerWidget {
     final terminals =
         ref.watch(availableSystemTerminalsProvider).asData?.value ?? const [];
     final cliLabel = AgentRegistry.builtIn.displayNameFor(session.cli);
+    final attention = ref.watch(
+      sessionRowAttentionProvider.select(
+        (rows) => rows[session.id] ?? SessionRowAttention.none,
+      ),
+    );
     final hasSections = SectionMembershipDialog.hasManualSections(ref);
     // The CLI store file's own mtime — the agent's own writing rather than
     // anything we inferred. Aged, so a row can never claim to be live.
@@ -351,10 +374,12 @@ class ImportedSessionRow extends ConsumerWidget {
         case 'resume':
           await _open(context, ref, session);
         case 'copy-cmd':
-          unawaited(copyCommandToClipboard(
-            context,
-            () => actions.resumeShellCommand(session),
-          ));
+          unawaited(
+            copyCommandToClipboard(
+              context,
+              () => actions.resumeShellCommand(session),
+            ),
+          );
         case 'rename':
           final name = await _promptRename(context, session.displayTitle);
           if (name != null) await actions.renameImported(session, name);
@@ -381,6 +406,11 @@ class ImportedSessionRow extends ConsumerWidget {
           ? AppIcons.arrowBendDownRight
           : AppIcons.clockCounterClockwise,
       agentLabel: [cliLabel, 'imported'].join('  ·  '),
+      statusLabel: session.isSubagent
+          ? 'Imported subagent conversation'
+          : 'Imported conversation',
+      unread: attention == SessionRowAttention.unread,
+      needsYou: attention == SessionRowAttention.needsYou,
       age: lastSeen,
       ageTooltip: switch (lastActive.label(now)) {
         final label? =>
@@ -399,11 +429,7 @@ class ImportedSessionRow extends ConsumerWidget {
           ? () => ref.read(sessionSelectionProvider.notifier).toggle(session.id)
           : () => _open(context, ref, session),
       menuItemsBuilder: () => [
-        DesktopMenuItem(
-          value: 'resume',
-          label: 'Resume',
-          icon: AppIcons.play,
-        ),
+        DesktopMenuItem(value: 'resume', label: 'Resume', icon: AppIcons.play),
         if (terminals.isNotEmpty)
           DesktopMenuItem(
             value: 'terminal:${terminals.first.id}',

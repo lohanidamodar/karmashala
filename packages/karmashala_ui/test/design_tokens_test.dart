@@ -70,16 +70,13 @@ void main() {
         Motion.emphasisOut,
         Motion.statusPeriod,
       ].map((d) => reduced ? Duration.zero : d);
-      expect(
-        [
-          motion.fast,
-          motion.base,
-          motion.emphasisIn,
-          motion.emphasisOut,
-          motion.statusPeriod,
-        ],
-        expected.toList(),
-      );
+      expect([
+        motion.fast,
+        motion.base,
+        motion.emphasisIn,
+        motion.emphasisOut,
+        motion.statusPeriod,
+      ], expected.toList());
       expect(motion.instant, Duration.zero);
     });
   }
@@ -233,8 +230,8 @@ void main() {
       );
     });
 
-    testWidgets('a selected Explorer row is its resting tone under the '
-        'selected layer ($brightness)', (tester) async {
+    testWidgets('a selected Explorer row wears the selected layer over a '
+        'transparent rest ($brightness)', (tester) async {
       await pumpInBox(
         tester,
         width: 300,
@@ -247,11 +244,8 @@ void main() {
         ),
       );
       final fills = _rowDecorations(tester).map((d) => d.color).toList();
-      final expected = Color.alphaBlend(
-        StateLayers.selected(scheme),
-        ExplorerRowKind.session.surface(scheme),
-      );
-      expect(fills, contains(expected));
+      // Design direction S3: under a pointer a row rests transparent.
+      expect(fills, contains(StateLayers.selected(scheme)));
     });
 
     testWidgets('keyboard focus is an inset ring, not a second fill '
@@ -272,13 +266,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final fill = _rowDecorations(tester).firstWhere((d) => d.border != null);
-      expect(
-        fill.color,
-        Color.alphaBlend(
-          StateLayers.selected(scheme),
-          ExplorerRowKind.session.surface(scheme),
-        ),
-      );
+      expect(fill.color, StateLayers.selected(scheme));
       final side = (fill.border! as Border).top;
       expect(side.color, StateLayers.focusRing(scheme));
       expect(side.width, 1.0);

@@ -109,20 +109,18 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     picked.clear();
-    await tester.pumpWidget(
-      host(rows(selected: selected), platform: platform),
-    );
+    await tester.pumpWidget(host(rows(selected: selected), platform: platform));
     await tester.pumpAndSettle();
   }
 
-  /// The row's tile: the outermost decorated box inside it, which is the one
-  /// [ExplorerRow] paints the tone, the state and the corners on.
+  /// The row's fill: the outermost decorated box inside it, which is the one
+  /// [ExplorerRow] paints the states, the ring and the corners on.
   Finder tile(Finder row) =>
       find.descendant(of: row, matching: find.byType(DecoratedBox)).first;
 
-  Color tileColor(WidgetTester tester, Finder row) {
+  Color? tileColor(WidgetTester tester, Finder row) {
     final box = tester.widget<DecoratedBox>(tile(row));
-    return (box.decoration as BoxDecoration).color!;
+    return (box.decoration as BoxDecoration).color;
   }
 
   Future<TestGesture> hover(WidgetTester tester, Finder finder) async {
@@ -135,29 +133,34 @@ void main() {
   }
 
   group('separation', () {
-    testWidgets('every row kind draws its own tile, one step off the pane', (
+    // Design direction S3: under a pointer a row is flat at rest, and structure
+    // is carried by indent and glyphs; only hover, selection and focus fill.
+    testWidgets('every row kind rests transparent under a pointer', (
       tester,
     ) async {
       await pump(tester);
-      final surface = AppTheme.light().colorScheme.surface;
-
-      final project = tileColor(tester, find.byType(ProjectCard));
-      final checkout = tileColor(tester, find.byType(CheckoutRow));
-      final session = tileColor(tester, find.byType(SessionCard).first);
-
-      for (final color in [project, checkout, session]) {
-        expect(
-          color,
-          isNot(surface),
-          reason: 'a row painted in the pane colour has no edges',
-        );
+      for (final row in [
+        find.byType(ProjectCard),
+        find.byType(CheckoutRow),
+        find.byType(SessionCard).first,
+      ]) {
+        expect(tileColor(tester, row), isNull, reason: '$row is tinted');
       }
-      // And the tones differ from one another, so depth reads as tone as well
-      // as position.
-      expect({project, checkout, session}, hasLength(3));
     });
 
-    testWidgets('consecutive rows do not touch', (tester) async {
+    testWidgets('a pointer on a row fills it, and only that row', (
+      tester,
+    ) async {
+      await pump(tester);
+      await hover(tester, find.byType(SessionCard).first);
+      expect(
+        tileColor(tester, find.byType(SessionCard).first),
+        StateLayers.hover(AppTheme.light().colorScheme),
+      );
+      expect(tileColor(tester, find.byType(ProjectCard)), isNull);
+    });
+
+    testWidgets('consecutive rows are a hairline apart', (tester) async {
       await pump(tester);
       final tiles = [
         tester.getRect(tile(find.byType(ProjectCard))),
@@ -168,36 +171,45 @@ void main() {
       for (var i = 1; i < tiles.length; i++) {
         expect(
           tiles[i].top - tiles[i - 1].bottom,
-          greaterThanOrEqualTo(ExplorerRow.gap),
-          reason: 'row $i sits flush against the one above it',
+          ExplorerRow.gapOf(UiDensity.pointer),
+          reason: 'row $i',
         );
       }
     });
 
-    testWidgets('depth is an indent of the tile, not only of the text', (
+    testWidgets('depth indents the content, and the fill spans the pane', (
       tester,
     ) async {
       await pump(tester);
-      final project = tester.getRect(tile(find.byType(ProjectCard))).left;
-      final checkout = tester.getRect(tile(find.byType(CheckoutRow))).left;
-      final session = tester.getRect(tile(find.byType(SessionCard).first)).left;
-      final subagent = tester.getRect(tile(find.byType(SessionCard).last)).left;
+      final fills = {
+        for (final row in [
+          find.byType(ProjectCard),
+          find.byType(CheckoutRow),
+          find.byType(SessionCard).first,
+          find.byType(SessionCard).last,
+        ])
+          tester.getRect(tile(row)).left,
+      };
+      expect(fills, hasLength(1), reason: 'one fill edge for every depth');
 
-      expect(checkout, greaterThan(project));
-      expect(session, greaterThan(checkout));
-      expect(subagent, greaterThan(session));
+      final project = tester.getRect(find.text('popupbits')).left;
+      final checkout = tester.getRect(find.text('karmashala-app')).left;
+      final session = tester.getRect(find.text('Benchmark arcade games')).left;
+      final subagent = tester.getRect(find.text('A subagent of it')).left;
+      expect(checkout - project, ExplorerRow.indent);
+      expect(session - checkout, ExplorerRow.indent);
+      expect(subagent - session, ExplorerRow.indent);
     });
 
-    testWidgets('selection tints the tile and draws the accent rule', (
+    testWidgets('selection is the selected layer, with no rule beside it', (
       tester,
     ) async {
-      await pump(tester);
-      final resting = tileColor(tester, find.byType(SessionCard).first);
-
       await pump(tester, selected: true);
-      expect(tileColor(tester, find.byType(SessionCard).first), isNot(resting));
-
-      final primary = AppTheme.light().colorScheme.primary;
+      final scheme = AppTheme.light().colorScheme;
+      expect(
+        tileColor(tester, find.byType(SessionCard).first),
+        StateLayers.selected(scheme),
+      );
       expect(
         find.descendant(
           of: find.byType(SessionCard).first,
@@ -205,11 +217,11 @@ void main() {
             (widget) =>
                 widget is Container &&
                 widget.decoration is BoxDecoration &&
-                (widget.decoration! as BoxDecoration).color == primary,
+                (widget.decoration! as BoxDecoration).color == scheme.primary,
           ),
         ),
-        findsOneWidget,
-        reason: 'selection is carried by a rule in the accent',
+        findsNothing,
+        reason: 'one way to say "selected", on every row kind',
       );
     });
   });
@@ -223,8 +235,11 @@ void main() {
       expect(find.byTooltip('Project actions'), findsNothing);
       expect(find.byTooltip('Folder actions'), findsNothing);
 
-      // The verb a row exists for stays put: only the overflow is on demand.
-      expect(find.byTooltip('Start a session here with the default agent'), findsOneWidget);
+      // The `+` too: it takes the count's place under the pointer (S2).
+      expect(
+        find.byTooltip('Start a session here with the default agent'),
+        findsNothing,
+      );
     });
 
     testWidgets('a pointer on the row reveals it, and leaving hides it again', (

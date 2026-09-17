@@ -25,8 +25,12 @@ class AgentStatusBadge extends ConsumerWidget {
   const AgentStatusBadge({
     required this.sessionId,
     this.showLabel = false,
+    this.size = Chrome.iconSmall,
     super.key,
   });
+
+  /// The glyph's size; a row's status column asks for its own.
+  final double size;
 
   final String sessionId;
 
@@ -54,11 +58,7 @@ class AgentStatusBadge extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            StatusGlyph(
-              status: status,
-              size: Chrome.iconSmall,
-              color: colour,
-            ),
+            StatusGlyph(status: status, size: size, color: colour),
             if (showLabel) ...[
               const SizedBox(width: Insets.xs),
               Text(

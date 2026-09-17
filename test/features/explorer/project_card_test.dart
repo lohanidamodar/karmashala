@@ -94,26 +94,21 @@ void main() {
       });
     }
 
-    testWidgets('the aggregate is dropped at the pane minimum', (tester) async {
-      await pump(tester, width: 200);
-      expect(find.textContaining('6 sessions'), findsNothing);
-      // The name and the path survive: they are what identifies the row.
-      expect(find.text('popupbits'), findsOneWidget);
-    });
-
-    testWidgets('the aggregate is the same string it has always been', (
+    testWidgets('the count is a number, and the aggregate is its tooltip', (
       tester,
     ) async {
-      await pump(tester, width: 400);
-      expect(find.text('6 sessions · 3 changed'), findsOneWidget);
+      // The name wins the row: `12 sessions` beside a `+` left "popupb…".
+      for (final width in [200.0, 400.0]) {
+        await pump(tester, width: width);
+        expect(find.text('6'), findsOneWidget);
+        expect(find.byTooltip('6 sessions · 3 changed'), findsOneWidget);
+        expect(find.text('popupbits'), findsOneWidget);
+      }
     });
 
-    testWidgets('waiting work joins the aggregate as one run of text', (
+    testWidgets('waiting work is a glyph and a count beside the name', (
       tester,
     ) async {
-      // One widget, two colours. Rendering it as a second `Text` saying exactly
-      // what the status bar says would put two identical labels on screen, and
-      // the status bar's is the one you click.
       await pump(
         tester,
         width: 480,
@@ -123,18 +118,23 @@ void main() {
           needsAttention: 1,
         ),
       );
+      expect(find.byTooltip('1 needs you'), findsOneWidget);
       expect(
-        find.text('6 sessions · 3 changed  ·  1 needs you'),
+        find.byTooltip('6 sessions · 3 changed · 1 needs you'),
         findsOneWidget,
       );
-      expect(find.text('1 needs you'), findsNothing);
+      // Strong, as design direction T5 keeps bold for what needs you.
+      expect(
+        tester.widget<Text>(find.text('popupbits')).style?.fontWeight,
+        FontWeight.w600,
+      );
     });
 
-    testWidgets('the running badge waits for a pane wide enough for it', (
+    testWidgets('the running badge waits for a title slot wide enough', (
       tester,
     ) async {
       const summary = ProjectSummary(sessions: 6, changedFiles: 3, running: 2);
-      await pump(tester, width: 294, summary: summary);
+      await pump(tester, width: 200, summary: summary);
       expect(find.byTooltip('2 sessions are running'), findsNothing);
 
       await pump(tester, width: 400, summary: summary);
@@ -152,16 +152,15 @@ void main() {
       );
     });
 
-    testWidgets('the + stays reachable even at the pane minimum', (
-      tester,
-    ) async {
-      // The verb the row exists for is never hidden. The overflow beside it is
-      // — a right-click and Shift+F10 already open the same menu, and a
-      // permanent button on every row was the clutter the owner reported. It
-      // comes back under the pointer.
+    testWidgets('the + and the menu take the count\'s place, even at the pane '
+        'minimum', (tester) async {
+      // Design direction S2: actions replace the count on hover or focus, in
+      // one column with every other row's.
+      const plus = 'Start a session here with the default agent';
       await pump(tester, width: 200);
-      expect(find.byTooltip('Start a session here with the default agent'), findsOneWidget);
+      expect(find.byTooltip(plus), findsNothing);
       expect(find.byTooltip('Project actions'), findsNothing);
+      expect(find.text('6'), findsOneWidget);
 
       final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
       await gesture.addPointer(location: Offset.zero);
@@ -169,7 +168,9 @@ void main() {
       await gesture.moveTo(tester.getCenter(find.byType(ProjectCard)));
       await tester.pumpAndSettle();
 
+      expect(find.byTooltip(plus), findsOneWidget);
       expect(find.byTooltip('Project actions'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

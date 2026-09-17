@@ -76,9 +76,12 @@ void main() {
   });
 
   testWidgets('ProjectCard draws its path with it', (tester) async {
+    // Under a thumb. A pointer row keeps one line and puts the path and the
+    // badge in the name's tooltip, drawing the line only for a missing folder.
     await pumpInBox(
       tester,
       width: 400,
+      density: UiDensity.touch,
       child: ProjectCard(
         name: 'app',
         path: '/w/app',

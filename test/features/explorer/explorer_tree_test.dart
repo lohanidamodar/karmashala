@@ -495,16 +495,20 @@ void main() {
       tester,
     ) async {
       await pump(tester);
-      // The machine is the outermost row now, so its caret is the column's
-      // left edge; the project tile sits two levels in from it.
-      final caret = tester.getRect(
+      // A row's hover and selection fill spans the pane at the same inset as
+      // the field; only a row's content steps in with depth.
+      final fill = tester.getRect(
         find
-            .descendant(of: find.byType(ListView), matching: find.byType(Icon))
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(InkWell),
+            )
             .first,
       );
       final field = tester.getRect(find.byType(TextField));
 
-      expect(field.left, caret.left);
+      expect(field.left, fill.left);
+      expect(field.right, fill.right);
     });
   });
 
@@ -547,23 +551,22 @@ void main() {
       await pump(tester, size: const Size(460, 900));
 
       expect(tester.takeException(), isNull);
-      expect(find.textContaining('projects/app  ·  main'), findsOneWidget);
+      // The branch is on line two with the agent; the sub-path, when there is
+      // one, is line three.
+      expect(find.textContaining('main'), findsOneWidget);
+      expect(find.text('projects/app'), findsOneWidget);
     });
 
-    testWidgets('the header does not overflow between its two breakpoints', (
+    testWidgets('the header does not overflow at the width it opens at', (
       tester,
     ) async {
-      // 304px is the width the Explorer opens at, and the narrowest that still
-      // carries the aggregate now the card sits two levels into the tree. The
-      // name is the row's only flexible child, so the facts are dropped rather
-      // than squeezed; between 294 and 304 they are, which is the cost of the
-      // machine and its section standing above every project.
+      // 304px is the width the Explorer opens at. The count is a number in the
+      // right-hand column, its words in the tooltip, at every width.
       addSession('s1', repositoryId: 'r1', title: 'Running');
       await pump(tester, size: const Size(304, 900));
 
       expect(tester.takeException(), isNull);
-      expect(find.textContaining('1 session'), findsOneWidget);
-      expect(find.byTooltip('1 session is running'), findsNothing);
+      expect(find.byTooltip('1 session'), findsOneWidget);
     });
 
     testWidgets('a wide pane shows the running badge as well', (tester) async {

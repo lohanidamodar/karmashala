@@ -28,6 +28,7 @@ class ProjectCard extends StatelessWidget {
     this.onTogglePin,
     this.showMenu = true,
     this.environmentBadge,
+    this.depth = 0,
     super.key,
   });
 
@@ -57,15 +58,12 @@ class ProjectCard extends StatelessWidget {
   /// Whether to draw the row's overflow menu. See [SessionCard.showMenu].
   final bool showMenu;
 
-  /// The narrowest pane that still has room for the aggregate beside the row's
-  /// buttons. The Explorer clamps to 200px, so this is a real case, and half a
-  /// word of aggregate is worth less than the row it would squeeze.
-  static const aggregateWidth = 260.0;
+  /// Where the tree draws this row. The companion's cards stand at zero.
+  final int depth;
 
-  /// And the narrowest with room for the semantic badges *as well*. Two
-  /// thresholds because the name is the row's only flexible child: with all of
-  /// it drawn, a 294px pane overflowed by 60px.
-  static const badgeWidth = 350.0;
+  /// The narrowest title slot that still has room for the running count beside
+  /// the name. Under it the name wins, and the count is in the tooltip.
+  static const runningWidth = 120.0;
 
   @override
   Widget build(BuildContext context) {
@@ -76,34 +74,129 @@ class ProjectCard extends StatelessWidget {
 
     return ExplorerRow(
       kind: ExplorerRowKind.project,
-      depth: 0,
+      depth: depth,
       selected: selected,
       onTap: onTap,
       menuItemsBuilder: menuItemsBuilder,
       onMenu: onMenu,
       builder: (context) => density.isTouch
           ? _touchBody(context, muted, semantic, density)
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final width = constraints.maxWidth;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          : _pointerBody(context, muted, semantic, density),
+    );
+  }
+
+  /// One line under a pointer: caret, folder, the name, what needs you, and
+  /// the session count in the right-hand column — `+` and `⋮` in its place on
+  /// hover. The path is the name's tooltip; a missing folder gets a line.
+  Widget _pointerBody(
+    BuildContext context,
+    TextStyle? muted,
+    SemanticColors semantic,
+    UiDensity density,
+  ) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final count = [?summary.label, ?summary.attentionLabel].join(' · ');
+    final line = ExplorerRowLine(
+      lead: ExplorerRowLead(
+        expanded: expanded,
+        glyph: Icon(
+          expanded ? AppIcons.folderOpen : AppIcons.folder,
+          size: ExplorerRow.glyphSize,
+          color: missing ? scheme.error : scheme.onSurfaceVariant,
+        ),
+      ),
+      title: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          children: [
+            Flexible(
+              child: Tooltip(
+                message: [
+                  ?environmentBadge,
+                  path,
+                ].where((part) => part.isNotEmpty).join('\n'),
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: density.rowTitle(
+                    theme,
+                    strong: summary.needsAttention > 0,
+                  ),
+                ),
+              ),
+            ),
+            if (pinned) ...[
+              SizedBox(width: density.glyphGap),
+              Tooltip(
+                message: 'Pinned to top',
+                child: Icon(
+                  AppIcons.pushPinFill,
+                  size: density.iconSmall,
+                  color: scheme.tertiary,
+                ),
+              ),
+            ],
+            if (summary.needsAttention > 0) ...[
+              SizedBox(width: density.glyphGap),
+              Tooltip(
+                message: summary.attentionLabel!,
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _line1(
-                      context,
-                      muted,
-                      semantic,
-                      density,
-                      wide: width >= aggregateWidth,
-                      roomy: width >= badgeWidth,
+                    Icon(
+                      AppIcons.warningCircle,
+                      size: density.iconSmall,
+                      color: semantic.attention,
                     ),
-                    SizedBox(height: density.lineGap),
-                    _line2(density),
+                    const SizedBox(width: Insets.hair),
+                    Text(
+                      '${summary.needsAttention}',
+                      style: muted?.copyWith(color: semantic.attention),
+                    ),
                   ],
-                );
-              },
-            ),
+                ),
+              ),
+            ],
+            if (summary.running > 0 &&
+                constraints.maxWidth >= runningWidth) ...[
+              SizedBox(width: density.glyphGap),
+              _runningBadge(muted, semantic, density),
+            ],
+          ],
+        ),
+      ),
+      trailing: ExplorerRowTrailing(
+        meta: summary.sessions == 0
+            ? null
+            : ExplorerRowMeta('${summary.sessions}', tooltip: count),
+        action: onNewSession == null
+            ? null
+            : ExplorerRowAction(
+                tooltip: 'Start a session here with the default agent',
+                icon: AppIcons.plus,
+                onPressed: onNewSession,
+              ),
+        menu: showMenu
+            ? RowMenuButton(
+                tooltip: 'Project actions',
+                itemBuilder: menuItemsBuilder,
+                onSelected: onMenu,
+              )
+            : null,
+      ),
+    );
+    if (!missing) return line;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        line,
+        Padding(
+          padding: const EdgeInsets.only(left: ExplorerRow.lead),
+          child: _pathLine,
+        ),
+      ],
     );
   }
 
@@ -232,84 +325,6 @@ class ProjectCard extends StatelessWidget {
     ),
   );
 
-  Widget _line1(
-    BuildContext context,
-    TextStyle? muted,
-    SemanticColors semantic,
-    UiDensity density, {
-    required bool wide,
-    required bool roomy,
-  }) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final aggregate = wide ? summary.label : null;
-    return Row(
-      children: [
-        Icon(
-          expanded ? AppIcons.caretDown : AppIcons.caretRight,
-          size: density.icon,
-          color: scheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 2),
-        Icon(
-          expanded ? AppIcons.folderOpen : AppIcons.folder,
-          size: density.icon,
-          color: missing ? scheme.error : scheme.onSurfaceVariant,
-        ),
-        SizedBox(width: density.glyphGap),
-        // Two measured children sharing the row, so neither pushes the other
-        // off the end. Fixed-width facts beside an `Expanded` name is what
-        // overflowed a 294px pane by 60 — see [badgeWidth].
-        Expanded(
-          flex: 2,
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: density.title(theme),
-          ),
-        ),
-        if (roomy && summary.running > 0) ...[
-          SizedBox(width: density.glyphGap),
-          _runningBadge(muted, semantic, density),
-        ],
-        if (aggregate != null) ...[
-          SizedBox(width: density.glyphGap),
-          Expanded(
-            flex: 3,
-            // Right-aligned so it sits against the buttons rather than leaving
-            // a gap when it is shorter than its share.
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: _aggregate(aggregate, muted, semantic),
-            ),
-          ),
-        ],
-        // `34 sessions+` read as one glyph run without it.
-        const SizedBox(width: Insets.sm),
-        if (pinned && onTogglePin != null)
-          ExplorerRowAction(
-            tooltip: 'Unpin',
-            icon: AppIcons.pushPinFill,
-            color: scheme.tertiary,
-            onPressed: onTogglePin,
-          ),
-        if (onNewSession != null)
-          ExplorerRowAction(
-            tooltip: 'Start a session here with the default agent',
-            icon: AppIcons.plus,
-            onPressed: onNewSession,
-          ),
-        if (showMenu)
-          RowMenuButton(
-            tooltip: 'Project actions',
-            itemBuilder: menuItemsBuilder,
-            onSelected: onMenu,
-          ),
-      ],
-    );
-  }
-
   /// The aggregate and the attention clause as **one** run of text: two colours
   /// in one widget, so a count that means something does not read like a word,
   /// and the whole run ellipsises as a unit.
@@ -340,13 +355,6 @@ class ProjectCard extends StatelessWidget {
       style: muted,
     );
   }
-
-  /// The path hangs under the **name**, not the caret: the two glyphs and their
-  /// gaps, measured, so the lines share a left edge at any density.
-  Widget _line2(UiDensity density) => Padding(
-    padding: EdgeInsets.only(left: density.icon * 2 + 2 + density.glyphGap),
-    child: _pathLine,
-  );
 
   Widget get _pathLine => ProjectPathLine(
     path: path,

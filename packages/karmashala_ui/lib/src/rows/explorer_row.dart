@@ -1,22 +1,34 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../app_icons.dart';
 import '../design_tokens.dart';
 import '../row_menu.dart';
 import '../reveal_on_focus.dart';
 
-/// What a row stands for, and therefore how strongly it is drawn — one kind
-/// per level of the tree: project, checkout, session.
+/// What a row stands for. Under a pointer every kind is drawn alike — flat,
+/// one gutter, one right-hand column; the kind names the menu and, under a
+/// thumb, the tile's tone.
 enum ExplorerRowKind {
   project,
   checkout,
-  session;
+  session,
 
-  /// The tile's resting colour: a step of the neutral ramp per level, so depth
-  /// reads as tone as well as position.
+  /// A machine, a `PROJECTS` section, a context — a row that folds others.
+  group,
+
+  /// A shell under a machine's `Terminals`.
+  terminal;
+
+  /// The tile's resting colour under a thumb, one step of the ramp per level.
+  /// A pointer row rests transparent (design-direction S3).
   Color surface(ColorScheme scheme) => switch (this) {
-    ExplorerRowKind.project => scheme.surfaceContainerHigh,
+    ExplorerRowKind.project ||
+    ExplorerRowKind.group => scheme.surfaceContainerHigh,
     ExplorerRowKind.checkout => scheme.surfaceContainer,
-    ExplorerRowKind.session => scheme.surfaceContainerLow,
+    ExplorerRowKind.session ||
+    ExplorerRowKind.terminal => scheme.surfaceContainerLow,
   };
 
   /// What the row's menu is called, in the same words the button's tooltip
@@ -25,12 +37,17 @@ enum ExplorerRowKind {
     ExplorerRowKind.project => 'Project actions',
     ExplorerRowKind.checkout => 'Folder actions',
     ExplorerRowKind.session => 'Session actions',
+    ExplorerRowKind.group => 'Group actions',
+    ExplorerRowKind.terminal => 'Terminal actions',
   };
 }
 
-/// The shell every Explorer row draws itself into: separation, hierarchy, the
-/// one selected/hovered/focused fill, and the menu. Before it each row kind
-/// carried its own padding and button size, and the three had drifted.
+/// The shell every Explorer row draws itself into: the indent, the one
+/// selected/hovered/focused fill, and the menu.
+///
+/// Under a pointer the geometry is one model for every kind:
+/// `[depth × indent][disclosure][glyph][gap] title … [trailing]`, with the fill
+/// spanning the pane and only the content indented.
 class ExplorerRow extends StatelessWidget {
   const ExplorerRow({
     required this.kind,
@@ -40,6 +57,7 @@ class ExplorerRow extends StatelessWidget {
     this.onTap,
     this.menuItemsBuilder,
     this.onMenu,
+    this.settled = false,
     super.key,
   });
 
@@ -56,53 +74,92 @@ class ExplorerRow extends StatelessWidget {
 
   final ValueChanged<String>? onMenu;
 
+  /// A session that ended and has been seen: its content is drawn at
+  /// [settledOpacity], so what still needs you stands out.
+  final bool settled;
+
   /// The row's content, built when the row's *data* changes and not when a
-  /// pointer crosses it. It must still *reserve* the `⋮` slot when the button
-  /// is not drawn (see [RowMenuButton]) or the text reflows on hover.
+  /// pointer crosses it.
   final WidgetBuilder builder;
 
   /// One step of the tree, per level of depth.
   static const indent = Insets.md;
 
-  /// What separates one row from the next.
+  /// The column a disclosure caret sits in, reserved on rows that have none.
+  static const disclosureSlot = Chrome.icon;
+
+  /// The column a row's one leading glyph sits in: folder, stack, status.
+  static const glyphSlot = Chrome.icon;
+
+  /// Between the glyph column and the title.
+  static const textGap = Insets.xs;
+
+  /// Everything left of a row's title at depth zero. Second lines hang here.
+  static const lead = disclosureSlot + glyphSlot + textGap;
+
+  static const disclosureSize = Chrome.iconSmall;
+  static const glyphSize = Chrome.iconAction;
+
+  /// The fill's margin from the pane's edges.
+  static const inset = Insets.xs;
+
+  /// What separates one row from the next under a thumb, and the list's own
+  /// padding top and bottom.
   static const gap = Insets.xs;
 
-  /// The accent rule that carries selection, as on the workbench tabs.
-  static const _rule = 2.0;
+  /// Under a pointer rows sit one hairline apart: flat rows need no gutter.
+  static double gapOf(UiDensity density) => density.isTouch ? gap : Insets.hair;
+
+  static const settledOpacity = 0.6;
+
+  /// The `·` between clauses of a meta line, over the muted ink.
+  static const separatorAlpha = 0.5;
 
   static const _radius = BorderRadius.all(Radius.circular(Radii.sm));
 
-  /// The square a row-level button occupies — the menu, the `+`, the pin. One
-  /// number for every row kind, or they cannot share a centre-line.
+  /// The square a row-level button occupies — the menu, the `+`. One number for
+  /// every row kind, or they cannot share a centre-line.
   static double slotOf(UiDensity density) => RowMenuButton.slotOf(density);
 
   /// The glyph inside that slot.
   static double glyphOf(UiDensity density) => RowMenuButton.glyphOf(density);
 
-  bool get _hasMenu => menuItemsBuilder != null && onMenu != null;
+  /// Where depth zero's disclosure column starts, from the pane's left edge.
+  static double contentStartOf(UiDensity density) => inset + density.padX;
 
-  /// A floor, never a fixed height: every row still grows with its text at
-  /// 200% scale instead of clipping it.
+  /// The right-hand column every row kind ends in: two button slots wide, grown
+  /// with the text scale so an age still fits it.
+  static double trailingWidthOf(BuildContext context) {
+    final slots = slotOf(UiDensity.of(context)) * 2;
+    return math.max(slots, MediaQuery.textScalerOf(context).scale(slots));
+  }
+
+  /// A floor, never a fixed height: every row still grows with its text.
   double _minHeight(UiDensity density) {
     if (density.isTouch) return Touch.target;
-    // A session card is three lines and sets its own height; the single-line
-    // structural rows share the chrome's row height.
     return kind == ExplorerRowKind.session ? 0 : Chrome.row;
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final density = UiDensity.of(context);
+    final touch = density.isTouch;
 
+    Widget body = Builder(builder: builder);
+    if (settled) body = Opacity(opacity: settledOpacity, child: body);
     Widget content = Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: density.padX,
-        // Half of what a row used to carry: the other half is now the gap
-        // between rows, which is what makes them read as separate things.
-        vertical: density.isTouch ? density.padY : Insets.xs,
-      ),
-      child: Builder(builder: builder),
+      padding: touch
+          ? EdgeInsets.symmetric(
+              horizontal: density.padX,
+              vertical: density.padY,
+            )
+          : EdgeInsets.fromLTRB(
+              density.padX + depth * indent,
+              kind == ExplorerRowKind.session ? Insets.xs : Insets.hair,
+              density.padX,
+              kind == ExplorerRowKind.session ? Insets.xs : Insets.hair,
+            ),
+      child: body,
     );
     final minHeight = _minHeight(density);
     if (minHeight > 0) {
@@ -114,62 +171,32 @@ class ExplorerRow extends StatelessWidget {
 
     // Built once, and handed to the fill as a `child` it passes straight
     // through: a hover repaints the tone and rebuilds nothing inside it.
-    final stack = Stack(
-      children: [
-        InkWell(
-          onTap: onTap,
-          // The ink is invisible — it paints on the pane's Material, under this
-          // tile's fill — so [_ExplorerRowFill] paints the states instead.
-          borderRadius: ExplorerRow._radius,
-          child: content,
-        ),
-        if (selected)
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            child: IgnorePointer(
-              child: Container(
-                width: ExplorerRow._rule,
-                decoration: BoxDecoration(
-                  color: scheme.primary,
-                  borderRadius: const BorderRadius.horizontal(
-                    left: Radius.circular(Radii.sm),
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
+    final row = InkWell(onTap: onTap, borderRadius: _radius, child: content);
 
     // The Explorer's body is one lazy `ListView`, so a row Tab reaches may be a
-    // cached one above the viewport that forward traversal will not scroll back
-    // to on its own. See [RevealOnFocus].
+    // cached one above the viewport. See [RevealOnFocus].
     return RevealOnFocus(
       child: Padding(
         padding: EdgeInsets.only(
-          left: Insets.xs + depth * ExplorerRow.indent,
-          right: Insets.xs,
-          bottom: ExplorerRow.gap,
+          left: inset + (touch ? depth * indent : 0),
+          right: inset,
+          bottom: gapOf(density),
         ),
-        // Right-click, `Shift+F10`, the Menu key and the screen-reader action
-        // all come from here, with the hover state the fill and the `⋮` read.
         child: RowContextMenu(
           menuLabel: kind.menuLabel,
-          itemBuilder: _hasMenu ? menuItemsBuilder : null,
+          itemBuilder: menuItemsBuilder != null && onMenu != null
+              ? menuItemsBuilder
+              : null,
           onSelected: onMenu ?? (_) {},
           builder: (context) =>
-              _ExplorerRowFill(kind: kind, selected: selected, child: stack),
+              _ExplorerRowFill(kind: kind, selected: selected, child: row),
         ),
       ),
     );
   }
 }
 
-/// The tone a row rests at, and the two states that tint it. Its own widget
-/// because it is the *only* part of a row a hover changes: [child] — the whole
-/// card — travels through it untouched.
+/// The only part of a row a hover changes: [child] travels through untouched.
 class _ExplorerRowFill extends StatelessWidget {
   const _ExplorerRowFill({
     required this.kind,
@@ -184,16 +211,15 @@ class _ExplorerRowFill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final touch = UiDensity.of(context).isTouch;
     final interaction = RowInteractionScope.maybeOf(context);
-    // Resting tone, then the states, in the order they compose: what is
-    // selected stays selected while it is hovered. Focus is a ring, not a fill.
-    var color = kind.surface(scheme);
-    if (selected) {
-      color = Color.alphaBlend(StateLayers.selected(scheme), color);
-    }
-    if (interaction?.hovered ?? false) {
-      color = Color.alphaBlend(StateLayers.hover(scheme), color);
-    }
+    // Resting tone, then the states in the order they compose. Focus is a
+    // ring, not a fill.
+    Color? color = touch ? kind.surface(scheme) : null;
+    Color layer(Color over) =>
+        color == null ? over : Color.alphaBlend(over, color);
+    if (selected) color = layer(StateLayers.selected(scheme));
+    if (interaction?.hovered ?? false) color = layer(StateLayers.hover(scheme));
     final focused = interaction?.focused ?? false;
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -211,9 +237,228 @@ class _ExplorerRowFill extends StatelessWidget {
   }
 }
 
-/// A row-level verb — "new session here", "unpin", "rescan" — in the same slot
-/// as [ExplorerRowMenuButton]. A verb stays visible where the overflow does
-/// not: hiding the one affordance that starts work is the worse trade.
+/// A row's disclosure and glyph columns plus the gap before its title — the
+/// same 36px on every kind, so carets and glyphs form one column per depth.
+class ExplorerRowLead extends StatelessWidget {
+  const ExplorerRowLead({this.expanded, this.glyph, this.tick, super.key});
+
+  /// Null reserves the disclosure column and draws nothing in it.
+  final bool? expanded;
+
+  /// Centred in [ExplorerRow.glyphSlot]; size it [ExplorerRow.glyphSize].
+  final Widget? glyph;
+
+  /// A selection box, which takes both columns while a selection is open.
+  final Widget? tick;
+
+  @override
+  Widget build(BuildContext context) {
+    final expanded = this.expanded;
+    final tick = this.tick;
+    return SizedBox(
+      width: ExplorerRow.lead,
+      child: Row(
+        children: [
+          if (tick != null)
+            SizedBox(
+              width: ExplorerRow.disclosureSlot + ExplorerRow.glyphSlot,
+              child: Center(child: tick),
+            )
+          else ...[
+            SizedBox(
+              width: ExplorerRow.disclosureSlot,
+              child: expanded == null
+                  ? null
+                  : Center(
+                      child: Icon(
+                        expanded ? AppIcons.caretDown : AppIcons.caretRight,
+                        size: ExplorerRow.disclosureSize,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+            ),
+            // Square, and a wider badge is scaled into it rather than
+            // pushing the title off the row.
+            SizedBox.square(
+              dimension: ExplorerRow.glyphSlot,
+              child: glyph == null
+                  ? null
+                  : Center(
+                      child: FittedBox(fit: BoxFit.scaleDown, child: glyph),
+                    ),
+            ),
+          ],
+          const SizedBox(width: ExplorerRow.textGap),
+        ],
+      ),
+    );
+  }
+}
+
+/// One line of a pointer row: [ExplorerRowLead], the flexible [title], and the
+/// right-hand [trailing] column at [ExplorerRow.trailingWidthOf] — capped at
+/// half of what the lead leaves, so a 200px pane at 2× text still fits.
+class ExplorerRowLine extends StatelessWidget {
+  const ExplorerRowLine({
+    required this.lead,
+    required this.title,
+    this.trailing,
+    super.key,
+  });
+
+  final Widget lead;
+  final Widget title;
+  final ExplorerRowTrailing? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final trailing = this.trailing;
+    if (trailing == null) {
+      return Row(
+        children: [
+          lead,
+          Expanded(child: title),
+        ],
+      );
+    }
+    final wanted = ExplorerRow.trailingWidthOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final room = math.max(0.0, constraints.maxWidth - ExplorerRow.lead);
+        final width = math.min(wanted, room / 2);
+        return Row(
+          children: [
+            lead,
+            Expanded(child: title),
+            SizedBox(width: width, child: trailing),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// The right-hand column: a count or an age at rest, the row's verbs in its
+/// place while a pointer or the keyboard is on the row. [action] and [menu]
+/// have fixed slots, so every `+` in the tree shares one centre-line.
+class ExplorerRowTrailing extends StatelessWidget {
+  const ExplorerRowTrailing({this.meta, this.action, this.menu, super.key});
+
+  /// Right-aligned, scaled down rather than ellipsised: half a number is wrong.
+  final Widget? meta;
+
+  /// The row's verb — `+` — in the slot left of [menu].
+  final Widget? action;
+
+  /// The `⋮`, in the rightmost slot.
+  final Widget? menu;
+
+  @override
+  Widget build(BuildContext context) => _TrailingSwap(
+    meta: meta == null
+        ? null
+        : Align(
+            alignment: Alignment.centerRight,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: meta,
+            ),
+          ),
+    actions: action == null && menu == null
+        ? null
+        : Builder(
+            builder: (context) {
+              final slot = ExplorerRow.slotOf(UiDensity.of(context));
+              return Align(
+                alignment: Alignment.centerRight,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(width: slot, height: slot, child: action),
+                      SizedBox(width: slot, height: slot, child: menu),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+  );
+}
+
+/// The one widget a hover rebuilds on the right: both children are handed in
+/// and kept mounted, so a menu open under a hidden `⋮` still reports back.
+class _TrailingSwap extends StatelessWidget {
+  const _TrailingSwap({required this.meta, required this.actions});
+
+  final Widget? meta;
+  final Widget? actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = this.meta;
+    final actions = this.actions;
+    final engaged =
+        UiDensity.of(context).isTouch ||
+        (RowInteractionScope.maybeOf(context)?.engaged ?? false);
+    final showActions = actions != null && engaged;
+    // The count keeps its size while hidden and the column never drops below a
+    // button's height, so swapping one for the other moves nothing.
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: ExplorerRow.slotOf(UiDensity.of(context)),
+      ),
+      child: Stack(
+        alignment: Alignment.centerRight,
+        children: [
+          if (meta != null)
+            Visibility(
+              visible: !showActions,
+              maintainState: true,
+              maintainAnimation: true,
+              maintainSize: true,
+              child: meta,
+            ),
+          if (actions != null)
+            Visibility(
+              visible: showActions,
+              maintainState: true,
+              maintainAnimation: true,
+              child: actions,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A row's count or age: muted, tabular, one line.
+class ExplorerRowMeta extends StatelessWidget {
+  const ExplorerRowMeta(this.text, {this.tooltip, this.color, super.key});
+
+  final String text;
+  final String? tooltip;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = UiDensity.of(context)
+        .muted(theme)
+        ?.copyWith(
+          color: color,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        );
+    final label = Text(text, maxLines: 1, softWrap: false, style: style);
+    return tooltip == null ? label : Tooltip(message: tooltip!, child: label);
+  }
+}
+
+/// A row-level verb — "new session here", "open a terminal" — in the same slot
+/// as the `⋮`.
 class ExplorerRowAction extends StatelessWidget {
   const ExplorerRowAction({
     required this.tooltip,
@@ -232,9 +477,7 @@ class ExplorerRowAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final density = UiDensity.of(context);
     final slot = ExplorerRow.slotOf(density);
-    // Sized like [RowMenuButton], which wraps rather than constrains: compact
-    // density takes 8px off tight constraints, so the two buttons laid out at
-    // different widths and no gutter reserved in slots could line up with them.
+    // Sized like [RowMenuButton], which wraps rather than constrains.
     return SizedBox(
       width: slot,
       height: slot,

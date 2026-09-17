@@ -71,21 +71,21 @@ class ExplorerEnvironmentRow extends ConsumerWidget {
     label: node.label,
     icon: environmentGlyph(node.kind),
     emphasis: HeaderEmphasis.machine,
-    trailingText: environmentSummary(node),
+    trailingText: node.projectCount == 0 ? null : '${node.projectCount}',
+    trailingTooltip: environmentSummary(node),
     tooltip: node.environment == null
         ? 'This environment is no longer in the workspace.'
         : null,
     onTap: () => _toggleCollapsed(ref, node.id),
-    actions: [
-      // Not offered for a machine whose row is gone: we cannot say what it
-      // is, and the fallback would quietly open a shell on this one.
-      if (node.environment != null)
-        ExplorerRowAction(
-          tooltip: 'Open a terminal on ${node.label}',
-          icon: AppIcons.plus,
-          onPressed: () => _openTerminalOn(ref),
-        ),
-    ],
+    // Not offered for a machine whose row is gone: we cannot say what it is,
+    // and the fallback would quietly open a shell on this one.
+    action: node.environment == null
+        ? null
+        : ExplorerRowAction(
+            tooltip: 'Open a terminal on ${node.label}',
+            icon: AppIcons.plus,
+            onPressed: () => _openTerminalOn(ref),
+          ),
   );
 
   void _openTerminalOn(WidgetRef ref) {
@@ -121,7 +121,8 @@ class ExplorerSectionHeaderRow extends ConsumerWidget {
     depth: node.depth,
     expanded: node.expanded,
     label: node.label,
-    trailingText: node.detail ?? (node.count == null ? null : '${node.count}'),
+    trailingText: node.count == null ? null : '${node.count}',
+    detail: node.detail,
     onTap: () => node.section == EnvironmentSection.terminals
         ? _toggleTerminals(ref)
         : _toggleCollapsed(ref, node.id),
@@ -155,6 +156,8 @@ class ExplorerContextRow extends ConsumerWidget {
     icon: AppIcons.stack,
     emphasis: HeaderEmphasis.context,
     trailingText: '${node.projectCount}',
+    trailingTooltip:
+        '${node.projectCount} project${node.projectCount == 1 ? '' : 's'}',
     onTap: () => _toggleCollapsed(ref, node.id),
   );
 }
@@ -256,21 +259,19 @@ class ExplorerTreeHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final density = UiDensity.of(context);
     return Padding(
-      // Lined up with the text of a row at the same depth, so the hint reads as
+      // On the title column of a row at the same depth, so the hint reads as
       // sitting inside the node it is about rather than beside it.
       padding: EdgeInsets.fromLTRB(
-        Insets.xs + depth * ExplorerRow.indent + Insets.lg,
+        ExplorerRow.contentStartOf(density) +
+            depth * ExplorerRow.indent +
+            ExplorerRow.lead,
         Insets.xs,
         Insets.sm,
         Insets.sm,
       ),
-      child: Text(
-        message,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
+      child: Text(message, style: density.muted(theme)),
     );
   }
 }

@@ -90,9 +90,10 @@ void main() {
     onMenu: (_) {},
   );
 
-  testWidgets('draws three lines: who and when, what, and where', (
+  testWidgets('draws two lines: status, title and age; then who and where', (
     tester,
   ) async {
+    // Design direction S2: the work leads, the agent is metadata.
     await tester.pumpWidget(
       host(
         card(
@@ -102,21 +103,18 @@ void main() {
       ),
     );
 
-    expect(find.text('Claude Code  ·  running'), findsOneWidget);
+    const meta =
+        'Claude Code  ·  running  ·  monocode/main  ·  '
+        'opened in an external terminal';
+    expect(find.text(meta), findsOneWidget);
     expect(find.text('22m'), findsOneWidget);
     expect(find.text('Benchmark arcade games'), findsOneWidget);
-    expect(
-      find.text('monocode/main  ·  opened in an external terminal'),
-      findsOneWidget,
-    );
     expect(find.text('6 changed'), findsOneWidget);
 
-    // Line order, top to bottom — the whole point of the shape.
-    final agent = tester.getTopLeft(find.text('Claude Code  ·  running')).dy;
-    final title = tester.getTopLeft(find.text('Benchmark arcade games')).dy;
-    final where = tester.getTopLeft(find.text('6 changed')).dy;
-    expect(agent, lessThan(title));
-    expect(title, lessThan(where));
+    final title = tester.getCenter(find.text('Benchmark arcade games')).dy;
+    expect(tester.getCenter(find.text('22m')).dy, title);
+    expect(tester.getTopLeft(find.text(meta)).dy, greaterThan(title));
+    expect(tester.getCenter(find.text('6 changed')).dy, greaterThan(title));
   });
 
   testWidgets('the age and the diff stat sit on the right edge', (
@@ -203,17 +201,32 @@ void main() {
     expect(find.text('1 changed'), findsOneWidget);
   });
 
-  testWidgets('a card with nothing to say on line three does not draw one', (
-    tester,
-  ) async {
-    await tester.pumpWidget(host(card(branch: null, stat: null)));
-    expect(find.byIcon(AppIcons.gitBranch), findsNothing);
-    final tall = tester.getSize(find.byType(SessionCard)).height;
-
+  testWidgets('a third line is drawn only for a sub-path', (tester) async {
     await tester.pumpWidget(
       host(card(stat: const SessionDiffStat(changedFiles: 4))),
     );
-    expect(tester.getSize(find.byType(SessionCard)).height, greaterThan(tall));
+    final twoLines = tester.getSize(find.byType(SessionCard)).height;
+
+    await tester.pumpWidget(
+      host(
+        SessionCard(
+          depth: 1,
+          selected: false,
+          agentIcon: AppIcons.playCircle,
+          agentLabel: 'Claude Code',
+          title: 'Benchmark arcade games',
+          subPath: 'packages/app',
+          onTap: () {},
+          menuItemsBuilder: () => const [],
+          onMenu: (_) {},
+        ),
+      ),
+    );
+    expect(find.text('packages/app'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(SessionCard)).height,
+      greaterThan(twoLines),
+    );
   });
 
   testWidgets('the worktree glyph appears only for a worktree session', (

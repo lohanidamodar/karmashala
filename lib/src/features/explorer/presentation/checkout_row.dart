@@ -4,6 +4,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import 'package:karmashala_ui/rows.dart';
+
 /// One place a session can live: a repository, one of its worktrees, or a
 /// folder the scanner has not been to yet. A single dense line, because the
 /// pane's vertical space belongs to the cards.
@@ -101,21 +102,14 @@ class CheckoutRow extends StatelessWidget {
 
     return Row(
       children: [
-        if (expanded != null)
-          Icon(
-            expanded! ? AppIcons.caretDown : AppIcons.caretRight,
-            size: density.icon,
-            color: scheme.onSurfaceVariant,
-          )
-        else
-          SizedBox(width: density.icon),
-        const SizedBox(width: 2),
-        Icon(
-          icon,
-          size: density.icon,
-          color: iconColor ?? scheme.onSurfaceVariant,
+        ExplorerRowLead(
+          expanded: expanded,
+          glyph: Icon(
+            icon,
+            size: ExplorerRow.glyphSize,
+            color: iconColor ?? scheme.onSurfaceVariant,
+          ),
         ),
-        SizedBox(width: density.glyphGap),
         // The name gets the larger share and the path is context. Both are
         // flexible, so neither can push the right-hand facts off the row.
         Flexible(
@@ -126,7 +120,7 @@ class CheckoutRow extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             // The same weight a project name and a session title carry: a row
             // lighter than the cards under it had the hierarchy upside down.
-            style: density.title(theme),
+            style: density.rowTitle(theme),
           ),
         ),
         if (subtitle != null) ...[

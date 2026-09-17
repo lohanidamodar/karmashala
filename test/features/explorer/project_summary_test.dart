@@ -141,7 +141,8 @@ void main() {
     // out. `ProjectSummary.label` composing the `· N changed` clause once a
     // count *is* known is `project_card_test.dart`'s to assert; what belongs
     // here is that a header nobody expanded starts no work.
-    expect(find.text('2 sessions'), findsOneWidget);
+    // The right-hand column holds the number; the words are its tooltip.
+    expect(find.byTooltip('2 sessions'), findsOneWidget);
     expect(
       git.requests,
       isEmpty,
@@ -152,7 +153,7 @@ void main() {
   testWidgets('one session reads in the singular', (tester) async {
     addSession('s1', 'Only');
     await pump(tester);
-    expect(find.text('1 session'), findsOneWidget);
+    expect(find.byTooltip('1 session'), findsOneWidget);
   });
 
   testWidgets('every card in a repository shares one git status', (
@@ -203,7 +204,12 @@ void main() {
       if (args.contains('status')) {
         return CommandResult(
           exitCode: 0,
-          stdout: porcelainV2(branch: 'feature/cards', ahead: 0, behind: 0, modified: ['lib/a.dart']),
+          stdout: porcelainV2(
+            branch: 'feature/cards',
+            ahead: 0,
+            behind: 0,
+            modified: ['lib/a.dart'],
+          ),
           stderr: '',
         );
       }
@@ -248,7 +254,12 @@ void main() {
     git.responder = (request) => request.arguments.contains('status')
         ? CommandResult(
             exitCode: 0,
-            stdout: porcelainV2(branch: 'feature/cards', ahead: 0, behind: 0, untracked: ['new.dart']),
+            stdout: porcelainV2(
+              branch: 'feature/cards',
+              ahead: 0,
+              behind: 0,
+              untracked: ['new.dart'],
+            ),
             stderr: '',
           )
         : const CommandResult(exitCode: 0, stdout: '', stderr: '');
@@ -300,9 +311,10 @@ void main() {
       find.text('A title long enough to need the whole card width'),
       findsOneWidget,
     );
-    // At the Explorer's own minimum width the header's buttons already fill the
-    // row, so the aggregate is dropped rather than squeezed into an ellipsis.
+    // The count is a number in the right-hand column at every width, so there
+    // is no aggregate left to squeeze into an ellipsis.
     expect(find.textContaining('1 session'), findsNothing);
+    expect(find.byTooltip('1 session'), findsOneWidget);
   });
 
   testWidgets('a session in its own worktree gets a stat of its own', (
@@ -318,10 +330,7 @@ void main() {
         return CommandResult(
           exitCode: 0,
           stdout: inWorktree
-              ? porcelainV2(
-                  branch: 'feature/side',
-                  modified: ['lib/a.dart'],
-                )
+              ? porcelainV2(branch: 'feature/side', modified: ['lib/a.dart'])
               : porcelainV2(
                   branch: 'main',
                   modified: ['lib/a.dart'],

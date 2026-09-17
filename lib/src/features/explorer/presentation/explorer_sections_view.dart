@@ -104,7 +104,6 @@ class _SectionHeader extends ConsumerWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final density = UiDensity.of(context);
-    final muted = density.muted(theme);
     final controller = ref.read(explorerSectionsProvider.notifier);
 
     // One function handed to both the row and its button: `ExplorerRow` carries
@@ -139,46 +138,37 @@ class _SectionHeader extends ConsumerWidget {
     }
 
     return ExplorerRow(
-      kind: ExplorerRowKind.project,
+      kind: ExplorerRowKind.group,
       depth: 0,
       selected: false,
       onTap: () => controller.toggleCollapsed(section.id),
       menuItemsBuilder: items,
       onMenu: onAction,
-      builder: (context) => Row(
-        children: [
-          Icon(
-            section.collapsed ? AppIcons.caretRight : AppIcons.caretDown,
-            size: density.icon,
-            color: scheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 2),
-          Icon(
+      builder: (context) => ExplorerRowLine(
+        lead: ExplorerRowLead(
+          expanded: !section.collapsed,
+          glyph: Icon(
             _glyphFor(section.rule.kind),
-            size: density.icon,
+            size: ExplorerRow.glyphSize,
             // Pinned wears the accent the pin glyph on every row already wears,
             // so the group and the rows in it are visibly the same idea.
             color: section.isPinned ? scheme.tertiary : scheme.onSurfaceVariant,
           ),
-          SizedBox(width: density.glyphGap),
-          Expanded(
-            child: Text(
-              section.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: density.title(theme),
-            ),
-          ),
-          if (count != null) ...[
-            SizedBox(width: density.glyphGap),
-            Text('$count', style: muted),
-          ],
-          RowMenuButton(
+        ),
+        title: Text(
+          section.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: density.rowTitle(theme),
+        ),
+        trailing: ExplorerRowTrailing(
+          meta: count == null ? null : ExplorerRowMeta('$count'),
+          menu: RowMenuButton(
             tooltip: 'Section actions',
             itemBuilder: items,
             onSelected: onAction,
           ),
-        ],
+        ),
       ),
     );
   }
@@ -195,18 +185,19 @@ class _SectionEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final density = UiDensity.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Insets.xs + ExplorerRow.indent + Insets.lg,
+      padding: EdgeInsets.fromLTRB(
+        ExplorerRow.contentStartOf(density) +
+            ExplorerRow.indent +
+            ExplorerRow.lead,
         Insets.xs,
         Insets.sm,
         Insets.sm,
       ),
       child: Text(
         emptySectionMessage(section.rule),
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
+        style: density.muted(theme),
       ),
     );
   }

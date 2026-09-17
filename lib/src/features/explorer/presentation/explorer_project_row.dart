@@ -88,10 +88,10 @@ class ExplorerProjectRow extends ConsumerWidget {
     };
     final actions = ProjectRowActions(ref, context, project);
 
-    return Padding(
+    return KeyedSubtree(
       key: anchorKey,
-      padding: EdgeInsets.only(left: depth * ExplorerRow.indent),
       child: ProjectCard(
+        depth: depth,
         name: project.name,
         path: project.root.path,
         expanded: expanded,

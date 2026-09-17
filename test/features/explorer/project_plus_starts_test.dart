@@ -40,9 +40,9 @@ void main() {
     final database = AppDatabase.memory();
     ExecutionEnvironmentDao(database).upsert(windowsEnv());
     ProjectDao(database).insert(project(name: 'Alpha', path: r'C:\src\alpha'));
-    RepositoryDao(database).insert(
-      repository(name: 'alpha-app', path: r'C:\src\alpha\app'),
-    );
+    RepositoryDao(
+      database,
+    ).insert(repository(name: 'alpha-app', path: r'C:\src\alpha\app'));
     if (withAgent) AgentInstallationDao(database).insert(agentInstallation());
     return database;
   }
@@ -83,6 +83,12 @@ void main() {
     db = seed();
     await pump(tester);
 
+    // The + takes the count's place while a pointer is on the row.
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(() => gesture.removePointer());
+    await gesture.moveTo(tester.getCenter(find.byType(ProjectCard)));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip(plus));
     await tester.pumpAndSettle();
 
@@ -133,6 +139,12 @@ void main() {
     db = seed(withAgent: false);
     await pump(tester);
 
+    // The + takes the count's place while a pointer is on the row.
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(() => gesture.removePointer());
+    await gesture.moveTo(tester.getCenter(find.byType(ProjectCard)));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip(plus));
     await tester.pumpAndSettle();
 

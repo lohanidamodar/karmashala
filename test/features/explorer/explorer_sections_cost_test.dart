@@ -7,6 +7,7 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/explorer/application/explorer_sections.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
+import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -224,6 +225,9 @@ void main() {
       // The tree's spine is the machine; the saved views are the surface
       // these sections are drawn on.
       container.read(explorerShowingViewsProvider.notifier).toggle();
+      // The shell's status bar and rail badge keep the attention inbox alive
+      // before any row is drawn; a session row reads its unread word from it.
+      container.listen(attentionInboxProvider, (_, _) {});
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,

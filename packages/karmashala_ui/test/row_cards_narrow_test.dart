@@ -161,6 +161,7 @@ void main() {
     await pumpInBox(
       tester,
       width: 600,
+      density: UiDensity.touch,
       child: ProjectCard(
         name: 'app',
         path: '/w/app',
