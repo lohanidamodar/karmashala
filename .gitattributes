@@ -1,2 +1,6 @@
 # Captured PTY output: byte-exact VT streams, never line-ending normalised.
 *.raw -text -diff
+
+# cmd.exe misparses LF batch files: labels, gotos and set lines break.
+*.bat text eol=crlf
+*.cmd text eol=crlf
