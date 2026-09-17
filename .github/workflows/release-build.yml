@@ -1,7 +1,7 @@
 name: Release
 
-# Builds the desktop release artifacts (Windows installer + portable zip, Linux
-# tarball) and attaches them to the GitHub release.
+# Builds the desktop release artifacts (Windows installer + portable zip, macOS
+# DMG, Linux tarball, Linux session hosts) and attaches them to the release.
 #   - publishing a release uploads the artifacts to it,
 #   - pushing a `v*` tag or dispatching with a version input creates the release.
 on:
@@ -141,6 +141,37 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           files: build/artifacts/karmashala_host-*-linux-*.tar.gz
+
+  # The macOS app, by the same recipe a local release uses (tool/build_release.sh):
+  # the app, the MCP bridge and the session host inside the bundle, the host's
+  # store and pty probes, an ad-hoc signature and a drag-to-install DMG.
+  # Unnotarised: Gatekeeper asks on first open (right-click › Open).
+  build-macos:
+    needs: prepare
+    runs-on: macos-latest
+    env:
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter config --enable-macos-desktop
+      - run: flutter pub get
+      - name: Build, bundle, sign and package
+        run: tool/build_release.sh
+      - name: Name the DMG for the release
+        run: |
+          set -euo pipefail
+          mkdir -p build/artifacts
+          dmg=$(ls build/macos/karmashala-*.dmg)
+          cp "$dmg" "build/artifacts/Karmashala-macOS-$VERSION.dmg"
+      - name: Upload macOS artifact to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          files: build/artifacts/Karmashala-macOS-${{ env.VERSION }}.dmg
 
   build-linux:
     needs: prepare
