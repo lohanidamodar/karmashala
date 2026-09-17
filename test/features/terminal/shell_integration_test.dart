@@ -1,25 +1,8 @@
-import 'dart:convert';
-
 import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-/// Decodes what `powershell.exe -EncodedCommand` expects: base64 of UTF-16LE.
-String _decodeEncodedCommand(String base64Text) {
-  final bytes = base64Decode(base64Text);
-  expect(
-    bytes.length.isEven,
-    isTrue,
-    reason: 'UTF-16LE is two bytes per code unit',
-  );
-  final units = <int>[];
-  for (var i = 0; i < bytes.length; i += 2) {
-    units.add(bytes[i] | (bytes[i + 1] << 8));
-  }
-  return String.fromCharCodes(units);
-}
 
 void main() {
   group('shellSupportsIntegration', () {
@@ -30,22 +13,6 @@ void main() {
       // PROMPT cannot carry a live exit code — both measured, see the doc.
       expect(shellSupportsIntegration(TerminalShell.wsl), isTrue);
       expect(shellSupportsIntegration(TerminalShell.commandPrompt), isFalse);
-    });
-  });
-
-  group('encodePowerShellCommand', () {
-    test('round-trips as base64 of UTF-16LE', () {
-      expect(
-        _decodeEncodedCommand(encodePowerShellCommand('Write-Output 1')),
-        'Write-Output 1',
-      );
-    });
-
-    test('encodes non-ASCII correctly', () {
-      expect(
-        _decodeEncodedCommand(encodePowerShellCommand('héllo → ✓')),
-        'héllo → ✓',
-      );
     });
   });
 
@@ -86,7 +53,7 @@ void main() {
   });
 
   group('ptyLaunchFor with integration on', () {
-    test('appends -NoExit -EncodedCommand after -NoLogo', () {
+    test('appends -NoExit -Command after -NoLogo', () {
       final launch = ptyLaunchFor(
         TerminalProfile.powerShell,
         shellIntegration: true,
@@ -95,11 +62,8 @@ void main() {
       expect(launch.arguments.length, 4);
       expect(launch.arguments[0], '-NoLogo');
       expect(launch.arguments[1], '-NoExit');
-      expect(launch.arguments[2], '-EncodedCommand');
-      expect(
-        _decodeEncodedCommand(launch.arguments[3]),
-        powerShellIntegrationScript(),
-      );
+      expect(launch.arguments[2], '-Command');
+      expect(launch.arguments[3], powerShellIntegrationScript());
     });
 
     test('the working directory is still passed through', () {
@@ -116,7 +80,7 @@ void main() {
     final script = powerShellIntegrationScript();
 
     test('never suppresses or rewrites the user profile', () {
-      // The whole mechanism depends on -EncodedCommand running AFTER profiles
+      // The whole mechanism depends on -Command running AFTER profiles
       // load, so the user's final prompt is the one we wrap. Touching any of
       // these would defeat that or alter the user's environment.
       expect(script, isNot(contains('NoProfile')));

@@ -81,10 +81,7 @@ void main() {
       final line = conPtyCommandLine(
         ptyLaunchFor(_ubuntu, shellIntegration: true),
       );
-      expect(
-        line,
-        startsWith('cmd.exe cmd.exe /c wsl.exe -d Ubuntu -- eval '),
-      );
+      expect(line, startsWith('cmd.exe cmd.exe /c wsl.exe -d Ubuntu -- eval '));
       // And it fits, with room to spare, in the 8191 characters `cmd.exe`
       // allows: base64 is four bytes for three, and a working directory has to
       // go on the same line.
@@ -118,25 +115,24 @@ void main() {
       );
     });
 
-    test('the PowerShell integration bootstrap is unchanged', () {
+    test('the PowerShell integration bootstrap is a plain -Command', () {
+      // It was `-EncodedCommand`; see windows_powershell_launch_test.dart for
+      // the command line flutter_pty now really builds for it.
       final launch = ptyLaunchFor(
         TerminalProfile.powerShell,
         shellIntegration: true,
       );
       expect(launch.executable, 'powershell.exe');
-      expect(
-        launch.arguments.take(3),
-        ['-NoLogo', '-NoExit', '-EncodedCommand'],
-      );
+      expect(launch.arguments.take(3), ['-NoLogo', '-NoExit', '-Command']);
     });
   });
 
   group('throughCommandPrompt', () {
     test('quotes only what a re-parse would otherwise split', () {
-      expect(
-        throughCommandPrompt(['a.exe', 'plain', 'two words']).arguments,
-        ['/c', 'a.exe plain "two words"'],
-      );
+      expect(throughCommandPrompt(['a.exe', 'plain', 'two words']).arguments, [
+        '/c',
+        'a.exe plain "two words"',
+      ]);
     });
 
     test('carries the working directory and environment through', () {
@@ -171,7 +167,8 @@ void main() {
         startsWith(
           'cmd.exe cmd.exe /c wsl.exe -d Ubuntu --cd /home/me/proj -- eval ',
         ),
-        reason: 'cmd drops the stray token, so wsl.exe sees its own options '
+        reason:
+            'cmd drops the stray token, so wsl.exe sees its own options '
             'and runs the agent in the distro with no PE round-trip',
       );
       expect(decodedPosixScript(launch), "exec 'claude' '--resume' 'abc123'");
@@ -185,8 +182,9 @@ void main() {
         wrapForPty(resume(), const LaunchContext.wsl('Ubuntu')),
       );
       expect(
-        RegExp(r'''-- eval "\$\(echo '[A-Za-z0-9+/=]+'\|base64 -d\)"$''')
-            .hasMatch(line),
+        RegExp(
+          r'''-- eval "\$\(echo '[A-Za-z0-9+/=]+'\|base64 -d\)"$''',
+        ).hasMatch(line),
         isTrue,
         reason: line,
       );
@@ -321,8 +319,9 @@ void main() {
         'a "b" `c` \$(d) 50% e\nf',
       ]);
       expect(
-        RegExp(r'''^\$\(echo '[A-Za-z0-9+/=]+'\|base64 -d\)$''')
-            .hasMatch(tokens.last),
+        RegExp(
+          r'''^\$\(echo '[A-Za-z0-9+/=]+'\|base64 -d\)$''',
+        ).hasMatch(tokens.last),
         isTrue,
         reason: tokens.last,
       );
@@ -371,10 +370,10 @@ void main() {
         wrapForExternalTerminal(command, const LaunchContext.windowsNative()),
         ['claude', 'say "hi"'],
       );
-      expect(
-        wrapForExternalTerminal(command, const LaunchContext.posix()),
-        ['claude', 'say "hi"'],
-      );
+      expect(wrapForExternalTerminal(command, const LaunchContext.posix()), [
+        'claude',
+        'say "hi"',
+      ]);
     });
   });
 }

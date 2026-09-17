@@ -121,6 +121,16 @@ could not. Covered by `test/tooling/pty_exit_port_test.dart`.
 case this exists for). `write`/`resize`/`ackRead` no-op afterwards, and `pid` is
 memoised so `kill` still answers once the handle is gone.
 
+**`lib/flutter_pty.dart`** — `Pty.start(repeatExecutableOnWindows:)`,
+default `true` (upstream behaviour). The Windows `build_command` writes the
+executable and then every `argv` entry, and `argv[0]` *is* the executable, so a
+child starts as `<exe> <exe> <args…>`: `powershell.exe` bound the duplicate to
+its positional `-Command` and started a second PowerShell. `false` sends an
+empty `argv[0]`, so the line is `<exe>  <args…>` (the extra space is whitespace
+to every Windows argument parser). Pure Dart — the native file is untouched —
+and used only for launches the app marks `exactArgv`, which it pre-quotes itself
+(`flutterPtyStartFor` in `pty_launch.dart`). **Not yet run on Windows.**
+
 **`lib/src/flutter_pty_bindings_generated.dart`** — the `pty_destroy` binding,
 written by hand in ffigen's shape. ffigen is not re-run: this project forbids
 code generation (ARCHITECTURE constraint 3).

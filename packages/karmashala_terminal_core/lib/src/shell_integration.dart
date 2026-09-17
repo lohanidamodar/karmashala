@@ -2,8 +2,6 @@
 /// launch**, so nothing is left on the user's machine.
 library;
 
-import 'dart:convert';
-
 import 'terminal_profile.dart';
 
 /// Whether this app can emit OSC 133 markers from [shell]: PowerShell and WSL.
@@ -11,24 +9,13 @@ import 'terminal_profile.dart';
 bool shellSupportsIntegration(TerminalShell shell) =>
     shell == TerminalShell.powerShell || shell == TerminalShell.wsl;
 
-/// Encodes [script] the way `powershell.exe -EncodedCommand` expects: base64 of
-/// UTF-16LE. Used instead of `-Command` so Windows command-line quoting is
-/// removed from the problem entirely.
-String encodePowerShellCommand(String script) {
-  final bytes = <int>[];
-  for (final unit in script.codeUnits) {
-    bytes
-      ..add(unit & 0xff)
-      ..add(unit >> 8);
-  }
-  return base64Encode(bytes);
-}
-
-/// The PowerShell OSC 133 (and OSC 7) bootstrap. It rests on `-EncodedCommand`
-/// running **after** the user's profiles, so it wraps their final prompt.
+/// The PowerShell OSC 133 (and OSC 7) bootstrap. It rests on `-Command` running
+/// **after** the user's profiles, so it wraps their final prompt. Handed over
+/// as a plain, readable `-Command` — never `-EncodedCommand`, which behavioural
+/// antivirus scores as a dropper signal — so it must stay printable ASCII.
 String powerShellIntegrationScript() => r'''
 # Karmashala OSC 133 shell integration.
-# Injected at launch with -EncodedCommand, which PowerShell runs after profiles
+# Injected at launch with -Command, which PowerShell runs after profiles
 # have loaded. Nothing is written to the user's profile, or anywhere on disk.
 if ($ExecutionContext.SessionState.LanguageMode -eq 'FullLanguage' -and -not (Test-Path variable:global:__CgOsc133)) {
   try {

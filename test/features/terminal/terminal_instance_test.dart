@@ -164,7 +164,8 @@ void main() {
   });
 
   group('a spawn failure names the command without burying its own error', () {
-    // `-EncodedCommand`'s base64 payload runs to ~4,600 characters. Printed
+    // A shell-integrated PowerShell pane's script (once an `-EncodedCommand`
+    // base64 payload) runs to thousands of characters. Printed
     // verbatim it pushed the exception — the one sentence that explains the
     // failure — off the visible buffer, so the error message hid its error.
     final blob = 'A' * 4600;
@@ -196,10 +197,7 @@ void main() {
     test('and nothing is elided at the boundary', () {
       final exact = 'x' * 120;
       expect(describeLaunchArguments([exact]), exact);
-      expect(
-        describeLaunchArguments(['${exact}y']),
-        '<121 characters elided>',
-      );
+      expect(describeLaunchArguments(['${exact}y']), '<121 characters elided>');
     });
   });
 }

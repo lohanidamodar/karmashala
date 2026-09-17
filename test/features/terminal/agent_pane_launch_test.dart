@@ -22,16 +22,6 @@ final _codexBypass = PermissionSelection.parse(codexBypassStored)!;
 final _antigravityAsk = PermissionSelection.parse(antigravityAskStored)!;
 const _antigravityAcceptEdits = PermissionSelection({'mode': 'accept-edits'});
 
-/// Decodes what `powershell.exe -EncodedCommand` expects: base64 of UTF-16LE.
-String decodePowerShellCommand(String encoded) {
-  final bytes = base64Decode(encoded);
-  final units = <int>[
-    for (var i = 0; i + 1 < bytes.length; i += 2)
-      bytes[i] | (bytes[i + 1] << 8),
-  ];
-  return String.fromCharCodes(units);
-}
-
 void main() {
   group('the PTY launch', () {
     test('a Windows-native agent goes through PowerShell, not directly', () {
@@ -39,8 +29,8 @@ void main() {
       // still cannot be spawned directly — flutter_pty hands the child its own
       // executable name as its first argument and joins the rest with unquoted
       // spaces, which starts a turn about "codex.exe" and splits any argument
-      // containing a space — so the whole script rides in one `-EncodedCommand`
-      // token, which has nothing for that concatenation to split.
+      // containing a space — so the whole script rides in one plain `-Command` on an
+      // exact argv, quoted once for Windows (windows_powershell_launch_test).
       const launch = AgentPaneLaunch(
         agentId: 'claudeCode',
         executable: r'C:\bin\claude.exe',
@@ -52,10 +42,10 @@ void main() {
       expect(pty.arguments.sublist(0, 3), [
         '-NoLogo',
         '-NoProfile',
-        '-EncodedCommand',
+        '-Command',
       ]);
       expect(
-        decodePowerShellCommand(pty.arguments.last),
+        pty.arguments.last,
         r"& 'C:\bin\claude.exe' '--permission-mode' 'acceptEdits' 'say hello'",
       );
       expect(pty.workingDirectory, r'C:\repo');
@@ -67,7 +57,7 @@ void main() {
         executable: r'C:\Program Files\rover\rover.exe',
       );
       expect(
-        decodePowerShellCommand(agentPtyLaunchFor(launch).arguments.last),
+        agentPtyLaunchFor(launch).arguments.last,
         r"& 'C:\Program Files\rover\rover.exe'",
       );
     });
@@ -83,7 +73,7 @@ void main() {
         workingDirectory: r'C:\repo',
       );
       expect(
-        decodePowerShellCommand(agentPtyLaunchFor(launch).arguments.last),
+        agentPtyLaunchFor(launch).arguments.last,
         r"& 'C:\bin\claude.exe' 'explain %PATH% please'",
       );
     });
@@ -182,7 +172,7 @@ void main() {
       expect(
         env['WSLENV'],
         '$kSessionIdEnvironmentVariable/u:'
-            '$kSessionPortBaseEnvironmentVariable/u',
+        '$kSessionPortBaseEnvironmentVariable/u',
       );
     });
 
@@ -233,10 +223,7 @@ void main() {
       );
       // Once, still: the point of this test is that the destination is not
       // wrapped twice, and `cmd.exe /c` carries exactly one `wsl.exe`.
-      expect(
-        'wsl.exe'.allMatches(pty.arguments.join(' ')).length,
-        1,
-      );
+      expect('wsl.exe'.allMatches(pty.arguments.join(' ')).length, 1);
     });
 
     test('Windows host, native destination: powershell.exe', () {
@@ -251,10 +238,7 @@ void main() {
         context: LaunchContext.forAgent(launch, hostIsWindows: true),
       );
       expect(pty.executable, 'powershell.exe');
-      expect(
-        decodePowerShellCommand(pty.arguments.last),
-        r"& 'C:\bin\claude.exe' '--resume' 'sid'",
-      );
+      expect(pty.arguments.last, r"& 'C:\bin\claude.exe' '--resume' 'sid'");
       expect(pty.workingDirectory, r'C:\repo');
     });
 
@@ -297,12 +281,9 @@ void main() {
       expect(pty.arguments.sublist(0, 3), [
         '-NoLogo',
         '-NoProfile',
-        '-EncodedCommand',
+        '-Command',
       ]);
-      expect(
-        decodePowerShellCommand(pty.arguments.last),
-        r"& 'C:\bin\claude.exe' 'say hello'",
-      );
+      expect(pty.arguments.last, r"& 'C:\bin\claude.exe' 'say hello'");
       expect(pty.workingDirectory, r'C:\repo');
     });
 
@@ -478,7 +459,7 @@ void main() {
         'say hello',
       ]);
       expect(
-        decodePowerShellCommand(agentPtyLaunchFor(launch).arguments.last),
+        agentPtyLaunchFor(launch).arguments.last,
         contains('--mcp-config=/now.json'),
       );
     });
@@ -742,7 +723,7 @@ void main() {
       final pty = agentPtyLaunchFor(launch);
       expect(pty.executable, 'powershell.exe');
       expect(
-        decodePowerShellCommand(pty.arguments.last),
+        pty.arguments.last,
         // PowerShell's literal string leaves the double quotes alone; only an
         // apostrophe would need doubling.
         '& \'agy\' \'--prompt-interactive\' \'say "hi" to a b\'',
@@ -752,10 +733,7 @@ void main() {
     test('an agent that has never been checked is launched bare', () {
       // Not handed a stray argument it might read as a subcommand, and not
       // handed another agent's permission flag.
-      expect(
-        agentPaneArguments(null, _claudeBypass, prompt: 'hello'),
-        isEmpty,
-      );
+      expect(agentPaneArguments(null, _claudeBypass, prompt: 'hello'), isEmpty);
     });
   });
 
@@ -843,18 +821,12 @@ void main() {
     });
 
     test('an agent nobody has checked is launched exactly as before', () {
-      expect(
-        agentPaneArguments(null, _claudeAsk, mcpUrl: url),
-        isEmpty,
-      );
+      expect(agentPaneArguments(null, _claudeAsk, mcpUrl: url), isEmpty);
     });
 
     test('no endpoint means no flag', () {
       expect(
-        agentPaneArguments(
-          registry.byId(AgentIds.claudeCode),
-          _claudeAsk,
-        ),
+        agentPaneArguments(registry.byId(AgentIds.claudeCode), _claudeAsk),
         isNot(contains(startsWith('--mcp-config'))),
       );
     });

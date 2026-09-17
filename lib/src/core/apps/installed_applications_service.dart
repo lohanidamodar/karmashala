@@ -1,8 +1,6 @@
 import 'dart:io';
 
 import 'package:agent_cli/process.dart';
-import 'package:karmashala_terminal_core/shell_integration.dart'
-    show encodePowerShellCommand;
 import 'package:path/path.dart' as p;
 
 import 'installed_application.dart';
@@ -85,15 +83,12 @@ Get-ChildItem -LiteralPath $roots -Filter *.lnk -Recurse | ForEach-Object {
     final result = await _runner.run(
       CommandRequest(
         executable: 'powershell.exe',
-        arguments: [
-          '-NoProfile',
-          // The machine's policy is Restricted (CLAUDE.md §18); this applies to
-          // the child process only and changes nothing on the system.
-          '-ExecutionPolicy',
-          'Bypass',
-          '-EncodedCommand',
-          encodePowerShellCommand(startMenuScript),
-        ],
+        // A readable `-Command`: no `-EncodedCommand` and no execution-policy
+        // override, both of which behavioural antivirus scores as a dropper
+        // (docs/windows-antivirus.md). Neither was needed — the policy governs
+        // script *files*, not `-Command` — and `Process.start` quotes this one
+        // argument for Windows itself, in UTF-16.
+        arguments: ['-NoProfile', '-Command', startMenuScript],
         timeout: timeout,
       ),
     );

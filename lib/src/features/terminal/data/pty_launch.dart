@@ -11,6 +11,7 @@ class PtyLaunch {
     this.arguments = const [],
     this.workingDirectory,
     this.environment = const {},
+    this.exactArgv = false,
   });
 
   final String executable;
@@ -21,10 +22,19 @@ class PtyLaunch {
   /// an agent pane uses it to tell the agent which session it is running in.
   final Map<String, String> environment;
 
+  /// Whether [arguments] are an **exact argv** the child must receive as
+  /// written. A spawner that builds one Windows command line owes them
+  /// `CommandLineToArgvW` quoting and must not repeat the executable — which
+  /// the session host always did, and `flutter_pty` did not (see
+  /// [flutterPtyStartFor]). `false` is every launch shaped *for* `flutter_pty`'s
+  /// unquoted concatenation — the `cmd.exe /c <line>` family — left as shipped.
+  final bool exactArgv;
+
   @override
   bool operator ==(Object other) =>
       other is PtyLaunch &&
       other.executable == executable &&
+      other.exactArgv == exactArgv &&
       other.workingDirectory == workingDirectory &&
       _mapEquals(other.environment, environment) &&
       _listEquals(other.arguments, arguments);
@@ -33,6 +43,7 @@ class PtyLaunch {
   int get hashCode => Object.hash(
     executable,
     workingDirectory,
+    exactArgv,
     Object.hashAll(arguments),
     Object.hashAllUnordered(
       environment.entries.map((e) => '${e.key}=${e.value}'),
@@ -85,22 +96,31 @@ PtyLaunch ptyLaunchFor(
         environment: environment,
       );
     case ShellContextKind.powerShell:
-      // Still spawned directly and still *nested* because of it: the duplicate
-      // token binds to PowerShell's positional `-Command`. Left as it shipped.
+      // Without integration: still spawned directly and still *nested*,
+      // because the duplicate token binds to PowerShell's positional
+      // `-Command`. Left as it shipped — it carries no script.
+      //
+      // With integration the bootstrap rides as a plain, readable `-Command`
+      // on an exact argv: one PowerShell, never an encoded one. An
+      // `-EncodedCommand` from an unsigned parent is among the strongest
+      // signals behavioural antivirus scores (docs/windows-antivirus.md).
+      // `-NoExit` keeps the session interactive after the bootstrap, and
+      // `-Command` runs after the profiles exactly as the encoded form did.
+      // Not `-File`: the owner's execution policy is `Restricted`, which
+      // refuses a script file and does not apply to `-Command`.
       return PtyLaunch(
         executable: 'powershell.exe',
         arguments: [
           '-NoLogo',
-          // -NoExit keeps the session interactive after the bootstrap runs;
-          // -EncodedCommand sidesteps Windows command-line quoting entirely.
           if (integrate) ...[
             '-NoExit',
-            '-EncodedCommand',
-            encodePowerShellCommand(powerShellIntegrationScript()),
+            '-Command',
+            powerShellIntegrationScript(),
           ],
         ],
         workingDirectory: workingDirectory,
         environment: environment,
+        exactArgv: integrate,
       );
     // A shell profile never names a bare executable; the Windows-native shell
     // is `cmd.exe`, so both spellings land here.
@@ -172,27 +192,26 @@ PtyLaunch agentPtyLaunchFor(
   LaunchContext? context,
   Map<String, String> environment = const {},
 }) => wrapForPty(
-      ShellCommand(
-        executable: launch.executable,
-        // `commandArguments`, not `arguments`: the MCP flags are rebuilt for
-        // this start and sit beside the stored ones rather than inside them.
-        arguments: launch.commandArguments,
-        workingDirectory: launch.workingDirectory,
-        environment: {
-          ...environment,
-          if (launch.sessionId != null) ...{
-            kSessionIdEnvironmentVariable: launch.sessionId!,
-            // Beside the id and through the same `WSLENV` plumbing. A
-            // namespace a repository's scripts opt into, so two worktree
-            // sessions running one script do not both bind the same port.
-            kSessionPortBaseEnvironmentVariable: '${sessionPortBase(
-              launch.sessionId!,
-            )}',
-          },
-        },
-      ),
-      context ?? LaunchContext.forAgent(launch, hostIsWindows: true),
-    );
+  ShellCommand(
+    executable: launch.executable,
+    // `commandArguments`, not `arguments`: the MCP flags are rebuilt for
+    // this start and sit beside the stored ones rather than inside them.
+    arguments: launch.commandArguments,
+    workingDirectory: launch.workingDirectory,
+    environment: {
+      ...environment,
+      if (launch.sessionId != null) ...{
+        kSessionIdEnvironmentVariable: launch.sessionId!,
+        // Beside the id and through the same `WSLENV` plumbing. A
+        // namespace a repository's scripts opt into, so two worktree
+        // sessions running one script do not both bind the same port.
+        kSessionPortBaseEnvironmentVariable:
+            '${sessionPortBase(launch.sessionId!)}',
+      },
+    },
+  ),
+  context ?? LaunchContext.forAgent(launch, hostIsWindows: true),
+);
 
 /// The **one** place a command gets a wrapper put in front of it for a ConPTY.
 /// It consumes a [ShellCommand] and returns a [PtyLaunch] with no route back,
@@ -211,19 +230,21 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
     case ShellContextKind.windowsNative:
     case ShellContextKind.powerShell:
       // PowerShell, not `cmd.exe`, so the pane and the copied line speak one
-      // shell — and `-EncodedCommand` is one token `flutter_pty` cannot split.
-      final script =
-          '& ${command.parts.map(quotePowerShellArgument).join(' ')}';
+      // shell and `%NAME%` is never expanded. A plain `-Command` on an exact
+      // argv — it was `-EncodedCommand`, which behavioural antivirus treats as
+      // a dropper signal (docs/windows-antivirus.md) — in printable ASCII only,
+      // because `flutter_pty` casts each byte of its command line to a `WCHAR`.
       return PtyLaunch(
         executable: 'powershell.exe',
         arguments: [
           '-NoLogo',
           '-NoProfile',
-          '-EncodedCommand',
-          encodePowerShellCommand(script),
+          '-Command',
+          powerShellInvocation(command.parts),
         ],
         workingDirectory: command.workingDirectory,
         environment: command.environment,
+        exactArgv: true,
       );
     case ShellContextKind.commandPrompt:
       // Only when the profile *names* `cmd.exe`: it ignores the duplicated
@@ -279,6 +300,78 @@ List<String> wrapForExternalTerminal(
 /// embedded single quote doubled.
 String quotePowerShellArgument(String value) =>
     "'${value.replaceAll("'", "''")}'";
+
+/// The PowerShell statement that runs [parts] — `& <exe> <arg>…` — with every
+/// part a [powerShellLiteral], so the whole script is printable ASCII.
+String powerShellInvocation(List<String> parts) =>
+    '& ${parts.map(powerShellLiteral).join(' ')}';
+
+/// A PowerShell expression that evaluates to exactly [value], written in
+/// **printable ASCII only**.
+///
+/// Printable ASCII goes in a single-quoted literal, where PowerShell expands
+/// nothing (`$`, backtick, `%`, `&` and `"` are inert) and only `'` is doubled.
+/// Anything else — control characters and every code unit past `~` — is its
+/// UTF-16 code units in `[string]::new([char[]](…))`, joined to the literals
+/// with `+` inside parentheses, which is how one expression is one argument.
+/// Two reasons it cannot go in raw: `flutter_pty` writes its command line a
+/// byte at a time into `WCHAR`s, so UTF-8 arrives as garbage; and PowerShell
+/// also ends a single-quoted string at a *typographic* quote (U+2018–U+201B),
+/// so "don’t" in a prompt cut the script short even where the bytes survived.
+String powerShellLiteral(String value) {
+  if (value.isEmpty) return "''";
+  final segments = <String>[];
+  final plain = StringBuffer();
+  final codes = <int>[];
+  void flushPlain() {
+    if (plain.isEmpty) return;
+    segments.add("'${plain.toString().replaceAll("'", "''")}'");
+    plain.clear();
+  }
+
+  void flushCodes() {
+    if (codes.isEmpty) return;
+    segments.add('[string]::new([char[]](${codes.join(',')}))');
+    codes.clear();
+  }
+
+  for (final unit in value.codeUnits) {
+    if (unit >= 0x20 && unit <= 0x7E) {
+      flushCodes();
+      plain.writeCharCode(unit);
+    } else {
+      flushPlain();
+      codes.add(unit);
+    }
+  }
+  flushPlain();
+  flushCodes();
+  return segments.length == 1 ? segments.single : '(${segments.join('+')})';
+}
+
+/// What `Pty.start` is handed for [launch]: its arguments, and whether the
+/// vendored `flutter_pty` may repeat the executable as `argv[0]`.
+///
+/// On Windows `flutter_pty` joins its arguments with single spaces and quotes
+/// nothing, so a [PtyLaunch.exactArgv] launch is quoted here — by the same
+/// `CommandLineToArgvW` rules the session host applies — into **one**
+/// pre-quoted tail, and the repeated executable is suppressed so PowerShell is
+/// not started twice. Every other launch is handed over exactly as before.
+({List<String> arguments, bool repeatExecutable}) flutterPtyStartFor(
+  PtyLaunch launch, {
+  required bool hostIsWindows,
+}) {
+  if (!hostIsWindows || !launch.exactArgv) {
+    return (arguments: launch.arguments, repeatExecutable: true);
+  }
+  return (
+    arguments: [
+      if (launch.arguments.isNotEmpty)
+        launch.arguments.map(quoteWindowsCommandArgument).join(' '),
+    ],
+    repeatExecutable: false,
+  );
+}
 
 /// Quotes one argument for a **POSIX** shell. Single quotes, so everything
 /// arrives byte for byte; it cannot defend against `cmd.exe`, the first parser.

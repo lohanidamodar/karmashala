@@ -256,11 +256,15 @@ class PtyTerminalInstance
             Directory(launch.workingDirectory!).existsSync())
         ? launch.workingDirectory
         : null;
+    // An exact-argv launch is quoted for flutter_pty's unquoted Windows
+    // concatenation here, and its executable is not repeated.
+    final start = flutterPtyStartFor(launch, hostIsWindows: Platform.isWindows);
     _pty = Pty.start(
       launch.executable,
-      arguments: launch.arguments,
+      arguments: start.arguments,
       environment: _ptyEnvironment(launch.environment),
       workingDirectory: startIn,
+      repeatExecutableOnWindows: start.repeatExecutable,
     );
 
     // Buffer the raw PTY bytes and hand them to the terminal once per frame:
@@ -291,7 +295,9 @@ class PtyTerminalInstance
         onError: (Object error) {
           _exited = true;
           if (_disposed) return;
-          _emit('\r\n\x1b[90m[process ended; exit code unknown ($error)]\x1b[0m\r\n');
+          _emit(
+            '\r\n\x1b[90m[process ended; exit code unknown ($error)]\x1b[0m\r\n',
+          );
           _liveness.value = PaneLiveness.exited;
         },
       ),
@@ -394,7 +400,9 @@ class PtyTerminalInstance
   /// is the history: not while running, parked, or on the alternate buffer.
   @override
   Terminal? get adoptableBuffer =>
-      _exited && !_cold.isParked && !terminal.isUsingAltBuffer ? terminal : null;
+      _exited && !_cold.isParked && !terminal.isUsingAltBuffer
+      ? terminal
+      : null;
 
   /// Bytes this pane is holding for a replay. Diagnostics, and what the
   /// ingest-tier tests assert on.
@@ -478,20 +486,21 @@ class PtyTerminalInstance
     scrollController.dispose();
     // Ask the process to exit before destroying it, so a build or ssh session
     // can flush. Quitting waits for it; the pty is released after the reap.
-    _reap = closePaneProcess(
-      kill: _pty.kill,
-      exitCode: _pty.exitCode,
-      // The whole tree, not just the pid: see killWindowsProcessTree.
-      pid: _exited ? null : _pid,
-      // Read at the end, not now: the quit can arrive while this reap is still
-      // in flight, and it is the quit's answer that decides.
-      keepPseudoConsole: () => _keepPseudoConsole,
-      releasePseudoConsole: _pty.destroy,
-    ).then((report) {
-      // What a pane close actually did: the 2026-09-10 hang turned on whether
-      // the tree was gone when the console was released.
-      _log.info('pane $id: ${report.summary}.');
-    });
+    _reap =
+        closePaneProcess(
+          kill: _pty.kill,
+          exitCode: _pty.exitCode,
+          // The whole tree, not just the pid: see killWindowsProcessTree.
+          pid: _exited ? null : _pid,
+          // Read at the end, not now: the quit can arrive while this reap is still
+          // in flight, and it is the quit's answer that decides.
+          keepPseudoConsole: () => _keepPseudoConsole,
+          releasePseudoConsole: _pty.destroy,
+        ).then((report) {
+          // What a pane close actually did: the 2026-09-10 hang turned on whether
+          // the tree was gone when the console was released.
+          _log.info('pane $id: ${report.summary}.');
+        });
   }
 
   static final _log = AppLogger.named('terminal.pane');
@@ -574,7 +583,8 @@ class ErrorTerminalInstance implements TerminalInstance {
   }) {
     // A failed *restart* still holds the history of the pane it replaced, and
     // that history is the reason anyone would retry.
-    terminal = adoptTerminal ?? Terminal(maxLines: kErrorPaneScrollbackMaxLines);
+    terminal =
+        adoptTerminal ?? Terminal(maxLines: kErrorPaneScrollbackMaxLines);
     if (adoptTerminal == null) {
       writeRestoredScrollback(terminal, restoredScrollback);
     }
@@ -735,10 +745,8 @@ class DormantTerminalInstance
       }
       // Nothing else claims `onResize` here, so this pane can report what the
       // workbench laid it out at, for the next one to parse into.
-      built.onResize = (columns, rows, _, _) => hint.grid = (
-        columns: columns,
-        rows: rows,
-      );
+      built.onResize = (columns, rows, _, _) =>
+          hint.grid = (columns: columns, rows: rows);
     }
     if (restoredScrollback.isNotEmpty) built.write(restoredScrollback);
     return built;
@@ -875,7 +883,7 @@ TerminalInstance createPtyTerminalInstance({
 const int _maxArgumentInMessage = 120;
 
 /// [arguments] as one line, with anything unreadably long summarised: a
-/// shell-integrated PowerShell pane's `-EncodedCommand` blob runs to ~4,600
+/// shell-integrated PowerShell pane's `-Command` script runs to thousands of
 /// characters and pushed the exception that explains the failure off screen.
 String describeLaunchArguments(List<String> arguments) => [
   for (final argument in arguments)

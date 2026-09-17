@@ -45,6 +45,14 @@ class Pty {
   /// Spawns a process in a pseudo-terminal. The arguments have the same meaning
   /// as in [Process.start].
   /// [ackRead] indicates if the pty should wait for a call to [Pty.ackRead] before sending the next data.
+  ///
+  /// DIVERGENCE (Karmashala): [repeatExecutableOnWindows]. On Windows the
+  /// native `build_command` writes the executable and then every `argv` entry,
+  /// and `argv[0]` is the executable again — so a child is started as
+  /// `<exe> <exe> <args…>`. Passing `false` sends an empty `argv[0]`, which
+  /// `build_command` writes as nothing: the line becomes `<exe>  <args…>`, and
+  /// the extra space is whitespace to every Windows argument parser. Ignored
+  /// elsewhere, where `argv[0]` is what `execvp` hands the child.
   Pty.start(
     this.executable, {
     this.arguments = const [],
@@ -53,6 +61,7 @@ class Pty {
     int rows = 25,
     int columns = 80,
     bool ackRead = false,
+    bool repeatExecutableOnWindows = true,
   }) {
     _ensureInitialized();
 
@@ -85,7 +94,9 @@ class Pty {
 
     // build argv
     final argv = calloc<Pointer<Utf8>>(arguments.length + 2);
-    (argv + 0).value = executable.toNativeUtf8();
+    (argv + 0).value =
+        (Platform.isWindows && !repeatExecutableOnWindows ? '' : executable)
+            .toNativeUtf8();
     for (var i = 0; i < arguments.length; i++) {
       (argv + i + 1).value = arguments[i].toNativeUtf8();
     }
