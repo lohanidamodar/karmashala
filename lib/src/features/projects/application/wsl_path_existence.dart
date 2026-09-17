@@ -48,11 +48,17 @@ class WslPathExistence {
   /// Whether [path] is a directory in [distribution]. Answered from what is
   /// kept while that is fresh — younger than [floor], or asked under the same
   /// [stamp] and younger than its TTL — and otherwise asked with every other
-  /// path wanted this turn. Never throws.
-  Future<bool?> exists(String distribution, String path, {Object? stamp}) {
+  /// path wanted this turn. [fresh] takes no kept answer: for a caller that
+  /// acts on "gone". Never throws.
+  Future<bool?> exists(
+    String distribution,
+    String path, {
+    Object? stamp,
+    bool fresh = false,
+  }) {
     if (path.isEmpty) return Future.value();
     final kept = _answers[(distribution, path)];
-    if (kept != null) {
+    if (kept != null && !fresh) {
       final age = now().difference(kept.at);
       final life = kept.exists == null ? unknownTtl : ttl;
       if (age < floor || (kept.stamp == stamp && age < life)) {
@@ -69,6 +75,11 @@ class WslPathExistence {
     }
     return completer.future;
   }
+
+  /// What is kept for [path], however old, and nothing asked: for a caller
+  /// that cannot wait. Null is "not checked".
+  bool? peek(String distribution, String path) =>
+      _answers[(distribution, path)]?.exists;
 
   /// Drops what is kept for [path], so the next [exists] asks — a rescan.
   void forget(String distribution, String path) =>

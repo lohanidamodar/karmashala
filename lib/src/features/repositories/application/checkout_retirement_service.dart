@@ -40,8 +40,14 @@ class CheckoutRetirementService {
     final retired = <Repository>[];
     final keptReferenced = <ReferencedCheckout>[];
     final keptUnreachable = <Repository>[];
-    for (final candidate in candidates) {
-      final presence = await _presenceOf(candidate.path, environment, windows);
+    // Asked together: a WSL project's checkouts are then one `wsl.exe` call,
+    // and a share that blocks costs one deadline rather than one per checkout.
+    final presences = await Future.wait([
+      for (final candidate in candidates)
+        _presenceOf(candidate.path, environment, windows),
+    ]);
+    for (final (index, candidate) in candidates.indexed) {
+      final presence = presences[index];
       if (presence == CheckoutPresence.present) continue;
       if (presence == CheckoutPresence.unknown) {
         keptUnreachable.add(candidate);

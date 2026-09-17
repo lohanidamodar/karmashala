@@ -2,6 +2,7 @@
 /// copied: the environment probes, the id resolution, and the badge.
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
@@ -13,11 +14,17 @@ import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/session_diff_stat.dart';
+import '../../projects/application/wsl_path_existence.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';
 
 /// Whether a session's working folder is gone from disk, answered synchronously
 /// because `sessions.list` is. **False also means "could not tell"**.
+///
+/// A WSL folder is never statted over `\\wsl.localhost` for this — a phone's
+/// list would stat every checkout, synchronously (docs/windows-antivirus.md).
+/// It answers what [WslPathExistence] already knows and asks for the rest, so
+/// the next list has it.
 final remoteFolderMissingProvider =
     Provider<bool Function(EnvironmentPath path)>((ref) {
       return (path) {
@@ -26,6 +33,17 @@ final remoteFolderMissingProvider =
           final env = environments.getById(path.environmentId);
           if (env == null) return false;
           var resolved = path.path;
+          if (env.kind == EnvironmentKind.wsl) {
+            final distribution = env.wslDistribution;
+            final local = ref.read(localEnvironmentProvider);
+            if (distribution == null ||
+                local?.kind != EnvironmentKind.windowsNative) {
+              return false;
+            }
+            final paths = ref.read(wslPathExistenceProvider);
+            unawaited(paths.exists(distribution, path.path));
+            return paths.peek(distribution, path.path) == false;
+          }
           if (env.kind != EnvironmentKind.windowsNative) {
             ExecutionEnvironment? windows;
             for (final candidate in environments.getAll()) {
