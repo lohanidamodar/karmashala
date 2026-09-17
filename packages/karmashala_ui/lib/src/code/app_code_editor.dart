@@ -9,6 +9,13 @@ import 'code_theme.dart';
 /// The line box a code row is drawn in, as a multiple of the font size.
 const double kCodeLineHeight = 1.4;
 
+/// Save whatever document holds focus. A chord the platform delivers outside
+/// the key path (macOS key equivalents) is invoked as this on the focused
+/// context, so it reaches the same save the key binding does.
+class SaveDocumentIntent extends Intent {
+  const SaveDocumentIntent();
+}
+
 /// The app's one code editor: a file to read or to edit, drawn in the app's
 /// own palette.
 ///
@@ -118,6 +125,17 @@ class _AppCodeEditorState extends State<AppCodeEditor> {
           theme: codeHighlightTheme(theme.brightness),
         ),
       ),
+      // re_editor binds Cmd/Ctrl+S to an intent it never handles but still
+      // consumes, so the save has to be its action rather than a binding above.
+      shortcutOverrideActions: {
+        if (widget.onSave != null)
+          CodeShortcutSaveIntent: CallbackAction<CodeShortcutSaveIntent>(
+            onInvoke: (_) {
+              widget.onSave?.call();
+              return null;
+            },
+          ),
+      },
       indicatorBuilder: widget.showLineNumbers
           ? (context, editingController, chunkController, notifier) =>
                 DefaultCodeLineNumber(
@@ -136,15 +154,24 @@ class _AppCodeEditorState extends State<AppCodeEditor> {
     );
     final onSave = widget.onSave;
     if (onSave == null) return editor;
-    // Bound here rather than through the editor's own shortcut table: saving
-    // is the tab's, not the buffer's, and the chord has to reach it whether or
-    // not the buffer took the key.
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyS, control: true): onSave,
-        const SingleActivator(LogicalKeyboardKey.keyS, meta: true): onSave,
+    // Also bound above the editor, for focus that sits beside the buffer
+    // rather than in it, and as an action for a chord the platform forwards.
+    return Actions(
+      actions: {
+        SaveDocumentIntent: CallbackAction<SaveDocumentIntent>(
+          onInvoke: (_) {
+            onSave();
+            return null;
+          },
+        ),
       },
-      child: editor,
+      child: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyS, control: true): onSave,
+          const SingleActivator(LogicalKeyboardKey.keyS, meta: true): onSave,
+        },
+        child: editor,
+      ),
     );
   }
 }

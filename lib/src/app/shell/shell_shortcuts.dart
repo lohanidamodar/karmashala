@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:karmashala_ui/code.dart' show SaveDocumentIntent;
 
 import '../../features/projects/presentation/new_project_dialog.dart';
 import '../../features/sessions/presentation/new_session_dialog.dart';
@@ -216,13 +217,12 @@ String _paneEditLabel(String key) =>
 SingleActivator commandActivator(
   LogicalKeyboardKey key, {
   bool shift = false,
-}) =>
-    SingleActivator(
-      key,
-      control: !commandKeyIsMeta,
-      meta: commandKeyIsMeta,
-      shift: shift,
-    );
+}) => SingleActivator(
+  key,
+  control: !commandKeyIsMeta,
+  meta: commandKeyIsMeta,
+  shift: shift,
+);
 
 /// How that chord is written for the user: `⇧⌘K` on macOS, `Ctrl+Shift+K`
 /// elsewhere — the macOS modifier order is the platform's own.
@@ -565,17 +565,17 @@ List<ShellChord> _buildChords() => [
   // Not on macOS: ⌘V already pastes there, and `Ctrl+V` is readline's
   // quoted-insert, so claiming it would cost a shell binding for nothing.
   if (!commandKeyIsMeta)
-  ShellChord(
-    activator: SingleActivator(LogicalKeyboardKey.keyV, control: true),
-    intent: TerminalPasteIntent(),
-    label: 'Ctrl+V',
-    does: 'Paste into the terminal',
-    skipsShell: true,
-    paneOnly: true,
-    shellCost:
-        'readline quoted-insert (^V) — Ctrl+Q does the same thing in most '
-        'shells, and Ctrl+Shift+V still pastes if you hand this one back',
-  ),
+    ShellChord(
+      activator: SingleActivator(LogicalKeyboardKey.keyV, control: true),
+      intent: TerminalPasteIntent(),
+      label: 'Ctrl+V',
+      does: 'Paste into the terminal',
+      skipsShell: true,
+      paneOnly: true,
+      shellCost:
+          'readline quoted-insert (^V) — Ctrl+Q does the same thing in most '
+          'shells, and Ctrl+Shift+V still pastes if you hand this one back',
+    ),
 ];
 
 /// Every chord, for the platform [commandKeyIsMeta] describes. Cached on that
@@ -665,6 +665,23 @@ bool handleAppChordFromTerminal(
   return true;
 }
 
+/// Cmd chords that belong to whatever holds focus rather than to the shell,
+/// keyed by the character macOS reports: forwarded like [shellChords], because
+/// the text-input plugin eats a key equivalent before a focused editor sees it.
+const Map<String, Intent> focusedCommandChords = {'s': SaveDocumentIntent()};
+
+/// Invokes the forwarded focus-level chord [key] on the focused widget. False
+/// when it is not one, or nothing focused takes it.
+bool invokeFocusedCommandChord(String key, {required bool shift}) {
+  final intent = shift ? null : focusedCommandChords[key];
+  final context = FocusManager.instance.primaryFocus?.context;
+  if (intent == null || context == null || !context.mounted) return false;
+  final action = Actions.maybeFind<Intent>(context, intent: intent);
+  if (action == null || !action.isEnabled(intent)) return false;
+  Actions.invoke(context, intent);
+  return true;
+}
+
 /// Wraps [child] with the application's desktop keyboard shortcuts, declared
 /// once in [shellChords] — see that list for the map and the skip-list.
 class ShellShortcuts extends ConsumerStatefulWidget {
@@ -711,6 +728,7 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
       if (key.isEmpty || key.length > 1) continue;
       (chord.activator.shift ? shifted : plain).add(key);
     }
+    plain.addAll(focusedCommandChords.keys);
     try {
       await _chords.invokeMethod('register', {
         'plain': plain,
@@ -729,6 +747,7 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
     if (arguments is! Map) return;
     final key = arguments['key'];
     final shift = arguments['shift'] == true;
+    if (key is String && invokeFocusedCommandChord(key, shift: shift)) return;
     final context = _actionsContext;
     if (key is! String || context == null || !context.mounted) return;
     for (final chord in shellChords) {
@@ -812,7 +831,9 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
           ),
           ToggleTerminalIntent: CallbackAction<ToggleTerminalIntent>(
             onInvoke: (intent) {
-              ref.read(terminalSessionsControllerProvider.notifier).toggleFaceHere();
+              ref
+                  .read(terminalSessionsControllerProvider.notifier)
+                  .toggleFaceHere();
               return null;
             },
           ),

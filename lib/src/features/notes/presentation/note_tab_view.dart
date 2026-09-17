@@ -151,67 +151,77 @@ class _NoteTabViewState extends ConsumerState<NoteTabView> {
         ): () =>
             _setPreview(!_preview),
       },
-      child: Focus(
-        focusNode: _focus,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const PaneHeader(icon: AppIcons.note, title: 'Note'),
-            NoteToolbar(
-              preview: _preview,
-              saveState: draft.saveState,
-              toggleChord: _toggleChord,
-              onPreviewChanged: _setPreview,
-              onDelete: _delete,
-            ),
-            if (draft.hasConflict)
-              NoteConflictBar(
-                onKeepMine: () => drafts.keepMine(_id),
-                onTakeTheirs: () => drafts.takeTheirs(_id),
+      child: Actions(
+        actions: {
+          SaveDocumentIntent: CallbackAction<SaveDocumentIntent>(
+            onInvoke: (_) {
+              _save();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          focusNode: _focus,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const PaneHeader(icon: AppIcons.note, title: 'Note'),
+              NoteToolbar(
+                preview: _preview,
+                saveState: draft.saveState,
+                toggleChord: _toggleChord,
+                onPreviewChanged: _setPreview,
+                onDelete: _delete,
               ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                Insets.md,
-                Insets.xs,
-                Insets.md,
-                Insets.sm,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: _title,
-                    style: Theme.of(context).textTheme.titleMedium,
-                    decoration: InputDecoration.collapsed(
-                      hintText: note.body.trim().isEmpty
-                          ? 'Untitled note'
-                          : '${note.displayTitle}  (named by its first line)',
-                    ),
-                  ),
-                  const SizedBox(height: Insets.sm),
-                  NoteMetadata(note: note),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: _preview
-                  ? NotePreview(body: draft.body)
-                  : AppCodeEditor(
-                      controller: _body,
-                      focusNode: _bodyFocus,
-                      language: 'markdown',
-                      wrap: true,
-                      showLineNumbers: false,
-                      fontSize: ref.watch(
-                        settingsControllerProvider.select(
-                          (s) => s.terminalFontSize,
-                        ),
+              if (draft.hasConflict)
+                NoteConflictBar(
+                  onKeepMine: () => drafts.keepMine(_id),
+                  onTakeTheirs: () => drafts.takeTheirs(_id),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  Insets.md,
+                  Insets.xs,
+                  Insets.md,
+                  Insets.sm,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    TextField(
+                      controller: _title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                      decoration: InputDecoration.collapsed(
+                        hintText: note.body.trim().isEmpty
+                            ? 'Untitled note'
+                            : '${note.displayTitle}  (named by its first line)',
                       ),
-                      onSave: _save,
                     ),
-            ),
-          ],
+                    const SizedBox(height: Insets.sm),
+                    NoteMetadata(note: note),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: _preview
+                    ? NotePreview(body: draft.body)
+                    : AppCodeEditor(
+                        controller: _body,
+                        focusNode: _bodyFocus,
+                        language: 'markdown',
+                        wrap: true,
+                        showLineNumbers: false,
+                        fontSize: ref.watch(
+                          settingsControllerProvider.select(
+                            (s) => s.terminalFontSize,
+                          ),
+                        ),
+                        onSave: _save,
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
