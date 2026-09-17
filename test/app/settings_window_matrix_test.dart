@@ -225,6 +225,11 @@ void main() {
   });
 
   group('PairPhoneDialog', () {
+    // The route chosen for a host is read from the store.
+    late AppDatabase routes;
+    setUp(() => routes = AppDatabase.memory());
+    tearDown(() => routes.close());
+
     final host = SshHost(
       id: 'h1',
       name: 'build-box-in-the-basement-with-a-long-name',
@@ -274,6 +279,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           ...noProcessOverrides(),
+          databaseProvider.overrideWithValue(routes),
           sshCompanionSetupProvider.overrideWith(
             (ref, host) async => _InvitingSetup(host),
           ),
@@ -288,6 +294,41 @@ void main() {
         because:
             'the address is the host name the user typed, and two notes sit '
             'under it',
+      );
+    });
+
+    testWidgets('with the QR shown and the route chosen by hand', (
+      tester,
+    ) async {
+      final container = ProviderContainer(
+        overrides: [
+          ...noProcessOverrides(),
+          databaseProvider.overrideWithValue(routes),
+          sshCompanionSetupProvider.overrideWith(
+            (ref, host) async => _InvitingSetup(host),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => opener(container),
+        warmUp: (tester) async {
+          await open(tester);
+          await tester.pump();
+          await tester.pump();
+          // The direct route: the address row, the code row and the QR at once,
+          // which is the tallest this dialog gets.
+          await tester.tap(find.text('This host'));
+          await tester.pump();
+          await tester.pump();
+          await tester.ensureVisible(find.text('Show QR'));
+          await tester.tap(find.text('Show QR'));
+        },
+        matrix: settingsMatrix,
+        because:
+            'a QR, a route switch and two copyable values share a dialog in a '
+            'window 560 tall',
       );
     });
   });
@@ -515,26 +556,26 @@ class _InvitingSetup implements SshCompanionSetup {
   final SshHost host;
 
   @override
-  Future<({CompanionEndpoint endpoint, PairingWindow window})> invite({
+  Future<CompanionEndpoint> prepare() async => CompanionEndpoint(
+    address: host.host,
+    port: 7422,
+    hostName: host.name,
+    reachable: false,
+    reason:
+        'Nothing answered on port 7422 from this desktop. Open it in the '
+        "host's firewall, or pair from a network that can reach it.",
+  );
+
+  @override
+  Future<PairingWindow> openWindow({
     required int capabilities,
     String relay = '',
-  }) async => (
-    endpoint: CompanionEndpoint(
-      address: host.host,
-      port: 7422,
-      hostName: host.name,
-      reachable: false,
-      reason:
-          'Nothing answered on port 7422 from this desktop. Open it in the '
-          "host's firewall, or pair from a network that can reach it.",
-    ),
-    window: PairingWindow(
-      status: PairingRequestStatus.open,
-      observedAt: testTime,
-      reason: 'Open.',
-      code: 'K7QM-3X2W-9PLA',
-      expiresAt: testTime.add(const Duration(minutes: 10)),
-    ),
+  }) async => PairingWindow(
+    status: PairingRequestStatus.open,
+    observedAt: testTime,
+    reason: 'Open.',
+    code: PairingCode.encode(List<int>.generate(20, (i) => i * 7)),
+    expiresAt: testTime.add(const Duration(minutes: 10)),
   );
 
   @override

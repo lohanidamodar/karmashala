@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../projects/application/projects_controller.dart';
 import '../../settings/application/settings_controller.dart';
+import '../../ssh/presentation/pair_phone_entry.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/domain/workspace.dart';
 import '../../workspaces/domain/workspace_scope.dart';
@@ -25,6 +26,7 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
 
   static const _all = '';
   static const _terminal = 'terminal:';
+  static const _pairPhone = 'pair-phone:';
 
   /// Under this a machine's button is its glyph and caret, and the name its
   /// tooltip.
@@ -59,6 +61,10 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
         if (value.startsWith(_terminal)) {
           final environment = current?.environment;
           if (environment != null) openTerminalOn(ref, environment);
+          return;
+        }
+        if (value.startsWith(_pairPhone)) {
+          pairPhoneWith(context, ref, current?.environment);
           return;
         }
         ref
@@ -96,6 +102,13 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
             label: 'Open a terminal on ${current.label}',
             icon: AppIcons.terminal,
           ),
+          // Only a box has an address of its own for a phone to pair with.
+          if (sshHostOf(ref, current.environment) != null)
+            DesktopMenuItem(
+              value: '$_pairPhone${current.environmentId}',
+              label: 'Pair a phone with ${current.label}…',
+              icon: AppIcons.deviceMobile,
+            ),
         ],
       ],
       child: _SwitcherFace(

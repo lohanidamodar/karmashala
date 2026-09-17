@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -25,7 +27,9 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
+import 'package:karmashala/src/features/ssh/application/host_session_providers.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
+import 'package:karmashala/src/features/ssh/presentation/pair_phone_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
@@ -141,6 +145,10 @@ void main() {
         ),
         agentSessionStatusProvider.overrideWith(
           (ref, id) => const Stream<AgentStatusReport>.empty(),
+        ),
+        // Opening the pairing dialog must not reach for a machine.
+        sshCompanionSetupProvider.overrideWith(
+          (ref, host) => Completer<Never>().future,
         ),
       ],
     );
@@ -482,6 +490,36 @@ void main() {
         container.read(terminalSessionsControllerProvider).tabs,
         hasLength(1),
       );
+    });
+
+    testWidgets('the switcher pairs a phone with a box, and only with a box', (
+      tester,
+    ) async {
+      seed();
+      final container = newContainer();
+      container
+          .read(settingsControllerProvider.notifier)
+          .setExplorerEnvironmentScope('ssh:h1');
+      await pump(tester, container: container);
+
+      await tester.tap(find.byType(ExplorerEnvironmentSwitcher));
+      await tester.pumpAndSettle();
+      await tester.tap(inMenu('Pair a phone with build-box…'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(PairPhoneDialog), findsOneWidget);
+      Navigator.of(tester.element(find.byType(PairPhoneDialog))).pop();
+      await tester.pumpAndSettle();
+
+      // WSL has no address of its own for a phone to dial.
+      container
+          .read(settingsControllerProvider.notifier)
+          .setExplorerEnvironmentScope('wsl:Ubuntu');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(ExplorerEnvironmentSwitcher));
+      await tester.pumpAndSettle();
+      expect(inMenu('Open a terminal on Ubuntu'), findsOneWidget);
+      expect(find.textContaining('Pair a phone'), findsNothing);
     });
 
     testWidgets('Terminals starts folded on every launch, whatever is stored', (

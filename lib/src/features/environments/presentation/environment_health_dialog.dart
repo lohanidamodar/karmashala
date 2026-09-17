@@ -6,6 +6,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
+import '../../ssh/presentation/pair_phone_entry.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/environment_health.dart';
 import '../application/system_health.dart';
@@ -285,14 +286,15 @@ class _CopyableCommand extends StatelessWidget {
 }
 
 /// One execution environment: reachable, and what was found in it.
-class _EnvironmentRow extends StatelessWidget {
+class _EnvironmentRow extends ConsumerWidget {
   const _EnvironmentRow({required this.health});
 
   final EnvironmentHealth health;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final pairable = sshHostOf(ref, health.environment) != null;
     // Versions, not just names. Which version of a CLI is installed decides
     // which modes a session there can use — that is a property of the
     // installation, and this app has learned it the hard way.
@@ -335,6 +337,12 @@ class _EnvironmentRow extends StatelessWidget {
               ],
             ),
           ),
+          if (pairable)
+            TextButton.icon(
+              onPressed: () => pairPhoneWith(context, ref, health.environment),
+              icon: const Icon(AppIcons.deviceMobile, size: Chrome.icon),
+              label: const Text(kPairPhoneLabel),
+            ),
         ],
       ),
     );

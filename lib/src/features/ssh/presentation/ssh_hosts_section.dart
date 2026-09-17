@@ -14,6 +14,7 @@ import 'package:karmashala_ssh/connection.dart';
 import 'ssh_connection_status_chip.dart';
 import 'host_sessions_dialog.dart';
 import 'pair_phone_dialog.dart';
+import 'pair_phone_entry.dart';
 import 'ssh_host_dialog.dart';
 import 'remote_file_browser_dialog.dart';
 
@@ -101,7 +102,7 @@ class _HostCard extends ConsumerWidget {
         ),
         DesktopMenuItem(
           value: 'pair_phone',
-          label: 'Pair a phone…',
+          label: kPairPhoneLabel,
           icon: AppIcons.deviceMobile,
         ),
         const DesktopMenuDivider(),
@@ -214,6 +215,11 @@ class _HostCard extends ConsumerWidget {
                       RemoteFileBrowserDialog.show(context, host: host),
                   icon: const Icon(AppIcons.folderOpen),
                   label: const Text('Browse files'),
+                ),
+                TextButton.icon(
+                  onPressed: () => PairPhoneDialog.show(context, host: host),
+                  icon: const Icon(AppIcons.deviceMobile),
+                  label: const Text(kPairPhoneLabel),
                 ),
                 TextButton.icon(
                   onPressed: () => SshHostDialog.show(context, existing: host),

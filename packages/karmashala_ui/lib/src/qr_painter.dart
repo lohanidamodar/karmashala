@@ -4,13 +4,16 @@ import 'package:qr/qr.dart';
 /// Paints a QR code with a plain [CustomPainter]. Black-on-white in both
 /// themes deliberately: many scanners refuse an inverted QR.
 class QrPainter extends CustomPainter {
-  QrPainter(String data)
+  QrPainter(this.data)
     : _image = QrImage(
         QrCode(
           payload: QrPayload.fromString(data),
           errorCorrectLevel: QrErrorCorrectLevel.medium,
         ),
       );
+
+  /// What the code says. Secret for a pairing QR: read it, never log it.
+  final String data;
 
   final QrImage _image;
 
@@ -42,5 +45,5 @@ class QrPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(QrPainter oldDelegate) => false;
+  bool shouldRepaint(QrPainter oldDelegate) => oldDelegate.data != data;
 }

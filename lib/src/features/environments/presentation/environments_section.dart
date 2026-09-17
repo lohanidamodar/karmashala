@@ -11,7 +11,11 @@ import 'package:agent_cli/descriptors.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../ssh/application/ssh_hosts_controller.dart';
 import 'package:karmashala_ssh/connection.dart';
+import '../../ssh/application/companion_route_store.dart';
+import '../../ssh/presentation/pair_phone_dialog.dart';
+import '../../ssh/presentation/pair_phone_entry.dart';
 import '../../ssh/presentation/ssh_connection_status_chip.dart';
+import 'package:karmashala_remote/pairing.dart' show HostRoute;
 import '../application/environment_scan_controller.dart';
 import '../application/environments_controller.dart';
 import 'package:agent_cli/process.dart';
@@ -162,20 +166,35 @@ class _EnvironmentCard extends ConsumerWidget {
             const SizedBox(height: Insets.sm),
             DesktopErrorBanner(scan.error!),
           ],
+          if (isSsh && host != null) ...[
+            const SizedBox(height: Insets.xs),
+            _PhoneRoute(hostId: host!.id),
+          ],
           const SizedBox(height: Insets.xs),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: scan.busy
-                  ? null
-                  : () => ref
-                        .read(environmentScanControllerProvider.notifier)
-                        .scan(environment),
-              icon: scan.busy
-                  ? const InlineSpinner()
-                  : const Icon(AppIcons.magnifyingGlass),
-              label: Text(isSsh ? 'Connect and find agents' : 'Find agents'),
-            ),
+          // A Wrap: two buttons do not fit one line at the narrowest window
+          // with bigger text.
+          Wrap(
+            spacing: Insets.xs,
+            runSpacing: Insets.xs,
+            children: [
+              TextButton.icon(
+                onPressed: scan.busy
+                    ? null
+                    : () => ref
+                          .read(environmentScanControllerProvider.notifier)
+                          .scan(environment),
+                icon: scan.busy
+                    ? const InlineSpinner()
+                    : const Icon(AppIcons.magnifyingGlass),
+                label: Text(isSsh ? 'Connect and find agents' : 'Find agents'),
+              ),
+              if (isSsh && host != null)
+                TextButton.icon(
+                  onPressed: () => PairPhoneDialog.show(context, host: host!),
+                  icon: const Icon(AppIcons.deviceMobile),
+                  label: const Text(kPairPhoneLabel),
+                ),
+            ],
           ),
         ],
       ),
@@ -195,4 +214,28 @@ class _EnvironmentCard extends ConsumerWidget {
     EnvironmentKind.wsl => 'WSL',
     EnvironmentKind.ssh => 'SSH',
   };
+}
+
+/// How phones reach this machine, once somebody has chosen. Silent before
+/// that: the route is decided by a dial, and none has been made here.
+class _PhoneRoute extends ConsumerWidget {
+  const _PhoneRoute({required this.hostId});
+
+  final String hostId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final route = ref.watch(companionRouteProvider(hostId));
+    if (route == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    return Text(
+      switch (route) {
+        HostRoute.direct => 'Phones connect to this host itself.',
+        HostRoute.relay => 'Phones connect through the hosted relay.',
+      },
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
 }
