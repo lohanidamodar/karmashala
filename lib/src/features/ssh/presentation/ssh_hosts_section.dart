@@ -246,6 +246,10 @@ class _HostCard extends ConsumerWidget {
   }
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
+    final controller = ref.read(sshHostsControllerProvider.notifier);
+    final holding = controller.projectsHolding(host.id);
+    if (holding.isNotEmpty) return _explainInUse(context, holding);
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -271,6 +275,37 @@ class _HostCard extends ConsumerWidget {
       ),
     );
     if (confirmed != true) return;
-    await ref.read(sshHostsControllerProvider.notifier).remove(host.id);
+    try {
+      await controller.remove(host.id);
+    } on SshHostInUse catch (inUse) {
+      // A project created on the host while the dialog was open.
+      if (context.mounted) await _explainInUse(context, inUse.projects);
+    }
+  }
+
+  /// The store will not orphan a project, so the host cannot go before they
+  /// do. Named, so the user knows exactly what to remove.
+  Future<void> _explainInUse(BuildContext context, List<String> projects) {
+    final named = projects.map((p) => '• $p').join('\n');
+    final one = projects.length == 1;
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('${host.name} still has projects'),
+        content: Text(
+          '${one ? 'This project uses' : 'These projects use'} ${host.name}:'
+          '\n\n$named\n\n'
+          'Remove ${one ? 'it' : 'them'} from Karmashala first, then remove '
+          'the host.',
+        ),
+        actions: [
+          TextButton(
+            autofocus: true,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 }

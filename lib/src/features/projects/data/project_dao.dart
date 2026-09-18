@@ -74,6 +74,25 @@ class ProjectDao {
     _db.execute('DELETE FROM projects WHERE id = ?;', [id]);
   }
 
+  /// Names of the projects that keep [environmentId]'s row from being deleted,
+  /// sorted. Each clause is a RESTRICT on the way down: a project rooted there,
+  /// a repository there, or a session run by an agent installed there (the
+  /// installation cascades with the environment, the session does not let it).
+  List<String> namesUsingEnvironment(String environmentId) {
+    final rows = _db.query(
+      'SELECT DISTINCT p.name FROM projects p '
+      'WHERE p.root_environment_id = ?1 '
+      'OR p.id IN (SELECT project_id FROM repositories WHERE environment_id = ?1) '
+      'OR p.id IN (SELECT r.project_id FROM sessions s '
+      'JOIN repositories r ON r.id = s.repository_id '
+      'JOIN agent_installations a ON a.id = s.agent_installation_id '
+      'WHERE a.environment_id = ?1) '
+      'ORDER BY p.name;',
+      [environmentId],
+    );
+    return [for (final row in rows) row['name']! as String];
+  }
+
   Project _fromRow(Map<String, Object?> row) => Project(
     id: row['id']! as String,
     name: row['name']! as String,

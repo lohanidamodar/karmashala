@@ -4,6 +4,7 @@ import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';
+import '../../projects/application/project_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'ssh_providers.dart';
@@ -57,15 +58,36 @@ class SshHostsController extends Notifier<List<SshHost>> {
     return host;
   }
 
+  /// The projects that have to go before [hostId] can: its environment row is
+  /// what they point at, and the store refuses to orphan them.
+  List<String> projectsHolding(String hostId) => ref
+      .read(projectDaoProvider)
+      .namesUsingEnvironment(sshEnvironmentId(hostId));
+
   /// Removes a host, its environment and any open connection. The trusted host
   /// key is kept: dropping it would make a later re-add a silent re-trust.
+  ///
+  /// Throws [SshHostInUse], and changes nothing, while projects still use it.
   Future<void> remove(String hostId) async {
+    final holding = projectsHolding(hostId);
+    if (holding.isNotEmpty) throw SshHostInUse(holding);
     await ref.read(sshConnectionPoolProvider).evict(hostId);
     ref.read(executionEnvironmentDaoProvider).delete(sshEnvironmentId(hostId));
     ref.read(sshHostDaoProvider).delete(hostId);
     ref.invalidate(environmentsControllerProvider);
     state = ref.read(sshHostDaoProvider).getAll();
   }
+}
+
+/// A host whose environment [projects] still use, named so the user can remove
+/// them first.
+class SshHostInUse implements Exception {
+  const SshHostInUse(this.projects);
+
+  final List<String> projects;
+
+  @override
+  String toString() => 'SshHostInUse: ${projects.join(', ')}';
 }
 
 final sshHostsControllerProvider =

@@ -4,6 +4,7 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/ssh/data/ssh_host_dao.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala/src/features/environments/presentation/environments_section.dart';
@@ -223,6 +224,43 @@ void main() {
 
     expect(hosts.getAll(), isEmpty);
     expect(environments.getById('ssh:id-0'), isNull);
+  });
+
+  /// A project rooted on the host holds its environment row (RESTRICT), so the
+  /// delete used to die as an uncaught FOREIGN KEY error with nothing on
+  /// screen. It has to say which projects to remove, and change nothing.
+  testWidgets('a host that still has projects says to remove them first', (
+    tester,
+  ) async {
+    hosts.upsert(
+      SshHost(
+        id: 'h1',
+        name: 'do-box',
+        host: 'do.example.com',
+        port: 22,
+        username: 'dev',
+        authMethod: SshAuthMethod.password,
+        createdAt: testTime,
+      ),
+    );
+    environments.upsert(sshEnvFixture(name: 'do-box'));
+    ProjectDao(db).insert(
+      project(id: 'p-ssh', name: 'Test ssh', environmentId: 'ssh:h1'),
+    );
+    await pump(tester);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('do-box still has projects'), findsOneWidget);
+    expect(find.textContaining('Test ssh'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Remove'), findsNothing);
+
+    await tester.tap(find.widgetWithText(TextButton, 'OK'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(hosts.getAll(), hasLength(1));
+    expect(environments.getById('ssh:h1'), isNotNull);
   });
 
   /// The same actions on a right-click and from the keyboard, because a user
