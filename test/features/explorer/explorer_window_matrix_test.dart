@@ -256,8 +256,8 @@ void main() {
   }
 
   // Three machines is the strip at its widest — four segments, one of them
-  // named longer than the column — on the search row or its own, glyphs alone
-  // when the segments are under the floor, up to 2x text.
+  // named longer than the column — on a row of its own under the field,
+  // glyphs alone when the segments are under the floor, up to 2x text.
   for (final width in [200.0, 240.0]) {
     testWidgets('the Explorer at ${width.toInt()}px with three machines, up '
         'to 2x text', (tester) async {

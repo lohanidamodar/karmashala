@@ -43,11 +43,14 @@ import '../../support/fixtures.dart';
 /// with the menu row that set it.
 ///
 /// **The chrome is measured because it is taken from the list.** Two rows sit
-/// above the tree — the pane header and the search field, which the machine's
-/// switcher shares rather than adding to. The context chips are a third, drawn
-/// only while there are contexts; they came back on 2026-09-17 in exchange for
+/// above the tree — the pane header and the search field, which a fourth
+/// machine's menu shares rather than adding to. Two or three machines are a
+/// strip on a row of its own under the field — it shared the field's row at
+/// first and the owner's screenshot of that was a crush — costing exactly
+/// [Chrome.control] and a gap. The context chips are one more, drawn only
+/// while there are contexts; they came back on 2026-09-17 in exchange for
 /// three levels of the tree (SETTLED, "The Explorer is two levels"), and they
-/// are ratcheted here like the other two.
+/// are ratcheted here like the others.
 void main() {
   late AppDatabase db;
 
@@ -164,50 +167,42 @@ void main() {
       );
     });
 
-    testWidgets('a second machine adds its strip to the search row while '
-        'every name fits whole beside a usable field, and a row of its own '
-        'under it otherwise', (tester) async {
+    testWidgets('a second machine adds its strip on a row of its own under '
+        'the search field — never beside it, however wide the pane — and '
+        'the row costs one control and its gap', (tester) async {
       ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
-      // The test font is a square per glyph, twice the shipped one's width:
-      // `All · Windows · build-box` is 353px here and about 220 in the app,
-      // and the field keeps 120 beside it.
-      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 520);
-      expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
-      expect(
-        heightOf(tester, find.byType(ExplorerScopeBar)),
-        heightOf(tester, searchBlock()),
-        reason: 'the row is as tall as the search field made it',
-      );
-      expect(
-        tester.getTopLeft(find.byType(TextField)).dx,
-        greaterThan(
-          tester.getTopRight(find.byType(ExplorerEnvironmentStrip)).dx,
-        ),
-      );
-
-      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
-      expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
-      expect(
-        heightOf(tester, find.byType(ExplorerScopeBar)),
-        heightOf(tester, searchBlock()) +
-            heightOf(tester, find.byType(ExplorerEnvironmentStrip)) +
-            Insets.xs,
-        reason: 'one row more, and only the strip and its gap',
-      );
-      expect(
-        heightOf(tester, find.byType(ExplorerEnvironmentStrip)),
-        Chrome.control,
-      );
-      expect(
-        tester.getTopLeft(find.byType(ExplorerEnvironmentStrip)).dy,
-        greaterThanOrEqualTo(tester.getBottomLeft(find.byType(TextField)).dy),
-      );
-      expect(
-        tester.getSize(find.byType(ExplorerEnvironmentStrip)).width,
-        304 - Insets.xs * 2,
-        reason: 'on its own row it spans the column the field and rows share',
-      );
-      // Two containers were mounted in turn; the second is taken down here,
+      // 520 is where `All · Windows · build-box` once fit beside the field
+      // whole; it is a row of its own there too now.
+      for (final paneWidth in [520.0, 304.0, 240.0]) {
+        await pumpPanel(
+          tester,
+          window: const Size(1440, 900),
+          paneWidth: paneWidth,
+        );
+        final strip = find.byType(ExplorerEnvironmentStrip);
+        expect(strip, findsOneWidget);
+        expect(
+          heightOf(tester, find.byType(ExplorerScopeBar)),
+          heightOf(tester, searchBlock()) + Chrome.control + Insets.xs,
+          reason: 'at $paneWidth: one row more, and only the strip and its gap',
+        );
+        expect(heightOf(tester, strip), Chrome.control);
+        expect(
+          tester.getTopLeft(strip).dy,
+          greaterThanOrEqualTo(tester.getBottomLeft(find.byType(TextField)).dy),
+        );
+        expect(
+          tester.getSize(strip).width,
+          paneWidth - Insets.xs * 2,
+          reason: 'it spans the column the field and the rows share',
+        );
+        expect(
+          tester.getSize(find.byType(TextField)).width,
+          paneWidth - Insets.xs * 2,
+          reason: 'the field keeps its whole row',
+        );
+      }
+      // Three containers were mounted in turn; the last is taken down here,
       // where its providers' dispose tick can run, not in the teardown.
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 1));
@@ -295,10 +290,13 @@ void main() {
         'scope is the one marked', (tester) async {
       ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
       final c = container();
+      // Wide enough that `build-box` — nine squares in the test font — fits
+      // beside a glyph; narrower, the strip rightly drops the glyphs for
+      // whole names (explorer_scope_test pins where).
       await pumpPanel(
         tester,
         window: const Size(1440, 900),
-        paneWidth: 304,
+        paneWidth: 520,
         scope: c,
       );
       expect(

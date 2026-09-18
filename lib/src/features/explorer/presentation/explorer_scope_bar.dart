@@ -144,59 +144,78 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
 
 /// The machines as a strip of segments — `All · macOS · do-box` — for a
 /// workspace with two or three, so a switch is one click and the choice in
-/// force is always in view. Each segment's right-click carries what the
-/// menu's entry for that machine did: its count, a terminal on it, pairing.
+/// force is always in view. **A row of its own, always**: beside the search
+/// field it was a crush — segments touching, `do-box` cut to `DO`, the field
+/// squeezed to what was left (owner, 2026-09-18) — so the segments share the
+/// full width equally, with a gap between them, and the field keeps its row.
+/// Each segment's right-click carries what the menu's entry for that machine
+/// did: its count, a terminal on it, pairing.
 class ExplorerEnvironmentStrip extends ConsumerWidget {
-  const ExplorerEnvironmentStrip({required this.fill, super.key});
-
-  /// True on a row of its own: the segments share the width and a name that
-  /// does not fit is ellipsised (whole in its tooltip), or under [labelFloor]
-  /// the segments are glyphs alone. False beside the search field, where the
-  /// strip was measured to fit at its natural width.
-  final bool fill;
+  const ExplorerEnvironmentStrip({super.key});
 
   /// The most machines a strip holds; above it the switcher is a menu.
   static const most = 3;
 
   /// Under this width per segment (scaled with the text) a segment is its
-  /// glyph alone: room for the glyph, the gap and about four letters.
+  /// glyph alone, and the name is its tooltip.
   static const labelFloor = 64.0;
 
-  /// A segment's own padding, each side.
-  static const padX = 6.0;
+  /// Between two segments: they are separate targets, not one bar notched.
+  static const gap = Insets.xs;
 
-  static TextStyle? _style(BuildContext context) =>
-      UiDensity.of(context).rowTitle(Theme.of(context), strong: true);
+  /// A segment's own padding: [padX] each side, [padY] above and below.
+  static const padX = Insets.sm;
+  static const padY = Insets.xs;
 
-  /// What the strip takes with every name whole, in [context]'s text.
-  static double naturalWidthOf(
+  /// Between a segment's glyph and its name.
+  static const glyphGap = Insets.sm;
+
+  /// What a segment [share] wide leaves its name beside its glyph, once the
+  /// padding, the glyph and the gap have theirs.
+  static double labelRoomOf(double share) =>
+      share - padX * 2 - Chrome.icon - glyphGap;
+
+  /// What a segment [share] wide leaves its name on its own.
+  static double nameRoomOf(double share) => share - padX * 2;
+
+  /// A segment's width when [count] of them share [width].
+  static double shareOf(double width, int count) =>
+      (width - gap * (count - 1)) / count;
+
+  /// Whether a segment [share] wide draws its glyph beside its name, from the
+  /// widest of [labels] in [context]'s text: yes while every name fits beside
+  /// one; otherwise the names stand alone — a whole `macOS` says more than
+  /// `>_ ma…`, the rows under the strip wear the glyphs anyway — and one that
+  /// does not fit even alone is ellipsised, whole in the tooltip and to a
+  /// screen reader. Measured at w600, the weight of the one in scope, so a
+  /// click never changes the strip's shape.
+  static (bool glyph, bool name) _fit(
     BuildContext context,
-    List<EnvironmentChoice> environments,
+    double share,
+    List<String> labels,
   ) {
     final painter = TextPainter(
       textDirection: Directionality.of(context),
       textScaler: MediaQuery.textScalerOf(context),
       maxLines: 1,
     );
-    final style = _style(context);
-    final gap = UiDensity.of(context).glyphGap;
-    var width = 0.0;
+    final style = UiDensity.of(
+      context,
+    ).rowTitle(Theme.of(context), strong: true);
+    var widest = 0.0;
     try {
-      for (final label in [
-        ExplorerEnvironmentSwitcher.allShortLabel,
-        for (final choice in environments) choice.label,
-      ]) {
+      for (final label in labels) {
         painter
           ..text = TextSpan(text: label, style: style)
           ..layout();
-        width += padX * 2 + Chrome.icon + gap + painter.width;
+        widest = math.max(widest, painter.width);
       }
     } finally {
       painter.dispose();
     }
-    // The border and the hairlines between segments, and a pixel kept back:
-    // what is drawn is not what was measured to the last fraction.
-    return width + environments.length + 3;
+    // A pixel kept back: what is drawn is not what was measured to the last
+    // fraction.
+    return (widest + 1 <= labelRoomOf(share), true);
   }
 
   @override
@@ -230,40 +249,37 @@ class ExplorerEnvironmentStrip extends ConsumerWidget {
         ),
     ];
 
-    Widget strip(bool glyphOnly) => Material(
-      color: Colors.transparent,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(Radii.sm),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
-      child: Row(
-        mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
-        children: [
-          for (final (index, segment) in segments.indexed) ...[
-            if (index > 0)
-              SizedBox(
-                width: Insets.hair,
-                height: Chrome.control,
-                child: ColoredBox(color: scheme.outlineVariant),
-              ),
-            if (fill)
-              Expanded(
-                child: _SegmentButton(segment: segment, glyphOnly: glyphOnly),
-              )
-            else
-              _SegmentButton(segment: segment, glyphOnly: glyphOnly),
-          ],
-        ],
-      ),
-    );
-
-    if (!fill) return strip(false);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final share = constraints.maxWidth / segments.length;
+        final share = shareOf(constraints.maxWidth, segments.length);
         final floor = MediaQuery.textScalerOf(context).scale(labelFloor);
-        return strip(share < floor);
+        final (glyph, name) = share < floor
+            ? (true, false)
+            : _fit(context, share, [
+                for (final segment in segments) segment.label,
+              ]);
+        return Material(
+          color: Colors.transparent,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(Radii.md),
+            side: BorderSide(color: scheme.outlineVariant),
+          ),
+          child: Row(
+            children: [
+              for (final (index, segment) in segments.indexed) ...[
+                if (index > 0) const SizedBox(width: gap),
+                Expanded(
+                  child: _SegmentButton(
+                    segment: segment,
+                    glyph: glyph,
+                    name: name,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
       },
     );
   }
@@ -296,10 +312,17 @@ class _Segment {
 }
 
 class _SegmentButton extends ConsumerWidget {
-  const _SegmentButton({required this.segment, required this.glyphOnly});
+  const _SegmentButton({
+    required this.segment,
+    required this.glyph,
+    required this.name,
+  });
 
   final _Segment segment;
-  final bool glyphOnly;
+
+  /// What the segment draws — never neither; see [ExplorerEnvironmentStrip].
+  final bool glyph;
+  final bool name;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -308,26 +331,36 @@ class _SegmentButton extends ConsumerWidget {
     final density = UiDensity.of(context);
     final ink = segment.selected ? scheme.onSurface : scheme.onSurfaceVariant;
     final choice = segment.choice;
+    const shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.all(Radius.circular(Radii.sm)),
+    );
     final button = Semantics(
       button: true,
       selected: segment.selected,
       label: 'Environment: ${segment.name}',
       child: Tooltip(
         message: '${segment.name} · ${segment.detail}',
-        child: InkWell(
-          onTap: () => ExplorerEnvironmentSwitcher.run(
-            context,
-            ref,
-            segment.value,
-            choice,
-          ),
-          child: Ink(
-            color: segment.selected ? StateLayers.selected(scheme) : null,
+        child: Material(
+          color: segment.selected
+              ? StateLayers.selected(scheme)
+              : Colors.transparent,
+          shape: shape,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            customBorder: shape,
+            hoverColor: StateLayers.hover(scheme),
+            onTap: () => ExplorerEnvironmentSwitcher.run(
+              context,
+              ref,
+              segment.value,
+              choice,
+            ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: Chrome.control),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: ExplorerEnvironmentStrip.padX,
+                  vertical: ExplorerEnvironmentStrip.padY,
                 ),
                 // The label above names the segment in full; the glyph and
                 // the short word on it would only be read out twice.
@@ -336,9 +369,13 @@ class _SegmentButton extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(segment.icon, size: Chrome.icon, color: ink),
-                      if (!glyphOnly) ...[
-                        SizedBox(width: density.glyphGap),
+                      if (glyph)
+                        Icon(segment.icon, size: Chrome.icon, color: ink),
+                      if (glyph && name)
+                        const SizedBox(
+                          width: ExplorerEnvironmentStrip.glyphGap,
+                        ),
+                      if (name)
                         Flexible(
                           child: Text(
                             segment.label,
@@ -350,7 +387,6 @@ class _SegmentButton extends ConsumerWidget {
                                 ?.copyWith(color: ink),
                           ),
                         ),
-                      ],
                     ],
                   ),
                 ),
@@ -477,10 +513,10 @@ class _SwitcherFace extends StatelessWidget {
   }
 }
 
-/// The row above the list: the machine on the left when there is more than
-/// one, and [search] in what is left. Two or three machines are a strip; it
-/// shares the search row while every name fits whole beside a usable field,
-/// and takes a row of its own under it otherwise.
+/// The rows above the list: [search], and the machine when there is more than
+/// one. Two or three machines are a strip on a row of its own under the field
+/// — never beside it, where the two crowded each other; four or more are a
+/// menu on the left of the field's row, in what a menu's face needs.
 class ExplorerScopeBar extends ConsumerWidget {
   const ExplorerScopeBar({required this.search, super.key});
 
@@ -488,10 +524,6 @@ class ExplorerScopeBar extends ConsumerWidget {
 
   /// The most of the row the machine's name may take, as a menu.
   static const switcherShare = 0.42;
-
-  /// What the search field keeps beside a strip: its glyph and its hint.
-  /// Scaled with the text.
-  static const searchFloor = 120.0;
 
   /// The bar's width, for the switcher to decide whether its name fits.
   static double? widthOf(BuildContext context) =>
@@ -530,39 +562,17 @@ class ExplorerScopeBar extends ConsumerWidget {
         ),
       );
     }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final natural = ExplorerEnvironmentStrip.naturalWidthOf(
-          context,
-          environments,
-        );
-        final room =
-            constraints.maxWidth -
-            Insets.xs * 2 -
-            MediaQuery.textScalerOf(context).scale(searchFloor);
-        if (natural <= room) {
-          return Row(
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(left: Insets.xs, top: Insets.xs),
-                child: ExplorerEnvironmentStrip(fill: false),
-              ),
-              Expanded(child: search),
-            ],
-          );
-        }
-        return Column(
-          children: [
-            search,
-            const Padding(
-              // The search field keeps [Insets.xs] under it; the strip sits
-              // in the same column as the field and the rows.
-              padding: EdgeInsets.fromLTRB(Insets.xs, 0, Insets.xs, Insets.xs),
-              child: ExplorerEnvironmentStrip(fill: true),
-            ),
-          ],
-        );
-      },
+    return Column(
+      children: [
+        search,
+        const Padding(
+          // The search field keeps [Insets.xs] under it; the strip sits in
+          // the same column as the field and the rows, and costs the row
+          // one [Chrome.control] and that gap.
+          padding: EdgeInsets.fromLTRB(Insets.xs, 0, Insets.xs, Insets.xs),
+          child: ExplorerEnvironmentStrip(),
+        ),
+      ],
     );
   }
 }

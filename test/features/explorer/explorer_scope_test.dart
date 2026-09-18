@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter/gestures.dart';
@@ -63,13 +64,18 @@ void main() {
 
   /// Three machines — one of them holding nothing — two contexts that hold
   /// projects and one that does not, and a project in no context. A [fourth]
-  /// machine is what turns the strip into a menu.
-  void seed({bool machines = true, bool contexts = true, bool fourth = false}) {
+  /// machine is what turns the strip into a menu; without the [wsl] one there
+  /// are two, the strip at its narrowest.
+  void seed({
+    bool machines = true,
+    bool contexts = true,
+    bool fourth = false,
+    bool wsl = true,
+  }) {
     final environments = ExecutionEnvironmentDao(db)..upsert(windowsEnv());
     if (machines) {
-      environments
-        ..upsert(wslEnv())
-        ..upsert(sshEnvFixture());
+      environments.upsert(sshEnvFixture());
+      if (wsl) environments.upsert(wslEnv());
       if (fourth) {
         environments.upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));
       }
@@ -432,50 +438,169 @@ void main() {
       );
     });
 
-    testWidgets('the strip names every segment while each keeps room for a '
-        'few letters, and is glyphs alone under that — whole names in the '
-        'tooltip either way, at every text size', (tester) async {
-      seed();
-      final container = newContainer();
-      Finder within(Finder what) => find.descendant(
-        of: find.byType(ExplorerEnvironmentStrip),
-        matching: what,
-      );
+    // The strip on a row of its own, at every width a side panel is dragged
+    // to and every text size. The test font is a square per glyph — twice the
+    // shipped one's width — so whether a name has the room is computed from
+    // its segment rather than assumed: a name is whole exactly when it fits
+    // beside its glyph, and whole in its tooltip either way.
+    for (final machines in [2, 3]) {
+      for (final width in [240.0, 320.0, 420.0]) {
+        for (final scale in [1.0, 1.3, 2.0]) {
+          testWidgets(
+            '$machines machines at ${width.toInt()}px and ${scale}x: a row of '
+            'its own under the field, equal segments with a gap, a whole name '
+            'where it fits',
+            (tester) async {
+              seed(wsl: machines == 3);
+              await pump(tester, size: Size(width, 900), textScale: scale);
+              expect(tester.takeException(), isNull);
 
-      await pump(tester, container: container);
-      expect(within(find.text('build-box')), findsOneWidget);
-      expect(within(find.text('All')), findsOneWidget);
+              final strip = find.byType(ExplorerEnvironmentStrip);
+              final column = width - Insets.xs * 2;
+              expect(strip, findsOneWidget);
+              expect(
+                tester.getSize(strip).width,
+                column,
+                reason: 'the column the field and the rows share',
+              );
+              expect(
+                tester.getTopLeft(strip).dy,
+                greaterThanOrEqualTo(
+                  tester.getBottomLeft(find.byType(TextField)).dy,
+                ),
+                reason: 'under the field, never beside it',
+              );
+              expect(
+                tester.getSize(find.byType(TextField)).width,
+                column,
+                reason: 'the field keeps its whole row',
+              );
 
-      for (final (width, scale) in [
-        (240.0, 1.0),
-        (240.0, 1.3),
-        (240.0, 2.0),
-        (200.0, 2.0),
-      ]) {
-        await pump(
-          tester,
-          size: Size(width, 900),
-          textScale: scale,
-          container: container,
-        );
-        expect(tester.takeException(), isNull, reason: '$width at $scale');
-        expect(
-          within(find.byType(Text)),
-          findsNothing,
-          reason:
-              'at $width and $scale: four segments in the test font are '
-              'under the floor, so each is its glyph',
-        );
-        expect(within(find.byIcon(AppIcons.globe)), findsOneWidget);
-        expect(find.byTooltip('build-box · 1 project'), findsOneWidget);
-        expect(segment('build-box'), findsOneWidget);
-        // Whole, never "b…": every label went together.
-        expect(
-          tester.getSize(find.byType(ExplorerEnvironmentStrip)).width,
-          lessThanOrEqualTo(width),
-        );
+              final segments = find.bySemanticsLabel(RegExp('^Environment: '));
+              expect(segments, findsNWidgets(machines + 1));
+              final share = ExplorerEnvironmentStrip.shareOf(
+                column,
+                machines + 1,
+              );
+              for (var i = 0; i <= machines; i++) {
+                expect(
+                  tester.getSize(segments.at(i)).width,
+                  closeTo(share, 0.5),
+                  reason: 'segment $i takes an equal share',
+                );
+                if (i == 0) continue;
+                expect(
+                  tester.getTopLeft(segments.at(i)).dx -
+                      tester.getTopRight(segments.at(i - 1)).dx,
+                  closeTo(ExplorerEnvironmentStrip.gap, 0.5),
+                  reason: 'a gap between segments, never a touch',
+                );
+              }
+
+              for (final tip in [
+                'All environments · 4 projects',
+                'Windows · 3 projects',
+                'build-box · 1 project',
+                if (machines == 3) 'Ubuntu · No projects yet',
+              ]) {
+                expect(find.byTooltip(tip), findsOneWidget);
+              }
+              expect(segment('build-box'), findsOneWidget);
+
+              final labels = find.descendant(
+                of: strip,
+                matching: find.byType(Text),
+              );
+              final glyphs = find.descendant(
+                of: strip,
+                matching: find.byType(Icon),
+              );
+              final floor = MediaQuery.textScalerOf(
+                tester.element(strip),
+              ).scale(ExplorerEnvironmentStrip.labelFloor);
+              if (share < floor) {
+                expect(
+                  labels,
+                  findsNothing,
+                  reason: 'under the floor the segments are their glyphs',
+                );
+                expect(glyphs, findsNWidgets(machines + 1));
+                expect(tester.getSize(strip).height, Chrome.control);
+                return;
+              }
+              // The ladder: glyph and name while every name fits beside its
+              // glyph; else the names alone, and only one that does not fit
+              // even alone is ellipsised. Each rung is pinned from what is
+              // drawn, with a pixel of slack for the measuring.
+              expect(labels, findsNWidgets(machines + 1));
+              final beside = ExplorerEnvironmentStrip.labelRoomOf(share);
+              final alone = ExplorerEnvironmentStrip.nameRoomOf(share);
+              final naturals = [
+                for (var i = 0; i <= machines; i++)
+                  tester
+                      .renderObject<RenderParagraph>(labels.at(i))
+                      .getMaxIntrinsicWidth(double.infinity),
+              ];
+              final clipped = [
+                for (var i = 0; i <= machines; i++)
+                  tester
+                      .renderObject<RenderParagraph>(labels.at(i))
+                      .didExceedMaxLines,
+              ];
+              final widest = naturals.reduce(math.max);
+              final names = [
+                for (var i = 0; i <= machines; i++)
+                  tester.widget<Text>(labels.at(i)).data,
+              ];
+              final drawn = '$names at ${naturals.map((n) => n.round())}px';
+              if (glyphs.evaluate().isEmpty) {
+                expect(
+                  widest + 1,
+                  greaterThan(beside),
+                  reason:
+                      'the glyphs go only once a name would not fit '
+                      'beside one: $drawn, ${beside.round()}px beside',
+                );
+                for (var i = 0; i <= machines; i++) {
+                  if ((naturals[i] - alone).abs() < 1) continue;
+                  expect(
+                    clipped[i],
+                    naturals[i] > alone,
+                    reason:
+                        '"${names[i]}" is ${naturals[i].round()}px with '
+                        '${alone.round()}px alone: cut only when it truly '
+                        'does not fit',
+                  );
+                }
+              } else {
+                expect(glyphs, findsNWidgets(machines + 1));
+                expect(
+                  widest + 1,
+                  lessThanOrEqualTo(beside),
+                  reason:
+                      'glyphs only while every name fits beside one: '
+                      '$drawn, ${beside.round()}px beside',
+                );
+                expect(
+                  clipped,
+                  everyElement(isFalse),
+                  reason: 'every name fits beside its glyph: $drawn',
+                );
+              }
+              // In the test font's terms, at 420 with two machines: seven
+              // squares of `Windows` are whole, and `build-box` — nine, a
+              // third of a pixel over its share alone — is the one cut.
+              if (machines == 2 && width == 420 && scale == 1.0) {
+                expect(clipped, [false, false, true], reason: drawn);
+              }
+              if (scale == 1.0) {
+                expect(tester.getSize(strip).height, Chrome.control);
+              }
+            },
+          );
+        }
       }
-    });
+    }
 
     testWidgets('as a menu, with every machine listed it says "All '
         'environments" — the app\'s own word — and "All" where that does '
