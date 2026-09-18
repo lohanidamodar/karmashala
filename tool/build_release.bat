@@ -79,11 +79,22 @@ rem from the release here.
 rem
 rem The version is in the filename because HostDeployer compares it against what
 rem the remote binary reports rather than trusting the name.
+rem
+rem Whatever is already in Release stays and ships: the installer deletes
+rem nothing, so a failed download means an SSH host gets an *older* host, not
+rem none. Say which failure it was - "no bundles on the release" was printed
+rem on a machine that had no gh at all.
 echo === SESSION HOST (linux, from the release) === >> "%LOG%"
-gh release download v!APPVERSHORT! -p "karmashala_host-*-linux-*" -D "%RELEASE%" >> "%LOG%" 2>&1
+where gh >nul 2>nul
 if errorlevel 1 (
-  echo     no linux host bundles on release v!APPVERSHORT! yet - SSH deploy will report noBinary
-  echo no linux host bundles on release v!APPVERSHORT! >> "%LOG%"
+  echo     gh is not installed - linux host bundles NOT fetched; SSH hosts get whatever older bundle is already in %RELEASE%
+  echo gh is not installed - linux host bundles not fetched >> "%LOG%"
+) else (
+  gh release download v!APPVERSHORT! -p "karmashala_host-*-linux-*" -D "%RELEASE%" >> "%LOG%" 2>&1
+  if errorlevel 1 (
+    echo     could not download linux host bundles from release v!APPVERSHORT! - SSH hosts get whatever older bundle is already in %RELEASE%
+    echo could not download linux host bundles from release v!APPVERSHORT! >> "%LOG%"
+  )
 )
 
 echo === INSTALLER === >> "%LOG%"
