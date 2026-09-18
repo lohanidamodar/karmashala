@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import '../pairing/host_pairing_invite.dart' show HostRoute;
 import '../protocol.dart';
 import 'relay_candidates.dart';
+import 'route_pin.dart';
 
 /// A tiny async key/value store for the companion's secrets and counters.
 abstract interface class CompanionStore {
@@ -47,7 +48,9 @@ class CompanionPairing {
     this.lanHint,
     this.directEndpoint,
     HostRoute? route,
-  }) : route = route ?? (directEndpoint == null ? null : HostRoute.direct),
+    CompanionRoutePin? pin,
+  }) : pin = pin ?? CompanionRoutePin.auto,
+       route = route ?? (directEndpoint == null ? null : HostRoute.direct),
        deviceKey = Uint8List.fromList(deviceKey),
        // A record always knows at least the relay it paired through, so the
        // dial order below never has to special-case an empty set.
@@ -94,6 +97,10 @@ class CompanionPairing {
   /// routes existed carries none, and reads as direct when it has an address.
   final HostRoute? route;
 
+  /// How the person has asked for this desktop to be reached. [CompanionRoutePin.auto]
+  /// unless they chose; a re-pair writes a fresh record, and so clears it.
+  final CompanionRoutePin pin;
+
   /// The rendezvous generation counter — the companion's copy of the one
   /// number both ends persist. Bumped after a session pairs.
   final int generation;
@@ -112,6 +119,7 @@ class CompanionPairing {
     String? lanHint,
     String? directEndpoint,
     HostRoute? route,
+    CompanionRoutePin? pin,
   }) => CompanionPairing(
     hostId: hostId,
     deviceId: deviceId,
@@ -125,6 +133,7 @@ class CompanionPairing {
     lanHint: lanHint ?? this.lanHint,
     directEndpoint: directEndpoint ?? this.directEndpoint,
     route: route ?? this.route,
+    pin: pin ?? this.pin,
   );
 
   CompanionPairing withGeneration(int next) => copyWith(generation: next);
@@ -135,6 +144,8 @@ class CompanionPairing {
   /// Points the record at the relay a dial just succeeded on, so the next
   /// reconnect — and any older build reading the mirror — starts there.
   CompanionPairing withRelay(Uri url) => copyWith(relay: url);
+
+  CompanionPairing withPin(CompanionRoutePin pin) => copyWith(pin: pin);
 
   Map<String, Object?> toJson() => {
     'hostId': hostId.value,
@@ -152,6 +163,7 @@ class CompanionPairing {
     if (lanHint != null) 'lanHint': lanHint,
     if (directEndpoint != null) 'directEndpoint': directEndpoint,
     if (route != null) 'via': route!.wire,
+    'pin': ?pin.toJson(),
   };
 
   static CompanionPairing fromJson(Map<String, Object?> json) {
@@ -188,6 +200,7 @@ class CompanionPairing {
       lanHint: lanHint is String && lanHint.isNotEmpty ? lanHint : null,
       directEndpoint: direct is String && direct.isNotEmpty ? direct : null,
       route: HostRoute.tryParse(json['via']),
+      pin: CompanionRoutePin.fromJson(json['pin']),
     );
   }
 

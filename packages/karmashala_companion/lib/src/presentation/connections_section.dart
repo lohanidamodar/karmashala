@@ -11,6 +11,7 @@ import 'package:karmashala_remote/companion.dart';
 import 'companion_chrome.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';
+import 'connection_route.dart';
 import 'pairing/pairing_screen.dart';
 
 /// The saved desktops on the settings screen. The frame draws in every state
@@ -230,6 +231,9 @@ class _ConnectionRow extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
                 style: density.muted(theme),
               ),
+            // A desktop's route is the person's to choose; its own tap target,
+            // so choosing one never switches desktops by accident.
+            ConnectionRouteLine(connection: connection),
           ],
         ),
         trailing: IconButton(

@@ -7,3 +7,4 @@ export 'src/companion/client/companion_gateway.dart';
 export 'src/companion/client/fake_companion_gateway.dart';
 export 'src/companion/client/pairing_input.dart';
 export 'src/companion/client/remote_companion_gateway.dart';
+export 'src/companion/client/route_labels.dart';

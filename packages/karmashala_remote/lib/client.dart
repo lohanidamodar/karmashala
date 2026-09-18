@@ -9,3 +9,4 @@ export 'src/client/companion_pairing_client.dart';
 export 'src/client/companion_store.dart';
 export 'src/client/lan_path.dart';
 export 'src/client/relay_candidates.dart';
+export 'src/client/route_pin.dart';

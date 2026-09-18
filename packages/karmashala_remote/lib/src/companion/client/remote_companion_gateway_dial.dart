@@ -12,6 +12,12 @@ String _directUnreachableTrouble(String? endpoint) =>
     "reachable from here, pair it again from the desktop and choose 'Hosted "
     "relay'.";
 
+/// Why a pinned desktop is not connected. The remedy is the one the banner's
+/// Use Auto gives: a pin is "only", so the phone will not go around it alone.
+String _pinnedUnreachableTrouble(String name, CompanionRoutePin pin) =>
+    '$name is pinned to ${describeRoutePin(pin)}, and it is not answering '
+    'there. Use Auto to let the phone find another way.';
+
 extension _GatewayDial on RemoteCompanionGateway {
   /// The dial order: every fresh LAN candidate, the host's own LAN hint, the
   /// last relay that worked, the rest of the saved set (skipping any still
@@ -36,6 +42,18 @@ extension _GatewayDial on RemoteCompanionGateway {
       return null;
     }
 
+    // A person's pin, for a desktop: one route and nothing else. A box has no
+    // pin — its route was chosen on the desktop when it was paired.
+    final pin = route == null
+        ? (_record?.pin ?? CompanionRoutePin.auto)
+        : CompanionRoutePin.auto;
+    if (pin.kind == CompanionRouteKind.relay) {
+      final client = await _dialRelay(pin.relay!);
+      if (client == null && !_abandonDial) _notePinnedTrouble(pin);
+      return client;
+    }
+    final pinnedLan = pin.kind == CompanionRouteKind.lan;
+
     final scout = route == HostRoute.relay ? null : lan;
     if (scout != null) {
       _ensureLanScout();
@@ -46,8 +64,10 @@ extension _GatewayDial on RemoteCompanionGateway {
         final client = await _dialLan(scout, host);
         if (client != null) return client;
       }
-      if (!triedLan) {
-        final hinted = _lanHintHost(scout);
+      // Pinned, the desktop's own announced address is tried as well: there is
+      // no relay behind it, and a beacon not heard yet is not a LAN that is gone.
+      if (!triedLan || pinnedLan) {
+        final hinted = _lanHintHost(scout, ignoreCooldown: pinnedLan);
         if (hinted != null) {
           if (_abandonDial) return null;
           final client = await _dialLan(scout, hinted);
@@ -55,12 +75,23 @@ extension _GatewayDial on RemoteCompanionGateway {
         }
       }
     }
+    if (pinnedLan) {
+      if (!_abandonDial) _notePinnedTrouble(pin);
+      return null;
+    }
     for (final url in await _relayOrder()) {
       if (_abandonDial) return null;
       final client = await _dialRelay(url);
       if (client != null) return client;
     }
     return null;
+  }
+
+  void _notePinnedTrouble(CompanionRoutePin pin) {
+    final name = _record?.hostName ?? '';
+    _noteTrouble(
+      _pinnedUnreachableTrouble(name.isEmpty ? 'Your desktop' : name, pin),
+    );
   }
 
   /// Whether the pass in flight is still worth finishing. A Retry, an unpair
@@ -100,7 +131,13 @@ extension _GatewayDial on RemoteCompanionGateway {
   /// The host's announced LAN address as something [LanPathScout] can dial.
   /// A hint, not an identity: it may name a machine DHCP has since moved, and
   /// only the sealed hello decides whether whoever answers is the host.
-  DiscoveredHost? _lanHintHost(LanPathScout scout) {
+  ///
+  /// [ignoreCooldown] for a LAN pin: the cooldown exists so a dead address does
+  /// not delay the relay behind it, and a pinned phone has no relay behind it.
+  DiscoveredHost? _lanHintHost(
+    LanPathScout scout, {
+    bool ignoreCooldown = false,
+  }) {
     final hint = parseLanHint(_record?.lanHint);
     if (hint == null) return null;
     final address = InternetAddress.tryParse(hint.host);
@@ -110,7 +147,7 @@ extension _GatewayDial on RemoteCompanionGateway {
       advert: LanAdvert(port: hint.port, tag: 'hint'),
       seenAt: _now(),
     );
-    return scout.inCooldown(candidate) ? null : candidate;
+    return !ignoreCooldown && scout.inCooldown(candidate) ? null : candidate;
   }
 
   /// Dials the address this pairing was made at, if it has one.
@@ -209,6 +246,7 @@ extension _GatewayDial on RemoteCompanionGateway {
         scout.noteSuccess(host);
         _lastPathWasLocal = true;
         _linkPath.value = CompanionLinkPath.lan;
+        _noteTrouble(null);
         onLog?.call('connected over the LAN');
         return client;
       } on Object catch (error) {

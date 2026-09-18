@@ -6,6 +6,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
+import 'companion_states.dart';
 
 /// The strip that says the host cannot be reached, drawn above every tab and
 /// never a toast that scrolls away.
@@ -28,6 +29,13 @@ class LinkBanner extends ConsumerWidget {
     // about it is different.
     final pairing = ref.watch(companionPairingProvider).asData?.value;
     final machine = pairing?.route != null;
+    // The active desktop, when the person pinned its route.
+    final pinned = ref
+        .watch(companionConnectionsProvider)
+        .asData
+        ?.value
+        .where((c) => c.active && c.route == null && !c.pin.isAuto)
+        .firstOrNull;
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final semantic = SemanticColors.of(context);
@@ -111,13 +119,42 @@ class LinkBanner extends ConsumerWidget {
           ),
           // Offered while dialling too: a phone stuck on "connecting" needs a
           // way to start over as much as one that gave up.
-          trailing: TextButton(
-            onPressed: () => ref.read(companionGatewayProvider).reconnect(),
-            child: const Text('Retry'),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // A pin is "only": the phone will not go around it by itself,
+              // so the way around it is here, beside the reason.
+              if (pinned != null)
+                TextButton(
+                  onPressed: () => _useAuto(context, ref, pinned),
+                  child: const Text('Use Auto'),
+                ),
+              TextButton(
+                onPressed: () => ref.read(companionGatewayProvider).reconnect(),
+                child: const Text('Retry'),
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _useAuto(
+    BuildContext context,
+    WidgetRef ref,
+    CompanionConnection pinned,
+  ) async {
+    try {
+      await ref
+          .read(companionGatewayProvider)
+          .setRoutePin(pinned.hostId, CompanionRoutePin.auto);
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        SnackBar(content: Text(companionErrorText(error))),
+      );
+    }
   }
 
   /// The narrowest banner, at 1x text, that still gives the words a readable

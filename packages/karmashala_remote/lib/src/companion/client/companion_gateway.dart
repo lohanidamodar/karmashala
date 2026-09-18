@@ -7,9 +7,11 @@ import 'dart:typed_data';
 
 import '../../domain/companion_presence.dart';
 import '../../domain/remote_payloads.dart';
+import '../../client/route_pin.dart';
 import '../../pairing/host_pairing_invite.dart' show HostRoute;
 import '../../protocol.dart';
 
+export '../../client/route_pin.dart';
 export '../../pairing/host_pairing_invite.dart' show HostRoute;
 
 /// A refused or failed gateway call. Carries a sentence fit to show the user.
@@ -133,7 +135,18 @@ class CompanionConnection {
     this.lastConnectedAt,
     this.route,
     this.directEndpoint,
+    this.pin = CompanionRoutePin.auto,
+    this.relays = const [],
   });
+
+  /// How the person has asked for this desktop to be reached. Always
+  /// [CompanionRoutePin.auto] for a box, which keeps the route it was paired
+  /// over.
+  final CompanionRoutePin pin;
+
+  /// The relays the desktop has announced, in the order it announced them —
+  /// what a pin may choose between. May no longer include a pinned relay.
+  final List<Uri> relays;
 
   /// How a session host on a box is reached — [HostRoute.direct] at
   /// [directEndpoint], or [HostRoute.relay]. Null for a desktop, which the
@@ -157,6 +170,18 @@ class CompanionConnection {
   /// pairing that never connected.
   final DateTime? lastConnectedAt;
 
+  CompanionConnection copyWith({bool? active, CompanionRoutePin? pin}) =>
+      CompanionConnection(
+        hostId: hostId,
+        name: name,
+        active: active ?? this.active,
+        lastConnectedAt: lastConnectedAt,
+        route: route,
+        directEndpoint: directEndpoint,
+        pin: pin ?? this.pin,
+        relays: relays,
+      );
+
   @override
   bool operator ==(Object other) =>
       other is CompanionConnection &&
@@ -165,11 +190,29 @@ class CompanionConnection {
       other.active == active &&
       other.lastConnectedAt == lastConnectedAt &&
       other.route == route &&
-      other.directEndpoint == directEndpoint;
+      other.directEndpoint == directEndpoint &&
+      other.pin == pin &&
+      _sameUris(other.relays, relays);
 
   @override
-  int get hashCode =>
-      Object.hash(hostId, name, active, lastConnectedAt, route, directEndpoint);
+  int get hashCode => Object.hash(
+    hostId,
+    name,
+    active,
+    lastConnectedAt,
+    route,
+    directEndpoint,
+    pin,
+    Object.hashAll([for (final url in relays) url.toString()]),
+  );
+
+  static bool _sameUris(List<Uri> a, List<Uri> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].toString() != b[i].toString()) return false;
+    }
+    return true;
+  }
 
   @override
   String toString() =>
@@ -636,6 +679,14 @@ abstract interface class CompanionGateway {
   /// derived state rebuilt for it. Throws [GatewayException] when [hostId] names
   /// no saved connection; a host that cannot be reached is not a failed switch.
   Future<void> switchTo(String hostId);
+
+  /// Pins how [hostId] is reached, or lets the phone choose again with
+  /// [CompanionRoutePin.auto]. Takes effect at once: the active desktop is
+  /// re-dialled on the new route, its sessions kept. A pinned route that does
+  /// not answer is said in [linkTrouble] and never swapped for another. Throws
+  /// [GatewayException] for a machine paired directly, whose route was chosen
+  /// on the desktop, and for a host this phone no longer holds.
+  Future<void> setRoutePin(String hostId, CompanionRoutePin pin);
 
   /// Forgets one saved desktop. Removing the active one falls back to the
   /// most recently connected of the rest, or to unpaired when none remain.

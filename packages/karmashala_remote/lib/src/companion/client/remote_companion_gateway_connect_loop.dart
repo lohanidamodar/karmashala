@@ -38,6 +38,9 @@ extension _GatewayConnectLoop on RemoteCompanionGateway {
     if (scout == null || _closed || _record == null) return;
     // A beacon is a desktop's; a box's link has nothing to be promoted to.
     if (_record?.route != null) return;
+    // Pinned to a relay: the person chose that route, and a beacon is not a
+    // reason to leave it.
+    if (_record?.pin.kind == CompanionRouteKind.relay) return;
     if (_link.value != CompanionLinkState.connected) return;
     if (_linkPath.value != CompanionLinkPath.relay) return;
     // The desktop IS the relay: the embedded local relay is served on the very

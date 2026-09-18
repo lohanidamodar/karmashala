@@ -35,6 +35,8 @@ extension _GatewayConnections on RemoteCompanionGateway {
         lastConnectedAt: record.lastConnectedAt,
         route: record.route,
         directEndpoint: record.directEndpoint,
+        pin: record.pin,
+        relays: [for (final candidate in record.candidates) candidate.url],
       ),
   ]);
 

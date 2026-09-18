@@ -28,6 +28,7 @@ import '../../transport/lan_transport.dart';
 import '../../transport/relay_transport.dart';
 import '../../transport/remote_transport.dart';
 import 'companion_gateway.dart';
+import 'route_labels.dart';
 
 part 'remote_companion_gateway_state.dart';
 part 'remote_companion_gateway_refusals.dart';
@@ -539,6 +540,57 @@ class RemoteCompanionGateway implements CompanionGateway {
       );
     }
     await _becomeActive(_all.active ?? target);
+  }
+
+  @override
+  Future<void> setRoutePin(String hostId, CompanionRoutePin pin) async {
+    await _ready;
+    if (_closed) return;
+    final target = _all.byHost(hostId);
+    if (target == null) {
+      throw const GatewayException(
+        'That desktop is no longer saved on this phone.',
+      );
+    }
+    if (target.route != null) {
+      throw const GatewayException(
+        'A machine paired directly keeps the route it was paired over. To '
+        'change it, pair it again from the desktop.',
+      );
+    }
+    if (target.pin == pin) return;
+    try {
+      _all = await stored.CompanionConnections.mutate(store, (all) {
+        final saved = all.byHost(hostId);
+        if (saved != null) all.upsert(saved.withPin(pin));
+        return all;
+      });
+    } on Object catch (error) {
+      onLog?.call('setRoutePin failed: $error');
+      throw const GatewayException(
+        'This phone could not save the route, so it kept the one it had. '
+        'Try again.',
+      );
+    }
+    if (_all.activeHostId?.value != hostId || _record == null) {
+      // A background desktop: its next dial reads the pin from the record.
+      _publishConnections();
+      return;
+    }
+    // The in-memory record, not the stored one: the client persists its own
+    // generation bump, and this must not walk it back.
+    _record = _record!.withPin(pin);
+    _publishConnections();
+    // What the last route said about itself is not a statement about this one.
+    _noteTrouble(null);
+    // Re-dialled at once, as a switch is — but the same desktop, so nothing it
+    // holds is cleared: a teardown marks open transcripts stale, and the next
+    // link re-reads them from their cursors.
+    _switching = true;
+    _link.value = CompanionLinkState.connecting;
+    await _dropLink(keepState: true);
+    _resetBackoff();
+    _startLoop();
   }
 
   @override

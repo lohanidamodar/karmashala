@@ -234,6 +234,9 @@ class FakeCompanionGateway implements CompanionGateway {
   /// Every host id the UI asked to switch to, in order.
   final switchRequests = <String>[];
 
+  /// Every [setRoutePin], in order, as (host id, pin).
+  final routePinRequests = <(String, CompanionRoutePin)>[];
+
   // ---------------------------------------------------------------- pairing
 
   @override
@@ -435,14 +438,7 @@ class FakeCompanionGateway implements CompanionGateway {
     _pairing.value = paired;
     _connections.value = List.unmodifiable([
       for (final c in _connections.value)
-        CompanionConnection(
-          hostId: c.hostId,
-          name: c.name,
-          active: false,
-          lastConnectedAt: c.lastConnectedAt,
-          route: c.route,
-          directEndpoint: c.directEndpoint,
-        ),
+        c.copyWith(active: false),
       CompanionConnection(
         hostId: hostId,
         name: hostName,
@@ -534,16 +530,31 @@ class FakeCompanionGateway implements CompanionGateway {
     await switchTo(rest.first.hostId);
   }
 
+  @override
+  Future<void> setRoutePin(String hostId, CompanionRoutePin pin) async {
+    final target = _connections.value
+        .where((c) => c.hostId == hostId)
+        .firstOrNull;
+    if (target == null) {
+      throw const GatewayException(
+        'That desktop is no longer saved on this phone.',
+      );
+    }
+    if (target.route != null) {
+      throw const GatewayException(
+        'A machine paired directly keeps the route it was paired over. To '
+        'change it, pair it again from the desktop.',
+      );
+    }
+    routePinRequests.add((hostId, pin));
+    _connections.value = List.unmodifiable([
+      for (final c in _connections.value)
+        c.hostId == hostId ? c.copyWith(pin: pin) : c,
+    ]);
+  }
+
   void _setActive(String hostId) => _connections.value = List.unmodifiable([
-    for (final c in _connections.value)
-      CompanionConnection(
-        hostId: c.hostId,
-        name: c.name,
-        active: c.hostId == hostId,
-        lastConnectedAt: c.lastConnectedAt,
-        route: c.route,
-        directEndpoint: c.directEndpoint,
-      ),
+    for (final c in _connections.value) c.copyWith(active: c.hostId == hostId),
   ]);
 
   @override
