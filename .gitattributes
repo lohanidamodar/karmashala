@@ -4,3 +4,8 @@
 # cmd.exe misparses LF batch files: labels, gotos and set lines break.
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Goldens are compared byte for byte against LF output. Pinned to LF so a
+# checkout under core.autocrlf=true cannot turn every golden test red.
+*.golden.txt text eol=lf
+*.golden.json text eol=lf
