@@ -24,10 +24,11 @@ void main() {
   File endpointFile() => File(p.join(home.path, '$agentHookMarker.endpoint'));
   File windowsScript() => File(p.join(home.path, '$agentHookMarker.cmd'));
 
-  /// What the config entry spells for a Windows-native Claude Code store — a
-  /// constant, with no port and no token anywhere in it.
-  const windowsCommand =
-      'cmd.exe /c "%USERPROFILE%\\.claude\\$agentHookMarker.cmd"';
+  /// The script a Windows-native Claude Code store's entry runs — a constant,
+  /// with no port and no token anywhere in it.
+  String windowsScriptFor(String event) =>
+      '& "\$env:USERPROFILE\\.claude\\$agentHookMarker.cmd" $event; '
+      'exit \$LASTEXITCODE';
 
   Map<String, dynamic> hooks() {
     final json = jsonDecode(configFile().readAsStringSync()) as Map;
@@ -52,14 +53,16 @@ void main() {
     expect(hooks().keys.toSet(), claude.hooks!.eventStatus.keys.toSet());
     final stop = commandsFor('Stop').single;
     expect(stop['type'], 'command');
-    expect(stop['command'], '$windowsCommand Stop');
-    expect(stop['command'], contains(agentHookMarker));
+    expect(
+      decodeWindowsHookScript(stop['command'] as String),
+      windowsScriptFor('Stop'),
+    );
     // Neither the port nor the token is in the agent's config any more. That
     // is the whole change: the entry is a constant, and the two things that
     // differ between launches are in the endpoint file the script reads when
     // the hook fires.
-    expect(stop['command'], isNot(contains('4242')));
-    expect(stop['command'], isNot(contains('tok')));
+    expect(revealHookCommands(stop['command']), isNot(contains('4242')));
+    expect(revealHookCommands(stop['command']), isNot(contains('tok')));
 
     final endpointText = endpointFile().readAsStringSync();
     expect(endpointText, contains('url=http://127.0.0.1:4242/agent-hook'));
@@ -111,7 +114,10 @@ void main() {
 
     final commands = commandsFor('Stop').map((h) => h['command']).toList();
     expect(commands, contains('mine.sh'));
-    expect(commands.where((c) => '$c'.contains(agentHookMarker)), hasLength(1));
+    expect(
+      commands.where((c) => revealHookCommands(c).contains(agentHookMarker)),
+      hasLength(1),
+    );
   });
 
   test('re-installing is idempotent', () async {
@@ -133,7 +139,10 @@ void main() {
     // The command is a constant, so the second launch found its own entry
     // already there and rewrote nothing. The new port went into the endpoint
     // file instead.
-    expect(commands.single['command'], '$windowsCommand Stop');
+    expect(
+      decodeWindowsHookScript(commands.single['command'] as String),
+      windowsScriptFor('Stop'),
+    );
     expect(endpointFile().readAsStringSync(), contains('127.0.0.1:5555'));
     expect(endpointFile().readAsStringSync(), contains('token=tok2'));
   });
@@ -226,7 +235,7 @@ void main() {
       expect(hooks()['Stop'], 'run-my-thing');
       // Every other declared event still got its entry.
       expect(
-        commandsFor('PreToolUse').single['command'],
+        revealHookCommands(commandsFor('PreToolUse').single['command']),
         contains(agentHookMarker),
       );
 
@@ -237,7 +246,10 @@ void main() {
 
       expect(removed, isTrue);
       expect(hooks()['Stop'], 'run-my-thing');
-      expect(configFile().readAsStringSync(), isNot(contains(agentHookMarker)));
+      expect(
+        revealHookCommands(configFile().readAsStringSync()),
+        isNot(contains(agentHookMarker)),
+      );
     },
   );
 
@@ -699,13 +711,13 @@ void main() {
       expect(raw, contains('"g:/x": 1'));
       expect(raw, contains('"G:/x": 2'));
       expect(raw, contains(r'Bash(node -e \":*)'));
-      expect(commandsFor('Stop').map((h) => h['command']), [
+      expect(commandsFor('Stop').map((h) => revealHookCommands(h['command'])), [
         'other-tool-hook',
         contains(agentHookMarker),
       ]);
       for (final event in claude.hooks!.eventStatus.keys) {
         expect(
-          commandsFor(event).map((h) => h['command']),
+          commandsFor(event).map((h) => revealHookCommands(h['command'])),
           contains(contains(agentHookMarker)),
           reason: '$event should carry our callback',
         );

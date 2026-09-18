@@ -20,6 +20,61 @@ const List<String> legacyAgentHookMarkers = <String>['chitragupta-agent-hook'];
 /// block rather than moving it. Literals; see [legacyAgentHookMarkers].
 const List<String> legacyAgentHookConfigKeys = <String>['chitragupta'];
 
+/// Everything before the base64 in a Windows hook command.
+const String _windowsHookPrefix =
+    'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass '
+    '-EncodedCommand ';
+
+/// A Windows hook command that runs [script] in Windows PowerShell, spelled so
+/// that **no shell can reinterpret it**: no quotes, no `%VAR%` or `$VAR`, and
+/// no `/`-flag, only bare words and base64.
+///
+/// It has to be that neutral because the agent picks the shell, not us. Claude
+/// Code runs a hook through Git Bash when Git Bash is installed and PowerShell
+/// when it is not. The `cmd.exe /c "%USERPROFILE%\…"` this replaced was fine
+/// under cmd, but Git Bash's MSYS path conversion rewrites `/c` to `C:/`, so
+/// cmd started *interactively* and ran the hook's JSON payload from stdin as
+/// command lines — every `=>` in a payload redirected into a stray file in the
+/// working directory, and an `&` would have run whatever followed it.
+///
+/// The payload still arrives on the script's stdin under all three shells:
+/// PowerShell does not read its own stdin for `-EncodedCommand`, so the child
+/// inherits it untouched.
+String windowsHookCommand(String script) {
+  final utf16 = <int>[
+    for (final unit in script.codeUnits) ...[unit & 0xff, unit >> 8],
+  ];
+  return '$_windowsHookPrefix${base64.encode(utf16)}';
+}
+
+/// The script inside a [windowsHookCommand], or null when [command] is not one.
+String? decodeWindowsHookScript(String command) {
+  if (!command.startsWith(_windowsHookPrefix)) return null;
+  final List<int> bytes;
+  try {
+    bytes = base64.decode(command.substring(_windowsHookPrefix.length).trim());
+  } on FormatException {
+    return null;
+  }
+  if (bytes.length.isOdd) return null;
+  return String.fromCharCodes([
+    for (var i = 0; i < bytes.length; i += 2) bytes[i] | (bytes[i + 1] << 8),
+  ]);
+}
+
+final _encodedWindowsHook = RegExp(
+  '${RegExp.escape(_windowsHookPrefix)}[A-Za-z0-9+/]+=*',
+);
+
+/// [text] — a command, or a whole config file — with every Windows hook command
+/// in it replaced by the script it runs. A search for the marker, a port or a
+/// token has to read through this: against the base64 it would find nothing,
+/// and "not found" would be the wrong answer.
+String revealHookCommands(Object? text) => '$text'.replaceAllMapped(
+  _encodedWindowsHook,
+  (match) => decodeWindowsHookScript(match[0]!) ?? match[0]!,
+);
+
 /// Installs Karmashala's callbacks into an agent's own hook config: only the
 /// hook value is spliced back, and nothing is `…Sync` (a WSL home is UNC).
 class AgentHookInstaller {
@@ -282,9 +337,11 @@ class AgentHookInstaller {
     if (store == null) return null;
     final file = _scriptFileName(environment);
     return switch (environment) {
-      EnvironmentKind.windowsNative =>
-        'cmd.exe /c "%USERPROFILE%\\'
-            '${store.homeDirectoryName.replaceAll('/', '\\')}\\$file" $event',
+      EnvironmentKind.windowsNative => windowsHookCommand(
+        '& "\$env:USERPROFILE\\'
+        '${store.homeDirectoryName.replaceAll('/', '\\')}\\$file" $event; '
+        'exit \$LASTEXITCODE',
+      ),
       EnvironmentKind.localPosix || EnvironmentKind.wsl =>
         'sh "\$HOME/${store.homeDirectoryName}/$file" $event',
       // Never reached: [AgentHookEndpoint.reaches] is false for SSH. Spelled
@@ -761,12 +818,14 @@ class AgentHookInstaller {
   @visibleForTesting
   bool debugIsOurs(Object? entry) => _isOurs(entry);
 
-  /// Ours if it carries the current marker **or** one we used to write.
-  bool _isOurs(Object? entry) => _commandsIn(entry).any(
-    (command) =>
-        command.contains(agentHookMarker) ||
-        legacyAgentHookMarkers.any(command.contains),
-  );
+  /// Ours if it carries the current marker **or** one we used to write — read
+  /// through the encoding, since the Windows command carries its script in
+  /// base64 and the marker is only visible once decoded.
+  bool _isOurs(Object? entry) => _commandsIn(entry).any((command) {
+    final text = decodeWindowsHookScript(command) ?? command;
+    return text.contains(agentHookMarker) ||
+        legacyAgentHookMarkers.any(text.contains);
+  });
 
   /// Every command string an entry carries, in either shape: a config written
   /// by an earlier build is still ours to recognise and take back out.

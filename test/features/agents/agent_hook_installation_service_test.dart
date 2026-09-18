@@ -245,7 +245,10 @@ void main() {
 
     final installed = await service.installAll(endpoint);
     expect(installed.where((r) => r.installed), isNotEmpty);
-    expect(settings().readAsStringSync(), contains(agentHookMarker));
+    expect(
+      revealHookCommands(settings().readAsStringSync()),
+      contains(agentHookMarker),
+    );
 
     final removed = await service.uninstallAll();
 
@@ -256,7 +259,7 @@ void main() {
     );
     final after = settings().readAsStringSync();
     expect(
-      after,
+      revealHookCommands(after),
       isNot(contains(agentHookMarker)),
       reason:
           'a hook left behind keeps running curl at a dead port after the '
@@ -319,7 +322,7 @@ void main() {
 
     final after = settings().readAsStringSync();
     expect(
-      after,
+      revealHookCommands(after),
       isNot(contains(agentHookMarker)),
       reason: 'the entry that was failing on every prompt is gone',
     );
@@ -331,7 +334,10 @@ void main() {
 
     // Still a no-op afterwards: the sweep has nothing left to find.
     await service.uninstallAll();
-    expect(settings().readAsStringSync(), isNot(contains(agentHookMarker)));
+    expect(
+      revealHookCommands(settings().readAsStringSync()),
+      isNot(contains(agentHookMarker)),
+    );
   });
 
   group('what each kind of store gets', () {
@@ -386,7 +392,10 @@ void main() {
       final claude = results.singleWhere((r) => r.environmentId == wsl.id);
       expect(claude.installed, isTrue);
       expect(claude.skippedBecause, isNull);
-      expect(settings().readAsStringSync(), contains(agentHookMarker));
+      expect(
+      revealHookCommands(settings().readAsStringSync()),
+      contains(agentHookMarker),
+    );
       final endpointText = endpointFile().readAsStringSync();
       expect(endpointText, contains('spool=$agentHookMarker.spool'));
       expect(endpointText, contains('agent=claudeCode'));
@@ -484,7 +493,7 @@ void main() {
         );
         final raw = settings().readAsStringSync();
         expect(
-          raw,
+          revealHookCommands(raw),
           isNot(contains(agentHookMarker)),
           reason: 'the entry that was failing on every prompt is gone',
         );
@@ -592,7 +601,10 @@ void main() {
 
       await service.uninstallAll();
 
-      expect(settings().readAsStringSync(), isNot(contains(agentHookMarker)));
+      expect(
+      revealHookCommands(settings().readAsStringSync()),
+      isNot(contains(agentHookMarker)),
+    );
       expect(endpointFile().existsSync(), isFalse);
       expect(
         spoolDir().existsSync(),
@@ -638,7 +650,7 @@ void main() {
         final ours = [
           for (final matcher in entry.value as List)
             for (final hook in (matcher as Map)['hooks'] as List)
-              if ('${(hook as Map)['command']}'.contains(agentHookMarker))
+              if (revealHookCommands((hook as Map)['command']).contains(agentHookMarker))
                 hook['command'],
         ];
         expect(ours, hasLength(1), reason: '${entry.key}');
@@ -811,6 +823,9 @@ void main() {
       (r) => r.environmentId == localEnvironmentId(),
     );
     expect(good.installed, isTrue);
-    expect(settings().readAsStringSync(), contains(agentHookMarker));
+    expect(
+      revealHookCommands(settings().readAsStringSync()),
+      contains(agentHookMarker),
+    );
   });
 }

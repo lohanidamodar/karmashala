@@ -211,17 +211,19 @@ args = ["blender-mcp"]
         EnvironmentKind.windowsNative,
         EnvironmentKind.localPosix,
       ]) {
-        final command = installer.hookCommand(
+        final raw = installer.hookCommand(
           descriptor: codex,
           event: 'Stop',
           endpoint: endpoint,
           environment: environment,
         );
-        expect(command, isNotNull);
+        expect(raw, isNotNull);
+        final command = revealHookCommands(raw);
         expect(command, isNot(contains('4242')));
         expect(command, isNot(contains('tok-abc')));
         expect(command, contains(agentHookMarker));
-        expect(command, endsWith(' Stop'));
+        // The event is the script's argument, straight after its path.
+        expect(command, matches(RegExp(r'\.(cmd|sh)" Stop\b')));
       }
     });
 
@@ -249,13 +251,16 @@ args = ["blender-mcp"]
       // the WSL command correct: the app reaches that store over a UNC name the
       // distribution cannot open.
       expect(
-        installer.hookCommand(
-          descriptor: codex,
-          event: 'Stop',
-          endpoint: endpoint,
-          environment: EnvironmentKind.windowsNative,
+        decodeWindowsHookScript(
+          installer.hookCommand(
+            descriptor: codex,
+            event: 'Stop',
+            endpoint: endpoint,
+            environment: EnvironmentKind.windowsNative,
+          )!,
         ),
-        'cmd.exe /c "%USERPROFILE%\\.codex\\$agentHookMarker.cmd" Stop',
+        '& "\$env:USERPROFILE\\.codex\\$agentHookMarker.cmd" Stop; '
+        'exit \$LASTEXITCODE',
       );
       expect(
         installer.hookCommand(
@@ -282,7 +287,7 @@ args = ["blender-mcp"]
       expect(hooks().keys.toSet(), codex.hooks!.eventStatus.keys.toSet());
       final handler = handlersFor('Stop').single;
       expect(handler['type'], 'command');
-      expect(handler['command'], contains(agentHookMarker));
+      expect(revealHookCommands(handler['command']), contains(agentHookMarker));
 
       // The script carries no address and no token either — it reads them
       // out of the endpoint file beside it when the hook fires, which is what
@@ -338,7 +343,7 @@ args = ["blender-mcp"]
         5,
       );
       expect(
-        handlersFor('PreToolUse').last['command'],
+        revealHookCommands(handlersFor('PreToolUse').last['command']),
         contains(agentHookMarker),
       );
       // An event only they declared is not touched at all.
@@ -486,7 +491,10 @@ args = ["blender-mcp"]
       // read by goes with it.
       expect(posixScript().existsSync(), isFalse);
       expect(endpointFile().existsSync(), isFalse);
-      expect(hooksFile().readAsStringSync(), isNot(contains(agentHookMarker)));
+      expect(
+        revealHookCommands(hooksFile().readAsStringSync()),
+        isNot(contains(agentHookMarker)),
+      );
     });
 
     test('retiring the endpoint keeps the entry and the script', () async {

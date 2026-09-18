@@ -137,12 +137,12 @@ void main() {
       // hashes its command — and this is the file the owner's machine had
       // emptied to `{}`, so it is the one that most needed to stop changing.
       expect(
-        stop['command'],
-        'cmd.exe /c "%USERPROFILE%\\.gemini\\antigravity-cli\\'
-            '$agentHookMarker.cmd" Stop',
+        decodeWindowsHookScript(stop['command'] as String),
+        '& "\$env:USERPROFILE\\.gemini\\antigravity-cli\\'
+        '$agentHookMarker.cmd" Stop; exit \$LASTEXITCODE',
       );
-      expect(stop['command'], isNot(contains('4242')));
-      expect(stop['command'], isNot(contains('tok')));
+      expect(revealHookCommands(stop['command']), isNot(contains('4242')));
+      expect(revealHookCommands(stop['command']), isNot(contains('tok')));
       expect(stop.containsKey('hooks'), isFalse);
       expect(stop.containsKey('matcher'), isFalse);
 
@@ -199,7 +199,7 @@ void main() {
 
       expect(removed, isTrue);
       final raw = hooksFile().readAsStringSync();
-      expect(raw, isNot(contains(agentHookMarker)));
+      expect(revealHookCommands(raw), isNot(contains(agentHookMarker)));
       expect(raw, contains('./lint.sh'));
       expect(windowsScript().existsSync(), isFalse);
       expect(endpointFile().existsSync(), isFalse);

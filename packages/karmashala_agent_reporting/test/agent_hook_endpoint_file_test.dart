@@ -97,7 +97,7 @@ void main() {
           // is what made moving WSL off the network affordable at all.
           expect(commandWith(first), commandWith(second));
           for (final endpoint in [first, second]) {
-            final command = commandWith(endpoint);
+            final command = revealHookCommands(commandWith(endpoint));
             expect(command, isNot(contains('${endpoint.port}')));
             expect(command, isNot(contains(endpoint.token)));
             expect(command, contains(agentHookMarker));
@@ -195,7 +195,7 @@ void main() {
       final hooks = root['hooks']! as Map<String, Object?>;
       return [
         for (final group in hooks['Stop']! as List)
-          if (!jsonEncode(group).contains(agentHookMarker)) group,
+          if (!revealHookCommands(jsonEncode(group)).contains(agentHookMarker)) group,
       ];
     }
 
@@ -228,7 +228,7 @@ void main() {
           storeHome: storeHomeOf(descriptor),
         );
         final afterUninstall = config.readAsStringSync();
-        expect(afterUninstall, isNot(contains(agentHookMarker)));
+        expect(revealHookCommands(afterUninstall), isNot(contains(agentHookMarker)));
         expect(theirHalf(descriptor, afterUninstall), before);
         for (final bytes in untouchedBytes(descriptor)) {
           expect(afterUninstall, contains(bytes), reason: descriptor.id);
@@ -242,7 +242,7 @@ void main() {
         );
         final after = config.readAsStringSync();
         expect(theirHalf(descriptor, after), before);
-        expect(after, contains(agentHookMarker));
+        expect(revealHookCommands(after), contains(agentHookMarker));
         for (final bytes in untouchedBytes(descriptor)) {
           expect(after, contains(bytes), reason: descriptor.id);
         }
@@ -312,7 +312,7 @@ void main() {
 
       expect(asked, hasLength(1));
       expect(asked.single.$1, endsWith('.karmashala-tmp'));
-      expect(asked.single.$1, contains(agentHookMarker));
+      expect(revealHookCommands(asked.single.$1), contains(agentHookMarker));
       expect(asked.single.$2, EnvironmentKind.localPosix);
     });
 
