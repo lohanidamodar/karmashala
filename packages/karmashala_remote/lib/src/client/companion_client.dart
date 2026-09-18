@@ -131,6 +131,9 @@ class CompanionClient {
   SealedChannel? _channel;
   int _generation = 0;
 
+  /// Set by [close], and never cleared: a closed client dials nothing more.
+  bool _closed = false;
+
   final StreamController<CompanionEvent> _events =
       StreamController<CompanionEvent>.broadcast();
   final Map<String, Completer<Map<String, Object?>>> _pending = {};
@@ -156,6 +159,7 @@ class CompanionClient {
     int? generation,
     Duration helloTimeout = const Duration(seconds: 8),
   }) async {
+    if (_closed) throw const RemoteApiException('connection closed');
     if (_transport != null) {
       throw StateError('already connected; close() first');
     }
@@ -168,6 +172,9 @@ class CompanionClient {
     for (var probe = 0; probe < kCompanionProbeWindow; probe++) {
       final g = _pairing.generation + probe;
       final rendezvous = await rendezvousFor(_key, g);
+      // Checked before every generation, not only the first: a close that
+      // lands mid-walk must not be answered by the next dial.
+      if (_closed) throw const RemoteApiException('connection closed');
       final dialled = _relayFactory(_pairing.relay, rendezvous);
       // Probing forward means something only once this relay has taken a
       // socket: waiting out the hello window three times over turns one
@@ -183,6 +190,7 @@ class CompanionClient {
       } on TimeoutException {
         await _detach();
         await dialled.close();
+        if (_closed) throw const RemoteApiException('connection closed');
         if (!socketOpened) {
           onLog?.call('the relay never took the socket; not probing forward');
           throw const RemoteApiException(
@@ -217,6 +225,8 @@ class CompanionClient {
       role: ChannelRole.companion,
       generation: generation,
     );
+    // Closed while the channel was being derived: nothing is listened to.
+    if (_closed) throw const RemoteApiException('connection closed');
     final arrived = _statusArrived = Completer<RemoteHostStatus>();
     _subscription = transport.frames.listen(_onFrame);
     final rendezvous = await rendezvousFor(_key, generation);
@@ -594,6 +604,15 @@ class CompanionClient {
   }
 
   Future<void> close() async {
+    _closed = true;
+    // The hello in flight ends now, not at its timeout — which connect would
+    // have read as "no host at this generation" and answered with a dial.
+    final arrived = _statusArrived;
+    if (arrived != null && !arrived.isCompleted) {
+      arrived.completeError(const RemoteApiException('connection closed'));
+      // A hello whose send threw was never awaited; its failure is nobody's.
+      arrived.future.ignore();
+    }
     final transport = _transport;
     await _detach();
     if (_ownsTransport && transport != null) await transport.close();
