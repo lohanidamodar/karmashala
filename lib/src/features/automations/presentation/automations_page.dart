@@ -21,6 +21,7 @@ import '../domain/automation.dart';
 import '../domain/automation_check_verdict.dart';
 import '../domain/automation_run.dart';
 import '../domain/cron_schedule.dart';
+import 'active_schedules_section.dart';
 import 'automation_dialog.dart';
 import 'automation_undo_dialog.dart';
 import 'project_checks_section.dart';
@@ -42,6 +43,8 @@ class AutomationsPage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // What will fire on its own, before anything that explains it.
+        const ActiveSchedulesSection(),
         SettingsSection(
           title: 'AUTOMATIONS',
           trailing: repositories.isEmpty

@@ -10,6 +10,9 @@ import 'package:karmashala/src/features/automations/application/automation_provi
 import 'package:karmashala/src/features/automations/data/automation_dao.dart';
 import 'package:karmashala/src/features/automations/domain/automation.dart';
 import 'package:karmashala/src/features/automations/domain/automation_run.dart';
+import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
+import 'package:karmashala/src/features/automations/domain/scheduled_resume.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/automations/presentation/automation_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/automations_page.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -119,6 +122,60 @@ void main() {
     expect(find.text('AUTOMATIONS'), findsOneWidget);
     expect(find.text('Nothing is armed.'), findsOneWidget);
     expect(find.text('Arm an automation'), findsOneWidget);
+    expect(find.text('Nothing is armed or waiting.'), findsOneWidget);
+  });
+
+  /// What will fire on its own comes first, soonest first, above the page's
+  /// explanations: a resume in 42 minutes before a sweep at 03:00 tomorrow,
+  /// and a paused automation not at all.
+  testWidgets('active automations and resumes lead the page, soonest first', (
+    tester,
+  ) async {
+    arm();
+    arm(nightly(id: 'auto2', name: 'Paused sweep', enabled: false));
+    SessionDao(db).insert(session(title: 'Fix the login'));
+    container
+        .read(scheduledResumeDaoProvider)
+        .replaceFor(
+          ScheduledResume(
+            id: 'res1',
+            sessionId: 's1',
+            fireAt: now.add(const Duration(minutes: 42)),
+            state: ScheduledResumeState.pending,
+            scheduledAt: now,
+            windowLabel: '5h',
+          ),
+          now: now,
+        );
+
+    await pumpPage(tester);
+
+    final active = find.byKey(const ValueKey('active-schedules'));
+    expect(active, findsOneWidget);
+    final resume = find.descendant(
+      of: active,
+      matching: find.textContaining('Fix the login'),
+    );
+    final sweep = find.descendant(
+      of: active,
+      matching: find.text('Nightly sweep'),
+    );
+    expect(resume, findsOneWidget);
+    expect(sweep, findsOneWidget);
+    expect(
+      find.descendant(of: active, matching: find.textContaining('in 42m')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: active, matching: find.text('Paused sweep')),
+      findsNothing,
+    );
+    // Soonest first, and the whole block above the AUTOMATIONS section.
+    expect(tester.getTopLeft(resume).dy, lessThan(tester.getTopLeft(sweep).dy));
+    expect(
+      tester.getTopLeft(active).dy,
+      lessThan(tester.getTopLeft(find.text('AUTOMATIONS')).dy),
+    );
   });
 
   testWidgets('the arm form names each rung beside the CLI own word', (
@@ -182,7 +239,14 @@ void main() {
     makeReady();
     arm();
     await pumpPage(tester);
-    expect(find.text('Nightly sweep'), findsOneWidget);
+    // Once on its card and once in the ACTIVE list above it.
+    expect(
+      find.descendant(
+        of: find.byType(AutomationCard),
+        matching: find.text('Nightly sweep'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Claude Code'), findsOneWidget);
     expect(find.text('Run the checks and fix what broke.'), findsOneWidget);
     expect(find.text('Windows'), findsOneWidget);
@@ -392,7 +456,13 @@ void main() {
     record(AutomationRunState.missed, 'It was due and nobody was here.');
     for (final size in const [Size(390, 844), Size(1440, 900)]) {
       await pumpPage(tester, size: size);
-      expect(find.text('Nightly sweep'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(AutomationCard),
+          matching: find.text('Nightly sweep'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Missed'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
