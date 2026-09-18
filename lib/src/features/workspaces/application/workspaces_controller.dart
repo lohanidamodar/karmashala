@@ -59,6 +59,13 @@ class WorkspacesController extends Notifier<List<Workspace>> {
     description: state.where((w) => w.id == id).firstOrNull?.description,
   );
 
+  /// The colour's name, or null for none. Stored as the word, so a colour a
+  /// newer build named is kept through an older one rather than erased.
+  void setColor(String id, String? color) {
+    ref.read(workspaceDaoProvider).updateColor(id, color);
+    _refresh();
+  }
+
   /// Deletes the context. **Its projects are kept** and become unassigned, by
   /// the schema's `ON DELETE SET NULL`; this only refreshes the project list.
   void delete(String id) {

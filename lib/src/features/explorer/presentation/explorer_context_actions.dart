@@ -7,12 +7,14 @@ import 'package:karmashala_ui/menus.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 import '../../workspaces/domain/workspace.dart';
 import '../../workspaces/domain/workspace_scope.dart';
+import '../../workspaces/presentation/context_color_dialog.dart';
 import '../../workspaces/presentation/new_context_dialog.dart';
 import '../../workspaces/presentation/workspaces_dialog.dart';
 
 const _showOnly = 'context-only';
 const _showAll = 'context-all';
 const _edit = 'context-edit';
+const _colour = 'context-colour';
 
 /// The two verbs that are about contexts rather than about one of them, for
 /// the chips' own menu.
@@ -47,12 +49,18 @@ List<PopupMenuEntry<String>> contextMenuItems({
         icon: AppIcons.funnel,
       ),
     const DesktopMenuDivider(),
-    if (workspace != null)
+    if (workspace != null) ...[
       DesktopMenuItem(
         value: _edit,
         label: 'Rename or describe…',
         icon: AppIcons.pencilSimple,
       ),
+      DesktopMenuItem(
+        value: _colour,
+        label: 'Colour…',
+        icon: AppIcons.circleHalf,
+      ),
+    ],
     DesktopMenuItem(
       value: contextActionNew,
       label: 'New context…',
@@ -94,6 +102,8 @@ Future<void> runContextAction(
       scopes.select(WorkspaceScope.all);
     case _edit:
       if (workspace != null) await NewContextDialog.edit(context, workspace);
+    case _colour:
+      if (workspace != null) await ContextColorDialog.show(context, workspace);
     case contextActionNew:
       await NewContextDialog.show(context);
     case contextActionManage:

@@ -10,12 +10,16 @@ import '../application/environment_terminals.dart';
 /// A group's label over the rows it holds — a context, a machine's terminals.
 /// Flat: it stands at depth zero and indents nothing beneath it, and the list
 /// pins it while its rows scroll under it. It is drawn in the same row model
-/// as those rows — caret column, the right-hand column, `+` and `⋮` on hover.
+/// as those rows — caret column, glyph column, the right-hand column, `+` and
+/// `⋮` on hover — on a tinted band, with the context's colour dot where a
+/// project row keeps its folder.
 class ExplorerGroupHeader extends StatelessWidget {
   const ExplorerGroupHeader({
     required this.expanded,
     required this.label,
     required this.onTap,
+    this.hue,
+    this.spaceAbove = true,
     this.trailingText,
     this.trailingWords,
     this.detail,
@@ -30,6 +34,14 @@ class ExplorerGroupHeader extends StatelessWidget {
   final bool expanded;
   final String label;
   final VoidCallback onTap;
+
+  /// The context's colour, drawn as a dot in the glyph column; null draws the
+  /// column empty, so every header's label starts where a project's name does.
+  final ContextHue? hue;
+
+  /// False for the first row of a list and for the pinned copy: the band's
+  /// gap is between groups, not above the list.
+  final bool spaceAbove;
 
   /// The count in the right-hand column. Never a fabricated zero: pass null
   /// where nothing has been measured (§19).
@@ -54,11 +66,14 @@ class ExplorerGroupHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final menuItemsBuilder = this.menuItemsBuilder;
     final onMenu = this.onMenu;
+    final hue = this.hue;
     final row = ExplorerRow(
       kind: ExplorerRowKind.group,
       expanded: expanded,
       depth: 0,
       selected: false,
+      band: true,
+      spaceAbove: spaceAbove,
       onTap: onTap,
       menuItemsBuilder: menuItemsBuilder,
       onMenu: onMenu,
@@ -68,7 +83,12 @@ class ExplorerGroupHeader extends StatelessWidget {
         final detail = this.detail;
         final trailing = trailingText;
         return ExplorerRowLine(
-          lead: ExplorerRowLead(expanded: expanded, glyphColumn: false),
+          lead: ExplorerRowLead(
+            expanded: expanded,
+            glyph: hue == null
+                ? null
+                : ContextHueDot(hue: hue, label: '${hue.label} context'),
+          ),
           title: Row(
             children: [
               Flexible(

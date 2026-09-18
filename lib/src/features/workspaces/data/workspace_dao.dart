@@ -9,12 +9,13 @@ class WorkspaceDao {
 
   void insert(Workspace workspace) {
     _db.execute(
-      'INSERT INTO workspaces (id, name, description, created_at) '
-      'VALUES (?, ?, ?, ?);',
+      'INSERT INTO workspaces (id, name, description, color, created_at) '
+      'VALUES (?, ?, ?, ?, ?);',
       [
         workspace.id,
         workspace.name,
         workspace.description,
+        workspace.color,
         isoFromDate(workspace.createdAt),
       ],
     );
@@ -23,11 +24,16 @@ class WorkspaceDao {
   /// The name and the description in **one** statement: they are edited
   /// together, so two writes would leave a window holding half the change.
   void updateDetails(String id, {required String name, String? description}) {
-    _db.execute('UPDATE workspaces SET name = ?, description = ? WHERE id = ?;', [
-      name,
-      description,
-      id,
-    ]);
+    _db.execute(
+      'UPDATE workspaces SET name = ?, description = ? WHERE id = ?;',
+      [name, description, id],
+    );
+  }
+
+  /// The colour's name, or null to clear it. Its own statement: a colour is
+  /// picked from a grid, never edited beside the name.
+  void updateColor(String id, String? color) {
+    _db.execute('UPDATE workspaces SET color = ? WHERE id = ?;', [color, id]);
   }
 
   /// Removes the workspace. Its projects are **kept** and become unassigned, by
@@ -52,6 +58,7 @@ class WorkspaceDao {
     id: row['id']! as String,
     name: row['name']! as String,
     description: row['description'] as String?,
+    color: row['color'] as String?,
     createdAt: dateFromIso(row['created_at']),
   );
 }

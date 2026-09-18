@@ -23,7 +23,7 @@ void main() {
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
-    expect(db.schemaVersion, 53);
+    expect(db.schemaVersion, 54);
   });
 
   test('v25 gives a session somewhere to record what it left', () {
@@ -72,7 +72,13 @@ void main() {
       'INSERT INTO session_follow_ups '
       '(session_id, reason, ending, raised_at, resolved_at) '
       'VALUES (?, ?, ?, ?, ?);',
-      ['s1', 'endedInFailure', 'failed', '2026-09-01T10:00:00.000Z', resolvedAt],
+      [
+        's1',
+        'endedInFailure',
+        'failed',
+        '2026-09-01T10:00:00.000Z',
+        resolvedAt,
+      ],
     );
 
     raise();
@@ -87,9 +93,7 @@ void main() {
     raise();
     raise(resolvedAt: '2026-09-01T12:00:00.000Z');
     expect(
-      db
-          .query('SELECT COUNT(*) AS n FROM session_follow_ups;')
-          .first['n'],
+      db.query('SELECT COUNT(*) AS n FROM session_follow_ups;').first['n'],
       3,
     );
   });

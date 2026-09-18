@@ -212,7 +212,7 @@ class _ExplorerSectionsListState extends ConsumerState<ExplorerSectionsList>
                     subPath: node.subPath,
                     pinned: node.pinned,
                   )
-                : ExplorerTreeRow(node: node),
+                : ExplorerTreeRow(node: node, first: index == 0),
           );
         },
       ),
@@ -320,6 +320,7 @@ class _ExplorerTreeViewState extends ConsumerState<ExplorerTreeView>
           keyboard: keyboard,
           child: ExplorerTreeRow(
             node: node,
+            first: index == 0,
             anchorKey:
                 node is ProjectNode && node.project.id == selectedProjectId
                 ? _selectedRow
@@ -572,9 +573,12 @@ class _ExplorerPinnedHeaderState extends State<ExplorerPinnedHeader> {
     if (node is! ExplorerHeaderNode) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final keyboard = widget.keyboard;
+    // `first`: it sits at the list's edge, so no gap above its band — and the
+    // band and its hairline are the row's own, the same as in the list.
     final Widget row = ExplorerTreeRow(
       key: ValueKey('pinned:${node.id}'),
       node: node,
+      first: true,
     );
     return Positioned(
       top: _shift,
@@ -582,12 +586,8 @@ class _ExplorerPinnedHeaderState extends State<ExplorerPinnedHeader> {
       right: 0,
       child: DecoratedBox(
         key: _box,
-        // Opaque, where every other row rests transparent: rows pass under
-        // it. The hairline says so.
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
-        ),
+        // Opaque under the row's own gap, where the rows pass under it.
+        decoration: BoxDecoration(color: scheme.surface),
         child: keyboard == null
             ? row
             : ExplorerKeyboardRow(

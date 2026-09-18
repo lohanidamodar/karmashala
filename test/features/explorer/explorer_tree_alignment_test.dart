@@ -446,25 +446,34 @@ void main() {
     expect(tester.getSize(find.text(_long)).width, greaterThanOrEqualTo(150));
   });
 
-  testWidgets('rows are flat at rest and fill under the pointer', (
-    tester,
-  ) async {
+  testWidgets('rows are flat at rest, a header is its band, and both fill '
+      'under the pointer', (tester) async {
     await pumpExplorer(tester);
+    final scheme = Theme.of(
+      tester.element(find.byType(ExplorerContextHeader).first),
+    ).colorScheme;
 
     for (final row in [
-      rowOf(ExplorerContextHeader).first,
       sessionRow('Running session'),
       sessionRow('Finished session'),
     ]) {
       expect(fillsIn(tester, row), isEmpty, reason: '$row is tinted at rest');
     }
+    expect(fillsIn(tester, rowOf(ExplorerContextHeader).first), [
+      ExplorerRow.bandColor(scheme),
+    ], reason: 'a header rests on its band and nothing else');
 
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);
     addTearDown(gesture.removePointer);
     await gesture.moveTo(tester.getCenter(find.text('GAME DEV')));
     await tester.pumpAndSettle();
-    expect(fillsIn(tester, rowOf(ExplorerContextHeader).first), isNotEmpty);
+    expect(fillsIn(tester, rowOf(ExplorerContextHeader).first), [
+      Color.alphaBlend(
+        StateLayers.hover(scheme),
+        ExplorerRow.bandColor(scheme),
+      ),
+    ], reason: 'the hover wash is laid over the band, not in its place');
   });
 }
 

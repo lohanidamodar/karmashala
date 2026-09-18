@@ -178,6 +178,53 @@ class SemanticColors extends ThemeExtension<SemanticColors> {
   }
 }
 
+/// A colour a user gives a context so its header and chip are told apart at a
+/// glance. Identity, never state: every hue keeps 20° from the hues
+/// [SemanticColors] mean something by — no red, amber, green or cyan — so a
+/// coloured context never reads as failing, waiting or working, and the hues
+/// keep 24° from each other so they can be told apart. The accent's blue is
+/// not reserved: a solid dot and a 12% wash are not confused. Stored by
+/// [name]; the two variants each keep 3:1 against the band and the pane
+/// surface of their theme (`context_hue_test`).
+enum ContextHue {
+  rose(Color(0xFFC43D6E), Color(0xFFF28BAF)),
+  magenta(Color(0xFFA634A0), Color(0xFFE48EDE)),
+  violet(Color(0xFF9842D6), Color(0xFFCC8EF7)),
+  indigo(Color(0xFF5A4AD6), Color(0xFFAA9CF7)),
+  slate(Color(0xFF566890), Color(0xFFA4B2CE)),
+  teal(Color(0xFF1A8578), Color(0xFF5FD2C0)),
+  olive(Color(0xFF6F7F1C), Color(0xFFC1CC5C));
+
+  const ContextHue(this.light, this.dark);
+
+  final Color light;
+  final Color dark;
+
+  Color of(Brightness brightness) =>
+      brightness == Brightness.dark ? dark : light;
+
+  /// The hue stored under [name], or null for anything else — an unknown name
+  /// from a newer build is no colour, not a crash.
+  static ContextHue? tryParse(String? name) {
+    if (name == null) return null;
+    for (final hue in values) {
+      if (hue.name == name) return hue;
+    }
+    return null;
+  }
+
+  /// The word a picker shows for it.
+  String get label => switch (this) {
+    ContextHue.rose => 'Rose',
+    ContextHue.magenta => 'Magenta',
+    ContextHue.violet => 'Violet',
+    ContextHue.indigo => 'Indigo',
+    ContextHue.slate => 'Slate',
+    ContextHue.teal => 'Teal',
+    ContextHue.olive => 'Olive',
+  };
+}
+
 /// Spacing scale (4-pt base). Use these instead of ad-hoc paddings.
 class Insets {
   const Insets._();

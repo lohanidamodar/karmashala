@@ -60,12 +60,24 @@ class ExplorerRow extends StatelessWidget {
     this.onMenu,
     this.settled = false,
     this.expanded,
+    this.band = false,
+    this.spaceAbove = false,
     super.key,
   });
 
   final ExplorerRowKind kind;
   final int depth;
   final bool selected;
+
+  /// A group header's tinted band: a full-width fill one step under the pane,
+  /// with a hairline beneath, so a context is told from a project by more
+  /// than its capitals. Under a pointer only — a thumb's rows are tiles
+  /// already. Hover and focus still layer over it.
+  final bool band;
+
+  /// [bandGap] of pane above the band: between one group and the next, never
+  /// before the first, and never on the pinned copy, which sits at the edge.
+  final bool spaceAbove;
 
   /// Whether the rows under this one are drawn, for a row that folds; null for
   /// one that does not. Said to a screen reader — the caret is the row's own.
@@ -130,6 +142,15 @@ class ExplorerRow extends StatelessWidget {
   /// The `·` between clauses of a meta line, over the muted ink.
   static const separatorAlpha = 0.5;
 
+  /// What separates one group's band from the rows above it.
+  static const bandGap = Insets.xs;
+
+  /// The hairline under a band.
+  static const bandHairline = Insets.hair;
+
+  /// A band's tone: the step the pane header and a quiet notice bar use.
+  static Color bandColor(ColorScheme scheme) => scheme.surfaceContainerLow;
+
   static const _radius = BorderRadius.all(Radius.circular(Radii.sm));
 
   /// The square a row-level button occupies — the menu, the `+`. One number for
@@ -172,6 +193,10 @@ class ExplorerRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final density = UiDensity.of(context);
     final touch = density.isTouch;
+    final banded = band && !touch;
+    // The band runs to the pane's edges; its content keeps [inset] so the
+    // columns still line up with every row that rests inside it.
+    final edge = banded ? inset : 0.0;
 
     Widget body = Builder(builder: builder);
     if (settled) body = Opacity(opacity: settledOpacity, child: body);
@@ -182,9 +207,9 @@ class ExplorerRow extends StatelessWidget {
               vertical: density.padY,
             )
           : EdgeInsets.fromLTRB(
-              density.padX + depth * indent,
+              edge + density.padX + depth * indent,
               kind == ExplorerRowKind.session ? Insets.xs : Insets.hair,
-              density.padX + scrollbarGutter,
+              edge + density.padX + scrollbarGutter,
               kind == ExplorerRowKind.session ? Insets.xs : Insets.hair,
             ),
       child: body,
@@ -202,7 +227,7 @@ class ExplorerRow extends StatelessWidget {
     Widget row = InkWell(
       onTap: onTap,
       focusNode: ExplorerRowFocus.maybeOf(context),
-      borderRadius: _radius,
+      borderRadius: banded ? BorderRadius.zero : _radius,
       child: content,
     );
     // On the row's own node, so a screen reader hears "collapsed" with the
@@ -214,8 +239,9 @@ class ExplorerRow extends StatelessWidget {
     return RevealOnFocus(
       child: Padding(
         padding: EdgeInsets.only(
-          left: inset + (touch ? depth * indent : 0),
-          right: inset,
+          left: banded ? 0 : inset + (touch ? depth * indent : 0),
+          right: banded ? 0 : inset,
+          top: banded && spaceAbove ? bandGap : 0,
           bottom: gapOf(density),
         ),
         child: RowContextMenu(
@@ -224,8 +250,12 @@ class ExplorerRow extends StatelessWidget {
               ? menuItemsBuilder
               : null,
           onSelected: onMenu ?? (_) {},
-          builder: (context) =>
-              _ExplorerRowFill(kind: kind, selected: selected, child: row),
+          builder: (context) => _ExplorerRowFill(
+            kind: kind,
+            selected: selected,
+            band: banded,
+            child: row,
+          ),
         ),
       ),
     );
@@ -253,11 +283,13 @@ class _ExplorerRowFill extends StatelessWidget {
   const _ExplorerRowFill({
     required this.kind,
     required this.selected,
+    required this.band,
     required this.child,
   });
 
   final ExplorerRowKind kind;
   final bool selected;
+  final bool band;
   final Widget child;
 
   @override
@@ -267,7 +299,11 @@ class _ExplorerRowFill extends StatelessWidget {
     final interaction = RowInteractionScope.maybeOf(context);
     // Resting tone, then the states in the order they compose. Focus is a
     // ring, not a fill.
-    Color? color = touch ? kind.surface(scheme) : null;
+    Color? color = band
+        ? ExplorerRow.bandColor(scheme)
+        : touch
+        ? kind.surface(scheme)
+        : null;
     Color layer(Color over) =>
         color == null ? over : Color.alphaBlend(over, color);
     if (selected) color = layer(StateLayers.selected(scheme));
@@ -276,11 +312,18 @@ class _ExplorerRowFill extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: color,
-        borderRadius: ExplorerRow._radius,
+        borderRadius: band ? null : ExplorerRow._radius,
         border: focused
             ? Border.all(
                 color: StateLayers.focusRing(scheme),
                 width: StateLayers.focusRingWidth,
+              )
+            : band
+            ? Border(
+                bottom: BorderSide(
+                  color: scheme.outlineVariant,
+                  width: ExplorerRow.bandHairline,
+                ),
               )
             : null,
       ),

@@ -211,15 +211,19 @@ void main() {
     expect(carets, hasLength(1));
   });
 
-  testWidgets('a header\'s words start right after its caret', (tester) async {
+  testWidgets('a header\'s words start where a project\'s name does', (
+    tester,
+  ) async {
     await pumpTree(tester);
 
     final label = tester.getTopLeft(find.text('GAME DEV')).dx;
     final name = tester.getTopLeft(find.text('popubits')).dx;
     expect(
       name - label,
-      ExplorerRow.glyphSlot,
-      reason: 'a header has no glyph, so it keeps no column for one',
+      0,
+      reason:
+          'a header keeps the glyph column for its colour dot, coloured or '
+          'not, so every label and every name start on one edge',
     );
   });
 

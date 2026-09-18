@@ -11,12 +11,20 @@ import 'package:karmashala_ui/rows.dart';
 
 /// One section's header: the disclosure, the name, what it holds, its menu.
 class ExplorerSectionHeader extends ConsumerWidget {
-  const ExplorerSectionHeader({required this.section, this.count, super.key});
+  const ExplorerSectionHeader({
+    required this.section,
+    this.count,
+    this.spaceAbove = true,
+    super.key,
+  });
 
   final ExplorerSection section;
 
   /// How many rows the section holds, or null while it is collapsed.
   final int? count;
+
+  /// False for the list's first row: the band's gap is between groups.
+  final bool spaceAbove;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,6 +68,8 @@ class ExplorerSectionHeader extends ConsumerWidget {
       kind: ExplorerRowKind.group,
       depth: 0,
       selected: false,
+      band: true,
+      spaceAbove: spaceAbove,
       expanded: !section.collapsed,
       onTap: () => controller.toggleCollapsed(section.id),
       menuItemsBuilder: items,

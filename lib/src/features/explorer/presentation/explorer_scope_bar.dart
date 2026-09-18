@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../projects/application/projects_controller.dart';
@@ -358,6 +359,7 @@ class ExplorerContextChips extends ConsumerWidget {
                         ..layout())
                       .width,
                   scaler,
+                  dot: entry.hue != null,
                 ),
             ];
           } finally {
@@ -493,6 +495,8 @@ class _ChipEntry {
   final String label;
   final int count;
   final Workspace? workspace;
+
+  ContextHue? get hue => ContextHue.tryParse(workspace?.color);
 }
 
 class _ScopeChip extends StatelessWidget {
@@ -512,9 +516,14 @@ class _ScopeChip extends StatelessWidget {
 
   static const _padX = Insets.sm;
 
-  /// What a chip whose text measures [text] takes of the row.
-  static double widthFor(double text, TextScaler scaler) =>
+  /// Between a chip's colour dot and its label.
+  static const _dotGap = Insets.xs;
+
+  /// What a chip whose text measures [text] takes of the row, with its colour
+  /// [dot] when it wears one.
+  static double widthFor(double text, TextScaler scaler, {bool dot = false}) =>
       math.min(text, scaler.scale(ExplorerContextChips.chipMax)) +
+      (dot ? ContextHueDot.chipSize + _dotGap : 0) +
       _padX * 2 +
       // The border, and a pixel kept back: what is drawn is not what was
       // measured to the last fraction.
@@ -525,6 +534,7 @@ class _ScopeChip extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final scaler = MediaQuery.textScalerOf(context);
+    final hue = entry.hue;
     const shape = StadiumBorder();
     final chip = Semantics(
       button: true,
@@ -545,24 +555,36 @@ class _ScopeChip extends StatelessWidget {
               constraints: BoxConstraints(
                 minHeight: Chrome.statusBar,
                 maxWidth:
-                    scaler.scale(ExplorerContextChips.chipMax) + _padX * 2,
+                    scaler.scale(ExplorerContextChips.chipMax) +
+                    (hue == null ? 0 : ContextHueDot.chipSize + _dotGap) +
+                    _padX * 2,
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: _padX),
-                child: Center(
-                  widthFactor: 1,
-                  child: Text(
-                    entry.label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: selected
-                          ? scheme.onSurface
-                          : scheme.onSurfaceVariant,
-                      fontWeight: selected ? FontWeight.w600 : null,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // The dot stays whether or not the chip is the one in
+                    // force: the colour is the context's, not the filter's.
+                    if (hue != null) ...[
+                      ContextHueDot(hue: hue, size: ContextHueDot.chipSize),
+                      const SizedBox(width: _dotGap),
+                    ],
+                    Flexible(
+                      child: Text(
+                        entry.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: selected
+                              ? scheme.onSurface
+                              : scheme.onSurfaceVariant,
+                          fontWeight: selected ? FontWeight.w600 : null,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),

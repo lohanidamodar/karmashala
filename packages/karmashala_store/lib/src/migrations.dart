@@ -62,6 +62,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   51: _migrateToV51,
   52: _migrateToV52,
   53: _migrateToV53,
+  54: _migrateToV54,
 };
 
 /// Was this pane running when its row was written? `DEFAULT 0` is the honest
@@ -1265,10 +1266,9 @@ void _migrateToV49(Database db) {
 /// hosted. `remote.relay_prefs.v1` is the app's `kRelayPrefsMetadataKey`.
 void _migrateToV50(Database db) {
   const prefsKey = 'remote.relay_prefs.v1';
-  final existing = db.select(
-    'SELECT 1 FROM app_metadata WHERE key = ?;',
-    [prefsKey],
-  );
+  final existing = db.select('SELECT 1 FROM app_metadata WHERE key = ?;', [
+    prefsKey,
+  ]);
   if (existing.isNotEmpty) return;
   final settingsRows = db.select(
     "SELECT value FROM app_metadata WHERE key = 'settings.v1';",
@@ -1371,4 +1371,14 @@ void _migrateToV53(Database db) {
     'CREATE INDEX IF NOT EXISTS idx_scheduled_resumes_fire_at '
     'ON scheduled_resumes (state, fire_at);',
   );
+}
+
+/// A context's colour, by the name of a hue the app's theme paints. Nullable:
+/// a context has none until its owner picks one.
+void _migrateToV54(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(workspaces);')
+      .map((row) => row['name'] as String);
+  if (columns.contains('color')) return;
+  db.execute('ALTER TABLE workspaces ADD COLUMN color TEXT;');
 }

@@ -59,7 +59,7 @@ void main() {
   test('v39 is the head and the keys stay contiguous', () {
     final db = AppDatabase.memory();
     addTearDown(db.close);
-    expect(db.schemaVersion, 53);
+    expect(db.schemaVersion, 54);
     expect(schemaMigrations.keys.toList()..sort(), [
       for (var v = 1; v <= schemaMigrations.length; v++) v,
     ]);
@@ -103,7 +103,13 @@ void main() {
       for (final row in db.query('PRAGMA table_info(workspaces);'))
         row['name']! as String: row,
     };
-    expect(workspaceColumns.keys, {'id', 'name', 'description', 'created_at'});
+    expect(workspaceColumns.keys, {
+      'id',
+      'name',
+      'description',
+      'color',
+      'created_at',
+    });
     for (final required in const ['name', 'created_at']) {
       expect(workspaceColumns[required]!['notnull'], 1, reason: required);
     }

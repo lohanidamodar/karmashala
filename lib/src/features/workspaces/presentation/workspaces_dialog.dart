@@ -5,10 +5,12 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/menus.dart';
+import 'package:karmashala_ui/rows.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../application/workspaces_controller.dart';
 import '../domain/workspace.dart';
+import 'context_color_dialog.dart';
 
 /// Create, rename, describe, delete and assign — the verbs a context has.
 /// The project list is a `const` child: a new context rebuilt all 31 rows.
@@ -346,16 +348,26 @@ class _WorkspaceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final hue = ContextHue.tryParse(workspace.color);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
       child: Row(
         children: [
-          Icon(
-            AppIcons.folder,
-            size: Chrome.icon,
-            color: theme.colorScheme.onSurfaceVariant,
+          // The folder glyph is the colour's slot: a dot once one is picked,
+          // and the way to pick one either way.
+          IconButton(
+            tooltip: 'Colour for ${workspace.name}',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => ContextColorDialog.show(context, workspace),
+            icon: hue == null
+                ? Icon(
+                    AppIcons.folder,
+                    size: Chrome.icon,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  )
+                : ContextHueDot(hue: hue, size: Chrome.iconSmall),
           ),
-          const SizedBox(width: Insets.sm),
+          const SizedBox(width: Insets.xs),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

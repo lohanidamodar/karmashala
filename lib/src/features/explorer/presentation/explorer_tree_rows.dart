@@ -25,20 +25,36 @@ import 'session_rows.dart';
 /// One Explorer row for [node]. Each kind is its own widget so that the
 /// readings a row needs are watched by that row alone.
 class ExplorerTreeRow extends StatelessWidget {
-  const ExplorerTreeRow({required this.node, this.anchorKey, super.key});
+  const ExplorerTreeRow({
+    required this.node,
+    this.anchorKey,
+    this.first = false,
+    super.key,
+  });
 
   final ExplorerNode node;
 
   /// Handed to the selected project's row — see [ExplorerProjectRow.anchorKey].
   final Key? anchorKey;
 
+  /// The list's first row, and the pinned copy: a header there keeps no gap
+  /// above its band.
+  final bool first;
+
   @override
   Widget build(BuildContext context) => switch (node) {
-    final ContextHeaderNode node => ExplorerContextHeader(node: node),
-    final TerminalsHeaderNode node => ExplorerTerminalsHeader(node: node),
+    final ContextHeaderNode node => ExplorerContextHeader(
+      node: node,
+      spaceAbove: !first,
+    ),
+    final TerminalsHeaderNode node => ExplorerTerminalsHeader(
+      node: node,
+      spaceAbove: !first,
+    ),
     final SectionHeaderNode node => ExplorerSectionHeader(
       section: node.section,
       count: node.count,
+      spaceAbove: !first,
     ),
     final ProjectNode node => ExplorerProjectRow(
       project: node.project,
@@ -69,9 +85,14 @@ class ExplorerTreeRow extends StatelessWidget {
 
 /// A context's label over its projects — or *No context*, over the rest.
 class ExplorerContextHeader extends ConsumerWidget {
-  const ExplorerContextHeader({required this.node, super.key});
+  const ExplorerContextHeader({
+    required this.node,
+    this.spaceAbove = true,
+    super.key,
+  });
 
   final ContextHeaderNode node;
+  final bool spaceAbove;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -79,6 +100,8 @@ class ExplorerContextHeader extends ConsumerWidget {
     return ExplorerGroupHeader(
       expanded: node.expanded,
       label: node.label,
+      hue: ContextHue.tryParse(workspace?.color),
+      spaceAbove: spaceAbove,
       trailingText: '${node.projectCount}',
       trailingWords: projectCountWords(node.projectCount),
       tooltip: workspace?.description,
@@ -99,9 +122,14 @@ class ExplorerContextHeader extends ConsumerWidget {
 /// `Terminals`, for one machine. It carries what the machine's own row used
 /// to: the `+` that opens a shell there, and the word that it has gone.
 class ExplorerTerminalsHeader extends ConsumerWidget {
-  const ExplorerTerminalsHeader({required this.node, super.key});
+  const ExplorerTerminalsHeader({
+    required this.node,
+    this.spaceAbove = true,
+    super.key,
+  });
 
   final TerminalsHeaderNode node;
+  final bool spaceAbove;
 
   static const _open = 'open';
   static const _refresh = 'refresh';
@@ -114,6 +142,7 @@ class ExplorerTerminalsHeader extends ConsumerWidget {
     return ExplorerGroupHeader(
       expanded: node.expanded,
       label: node.label,
+      spaceAbove: spaceAbove,
       trailingText: node.count == null ? null : '${node.count}',
       trailingWords: node.count == null ? null : '${node.count} running',
       detail: node.detail,
