@@ -14,6 +14,7 @@ import 'package:karmashala/src/features/cli_detection/application/project_import
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
+import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
 import 'package:karmashala/src/features/file_explorer/application/file_explorer_providers.dart';
 import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
@@ -35,6 +36,7 @@ import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
+import 'package:karmashala_ui/tokens.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
@@ -99,9 +101,11 @@ Widget _column(double width, Widget surface) => MaterialApp(
 const _longHost = 'a-build-box-with-a-long-host-name';
 
 void main() {
-  AppDatabase seeded() {
+  AppDatabase seeded({bool third = false}) {
     final db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    // A third: the strip is at its widest, and has a WSL mark in it.
+    if (third) ExecutionEnvironmentDao(db).upsert(wslEnv());
     // A second machine: the switcher joins the search row, and every project
     // names its machine on line two — both with a name too long to fit.
     SshHostDao(db).upsert(
@@ -158,8 +162,8 @@ void main() {
     return db;
   }
 
-  Widget explorer(double width, {bool working = false}) {
-    final db = seeded();
+  Widget explorer(double width, {bool working = false, bool third = false}) {
+    final db = seeded(third: third);
     addTearDown(db.close);
     return ProviderScope(
       overrides: [
@@ -248,6 +252,35 @@ void main() {
       );
       // The spinner's clock is a real timer: stopped with the last spinner.
       await tester.pumpWidget(const SizedBox());
+    });
+  }
+
+  // Three machines is the strip at its widest — four segments, one of them
+  // named longer than the column — on the search row or its own, glyphs alone
+  // when the segments are under the floor, up to 2x text.
+  for (final width in [200.0, 240.0]) {
+    testWidgets('the Explorer at ${width.toInt()}px with three machines, up '
+        'to 2x text', (tester) async {
+      await expectSurvivesWindowMatrix(
+        tester,
+        build: () => explorer(width, third: true),
+        matrix: const [
+          ...windowMatrix,
+          WindowCell('720x560 @ 2x text', Size(720, 560), textScale: 2),
+        ],
+        warmUp: (tester) async {
+          await openProject(tester);
+          expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
+          expect(
+            find.bySemanticsLabel(RegExp('^Environment: $_longHost\$')),
+            findsOneWidget,
+            reason: 'the long name is a segment, whole to a screen reader',
+          );
+          final strip = tester.getSize(find.byType(ExplorerEnvironmentStrip));
+          expect(strip.width, lessThanOrEqualTo(width));
+          expect(strip.height, Chrome.control);
+        },
+      );
     });
   }
 

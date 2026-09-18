@@ -1,3 +1,5 @@
+import 'dart:ui' show Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -162,15 +164,67 @@ void main() {
       );
     });
 
-    testWidgets('a second machine adds its switcher to the search row, not a '
-        'row of its own', (tester) async {
+    testWidgets('a second machine adds its strip to the search row while '
+        'every name fits whole beside a usable field, and a row of its own '
+        'under it otherwise', (tester) async {
       ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
-      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
-      expect(find.byType(ExplorerEnvironmentSwitcher), findsOneWidget);
+      // The test font is a square per glyph, twice the shipped one's width:
+      // `All · Windows · build-box` is 353px here and about 220 in the app,
+      // and the field keeps 120 beside it.
+      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 520);
+      expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
       expect(
         heightOf(tester, find.byType(ExplorerScopeBar)),
         heightOf(tester, searchBlock()),
         reason: 'the row is as tall as the search field made it',
+      );
+      expect(
+        tester.getTopLeft(find.byType(TextField)).dx,
+        greaterThan(
+          tester.getTopRight(find.byType(ExplorerEnvironmentStrip)).dx,
+        ),
+      );
+
+      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
+      expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
+      expect(
+        heightOf(tester, find.byType(ExplorerScopeBar)),
+        heightOf(tester, searchBlock()) +
+            heightOf(tester, find.byType(ExplorerEnvironmentStrip)) +
+            Insets.xs,
+        reason: 'one row more, and only the strip and its gap',
+      );
+      expect(
+        heightOf(tester, find.byType(ExplorerEnvironmentStrip)),
+        Chrome.control,
+      );
+      expect(
+        tester.getTopLeft(find.byType(ExplorerEnvironmentStrip)).dy,
+        greaterThanOrEqualTo(tester.getBottomLeft(find.byType(TextField)).dy),
+      );
+      expect(
+        tester.getSize(find.byType(ExplorerEnvironmentStrip)).width,
+        304 - Insets.xs * 2,
+        reason: 'on its own row it spans the column the field and rows share',
+      );
+      // Two containers were mounted in turn; the second is taken down here,
+      // where its providers' dispose tick can run, not in the teardown.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('a fourth machine folds the strip into a menu on the search '
+        'row', (tester) async {
+      ExecutionEnvironmentDao(db)
+        ..upsert(sshEnvFixture())
+        ..upsert(wslEnv())
+        ..upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));
+      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
+      expect(find.byType(ExplorerEnvironmentStrip), findsNothing);
+      expect(find.byType(ExplorerEnvironmentSwitcher), findsOneWidget);
+      expect(
+        heightOf(tester, find.byType(ExplorerScopeBar)),
+        heightOf(tester, searchBlock()),
       );
     });
 
@@ -237,10 +291,50 @@ void main() {
         if (icon.icon case final IconData data) data,
     ];
 
-    testWidgets('the machine in scope wears the mark of what it is', (
-      tester,
-    ) async {
+    testWidgets('every segment wears the mark of what it is, and the one in '
+        'scope is the one marked', (tester) async {
       ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      final c = container();
+      await pumpPanel(
+        tester,
+        window: const Size(1440, 900),
+        paneWidth: 304,
+        scope: c,
+      );
+      expect(
+        glyphs(tester, find.byType(ExplorerEnvironmentStrip)),
+        [AppIcons.stack, AppIcons.terminal, AppIcons.globe],
+        reason:
+            'every machine together is a stack of them; a local one is a '
+            'terminal, a box a globe',
+      );
+      String chosen() {
+        final segments = find.bySemanticsLabel(RegExp('^Environment: '));
+        return [
+              for (var i = 0; i < segments.evaluate().length; i++)
+                tester.getSemantics(segments.at(i)),
+            ]
+            .singleWhere(
+              (node) => node.flagsCollection.isSelected == Tristate.isTrue,
+            )
+            .label;
+      }
+
+      expect(chosen(), 'Environment: All environments');
+
+      c
+          .read(settingsControllerProvider.notifier)
+          .setExplorerEnvironmentScope('windows');
+      await tester.pumpAndSettle();
+      expect(chosen(), 'Environment: Windows');
+    });
+
+    testWidgets('as a menu, the machine in scope wears the mark of what it '
+        'is', (tester) async {
+      ExecutionEnvironmentDao(db)
+        ..upsert(sshEnvFixture())
+        ..upsert(wslEnv())
+        ..upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));
       final c = container();
       await pumpPanel(
         tester,

@@ -41,6 +41,7 @@ import 'package:karmashala/src/features/workspaces/presentation/workspaces_dialo
 import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -61,13 +62,17 @@ void main() {
   late AppDatabase db;
 
   /// Three machines — one of them holding nothing — two contexts that hold
-  /// projects and one that does not, and a project in no context.
-  void seed({bool machines = true, bool contexts = true}) {
+  /// projects and one that does not, and a project in no context. A [fourth]
+  /// machine is what turns the strip into a menu.
+  void seed({bool machines = true, bool contexts = true, bool fourth = false}) {
     final environments = ExecutionEnvironmentDao(db)..upsert(windowsEnv());
     if (machines) {
       environments
         ..upsert(wslEnv())
         ..upsert(sshEnvFixture());
+      if (fourth) {
+        environments.upsert(wslEnv(id: 'wsl:arch', distro: 'archlinux'));
+      }
       SshHostDao(db).upsert(
         SshHost(
           id: 'h1',
@@ -222,6 +227,10 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// A segment of the strip, by the name it says in full.
+  Finder segment(String name) =>
+      find.bySemanticsLabel(RegExp('^Environment: $name\$'));
+
   group('the machine, in the scope bar', () {
     testWidgets('is not drawn with one machine: there is nothing to choose', (
       tester,
@@ -230,6 +239,7 @@ void main() {
       await pump(tester);
 
       expect(find.byType(ExplorerEnvironmentSwitcher), findsNothing);
+      expect(find.byType(ExplorerEnvironmentStrip), findsNothing);
       expect(drawn(tester), [
         'CLIENT WORK',
         'proc-nepal',
@@ -241,11 +251,45 @@ void main() {
       ]);
     });
 
-    testWidgets('lists every machine with its mark, its name and how much is '
-        'on it — an empty one too', (tester) async {
+    testWidgets('two or three machines are a strip of segments — every '
+        'machine with its mark, its name and how much is on it, an empty '
+        'one too', (tester) async {
       seed();
       await pump(tester);
 
+      expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
+      expect(find.byType(ExplorerEnvironmentSwitcher), findsNothing);
+      Finder within(Finder what) => find.descendant(
+        of: find.byType(ExplorerEnvironmentStrip),
+        matching: what,
+      );
+      expect(within(find.text('All')), findsOneWidget);
+      expect(within(find.text('Windows')), findsOneWidget);
+      expect(within(find.text('Ubuntu')), findsOneWidget);
+      expect(within(find.text('build-box')), findsOneWidget);
+      expect(within(find.byIcon(AppIcons.stack)), findsOneWidget);
+      expect(within(find.byIcon(AppIcons.terminal)), findsOneWidget);
+      expect(within(find.byIcon(AppIcons.terminalWindow)), findsOneWidget);
+      expect(within(find.byIcon(AppIcons.globe)), findsOneWidget);
+      // The count is the segment's tooltip: the menu's second line, moved.
+      expect(find.byTooltip('All environments · 4 projects'), findsOneWidget);
+      expect(find.byTooltip('Windows · 3 projects'), findsOneWidget);
+      expect(
+        find.byTooltip('Ubuntu · No projects yet'),
+        findsOneWidget,
+        reason: 'a machine holding nothing is where a terminal is opened',
+      );
+      expect(find.byTooltip('build-box · 1 project'), findsOneWidget);
+      expect(segment('All environments'), findsOneWidget);
+      expect(segment('build-box'), findsOneWidget);
+    });
+
+    testWidgets('a fourth machine makes the switcher a menu, which lists '
+        'them the same way', (tester) async {
+      seed(fourth: true);
+      await pump(tester);
+
+      expect(find.byType(ExplorerEnvironmentStrip), findsNothing);
       await tester.tap(find.byType(ExplorerEnvironmentSwitcher));
       await tester.pumpAndSettle();
 
@@ -254,26 +298,47 @@ void main() {
       expect(inMenu('Windows'), findsOneWidget);
       expect(inMenu('3 projects'), findsOneWidget);
       expect(inMenu('Ubuntu'), findsOneWidget);
-      expect(
-        inMenu('No projects yet'),
-        findsOneWidget,
-        reason: 'a machine holding nothing is where a terminal is opened',
-      );
+      expect(inMenu('archlinux'), findsOneWidget);
+      expect(inMenu('No projects yet'), findsNWidgets(2));
       expect(inMenu('build-box'), findsOneWidget);
       expect(inMenu('1 project'), findsOneWidget);
     });
 
-    testWidgets('choosing one narrows the list to it, and survives a restart', (
-      tester,
-    ) async {
+    testWidgets('one machine, two, three, four: nothing, a strip, a strip, '
+        'a menu', (tester) async {
+      seed(machines: false);
+      await pump(tester);
+      expect(find.byType(ExplorerEnvironmentStrip), findsNothing);
+      expect(find.byType(ExplorerEnvironmentSwitcher), findsNothing);
+
+      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      await pump(tester);
+      expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
+      expect(segment('build-box'), findsOneWidget);
+
+      ExecutionEnvironmentDao(db).upsert(wslEnv());
+      await pump(tester);
+      expect(find.byType(ExplorerEnvironmentStrip), findsOneWidget);
+      expect(find.byType(ExplorerEnvironmentSwitcher), findsNothing);
+
+      ExecutionEnvironmentDao(db).upsert(wslEnv(id: 'wsl:arch', distro: 'a'));
+      await pump(tester);
+      expect(find.byType(ExplorerEnvironmentStrip), findsNothing);
+      expect(find.byType(ExplorerEnvironmentSwitcher), findsOneWidget);
+      // Four containers were mounted in turn; the last is taken down here,
+      // where its providers' dispose tick can run, not in the teardown.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 1));
+    });
+
+    testWidgets('choosing a segment narrows the list to it, and survives a '
+        'restart', (tester) async {
       seed();
       final container = await pump(tester);
       expect(drawn(tester), contains('relay'));
       expect(drawn(tester), contains('BUILD-BOX · TERMINALS'));
 
-      await tester.tap(find.byType(ExplorerEnvironmentSwitcher));
-      await tester.pumpAndSettle();
-      await tester.tap(inMenu('Windows'));
+      await tester.tap(segment('Windows'));
       await tester.pumpAndSettle();
 
       expect(drawn(tester), [
@@ -295,11 +360,46 @@ void main() {
         reason: 'kept in settings, like the folds',
       );
 
-      await tester.tap(find.byType(ExplorerEnvironmentSwitcher));
-      await tester.pumpAndSettle();
-      await tester.tap(inMenu('All environments'));
+      await tester.tap(segment('All environments'));
       await tester.pumpAndSettle();
       expect(drawn(tester), contains('relay'));
+    });
+
+    testWidgets('a switch from a segment redraws the strip and the list, not '
+        'the panel or the search field', (tester) async {
+      seed();
+      await pump(tester);
+      // Identity is the probe: a rebuilt widget is a new instance. Held, not
+      // hashed, so a collected one cannot lend its hash to its replacement.
+      final panel = tester.widget(find.byType(PaneScaffold));
+      final field = tester.widget(find.byType(TextField));
+      // The strip itself is a const child of the scope bar; what its build
+      // makes is the probe.
+      Finder stripBody() => find
+          .descendant(
+            of: find.byType(ExplorerEnvironmentStrip),
+            matching: find.byType(Material),
+          )
+          .first;
+      final strip = tester.widget(stripBody());
+      final list = tester.widget(find.byType(ListView));
+
+      await tester.tap(segment('Windows'));
+      await tester.pumpAndSettle();
+      expect(drawn(tester), isNot(contains('relay')));
+
+      expect(
+        identical(tester.widget(find.byType(PaneScaffold)), panel),
+        isTrue,
+        reason: 'the panel must not rebuild',
+      );
+      expect(
+        identical(tester.widget(find.byType(TextField)), field),
+        isTrue,
+        reason: 'the scope bar watches the machines, not the choice',
+      );
+      expect(identical(tester.widget(stripBody()), strip), isFalse);
+      expect(identical(tester.widget(find.byType(ListView)), list), isFalse);
     });
 
     testWidgets('with every machine listed, a project says which it is on', (
@@ -332,9 +432,55 @@ void main() {
       );
     });
 
-    testWidgets('with every machine listed it says "All environments" — the '
-        'app\'s own word — and "All" where that does not fit', (tester) async {
+    testWidgets('the strip names every segment while each keeps room for a '
+        'few letters, and is glyphs alone under that — whole names in the '
+        'tooltip either way, at every text size', (tester) async {
       seed();
+      final container = newContainer();
+      Finder within(Finder what) => find.descendant(
+        of: find.byType(ExplorerEnvironmentStrip),
+        matching: what,
+      );
+
+      await pump(tester, container: container);
+      expect(within(find.text('build-box')), findsOneWidget);
+      expect(within(find.text('All')), findsOneWidget);
+
+      for (final (width, scale) in [
+        (240.0, 1.0),
+        (240.0, 1.3),
+        (240.0, 2.0),
+        (200.0, 2.0),
+      ]) {
+        await pump(
+          tester,
+          size: Size(width, 900),
+          textScale: scale,
+          container: container,
+        );
+        expect(tester.takeException(), isNull, reason: '$width at $scale');
+        expect(
+          within(find.byType(Text)),
+          findsNothing,
+          reason:
+              'at $width and $scale: four segments in the test font are '
+              'under the floor, so each is its glyph',
+        );
+        expect(within(find.byIcon(AppIcons.globe)), findsOneWidget);
+        expect(find.byTooltip('build-box · 1 project'), findsOneWidget);
+        expect(segment('build-box'), findsOneWidget);
+        // Whole, never "b…": every label went together.
+        expect(
+          tester.getSize(find.byType(ExplorerEnvironmentStrip)).width,
+          lessThanOrEqualTo(width),
+        );
+      }
+    });
+
+    testWidgets('as a menu, with every machine listed it says "All '
+        'environments" — the app\'s own word — and "All" where that does '
+        'not fit', (tester) async {
+      seed(fourth: true);
       final container = newContainer();
       Finder face(String text) => find.descendant(
         of: find.byType(ExplorerEnvironmentSwitcher),
@@ -402,9 +548,9 @@ void main() {
       expect(inMenu('All environments'), findsOneWidget);
     });
 
-    testWidgets('a machine in scope is named while the bar has room, and is '
-        'its glyph under that', (tester) async {
-      seed();
+    testWidgets('as a menu, a machine in scope is named while the bar has '
+        'room, and is its glyph under that', (tester) async {
+      seed(fourth: true);
       final container = newContainer();
       container
           .read(settingsControllerProvider.notifier)
@@ -471,10 +617,38 @@ void main() {
       );
     });
 
-    testWidgets('and in the switcher\'s menu, for the machine in scope', (
-      tester,
-    ) async {
+    testWidgets('and on a segment\'s right-click — any machine, in scope or '
+        'not — with its count', (tester) async {
       seed();
+      final container = await pump(tester);
+
+      await tester.tap(segment('build-box'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(inMenu('build-box'), findsOneWidget);
+      expect(inMenu('1 project'), findsOneWidget);
+      await tester.tap(inMenu('Open a terminal on build-box'));
+      await tester.pumpAndSettle();
+
+      expect(
+        container.read(terminalSessionsControllerProvider).tabs,
+        hasLength(1),
+      );
+
+      // An empty machine says so there too, and the segment's own entry
+      // chooses it.
+      await tester.tap(segment('Ubuntu'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(inMenu('No projects yet'), findsOneWidget);
+      await tester.tap(inMenu('Ubuntu'));
+      await tester.pumpAndSettle();
+      expect(
+        container.read(settingsControllerProvider).explorerEnvironmentScope,
+        'wsl:Ubuntu',
+      );
+    });
+
+    testWidgets('as a menu, for the machine in scope', (tester) async {
+      seed(fourth: true);
       final container = newContainer();
       container
           .read(settingsControllerProvider.notifier)
@@ -495,7 +669,7 @@ void main() {
     testWidgets('the switcher pairs a phone with a box, and only with a box', (
       tester,
     ) async {
-      seed();
+      seed(fourth: true);
       final container = newContainer();
       container
           .read(settingsControllerProvider.notifier)
@@ -517,6 +691,27 @@ void main() {
           .setExplorerEnvironmentScope('wsl:Ubuntu');
       await tester.pumpAndSettle();
       await tester.tap(find.byType(ExplorerEnvironmentSwitcher));
+      await tester.pumpAndSettle();
+      expect(inMenu('Open a terminal on Ubuntu'), findsOneWidget);
+      expect(find.textContaining('Pair a phone'), findsNothing);
+    });
+
+    testWidgets('a segment pairs a phone with a box, and only with a box', (
+      tester,
+    ) async {
+      seed();
+      await pump(tester);
+
+      await tester.tap(segment('build-box'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(inMenu('Pair a phone with build-box…'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(PairPhoneDialog), findsOneWidget);
+      Navigator.of(tester.element(find.byType(PairPhoneDialog))).pop();
+      await tester.pumpAndSettle();
+
+      await tester.tap(segment('Ubuntu'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       expect(inMenu('Open a terminal on Ubuntu'), findsOneWidget);
       expect(find.textContaining('Pair a phone'), findsNothing);

@@ -21,7 +21,9 @@ import 'explorer_tree_rows.dart';
 
 /// **Which machine the Explorer lists.** The machine used to be the tree's top
 /// level; it is a choice above the list now, so a project stands at depth zero.
-/// Not drawn with one machine: there is nothing to choose between.
+/// Not drawn with one machine: there is nothing to choose between. Up to
+/// [ExplorerEnvironmentStrip.most] machines are a strip of segments, one click
+/// each; more than that are this menu.
 class ExplorerEnvironmentSwitcher extends ConsumerWidget {
   const ExplorerEnvironmentSwitcher({super.key});
 
@@ -37,6 +39,59 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
   /// fit — a whole word either way, never an ellipsised one.
   static const allLabel = 'All environments';
   static const allShortLabel = 'All';
+
+  /// What a machine's line in a menu says under its name.
+  static String detailOf(EnvironmentChoice choice) => choice.environment == null
+      // A machine whose row has gone is named, never folded into this one —
+      // and the menu is where it says so.
+      ? '${projectCountWords(choice.projectCount)} · no longer in '
+            'the workspace'
+      : choice.projectCount == 0
+      ? 'No projects yet'
+      : projectCountWords(choice.projectCount);
+
+  /// The verbs a machine in scope offers besides being chosen.
+  static List<PopupMenuEntry<String>> actionsOf(
+    WidgetRef ref,
+    EnvironmentChoice choice,
+  ) => [
+    if (choice.environment != null) ...[
+      const DesktopMenuDivider(),
+      DesktopMenuItem(
+        value: '$_terminal${choice.environmentId}',
+        label: 'Open a terminal on ${choice.label}',
+        icon: AppIcons.terminal,
+      ),
+      // Only a box has an address of its own for a phone to pair with.
+      if (sshHostOf(ref, choice.environment) != null)
+        DesktopMenuItem(
+          value: '$_pairPhone${choice.environmentId}',
+          label: 'Pair a phone with ${choice.label}…',
+          icon: AppIcons.deviceMobile,
+        ),
+    ],
+  ];
+
+  /// Runs what [actionsOf] or a machine's own entry was picked for.
+  static void run(
+    BuildContext context,
+    WidgetRef ref,
+    String value,
+    EnvironmentChoice? choice,
+  ) {
+    if (value.startsWith(_terminal)) {
+      final environment = choice?.environment;
+      if (environment != null) openTerminalOn(ref, environment);
+      return;
+    }
+    if (value.startsWith(_pairPhone)) {
+      pairPhoneWith(context, ref, choice?.environment);
+      return;
+    }
+    ref
+        .read(settingsControllerProvider.notifier)
+        .setExplorerEnvironmentScope(value);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -58,20 +113,7 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
           : 'Showing $label only',
       padding: EdgeInsets.zero,
       position: PopupMenuPosition.under,
-      onSelected: (value) {
-        if (value.startsWith(_terminal)) {
-          final environment = current?.environment;
-          if (environment != null) openTerminalOn(ref, environment);
-          return;
-        }
-        if (value.startsWith(_pairPhone)) {
-          pairPhoneWith(context, ref, current?.environment);
-          return;
-        }
-        ref
-            .read(settingsControllerProvider.notifier)
-            .setExplorerEnvironmentScope(value);
-      },
+      onSelected: (value) => run(context, ref, value, current),
       itemBuilder: (context) => [
         DesktopMenuDetailItem(
           value: _all,
@@ -85,38 +127,254 @@ class ExplorerEnvironmentSwitcher extends ConsumerWidget {
           DesktopMenuDetailItem(
             value: choice.environmentId,
             label: choice.label,
-            // A machine whose row has gone is named, never folded into this
-            // one — and the menu is where it says so.
-            detail: choice.environment == null
-                ? '${projectCountWords(choice.projectCount)} · no longer in '
-                      'the workspace'
-                : choice.projectCount == 0
-                ? 'No projects yet'
-                : projectCountWords(choice.projectCount),
+            detail: detailOf(choice),
             icon: environmentGlyph(choice.kind),
             selected: choice.environmentId == current?.environmentId,
           ),
-        if (current?.environment != null) ...[
-          const DesktopMenuDivider(),
-          DesktopMenuItem(
-            value: '$_terminal${current!.environmentId}',
-            label: 'Open a terminal on ${current.label}',
-            icon: AppIcons.terminal,
-          ),
-          // Only a box has an address of its own for a phone to pair with.
-          if (sshHostOf(ref, current.environment) != null)
-            DesktopMenuItem(
-              value: '$_pairPhone${current.environmentId}',
-              label: 'Pair a phone with ${current.label}…',
-              icon: AppIcons.deviceMobile,
-            ),
-        ],
+        if (current != null) ...actionsOf(ref, current),
       ],
       child: _SwitcherFace(
         icon: current == null ? AppIcons.stack : environmentGlyph(current.kind),
         label: label,
         shortLabel: current == null ? allShortLabel : null,
       ),
+    );
+  }
+}
+
+/// The machines as a strip of segments — `All · macOS · do-box` — for a
+/// workspace with two or three, so a switch is one click and the choice in
+/// force is always in view. Each segment's right-click carries what the
+/// menu's entry for that machine did: its count, a terminal on it, pairing.
+class ExplorerEnvironmentStrip extends ConsumerWidget {
+  const ExplorerEnvironmentStrip({required this.fill, super.key});
+
+  /// True on a row of its own: the segments share the width and a name that
+  /// does not fit is ellipsised (whole in its tooltip), or under [labelFloor]
+  /// the segments are glyphs alone. False beside the search field, where the
+  /// strip was measured to fit at its natural width.
+  final bool fill;
+
+  /// The most machines a strip holds; above it the switcher is a menu.
+  static const most = 3;
+
+  /// Under this width per segment (scaled with the text) a segment is its
+  /// glyph alone: room for the glyph, the gap and about four letters.
+  static const labelFloor = 64.0;
+
+  /// A segment's own padding, each side.
+  static const padX = 6.0;
+
+  static TextStyle? _style(BuildContext context) =>
+      UiDensity.of(context).rowTitle(Theme.of(context), strong: true);
+
+  /// What the strip takes with every name whole, in [context]'s text.
+  static double naturalWidthOf(
+    BuildContext context,
+    List<EnvironmentChoice> environments,
+  ) {
+    final painter = TextPainter(
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    );
+    final style = _style(context);
+    final gap = UiDensity.of(context).glyphGap;
+    var width = 0.0;
+    try {
+      for (final label in [
+        ExplorerEnvironmentSwitcher.allShortLabel,
+        for (final choice in environments) choice.label,
+      ]) {
+        painter
+          ..text = TextSpan(text: label, style: style)
+          ..layout();
+        width += padX * 2 + Chrome.icon + gap + painter.width;
+      }
+    } finally {
+      painter.dispose();
+    }
+    // The border and the hairlines between segments, and a pixel kept back:
+    // what is drawn is not what was measured to the last fraction.
+    return width + environments.length + 3;
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scope = ref.watch(explorerEnvironmentScopeProvider);
+    final environments = scope.environments;
+    if (environments.length < 2 || environments.length > most) {
+      return const SizedBox.shrink();
+    }
+    final scheme = Theme.of(context).colorScheme;
+    final total = environments.fold(0, (sum, e) => sum + e.projectCount);
+    final segments = [
+      _Segment(
+        value: ExplorerEnvironmentSwitcher._all,
+        icon: AppIcons.stack,
+        label: ExplorerEnvironmentSwitcher.allShortLabel,
+        name: ExplorerEnvironmentSwitcher.allLabel,
+        detail: projectCountWords(total),
+        selected: scope.environmentId == null,
+        choice: null,
+      ),
+      for (final choice in environments)
+        _Segment(
+          value: choice.environmentId,
+          icon: environmentGlyph(choice.kind),
+          label: choice.label,
+          name: choice.label,
+          detail: ExplorerEnvironmentSwitcher.detailOf(choice),
+          selected: choice.environmentId == scope.environmentId,
+          choice: choice,
+        ),
+    ];
+
+    Widget strip(bool glyphOnly) => Material(
+      color: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Radii.sm),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          for (final (index, segment) in segments.indexed) ...[
+            if (index > 0)
+              SizedBox(
+                width: Insets.hair,
+                height: Chrome.control,
+                child: ColoredBox(color: scheme.outlineVariant),
+              ),
+            if (fill)
+              Expanded(
+                child: _SegmentButton(segment: segment, glyphOnly: glyphOnly),
+              )
+            else
+              _SegmentButton(segment: segment, glyphOnly: glyphOnly),
+          ],
+        ],
+      ),
+    );
+
+    if (!fill) return strip(false);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final share = constraints.maxWidth / segments.length;
+        final floor = MediaQuery.textScalerOf(context).scale(labelFloor);
+        return strip(share < floor);
+      },
+    );
+  }
+}
+
+class _Segment {
+  const _Segment({
+    required this.value,
+    required this.icon,
+    required this.label,
+    required this.name,
+    required this.detail,
+    required this.selected,
+    required this.choice,
+  });
+
+  final String value;
+  final IconData icon;
+
+  /// On the segment.
+  final String label;
+
+  /// In full, for the tooltip, the menu and a screen reader.
+  final String name;
+  final String detail;
+  final bool selected;
+
+  /// Null for *All*.
+  final EnvironmentChoice? choice;
+}
+
+class _SegmentButton extends ConsumerWidget {
+  const _SegmentButton({required this.segment, required this.glyphOnly});
+
+  final _Segment segment;
+  final bool glyphOnly;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final density = UiDensity.of(context);
+    final ink = segment.selected ? scheme.onSurface : scheme.onSurfaceVariant;
+    final choice = segment.choice;
+    final button = Semantics(
+      button: true,
+      selected: segment.selected,
+      label: 'Environment: ${segment.name}',
+      child: Tooltip(
+        message: '${segment.name} · ${segment.detail}',
+        child: InkWell(
+          onTap: () => ExplorerEnvironmentSwitcher.run(
+            context,
+            ref,
+            segment.value,
+            choice,
+          ),
+          child: Ink(
+            color: segment.selected ? StateLayers.selected(scheme) : null,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: Chrome.control),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: ExplorerEnvironmentStrip.padX,
+                ),
+                // The label above names the segment in full; the glyph and
+                // the short word on it would only be read out twice.
+                child: ExcludeSemantics(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(segment.icon, size: Chrome.icon, color: ink),
+                      if (!glyphOnly) ...[
+                        SizedBox(width: density.glyphGap),
+                        Flexible(
+                          child: Text(
+                            segment.label,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: density
+                                .rowTitle(theme, strong: segment.selected)
+                                ?.copyWith(color: ink),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return ContextMenuRegion(
+      itemBuilder: () => [
+        DesktopMenuDetailItem(
+          value: segment.value,
+          label: segment.name,
+          detail: segment.detail,
+          icon: segment.icon,
+          selected: segment.selected,
+        ),
+        if (choice != null)
+          ...ExplorerEnvironmentSwitcher.actionsOf(ref, choice),
+      ],
+      onSelected: (value) =>
+          ExplorerEnvironmentSwitcher.run(context, ref, value, choice),
+      child: button,
     );
   }
 }
@@ -220,14 +478,20 @@ class _SwitcherFace extends StatelessWidget {
 }
 
 /// The row above the list: the machine on the left when there is more than
-/// one, and [search] in what is left.
+/// one, and [search] in what is left. Two or three machines are a strip; it
+/// shares the search row while every name fits whole beside a usable field,
+/// and takes a row of its own under it otherwise.
 class ExplorerScopeBar extends ConsumerWidget {
   const ExplorerScopeBar({required this.search, super.key});
 
   final Widget search;
 
-  /// The most of the row the machine's name may take.
+  /// The most of the row the machine's name may take, as a menu.
   static const switcherShare = 0.42;
+
+  /// What the search field keeps beside a strip: its glyph and its hint.
+  /// Scaled with the text.
+  static const searchFloor = 120.0;
 
   /// The bar's width, for the switcher to decide whether its name fits.
   static double? widthOf(BuildContext context) =>
@@ -235,30 +499,70 @@ class ExplorerScopeBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final several = ref.watch(
-      explorerEnvironmentScopeProvider.select(
-        (scope) => scope.environments.length > 1,
-      ),
-    );
-    if (!several) return search;
-    return LayoutBuilder(
-      builder: (context, constraints) => _ScopeBarWidth(
-        width: constraints.maxWidth,
-        child: Row(
-          children: [
-            ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: constraints.maxWidth * switcherShare,
+    // The machines, not which is chosen: a switch redraws the strip and the
+    // list, and this row — with the search field in it — stays as it is.
+    final environments = ref
+        .watch(
+          explorerEnvironmentScopeProvider.select(
+            (scope) => ExplorerEnvironmentScope(scope.environments, null),
+          ),
+        )
+        .environments;
+    if (environments.length < 2) return search;
+    if (environments.length > ExplorerEnvironmentStrip.most) {
+      return LayoutBuilder(
+        builder: (context, constraints) => _ScopeBarWidth(
+          width: constraints.maxWidth,
+          child: Row(
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: constraints.maxWidth * switcherShare,
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.only(left: Insets.xs, top: Insets.xs),
+                  child: ExplorerEnvironmentSwitcher(),
+                ),
               ),
-              child: const Padding(
-                padding: EdgeInsets.only(left: Insets.xs, top: Insets.xs),
-                child: ExplorerEnvironmentSwitcher(),
-              ),
-            ),
-            Expanded(child: search),
-          ],
+              Expanded(child: search),
+            ],
+          ),
         ),
-      ),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final natural = ExplorerEnvironmentStrip.naturalWidthOf(
+          context,
+          environments,
+        );
+        final room =
+            constraints.maxWidth -
+            Insets.xs * 2 -
+            MediaQuery.textScalerOf(context).scale(searchFloor);
+        if (natural <= room) {
+          return Row(
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(left: Insets.xs, top: Insets.xs),
+                child: ExplorerEnvironmentStrip(fill: false),
+              ),
+              Expanded(child: search),
+            ],
+          );
+        }
+        return Column(
+          children: [
+            search,
+            const Padding(
+              // The search field keeps [Insets.xs] under it; the strip sits
+              // in the same column as the field and the rows.
+              padding: EdgeInsets.fromLTRB(Insets.xs, 0, Insets.xs, Insets.xs),
+              child: ExplorerEnvironmentStrip(fill: true),
+            ),
+          ],
+        );
+      },
     );
   }
 }
