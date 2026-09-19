@@ -12,6 +12,7 @@ import 'package:agent_cli/descriptors.dart';
 import '../../sessions/application/session_key_pacer.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_menu_answerer.dart';
+import '../../sessions/application/session_question_typist.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../notifications/application/notification_providers.dart';
@@ -170,28 +171,40 @@ Future<String> answerRemoteQuestion(
       'this question has already been answered',
     );
   }
-  final String keys;
   if (request.decline) {
-    keys = support.declineKeys;
-  } else {
-    try {
-      keys = support.keysFor(open, [
-        for (final answer in request.answers)
-          answer.text != null
-              ? AgentQuestionAnswer.text(answer.text!)
-              : AgentQuestionAnswer.options(answer.options),
-      ]);
-    } on ArgumentError catch (error) {
-      throw RemoteApiRefusal(ErrorCode.badRequest, '${error.message}');
+    if (!await ref
+        .read(sessionKeyPacerProvider)
+        .type(sessionId, support.declineKeys)) {
+      throw const RemoteApiRefusal(
+        ErrorCode.notFound,
+        'this session has no live terminal to answer in',
+      );
     }
+    return 'declined';
   }
-  if (!await ref.read(sessionKeyPacerProvider).type(sessionId, keys)) {
-    throw const RemoteApiRefusal(
-      ErrorCode.notFound,
-      'this session has no live terminal to answer in',
+  final answers = [
+    for (final answer in request.answers)
+      answer.text != null
+          ? AgentQuestionAnswer.text(answer.text!)
+          : AgentQuestionAnswer.options(answer.options),
+  ];
+  try {
+    // The measured keys double as the check that the answer fits at all,
+    // before a single key is pressed.
+    support.keysFor(open, answers);
+  } on ArgumentError catch (error) {
+    throw RemoteApiRefusal(ErrorCode.badRequest, '${error.message}');
+  }
+  try {
+    await ref.read(sessionQuestionTypistProvider).answer(
+      sessionId,
+      open,
+      answers,
     );
+  } on SessionPromptRefusal catch (refusal) {
+    throw RemoteApiRefusal(ErrorCode.badRequest, refusal.message);
   }
-  return request.decline ? 'declined' : 'answered';
+  return 'answered';
 }
 
 Future<RemoteApprovalRequest> remoteApprovalEvidenceFor(

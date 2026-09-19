@@ -5,13 +5,13 @@ import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/sessions/application/session_key_pacer.dart';
+import 'package:karmashala/src/features/sessions/application/session_question_typist.dart';
 import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
 import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
 
 import 'live_agent_screen.dart';
 
-/// The production key builder and [SessionKeyPacer] answering a real Claude
+/// The production [SessionQuestionTypist] answering a real Claude
 /// Code `AskUserQuestion` — the path the phone and the chat view take. Found
 /// on the Oppo: the same keys written as one burst lost every key after the
 /// first tab change and left the question half-answered.
@@ -50,6 +50,9 @@ void main() {
       },
     );
     await screen.untilShows('trust');
+    // Cold, the CLI draws the trust menu before it takes keys; nobody answers
+    // it inside that moment but a test.
+    await Future<void>.delayed(const Duration(seconds: 2));
     final trust = menus.read('s')!;
     await menus.choose(
       's',
@@ -65,16 +68,20 @@ void main() {
     await screen.write(asking);
     await Future<void>.delayed(const Duration(seconds: 1));
     await screen.write('\r');
-    await screen.untilShows('Enter to select', within: const Duration(seconds: 90));
+    await screen.untilShows(
+      'Enter to select',
+      within: const Duration(seconds: 90),
+    );
     await Future<void>.delayed(const Duration(seconds: 1));
 
-    final typed = await SessionKeyPacer(
+    await SessionQuestionTypist(
+      readScreen: (_) =>
+          terminalTailLines(screen.terminal, lines: kMenuScreenRows),
       press: (_, keys) {
         screen.send(keys);
         return true;
       },
-    ).type('s', support.questions!.keysFor(shape, answers));
-    expect(typed, isTrue);
+    ).answer('s', shape, answers);
 
     await screen.untilShows(expectShown, within: const Duration(seconds: 60));
     return screen.text;
@@ -104,43 +111,45 @@ void main() {
       'choice) options Apple, Banana, Cherry. After it returns reply only '
       'with the answers.';
 
-  group('Claude Code AskUserQuestion, paced', skip: claude == null
-      ? 'set KARMASHALA_CLAUDE'
-      : false, () {
-    for (final mode in ['plan', 'default']) {
-      test('several boxes, then own words, in $mode mode', () async {
+  group(
+    'Claude Code AskUserQuestion, each step seen',
+    skip: claude == null ? 'set KARMASHALA_CLAUDE' : false,
+    () {
+      for (final mode in ['plan', 'default']) {
+        test('several boxes, then own words, in $mode mode', () async {
+          final shown = await answer(
+            mode: mode,
+            asking: asking,
+            shape: const AgentQuestionSet(
+              toolUseId: 't',
+              questions: [colours, fruit],
+            ),
+            answers: const [
+              AgentQuestionAnswer.options([0, 2]),
+              AgentQuestionAnswer.text('Durian'),
+            ],
+            expectShown: 'Durian',
+          );
+          expect(shown, contains('Red, Blue'));
+        }, timeout: const Timeout(Duration(minutes: 4)));
+      }
+
+      test('one option on each tab', () async {
         final shown = await answer(
-          mode: mode,
+          mode: 'plan',
           asking: asking,
           shape: const AgentQuestionSet(
             toolUseId: 't',
             questions: [colours, fruit],
           ),
           answers: const [
-            AgentQuestionAnswer.options([0, 2]),
-            AgentQuestionAnswer.text('Durian'),
+            AgentQuestionAnswer.options([1]),
+            AgentQuestionAnswer.option(2),
           ],
-          expectShown: 'Durian',
+          expectShown: 'Cherry',
         );
-        expect(shown, contains('Red, Blue'));
+        expect(shown, contains('Green'));
       }, timeout: const Timeout(Duration(minutes: 4)));
-    }
-
-    test('one option on each tab', () async {
-      final shown = await answer(
-        mode: 'plan',
-        asking: asking,
-        shape: const AgentQuestionSet(
-          toolUseId: 't',
-          questions: [colours, fruit],
-        ),
-        answers: const [
-          AgentQuestionAnswer.options([1]),
-          AgentQuestionAnswer.option(2),
-        ],
-        expectShown: 'Cherry',
-      );
-      expect(shown, contains('Green'));
-    }, timeout: const Timeout(Duration(minutes: 4)));
-  });
+    },
+  );
 }
