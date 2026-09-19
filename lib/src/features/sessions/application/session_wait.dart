@@ -53,6 +53,9 @@ class SessionWaitService {
         text: evidenceLine(report.evidence),
       );
     }
+    // At its own input — Claude Code's 60-second "waiting for your input" — the
+    // agent is waiting for a message, which is what a send is, not blocked.
+    if (report != null && report.waiting == AgentWaitKind.input) return null;
     for (final item in _ref.read(attentionInboxProvider).items) {
       if (item.session.openId != sessionId) continue;
       if (item.kind != InboxItemKind.needsApproval) continue;

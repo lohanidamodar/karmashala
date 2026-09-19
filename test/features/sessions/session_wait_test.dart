@@ -296,6 +296,25 @@ void main() {
       expect(waitService().blockedOn('s1')?.kind, 'approvalPrompt');
     });
 
+    // Seen 2026-09-19: a send-and-wait to a session at its own prompt was
+    // refused as "blocked on a person (needsApproval)". Claude Code's
+    // 60-second idle nudge files an inbox item, but the agent is waiting for
+    // exactly the message the caller is about to send.
+    test('an agent at its own input is not blocked, whatever the inbox holds',
+        () {
+      statusLookup = (_) => report(
+        status: AgentActivityStatus.awaitingApproval,
+        waiting: AgentWaitKind.input,
+        evidence: const ['Claude is waiting for your input'],
+      );
+      inboxItem(
+        's1',
+        kind: InboxItemKind.needsApproval,
+        detail: 'Claude is waiting for your input',
+      );
+      expect(waitService().blockedOn('s1'), isNull);
+    });
+
     test('blockedOn is null for a session that is merely busy', () {
       statusLookup = (_) => report(status: AgentActivityStatus.working);
       expect(waitService().blockedOn('s1'), isNull);
