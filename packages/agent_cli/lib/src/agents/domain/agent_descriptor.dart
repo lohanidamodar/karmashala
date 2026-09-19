@@ -3,6 +3,7 @@ import '../../permissions/permission_risk.dart';
 import './agent_kind.dart';
 import './agent_mcp_config.dart';
 import './agent_plan.dart';
+import './agent_question.dart';
 import './agent_permission_support.dart';
 import './agent_skill_support.dart';
 import './agent_status.dart';
@@ -1069,6 +1070,7 @@ class AgentDescriptor {
     this.stateFile,
     this.grid = const AgentGridRules(),
     this.approval = const AgentApprovalRules(),
+    this.questions,
     this.attachments = const AgentAttachmentSupport.none(),
     this.plan = const AgentPlanSupport.none(),
     this.skills = const AgentSkillSupport.none(),
@@ -1098,6 +1100,11 @@ class AgentDescriptor {
   /// outcome, not a gap. Pressing keys into a TUI on a guess is the one failure
   /// mode worse than making the user switch to the terminal.
   final AgentApprovalRules approval;
+
+  /// How this agent's multiple-choice questions are read and answered, or null
+  /// for an agent none of whose questions were ever measured — surfaced as a
+  /// session waiting on you, and answered at the terminal.
+  final AgentQuestionSupport? questions;
 
   /// What this agent will look at when a prompt **names a file's path**.
   ///

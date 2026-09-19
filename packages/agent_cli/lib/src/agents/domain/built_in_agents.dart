@@ -3,6 +3,7 @@ import './agent_descriptor.dart';
 import './agent_kind.dart';
 import './agent_mcp_config.dart';
 import './agent_plan.dart';
+import './agent_question.dart';
 import './agent_permission_support.dart';
 import './agent_skill_support.dart';
 import './agent_status.dart';
@@ -713,6 +714,15 @@ const _claudeCode = AgentDescriptor(
       label: 'Deny',
       effect: 'Sends Esc, which cancels the prompt.',
     ),
+  ),
+  // AskUserQuestion, answered by the keys measured against 2.1.274 in a real
+  // ConPTY (claudeQuestionKeys says what each one does). Declining is the
+  // same Esc that cancels any prompt; the transcript then records "User
+  // declined to answer questions".
+  questions: AgentQuestionSupport(
+    toolName: 'AskUserQuestion',
+    keysFor: claudeQuestionKeys,
+    declineKeys: '\x1b',
   ),
   // Claude Code reads a picture off a path a prompt names — measured in this
   // repo rather than read off `--help`: `SessionMediaOrigin.read` exists
