@@ -126,6 +126,10 @@ class SessionMenuAnswerer {
   }
 }
 
+/// How often a surface showing a menu reads the screen again: one menu can
+/// follow another (folder trust, then external imports) with no status change.
+const Duration kMenuRereadInterval = Duration(milliseconds: 700);
+
 /// Rows read for a menu: more than the status source's twelve, because a menu's
 /// prompt sits above its options — the folder-trust screen is fourteen rows.
 const kMenuScreenRows = 40;
