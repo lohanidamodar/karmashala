@@ -182,6 +182,17 @@ AgentQuestionSet? openQuestionIn(
 const _down = '\x1b[B';
 const _enter = '\r';
 
+/// [keys] split the way a terminal sends them: an escape sequence whole, a run
+/// of printable text whole, every other control key alone. Written to the TUI
+/// one at a time, because a burst crossing a question's tabs loses keys
+/// (docs/SETTLED.md).
+List<String> keystrokesOf(String keys) => [
+  for (final m in RegExp(
+    r'\x1b\[[0-9;]*[A-Za-z~]|[\x00-\x1f\x7f]|[^\x00-\x1f\x7f]+',
+  ).allMatches(keys))
+    m[0]!,
+];
+
 /// Claude Code 2.1.274's `AskUserQuestion`, as measured:
 ///
 /// - each question opens with its first option highlighted; ↓ moves;

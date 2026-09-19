@@ -9,6 +9,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
+import '../../sessions/application/session_key_pacer.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_menu_answerer.dart';
 import '../../sessions/application/session_providers.dart';
@@ -184,7 +185,7 @@ Future<String> answerRemoteQuestion(
       throw RemoteApiRefusal(ErrorCode.badRequest, '${error.message}');
     }
   }
-  if (!ref.read(sessionLauncherProvider).answerPrompt(sessionId, keys)) {
+  if (!await ref.read(sessionKeyPacerProvider).type(sessionId, keys)) {
     throw const RemoteApiRefusal(
       ErrorCode.notFound,
       'this session has no live terminal to answer in',

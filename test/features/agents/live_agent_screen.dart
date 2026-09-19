@@ -88,6 +88,9 @@ class LiveAgentScreen {
     }
   }
 
+  /// Writes [keys] now, in one write — what a pane's `textInput` does.
+  void send(String keys) => _pty.write(Uint8List.fromList(utf8.encode(keys)));
+
   /// Writes [bytes] in one write, the way a paste or one `answerPrompt` call
   /// delivers them.
   Future<void> write(String bytes) async {
