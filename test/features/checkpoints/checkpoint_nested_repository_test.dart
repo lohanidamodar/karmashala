@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:agent_cli/descriptors.dart';
@@ -79,10 +80,14 @@ void main() {
     File(p.join(hub, '.gitignore')).writeAsStringSync('projects/**/\n');
     File(p.join(hub, 'README.md')).writeAsStringSync('hub\n');
     git(hub, ['init', '-q']);
+    // Restores are compared byte for byte: with a machine-wide
+    // `core.autocrlf=true` (Git for Windows' default) `git apply` writes CRLF.
+    git(hub, ['config', 'core.autocrlf', 'false']);
     git(hub, ['add', '-A']);
     git(hub, ['commit', '-q', '-m', 'hub']);
     File(p.join(app, 'main.txt')).writeAsStringSync('one\ntwo\n');
     git(app, ['init', '-q']);
+    git(app, ['config', 'core.autocrlf', 'false']);
     git(app, ['add', '-A']);
     git(app, ['commit', '-q', '-m', 'app']);
 
@@ -195,11 +200,15 @@ void main() {
         'UserPromptSubmit',
         '{"session_id":"cli-1","prompt":"Change the app"}',
       );
+      // Encoded, not interpolated: a Windows path's backslashes are not JSON.
       await hook(
         AgentActivityStatus.working,
         'PreToolUse',
-        '{"session_id":"cli-1","tool_name":"Edit",'
-            '"tool_input":{"file_path":"$file"}}',
+        jsonEncode({
+          'session_id': 'cli-1',
+          'tool_name': 'Edit',
+          'tool_input': {'file_path': file},
+        }),
       );
       // The tool runs only once the hook has answered.
       File(file).writeAsStringSync('one\nTWO\nthree\n');
@@ -245,8 +254,11 @@ void main() {
       await hook(
         AgentActivityStatus.working,
         'PreToolUse',
-        '{"session_id":"cli-1","tool_name":"Read",'
-            '"tool_input":{"file_path":"${p.join(outside, 'notes.txt')}"}}',
+        jsonEncode({
+          'session_id': 'cli-1',
+          'tool_name': 'Read',
+          'tool_input': {'file_path': p.join(outside, 'notes.txt')},
+        }),
       );
       await hook(AgentActivityStatus.idle, 'Stop', '{"session_id":"cli-1"}');
       await container
