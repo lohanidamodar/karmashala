@@ -86,7 +86,17 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Karmashala"""; Flags: runhidden waituntilterminated
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""Karmashala"" dir=in action=allow program=""{app}\{#MyAppExeName}"" enable=yes profile=any protocol=tcp remoteip=LocalSubnet"; Flags: runhidden waituntilterminated; StatusMsg: "Allowing your phone to reach Karmashala..."
 
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+; --- Launching it ------------------------------------------------------------
+; Through Explorer, never directly. Setup runs with the RedirectionTrust
+; mitigation enforced, and a process it starts inherits it — measured
+; 2026-09-19: karmashala.exe launched from this page carried
+; ProcessRedirectionTrustPolicy enforce=1 (Explorer: 0), and so did every
+; terminal and agent under it, so none could follow a junction or symlink
+; the user created. Flutter's plugin links failed with "the path cannot be
+; traversed because it contains an untrusted mount point" (errno 448), and
+; pnpm's node_modules would too. Asked to open the file, Explorer has the
+; running shell start it, which gives the app the shell's policy instead.
+Filename: "{win}\explorer.exe"; Parameters: """{app}\{#MyAppExeName}"""; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
 ; Ours to remove: rules naming an executable and a port that no longer exist
