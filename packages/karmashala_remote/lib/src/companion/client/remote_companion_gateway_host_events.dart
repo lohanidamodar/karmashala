@@ -110,7 +110,12 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
     if (snapshot.attention != kAttentionNeedsApproval) {
       _retireApproval(snapshot.sessionId, CompanionApprovalOutcome.elsewhere);
     }
-    _noteAttention(snapshot.sessionId, snapshot.attention, snapshot.title);
+    _noteAttention(
+      snapshot.sessionId,
+      _attentionWordOf(snapshot),
+      snapshot.title,
+      detail: snapshot.usageLimit,
+    );
     if (!found) {
       final client = _client;
       if (client != null) {
@@ -134,10 +139,18 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
     return place;
   }
 
-  void _noteAttention(String sessionId, String? attention, String title) {
+  void _noteAttention(
+    String sessionId,
+    String? attention,
+    String title, {
+    String? detail,
+  }) {
     final previous = _lastAttention[sessionId];
     if (previous == attention) return;
     _lastAttention[sessionId] = attention;
+    // Claude Code ends a turn on its limit as a failure: once the limit has
+    // been told, the failure under it is not news a second time.
+    if (previous == kAttentionUsageLimit && attention == 'failed') return;
     final kind = _kindOf(attention);
     if (kind == null || _attention.isClosed) return;
     _attention.add(
@@ -145,6 +158,7 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
         sessionId: sessionId,
         sessionTitle: title,
         kind: kind,
+        detail: detail,
         at: _now().toUtc(),
         // Stamped from the host that is live right now. v1 keeps exactly one
         // link, so news can only come from the active desktop — carrying the
@@ -172,7 +186,8 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
           status: switch (kind) {
             CompanionAttentionKind.needsYou => CompanionSessionStatus.needsYou,
             CompanionAttentionKind.failed => CompanionSessionStatus.failed,
-            CompanionAttentionKind.finished => session.status,
+            CompanionAttentionKind.finished ||
+            CompanionAttentionKind.usageLimit => session.status,
           },
           attention: CompanionAttention(kind: kind, at: _now().toUtc()),
         ),

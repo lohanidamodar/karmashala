@@ -986,7 +986,8 @@ class FakeCompanionGateway implements CompanionGateway {
               CompanionAttentionKind.needsYou =>
                 CompanionSessionStatus.needsYou,
               CompanionAttentionKind.failed => CompanionSessionStatus.failed,
-              CompanionAttentionKind.finished => CompanionSessionStatus.idle,
+              CompanionAttentionKind.finished ||
+              CompanionAttentionKind.usageLimit => CompanionSessionStatus.idle,
             },
             lastActivityAt: event.at,
             attention: CompanionAttention(kind: event.kind, at: event.at),

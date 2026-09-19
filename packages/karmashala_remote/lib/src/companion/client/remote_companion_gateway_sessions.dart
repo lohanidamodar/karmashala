@@ -50,11 +50,20 @@ extension _GatewaySessions on RemoteCompanionGateway {
     return null;
   }
 
+  /// What a snapshot claims of the user, as one word: an open prompt first —
+  /// it is the one thing to act on — then a usage limit, then the rest.
+  String? _attentionWordOf(RemoteSessionSnapshot snapshot) =>
+      snapshot.attention == kAttentionNeedsApproval
+      ? snapshot.attention
+      : snapshot.usageLimit != null
+      ? kAttentionUsageLimit
+      : snapshot.attention;
+
   CompanionSessionSummary _summaryOf(
     RemoteSessionSnapshot snapshot, {
     Map<String, Object?>? raw,
   }) {
-    final kind = _kindOf(snapshot.attention);
+    final kind = _kindOf(_attentionWordOf(snapshot));
     CompanionAttention? attention;
     if (kind != null) {
       final previous = _currentSummary(snapshot.sessionId)?.attention;
@@ -102,6 +111,7 @@ extension _GatewaySessions on RemoteCompanionGateway {
       environmentId: snapshot.environmentId ?? text('environmentId'),
       environmentKind: snapshot.environmentKind ?? text('environmentKind'),
       model: snapshot.model,
+      usageLimit: snapshot.usageLimit,
     );
   }
 
@@ -131,6 +141,7 @@ extension _GatewaySessions on RemoteCompanionGateway {
     'needs_approval' => CompanionAttentionKind.needsYou,
     'failed' => CompanionAttentionKind.failed,
     'finished' => CompanionAttentionKind.finished,
+    kAttentionUsageLimit => CompanionAttentionKind.usageLimit,
     // A claim this build predates; "needs you" is the only safe reading of
     // a claim on the user.
     _ => CompanionAttentionKind.needsYou,

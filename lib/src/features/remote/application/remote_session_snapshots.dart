@@ -12,7 +12,9 @@ import 'package:agent_cli/read.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/project_tree.dart';
 import '../../explorer/application/session_forest.dart';
+import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
+import '../../notifications/domain/inbox_item.dart';
 import '../../notifications/domain/session_attention.dart';
 import '../../projects/application/project_providers.dart';
 import '../../projects/application/projects_controller.dart';
@@ -162,7 +164,20 @@ RemoteSessionSnapshot remoteSessionSnapshot(
     environmentKind: environmentKindFor(ref, owner?.environmentId),
     // What the desktop's model chip says: chosen, or the default it follows.
     model: ref.read(sessionLauncherProvider).effectiveModelFor(session.id)?.modelId,
+    usageLimit: _usageLimitFor(ref, session.id),
   );
+}
+
+/// The desktop's sentence for a usage limit [sessionId] hit, while its inbox
+/// item is still unseen; looked at on the desktop, it is no longer news.
+String? _usageLimitFor(Ref ref, String sessionId) {
+  for (final item in ref.read(attentionInboxProvider).pending) {
+    if (item.kind == InboxItemKind.usageLimit &&
+        item.session.openId == sessionId) {
+      return item.detail;
+    }
+  }
+  return null;
 }
 
 RemoteSessionSnapshot remoteImportedSnapshot(

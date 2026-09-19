@@ -53,10 +53,17 @@ class PushFanout {
     required String sessionId,
     required String title,
     required String kind,
+    String? detail,
   }) async {
     for (final device in _devices()) {
       try {
-        await _pushTo(device, sessionId: sessionId, title: title, kind: kind);
+        await _pushTo(
+          device,
+          sessionId: sessionId,
+          title: title,
+          kind: kind,
+          detail: detail,
+        );
       } on Object catch (error) {
         // Push is best-effort; the log names the failure, never the news.
         onLog?.call('push to a device failed: ${error.runtimeType}');
@@ -69,6 +76,7 @@ class PushFanout {
     required String sessionId,
     required String title,
     required String kind,
+    String? detail,
   }) async {
     if (device.revoked || device.deviceKey.isEmpty) return;
     if (!device.capabilities.has(Capability.receiveNotifications)) return;
@@ -98,6 +106,7 @@ class PushFanout {
           title: title,
           kind: kind,
           at: _now(),
+          detail: detail,
         ),
       ),
     );

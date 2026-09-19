@@ -82,7 +82,12 @@ class _InboxRow extends StatelessWidget {
         semantic.failure,
       ),
       CompanionAttentionKind.finished => (AppIcons.checkCircle, semantic.idle),
+      CompanionAttentionKind.usageLimit => (AppIcons.clock, semantic.attention),
     };
+    // A limit says which window and when it resets, in the desktop's words.
+    final what = attention.kind == CompanionAttentionKind.usageLimit
+        ? session.usageLimit ?? attention.kind.label
+        : attention.kind.label;
 
     return CompanionTouchRow(
       onTap: () => Navigator.of(context).push(
@@ -109,7 +114,7 @@ class _InboxRow extends StatelessWidget {
           ),
           SizedBox(height: density.lineGap),
           Text(
-            '${attention.kind.label}  ·  '
+            '$what  ·  '
             '${session.projectName}  ·  '
             '${describeAge(now.difference(attention.at))}',
             maxLines: 1,

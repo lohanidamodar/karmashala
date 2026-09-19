@@ -32,6 +32,9 @@ AttentionNotification notificationFor(CompanionAttentionEvent event) {
       'Finished a turn — open it when you are ready.',
     CompanionAttentionKind.needsYou => 'Waiting for your approval or input.',
     CompanionAttentionKind.failed => 'The turn ended in error.',
+    // The desktop's own sentence, with the reset time, when it sent one.
+    CompanionAttentionKind.usageLimit =>
+      event.detail ?? 'Stopped at its usage limit.',
   };
   return AttentionNotification(
     id: stableNotificationId(event.sessionId),

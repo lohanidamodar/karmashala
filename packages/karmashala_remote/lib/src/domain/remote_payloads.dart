@@ -9,6 +9,11 @@ import '../protocol.dart';
 /// The one attention word that means "a prompt is waiting on a person".
 const String kAttentionNeedsApproval = 'needs_approval';
 
+/// The attention word for a session whose turn ended on its usage limit — in a
+/// push, and as the phone's own reading of `RemoteSessionSnapshot.usageLimit`.
+/// An older phone reads it as "needs you", the safe direction.
+const String kAttentionUsageLimit = 'usage_limit';
+
 /// What one session looks like from a phone: `sessions.list` rows and the
 /// `session.changed` event share this shape.
 class RemoteSessionSnapshot {
@@ -40,6 +45,7 @@ class RemoteSessionSnapshot {
     this.environmentId,
     this.environmentKind,
     this.model,
+    this.usageLimit,
   });
 
   final String sessionId;
@@ -136,6 +142,10 @@ class RemoteSessionSnapshot {
   /// agent's own default is not known here, and is not guessed.
   final String? model;
 
+  /// The desktop's sentence while this session sits on a usage limit — "Codex
+  /// hit its 5-hour limit. Resets 14:05." — else null.
+  final String? usageLimit;
+
   /// [clearAttention] because "nothing is waiting" is a value a null argument
   /// cannot express, and an approval being answered is exactly that move.
   RemoteSessionSnapshot copyWith({
@@ -171,6 +181,7 @@ class RemoteSessionSnapshot {
         environmentId: environmentId,
         environmentKind: environmentKind,
         model: model,
+        usageLimit: usageLimit,
       );
 
   Map<String, Object?> toJson() => {
@@ -202,6 +213,7 @@ class RemoteSessionSnapshot {
     if (environmentId != null) 'environmentId': environmentId,
     if (environmentKind != null) 'environmentKind': environmentKind,
     if (model != null) 'model': model,
+    if (usageLimit != null) 'usageLimit': usageLimit,
   };
 
   static RemoteSessionSnapshot fromJson(Map<String, Object?> json) {
@@ -240,6 +252,7 @@ class RemoteSessionSnapshot {
       environmentId: str(json['environmentId']),
       environmentKind: str(json['environmentKind']),
       model: str(json['model']),
+      usageLimit: str(json['usageLimit']),
     );
   }
 
@@ -272,7 +285,8 @@ class RemoteSessionSnapshot {
       other.environmentName == environmentName &&
       other.environmentId == environmentId &&
       other.environmentKind == environmentKind &&
-      other.model == model;
+      other.model == model &&
+      other.usageLimit == usageLimit;
 
   @override
   int get hashCode => Object.hash(
@@ -304,6 +318,7 @@ class RemoteSessionSnapshot {
       environmentId,
       environmentKind,
       model,
+      usageLimit,
     ),
   );
 }

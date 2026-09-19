@@ -298,6 +298,50 @@ void main() {
     await awaitLink(gateway, CompanionLinkState.disconnected);
   });
 
+  // The owner asked to be warned on the phone when a session hits its limit.
+  // Claude Code ends such a turn as a failure first; the limit follows once
+  // the desktop has read the account's usage.
+  test('a usage limit reaches the phone in the desktop\'s words, and the '
+      'failure under it is not told twice',
+      timeout: const Timeout(Duration(minutes: 2)), () async {
+    await startService();
+    final gateway = makeGateway();
+    await pairPhone(gateway);
+    await gateway.listSessions();
+    final attention = ItemQueue(gateway.attentionEvents);
+
+    RemoteSessionSnapshot s1({String? usageLimit}) => RemoteSessionSnapshot(
+      sessionId: 's1',
+      title: 'Fix the tests',
+      status: 'failed',
+      attention: 'failed',
+      usageLimit: usageLimit,
+    );
+
+    fake.sessions['s1'] = s1();
+    await service!.notifySessionsChanged();
+    expect((await attention.next).kind, CompanionAttentionKind.failed);
+
+    const sentence = 'Claude Code hit its 5-hour limit. Resets 14:05.';
+    fake.sessions['s1'] = s1(usageLimit: sentence);
+    await service!.notifySessionsChanged();
+    final limit = await attention.next;
+    expect(limit.kind, CompanionAttentionKind.usageLimit);
+    expect(limit.detail, sentence);
+    await eventually(() async {
+      final list = await gateway.watchSessions().first;
+      return list.single.usageLimit == sentence &&
+          list.single.attention?.kind == CompanionAttentionKind.usageLimit;
+    }, reason: 'the inbox row wears the limit');
+
+    // Looked at on the desktop: the limit is no longer news, and the failed
+    // turn under it was told already.
+    fake.sessions['s1'] = s1();
+    await service!.notifySessionsChanged();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(attention.isEmpty, isTrue);
+  });
+
   test('an approval answered on the desktop stops offering itself on the '
       'phone', timeout: const Timeout(Duration(minutes: 2)), () async {
     // Seen on the owner's phone, 2026-09-02: the card below the chat kept

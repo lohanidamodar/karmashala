@@ -226,6 +226,7 @@ class RemoteAccessController {
     final before = {
       for (final item in previous?.items ?? const <InboxItem>[]) item.id,
     };
+    var limitFiled = false;
     for (final item in next.items) {
       if (before.contains(item.id)) continue;
       if (item.session.imported) continue;
@@ -233,24 +234,29 @@ class RemoteAccessController {
         InboxItemKind.finished => 'finished',
         InboxItemKind.needsApproval => 'needs_approval',
         InboxItemKind.failed => 'failed',
+        InboxItemKind.usageLimit => kAttentionUsageLimit,
         // Delivery news and follow-ups stay on the desktop in v1: what a
         // session left behind is to sit down with, not a buzz in a pocket.
         InboxItemKind.checksFailed ||
         InboxItemKind.changesRequested ||
         InboxItemKind.readyToMerge ||
-        InboxItemKind.followUp ||
-        // The turn ending already pushed; a limit has no word on the phone yet.
-        InboxItemKind.usageLimit => null,
+        InboxItemKind.followUp => null,
       };
       if (kind == null) continue;
+      if (item.kind == InboxItemKind.usageLimit) limitFiled = true;
       unawaited(
         service.pushAttentionNews(
           sessionId: item.session.openId,
           title: item.session.label,
           kind: kind,
+          // "Codex hit its 5-hour limit. Resets 14:05." — the reset is the news.
+          detail: item.kind == InboxItemKind.usageLimit ? item.detail : null,
         ),
       );
     }
+    // A limit is carried on the session's snapshot, which nothing else moves
+    // when it is filed; a connected phone hears it from this sweep.
+    if (limitFiled) unawaited(service.notifySessionsChanged());
   }
 }
 

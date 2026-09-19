@@ -10,6 +10,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/push.dart';
 import 'package:karmashala_remote/companion.dart';
+import 'package:karmashala_remote/remote.dart' show kAttentionUsageLimit;
 import '../notifications/attention_notification.dart';
 
 class CompanionPushReceiver {
@@ -62,10 +63,12 @@ class CompanionPushReceiver {
       }
       final title = payload['title'];
       final at = payload['at'];
+      final detail = payload['detail'];
       final event = CompanionAttentionEvent(
         sessionId: sessionId,
         sessionTitle: title is String && title.isNotEmpty ? title : sessionId,
         kind: _kindOf(payload['kind']),
+        detail: detail is String && detail.isNotEmpty ? detail : null,
         at:
             (at is String ? DateTime.tryParse(at)?.toUtc() : null) ??
             _now().toUtc(),
@@ -82,6 +85,7 @@ class CompanionPushReceiver {
   CompanionAttentionKind _kindOf(Object? kind) => switch (kind) {
     'finished' => CompanionAttentionKind.finished,
     'failed' => CompanionAttentionKind.failed,
+    kAttentionUsageLimit => CompanionAttentionKind.usageLimit,
     _ => CompanionAttentionKind.needsYou,
   };
 }

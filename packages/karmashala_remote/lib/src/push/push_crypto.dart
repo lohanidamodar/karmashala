@@ -76,12 +76,15 @@ Map<String, Object?> attentionPushPayload({
   required String title,
   required String kind,
   required DateTime at,
+  String? detail,
 }) => {
   'v': 1,
   'sessionId': sessionId,
   'title': title,
   'kind': kind,
   'at': at.toUtc().toIso8601String(),
+  // The desktop's own sentence, when the kind has one to say.
+  'detail': ?detail,
 };
 
 /// Seals [payload] as `nonce(24) || ciphertext || mac(16)` under the push key.

@@ -390,6 +390,7 @@ class RemoteHostService {
     required String sessionId,
     required String title,
     required String kind,
+    String? detail,
   }) async {
     if (!_started) return;
     try {
@@ -397,6 +398,7 @@ class RemoteHostService {
         sessionId: sessionId,
         title: title,
         kind: kind,
+        detail: detail,
       );
     } on Object catch (error) {
       onLog?.call('push fan-out failed: ${error.runtimeType}');

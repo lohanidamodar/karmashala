@@ -228,12 +228,16 @@ enum CompanionSessionStatus { working, idle, needsYou, failed, unknown }
 enum CompanionAttentionKind {
   finished,
   needsYou,
-  failed;
+  failed,
+
+  /// The session's turn ended on its account's usage limit.
+  usageLimit;
 
   String get label => switch (this) {
     CompanionAttentionKind.finished => 'Finished',
     CompanionAttentionKind.needsYou => 'Needs you',
     CompanionAttentionKind.failed => 'Failed',
+    CompanionAttentionKind.usageLimit => 'Hit a usage limit',
   };
 }
 
@@ -274,6 +278,7 @@ class CompanionSessionSummary {
     this.environmentId,
     this.environmentKind,
     this.model,
+    this.usageLimit,
   });
 
   final String id;
@@ -282,6 +287,10 @@ class CompanionSessionSummary {
   /// The model the desktop launched this session on, or null when it names
   /// none (the agent's own default, which the desktop does not know).
   final String? model;
+
+  /// The desktop's sentence while this session sits on a usage limit — "Codex
+  /// hit its 5-hour limit. Resets 14:05." — else null.
+  final String? usageLimit;
 
   /// "Claude Code · running" — the card's first line, worded by the host so
   /// the phone never invents a claim about a process it cannot see.
@@ -376,6 +385,7 @@ class CompanionSessionSummary {
     environmentId: environmentId,
     environmentKind: environmentKind,
     model: model,
+    usageLimit: usageLimit,
   );
 
   /// What the list groups by: the repository's real identity when the host
@@ -612,12 +622,17 @@ class CompanionAttentionEvent {
     required this.kind,
     required this.at,
     this.hostId,
+    this.detail,
   });
 
   final String sessionId;
   final String sessionTitle;
   final CompanionAttentionKind kind;
   final DateTime at;
+
+  /// The desktop's own sentence, when it sent one — "Codex hit its 5-hour
+  /// limit. Resets 14:05."
+  final String? detail;
 
   /// Which desktop this news came from, so a notification that arrives around a
   /// switch is never attributed to the wrong host.

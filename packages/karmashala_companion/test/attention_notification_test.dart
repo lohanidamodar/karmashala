@@ -25,6 +25,25 @@ void main() {
     expect(failed.body, contains('error'));
   });
 
+  test('a usage limit says which window and when it resets, in the '
+      "desktop's words", () {
+    final limit = notificationFor(
+      CompanionAttentionEvent(
+        sessionId: 'session-42',
+        sessionTitle: 'Fix the login flow',
+        kind: CompanionAttentionKind.usageLimit,
+        at: DateTime.utc(2026, 8, 31, 9),
+        detail: 'Codex hit its 5-hour limit. Resets 14:05.',
+      ),
+    );
+    expect(limit.body, 'Codex hit its 5-hour limit. Resets 14:05.');
+    expect(
+      notificationFor(event(CompanionAttentionKind.usageLimit)).body,
+      contains('usage limit'),
+      reason: 'a push from a desktop that sent no sentence still says what',
+    );
+  });
+
   test('tapping opens the session: the payload is the session id', () {
     expect(
       notificationFor(event(CompanionAttentionKind.finished)).sessionId,
