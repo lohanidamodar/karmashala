@@ -49,6 +49,17 @@ extension SessionInputVerbs on SessionLauncher {
     return true;
   }
 
+  /// Presses [keys] in the terminal and records nothing — for moving through a
+  /// menu, where what a key authorises is the option it lands on, not the key.
+  /// False if there is no pane.
+  bool pressKeys(String sessionId, String keys) {
+    if (keys.isEmpty) return false;
+    final terminal = _liveTerminalFor(sessionId);
+    if (terminal == null) return false;
+    terminal.textInput(keys);
+    return true;
+  }
+
   /// Writes the answered prompt to the decision record — **a table lookup, not
   /// an interpretation**; a keystroke matching neither answer records nothing.
   void _recordAnswer(
