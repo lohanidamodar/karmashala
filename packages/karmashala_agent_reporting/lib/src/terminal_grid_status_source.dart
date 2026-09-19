@@ -26,6 +26,11 @@ class TerminalGridStatusSource {
       (AgentActivityStatus.failed, AgentWaitKind.unrecorded, rules.failed),
       (
         AgentActivityStatus.awaitingApproval,
+        AgentWaitKind.question,
+        rules.question,
+      ),
+      (
+        AgentActivityStatus.awaitingApproval,
         AgentWaitKind.approval,
         rules.awaitingApproval,
       ),

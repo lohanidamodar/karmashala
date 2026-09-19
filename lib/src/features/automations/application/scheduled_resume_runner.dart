@@ -263,7 +263,7 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
       );
       return;
     }
-    if (report != null && report.hasOpenPrompt) {
+    if (report != null && (report.hasOpenPrompt || report.hasOpenQuestion)) {
       _finish(
         resume,
         ScheduledResumeState.failed,

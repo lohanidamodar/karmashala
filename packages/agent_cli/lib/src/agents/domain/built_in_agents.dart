@@ -671,6 +671,10 @@ const _claudeCode = AgentDescriptor(
   // the patterns: `esc to interrupt` is checked before the footer that is always
   // there.
   grid: AgentGridRules(
+    // AskUserQuestion's footer, read off 2.1.274 in a real ConPTY: one
+    // question reads 'Enter to select · ↑/↓ to navigate · Esc to cancel',
+    // several 'Enter to select · Tab/Arrow keys to navigate · Esc to cancel'.
+    question: [GridMatcher('Enter to select')],
     awaitingApproval: [
       // The workspace-trust modal's footer, captured whole in
       // `claude-code-trust-prompt.raw`: `Enter to confirm · Esc to cancel`.
@@ -721,6 +725,7 @@ const _claudeCode = AgentDescriptor(
   // declined to answer questions".
   questions: AgentQuestionSupport(
     toolName: 'AskUserQuestion',
+    hookEvent: 'PreToolUse',
     keysFor: claudeQuestionKeys,
     declineKeys: '\x1b',
   ),

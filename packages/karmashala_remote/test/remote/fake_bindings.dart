@@ -55,6 +55,7 @@ class FakeRemoteBindings {
   /// Every answer that actually reached the terminal. A refused one must not
   /// appear here — that is the whole point of refusing it.
   final List<({String sessionId, String decision})> approvalAnswers = [];
+  final List<RemoteQuestionAnswerRequest> questionAnswers = [];
   final List<
     ({
       String deviceId,
@@ -189,6 +190,10 @@ class FakeRemoteBindings {
       if (refusal != null) throw refusal;
       approvalAnswers.add((sessionId: sessionId, decision: decision));
       return decision == 'approve' ? 'Yes (enter)' : 'No (esc)';
+    },
+    answerQuestion: (request) async {
+      questionAnswers.add(request);
+      return request.decline ? 'declined' : 'answered';
     },
     approvalEvidenceFor: (sessionId) async =>
         approvals[sessionId] ?? RemoteApprovalRequest(sessionId: sessionId),

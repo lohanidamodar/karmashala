@@ -290,6 +290,12 @@ class SessionStatusRegistry {
   AgentStatusReport? reportForOpenId(String openId) =>
       _byOpenId[openId]?.report;
 
+  /// The transcript this registry reads for one workspace row, or null when
+  /// none has been resolved yet. The same file the status came from, so a
+  /// question answered from it is the question the status was about.
+  String? transcriptPathForOpenId(String openId) =>
+      _byOpenId[openId]?.statePath;
+
   /// The status of one workspace row and every later change. Starts nothing, and
   /// always yields immediately ([fallback] if unseen) so a first await cannot hang.
   Stream<AgentStatusReport> reportsFor(

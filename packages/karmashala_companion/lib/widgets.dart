@@ -6,6 +6,7 @@ library;
 export 'src/presentation/companion_activity_strip.dart';
 export 'src/presentation/environment_index.dart';
 export 'src/presentation/companion_approval_card.dart';
+export 'src/presentation/companion_question_card.dart';
 export 'src/presentation/companion_chrome.dart';
 export 'src/presentation/companion_composer.dart';
 export 'src/presentation/companion_route.dart';

@@ -863,6 +863,35 @@ class RemoteCompanionGateway implements CompanionGateway {
   }
 
   @override
+  Future<void> answerQuestion(
+    String sessionId,
+    String approvalId, {
+    List<RemoteQuestionAnswer> answers = const [],
+    bool decline = false,
+  }) async {
+    await _ready;
+    final pending = _approvalOf(sessionId);
+    final question = pending.value?.question;
+    if (pending.value?.id != approvalId || question == null) {
+      throw const GatewayException(
+        'That question is no longer waiting for an answer.',
+      );
+    }
+    final client = _requireClient();
+    await _mapRefusals(
+      () => client.answerQuestion(
+        RemoteQuestionAnswerRequest(
+          sessionId: sessionId,
+          toolUseId: question.toolUseId,
+          answers: answers,
+          decline: decline,
+        ),
+      ),
+    );
+    if (pending.value?.id == approvalId) pending.value = null;
+  }
+
+  @override
   Stream<CompanionApprovalResolution> get approvalResolutions =>
       _approvalResolutions.stream;
 

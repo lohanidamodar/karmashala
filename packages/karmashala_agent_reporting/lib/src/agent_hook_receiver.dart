@@ -73,6 +73,24 @@ class AgentHookReceiver {
     // answers for itself; only an event without one falls back to the table.
     final ending = kind.isEmpty ? spec?.eventEnding[name] : declared?.ending;
 
+    // **A question opening.** The event that announces it is an ordinary tool
+    // call to the table above, so it is recognised by the tool it names.
+    final asked = _question(id, name, payload);
+    if (asked != null) {
+      final report = AgentStatusReport(
+        agentId: id,
+        sessionId: sessionId,
+        status: AgentActivityStatus.awaitingApproval,
+        source: AgentStatusSource.hook,
+        observedAt: observedAt ?? clock.nowUtc(),
+        detail: '$name/question',
+        evidence: [for (final q in asked.questions) q.question],
+        waiting: AgentWaitKind.question,
+      );
+      reports.record(report);
+      return report;
+    }
+
     final report = AgentStatusReport(
       agentId: id,
       sessionId: sessionId,
@@ -93,6 +111,20 @@ class AgentHookReceiver {
     );
     if (status != AgentActivityStatus.unknown) reports.record(report);
     return report;
+  }
+
+  /// The question [event] opens, when it is [agentId]'s question event naming
+  /// its question tool with input this build can read; otherwise null.
+  AgentQuestionSet? _question(String agentId, String event, Object? payload) {
+    final support = registry.byId(agentId)?.questions;
+    if (support == null || support.hookEvent != event) return null;
+    if (_stringAt(support.hookToolNamePath, payload) != support.toolName) {
+      return null;
+    }
+    return AgentQuestionSet.fromToolInput(
+      '',
+      _valueAt(support.hookToolInputPath, payload),
+    );
   }
 
   static String? _failureReason(

@@ -481,6 +481,13 @@ class CompanionClient {
     return pressed is String ? pressed : '';
   }
 
+  /// `question.answer` — answers or declines the question [request] names.
+  Future<String> answerQuestion(RemoteQuestionAnswerRequest request) async {
+    final payload = await _request(FrameType.questionAnswer, request.toJson());
+    final done = payload['done'];
+    return done is String ? done : '';
+  }
+
   /// `workspace.list` — the projects, checkouts and installed agents a session
   /// could be started in. A row this build cannot parse is dropped.
   Future<List<RemoteWorkspaceProject>> listWorkspace() async {

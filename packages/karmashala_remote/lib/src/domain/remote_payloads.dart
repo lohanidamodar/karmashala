@@ -738,7 +738,11 @@ enum RemoteWaitKind {
 
   /// No source could tell, or the host is older than this field. Treated like
   /// [input] wherever a key would be pressed.
-  unrecorded('unrecorded');
+  unrecorded('unrecorded'),
+
+  /// A multiple-choice question is open. Never answered with approve/deny —
+  /// only with question.answer, naming the option chosen.
+  question('question');
 
   const RemoteWaitKind(this.wire);
 
@@ -754,6 +758,166 @@ enum RemoteWaitKind {
   };
 }
 
+/// One option of an agent's question, in its own words.
+class RemoteQuestionOption {
+  const RemoteQuestionOption({required this.label, this.description = ''});
+
+  final String label;
+  final String description;
+
+  Map<String, Object?> toJson() => {
+    'label': label,
+    if (description.isNotEmpty) 'description': description,
+  };
+}
+
+/// One question.
+class RemoteQuestionItem {
+  const RemoteQuestionItem({
+    required this.question,
+    required this.options,
+    this.header = '',
+    this.multiSelect = false,
+  });
+
+  final String question;
+  final String header;
+  final List<RemoteQuestionOption> options;
+  final bool multiSelect;
+
+  Map<String, Object?> toJson() => {
+    'question': question,
+    if (header.isNotEmpty) 'header': header,
+    if (multiSelect) 'multiSelect': true,
+    'options': [for (final o in options) o.toJson()],
+  };
+}
+
+/// A multiple-choice question an agent is asking (Claude Code's
+/// `AskUserQuestion`), carried with the approval request for its session.
+class RemoteQuestion {
+  const RemoteQuestion({required this.toolUseId, required this.questions});
+
+  /// Which call this is. The answer names it, so an answer meant for a question
+  /// that has since closed cannot land on the next one.
+  final String toolUseId;
+
+  final List<RemoteQuestionItem> questions;
+
+  Map<String, Object?> toJson() => {
+    'toolUseId': toolUseId,
+    'questions': [for (final q in questions) q.toJson()],
+  };
+
+  /// The question, or null for anything not wholly readable: a half-read
+  /// question is one the phone could answer wrongly.
+  static RemoteQuestion? tryFromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['toolUseId'];
+    final raw = json['questions'];
+    if (id is! String || raw is! List || raw.isEmpty) return null;
+    final questions = <RemoteQuestionItem>[];
+    for (final entry in raw) {
+      if (entry is! Map) return null;
+      final question = entry['question'];
+      final options = entry['options'];
+      if (question is! String || options is! List || options.isEmpty) {
+        return null;
+      }
+      final read = <RemoteQuestionOption>[];
+      for (final option in options) {
+        final label = option is Map ? option['label'] : null;
+        if (label is! String) return null;
+        final description = (option as Map)['description'];
+        read.add(
+          RemoteQuestionOption(
+            label: label,
+            description: description is String ? description : '',
+          ),
+        );
+      }
+      questions.add(
+        RemoteQuestionItem(
+          question: question,
+          header: entry['header'] is String ? entry['header']! as String : '',
+          multiSelect: entry['multiSelect'] == true,
+          options: read,
+        ),
+      );
+    }
+    return RemoteQuestion(toolUseId: id, questions: questions);
+  }
+}
+
+/// What the user chose for one question: option indexes, or their own words.
+class RemoteQuestionAnswer {
+  const RemoteQuestionAnswer.options(this.options) : text = null;
+
+  const RemoteQuestionAnswer.text(String this.text) : options = const [];
+
+  final List<int> options;
+  final String? text;
+
+  Map<String, Object?> toJson() =>
+      text != null ? {'text': text} : {'options': options};
+
+  static RemoteQuestionAnswer fromJson(Object? json) {
+    if (json is Map) {
+      final text = json['text'];
+      if (text is String) return RemoteQuestionAnswer.text(text);
+      final options = json['options'];
+      if (options is List && options.every((o) => o is int)) {
+        return RemoteQuestionAnswer.options(options.cast<int>());
+      }
+    }
+    throw const ProtocolException('bad question answer');
+  }
+}
+
+/// What `question.answer` carries: an answer per question, or a decline.
+class RemoteQuestionAnswerRequest {
+  const RemoteQuestionAnswerRequest({
+    required this.sessionId,
+    required this.toolUseId,
+    this.answers = const [],
+    this.decline = false,
+  });
+
+  final String sessionId;
+  final String toolUseId;
+  final List<RemoteQuestionAnswer> answers;
+
+  /// Dismiss the question without answering it.
+  final bool decline;
+
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId,
+    'toolUseId': toolUseId,
+    if (decline) 'decline': true else 'answers': [for (final a in answers) a.toJson()],
+  };
+
+  static RemoteQuestionAnswerRequest fromJson(Map<String, Object?> json) {
+    final sessionId = json['sessionId'];
+    final toolUseId = json['toolUseId'];
+    if (sessionId is! String || toolUseId is! String) {
+      throw const ProtocolException('bad question answer');
+    }
+    final decline = json['decline'] == true;
+    final answers = json['answers'];
+    if (!decline && (answers is! List || answers.isEmpty)) {
+      throw const ProtocolException('a question answer needs answers or a decline');
+    }
+    return RemoteQuestionAnswerRequest(
+      sessionId: sessionId,
+      toolUseId: toolUseId,
+      decline: decline,
+      answers: decline
+          ? const []
+          : [for (final a in answers! as List) RemoteQuestionAnswer.fromJson(a)],
+    );
+  }
+}
+
 /// What `approval.requested` carries: the agent's own words, verbatim, or
 /// nothing — never a summary this code wrote.
 class RemoteApprovalRequest {
@@ -763,10 +927,15 @@ class RemoteApprovalRequest {
     this.waiting = RemoteWaitKind.unrecorded,
     this.approveLabel,
     this.denyLabel,
+    this.question,
   });
 
   final String sessionId;
   final List<String> evidence;
+
+  /// The question itself, when [waiting] is [RemoteWaitKind.question] and the
+  /// host could read it. Absent from an older host.
+  final RemoteQuestion? question;
 
   /// What the host can tell the session is waiting on. Sent for every request
   /// so the phone can word the card without guessing.
@@ -783,6 +952,7 @@ class RemoteApprovalRequest {
     'waiting': waiting.wire,
     if (approveLabel != null) 'approve': approveLabel,
     if (denyLabel != null) 'deny': denyLabel,
+    if (question != null) 'question': question!.toJson(),
   };
 
   static RemoteApprovalRequest fromJson(Map<String, Object?> json) {
@@ -803,6 +973,7 @@ class RemoteApprovalRequest {
           ? json['approve']! as String
           : null,
       denyLabel: json['deny'] is String ? json['deny']! as String : null,
+      question: RemoteQuestion.tryFromJson(json['question']),
     );
   }
 }
@@ -813,7 +984,10 @@ class RemoteApprovalRequest {
 enum RemoteApprovalOutcome {
   approved('approved'),
   denied('denied'),
-  elsewhere('elsewhere');
+  elsewhere('elsewhere'),
+
+  /// A question this host answered with the user's choice.
+  answered('answered');
 
   const RemoteApprovalOutcome(this.wire);
 

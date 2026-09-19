@@ -430,6 +430,16 @@ void main() {
       FrameType.approvalAnswer: [
         {'sessionId': 's1', 'decision': 'approve'},
       ],
+      FrameType.questionAnswer: [
+        {
+          'sessionId': 's1',
+          'toolUseId': 'toolu_1',
+          'answers': [
+            {'options': [1]},
+          ],
+        },
+        {'sessionId': 's1', 'toolUseId': 'toolu_1', 'decline': true},
+      ],
       FrameType.notificationsRegister: [
         {'token': 't0k', 'platform': 'android'},
       ],

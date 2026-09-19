@@ -27,6 +27,7 @@ import 'package:karmashala/src/features/projects/application/projects_controller
 import 'package:karmashala/src/features/repositories/application/repository_discovery_provider.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
+import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
 import 'package:karmashala/src/features/remote/application/remote_bindings.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -1235,5 +1236,177 @@ void main() {
     expect(row.presence.focusedSessionId, 's1');
     // Every reading carries its age (§19); a presence with no time is not one.
     expect(row.presence.at, isNotNull);
+  });
+
+  // A question is answered with the option the user picked, never with
+  // Approve — which is Enter, which answers with whatever is highlighted.
+  group('an agent question is carried whole and answered only as asked', () {
+    const asked = AgentQuestionSet(
+      toolUseId: 'toolu_1',
+      questions: [
+        AgentQuestion(
+          question: 'Pick a fruit',
+          options: [
+            AgentQuestionOption(label: 'Apple'),
+            AgentQuestionOption(label: 'Banana'),
+          ],
+        ),
+      ],
+    );
+
+    ProviderContainer with_(
+      AgentStatusReport? report, {
+      AgentQuestionSet? open = asked,
+    }) {
+      final built = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          remoteDeliveryStageProvider.overrideWithValue(
+            (sessionId) async => 'working',
+          ),
+          remoteApprovalEvidenceProvider.overrideWithValue(
+            (sessionId) async => report,
+          ),
+          remoteOpenQuestionProvider.overrideWithValue(
+            (sessionId, agentId) async => open,
+          ),
+          remoteSessionPresenceProvider.overrideWithValue(
+            (sessionId) => (note: null, lastSeen: null),
+          ),
+        ],
+      );
+      addTearDown(built.dispose);
+      return built;
+    }
+
+    void seedClaude(String id) {
+      AgentInstallationDao(db).insert(
+        AgentInstallation(
+          id: 'i2',
+          agentId: 'claudeCode',
+          executable: path(r'C:\bin\claude.exe'),
+          createdAt: now,
+        ),
+      );
+      SessionDao(db).insert(
+        Session(
+          id: id,
+          repositoryId: 'r1',
+          agentInstallationId: 'i2',
+          title: 'Ask me',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: now,
+          surface: SessionSurface.external,
+        ),
+      );
+    }
+
+    AgentStatusReport showing(AgentWaitKind waiting) => AgentStatusReport(
+      agentId: 'claudeCode',
+      sessionId: 'ext1',
+      status: AgentActivityStatus.awaitingApproval,
+      observedAt: now,
+      source: AgentStatusSource.terminalGrid,
+      evidence: const ['Pick a fruit'],
+      waiting: waiting,
+    );
+
+    RemoteQuestionAnswerRequest answering({
+      String toolUseId = 'toolu_1',
+      List<RemoteQuestionAnswer> answers = const [
+        RemoteQuestionAnswer.options([1]),
+      ],
+    }) => RemoteQuestionAnswerRequest(
+      sessionId: 'q1',
+      toolUseId: toolUseId,
+      answers: answers,
+    );
+
+    Matcher refusedWith(String words) => throwsA(
+      isA<RemoteApiRefusal>().having((r) => r.message, 'message', contains(words)),
+    );
+
+    test('the question travels with the request, and no keys beside it',
+        () async {
+      seedWorkspace();
+      seedClaude('q1');
+      final bindings = with_(
+        showing(AgentWaitKind.question),
+      ).read(remoteHostBindingsProvider);
+
+      final request = await bindings.approvalEvidenceFor('q1');
+
+      expect(request.waiting, RemoteWaitKind.question);
+      expect(request.question!.toolUseId, 'toolu_1');
+      expect(request.question!.questions.single.options.last.label, 'Banana');
+      expect(request.approveLabel, isNull);
+      expect(request.denyLabel, isNull);
+    });
+
+    test('Approve is refused for a question', () async {
+      seedWorkspace();
+      seedClaude('q1');
+      final bindings = with_(
+        showing(AgentWaitKind.question),
+      ).read(remoteHostBindingsProvider);
+      await expectLater(
+        bindings.answerApproval('q1', 'approve'),
+        refusedWith('no prompt open'),
+      );
+    });
+
+    test('an answer with no question on screen is refused', () async {
+      seedWorkspace();
+      seedClaude('q1');
+      final bindings = with_(
+        showing(AgentWaitKind.input),
+      ).read(remoteHostBindingsProvider);
+      await expectLater(
+        bindings.answerQuestion(answering()),
+        refusedWith('no question open'),
+      );
+    });
+
+    test('an answer to a question that has since changed is refused',
+        () async {
+      seedWorkspace();
+      seedClaude('q1');
+      final bindings = with_(
+        showing(AgentWaitKind.question),
+      ).read(remoteHostBindingsProvider);
+      await expectLater(
+        bindings.answerQuestion(answering(toolUseId: 'toolu_older')),
+        refusedWith('already been answered'),
+      );
+    });
+
+    test('an answer that does not fit the question is refused', () async {
+      seedWorkspace();
+      seedClaude('q1');
+      final bindings = with_(
+        showing(AgentWaitKind.question),
+      ).read(remoteHostBindingsProvider);
+      await expectLater(
+        bindings.answerQuestion(
+          answering(answers: const [RemoteQuestionAnswer.options([5])]),
+        ),
+        refusedWith('no such option'),
+      );
+    });
+
+    test('a fitting answer passes every guard and stops on the terminal',
+        () async {
+      seedWorkspace();
+      seedClaude('q1');
+      final bindings = with_(
+        showing(AgentWaitKind.question),
+      ).read(remoteHostBindingsProvider);
+      // No live pane here: the refusal that proves the keys were built.
+      await expectLater(
+        bindings.answerQuestion(answering()),
+        refusedWith('no live terminal'),
+      );
+    });
   });
 }

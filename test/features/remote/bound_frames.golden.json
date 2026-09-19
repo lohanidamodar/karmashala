@@ -459,6 +459,50 @@
       ]
     },
     {
+      "frame": "question.answer",
+      "capability": "approve",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "s1",
+            "toolUseId": "toolu_1",
+            "answers": [
+              {
+                "options": [
+                  1
+                ]
+              }
+            ]
+          },
+          "frames": [
+            {
+              "type": "error",
+              "payload": {
+                "code": "bad_request",
+                "message": "this question has already been answered"
+              }
+            }
+          ]
+        },
+        {
+          "request": {
+            "sessionId": "s1",
+            "toolUseId": "toolu_1",
+            "decline": true
+          },
+          "frames": [
+            {
+              "type": "error",
+              "payload": {
+                "code": "bad_request",
+                "message": "this question has already been answered"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "frame": "notifications.register",
       "capability": "receive_notifications",
       "cases": [

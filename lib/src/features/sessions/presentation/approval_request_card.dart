@@ -67,6 +67,7 @@ class ApprovalRequestCard extends ConsumerWidget {
                   AgentWaitKind.approval => '$agentName is waiting for you',
                   AgentWaitKind.input => '$agentName is waiting for your input',
                   AgentWaitKind.unrecorded => '$agentName needs your attention',
+                  AgentWaitKind.question => '$agentName is asking you a question',
                 }, style: theme.textTheme.labelLarge),
               ),
             ],
@@ -119,6 +120,9 @@ class _Evidence extends StatelessWidget {
           AgentWaitKind.unrecorded =>
             'We can tell $agentName has stopped for you, but not what it '
                 'wants. Read what it is showing in the terminal view.',
+          AgentWaitKind.question =>
+            '$agentName is asking you a question. Choose your answer in the '
+                'terminal view.',
         },
         style: theme.textTheme.bodySmall?.copyWith(
           color: scheme.onSurfaceVariant,
@@ -187,6 +191,10 @@ class _NothingToAnswer extends ConsumerWidget {
             AgentWaitKind.input =>
               'There is nothing to approve — $agentName is at its own prompt, '
                   'so answer it in the terminal view.',
+            // Approve would be Enter, which answers with whatever option is
+            // highlighted — so there is no Approve here, only the terminal.
+            AgentWaitKind.question =>
+              'Pick an answer in the terminal view, or from the companion app.',
             _ =>
               'We cannot tell whether $agentName has a prompt open, so '
                   'Karmashala will not send it a key. Answer it in the '

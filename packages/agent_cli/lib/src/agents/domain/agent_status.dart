@@ -46,6 +46,12 @@ enum AgentWaitKind {
   /// No source could tell which. Treated exactly like [input] where it matters:
   /// a key we are not sure lands on a prompt is a key we do not send.
   unrecorded,
+
+  /// A multiple-choice question is open (Claude Code's AskUserQuestion).
+  /// **Never answered with Approve/Deny**: the approve key is Enter, which
+  /// chooses whichever option is highlighted. Answered only through the
+  /// agent's [AgentQuestionSupport], with the option the user picked.
+  question,
 }
 
 /// **What a CLI said about its own session ending**, when it said anything.
@@ -165,6 +171,13 @@ class AgentStatusReport {
   bool get hasOpenPrompt =>
       status == AgentActivityStatus.awaitingApproval &&
       waiting == AgentWaitKind.approval;
+
+  /// **Whether a multiple-choice question is on this session's screen.** Not an
+  /// open prompt — nothing may answer it with Approve/Deny — but just as much a
+  /// modal a typed message would land in.
+  bool get hasOpenQuestion =>
+      status == AgentActivityStatus.awaitingApproval &&
+      waiting == AgentWaitKind.question;
 
   @override
   String toString() =>
@@ -621,12 +634,18 @@ class GridMatcher {
 /// waiting for the user, not working.
 class AgentGridRules {
   const AgentGridRules({
+    this.question = const [],
     this.awaitingApproval = const [],
     this.working = const [],
     this.idle = const [],
     this.failed = const [],
     this.scanLines = 12,
   });
+
+  /// A multiple-choice question's footer. Checked before [awaitingApproval]:
+  /// the question's footer also ends Esc to cancel, and read as an approval it
+  /// would offer Approve — Enter, which answers with the highlighted option.
+  final List<GridMatcher> question;
 
   final List<GridMatcher> awaitingApproval;
   final List<GridMatcher> working;
@@ -638,6 +657,7 @@ class AgentGridRules {
   final int scanLines;
 
   bool get isEmpty =>
+      question.isEmpty &&
       awaitingApproval.isEmpty &&
       working.isEmpty &&
       idle.isEmpty &&

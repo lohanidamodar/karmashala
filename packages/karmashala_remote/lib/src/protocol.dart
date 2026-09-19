@@ -213,6 +213,15 @@ enum FrameType {
     origin: FrameOrigin.companion,
     capability: Capability.approve,
   ),
+
+  /// Answers an agent's multiple-choice question with the options the user
+  /// chose, or declines it. Gated on [Capability.approve]: choosing for an
+  /// agent is the same authority as approving for it.
+  questionAnswer(
+    'question.answer',
+    origin: FrameOrigin.companion,
+    capability: Capability.approve,
+  ),
   notificationsRegister(
     'notifications.register',
     origin: FrameOrigin.companion,

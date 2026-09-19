@@ -98,6 +98,15 @@ class SessionControlTools {
       throw ArgumentError('text is required and cannot be blank.');
     }
     final session = _session(sessionId);
+    if (_container.read(sessionStatusLookupProvider)(sessionId)?.hasOpenQuestion ??
+        false) {
+      throw StateError(
+        'That session is asking a multiple-choice question, so this would '
+        'type into the question rather than send a message. Read it with '
+        'session_transcript and answer it in the terminal or from the '
+        'companion app, or wait for it to be answered and send then.',
+      );
+    }
     if (_container.read(sessionStatusLookupProvider)(sessionId)?.hasOpenPrompt ??
         false) {
       throw StateError(

@@ -513,11 +513,17 @@ class CompanionApproval {
     this.approveEffect,
     this.denyLabel,
     this.denyEffect,
+    this.question,
   });
 
   final String id;
   final String sessionId;
   final String agentName;
+
+  /// The multiple-choice question itself, when [waiting] is
+  /// [RemoteWaitKind.question] and the host could read it. Answered with
+  /// [CompanionGateway.answerQuestion], never with approve/deny.
+  final RemoteQuestion? question;
 
   /// What the host says the session is waiting on. [RemoteWaitKind.input] is a
   /// notice, never an approval — the answer there is a message, not a key.
@@ -546,7 +552,10 @@ enum CompanionApprovalDecision { approve, deny }
 enum CompanionApprovalOutcome {
   approved,
   denied,
-  elsewhere;
+  elsewhere,
+
+  /// A question this phone answered.
+  answered;
 
   /// One line for the reader whose card just disappeared: a card that simply
   /// vanishes reads as a dropped request.
@@ -555,6 +564,7 @@ enum CompanionApprovalOutcome {
     CompanionApprovalOutcome.denied => 'Declined.',
     CompanionApprovalOutcome.elsewhere =>
       'That request was already answered on the desktop.',
+    CompanionApprovalOutcome.answered => 'Answered.',
   };
 }
 
@@ -728,6 +738,16 @@ abstract interface class CompanionGateway {
   /// Re-derived from the host rather than accumulated, so an approval answered
   /// anywhere clears here.
   Stream<CompanionApproval?> pendingApproval(String sessionId);
+
+  /// Answers the question pending on [sessionId] — one [answers] entry per
+  /// question, in order — or declines it. [approvalId] is the card being
+  /// answered, so a card that has since been replaced is not answered.
+  Future<void> answerQuestion(
+    String sessionId,
+    String approvalId, {
+    List<RemoteQuestionAnswer> answers = const [],
+    bool decline = false,
+  });
 
   /// Approvals going away, and why. Events-only, like [attentionEvents].
   Stream<CompanionApprovalResolution> get approvalResolutions;

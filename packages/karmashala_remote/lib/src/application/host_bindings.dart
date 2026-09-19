@@ -49,6 +49,7 @@ class RemoteHostBindings {
     required this.beginAttachment,
     required this.writeAttachmentChunk,
     required this.discardAttachment,
+    this.answerQuestion = _noQuestions,
   });
 
   /// What `host.status` calls this desktop.
@@ -145,7 +146,19 @@ class RemoteHostBindings {
   /// staged bytes nothing will ever quote do not outlive the link that made
   /// them.
   final Future<void> Function(String deviceId) discardAttachment;
+
+  /// Answers, or declines, the multiple-choice question [request] names.
+  /// Returns a short word for what was done, or throws [RemoteApiRefusal].
+  /// Defaults to refusing: a host that never learned questions answers none.
+  final Future<String> Function(RemoteQuestionAnswerRequest request)
+  answerQuestion;
 }
+
+Future<String> _noQuestions(RemoteQuestionAnswerRequest request) async =>
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'this host cannot answer questions',
+    );
 
 /// One completed upload, named by the link that carried it. The device travels
 /// with the id because an upload belongs to a **link**: the store keys on the

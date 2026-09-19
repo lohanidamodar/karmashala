@@ -24,6 +24,8 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
             RemoteApprovalOutcome.denied => CompanionApprovalOutcome.denied,
             RemoteApprovalOutcome.elsewhere =>
               CompanionApprovalOutcome.elsewhere,
+            RemoteApprovalOutcome.answered =>
+              CompanionApprovalOutcome.answered,
           },
         );
       case PairingRevokedEvent():

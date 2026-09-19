@@ -321,6 +321,30 @@ class HostSessionApi {
                 : RemoteApprovalOutcome.denied,
           );
           await _result(envelope.id, {'pressed': pressed});
+        case FrameType.questionAnswer:
+          final RemoteQuestionAnswerRequest request;
+          try {
+            request = RemoteQuestionAnswerRequest.fromJson(envelope.payload);
+          } on ProtocolException catch (error) {
+            throw RemoteApiRefusal(ErrorCode.badRequest, error.message);
+          }
+          // The same race the approval refuses: the question may have been
+          // answered at the desk a moment ago, and these keys would land in
+          // whatever is on screen now.
+          if (!_awaitingApproval(request.sessionId)) {
+            throw const RemoteApiRefusal(
+              ErrorCode.badRequest,
+              'this question has already been answered',
+            );
+          }
+          final done = await bindings.answerQuestion(request);
+          await _sendApprovalResolved(
+            request.sessionId,
+            request.decline
+                ? RemoteApprovalOutcome.denied
+                : RemoteApprovalOutcome.answered,
+          );
+          await _result(envelope.id, {'done': done});
         case FrameType.notificationsRegister:
           final token = _requireString(envelope, 'token');
           final platform = _requireString(envelope, 'platform');

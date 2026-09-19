@@ -4,6 +4,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
+import 'companion_question_card.dart';
 
 /// The pending approval for one session, evidence verbatim. Nothing to press
 /// for [RemoteWaitKind.input] — there approve would type Enter into a composer.
@@ -11,14 +12,19 @@ class CompanionApprovalCard extends StatefulWidget {
   const CompanionApprovalCard({
     required this.approval,
     required this.onAnswer,
+    this.onAnswerQuestion,
     this.canAnswer = true,
     super.key,
   });
+
+  /// Answers a multiple-choice question; null where none can be answered.
 
   final CompanionApproval approval;
 
   /// Sends the decision to the host; awaited for a busy state.
   final Future<void> Function(CompanionApprovalDecision decision) onAnswer;
+
+  final CompanionQuestionAnswerFn? onAnswerQuestion;
 
   /// Whether this phone holds the `approve` capability.
   final bool canAnswer;
@@ -39,6 +45,7 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
   /// [RemoteWaitKind.input] is refused whatever arrives with it.
   bool get _answerable =>
       widget.approval.waiting != RemoteWaitKind.input &&
+      widget.approval.waiting != RemoteWaitKind.question &&
       (widget.approval.approveLabel != null ||
           widget.approval.denyLabel != null);
 
@@ -64,6 +71,8 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
     final density = UiDensity.of(context);
     final approval = widget.approval;
     final name = approval.agentName;
+    final question = approval.question;
+    final onQuestion = widget.onAnswerQuestion;
 
     return Container(
       // Lined up with the transcript above it; three stacked things had three
@@ -87,7 +96,14 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
       // pushed the composer under the keyboard.
       child: SingleChildScrollView(
         primary: false,
-        child: Column(
+        child: question != null && onQuestion != null
+            ? CompanionQuestionCard(
+                agentName: name,
+                question: question,
+                canAnswer: widget.canAnswer,
+                onAnswer: onQuestion,
+              )
+            : Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -219,6 +235,9 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
       RemoteWaitKind.unrecorded =>
         'We cannot tell whether $name has a prompt open, so Karmashala will '
             'not send it a key. Answer on the desktop.',
+      RemoteWaitKind.question =>
+        '$name is asking a question this phone could not read, so answer '
+            'it on the desktop.',
     }, style: theme.textTheme.labelSmall?.copyWith(color: scheme.error));
   }
 

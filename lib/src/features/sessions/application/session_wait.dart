@@ -41,6 +41,12 @@ class SessionWaitService {
   /// send; only [InboxItemKind.needsApproval] blocks, not a finished item.
   SessionBlock? blockedOn(String sessionId) {
     final report = _ref.read(sessionStatusLookupProvider)(sessionId);
+    if (report != null && report.hasOpenQuestion) {
+      return SessionBlock(
+        kind: 'question',
+        text: evidenceLine(report.evidence),
+      );
+    }
     if (report != null && report.hasOpenPrompt) {
       return SessionBlock(
         kind: 'approvalPrompt',

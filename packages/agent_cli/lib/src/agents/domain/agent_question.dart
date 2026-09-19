@@ -113,10 +113,21 @@ class AgentQuestionSupport {
     required this.toolName,
     required this.keysFor,
     required this.declineKeys,
+    this.hookEvent,
+    this.hookToolNamePath = const ['tool_name'],
+    this.hookToolInputPath = const ['tool_input'],
   });
 
   /// The tool whose call is a question.
   final String toolName;
+
+  /// The hook event that fires as the question opens (PreToolUse), or null
+  /// when this agent's hooks do not announce it.
+  final String? hookEvent;
+
+  /// Where that event's payload names the tool, and carries its input.
+  final List<String> hookToolNamePath;
+  final List<String> hookToolInputPath;
 
   /// The keys that give [answers] to [questions], in order. Throws
   /// [ArgumentError] for an answer that does not fit — nothing is typed then.

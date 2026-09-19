@@ -12,6 +12,7 @@ import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_activity_strip.dart';
 import 'companion_approval_card.dart';
+import 'companion_question_card.dart';
 import 'companion_chrome.dart';
 import 'companion_composer.dart';
 import 'companion_route.dart';
@@ -197,6 +198,15 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                 onAnswer: (decision) => approval == null
                     ? Future<void>.value()
                     : gateway.answerApproval(sessionId, approval.id, decision),
+                onAnswerQuestion: (answers, {decline = false}) =>
+                    approval == null
+                    ? Future<void>.value()
+                    : gateway.answerQuestion(
+                        sessionId,
+                        approval.id,
+                        answers: answers,
+                        decline: decline,
+                      ),
                 showActivity: !imported,
                 resume:
                     companionOffersResume(session, listKnown: sessions.hasValue)
@@ -358,6 +368,7 @@ class SessionFooter extends StatelessWidget {
   const SessionFooter({
     required this.sessionId,
     required this.onAnswer,
+    this.onAnswerQuestion,
     this.approval,
     this.canApprove = false,
     this.showActivity = true,
@@ -374,6 +385,7 @@ class SessionFooter extends StatelessWidget {
   /// Whether this phone holds the `approve` capability.
   final bool canApprove;
   final Future<void> Function(CompanionApprovalDecision decision) onAnswer;
+  final CompanionQuestionAnswerFn? onAnswerQuestion;
 
   /// The activity strip, directly above the composer as the desktop puts it.
   final bool showActivity;
@@ -393,6 +405,7 @@ class SessionFooter extends StatelessWidget {
             approval: approval,
             canAnswer: canApprove,
             onAnswer: onAnswer,
+            onAnswerQuestion: onAnswerQuestion,
           ),
         if (showActivity) CompanionActivityStrip(sessionId: sessionId),
         ?resume,

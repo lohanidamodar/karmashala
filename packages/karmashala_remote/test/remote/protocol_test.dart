@@ -178,6 +178,7 @@ void main() {
         'transcript.get',
         'prompt.send',
         'approval.answer',
+        'question.answer',
         'notifications.register',
         'workspace.list',
         'projects.list',
@@ -204,6 +205,7 @@ void main() {
       expect(FrameType.transcriptGet.capability, Capability.readTranscript);
       expect(FrameType.promptSend.capability, Capability.sendPrompt);
       expect(FrameType.approvalAnswer.capability, Capability.approve);
+      expect(FrameType.questionAnswer.capability, Capability.approve);
       expect(
         FrameType.notificationsRegister.capability,
         Capability.receiveNotifications,

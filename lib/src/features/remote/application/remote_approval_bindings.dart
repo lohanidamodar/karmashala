@@ -2,12 +2,16 @@
 /// pressed, only for a wait a status source identified as an approval.
 library;
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
@@ -68,6 +72,106 @@ Future<String> answerRemoteApproval(
   return key.label;
 }
 
+/// The question [sessionId]'s agent has open in its transcript right now, or
+/// null. Read from the file the status registry reads, so it is the question
+/// the status was about; stubbed in tests.
+final remoteOpenQuestionProvider =
+    Provider<Future<AgentQuestionSet?> Function(String sessionId, String agentId)>((
+      ref,
+    ) {
+      return (sessionId, agentId) async {
+        final support = ref.read(agentRegistryProvider).byId(agentId)?.questions;
+        if (support == null) return null;
+        final path = ref
+            .read(sessionStatusRegistryProvider)
+            .transcriptPathForOpenId(sessionId);
+        if (path == null) return null;
+        try {
+          return openQuestionIn(await _tail(File(path)), support);
+        } on FileSystemException {
+          return null;
+        }
+      };
+    });
+
+/// The end of a transcript: a question is the newest thing in it while open.
+Future<String> _tail(File file, {int bytes = 65536}) async {
+  final handle = await file.open();
+  try {
+    final size = await handle.length();
+    final start = size > bytes ? size - bytes : 0;
+    await handle.setPosition(start);
+    return const Utf8Decoder(allowMalformed: true)
+        .convert(await handle.read(size - start));
+  } finally {
+    await handle.close();
+  }
+}
+
+/// Answers — or declines — an agent's open question with the keys its
+/// [AgentQuestionSupport] measured. Refused, and nothing typed, unless the
+/// session still shows a question **and** the one open in its transcript is
+/// the one the phone was answering.
+Future<String> answerRemoteQuestion(
+  Ref ref,
+  RemoteQuestionAnswerRequest request,
+) async {
+  final sessionId = request.sessionId;
+  final session = ref.read(sessionDaoProvider).getById(sessionId);
+  if (session == null) {
+    throw const RemoteApiRefusal(ErrorCode.notFound, 'no such session');
+  }
+  final agentId = ref
+      .read(agentInstallationDaoProvider)
+      .getById(session.agentInstallationId)
+      ?.agentId;
+  final support = agentId == null
+      ? null
+      : ref.read(agentRegistryProvider).byId(agentId)?.questions;
+  if (agentId == null || support == null) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      "this agent's questions can only be answered in its terminal",
+    );
+  }
+  final report = await ref.read(remoteApprovalEvidenceProvider)(sessionId);
+  if (!(report?.hasOpenQuestion ?? false)) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'this session has no question open to answer',
+    );
+  }
+  final open = await ref.read(remoteOpenQuestionProvider)(sessionId, agentId);
+  if (open == null || open.toolUseId != request.toolUseId) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'this question has already been answered',
+    );
+  }
+  final String keys;
+  if (request.decline) {
+    keys = support.declineKeys;
+  } else {
+    try {
+      keys = support.keysFor(open, [
+        for (final answer in request.answers)
+          answer.text != null
+              ? AgentQuestionAnswer.text(answer.text!)
+              : AgentQuestionAnswer.options(answer.options),
+      ]);
+    } on ArgumentError catch (error) {
+      throw RemoteApiRefusal(ErrorCode.badRequest, '${error.message}');
+    }
+  }
+  if (!ref.read(sessionLauncherProvider).answerPrompt(sessionId, keys)) {
+    throw const RemoteApiRefusal(
+      ErrorCode.notFound,
+      'this session has no live terminal to answer in',
+    );
+  }
+  return request.decline ? 'declined' : 'answered';
+}
+
 Future<RemoteApprovalRequest> remoteApprovalEvidenceFor(
   Ref ref,
   String sessionId,
@@ -85,7 +189,12 @@ Future<RemoteApprovalRequest> remoteApprovalEvidenceFor(
   final report = await ref.read(remoteApprovalEvidenceProvider)(sessionId);
   final asking = report?.status == AgentActivityStatus.awaitingApproval;
   final answerable = _hasOpenPrompt(report);
+  // A question travels whole, and never with approve/deny beside it.
+  final question = report?.hasOpenQuestion == true && agentId != null
+      ? await ref.read(remoteOpenQuestionProvider)(sessionId, agentId)
+      : null;
   return RemoteApprovalRequest(
+    question: question == null ? null : _wireQuestion(question),
     sessionId: sessionId,
     evidence: asking ? report!.evidence : const [],
     waiting: asking ? _wireWait(report!.waiting) : RemoteWaitKind.unrecorded,
@@ -104,4 +213,21 @@ RemoteWaitKind _wireWait(AgentWaitKind kind) => switch (kind) {
   AgentWaitKind.approval => RemoteWaitKind.approval,
   AgentWaitKind.input => RemoteWaitKind.input,
   AgentWaitKind.unrecorded => RemoteWaitKind.unrecorded,
+  AgentWaitKind.question => RemoteWaitKind.question,
 };
+
+RemoteQuestion _wireQuestion(AgentQuestionSet set) => RemoteQuestion(
+  toolUseId: set.toolUseId,
+  questions: [
+    for (final q in set.questions)
+      RemoteQuestionItem(
+        question: q.question,
+        header: q.header,
+        multiSelect: q.multiSelect,
+        options: [
+          for (final o in q.options)
+            RemoteQuestionOption(label: o.label, description: o.description),
+        ],
+      ),
+  ],
+);
