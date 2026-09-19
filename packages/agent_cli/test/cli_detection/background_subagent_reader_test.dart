@@ -115,6 +115,24 @@ void main() {
     expect(agentRow(await read()).pendingBackgroundAgentId, isNull);
   });
 
+  // Seen on the Oppo, 2026-09-19: "1 subagent running, oldest 10h 38m" on a
+  // session whose Explore agent had finished at 03:51. It reported back while
+  // the parent was mid-turn, and Claude Code 2.1.274 records such an envelope
+  // as a queued command, not a user turn (copied from that transcript).
+  test('an envelope queued while the parent was busy retires it too', () async {
+    writeParent([
+      agentCall('toolu_1', 'job'),
+      launched('toolu_1', 'ab0c1e796c3cfbbad', 'job'),
+      '{"type":"attachment","timestamp":"2026-09-19T03:52:01.700Z",'
+          '"attachment":{"type":"queued_command","prompt":"<task-notification>\\n'
+          '<task-id>ab0c1e796c3cfbbad</task-id>\\n'
+          '<tool-use-id>toolu_1</tool-use-id>\\n<status>completed</status>\\n'
+          '</task-notification>"}}',
+    ]);
+
+    expect(agentRow(await read()).pendingBackgroundAgentId, isNull);
+  });
+
   test('every outcome the CLI reports retires it, not just success', () async {
     // Measured across the store: 722 completed, 41 stopped, 40 failed, 15
     // killed. The status word says what happened; that it arrived at all says

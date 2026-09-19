@@ -576,6 +576,11 @@ void _parseClaudeLine(
   if (type == 'attachment') {
     final attachment = json['attachment'];
     if (attachment is! Map) return;
+    // An envelope that arrived mid-turn is queued, not a user turn.
+    if (attachment['type'] == 'queued_command') {
+      _retireReportedAgents(attachment['prompt'], background, acrossBoundary);
+      return;
+    }
     if (attachment['type'] != 'task_status') return;
     if (attachment['status'] != 'running') return;
     final id = attachment['taskId'];
