@@ -161,6 +161,13 @@ class HostSessionApi {
           // see [pollTranscript], which has to read the transcript anyway.
           await _result(envelope.id, const {});
           await _pushSnapshot(sessionId);
+          // `approval.requested` goes out once, as a session starts waiting. A
+          // phone that was asleep then — or is on a link that replaced the one
+          // it went out on — would read "needs you" with nothing to act on.
+          if (_awaitingApproval(sessionId) &&
+              !_announcedApprovals.contains(sessionId)) {
+            await pushApprovalRequested(sessionId);
+          }
         case FrameType.sessionUnsubscribe:
           final sessionId = _requireString(envelope, 'sessionId');
           _subscribed.remove(sessionId);

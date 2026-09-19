@@ -1409,4 +1409,70 @@ void main() {
       );
     });
   });
+
+  // The registry resolves a transcript only for a session it has to probe, and
+  // a session whose status is fresh from a hook or the screen is never one. The
+  // question is still in the transcript: found through the locator instead.
+  test('an open question is read from the transcript even when the status '
+      'registry never resolved it', () async {
+    seedWorkspace();
+    AgentInstallationDao(db).insert(
+      AgentInstallation(
+        id: 'i2',
+        agentId: 'claudeCode',
+        executable: path(r'C:\bin\claude.exe'),
+        createdAt: now,
+      ),
+    );
+    SessionDao(db).insert(
+      Session(
+        id: 'q9',
+        repositoryId: 'r1',
+        agentInstallationId: 'i2',
+        title: 'Ask me',
+        useWorktree: false,
+        status: SessionStatus.running,
+        createdAt: now,
+        surface: SessionSurface.pane,
+        externalSessionId: 'ext-q9',
+      ),
+    );
+    final dir = Directory.systemTemp.createTempSync('karmashala_question_');
+    addTearDown(() => removeTempDirectory(dir));
+    final transcript = File(ph.join(dir.path, 'ext-q9.jsonl'))
+      ..writeAsStringSync(
+        '${jsonEncode({
+          'type': 'assistant',
+          'message': {
+            'content': [
+              {
+                'type': 'tool_use',
+                'id': 'toolu_9',
+                'name': 'AskUserQuestion',
+                'input': {
+                  'questions': [
+                    {
+                      'question': 'Pick a fruit',
+                      'options': [
+                        {'label': 'Apple'},
+                        {'label': 'Banana'},
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        })}\n',
+      );
+    locator.paths['claudeCode/ext-q9'] = transcript.path;
+
+    final open = await container.read(remoteOpenQuestionProvider)(
+      'q9',
+      'claudeCode',
+    );
+
+    expect(open?.toolUseId, 'toolu_9');
+    expect(open?.questions.single.options.last.label, 'Banana');
+  });
 }

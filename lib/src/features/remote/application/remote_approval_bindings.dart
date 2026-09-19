@@ -11,6 +11,7 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_chat_source.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -82,9 +83,22 @@ final remoteOpenQuestionProvider =
       return (sessionId, agentId) async {
         final support = ref.read(agentRegistryProvider).byId(agentId)?.questions;
         if (support == null) return null;
-        final path = ref
+        // The registry's path when it has one — the file the status came
+        // from. It resolves one only for a session it has to probe, and one
+        // fresh from a hook or the screen is not, so the store is asked too.
+        var path = ref
             .read(sessionStatusRegistryProvider)
             .transcriptPathForOpenId(sessionId);
+        if (path == null) {
+          final external = ref
+              .read(sessionDaoProvider)
+              .getById(sessionId)
+              ?.externalSessionId;
+          if (external == null || external.isEmpty) return null;
+          path = await ref
+              .read(sessionTranscriptLocatorProvider)
+              .locate(agentId: agentId, externalSessionId: external);
+        }
         if (path == null) return null;
         try {
           return openQuestionIn(await _tail(File(path)), support);

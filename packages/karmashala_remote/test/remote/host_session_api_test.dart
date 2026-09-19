@@ -1360,4 +1360,72 @@ void main() {
       expect(resolutions(harness), isEmpty);
     });
   });
+
+  // Seen on the phone, 2026-09-19: a session reading "Needs you" with nothing
+  // under it. `approval.requested` goes out once, as the session starts
+  // waiting — and a phone that was asleep then, or on a link that has since
+  // been replaced, opened the session and was never told what it was for.
+  group('a phone that opens a session already waiting is told what for', () {
+    List<SentFrame> requests(Harness harness) => [
+      for (final frame in harness.sent)
+        if (frame.type == FrameType.approvalRequested) frame,
+    ];
+
+    test('on subscribe, with the evidence of now', () async {
+      final harness = Harness();
+      harness.fake.setAwaitingApproval('s1');
+      harness.fake.approvals['s1'] = const RemoteApprovalRequest(
+        sessionId: 's1',
+        evidence: ['Allow Bash? (y/n)'],
+        approveLabel: 'Yes',
+      );
+
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+
+      final sent = RemoteApprovalRequest.fromJson(
+        requests(harness).single.payload,
+      );
+      expect(sent.evidence, ['Allow Bash? (y/n)']);
+    });
+
+    test('once per link, not on every subscribe', () async {
+      final harness = Harness();
+      harness.fake.setAwaitingApproval('s1');
+      await harness.api.pushApprovalRequested('s1');
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+        id: 'q2',
+      );
+      expect(requests(harness), hasLength(1));
+    });
+
+    test('and not at all to a device that cannot answer it', () async {
+      final viewer = Harness(
+        capabilities: CapabilitySet.of(const [Capability.viewSessions]),
+      );
+      viewer.fake.setAwaitingApproval('s1');
+      await viewer.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      expect(requests(viewer), isEmpty);
+    });
+
+    test('nor for a session that is not waiting', () async {
+      final harness = Harness();
+      await harness.request(
+        FrameType.sessionSubscribe,
+        payload: const {'sessionId': 's1'},
+      );
+      expect(requests(harness), isEmpty);
+    });
+  });
 }
