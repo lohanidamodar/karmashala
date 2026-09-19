@@ -9,4 +9,5 @@ export 'src/presentation/inbox_screen.dart';
 export 'src/presentation/project_sessions_screen.dart';
 export 'src/presentation/session_list_screen.dart';
 export 'src/presentation/session_view_screen.dart';
+export 'src/presentation/usage_screen.dart';
 export 'src/presentation/start_session_screen.dart';

@@ -25,6 +25,12 @@ class CompanionSessionsSnapshot {
 /// The gateway the companion UI reads. Defaults to an unpaired
 /// [FakeCompanionGateway] so companion mode boots to the pairing screen; the
 /// orchestrator overrides it with the real client.
+/// Every agent account's usage limits, asked each time the Usage tab is
+/// opened or pulled — never pushed, never polled.
+final companionUsageProvider = FutureProvider.autoDispose<RemoteUsageSnapshot>(
+  (ref) => ref.watch(companionGatewayProvider).usage(),
+);
+
 final companionGatewayProvider = Provider<CompanionGateway>(
   (ref) => FakeCompanionGateway(),
 );

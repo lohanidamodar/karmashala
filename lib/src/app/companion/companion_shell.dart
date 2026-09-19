@@ -19,7 +19,8 @@ class CompanionShell extends ConsumerStatefulWidget {
 class _CompanionShellState extends ConsumerState<CompanionShell> {
   int _tab = 0;
 
-  static const _titles = ['Projects', 'Inbox', 'Settings'];
+  static const _titles = ['Projects', 'Inbox', 'Usage', 'Settings'];
+  static const _usageTab = 2;
 
   /// The most of the body the banner and desktop strip take before scrolling.
   static const _chromeShare = 0.5;
@@ -68,10 +69,16 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
               Expanded(
                 child: IndexedStack(
                   index: _tab,
-                  children: const [
-                    SessionListScreen(),
-                    InboxScreen(),
-                    CompanionSettingsScreen(),
+                  children: [
+                    const SessionListScreen(),
+                    const InboxScreen(),
+                    // Built only while shown: usage is asked when the tab
+                    // opens, and an offstage tab would ask at launch.
+                    if (_tab == _usageTab)
+                      const UsageScreen()
+                    else
+                      const SizedBox.shrink(),
+                    const CompanionSettingsScreen(),
                   ],
                 ),
               ),
@@ -93,6 +100,10 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
                 ? inboxIcon
                 : Badge.count(count: inboxCount, child: inboxIcon),
             label: 'Inbox',
+          ),
+          const NavigationDestination(
+            icon: Icon(AppIcons.circleHalf),
+            label: 'Usage',
           ),
           const NavigationDestination(
             icon: Icon(AppIcons.gearSix),
