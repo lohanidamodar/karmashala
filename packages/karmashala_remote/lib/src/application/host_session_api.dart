@@ -69,6 +69,12 @@ class HostSessionApi {
   final void Function(String message)? onLog;
 
   final Set<String> _subscribed = <String>{};
+
+  /// Every session this device has been shown — listed, subscribed to, or
+  /// announced. Null until its first `sessions.list`: before that, the list it
+  /// is about to ask for carries everything, and announcing would only race it.
+  Set<String>? _shown;
+
   final Map<String, int> _transcriptCursors = <String, int>{};
 
   /// Sessions this device has been told are waiting on it. Kept so
@@ -149,13 +155,16 @@ class HostSessionApi {
       switch (type) {
         case FrameType.sessionsList:
           final rows = <Map<String, Object?>>[];
+          final shown = _shown ??= <String>{};
           for (final snapshot in bindings.listSessions()) {
             rows.add((await _withStage(snapshot)).toJson());
+            shown.add(snapshot.sessionId);
           }
           await _result(envelope.id, {'sessions': rows});
         case FrameType.sessionSubscribe:
           final sessionId = _requireSession(envelope);
           _subscribed.add(sessionId);
+          _shown?.add(sessionId);
           // **Nothing here reads the transcript.** It used to, to prime the
           // cursor to *now*; the priming happens on the first poll instead —
           // see [pollTranscript], which has to read the transcript anyway.
@@ -460,6 +469,25 @@ class HostSessionApi {
   Future<void> pushSessionsChanged() async {
     for (final sessionId in _subscribed.toList()) {
       await pushSessionChanged(sessionId);
+    }
+  }
+
+  /// Announces every session this device has never been shown — one started
+  /// on the desktop, or by another phone, after this one listed. Only
+  /// subscribed sessions are pushed otherwise, and a phone subscribes to what
+  /// it listed, so a newcomer stayed off its list until the app was restarted.
+  /// The phone places the row and subscribes to it itself.
+  Future<void> pushNewSessions() async {
+    final shown = _shown;
+    if (shown == null) return;
+    if (!device.capabilities.has(Capability.viewSessions)) return;
+    for (final snapshot in bindings.listSessions()) {
+      if (shown.contains(snapshot.sessionId)) continue;
+      final full = await _withStage(snapshot);
+      // Written down only once it went out, so a dropped one is tried again.
+      if (await _send(FrameType.sessionChanged, payload: full.toJson())) {
+        shown.add(snapshot.sessionId);
+      }
     }
   }
 

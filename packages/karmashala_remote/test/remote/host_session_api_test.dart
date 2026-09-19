@@ -474,6 +474,66 @@ void main() {
       expect(harness.last.payload['attention'], 'needs_approval');
     });
 
+    // Found on the Oppo, 2026-09-19: a session started on the desktop never
+    // reached the phone's list until the app was restarted. `session.changed`
+    // went only to subscribed sessions, and a phone subscribes to what it
+    // listed — so a session born after the list was never announced.
+    test('a session started after the phone listed is announced', () async {
+      final harness = Harness();
+      await harness.request(FrameType.sessionsList);
+      harness.fake.addSession('s2', title: 'Born later');
+      final before = harness.sent.length;
+
+      await harness.api.pushNewSessions();
+
+      expect(harness.sent.length, before + 1);
+      expect(harness.last.type, FrameType.sessionChanged);
+      expect(harness.last.payload['sessionId'], 's2');
+
+      await harness.api.pushNewSessions();
+      expect(harness.sent.length, before + 1, reason: 'announced once');
+    });
+
+    test('nothing is announced to a phone that has not listed', () async {
+      final harness = Harness();
+      harness.fake.addSession('s2');
+
+      await harness.api.pushNewSessions();
+
+      expect(
+        harness.sent,
+        isEmpty,
+        reason: 'its first list will carry everything anyway',
+      );
+    });
+
+    test('a session is not announced to a phone without view_sessions',
+        () async {
+      final harness = Harness(
+        capabilities: CapabilitySet.of(const [Capability.startSession]),
+      );
+      await harness.request(FrameType.sessionsList);
+      harness.fake.addSession('s2');
+      final before = harness.sent.length;
+
+      await harness.api.pushNewSessions();
+
+      expect(harness.sent.length, before);
+    });
+
+    test('an announcement the link dropped is tried again', () async {
+      final harness = Harness();
+      await harness.request(FrameType.sessionsList);
+      harness.fake.addSession('s2');
+
+      harness.delivers = false;
+      await harness.api.pushNewSessions();
+      harness.delivers = true;
+      await harness.api.pushNewSessions();
+
+      expect(harness.last.payload['sessionId'], 's2');
+    });
+
     test('transcript.appended carries only the delta', () async {
       final harness = Harness();
       harness.fake.transcripts['s1'] = [

@@ -554,7 +554,8 @@ class _DeviceRuntime {
   bool _pushing = false;
   bool _pushAgain = false;
 
-  /// Re-evaluates every subscribed session, coalescing bursts: one pass after a
+  /// Re-evaluates every subscribed session, and announces the ones this phone
+  /// has never been shown, coalescing bursts: one pass after a
   /// burst says everything N passes would, and no frame waits behind a queue.
   Future<void> sweepSessionsChanged() async {
     if (_pushing) {
@@ -570,6 +571,9 @@ class _DeviceRuntime {
           if (_closed) return;
           await run((api) => api.pushSessionChanged(sessionId));
         }
+        // And any session this phone has never been shown, which no
+        // subscription covers yet.
+        if (!_closed) await run((api) => api.pushNewSessions());
       } while (_pushAgain && !_closed);
     } finally {
       _pushing = false;
