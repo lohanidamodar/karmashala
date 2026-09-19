@@ -322,6 +322,43 @@ void main() {
     expect(find.text('Yes, I trust this folder'), findsNothing);
   });
 
+  // Seen on the Oppo: "Explain architecture" offered beside the trust menu.
+  // Sent, its Enter would have picked "No, exit".
+  testWidgets('no starter prompts, and no sending, while a prompt is open', (
+    tester,
+  ) async {
+    final fake = FakeCompanionGateway.paired(
+      sessions: [summary('s1', title: 'New')],
+      transcripts: {'s1': const []},
+      approvals: const {
+        's1': CompanionApproval(
+          id: 'a4',
+          sessionId: 's1',
+          agentName: 'Claude Code',
+          waiting: RemoteWaitKind.approval,
+          menu: RemoteMenu(
+            menuId: 'm1',
+            options: ['No, exit', 'Yes, I trust this folder'],
+            highlighted: 0,
+          ),
+        ),
+      },
+    );
+    await pumpPhone(
+      tester,
+      gateway: fake,
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+    await tester.pump();
+
+    expect(find.text('Explain architecture'), findsNothing);
+    expect(find.text('Answer the prompt above first'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'hello');
+    await tester.tap(find.byTooltip('Send'));
+    await tester.pump();
+    expect(fake.sentPrompts, isEmpty);
+  });
+
   testWidgets('an approval with no named deny explains itself', (tester) async {
     await pumpPhone(
       tester,

@@ -145,6 +145,16 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     // has a value it is authoritative and the controls must go.
     final sessionGone = sessions.hasValue && session == null;
     final imported = session?.imported ?? false;
+    // A prompt is open on the desktop: typed text would land in it, and its
+    // Enter would pick whatever is highlighted. The host refuses the send, so
+    // the phone does not offer one.
+    final prompted =
+        !imported &&
+        approval != null &&
+        (approval.menu != null ||
+            approval.question != null ||
+            approval.waiting == RemoteWaitKind.approval ||
+            approval.waiting == RemoteWaitKind.question);
 
     final pane = sessionGone
         ? CompanionNotice(
@@ -189,7 +199,9 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
               // session that has not started — and never of a phone that may
               // not send one.
               onSuggestionTap:
-                  canPrompt && session?.status != CompanionSessionStatus.working
+                  canPrompt &&
+                      !prompted &&
+                      session?.status != CompanionSessionStatus.working
                   ? _suggest
                   : null,
               footer: SessionFooter(
@@ -230,10 +242,12 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                   ? null
                   : CompanionComposer(
                       controller: _composer,
-                      enabled: canPrompt,
-                      hintText: canPrompt
-                          ? 'Send a message…'
-                          : 'This phone was not granted prompt rights.',
+                      enabled: canPrompt && !prompted,
+                      hintText: !canPrompt
+                          ? 'This phone was not granted prompt rights.'
+                          : prompted
+                          ? 'Answer the prompt above first'
+                          : 'Send a message…',
                       // Straight off the row, so the picker appears only where
                       // the host has said what it would take.
                       attachments: capabilities.has(Capability.sendAttachment)
