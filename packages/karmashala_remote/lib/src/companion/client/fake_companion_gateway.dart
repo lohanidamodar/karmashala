@@ -826,6 +826,36 @@ class FakeCompanionGateway implements CompanionGateway {
   })>[];
 
   @override
+  Future<void> answerMenu(
+    String sessionId,
+    String approvalId,
+    int option,
+  ) async {
+    _requireLink();
+    final pending = _approvalOf(sessionId);
+    if (pending.value?.id != approvalId || pending.value?.menu == null) {
+      throw const GatewayException(
+        'That prompt is no longer waiting for an answer.',
+      );
+    }
+    answeredMenus.add((
+      sessionId: sessionId,
+      approvalId: approvalId,
+      option: option,
+    ));
+    pending.value = null;
+    _approvalResolutions.add(
+      CompanionApprovalResolution(
+        sessionId: sessionId,
+        outcome: CompanionApprovalOutcome.answered,
+      ),
+    );
+  }
+
+  /// Every [answerMenu], in order.
+  final answeredMenus = <({String sessionId, String approvalId, int option})>[];
+
+  @override
   Future<void> answerApproval(
     String sessionId,
     String approvalId,

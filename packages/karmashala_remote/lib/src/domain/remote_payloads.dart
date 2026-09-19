@@ -918,6 +918,100 @@ class RemoteQuestionAnswerRequest {
   }
 }
 
+/// A menu the agent drew on its own screen — folder trust, a permission
+/// prompt, a startup offer — as the host read it off the pane.
+class RemoteMenu {
+  const RemoteMenu({
+    required this.menuId,
+    required this.options,
+    required this.highlighted,
+    this.prompt = const [],
+  });
+
+  /// Names this menu. The answer carries it, so an answer meant for one
+  /// prompt cannot land on the one that replaced it.
+  final String menuId;
+
+  /// The rows above the options that say what is asked, verbatim.
+  final List<String> prompt;
+
+  /// The options in the agent's words, top first.
+  final List<String> options;
+
+  /// What Enter alone would choose — shown, never assumed to be the answer.
+  final int highlighted;
+
+  Map<String, Object?> toJson() => {
+    'menuId': menuId,
+    'prompt': prompt,
+    'options': options,
+    'highlighted': highlighted,
+  };
+
+  /// The menu, or null for anything not wholly readable.
+  static RemoteMenu? tryFromJson(Object? json) {
+    if (json is! Map) return null;
+    final id = json['menuId'];
+    final options = json['options'];
+    final highlighted = json['highlighted'];
+    final prompt = json['prompt'];
+    if (id is! String ||
+        options is! List ||
+        options.length < 2 ||
+        !options.every((o) => o is String) ||
+        highlighted is! int ||
+        highlighted < 0 ||
+        highlighted >= options.length) {
+      return null;
+    }
+    return RemoteMenu(
+      menuId: id,
+      options: options.cast<String>(),
+      highlighted: highlighted,
+      prompt: [
+        if (prompt is List)
+          for (final row in prompt)
+            if (row is String) row,
+      ],
+    );
+  }
+}
+
+/// What `menu.answer` carries: which option of which menu.
+class RemoteMenuAnswerRequest {
+  const RemoteMenuAnswerRequest({
+    required this.sessionId,
+    required this.menuId,
+    required this.option,
+  });
+
+  final String sessionId;
+  final String menuId;
+
+  /// The chosen option's index, top first.
+  final int option;
+
+  Map<String, Object?> toJson() => {
+    'sessionId': sessionId,
+    'menuId': menuId,
+    'option': option,
+  };
+
+  static RemoteMenuAnswerRequest fromJson(Map<String, Object?> json) {
+    final sessionId = json['sessionId'];
+    final menuId = json['menuId'];
+    final option = json['option'];
+    if (sessionId is! String || menuId is! String || option is! int) {
+      throw const ProtocolException('bad menu answer');
+    }
+    return RemoteMenuAnswerRequest(
+      sessionId: sessionId,
+      menuId: menuId,
+      option: option,
+    );
+  }
+}
+
 /// What `approval.requested` carries: the agent's own words, verbatim, or
 /// nothing — never a summary this code wrote.
 class RemoteApprovalRequest {
@@ -928,6 +1022,7 @@ class RemoteApprovalRequest {
     this.approveLabel,
     this.denyLabel,
     this.question,
+    this.menu,
   });
 
   final String sessionId;
@@ -936,6 +1031,12 @@ class RemoteApprovalRequest {
   /// The question itself, when [waiting] is [RemoteWaitKind.question] and the
   /// host could read it. Absent from an older host.
   final RemoteQuestion? question;
+
+  /// The menu on the agent's screen, when the host could read one — answered
+  /// by option with `menu.answer`. A host that sends one names no approve or
+  /// deny: Enter chooses whatever is highlighted, which on a folder-trust
+  /// prompt is "No, exit". Absent from an older host.
+  final RemoteMenu? menu;
 
   /// What the host can tell the session is waiting on. Sent for every request
   /// so the phone can word the card without guessing.
@@ -953,6 +1054,7 @@ class RemoteApprovalRequest {
     if (approveLabel != null) 'approve': approveLabel,
     if (denyLabel != null) 'deny': denyLabel,
     if (question != null) 'question': question!.toJson(),
+    if (menu != null) 'menu': menu!.toJson(),
   };
 
   static RemoteApprovalRequest fromJson(Map<String, Object?> json) {
@@ -974,6 +1076,7 @@ class RemoteApprovalRequest {
           : null,
       denyLabel: json['deny'] is String ? json['deny']! as String : null,
       question: RemoteQuestion.tryFromJson(json['question']),
+      menu: RemoteMenu.tryFromJson(json['menu']),
     );
   }
 }

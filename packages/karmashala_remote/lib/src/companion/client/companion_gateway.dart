@@ -514,11 +514,16 @@ class CompanionApproval {
     this.denyLabel,
     this.denyEffect,
     this.question,
+    this.menu,
   });
 
   final String id;
   final String sessionId;
   final String agentName;
+
+  /// The menu on the agent's screen, when the host read one — folder trust, a
+  /// permission prompt. Answered by option with [CompanionGateway.answerMenu].
+  final RemoteMenu? menu;
 
   /// The multiple-choice question itself, when [waiting] is
   /// [RemoteWaitKind.question] and the host could read it. Answered with
@@ -748,6 +753,10 @@ abstract interface class CompanionGateway {
     List<RemoteQuestionAnswer> answers = const [],
     bool decline = false,
   });
+
+  /// Chooses [option] of the menu pending on [sessionId]. [approvalId] is the
+  /// card being answered, so a card that has since been replaced is not.
+  Future<void> answerMenu(String sessionId, String approvalId, int option);
 
   /// Approvals going away, and why. Events-only, like [attentionEvents].
   Stream<CompanionApprovalResolution> get approvalResolutions;

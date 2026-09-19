@@ -50,6 +50,7 @@ class RemoteHostBindings {
     required this.writeAttachmentChunk,
     required this.discardAttachment,
     this.answerQuestion = _noQuestions,
+    this.answerMenu = _noMenus,
   });
 
   /// What `host.status` calls this desktop.
@@ -152,12 +153,23 @@ class RemoteHostBindings {
   /// Defaults to refusing: a host that never learned questions answers none.
   final Future<String> Function(RemoteQuestionAnswerRequest request)
   answerQuestion;
+
+  /// Chooses the option [request] names of the menu on the session's screen.
+  /// Returns the option's words, or throws [RemoteApiRefusal] with nothing
+  /// chosen. Defaults to refusing: a host that never learned menus reads none.
+  final Future<String> Function(RemoteMenuAnswerRequest request) answerMenu;
 }
 
 Future<String> _noQuestions(RemoteQuestionAnswerRequest request) async =>
     throw const RemoteApiRefusal(
       ErrorCode.badRequest,
       'this host cannot answer questions',
+    );
+
+Future<String> _noMenus(RemoteMenuAnswerRequest request) async =>
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'this host cannot answer menus',
     );
 
 /// One completed upload, named by the link that carried it. The device travels

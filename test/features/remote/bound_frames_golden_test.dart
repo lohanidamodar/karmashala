@@ -440,6 +440,9 @@ void main() {
         },
         {'sessionId': 's1', 'toolUseId': 'toolu_1', 'decline': true},
       ],
+      FrameType.menuAnswer: [
+        {'sessionId': 's1', 'menuId': 'm1', 'option': 1},
+      ],
       FrameType.notificationsRegister: [
         {'token': 't0k', 'platform': 'android'},
       ],

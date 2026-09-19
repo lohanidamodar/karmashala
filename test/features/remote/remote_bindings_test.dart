@@ -34,6 +34,7 @@ import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
+import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/sessions/data/session_event_dao.dart';
@@ -1407,6 +1408,164 @@ void main() {
         bindings.answerQuestion(answering()),
         refusedWith('no live terminal'),
       );
+    });
+  });
+
+  // A menu on the agent's screen — folder trust here — is answered by option.
+  // Approve would be Enter, and Enter on this one is "No, exit".
+  group('a menu on the screen is carried whole and answered by option', () {
+    late List<String> pressed;
+    late int highlighted;
+    const options = ['No, exit', 'Yes, I trust this folder'];
+
+    List<String> screen() => [
+      ' Security guide',
+      '',
+      for (var i = 0; i < options.length; i++)
+        i == highlighted ? ' ❯ ${options[i]}' : '   ${options[i]}',
+      '',
+      ' Enter to confirm · Esc to cancel',
+    ];
+
+    ProviderContainer with_(AgentStatusReport? report) {
+      pressed = [];
+      highlighted = 0;
+      final built = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          remoteDeliveryStageProvider.overrideWithValue(
+            (sessionId) async => 'working',
+          ),
+          remoteApprovalEvidenceProvider.overrideWithValue(
+            (sessionId) async => report,
+          ),
+          remoteSessionPresenceProvider.overrideWithValue(
+            (sessionId) => (note: null, lastSeen: null),
+          ),
+          sessionMenuAnswererProvider.overrideWithValue(
+            SessionMenuAnswerer(
+              readScreen: (_) => screen(),
+              supportFor: (_) => const AgentMenuSupport(markers: ['❯']),
+              isAsking: (_) => report?.hasOpenPrompt ?? false,
+              press: (_, keys) {
+                pressed.add(keys);
+                if (keys == '\x1b[B') highlighted++;
+                return true;
+              },
+              poll: const Duration(milliseconds: 1),
+            ),
+          ),
+        ],
+      );
+      addTearDown(built.dispose);
+      return built;
+    }
+
+    void seedClaude(String id) {
+      AgentInstallationDao(db).insert(
+        AgentInstallation(
+          id: 'i2',
+          agentId: 'claudeCode',
+          executable: path(r'C:\bin\claude.exe'),
+          createdAt: now,
+        ),
+      );
+      SessionDao(db).insert(
+        Session(
+          id: id,
+          repositoryId: 'r1',
+          agentInstallationId: 'i2',
+          title: 'Trust me',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: now,
+          surface: SessionSurface.external,
+        ),
+      );
+    }
+
+    AgentStatusReport showing(AgentWaitKind waiting) => AgentStatusReport(
+      agentId: 'claudeCode',
+      sessionId: 'ext1',
+      status: AgentActivityStatus.awaitingApproval,
+      observedAt: now,
+      source: AgentStatusSource.terminalGrid,
+      evidence: const ['Security guide'],
+      waiting: waiting,
+    );
+
+    test('the menu travels with the request, and no Approve beside it',
+        () async {
+      seedWorkspace();
+      seedClaude('m1');
+      final bindings = with_(
+        showing(AgentWaitKind.approval),
+      ).read(remoteHostBindingsProvider);
+
+      final request = await bindings.approvalEvidenceFor('m1');
+
+      expect(request.menu!.options, options);
+      expect(request.menu!.highlighted, 0);
+      expect(request.approveLabel, isNull);
+      expect(request.denyLabel, isNull);
+    });
+
+    test('the option chosen is the option confirmed', () async {
+      seedWorkspace();
+      seedClaude('m1');
+      final bindings = with_(
+        showing(AgentWaitKind.approval),
+      ).read(remoteHostBindingsProvider);
+      final menu = (await bindings.approvalEvidenceFor('m1')).menu!;
+
+      final chosen = await bindings.answerMenu(
+        RemoteMenuAnswerRequest(sessionId: 'm1', menuId: menu.menuId, option: 1),
+      );
+
+      expect(chosen, 'Yes, I trust this folder');
+      expect(pressed, ['\x1b[B', '\r']);
+    });
+
+    test('an answer with no prompt open is refused, and nothing pressed',
+        () async {
+      seedWorkspace();
+      seedClaude('m1');
+      final bindings = with_(
+        showing(AgentWaitKind.input),
+      ).read(remoteHostBindingsProvider);
+      await expectLater(
+        bindings.answerMenu(
+          const RemoteMenuAnswerRequest(sessionId: 'm1', menuId: 'x', option: 1),
+        ),
+        throwsA(isA<RemoteApiRefusal>()),
+      );
+      expect(pressed, isEmpty);
+    });
+
+    test('an answer for a menu that has since changed chooses nothing',
+        () async {
+      seedWorkspace();
+      seedClaude('m1');
+      final bindings = with_(
+        showing(AgentWaitKind.approval),
+      ).read(remoteHostBindingsProvider);
+      await expectLater(
+        bindings.answerMenu(
+          const RemoteMenuAnswerRequest(
+            sessionId: 'm1',
+            menuId: 'not-this-one',
+            option: 1,
+          ),
+        ),
+        throwsA(
+          isA<RemoteApiRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('prompt changed'),
+          ),
+        ),
+      );
+      expect(pressed, isEmpty);
     });
   });
 

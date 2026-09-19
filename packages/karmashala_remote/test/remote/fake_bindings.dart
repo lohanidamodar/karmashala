@@ -56,6 +56,10 @@ class FakeRemoteBindings {
   /// appear here — that is the whole point of refusing it.
   final List<({String sessionId, String decision})> approvalAnswers = [];
   final List<RemoteQuestionAnswerRequest> questionAnswers = [];
+  final List<RemoteMenuAnswerRequest> menuAnswers = [];
+
+  /// When set, [RemoteHostBindings.answerMenu] refuses with it.
+  RemoteApiRefusal? menuRefusal;
   final List<
     ({
       String deviceId,
@@ -194,6 +198,12 @@ class FakeRemoteBindings {
     answerQuestion: (request) async {
       questionAnswers.add(request);
       return request.decline ? 'declined' : 'answered';
+    },
+    answerMenu: (request) async {
+      final refusal = menuRefusal;
+      if (refusal != null) throw refusal;
+      menuAnswers.add(request);
+      return 'option ${request.option}';
     },
     approvalEvidenceFor: (sessionId) async =>
         approvals[sessionId] ?? RemoteApprovalRequest(sessionId: sessionId),

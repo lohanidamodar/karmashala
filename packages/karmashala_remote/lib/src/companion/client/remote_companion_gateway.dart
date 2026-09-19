@@ -892,6 +892,33 @@ class RemoteCompanionGateway implements CompanionGateway {
   }
 
   @override
+  Future<void> answerMenu(
+    String sessionId,
+    String approvalId,
+    int option,
+  ) async {
+    await _ready;
+    final pending = _approvalOf(sessionId);
+    final menu = pending.value?.menu;
+    if (pending.value?.id != approvalId || menu == null) {
+      throw const GatewayException(
+        'That prompt is no longer waiting for an answer.',
+      );
+    }
+    final client = _requireClient();
+    await _mapRefusals(
+      () => client.answerMenu(
+        RemoteMenuAnswerRequest(
+          sessionId: sessionId,
+          menuId: menu.menuId,
+          option: option,
+        ),
+      ),
+    );
+    if (pending.value?.id == approvalId) pending.value = null;
+  }
+
+  @override
   Stream<CompanionApprovalResolution> get approvalResolutions =>
       _approvalResolutions.stream;
 

@@ -10,6 +10,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../sessions/application/session_launcher.dart';
+import '../../sessions/application/session_menu_answerer.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_chat_source.dart';
 import '../../notifications/application/notification_providers.dart';
@@ -207,17 +208,60 @@ Future<RemoteApprovalRequest> remoteApprovalEvidenceFor(
   final question = report?.hasOpenQuestion == true && agentId != null
       ? await ref.read(remoteOpenQuestionProvider)(sessionId, agentId)
       : null;
+  // A menu read off the pane is answered by option, and travels without
+  // approve/deny: Enter chooses whatever is highlighted, which on a
+  // folder-trust prompt is "No, exit" — and an older phone that cannot read
+  // the menu then says to answer at the desk rather than offer that Enter.
+  final menu = answerable
+      ? ref.read(sessionMenuAnswererProvider).read(sessionId)
+      : null;
   return RemoteApprovalRequest(
     question: question == null ? null : _wireQuestion(question),
+    menu: menu == null ? null : _wireMenu(menu),
     sessionId: sessionId,
     evidence: asking ? report!.evidence : const [],
     waiting: asking ? _wireWait(report!.waiting) : RemoteWaitKind.unrecorded,
     // Keys only for a prompt a source could see: `awaitingApproval` is also
     // true of an agent at its own input, where approve would type Enter.
-    approveLabel: answerable ? rules?.approve?.label : null,
-    denyLabel: answerable ? rules?.deny?.label : null,
+    approveLabel: answerable && menu == null ? rules?.approve?.label : null,
+    denyLabel: answerable && menu == null ? rules?.deny?.label : null,
   );
 }
+
+/// Chooses the option [request] names of the menu on the session's screen,
+/// through the same answerer the chat view uses. Refused, with nothing chosen,
+/// unless the session still shows a prompt and it is the menu the phone saw.
+Future<String> answerRemoteMenu(
+  Ref ref,
+  RemoteMenuAnswerRequest request,
+) async {
+  final sessionId = request.sessionId;
+  if (ref.read(sessionDaoProvider).getById(sessionId) == null) {
+    throw const RemoteApiRefusal(ErrorCode.notFound, 'no such session');
+  }
+  if (!_hasOpenPrompt(await ref.read(remoteApprovalEvidenceProvider)(sessionId))) {
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'this session has no prompt open to answer',
+    );
+  }
+  try {
+    return await ref.read(sessionMenuAnswererProvider).choose(
+      sessionId,
+      menuId: request.menuId,
+      option: request.option,
+    );
+  } on SessionPromptRefusal catch (refusal) {
+    throw RemoteApiRefusal(ErrorCode.badRequest, refusal.message);
+  }
+}
+
+RemoteMenu _wireMenu(AgentScreenMenu menu) => RemoteMenu(
+  menuId: menu.id,
+  prompt: menu.prompt,
+  options: menu.options,
+  highlighted: menu.highlighted,
+);
 
 /// The one rule both halves turn on, kept on [AgentStatusReport.hasOpenPrompt]
 /// because `session_send` refuses on it too. Absent is not an open prompt.

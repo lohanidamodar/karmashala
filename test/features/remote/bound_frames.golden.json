@@ -503,6 +503,28 @@
       ]
     },
     {
+      "frame": "menu.answer",
+      "capability": "approve",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "s1",
+            "menuId": "m1",
+            "option": 1
+          },
+          "frames": [
+            {
+              "type": "error",
+              "payload": {
+                "code": "bad_request",
+                "message": "this prompt has already been answered"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "frame": "notifications.register",
       "capability": "receive_notifications",
       "cases": [

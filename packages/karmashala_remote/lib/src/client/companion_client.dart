@@ -488,6 +488,14 @@ class CompanionClient {
     return done is String ? done : '';
   }
 
+  /// `menu.answer` — chooses one option of the menu [request] names; answers
+  /// with the option's words.
+  Future<String> answerMenu(RemoteMenuAnswerRequest request) async {
+    final payload = await _request(FrameType.menuAnswer, request.toJson());
+    final chosen = payload['chosen'];
+    return chosen is String ? chosen : '';
+  }
+
   /// `workspace.list` — the projects, checkouts and installed agents a session
   /// could be started in. A row this build cannot parse is dropped.
   Future<List<RemoteWorkspaceProject>> listWorkspace() async {

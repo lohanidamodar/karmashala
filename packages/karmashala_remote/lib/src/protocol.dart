@@ -222,6 +222,15 @@ enum FrameType {
     origin: FrameOrigin.companion,
     capability: Capability.approve,
   ),
+
+  /// Chooses one option of a menu the agent drew on its screen — folder trust,
+  /// a permission prompt. Gated on [Capability.approve], like the approval it
+  /// replaces.
+  menuAnswer(
+    'menu.answer',
+    origin: FrameOrigin.companion,
+    capability: Capability.approve,
+  ),
   notificationsRegister(
     'notifications.register',
     origin: FrameOrigin.companion,

@@ -107,6 +107,27 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
               ),
       );
     },
+    answerMenu: (request) async {
+      final resolved = resolve(request.sessionId);
+      if (resolved.imported != null) {
+        throw const RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'this session was imported from the CLI — answer it in its own '
+          'terminal',
+        );
+      }
+      final native = resolved.native?.id;
+      return answerRemoteMenu(
+        ref,
+        native == null
+            ? request
+            : RemoteMenuAnswerRequest(
+                sessionId: native,
+                menuId: request.menuId,
+                option: request.option,
+              ),
+      );
+    },
     approvalEvidenceFor: (sessionId) =>
         remoteApprovalEvidenceFor(ref, sessionId),
     registerPush: (deviceId, token, platform, presence) async {

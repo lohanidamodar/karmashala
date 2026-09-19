@@ -179,6 +179,7 @@ void main() {
         'prompt.send',
         'approval.answer',
         'question.answer',
+        'menu.answer',
         'notifications.register',
         'workspace.list',
         'projects.list',

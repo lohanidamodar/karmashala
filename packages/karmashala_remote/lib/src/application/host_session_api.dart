@@ -361,6 +361,25 @@ class HostSessionApi {
                 : RemoteApprovalOutcome.answered,
           );
           await _result(envelope.id, {'done': done});
+        case FrameType.menuAnswer:
+          final RemoteMenuAnswerRequest request;
+          try {
+            request = RemoteMenuAnswerRequest.fromJson(envelope.payload);
+          } on ProtocolException catch (error) {
+            throw RemoteApiRefusal(ErrorCode.badRequest, error.message);
+          }
+          if (!_awaitingApproval(request.sessionId)) {
+            throw const RemoteApiRefusal(
+              ErrorCode.badRequest,
+              'this prompt has already been answered',
+            );
+          }
+          final chosen = await bindings.answerMenu(request);
+          await _sendApprovalResolved(
+            request.sessionId,
+            RemoteApprovalOutcome.answered,
+          );
+          await _result(envelope.id, {'chosen': chosen});
         case FrameType.notificationsRegister:
           final token = _requireString(envelope, 'token');
           final platform = _requireString(envelope, 'platform');
