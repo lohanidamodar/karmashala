@@ -102,7 +102,10 @@ class CompanionSessionRow extends StatelessWidget {
       depth: 0,
       selected: false,
       agentIcon: AppIcons.robot,
-      agentLabel: session.agentLabel,
+      agentLabel: switch (session.model) {
+        final model? => '${session.agentLabel}  ·  $model',
+        null => session.agentLabel,
+      },
       // The word beside the glyph, always: amber and green are not a
       // distinction everyone can see.
       badge: CompanionStatusBadge(status: session.status, showLabel: true),

@@ -19,6 +19,7 @@ import '../../projects/application/projects_controller.dart';
 import '../../projects/domain/project.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
+import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_resume_providers.dart';
 import 'package:karmashala_session/session.dart';
@@ -159,6 +160,8 @@ RemoteSessionSnapshot remoteSessionSnapshot(
     environmentName: environmentNameFor(ref, owner?.environmentId),
     environmentId: owner?.environmentId,
     environmentKind: environmentKindFor(ref, owner?.environmentId),
+    // What the desktop's model chip says: chosen, or the default it follows.
+    model: ref.read(sessionLauncherProvider).effectiveModelFor(session.id)?.modelId,
   );
 }
 

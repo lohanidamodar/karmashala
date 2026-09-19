@@ -284,6 +284,7 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                 child: SessionStatusStrip(
                   status: session?.status,
                   agentLabel: session?.agentLabel,
+                  model: session?.model,
                   whereabouts: session?.whereabouts,
                   stageLabel: switch (session?.deliveryStage) {
                     final stage? => SessionViewScreen._stageLabel(stage),
@@ -340,6 +341,7 @@ class SessionStatusStrip extends StatelessWidget {
   const SessionStatusStrip({
     this.status,
     this.agentLabel,
+    this.model,
     this.whereabouts,
     this.stageLabel,
     super.key,
@@ -348,6 +350,9 @@ class SessionStatusStrip extends StatelessWidget {
   /// Null while the session list is still arriving: no badge, not a guess.
   final CompanionSessionStatus? status;
   final String? agentLabel;
+
+  /// Beside the agent, before anything the line may cut off.
+  final String? model;
   final String? whereabouts;
   final String? stageLabel;
 
@@ -367,7 +372,7 @@ class SessionStatusStrip extends StatelessWidget {
           const SizedBox(width: Insets.sm),
           Expanded(
             child: Text(
-              [?agentLabel, ?whereabouts, ?stageLabel].join('  ·  '),
+              [?agentLabel, ?model, ?whereabouts, ?stageLabel].join('  ·  '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.right,

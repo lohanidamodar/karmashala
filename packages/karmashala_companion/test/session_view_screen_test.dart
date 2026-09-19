@@ -222,6 +222,21 @@ void main() {
     });
   });
 
+  testWidgets('the model the desktop launched it on sits beside the agent', (
+    tester,
+  ) async {
+    await pumpPhone(
+      tester,
+      gateway: FakeCompanionGateway.paired(
+        sessions: [summary('s1', model: 'opus')],
+      ),
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+    await tester.pump();
+
+    expect(find.textContaining('Claude Code  ·  running  ·  opus'), findsOneWidget);
+  });
+
   testWidgets('sending a prompt goes through the gateway', (tester) async {
     final fake = gateway();
     await pumpPhone(

@@ -37,7 +37,9 @@ CompanionSessionSummary summary(
   String? environmentName,
   String? environmentId,
   String? environmentKind,
+  String? model,
 }) => CompanionSessionSummary(
+  model: model,
   id: id,
   title: title ?? 'Session $id',
   agentLabel: agentLabel,

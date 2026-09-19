@@ -101,6 +101,7 @@ extension _GatewaySessions on RemoteCompanionGateway {
       environmentName: snapshot.environmentName ?? text('environmentName'),
       environmentId: snapshot.environmentId ?? text('environmentId'),
       environmentKind: snapshot.environmentKind ?? text('environmentKind'),
+      model: snapshot.model,
     );
   }
 

@@ -273,10 +273,15 @@ class CompanionSessionSummary {
     this.environmentName,
     this.environmentId,
     this.environmentKind,
+    this.model,
   });
 
   final String id;
   final String title;
+
+  /// The model the desktop launched this session on, or null when it names
+  /// none (the agent's own default, which the desktop does not know).
+  final String? model;
 
   /// "Claude Code · running" — the card's first line, worded by the host so
   /// the phone never invents a claim about a process it cannot see.
@@ -370,6 +375,7 @@ class CompanionSessionSummary {
     environmentName: environmentName,
     environmentId: environmentId,
     environmentKind: environmentKind,
+    model: model,
   );
 
   /// What the list groups by: the repository's real identity when the host

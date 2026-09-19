@@ -39,6 +39,7 @@ class RemoteSessionSnapshot {
     this.environmentName,
     this.environmentId,
     this.environmentKind,
+    this.model,
   });
 
   final String sessionId;
@@ -130,6 +131,11 @@ class RemoteSessionSnapshot {
   final String? environmentId;
   final String? environmentKind;
 
+  /// The model the desktop launched this session on — the one chosen for it,
+  /// or the configured default it follows. Null when neither names one: the
+  /// agent's own default is not known here, and is not guessed.
+  final String? model;
+
   /// [clearAttention] because "nothing is waiting" is a value a null argument
   /// cannot express, and an approval being answered is exactly that move.
   RemoteSessionSnapshot copyWith({
@@ -164,6 +170,7 @@ class RemoteSessionSnapshot {
         environmentName: environmentName,
         environmentId: environmentId,
         environmentKind: environmentKind,
+        model: model,
       );
 
   Map<String, Object?> toJson() => {
@@ -194,6 +201,7 @@ class RemoteSessionSnapshot {
     if (environmentName != null) 'environmentName': environmentName,
     if (environmentId != null) 'environmentId': environmentId,
     if (environmentKind != null) 'environmentKind': environmentKind,
+    if (model != null) 'model': model,
   };
 
   static RemoteSessionSnapshot fromJson(Map<String, Object?> json) {
@@ -231,6 +239,7 @@ class RemoteSessionSnapshot {
       environmentName: str(json['environmentName']),
       environmentId: str(json['environmentId']),
       environmentKind: str(json['environmentKind']),
+      model: str(json['model']),
     );
   }
 
@@ -262,7 +271,8 @@ class RemoteSessionSnapshot {
       other.environmentBadge == environmentBadge &&
       other.environmentName == environmentName &&
       other.environmentId == environmentId &&
-      other.environmentKind == environmentKind;
+      other.environmentKind == environmentKind &&
+      other.model == model;
 
   @override
   int get hashCode => Object.hash(
@@ -293,6 +303,7 @@ class RemoteSessionSnapshot {
       environmentName,
       environmentId,
       environmentKind,
+      model,
     ),
   );
 }

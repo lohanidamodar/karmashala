@@ -1423,6 +1423,29 @@ void main() {
     });
   });
 
+  test('a session carries the model the desktop launched it on', () {
+    seedWorkspace();
+    SessionDao(db).insert(
+      Session(
+        id: 'mod1',
+        repositoryId: 'r1',
+        agentInstallationId: 'i1',
+        title: 'Chosen model',
+        useWorktree: false,
+        status: SessionStatus.running,
+        createdAt: now,
+        surface: SessionSurface.external,
+        modelId: 'opus',
+      ),
+    );
+
+    final snapshot = container
+        .read(remoteHostBindingsProvider)
+        .sessionById('mod1');
+
+    expect(snapshot?.model, 'opus');
+  });
+
   // A menu on the agent's screen — folder trust here — is answered by option.
   // Approve would be Enter, and Enter on this one is "No, exit".
   group('a menu on the screen is carried whole and answered by option', () {
