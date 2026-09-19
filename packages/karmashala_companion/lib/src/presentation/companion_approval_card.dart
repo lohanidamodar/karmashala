@@ -4,6 +4,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/companion.dart';
+import 'companion_menu_card.dart';
 import 'companion_question_card.dart';
 
 /// The pending approval for one session, evidence verbatim. Nothing to press
@@ -13,18 +14,22 @@ class CompanionApprovalCard extends StatefulWidget {
     required this.approval,
     required this.onAnswer,
     this.onAnswerQuestion,
+    this.onAnswerMenu,
     this.canAnswer = true,
     super.key,
   });
-
-  /// Answers a multiple-choice question; null where none can be answered.
 
   final CompanionApproval approval;
 
   /// Sends the decision to the host; awaited for a busy state.
   final Future<void> Function(CompanionApprovalDecision decision) onAnswer;
 
+  /// Answers a multiple-choice question; null where none can be answered.
   final CompanionQuestionAnswerFn? onAnswerQuestion;
+
+  /// Chooses an option of a menu on the agent's screen; null where none can
+  /// be answered.
+  final CompanionMenuAnswerFn? onAnswerMenu;
 
   /// Whether this phone holds the `approve` capability.
   final bool canAnswer;
@@ -73,6 +78,8 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
     final name = approval.agentName;
     final question = approval.question;
     final onQuestion = widget.onAnswerQuestion;
+    final menu = approval.menu;
+    final onMenu = widget.onAnswerMenu;
 
     return Container(
       // Lined up with the transcript above it; three stacked things had three
@@ -102,6 +109,13 @@ class _CompanionApprovalCardState extends State<CompanionApprovalCard> {
                 question: question,
                 canAnswer: widget.canAnswer,
                 onAnswer: onQuestion,
+              )
+            : menu != null && onMenu != null
+            ? CompanionMenuCard(
+                agentName: name,
+                menu: menu,
+                canAnswer: widget.canAnswer,
+                onChoose: onMenu,
               )
             : Column(
           crossAxisAlignment: CrossAxisAlignment.start,

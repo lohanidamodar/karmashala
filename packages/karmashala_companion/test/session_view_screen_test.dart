@@ -283,6 +283,45 @@ void main() {
     expect(find.text('Claude Code is waiting for you'), findsNothing);
   });
 
+  // Folder trust: Approve would be Enter, and Enter here is "No, exit".
+  testWidgets('a menu on the screen is answered by option, through the '
+      'gateway', (tester) async {
+    final fake = gateway(
+      approvals: const {
+        's1': CompanionApproval(
+          id: 'a3',
+          sessionId: 's1',
+          agentName: 'Claude Code',
+          evidence: ['Security guide'],
+          waiting: RemoteWaitKind.approval,
+          menu: RemoteMenu(
+            menuId: 'm1',
+            prompt: ['Accessing workspace:'],
+            options: ['No, exit', 'Yes, I trust this folder'],
+            highlighted: 0,
+          ),
+        ),
+      },
+    );
+    await pumpPhone(
+      tester,
+      gateway: fake,
+      home: const SessionViewScreen(sessionId: 's1'),
+    );
+    await tester.pump();
+
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
+    await tester.tap(find.text('Yes, I trust this folder'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Choose'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(fake.answeredMenus.single.approvalId, 'a3');
+    expect(fake.answeredMenus.single.option, 1);
+    expect(find.text('Yes, I trust this folder'), findsNothing);
+  });
+
   testWidgets('an approval with no named deny explains itself', (tester) async {
     await pumpPhone(
       tester,

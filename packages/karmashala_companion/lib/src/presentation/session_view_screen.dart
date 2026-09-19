@@ -12,6 +12,7 @@ import '../application/companion_providers.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'companion_activity_strip.dart';
 import 'companion_approval_card.dart';
+import 'companion_menu_card.dart';
 import 'companion_question_card.dart';
 import 'companion_chrome.dart';
 import 'companion_composer.dart';
@@ -207,6 +208,9 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                         answers: answers,
                         decline: decline,
                       ),
+                onAnswerMenu: (option) => approval == null
+                    ? Future<void>.value()
+                    : gateway.answerMenu(sessionId, approval.id, option),
                 showActivity: !imported,
                 resume:
                     companionOffersResume(session, listKnown: sessions.hasValue)
@@ -369,6 +373,7 @@ class SessionFooter extends StatelessWidget {
     required this.sessionId,
     required this.onAnswer,
     this.onAnswerQuestion,
+    this.onAnswerMenu,
     this.approval,
     this.canApprove = false,
     this.showActivity = true,
@@ -386,6 +391,7 @@ class SessionFooter extends StatelessWidget {
   final bool canApprove;
   final Future<void> Function(CompanionApprovalDecision decision) onAnswer;
   final CompanionQuestionAnswerFn? onAnswerQuestion;
+  final CompanionMenuAnswerFn? onAnswerMenu;
 
   /// The activity strip, directly above the composer as the desktop puts it.
   final bool showActivity;
@@ -406,6 +412,7 @@ class SessionFooter extends StatelessWidget {
             canAnswer: canApprove,
             onAnswer: onAnswer,
             onAnswerQuestion: onAnswerQuestion,
+            onAnswerMenu: onAnswerMenu,
           ),
         if (showActivity) CompanionActivityStrip(sessionId: sessionId),
         ?resume,

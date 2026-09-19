@@ -206,7 +206,7 @@ class _CompanionQuestionCardState extends State<CompanionQuestionCard> {
             ),
           ),
         for (var o = 0; o < item.options.length; o++)
-          _Choice(
+          CompanionChoice(
             label: item.options[o].label,
             description: item.options[o].description,
             multi: item.multiSelect,
@@ -215,7 +215,7 @@ class _CompanionQuestionCardState extends State<CompanionQuestionCard> {
           ),
         // Own words were measured for a single-choice question only.
         if (!item.multiSelect) ...[
-          _Choice(
+          CompanionChoice(
             label: 'Other…',
             description: '',
             multi: false,
@@ -247,8 +247,10 @@ class _CompanionQuestionCardState extends State<CompanionQuestionCard> {
   }
 }
 
-class _Choice extends StatelessWidget {
-  const _Choice({
+/// One option to tap: a radio, or a box when several may be chosen.
+class CompanionChoice extends StatelessWidget {
+  const CompanionChoice({
+    super.key,
     required this.label,
     required this.description,
     required this.multi,
