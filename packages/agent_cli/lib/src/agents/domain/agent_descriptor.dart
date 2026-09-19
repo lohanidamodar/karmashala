@@ -4,6 +4,7 @@ import './agent_kind.dart';
 import './agent_mcp_config.dart';
 import './agent_plan.dart';
 import './agent_question.dart';
+import './agent_screen_menu.dart';
 import './agent_permission_support.dart';
 import './agent_skill_support.dart';
 import './agent_status.dart';
@@ -1071,6 +1072,7 @@ class AgentDescriptor {
     this.grid = const AgentGridRules(),
     this.approval = const AgentApprovalRules(),
     this.questions,
+    this.menus,
     this.attachments = const AgentAttachmentSupport.none(),
     this.plan = const AgentPlanSupport.none(),
     this.skills = const AgentSkillSupport.none(),
@@ -1105,6 +1107,12 @@ class AgentDescriptor {
   /// for an agent none of whose questions were ever measured — surfaced as a
   /// session waiting on you, and answered at the terminal.
   final AgentQuestionSupport? questions;
+
+  /// How this agent draws the menus that exist only on its screen — folder
+  /// trust, a permission prompt, an update offer — and the keys that move
+  /// through them. Null for an agent whose menus were never measured: its
+  /// prompts are answered with [approval]'s keys, or at the terminal.
+  final AgentMenuSupport? menus;
 
   /// What this agent will look at when a prompt **names a file's path**.
   ///

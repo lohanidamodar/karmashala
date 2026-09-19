@@ -32,6 +32,12 @@ tags:
   # ordinary gate is unaffected whether or not it is excluded by name.
   live-timing:
 
+  # Starts a real agent CLI (Claude Code, Codex) in a real ConPTY to measure
+  # which keys answer which of its prompts — see
+  # test/features/agents/live_prompt_probe_test.dart. Each run can spend a
+  # model turn, so it skips itself unless its environment variables are set.
+  live-agent:
+
   # A cost or soak measurement rather than a behaviour: seven suites that
   # spend ~100 s on ~40 tests (docs/PACKAGE_SPLIT.md §7). The full gate still
   # runs them; the per-package gate that the split introduces excludes them

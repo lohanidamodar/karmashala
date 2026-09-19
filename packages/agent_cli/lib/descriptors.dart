@@ -23,6 +23,7 @@ export 'src/agents/domain/agent_permission_options.dart';
 export 'src/agents/domain/agent_permission_support.dart';
 export 'src/agents/domain/agent_plan.dart';
 export 'src/agents/domain/agent_question.dart';
+export 'src/agents/domain/agent_screen_menu.dart';
 export 'src/agents/domain/agent_registry.dart';
 export 'src/agents/domain/agent_skill_support.dart';
 export 'src/agents/domain/agent_status.dart';
