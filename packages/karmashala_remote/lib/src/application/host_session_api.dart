@@ -491,11 +491,8 @@ class HostSessionApi {
     }
   }
 
-  /// Announces every session this device has never been shown — one started
-  /// on the desktop, or by another phone, after this one listed. Only
-  /// subscribed sessions are pushed otherwise, and a phone subscribes to what
-  /// it listed, so a newcomer stayed off its list until the app was restarted.
-  /// The phone places the row and subscribes to it itself.
+  /// Announces every session this device has never been shown. Only subscribed
+  /// sessions are pushed otherwise, and a phone subscribes only to what it listed.
   Future<void> pushNewSessions() async {
     final shown = _shown;
     if (shown == null) return;

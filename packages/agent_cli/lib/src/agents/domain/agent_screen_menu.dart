@@ -1,20 +1,6 @@
-/// A menu an agent draws in its own terminal and nowhere else — Claude Code's
-/// folder trust, its tool-permission prompt, its "New MCP server found", Codex's
-/// directory trust and its update offer — read off the screen, and answered by
-/// moving the highlight to the chosen row and confirming it.
-///
-/// These have no transcript record and no hook payload, so the screen is the
-/// only place their options exist. What keeps that honest is how they are
-/// answered: the highlight is moved first, the screen is read again to see it
-/// sit on the chosen row, and only then is Enter pressed. A menu that changed
-/// in between is refused with nothing chosen. Measured against Claude Code
-/// 2.1.274 and Codex 0.153/0.154 in a real ConPTY
-/// (`test/features/agents/live_prompt_probe_test.dart`).
-///
-/// Why this exists: Approve is Enter, and Enter confirms whatever is
-/// highlighted. On Claude Code's folder trust that is "No, exit"; on its MCP
-/// server prompt it is "Continue without using this MCP server"; on Codex's
-/// update offer it is "Update now".
+/// A menu an agent draws only on its screen — folder trust, a permission
+/// prompt, a startup offer — read off the grid so it can be answered by
+/// option; Enter alone picks whatever is highlighted. See docs/SETTLED.md.
 library;
 
 /// One menu as the screen shows it.
@@ -34,9 +20,8 @@ class AgentScreenMenu {
   /// Which option is highlighted — what Enter would choose now.
   final int highlighted;
 
-  /// Names this menu, not where its highlight is: an answer carries it, so an
-  /// answer meant for one prompt cannot land on the next — two Bash approvals in
-  /// a row offer the same options and differ only in the command above them.
+  /// Names the prompt, not the highlight: two Bash approvals in a row offer the
+  /// same options and differ only in the command above them.
   String get id => _fnv1a([...prompt, '', ...options].join('\n'));
 
   @override

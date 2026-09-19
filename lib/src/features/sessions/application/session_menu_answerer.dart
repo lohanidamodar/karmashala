@@ -89,10 +89,8 @@ class SessionMenuAnswerer {
       throw const SessionPromptRefusal('that menu has no such option');
     }
     final label = menu.options[option];
-    // One step at a time, each one seen on screen before the next. Measured on
-    // Claude Code's MCP-server menu: arrows sent the moment a menu is drawn
-    // can be dropped, and a burst would then leave the highlight short — or a
-    // late one past — the row that was chosen.
+    // One step at a time, each seen before the next: a burst sent as the menu
+    // draws can be dropped (docs/SETTLED.md).
     final deadline = DateTime.now().add(patience);
     var at = menu.highlighted;
     while (at != option) {

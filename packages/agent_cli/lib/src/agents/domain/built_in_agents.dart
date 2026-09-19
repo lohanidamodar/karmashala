@@ -730,11 +730,8 @@ const _claudeCode = AgentDescriptor(
     keysFor: claudeQuestionKeys,
     declineKeys: '\x1b',
   ),
-  // Its folder trust, tool-permission prompt and "New MCP server found", read
-  // off 2.1.274 in a real ConPTY and xterm2 grid: `❯ ` marks the highlighted
-  // row, ↓/↑ move it, Enter confirms it. What Enter alone would choose differs
-  // per menu — "No, exit" on trust, "Continue without" on an MCP server —
-  // which is why these are answered by option and not by Approve.
+  // Measured on 2.1.274 (folder trust, permission, MCP server): `❯ ` marks the
+  // highlighted row, ↓/↑ move it, Enter confirms it.
   menus: AgentMenuSupport(markers: ['❯']),
   // Claude Code reads a picture off a path a prompt names — measured in this
   // repo rather than read off `--help`: `SessionMediaOrigin.read` exists
@@ -1405,9 +1402,8 @@ const _codex = AgentDescriptor(
       effect: 'Sends Enter, the key this prompt names.',
     ),
   ),
-  // Its directory trust and update offer, read off 0.153.4 and 0.154.0 in a
-  // real ConPTY and xterm2 grid: `› ` marks the highlighted row, ↓/↑ move it,
-  // Enter confirms it. On the update offer Enter alone runs the updater.
+  // Measured on 0.153.4/0.154.0 (directory trust, update offer): `› ` marks the
+  // highlighted row, ↓/↑ move it, Enter confirms it.
   menus: AgentMenuSupport(markers: ['›']),
   // **Codex has images, and not through this door.** `codex --help` and
   // `codex exec --help` (codex-cli 0.153.4) both carry `-i, --image <FILE>...
