@@ -140,7 +140,9 @@ final sessionMenuAnswererProvider = Provider<SessionMenuAnswerer>((ref) {
         .read(agentInstallationDaoProvider)
         .getById(session.agentInstallationId)
         ?.agentId;
-    return agentId == null ? null : ref.read(agentRegistryProvider).byId(agentId);
+    return agentId == null
+        ? null
+        : ref.read(agentRegistryProvider).byId(agentId);
   }
 
   return SessionMenuAnswerer(
@@ -155,7 +157,8 @@ final sessionMenuAnswererProvider = Provider<SessionMenuAnswerer>((ref) {
     },
     supportFor: (sessionId) => agentOf(sessionId)?.menus,
     isAsking: (sessionId) =>
-        ref.read(sessionStatusLookupProvider)(sessionId)?.hasOpenPrompt ?? false,
+        ref.read(sessionStatusLookupProvider)(sessionId)?.hasOpenPrompt ??
+        false,
     press: (sessionId, keys) =>
         ref.read(sessionLauncherProvider).pressKeys(sessionId, keys),
   );

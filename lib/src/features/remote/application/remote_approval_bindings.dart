@@ -59,7 +59,9 @@ Future<String> answerRemoteApproval(
   }
   // Enforced where the key is pressed: a phone holding a stale card must not
   // type Enter into a session that has merely finished its turn.
-  if (!_hasOpenPrompt(await ref.read(remoteApprovalEvidenceProvider)(sessionId))) {
+  if (!_hasOpenPrompt(
+    await ref.read(remoteApprovalEvidenceProvider)(sessionId),
+  )) {
     throw const RemoteApiRefusal(
       ErrorCode.badRequest,
       'this session has no prompt open to answer',
@@ -78,11 +80,14 @@ Future<String> answerRemoteApproval(
 /// null. Read from the file the status registry reads, so it is the question
 /// the status was about; stubbed in tests.
 final remoteOpenQuestionProvider =
-    Provider<Future<AgentQuestionSet?> Function(String sessionId, String agentId)>((
-      ref,
-    ) {
+    Provider<
+      Future<AgentQuestionSet?> Function(String sessionId, String agentId)
+    >((ref) {
       return (sessionId, agentId) async {
-        final support = ref.read(agentRegistryProvider).byId(agentId)?.questions;
+        final support = ref
+            .read(agentRegistryProvider)
+            .byId(agentId)
+            ?.questions;
         if (support == null) return null;
         // The registry's path when it has one — the file the status came
         // from. It resolves one only for a session it has to probe, and one
@@ -116,8 +121,9 @@ Future<String> _tail(File file, {int bytes = 65536}) async {
     final size = await handle.length();
     final start = size > bytes ? size - bytes : 0;
     await handle.setPosition(start);
-    return const Utf8Decoder(allowMalformed: true)
-        .convert(await handle.read(size - start));
+    return const Utf8Decoder(
+      allowMalformed: true,
+    ).convert(await handle.read(size - start));
   } finally {
     await handle.close();
   }
@@ -217,7 +223,7 @@ Future<RemoteApprovalRequest> remoteApprovalEvidenceFor(
       : null;
   return RemoteApprovalRequest(
     question: question == null ? null : _wireQuestion(question),
-    menu: menu == null ? null : _wireMenu(menu),
+    menu: menu == null ? null : remoteMenuOf(menu),
     sessionId: sessionId,
     evidence: asking ? report!.evidence : const [],
     waiting: asking ? _wireWait(report!.waiting) : RemoteWaitKind.unrecorded,
@@ -239,24 +245,50 @@ Future<String> answerRemoteMenu(
   if (ref.read(sessionDaoProvider).getById(sessionId) == null) {
     throw const RemoteApiRefusal(ErrorCode.notFound, 'no such session');
   }
-  if (!_hasOpenPrompt(await ref.read(remoteApprovalEvidenceProvider)(sessionId))) {
+  if (!_hasOpenPrompt(
+    await ref.read(remoteApprovalEvidenceProvider)(sessionId),
+  )) {
     throw const RemoteApiRefusal(
       ErrorCode.badRequest,
       'this session has no prompt open to answer',
     );
   }
   try {
-    return await ref.read(sessionMenuAnswererProvider).choose(
-      sessionId,
-      menuId: request.menuId,
-      option: request.option,
-    );
+    return await ref
+        .read(sessionMenuAnswererProvider)
+        .choose(sessionId, menuId: request.menuId, option: request.option);
   } on SessionPromptRefusal catch (refusal) {
     throw RemoteApiRefusal(ErrorCode.badRequest, refusal.message);
   }
 }
 
-RemoteMenu _wireMenu(AgentScreenMenu menu) => RemoteMenu(
+/// The question open in [sessionId], shaped exactly as the phone receives it —
+/// for the desktop chat view, which answers it with the same card and through
+/// the same guarded path. Null while no question is open or it cannot be read.
+final chatOpenQuestionProvider = FutureProvider.autoDispose
+    .family<RemoteQuestion?, String>((ref, sessionId) async {
+      final report = ref
+          .watch(agentSessionStatusProvider(sessionId))
+          .asData
+          ?.value;
+      if (report == null || !report.hasOpenQuestion) return null;
+      final open = await ref.read(remoteOpenQuestionProvider)(
+        sessionId,
+        report.agentId,
+      );
+      return open == null ? null : _wireQuestion(open);
+    });
+
+/// Answers a question from the desktop chat view through [answerRemoteQuestion]
+/// — the same checks the phone's answer passes, and the same keys.
+final chatQuestionAnswerProvider =
+    Provider<Future<String> Function(RemoteQuestionAnswerRequest request)>(
+      (ref) =>
+          (request) => answerRemoteQuestion(ref, request),
+    );
+
+/// A menu read off the screen, as the wire and the shared card carry it.
+RemoteMenu remoteMenuOf(AgentScreenMenu menu) => RemoteMenu(
   menuId: menu.id,
   prompt: menu.prompt,
   options: menu.options,
@@ -265,7 +297,8 @@ RemoteMenu _wireMenu(AgentScreenMenu menu) => RemoteMenu(
 
 /// The one rule both halves turn on, kept on [AgentStatusReport.hasOpenPrompt]
 /// because `session_send` refuses on it too. Absent is not an open prompt.
-bool _hasOpenPrompt(AgentStatusReport? report) => report?.hasOpenPrompt ?? false;
+bool _hasOpenPrompt(AgentStatusReport? report) =>
+    report?.hasOpenPrompt ?? false;
 
 RemoteWaitKind _wireWait(AgentWaitKind kind) => switch (kind) {
   AgentWaitKind.approval => RemoteWaitKind.approval,

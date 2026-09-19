@@ -5,7 +5,10 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/remote/application/remote_approval_bindings.dart';
+import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
@@ -14,6 +17,7 @@ import 'package:karmashala/src/features/terminal/application/terminal_sessions_c
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fixtures.dart';
@@ -31,6 +35,7 @@ import '../terminal/fake_instance.dart';
   required String agentId,
   required AgentStatusReport report,
   bool live = true,
+  List<Override> overrides = const [],
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -58,6 +63,7 @@ import '../terminal/fake_instance.dart';
       agentSessionStatusProvider.overrideWith(
         (ref, id) => Stream.value(report),
       ),
+      ...overrides,
     ],
   );
   if (live) {
@@ -354,5 +360,129 @@ void main() {
     // The wording the flag used to switch to is gone with it: nothing here may
     // claim the prompt is on screen above the card.
     expect(find.textContaining('terminal above'), findsNothing);
+  });
+
+  // Claude Code's folder trust, as the pane shows it. Approve would be Enter,
+  // and Enter here is "No, exit".
+  group('a menu on the screen is answered by option', () {
+    late List<String> pressed;
+    late int highlighted;
+    const options = ['No, exit', 'Yes, I trust this folder'];
+
+    Override menuPane() {
+      pressed = [];
+      highlighted = 0;
+      return sessionMenuAnswererProvider.overrideWithValue(
+        SessionMenuAnswerer(
+          readScreen: (_) => [
+            ' Accessing workspace:',
+            ' Security guide',
+            '',
+            for (var i = 0; i < options.length; i++)
+              i == highlighted ? ' ❯ ${options[i]}' : '   ${options[i]}',
+            '',
+            ' Enter to confirm · Esc to cancel',
+          ],
+          supportFor: (_) => const AgentMenuSupport(markers: ['❯']),
+          isAsking: (_) => true,
+          press: (_, keys) {
+            pressed.add(keys);
+            if (keys == '\x1b[B') highlighted++;
+            return true;
+          },
+          poll: const Duration(milliseconds: 1),
+        ),
+      );
+    }
+
+    testWidgets('its own options, and no Approve', (tester) async {
+      final h = harness(
+        agentId: AgentIds.claudeCode,
+        report: report(agentId: AgentIds.claudeCode),
+        overrides: [menuPane()],
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await tester.pump();
+
+      expect(find.text('No, exit'), findsOneWidget);
+      expect(find.text('Yes, I trust this folder'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Terminal view'), findsOneWidget);
+    });
+
+    testWidgets('choosing moves to the option, then confirms it', (
+      tester,
+    ) async {
+      final h = harness(
+        agentId: AgentIds.claudeCode,
+        report: report(agentId: AgentIds.claudeCode),
+        overrides: [menuPane()],
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await tester.pump();
+
+      await tester.tap(find.text('Yes, I trust this folder'));
+      await tester.pump();
+      await tester.runAsync(() async {
+        await tester.tap(find.widgetWithText(FilledButton, 'Choose'));
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await tester.pump();
+
+      expect(pressed, ['\x1b[B', '\r']);
+    });
+  });
+
+  group('a question is answered with the options picked', () {
+    testWidgets('its options, no Approve, and the answer sent', (
+      tester,
+    ) async {
+      final sent = <RemoteQuestionAnswerRequest>[];
+      final h = harness(
+        agentId: AgentIds.claudeCode,
+        report: report(
+          agentId: AgentIds.claudeCode,
+          waiting: AgentWaitKind.question,
+          evidence: const ['Pick a fruit'],
+        ),
+        overrides: [
+          chatOpenQuestionProvider.overrideWith(
+            (ref, id) async => const RemoteQuestion(
+              toolUseId: 'toolu_1',
+              questions: [
+                RemoteQuestionItem(
+                  question: 'Pick a fruit',
+                  options: [
+                    RemoteQuestionOption(label: 'Apple'),
+                    RemoteQuestionOption(label: 'Banana'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          chatQuestionAnswerProvider.overrideWithValue((request) async {
+            sent.add(request);
+            return 'answered';
+          }),
+        ],
+      );
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      await tester.pumpWidget(h.app);
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing);
+      await tester.tap(find.text('Banana'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Send answer'));
+      await tester.pumpAndSettle();
+
+      expect(sent.single.toolUseId, 'toolu_1');
+      expect(sent.single.answers.single.options, [1]);
+    });
   });
 }

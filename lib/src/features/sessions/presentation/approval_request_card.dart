@@ -1,12 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_companion/widgets.dart';
+import 'package:karmashala_remote/companion.dart';
+import 'package:karmashala_remote/host.dart';
+import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
+import '../../remote/application/remote_approval_bindings.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../application/session_launcher.dart';
+import '../application/session_menu_answerer.dart';
 import '../application/session_providers.dart';
 import '../application/session_status_providers.dart';
 
@@ -39,6 +47,49 @@ class ApprovalRequestCard extends ConsumerWidget {
     final canAnswer =
         ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null;
 
+    final standard = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Icon(
+              waiting == AgentWaitKind.approval
+                  ? AppIcons.warningCircle
+                  : AppIcons.chatCircleDots,
+              size: Chrome.iconAction,
+              color: scheme.tertiary,
+            ),
+            const SizedBox(width: Insets.xs),
+            Expanded(
+              child: Text(switch (waiting) {
+                AgentWaitKind.approval => '$agentName is waiting for you',
+                AgentWaitKind.input => '$agentName is waiting for your input',
+                AgentWaitKind.unrecorded => '$agentName needs your attention',
+                AgentWaitKind.question => '$agentName is asking you a question',
+              }, style: theme.textTheme.labelLarge),
+            ),
+          ],
+        ),
+        const SizedBox(height: Insets.xs),
+        _Evidence(report: report, agentName: agentName),
+        const SizedBox(height: Insets.sm),
+        if (waiting == AgentWaitKind.approval)
+          _Answers(
+            sessionId: sessionId,
+            rules: rules,
+            agentName: agentName,
+            canAnswer: canAnswer,
+          )
+        else
+          _NothingToAnswer(
+            sessionId: sessionId,
+            waiting: waiting,
+            agentName: agentName,
+          ),
+      ],
+    );
+
     return Container(
       // Flush with the composer stack it is pinned above.
       margin: const EdgeInsets.fromLTRB(8, 0, 8, 6),
@@ -48,50 +99,161 @@ class ApprovalRequestCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(Radii.sm),
         border: Border.all(color: scheme.outlineVariant),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(
-                waiting == AgentWaitKind.approval
-                    ? AppIcons.warningCircle
-                    : AppIcons.chatCircleDots,
-                size: Chrome.iconAction,
-                color: scheme.tertiary,
+      // The phone's cards, answered through the phone's own guarded paths:
+      // a menu by the option chosen, a question by the options picked. Never
+      // Approve — Enter — on either.
+      child: !canAnswer
+          ? standard
+          : switch (waiting) {
+              AgentWaitKind.approval => _MenuOr(
+                sessionId: sessionId,
+                agentName: agentName,
+                orElse: standard,
               ),
-              const SizedBox(width: Insets.xs),
-              Expanded(
-                child: Text(switch (waiting) {
-                  AgentWaitKind.approval => '$agentName is waiting for you',
-                  AgentWaitKind.input => '$agentName is waiting for your input',
-                  AgentWaitKind.unrecorded => '$agentName needs your attention',
-                  AgentWaitKind.question => '$agentName is asking you a question',
-                }, style: theme.textTheme.labelLarge),
+              AgentWaitKind.question => _QuestionOr(
+                sessionId: sessionId,
+                agentName: agentName,
+                orElse: standard,
               ),
-            ],
-          ),
-          const SizedBox(height: Insets.xs),
-          _Evidence(report: report, agentName: agentName),
-          const SizedBox(height: Insets.sm),
-          if (waiting == AgentWaitKind.approval)
-            _Answers(
-              sessionId: sessionId,
-              rules: rules,
-              agentName: agentName,
-              canAnswer: canAnswer,
-            )
-          else
-            _NothingToAnswer(
-              sessionId: sessionId,
-              waiting: waiting,
-              agentName: agentName,
-            ),
-        ],
-      ),
+              _ => standard,
+            },
     );
   }
+}
+
+/// The menu on the agent's screen, answered by option — or [orElse] while the
+/// screen shows none this can read. The screen is read again while this is
+/// up: one menu can follow another (folder trust, then an MCP server) without
+/// the session's status changing at all.
+class _MenuOr extends ConsumerStatefulWidget {
+  const _MenuOr({
+    required this.sessionId,
+    required this.agentName,
+    required this.orElse,
+  });
+
+  final String sessionId;
+  final String agentName;
+  final Widget orElse;
+
+  @override
+  ConsumerState<_MenuOr> createState() => _MenuOrState();
+}
+
+class _MenuOrState extends ConsumerState<_MenuOr> {
+  static const _reread = Duration(milliseconds: 700);
+
+  AgentScreenMenu? _menu;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _menu = _read();
+    _timer = Timer.periodic(_reread, (_) {
+      final now = _read();
+      if (now?.id != _menu?.id || now?.highlighted != _menu?.highlighted) {
+        setState(() => _menu = now);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  AgentScreenMenu? _read() =>
+      ref.read(sessionMenuAnswererProvider).read(widget.sessionId);
+
+  Future<void> _choose(AgentScreenMenu menu, int option) async {
+    try {
+      await ref
+          .read(sessionMenuAnswererProvider)
+          .choose(widget.sessionId, menuId: menu.id, option: option);
+    } on SessionPromptRefusal catch (refusal) {
+      // Worded for the card's own snack bar, which reads a gateway refusal.
+      throw GatewayException(refusal.message);
+    }
+    if (mounted) setState(() => _menu = _read());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final menu = _menu;
+    if (menu == null) return widget.orElse;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CompanionMenuCard(
+          agentName: widget.agentName,
+          menu: remoteMenuOf(menu),
+          onChoose: (option) => _choose(menu, option),
+        ),
+        _TerminalLink(sessionId: widget.sessionId),
+      ],
+    );
+  }
+}
+
+/// The agent's open question, answered with the options picked — or [orElse]
+/// while it cannot be read.
+class _QuestionOr extends ConsumerWidget {
+  const _QuestionOr({
+    required this.sessionId,
+    required this.agentName,
+    required this.orElse,
+  });
+
+  final String sessionId;
+  final String agentName;
+  final Widget orElse;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final question = ref.watch(chatOpenQuestionProvider(sessionId)).value;
+    if (question == null) return orElse;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CompanionQuestionCard(
+          agentName: agentName,
+          question: question,
+          onAnswer: (answers, {decline = false}) async {
+            try {
+              await ref.read(chatQuestionAnswerProvider)(
+                RemoteQuestionAnswerRequest(
+                  sessionId: sessionId,
+                  toolUseId: question.toolUseId,
+                  answers: answers,
+                  decline: decline,
+                ),
+              );
+            } on RemoteApiRefusal catch (refusal) {
+              throw GatewayException(refusal.message);
+            }
+          },
+        ),
+        _TerminalLink(sessionId: sessionId),
+      ],
+    );
+  }
+}
+
+class _TerminalLink extends ConsumerWidget {
+  const _TerminalLink({required this.sessionId});
+
+  final String sessionId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => TextButton.icon(
+    onPressed: () => _openTerminal(ref, sessionId),
+    icon: const Icon(AppIcons.terminal, size: Chrome.iconSmall),
+    label: const Text('Terminal view'),
+  );
 }
 
 /// What the agent said, quoted, or an admission that we do not know.
