@@ -54,6 +54,75 @@ void main() {
       expect(report.evidence, ['Pick a fruit']);
     });
 
+    // Measured end to end, 2026-09-19: Claude Code follows the PreToolUse with
+    // a Notification of type `permission_prompt` ("Claude needs your
+    // permission"), which on its own reads as an approval — and Approve is
+    // Enter, which answers the question with whatever is highlighted.
+    test('the permission notice that follows a question does not turn it into '
+        'an approval', () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'PreToolUse',
+        body: preToolUse('AskUserQuestion', {
+          'questions': [
+            {
+              'question': 'Pick a fruit',
+              'options': [
+                {'label': 'Apple'},
+              ],
+            },
+          ],
+        }),
+      );
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'Notification',
+          'notification_type': 'permission_prompt',
+          'message': 'Claude needs your permission to use AskUserQuestion',
+        }),
+      );
+      expect(report.waiting, AgentWaitKind.question);
+      expect(report.hasOpenPrompt, isFalse);
+      expect(report.evidence, ['Pick a fruit']);
+    });
+
+    test('but a permission notice after the question was answered is one',
+        () {
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'PreToolUse',
+        body: preToolUse('AskUserQuestion', {
+          'questions': [
+            {
+              'question': 'Pick a fruit',
+              'options': [
+                {'label': 'Apple'},
+              ],
+            },
+          ],
+        }),
+      );
+      receiver.handle(
+        agentId: 'claudeCode',
+        event: 'PostToolUse',
+        body: preToolUse('AskUserQuestion', const {}),
+      );
+      final report = receiver.handle(
+        agentId: 'claudeCode',
+        event: 'Notification',
+        body: jsonEncode({
+          'session_id': 's1',
+          'hook_event_name': 'Notification',
+          'notification_type': 'permission_prompt',
+          'message': 'Claude needs your permission to use Bash',
+        }),
+      );
+      expect(report.waiting, AgentWaitKind.approval);
+    });
+
     test('any other tool is still just work', () {
       final report = receiver.handle(
         agentId: 'claudeCode',

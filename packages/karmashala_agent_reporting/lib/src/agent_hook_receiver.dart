@@ -109,6 +109,30 @@ class AgentHookReceiver {
           ? _waitKind(spec, message)
           : declared?.waiting ?? AgentWaitKind.unrecorded,
     );
+    // **The notice a question sends about itself.** Claude Code follows the
+    // question's PreToolUse with a permission_prompt Notification, which on
+    // its own reads as an approval — and Approve is Enter, which would answer
+    // the question with whatever option is highlighted. While the session's
+    // latest word is that open question, the question stands. Anything else in
+    // between (its own PostToolUse included) has already replaced it.
+    final before = reports.latest(id, sessionId);
+    if (report.waiting == AgentWaitKind.approval &&
+        before != null &&
+        before.waiting == AgentWaitKind.question &&
+        before.status == AgentActivityStatus.awaitingApproval) {
+      final kept = AgentStatusReport(
+        agentId: before.agentId,
+        sessionId: before.sessionId,
+        status: before.status,
+        source: before.source,
+        observedAt: report.observedAt,
+        detail: before.detail,
+        evidence: before.evidence,
+        waiting: AgentWaitKind.question,
+      );
+      reports.record(kept);
+      return kept;
+    }
     if (status != AgentActivityStatus.unknown) reports.record(report);
     return report;
   }
