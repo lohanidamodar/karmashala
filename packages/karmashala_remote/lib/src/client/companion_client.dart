@@ -10,6 +10,7 @@ import 'package:cryptography/cryptography.dart';
 
 import '../domain/companion_presence.dart';
 import '../domain/remote_payloads.dart';
+import '../domain/remote_usage.dart';
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';
 import '../transport/key_schedule.dart';
@@ -487,6 +488,10 @@ class CompanionClient {
     final done = payload['done'];
     return done is String ? done : '';
   }
+
+  /// `usage.get` — every agent account's usage limits.
+  Future<RemoteUsageSnapshot> usage() async =>
+      RemoteUsageSnapshot.fromJson(await _request(FrameType.usageGet, const {}));
 
   /// `menu.answer` — chooses one option of the menu [request] names; answers
   /// with the option's words.

@@ -6,6 +6,7 @@ library;
 export 'src/domain/companion_presence.dart';
 export 'src/domain/paired_device.dart';
 export 'src/domain/remote_payloads.dart';
+export 'src/domain/remote_usage.dart';
 export 'src/protocol.dart';
 export 'src/transport/key_schedule.dart';
 export 'src/transport/lan_beacon.dart';

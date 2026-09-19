@@ -6,6 +6,7 @@ library;
 
 import '../domain/companion_presence.dart';
 import '../domain/remote_payloads.dart';
+import '../domain/remote_usage.dart';
 import '../protocol.dart';
 
 /// A handler refusing a request for a reason the protocol can carry.
@@ -51,6 +52,7 @@ class RemoteHostBindings {
     required this.discardAttachment,
     this.answerQuestion = _noQuestions,
     this.answerMenu = _noMenus,
+    this.usage = _noUsage,
   });
 
   /// What `host.status` calls this desktop.
@@ -158,7 +160,17 @@ class RemoteHostBindings {
   /// Returns the option's words, or throws [RemoteApiRefusal] with nothing
   /// chosen. Defaults to refusing: a host that never learned menus reads none.
   final Future<String> Function(RemoteMenuAnswerRequest request) answerMenu;
+
+  /// Every agent account's usage limits, read through the desktop's own
+  /// throttle — asking from the phone never costs a request the throttle would
+  /// not have allowed. Defaults to refusing.
+  final Future<RemoteUsageSnapshot> Function() usage;
 }
+
+Future<RemoteUsageSnapshot> _noUsage() async => throw const RemoteApiRefusal(
+  ErrorCode.badRequest,
+  'this host cannot report usage',
+);
 
 Future<String> _noQuestions(RemoteQuestionAnswerRequest request) async =>
     throw const RemoteApiRefusal(

@@ -109,7 +109,12 @@ enum Capability {
   /// Put a **file** on the desktop's disk and name its path to an agent. Its
   /// own bit, and the widest gap yet from anything already granted: a phone
   /// paired before this existed is refused, in words, for ever.
-  sendAttachment('send_attachment', 1 << 8);
+  sendAttachment('send_attachment', 1 << 8),
+
+  /// Read the desktop's agent accounts' usage limits — who is signed in, and
+  /// how close each is to its limit. Its own bit: a phone paired before this
+  /// existed is refused, in words, for ever.
+  viewUsage('view_usage', 1 << 9);
 
   const Capability(this.wire, this.bit);
 
@@ -290,6 +295,14 @@ enum FrameType {
     'attachment.chunk',
     origin: FrameOrigin.companion,
     capability: Capability.sendAttachment,
+  ),
+
+  /// Every agent account's usage limits, as the desktop last read them —
+  /// asked when the phone's Usage view opens, never pushed.
+  usageGet(
+    'usage.get',
+    origin: FrameOrigin.companion,
+    capability: Capability.viewUsage,
   ),
 
   sessionChanged('session.changed', origin: FrameOrigin.host),

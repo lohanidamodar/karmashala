@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import '../../domain/companion_presence.dart';
 import '../../domain/remote_payloads.dart';
+import '../../domain/remote_usage.dart';
 import '../../pairing/host_pairing_invite.dart';
 import '../../protocol.dart';
 import 'companion_gateway.dart';
@@ -850,6 +851,32 @@ class FakeCompanionGateway implements CompanionGateway {
         outcome: CompanionApprovalOutcome.answered,
       ),
     );
+  }
+
+  /// What [usage] answers; set by a test.
+  RemoteUsageSnapshot usageSnapshot = RemoteUsageSnapshot(
+    accounts: const [],
+    observedAt: DateTime.utc(2026),
+  );
+
+  /// When set, [usage] throws it — a refusal in the host's words.
+  GatewayException? usageFailure;
+
+  /// How many times [usage] was asked.
+  int usageReads = 0;
+
+  @override
+  Future<RemoteUsageSnapshot> usage() async {
+    _requireLink();
+    usageReads++;
+    final failure = usageFailure;
+    if (failure != null) throw failure;
+    if (!capabilities.has(Capability.viewUsage)) {
+      throw const GatewayException(
+        'this device was not granted view_usage',
+      );
+    }
+    return usageSnapshot;
   }
 
   /// Every [answerMenu], in order.

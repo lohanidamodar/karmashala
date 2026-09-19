@@ -17,6 +17,7 @@ import '../../client/companion_store.dart' as stored;
 import '../../client/lan_path.dart';
 import '../../client/relay_candidates.dart';
 import '../../domain/remote_payloads.dart';
+import '../../domain/remote_usage.dart';
 import '../../pairing/companion_device_name.dart';
 import '../../pairing/host_pairing_invite.dart';
 import '../../pairing/pairing_code.dart';
@@ -889,6 +890,13 @@ class RemoteCompanionGateway implements CompanionGateway {
       ),
     );
     if (pending.value?.id == approvalId) pending.value = null;
+  }
+
+  @override
+  Future<RemoteUsageSnapshot> usage() async {
+    await _ready;
+    final client = _requireClient();
+    return _mapRefusals(() => client.usage());
   }
 
   @override

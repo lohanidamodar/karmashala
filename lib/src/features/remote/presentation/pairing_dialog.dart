@@ -137,6 +137,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     Capability.addProject => 'Add projects',
     Capability.viewActivity => 'See what is running',
     Capability.sendAttachment => 'Send files',
+    Capability.viewUsage => 'See usage limits',
   };
 
   void _selectEndpoint(int index) {

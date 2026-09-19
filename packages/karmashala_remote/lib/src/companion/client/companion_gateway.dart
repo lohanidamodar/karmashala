@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import '../../domain/companion_presence.dart';
 import '../../domain/remote_payloads.dart';
+import '../../domain/remote_usage.dart';
 import '../../client/route_pin.dart';
 import '../../pairing/host_pairing_invite.dart' show HostRoute;
 import '../../protocol.dart';
@@ -753,6 +754,11 @@ abstract interface class CompanionGateway {
     List<RemoteQuestionAnswer> answers = const [],
     bool decline = false,
   });
+
+  /// `usage.get` — every agent account's usage limits, as the desktop read
+  /// them. Throws [GatewayException] with the host's words when refused, as a
+  /// phone paired before usage existed is.
+  Future<RemoteUsageSnapshot> usage();
 
   /// Chooses [option] of the menu pending on [sessionId]. [approvalId] is the
   /// card being answered, so a card that has since been replaced is not.

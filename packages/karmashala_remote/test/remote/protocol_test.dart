@@ -180,6 +180,7 @@ void main() {
         'approval.answer',
         'question.answer',
         'menu.answer',
+        'usage.get',
         'notifications.register',
         'workspace.list',
         'projects.list',
