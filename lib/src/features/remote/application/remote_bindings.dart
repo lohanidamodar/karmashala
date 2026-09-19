@@ -63,6 +63,15 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       // The LIVE id, never the one the phone asked with: a stale imported id
       // names a record that cannot be typed into.
       final live = resolved.native?.id ?? sessionId;
+      // Typed into an open menu or question, the text is lost and its Enter
+      // picks whatever is highlighted — "No, exit" on a folder-trust prompt.
+      final report = await ref.read(remoteApprovalEvidenceProvider)(live);
+      if (report != null && (report.hasOpenPrompt || report.hasOpenQuestion)) {
+        throw const RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'this session is waiting on a prompt — answer it first, then send',
+        );
+      }
       if (attachment == null) {
         await ref.read(sessionActionsProvider).continueSession(live, text);
         return RemotePromptDelivery.sent;

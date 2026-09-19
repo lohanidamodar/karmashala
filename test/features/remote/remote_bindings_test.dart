@@ -1345,6 +1345,18 @@ void main() {
       expect(request.denyLabel, isNull);
     });
 
+    test('a message is refused while the question is open', () async {
+      seedWorkspace();
+      seedClaude('q1');
+      final bindings = with_(
+        showing(AgentWaitKind.question),
+      ).read(remoteHostBindingsProvider);
+      await expectLater(
+        bindings.sendPrompt('q1', 'carry on'),
+        refusedWith('answer it first'),
+      );
+    });
+
     test('Approve is refused for a question', () async {
       seedWorkspace();
       seedClaude('q1');
@@ -1524,6 +1536,28 @@ void main() {
 
       expect(chosen, 'Yes, I trust this folder');
       expect(pressed, ['\x1b[B', '\r']);
+    });
+
+    // Found on the Oppo: the empty session offered "Explain architecture"
+    // beside the trust menu. Sent, its Enter would have chosen "No, exit".
+    test('a message is refused while the menu is open, and nothing typed',
+        () async {
+      seedWorkspace();
+      seedClaude('m1');
+      final bindings = with_(
+        showing(AgentWaitKind.approval),
+      ).read(remoteHostBindingsProvider);
+      await expectLater(
+        bindings.sendPrompt('m1', 'Explain the architecture'),
+        throwsA(
+          isA<RemoteApiRefusal>().having(
+            (r) => r.message,
+            'message',
+            contains('answer it first'),
+          ),
+        ),
+      );
+      expect(pressed, isEmpty);
     });
 
     test('an answer with no prompt open is refused, and nothing pressed',
