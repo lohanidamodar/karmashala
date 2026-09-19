@@ -81,6 +81,9 @@ class HostSessionApi {
   /// [reconcileApproval] can retire a card it was shown before a reconnect.
   final Set<String> _announcedApprovals = <String>{};
 
+  /// What each announced approval asked — see [recheckApproval].
+  final Map<String, String> _announcedAsks = <String, String>{};
+
   /// When each watched session may next be read, on [_uptime]'s scale. The next
   /// poll waits [_pollBackoffFactor] times what the last read cost, so an
   /// expensive transcript is read less often instead of starving the link.
@@ -653,8 +656,43 @@ class HostSessionApi {
     // one this api will later try to retire.
     if (await _send(FrameType.approvalRequested, payload: request.toJson())) {
       _announcedApprovals.add(sessionId);
+      _announcedAsks[sessionId] = _askOf(request);
     }
   }
+
+  /// Announces what a waiting session asks now, when it is not what this
+  /// device was last shown: one menu can replace another (folder trust, then
+  /// external imports) while the session never stops waiting.
+  Future<void> recheckApproval(String sessionId) async {
+    if (!device.capabilities.has(Capability.approve)) return;
+    if (!_subscribed.contains(sessionId) || !_awaitingApproval(sessionId)) {
+      return;
+    }
+    final RemoteApprovalRequest request;
+    try {
+      request = await bindings.approvalEvidenceFor(sessionId);
+    } on Object {
+      return;
+    }
+    final ask = _askOf(request);
+    if (_announcedApprovals.contains(sessionId) &&
+        _announcedAsks[sessionId] == ask) {
+      return;
+    }
+    if (await _send(FrameType.approvalRequested, payload: request.toJson())) {
+      _announcedApprovals.add(sessionId);
+      _announcedAsks[sessionId] = ask;
+    }
+  }
+
+  /// What a request asks, and nothing that moves while it waits — the
+  /// highlight, or the screen rows it is quoted with.
+  static String _askOf(RemoteApprovalRequest request) =>
+      request.menu != null
+      ? 'menu:${request.menu!.menuId}'
+      : request.question != null
+      ? 'question:${request.question!.toolUseId}'
+      : 'wait:${request.waiting.wire}';
 
   /// Retires an approval this device was told about and is no longer waiting.
   /// Watches the host's own state rather than any one answer path, so every
@@ -685,6 +723,7 @@ class HostSessionApi {
       ).toJson(),
     )) {
       _announcedApprovals.remove(sessionId);
+      _announcedAsks.remove(sessionId);
     }
   }
 

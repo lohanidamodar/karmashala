@@ -154,6 +154,100 @@ void main() {
       expect(resolutions(harness), isEmpty);
     });
 
+    // Found on the Oppo, 2026-09-19: folder trust answered from the phone, and
+    // Claude Code went straight on to "Allow external CLAUDE.md imports?". The
+    // session never stopped waiting, so nothing announced the second menu and
+    // the phone read "Needs you" with no card.
+    group('a menu that replaces the one on screen', () {
+      const imports = RemoteMenu(
+        menuId: 'e5f6a7b8',
+        prompt: ['Allow external CLAUDE.md file imports?'],
+        options: ['No, disable external imports', 'Yes, allow external imports'],
+        highlighted: 0,
+      );
+
+      List<SentFrame> requests(Harness harness) => [
+        for (final frame in harness.sent)
+          if (frame.type == FrameType.approvalRequested) frame,
+      ];
+
+      Future<Harness> answered() async {
+        final harness = await waiting();
+        await harness.request(
+          FrameType.sessionSubscribe,
+          payload: const {'sessionId': 's1'},
+        );
+        await harness.request(
+          FrameType.menuAnswer,
+          payload: const RemoteMenuAnswerRequest(
+            sessionId: 's1',
+            menuId: 'a1b2c3d4',
+            option: 1,
+          ).toJson(),
+        );
+        harness.fake.approvals['s1'] = const RemoteApprovalRequest(
+          sessionId: 's1',
+          waiting: RemoteWaitKind.approval,
+          menu: imports,
+        );
+        return harness;
+      }
+
+      test('is announced, though the session never stopped waiting', () async {
+        final harness = await answered();
+        final before = requests(harness).length;
+
+        await harness.api.recheckApproval('s1');
+
+        expect(requests(harness).length, before + 1);
+        expect(
+          RemoteApprovalRequest.fromJson(requests(harness).last.payload)
+              .menu!
+              .menuId,
+          'e5f6a7b8',
+        );
+      });
+
+      test('is announced once', () async {
+        final harness = await answered();
+        await harness.api.recheckApproval('s1');
+        final before = requests(harness).length;
+
+        await harness.api.recheckApproval('s1');
+
+        expect(requests(harness).length, before);
+      });
+
+      test('replacing a menu that was never answered is announced too',
+          () async {
+        final harness = await waiting();
+        await harness.request(
+          FrameType.sessionSubscribe,
+          payload: const {'sessionId': 's1'},
+        );
+        harness.fake.approvals['s1'] = const RemoteApprovalRequest(
+          sessionId: 's1',
+          waiting: RemoteWaitKind.approval,
+          menu: imports,
+        );
+        final before = requests(harness).length;
+
+        await harness.api.recheckApproval('s1');
+
+        expect(requests(harness).length, before + 1);
+      });
+
+      test('nothing is announced once the session stops waiting', () async {
+        final harness = await answered();
+        harness.fake.setAwaitingApproval('s1', waiting: false);
+        final before = requests(harness).length;
+
+        await harness.api.recheckApproval('s1');
+
+        expect(requests(harness).length, before);
+      });
+    });
+
     test('a malformed answer is a bad request', () async {
       final harness = await waiting();
       await harness.request(

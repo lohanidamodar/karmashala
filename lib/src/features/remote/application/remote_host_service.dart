@@ -545,6 +545,7 @@ class _DeviceRuntime {
           in _active?.api.subscribedSessions ?? const <String>{}) {
         if (_closed) return;
         await run((api) => api.pollTranscript(sessionId));
+        await run((api) => api.recheckApproval(sessionId));
       }
     } finally {
       _sweeping = false;
