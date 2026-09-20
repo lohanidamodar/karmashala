@@ -12,6 +12,7 @@ import 'src/app/companion/companion_bootstrap.dart';
 import 'src/app/companion/companion_mode.dart';
 import 'package:karmashala_store/database.dart';
 import 'src/core/database/database_providers.dart';
+import 'src/core/lifecycle/app_binding.dart';
 import 'src/core/lifecycle/app_lifecycle.dart';
 import 'src/core/lifecycle/uncaught_errors.dart';
 import 'package:karmashala_core/logging.dart';
@@ -43,7 +44,7 @@ Future<void> main() async {
   // PTYs, no discovery, no control server, no tray, no window chrome.
   if (CompanionMode.enabled) return runCompanionApp();
 
-  WidgetsFlutterBinding.ensureInitialized();
+  ensureAppBinding();
   // A desktop bootstrap on a phone is a build mistake, and it used to be a
   // silent one: an APK that installed, launched and sat on a black screen.
   if (Platform.isAndroid || Platform.isIOS) {

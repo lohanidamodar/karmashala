@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
 import 'companion_device_name.dart';
+import '../../core/lifecycle/app_binding.dart';
 import '../../core/lifecycle/uncaught_errors.dart';
 import '../../core/logging/diagnostics_bootstrap.dart';
 import 'package:karmashala_remote/companion.dart';
@@ -24,7 +25,7 @@ import 'multicast_lock_channel.dart';
 /// database, no PTYs, no environment discovery, no control server, no tray,
 /// no window manager — a client, and only a client.
 Future<void> runCompanionApp() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  ensureAppBinding();
 
   // The companion installed no root handler at all, so its diagnostics went to
   // `debugPrint` — visible only on a cable, in the build that most needs evidence.

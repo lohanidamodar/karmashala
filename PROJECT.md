@@ -425,6 +425,16 @@ Code generation, only if the project uses it:
 dart run build_runner build --delete-conflicting-outputs
 ```
 
+Driving the running app — the widget tree, taps, typing and screenshots of a
+debug build over the VM service. **A second instance on a throwaway data
+directory**, never the one you are working in. See [docs/marionette.md](docs/marionette.md):
+
+```powershell
+$env:KARMASHALA_DATA_DIR = "$env:TEMP\ks-marionette-data"
+flutter run -d windows --debug          # prints the VM service URI
+& "$env:LOCALAPPDATA\Pub\Cache\bin\marionette.bat" --uri <ws://…/ws> get-interactive-elements
+```
+
 Release commands should be run only when explicitly requested:
 
 ```bash
