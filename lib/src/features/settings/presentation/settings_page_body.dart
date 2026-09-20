@@ -116,6 +116,7 @@ Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.logFile => const LogFileSection(),
   SettingsAnchor.scrollbackPersistence => const ScrollbackPersistenceSection(),
   SettingsAnchor.sessionWatching => const WatchSetSection(),
+  SettingsAnchor.memoryFootprint => const MemoryFootprintSection(),
 };
 
 /// Hands out one key per section of the page on screen, so the screen can

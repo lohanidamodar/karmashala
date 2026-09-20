@@ -22,6 +22,7 @@ import '../../features/system/native_adapters.dart';
 import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../database/database_providers.dart';
+import '../logging/memory_census_source.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_store/database.dart';
 
@@ -84,6 +85,7 @@ class AppLifecycle {
 
   SystemIntegrationService? _systemIntegration;
   LauncherControlServer? _controlServer;
+  MemoryCensusLogger? _memoryCensus;
   Future<void>? _hookInstallation;
   Future<void>? _shutdown;
 
@@ -258,6 +260,20 @@ class AppLifecycle {
     }
   }
 
+  /// The last memory census printed, or null before the first sample — the
+  /// reading Settings → Diagnostics shows.
+  MemoryCensus? get lastMemoryCensus => _memoryCensus?.lastLogged;
+
+  /// Begins logging what the app is holding. A release build has no VM service
+  /// and so no heap snapshot; without this nothing in the process reports its
+  /// own footprint and growth can only be guessed at from outside.
+  void startMemoryCensus({MemoryCensusLogger? census}) {
+    _memoryCensus ??=
+        (census ??
+              MemoryCensusLogger(count: () => takeMemoryCensus(_container)))
+          ..start();
+  }
+
   /// Looks in the background for agents this workspace has never searched for.
   /// Skipped on a never-discovered workspace: its first-run scan is doing this.
   void startAgentDiscovery() {
@@ -406,6 +422,10 @@ class AppLifecycle {
 
   Future<void> _runShutdown() async {
     final watch = (_stopwatch ?? Stopwatch())..start();
+
+    // Not a step: cancelling a timer cannot hang, so it needs no slice of the
+    // budget — and a census tick during teardown would count a half-torn app.
+    _memoryCensus?.dispose();
 
     // 0. Give up on any skill sweep still running. Not a step: it sets a flag and
     //    returns, so it needs no slice of the budget and cannot be abandoned.

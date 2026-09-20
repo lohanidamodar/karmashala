@@ -713,8 +713,8 @@ class DormantTerminalInstance
   late final Terminal terminal = _buildTerminal();
 
   /// Whether anything has asked to see this pane yet — `late final` cannot be
-  /// asked whether it has run.
-  @visibleForTesting
+  /// asked whether it has run. Read before [terminal] by anything that only
+  /// wants to *observe* the pane: reading [terminal] would build it.
   bool get bufferBuilt => _bufferBuilt;
   bool _bufferBuilt = false;
 

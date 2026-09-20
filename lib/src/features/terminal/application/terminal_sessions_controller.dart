@@ -384,6 +384,49 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// The live terminal behind [paneId], or `null` once it has been closed.
   TerminalInstance? instanceFor(String paneId) => _instances[paneId];
 
+  /// What the panes are holding, for the memory census. O(panes), and every
+  /// term is a length or a field read, so a pane with a megabyte of history
+  /// costs what an empty one does.
+  ///
+  /// A pane whose buffer has never been built is counted in `unparsedPanes`
+  /// and contributes no rows: reading a [DormantTerminalInstance]'s `terminal`
+  /// *is* the scrollback parse the restore defers, so measuring it would be
+  /// the cost it is measuring for.
+  ({int live, int detached, int unparsedPanes, int rows, int heldChars})
+  get paneFootprint {
+    var unparsed = 0;
+    var rows = 0;
+    var chars = 0;
+    for (final instance in _instances.values) {
+      if (instance case final DormantTerminalInstance dormant) {
+        // A restored pane keeps its stored history as text whether or not
+        // anything has asked to see it — parsing it is what `bufferBuilt`
+        // records, and doing so does not release the text.
+        chars += dormant.restoredScrollback.length;
+        if (dormant.bufferBuilt) {
+          rows += dormant.terminal.buffer.height;
+        } else {
+          unparsed++;
+        }
+      } else {
+        rows += instance.terminal.buffer.height;
+      }
+      if (instance case ParkableTerminalInstance(:final parkedScrollback)) {
+        chars += parkedScrollback?.length ?? 0;
+      }
+    }
+    for (final encoded in _encoded.values) {
+      chars += encoded.length;
+    }
+    return (
+      live: _instances.length,
+      detached: _detached.length,
+      unparsedPanes: unparsed,
+      rows: rows,
+      heldChars: chars,
+    );
+  }
+
   String _newId() => ref.read(idGeneratorProvider).newId();
 
   TerminalTab? get _activeTab => _tabById(_activeTabId);

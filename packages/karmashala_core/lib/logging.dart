@@ -11,3 +11,4 @@ export 'src/logging/log_buffer.dart';
 export 'src/logging/log_entry.dart';
 export 'src/logging/log_file_sink.dart';
 export 'src/logging/log_redactor.dart';
+export 'src/logging/memory_census.dart';

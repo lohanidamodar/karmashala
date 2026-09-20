@@ -448,6 +448,12 @@ enum SettingsAnchor {
   sessionWatching(SettingsSectionId.diagnostics, 'Session watching', [
     'watch',
     'status refresh',
+  ]),
+  memoryFootprint(SettingsSectionId.diagnostics, 'Memory footprint', [
+    'memory',
+    'ram',
+    'leak',
+    'resident',
   ]);
 
   const SettingsAnchor(this.page, this.title, this.keywords);
@@ -924,6 +930,12 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.sessionWatching,
     description: 'How many sessions are watched, and how fresh they are.',
     keywords: ['watch', 'hooks', 'probe'],
+  ),
+  SettingsEntry(
+    'Memory footprint',
+    anchor: SettingsAnchor.memoryFootprint,
+    description: 'What the app is holding, and how much of it is scrollback.',
+    keywords: ['memory', 'ram', 'leak', 'resident', 'scrollback'],
   ),
 ];
 

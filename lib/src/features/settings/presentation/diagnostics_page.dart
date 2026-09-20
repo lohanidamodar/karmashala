@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/shell/reveal_in_file_manager.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/logging/diagnostics_providers.dart';
+import '../../../core/logging/memory_census_source.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/process.dart';
 import '../../../core/process/command_runner_providers.dart';
@@ -185,6 +186,78 @@ class ScrollbackPersistenceSection extends ConsumerWidget {
               write == null
                   ? 'not recorded'
                   : '${write.panes} pane(s) in ${_age(write.took)}',
+              style: MonoStyles.body,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the process is holding. Sampled on build, like
+/// [ScrollbackPersistenceSection]: the counters move on the terminal's hot
+/// path, so watching them would repaint a settings page behind every keystroke.
+class MemoryFootprintSection extends ConsumerWidget {
+  const MemoryFootprintSection({super.key});
+
+  static String _mib(int bytes) =>
+      '${(bytes / (1024 * 1024)).toStringAsFixed(0)} MiB';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final census = takeMemoryCensus(
+      ProviderScope.containerOf(context, listen: false),
+    );
+    return SettingsSection(
+      title: SettingsAnchor.memoryFootprint.heading,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsRow(
+            label: 'Resident memory',
+            help:
+                'The whole process, not this app\'s Dart objects alone — the '
+                'terminal\'s consoles, SQLite and the graphics driver are in '
+                'here too, and nothing in a release build can separate them. '
+                'The peak never falls, so a resident size well under it is '
+                'memory that was released.',
+            control: Text(
+              '${_mib(census.residentBytes)} · peak '
+              '${_mib(census.peakResidentBytes)}',
+              style: MonoStyles.body,
+            ),
+          ),
+          SettingsRow(
+            label: 'Terminal panes',
+            help:
+                'Unparsed panes were restored and never opened, so they hold '
+                'their history as text rather than as rows.',
+            control: Text(
+              '${census.panes} (${census.detachedPanes} detached, '
+              '${census.unparsedPanes} unparsed)',
+              style: MonoStyles.body,
+            ),
+          ),
+          SettingsRow(
+            label: 'Scrollback held',
+            help:
+                'Rows across every parsed buffer, and the history held as '
+                'text beside them. These are what grow with use rather than '
+                'with the number of panes.',
+            control: Text(
+              '${census.scrollbackRows} rows · '
+              '${census.heldScrollbackChars} chars',
+              style: MonoStyles.body,
+            ),
+          ),
+          SettingsRow(
+            label: 'Sessions watched',
+            help:
+                'Sessions the status registry holds a status for, and log '
+                'records in the in-memory ring.',
+            control: Text(
+              '${census.watchedSessions} · ${census.logLinesHeld} log lines',
               style: MonoStyles.body,
             ),
           ),

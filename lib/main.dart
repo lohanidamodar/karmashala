@@ -162,6 +162,11 @@ Future<void> _bootstrap(AppLogger logger) async {
   // looked for — the ones an app upgrade added after the one-time scan.
   lifecycle.startAgentDiscovery();
 
+  // A release build has no VM service, so the log is the only place this app
+  // can say what it is holding. Started here rather than after the first frame:
+  // the interval is long enough that bootstrap is over before it first fires.
+  lifecycle.startMemoryCensus();
+
   // Retained here so the hook sweep below can be started *after* `runApp` —
   // see the sweep's own comment for why that ordering is the point.
   LauncherControlServer? controlServer;
