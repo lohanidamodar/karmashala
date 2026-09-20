@@ -30,6 +30,50 @@ class HandoffSourceBrief {
   bool get wasWritten => text != null;
 }
 
+/// One snapshot the source session left behind, as the packet states it — a
+/// local shape rather than the `Checkpoint` row, so the packet renders and
+/// tests without a database.
+class HandoffCheckpoint {
+  const HandoffCheckpoint({
+    required this.id,
+    required this.label,
+    this.takenAt,
+    this.files,
+  });
+
+  /// What `checkpoint_restore` is given.
+  final String id;
+
+  /// What it was taken for — "before turn 12", usually.
+  final String label;
+
+  final DateTime? takenAt;
+
+  /// How many files the snapshot holds, or null when the row did not say.
+  final int? files;
+
+  /// One list item: the id first, because that is the part a tool needs.
+  String get line {
+    final detail = [
+      label,
+      if (files != null) '$files file${files == 1 ? '' : 's'}',
+      if (takenAt != null) HandoffPacket._stamp(takenAt!),
+    ].where((part) => part.isNotEmpty).join(' · ');
+    return '`$id` — $detail';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is HandoffCheckpoint &&
+      other.id == id &&
+      other.label == label &&
+      other.takenAt == takenAt &&
+      other.files == files;
+
+  @override
+  int get hashCode => Object.hash(id, label, takenAt, files);
+}
+
 /// One changed file, as the packet states it — a local shape rather than git's
 /// `FileChange`, so the packet renders and tests without a repository.
 class HandoffChange {
@@ -198,6 +242,9 @@ class HandoffPacket {
     required this.sourceTitle,
     required this.sourceSessionId,
     required this.instruction,
+    this.sourceConversationId,
+    this.checkpoints = const [],
+    this.recapUnreadable = false,
     this.workingDirectory,
     this.branch,
     this.commitsAhead,
@@ -220,7 +267,27 @@ class HandoffPacket {
   final String targetAgentName;
 
   final String sourceTitle;
+
+  /// **Karmashala's own row id** for the source session — what
+  /// `checkpoint_list` and `checkpoint_restore` are keyed by, so the receiving
+  /// agent can reach the snapshots the previous one left. The CLI's own
+  /// conversation id was printed here once, and it resolves to nothing.
   final String sourceSessionId;
+
+  /// The CLI's id for the same conversation, when there is one. Printed beside
+  /// the row id rather than instead of it: they are two different namespaces
+  /// and a reader who confuses them asks the wrong tool.
+  final String? sourceConversationId;
+
+  /// The source's recent checkpoints, newest first — the turns the receiving
+  /// agent can put the tree back to. Empty is "none were taken", which for a
+  /// session with checkpoints switched off is the honest answer.
+  final List<HandoffCheckpoint> checkpoints;
+
+  /// Whether the transcript could not be read at all. Distinct from an empty
+  /// [recap]: one is "nothing was said", the other is "we could not look", and
+  /// the packet said the first for both until 2026-09-20.
+  final bool recapUnreadable;
 
   /// What the user actually wants done next. The last thing in the document,
   /// because it is the only part that is an instruction rather than context.
@@ -253,6 +320,7 @@ class HandoffPacket {
   /// Whatever the user typed as still-open work. Free text, one item per line,
   /// passed through unedited — Karmashala has no idea which of these are done.
   final List<String> unresolvedTasks;
+
   /// Approaches already ruled out, or **null for "could not be read"**. Read
   /// like [decisions]: an empty list is not "nothing was ruled out".
   final List<HandoffClaim>? deadEnds;
@@ -280,7 +348,15 @@ class HandoffPacket {
     out.writeln('## Where this came from');
     out.writeln();
     out.writeln('- **Previous agent:** $sourceAgentName');
-    out.writeln('- **Session:** "$sourceTitle" (`$sourceSessionId`)');
+    out.writeln(
+      '- **Session:** "$sourceTitle" (Karmashala `$sourceSessionId`)',
+    );
+    if (sourceConversationId != null &&
+        sourceConversationId != sourceSessionId) {
+      out.writeln(
+        '- **Its $sourceAgentName conversation:** `$sourceConversationId`',
+      );
+    }
     out.writeln('- **You are:** $targetAgentName');
     if (workingDirectory != null) {
       out.writeln('- **Working directory:** `$workingDirectory`');
@@ -310,10 +386,7 @@ class HandoffPacket {
     out.writeln('## Don\'t do');
     out.writeln();
     out.writeln(
-      HandoffSectionOwner(
-        sourceAgentName,
-        editors: [targetAgentName],
-      ).line,
+      HandoffSectionOwner(sourceAgentName, editors: [targetAgentName]).line,
     );
     out.writeln();
     out.writeln(_deadEndsSection());
@@ -332,6 +405,15 @@ class HandoffPacket {
     out.writeln();
     out.writeln(_decisionsSection());
     out.writeln();
+
+    if (checkpoints.isNotEmpty) {
+      out.writeln('## Snapshots you can go back to');
+      out.writeln();
+      out.writeln(HandoffSectionOwner(_readFrom).line);
+      out.writeln();
+      out.writeln(_checkpointsSection());
+      out.writeln();
+    }
 
     out.writeln('## Conversation so far');
     out.writeln();
@@ -558,8 +640,32 @@ class HandoffPacket {
         '${two(utc.hour)}:${two(utc.minute)}Z';
   }
 
+  /// The snapshots, newest first, with the tool that reaches them. The session
+  /// id is spelled out beside it because it is the one argument a reader
+  /// cannot guess and the whole reason the section is worth having.
+  String _checkpointsSection() {
+    final out = StringBuffer();
+    out.writeln(
+      '_Turn snapshots of the working tree, newest first. '
+      '`checkpoint_list(sessionId: "$sourceSessionId")` lists them and '
+      '`checkpoint_restore` puts the files back — **the tree, not the '
+      'conversation**._',
+    );
+    out.writeln();
+    for (final checkpoint in checkpoints) {
+      out.writeln('- ${checkpoint.line}');
+    }
+    return out.toString().trimRight();
+  }
+
   String _recapSection() {
     if (recap.isEmpty) {
+      if (recapUnreadable) {
+        return 'The transcript could not be read, so nothing from it is '
+            'quoted here — **this is not the same as nothing having been '
+            'said**. Ask the user what was decided rather than assuming the '
+            'session was empty.';
+      }
       return omittedTurns > 0
           ? 'The transcript could not be quoted here, though it has '
                 '$omittedTurns earlier turns. Ask the user what was decided '

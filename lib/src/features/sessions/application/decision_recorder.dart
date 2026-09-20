@@ -140,6 +140,50 @@ class DecisionRecorder {
     origin: DecisionOrigin.userEntry,
   );
 
+  /// Copies [from]'s record into [into] — what a handoff or a fork does, so a
+  /// chain of sessions accumulates its decisions rather than starting empty
+  /// each time. The packet already *quotes* them; this makes them readable by
+  /// the tools, and by the next handoff after this one.
+  ///
+  /// Each row keeps who decided it and when: a carried decision is the same
+  /// decision, and re-stamping it with now would say the new session made it.
+  /// [recordedBySessionId] becomes the session it came from, which is where a
+  /// reader goes to see the conversation around it.
+  int carryForward({required String from, required String into}) {
+    if (from == into) return 0;
+    try {
+      final dao = _ref.read(decisionRecordDaoProvider);
+      final source = dao.forSession(from);
+      for (final decision in source) {
+        dao.append(
+          DecisionRecord(
+            sessionId: into,
+            kind: decision.kind,
+            summary: decision.summary,
+            detail: decision.detail,
+            decidedBy: decision.decidedBy,
+            recordedBySessionId: decision.recordedBySessionId ?? from,
+            origin: decision.origin,
+            originId: decision.originId,
+            recordedAt: decision.recordedAt,
+          ),
+        );
+      }
+      if (source.isNotEmpty) {
+        _ref.read(decisionsRevisionProvider.notifier).bump();
+        _log.info(
+          'Carried ${source.length} decision(s) from $from into $into.',
+        );
+      }
+      return source.length;
+    } catch (error, stack) {
+      // A continuation that starts with an empty record is worse than one that
+      // starts at all: never a reason to fail the launch.
+      _log.warning('Could not carry decisions from $from.', error, stack);
+      return 0;
+    }
+  }
+
   /// Stamps the decision with the clock and appends it. A blank summary is
   /// refused: it would count towards a total while telling the reader nothing.
   DecisionRecord? _append({

@@ -6,6 +6,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
+import '../../checkpoints/data/checkpoint_dao.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -14,6 +15,7 @@ import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/lineage.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
+import 'decision_recorder.dart';
 import 'delivery_providers.dart';
 import 'session_actions.dart';
 import 'session_chat_source.dart';
@@ -22,6 +24,10 @@ import 'session_providers.dart';
 import 'session_signals.dart';
 import 'session_wait.dart';
 import 'session_working_directory.dart';
+
+/// How many of the source's snapshots the packet offers. Enough to reach the
+/// last few turns, few enough that the list is an offer rather than a dump.
+const int kHandoffCheckpointCount = 8;
 
 /// One agent this session could be continued in — including the one already
 /// running it: a fresh session is a real answer to a full context window.
@@ -188,7 +194,13 @@ class SessionHandoffService {
       sourceAgentName: sourceName,
       targetAgentName: targetAgentName,
       sourceTitle: session.title,
-      sourceSessionId: session.externalSessionId ?? session.id,
+      // Karmashala's own id: it is what `checkpoint_list` and
+      // `checkpoint_restore` are keyed by. The CLI's conversation id stood
+      // here until 2026-09-20, and resolved to nothing.
+      sourceSessionId: session.id,
+      sourceConversationId: session.externalSessionId,
+      checkpoints: _checkpointsFor(sessionId),
+      recapUnreadable: recap.unreadable,
       instruction: instruction,
       workingDirectory: directory?.path,
       branch: delivery?.branch,
@@ -209,6 +221,33 @@ class SessionHandoffService {
     );
   }
 
+  /// The source's most recent snapshots, newest first, so the packet can offer
+  /// the receiving agent somewhere to go back to. Capped: a long session has
+  /// hundreds, and a list of hundreds is not an offer, it is noise.
+  List<HandoffCheckpoint> _checkpointsFor(String sessionId) {
+    try {
+      final rows = _ref.read(checkpointDaoProvider).forSession(sessionId);
+      final newest = rows.reversed.take(kHandoffCheckpointCount);
+      return [
+        for (final row in newest)
+          HandoffCheckpoint(
+            id: row.id,
+            label:
+                row.label ??
+                (row.turn == null
+                    ? row.reason.name
+                    : '${row.reason.name}, turn ${row.turn}'),
+            takenAt: row.createdAt,
+            files: row.files.length,
+          ),
+      ];
+    } catch (_) {
+      // A packet without this section is still a packet; one that claims a
+      // snapshot that is not there is worse than one that claims none.
+      return const [];
+    }
+  }
+
   /// What this session decided, as recorded — no deduplication, and no folding
   /// of a reversal. **Null** is "could not be read", not an empty record.
   ({
@@ -217,10 +256,7 @@ class SessionHandoffService {
     int omitted,
     int cost,
   })
-  _decisionsFor(
-    String sessionId,
-    HandoffDecisionBudget budget,
-  ) {
+  _decisionsFor(String sessionId, HandoffDecisionBudget budget) {
     try {
       final rows = _ref.read(decisionRecordDaoProvider).forSession(sessionId);
       final trimmed = trimDecisions([
@@ -276,7 +312,7 @@ class SessionHandoffService {
 
   /// The tail of the conversation, from the **agent's own transcript**. `tool`
   /// records are dropped: they exhaust the budget before anyone's words.
-  Future<({List<HandoffTurn> turns, int omitted})> _recapFor(
+  Future<({List<HandoffTurn> turns, int omitted, bool unreadable})> _recapFor(
     Session session,
     String? agentId,
     String sourceName,
@@ -284,13 +320,16 @@ class SessionHandoffService {
   ) async {
     final externalId = session.externalSessionId;
     if (agentId == null || externalId == null || externalId.isEmpty) {
-      return (turns: const <HandoffTurn>[], omitted: 0);
+      // No conversation was ever named, so there is nothing to have read.
+      return (turns: const <HandoffTurn>[], omitted: 0, unreadable: false);
     }
     try {
       final path = await _ref
           .read(sessionTranscriptLocatorProvider)
           .locate(agentId: agentId, externalSessionId: externalId);
-      if (path == null) return (turns: const <HandoffTurn>[], omitted: 0);
+      if (path == null) {
+        return (turns: const <HandoffTurn>[], omitted: 0, unreadable: true);
+      }
       final messages = await readCliTranscript(path, agentId);
       final turns = <HandoffTurn>[
         for (final message in messages)
@@ -302,11 +341,17 @@ class SessionHandoffService {
                 text: message.text.trim(),
               ),
       ];
-      return trimRecap(turns, budget);
+      final trimmed = trimRecap(turns, budget);
+      return (
+        turns: trimmed.turns,
+        omitted: trimmed.omitted,
+        unreadable: false,
+      );
     } catch (_) {
-      // An unreadable transcript is the same answer as an empty one, and the
-      // packet says which by carrying the count it could not quote.
-      return (turns: const <HandoffTurn>[], omitted: 0);
+      // **Not the same answer as an empty transcript.** A store that could not
+      // be read says nothing about what was said in it, and the packet
+      // rendered both as "Nothing was said in that session yet."
+      return (turns: const <HandoffTurn>[], omitted: 0, unreadable: true);
     }
   }
 
@@ -402,22 +447,20 @@ class SessionHandoffService {
     // Counted against what was there before the request: the newest turn in an
     // unchanged transcript is something the agent said earlier.
     if (after.length <= before) {
-      return HandoffSourceBrief.notWritten(
-        switch (outcome.state) {
-          SessionWaitState.timeout =>
-            'it had not answered when this stopped waiting. The request was '
-                'delivered and may still be answered in that session — the '
-                'brief is simply not in this packet.',
-          SessionWaitState.blocked =>
-            'it stopped for a person before answering. Whatever it is asking '
-                'is in that session.',
-          SessionWaitState.ended =>
-            'its pane is gone; nothing is running there to answer.',
-          _ =>
-            'it settled without saying anything (${outcome.state.name}), so '
-                'there is nothing of its own to quote.',
-        },
-      );
+      return HandoffSourceBrief.notWritten(switch (outcome.state) {
+        SessionWaitState.timeout =>
+          'it had not answered when this stopped waiting. The request was '
+              'delivered and may still be answered in that session — the '
+              'brief is simply not in this packet.',
+        SessionWaitState.blocked =>
+          'it stopped for a person before answering. Whatever it is asking '
+              'is in that session.',
+        SessionWaitState.ended =>
+          'its pane is gone; nothing is running there to answer.',
+        _ =>
+          'it settled without saying anything (${outcome.state.name}), so '
+              'there is nothing of its own to quote.',
+      });
     }
     return HandoffSourceBrief.written(after.last);
   }
@@ -497,7 +540,7 @@ class SessionHandoffService {
     }
 
     final context = _contextFor(session, session.agentInstallationId);
-    return _ref
+    final launched = await _ref
         .read(sessionLauncherProvider)
         .launch(
           SessionLaunchRequest(
@@ -527,6 +570,12 @@ class SessionHandoffService {
             ).override,
           ),
         );
+    // A native fork inherits the conversation from the CLI itself, but nothing
+    // outside the CLI: the decision record is Karmashala's, so it is copied.
+    _ref
+        .read(decisionRecorderProvider)
+        .carryForward(from: sessionId, into: launched.session.id);
+    return launched;
   }
 
   Future<SessionLaunchResult> _continue({
@@ -575,18 +624,23 @@ class SessionHandoffService {
     final rendered = packet.render();
     // Which channel the packet is aimed at, from the target's own declared
     // capability; whether it *lands* there is the launcher's line to log.
-    final support = descriptor?.launch.systemPromptFile ??
+    final support =
+        descriptor?.launch.systemPromptFile ??
         const AgentSystemPromptFileSupport.unchecked();
     _log.info(
       '${isFork ? 'Fork' : 'Handoff'} from $sessionId to '
       '${context.installation.agentId} ($targetName): '
       'packet=${rendered.length} chars '
-      'delivery=${support.isSupported ? support.token : support.wasChecked ? 'typed — $targetName has no system-prompt file option' : 'typed — $targetName has never been checked for one'} '
+      'delivery=${support.isSupported
+          ? support.token
+          : support.wasChecked
+          ? 'typed — $targetName has no system-prompt file option'
+          : 'typed — $targetName has never been checked for one'} '
       'worktree=${intoNewWorktree ? 'new' : 'shared'} '
       'mode=${carried.override?.canonical ?? 'default'}',
     );
 
-    return _ref
+    final launched = await _ref
         .read(sessionLauncherProvider)
         .launch(
           SessionLaunchRequest(
@@ -610,6 +664,13 @@ class SessionHandoffService {
             permissionOverride: carried.override,
           ),
         );
+    // The record follows the work. The packet quotes these too, but a quote is
+    // read once by one agent: the rows are what `decision_record` and the next
+    // handoff after this one can read.
+    _ref
+        .read(decisionRecorderProvider)
+        .carryForward(from: sessionId, into: launched.session.id);
+    return launched;
   }
 
   /// What a continuation into [targetAgentId] starts from, and whether the

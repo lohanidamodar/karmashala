@@ -15,6 +15,9 @@ HandoffPacket _packet({
   String? baseBranch = 'origin/main',
   bool isFork = false,
   String instruction = 'Finish the parser.',
+  String? sourceConversationId,
+  List<HandoffCheckpoint> checkpoints = const [],
+  bool recapUnreadable = false,
 }) => HandoffPacket(
   sourceAgentName: 'Claude Code',
   targetAgentName: 'Codex CLI',
@@ -34,6 +37,9 @@ HandoffPacket _packet({
   deadEnds: deadEnds,
   sourceBrief: sourceBrief,
   isFork: isFork,
+  sourceConversationId: sourceConversationId,
+  checkpoints: checkpoints,
+  recapUnreadable: recapUnreadable,
 );
 
 HandoffDecision _decision({
@@ -69,7 +75,23 @@ void main() {
       final text = _packet().render();
       expect(text, contains('**Previous agent:** Claude Code'));
       expect(text, contains('**You are:** Codex CLI'));
-      expect(text, contains('"Fix the parser" (`a4f1`)'));
+      expect(text, contains('"Fix the parser" (Karmashala `a4f1`)'));
+    });
+
+    test('names the source session by the id the tools take', () {
+      // Every session-addressed tool — `session_transcript`, `checkpoint_list`
+      // — takes the Karmashala row id, so the packet must say which id it is.
+      final text = _packet().render();
+      expect(text, contains('Karmashala `a4f1`'));
+      expect(
+        _packet(sourceConversationId: 'c0ffee').render(),
+        contains('**Its Claude Code conversation:** `c0ffee`'),
+      );
+      // The CLI's own id is worth a line only when it is a different string.
+      expect(
+        _packet(sourceConversationId: 'a4f1').render(),
+        isNot(contains('conversation:**')),
+      );
     });
 
     test('a fork says the original still exists and is unchanged', () {
@@ -167,6 +189,55 @@ void main() {
         );
       },
     );
+
+    test('a transcript that could not be read is not "nothing was said"', () {
+      final text = _packet(recapUnreadable: true).render();
+      expect(text, contains('could not be read'));
+      expect(text, contains('not the same as nothing having been said'));
+      expect(text, isNot(contains('Nothing was said in that session yet')));
+    });
+  });
+
+  group('the snapshots the source left behind', () {
+    HandoffCheckpoint checkpoint({
+      String id = 'cp-9',
+      String label = 'before turn 12',
+      int? files = 3,
+      DateTime? takenAt,
+    }) => HandoffCheckpoint(
+      id: id,
+      label: label,
+      files: files,
+      takenAt: takenAt ?? DateTime.utc(2026, 8, 31, 12, 5),
+    );
+
+    test('are absent entirely when the session took none', () {
+      expect(_packet().render(), isNot(contains('Snapshots you can go back')));
+    });
+
+    test('list the id first, and name the tool that reaches them', () {
+      final text = _packet(checkpoints: [checkpoint()]).render();
+      expect(text, contains('## Snapshots you can go back to'));
+      expect(text, contains('`cp-9` — before turn 12 · 3 files'));
+      expect(text, contains('checkpoint_list(sessionId: "a4f1")'));
+      expect(text, contains('checkpoint_restore'));
+    });
+
+    test('say a restore puts back the tree, not the conversation', () {
+      final text = _packet(checkpoints: [checkpoint()]).render();
+      expect(text, contains('the tree, not the'));
+      expect(text, contains('conversation'));
+    });
+
+    test('a row that did not record its file count says less, not wrongly', () {
+      final text = _packet(
+        checkpoints: const [
+          HandoffCheckpoint(id: 'cp-9', label: 'before turn 12'),
+        ],
+      ).render();
+      expect(text, contains('- `cp-9` — before turn 12\n'));
+      expect(text, isNot(contains('before turn 12 ·')));
+    });
   });
 
   group('the decision record', () {
@@ -203,7 +274,10 @@ void main() {
       expect(
         _packet(
           decisions: [
-            _decision(origin: "the agent's own approval prompt", originId: null),
+            _decision(
+              origin: "the agent's own approval prompt",
+              originId: null,
+            ),
           ],
         ).render(),
         contains("from the agent's own approval prompt"),
@@ -221,17 +295,13 @@ void main() {
     });
 
     test('a multi-line detail is quoted line by line, like a turn', () {
-      final text = _packet(
-        decisions: [_decision(detail: 'one\ntwo')],
-      ).render();
+      final text = _packet(decisions: [_decision(detail: 'one\ntwo')]).render();
       expect(text, contains('> one'));
       expect(text, contains('> two'));
     });
 
     test('an unknown decider says "not recorded" rather than nothing', () {
-      final text = _packet(
-        decisions: [_decision(decidedBy: null)],
-      ).render();
+      final text = _packet(decisions: [_decision(decidedBy: null)]).render();
       expect(text, contains('decided by not recorded'));
     });
 
@@ -447,10 +517,7 @@ void main() {
       expect(text, contains('a command and what it printed'));
       expect(text, contains('"not checked yet"'));
       // The clause the rule exists for: a prior packet is a claim.
-      expect(
-        text,
-        contains('A previous packet is a claim, not evidence'),
-      );
+      expect(text, contains('A previous packet is a claim, not evidence'));
       expect(text, contains('the files win'));
       // And the mismatch is reported rather than quietly corrected.
       expect(text, contains('worth reporting rather than quietly correcting'));
@@ -531,10 +598,7 @@ void main() {
     test('an empty list is not "nothing was ruled out"', () {
       final text = _packet(deadEnds: const []).render();
       expect(text, contains('Nothing was recorded as ruled out'));
-      expect(
-        text,
-        contains('That is not the same as "nothing was ruled out"'),
-      );
+      expect(text, contains('That is not the same as "nothing was ruled out"'));
       expect(text, isNot(contains('None.')));
     });
 
@@ -544,7 +608,6 @@ void main() {
       expect(text, contains('before spending a turn re-deriving it'));
     });
   });
-
 
   group("the source agent's own brief", () {
     test('is absent entirely when nobody asked for one', () {
@@ -569,10 +632,7 @@ void main() {
       expect(text, contains('the evidence rule above applies'));
       expect(text, contains('the verbatim quotes further down'));
       // Quoted, so it has no editors.
-      expect(
-        text,
-        contains('_Owner: Claude Code. No editors'),
-      );
+      expect(text, contains('_Owner: Claude Code. No editors'));
     });
 
     test('a brief that was asked for and not written says why', () {
@@ -604,14 +664,17 @@ void main() {
       );
     });
 
-    test('the receiving prefix frames the work as inherited, not remembered', () {
-      final text = _packet().render();
-      expect(text, contains('Another model started this and has stopped'));
-      expect(text, contains('Build on what it did rather than repeating it'));
-      // And the half of Codex's framing that would be false here is not
-      // claimed: nothing says the reader has the other model's tool state.
-      expect(text, isNot(contains('tool state')));
-    });
+    test(
+      'the receiving prefix frames the work as inherited, not remembered',
+      () {
+        final text = _packet().render();
+        expect(text, contains('Another model started this and has stopped'));
+        expect(text, contains('Build on what it did rather than repeating it'));
+        // And the half of Codex's framing that would be false here is not
+        // claimed: nothing says the reader has the other model's tool state.
+        expect(text, isNot(contains('tool state')));
+      },
+    );
 
     test('the request is the compaction prompt, not a paraphrase', () {
       expect(
@@ -621,13 +684,18 @@ void main() {
           'handoff summary for another LLM that will resume the task.',
         ),
       );
-      expect(kSourceBriefRequest, contains('- Current progress and key decisions made'));
-      expect(kSourceBriefRequest, contains('- What remains to be done (clear next steps)'));
+      expect(
+        kSourceBriefRequest,
+        contains('- Current progress and key decisions made'),
+      );
+      expect(
+        kSourceBriefRequest,
+        contains('- What remains to be done (clear next steps)'),
+      );
       expect(
         kSourceBriefRequest,
         endsWith('helping the next LLM seamlessly continue the work.'),
       );
     });
   });
-
 }

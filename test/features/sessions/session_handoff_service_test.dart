@@ -158,9 +158,7 @@ const _mute = AgentDescriptor(
   displayName: 'Mute CLI',
   binaries: AgentBinaries(windows: ['mute'], posix: ['mute']),
   // Takes no prompt argument and declares no fork: the shape Antigravity has.
-  launch: AgentLaunchSpec(
-    permission: _muteModes,
-  ),
+  launch: AgentLaunchSpec(permission: _muteModes),
 );
 
 class _FakeLocator implements SessionTranscriptLocator {
@@ -271,9 +269,9 @@ Harness harness({
     ..insert(agentInstallation(id: 'a2', agentId: 'mute'));
   // Only when a test asks: the target list is asserted by name elsewhere.
   if (packetDirectory != null) {
-    AgentInstallationDao(db).insert(
-      agentInstallation(id: 'a3', agentId: 'briefed'),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(id: 'a3', agentId: 'briefed'));
   }
 
   final git = FakeCommandRunner(
@@ -520,8 +518,39 @@ void main() {
             instruction: 'Finish it.',
           );
       expect(packet.recap, isEmpty);
-      expect(packet.render(), contains('Nothing was said in that session yet'));
+      // A transcript nobody could find says nothing about what was said in it.
+      expect(packet.recapUnreadable, isTrue);
+      expect(packet.render(), contains('could not be read'));
+      expect(
+        packet.render(),
+        isNot(contains('Nothing was said in that session yet')),
+      );
     });
+
+    test(
+      'a session that never named a conversation is empty, not lost',
+      () async {
+        // The other half of the same distinction: no external id means the CLI
+        // never opened a conversation, which is genuinely "nothing was said".
+        final h = harness();
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+        seedSession(h.db, externalSessionId: null);
+
+        final packet = await h.container
+            .read(sessionHandoffServiceProvider)
+            .buildPacket(
+              sessionId: 'src',
+              targetAgentName: 'Mute CLI',
+              instruction: 'Finish it.',
+            );
+        expect(packet.recapUnreadable, isFalse);
+        expect(
+          packet.render(),
+          contains('Nothing was said in that session yet'),
+        );
+      },
+    );
 
     test('git refusing to answer is an admission, not a clean tree', () async {
       final h = harness(repoState: null);
@@ -594,10 +623,7 @@ void main() {
       // work rather than among everything else that was settled.
       expect(packet.decisions, hasLength(1));
       expect(packet.deadEnds, hasLength(1));
-      expect(
-        text,
-        contains('- **The isolate pool deadlocked on Windows.**'),
-      );
+      expect(text, contains('- **The isolate pool deadlocked on Windows.**'));
       expect(text, contains('said by: Forker CLI'));
       // Its evidence is the act that recorded it — never an omitted qualifier.
       expect(
@@ -662,10 +688,7 @@ void main() {
 
       // Every decision survives — counted across both sections it can land
       // in, because the budget is charged once over the whole record.
-      expect(
-        after.decisions!.length + after.deadEnds!.length,
-        15,
-      );
+      expect(after.decisions!.length + after.deadEnds!.length, 15);
       expect(after.omittedDecisions, 0);
       for (var i = 0; i < 15; i++) {
         expect(after.render(), contains('Decision $i'));
@@ -751,37 +774,40 @@ void main() {
       );
     });
 
-    test('a handoff of a session that never chose keeps following the default', () async {
-      final path = writeTranscript([('user', 'hello')]);
-      final h = harness(
-        transcriptPath: path,
-        settings: const Settings().withPermissions(
-          'forker',
-          const AgentPermissions(newSessions: bypassStored),
-        ),
-      );
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      seedSession(h.db, mode: null);
+    test(
+      'a handoff of a session that never chose keeps following the default',
+      () async {
+        final path = writeTranscript([('user', 'hello')]);
+        final h = harness(
+          transcriptPath: path,
+          settings: const Settings().withPermissions(
+            'forker',
+            const AgentPermissions(newSessions: bypassStored),
+          ),
+        );
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+        seedSession(h.db, mode: null);
 
-      final result = await h.container
-          .read(sessionHandoffServiceProvider)
-          .handoffTo(
-            sessionId: 'src',
-            targetInstallationId: 'a1',
-            instruction: 'Take it from here.',
-          );
+        final result = await h.container
+            .read(sessionHandoffServiceProvider)
+            .handoffTo(
+              sessionId: 'src',
+              targetInstallationId: 'a1',
+              instruction: 'Take it from here.',
+            );
 
-      final launch = h.container
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(result.paneId!)!
-          .agentLaunch!;
-      expect(launch.arguments, contains('--trust-me'));
-      expect(
-        SessionDao(h.db).getById(result.session.id)!.permissionMode,
-        isNull,
-      );
-    });
+        final launch = h.container
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(result.paneId!)!
+            .agentLaunch!;
+        expect(launch.arguments, contains('--trust-me'));
+        expect(
+          SessionDao(h.db).getById(result.session.id)!.permissionMode,
+          isNull,
+        );
+      },
+    );
 
     test('a picked mode the target cannot express is not escalated', () async {
       final path = writeTranscript([('user', 'hello')]);
@@ -917,40 +943,40 @@ void main() {
       expect(launch.arguments, isNot(contains('--careful')));
       // The branch runs under the picked mode; the session it came from is
       // left on its own.
-      expect(
-        SessionDao(h.db).getById('src')!.permissionMode,
-        askStored,
-      );
+      expect(SessionDao(h.db).getById('src')!.permissionMode, askStored);
     });
 
-    test('a fork of a session that never chose keeps following the default', () async {
-      final h = harness(
-        settings: const Settings().withPermissions(
-          'forker',
-          const AgentPermissions(newSessions: bypassStored),
-        ),
-      );
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      seedSession(h.db, mode: null);
+    test(
+      'a fork of a session that never chose keeps following the default',
+      () async {
+        final h = harness(
+          settings: const Settings().withPermissions(
+            'forker',
+            const AgentPermissions(newSessions: bypassStored),
+          ),
+        );
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+        seedSession(h.db, mode: null);
 
-      final result = await h.container
-          .read(sessionHandoffServiceProvider)
-          .forkSession(sessionId: 'src');
+        final result = await h.container
+            .read(sessionHandoffServiceProvider)
+            .forkSession(sessionId: 'src');
 
-      final launch = h.container
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(result.paneId!)!
-          .agentLaunch!;
-      expect(launch.arguments, contains('--trust-me'));
-      // A branch inherits its parent's *state*, not a snapshot of it: the
-      // parent follows the setting, so the branch does too. Stamping what the
-      // default said today would freeze the branch the moment it was made.
-      expect(
-        SessionDao(h.db).getById(result.session.id)!.permissionMode,
-        isNull,
-      );
-    });
+        final launch = h.container
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(result.paneId!)!
+            .agentLaunch!;
+        expect(launch.arguments, contains('--trust-me'));
+        // A branch inherits its parent's *state*, not a snapshot of it: the
+        // parent follows the setting, so the branch does too. Stamping what the
+        // default said today would freeze the branch the moment it was made.
+        expect(
+          SessionDao(h.db).getById(result.session.id)!.permissionMode,
+          isNull,
+        );
+      },
+    );
 
     test('a fork stamps a mode that had to be reduced to fit the agent', () async {
       final h = harness();
@@ -1391,10 +1417,9 @@ void main() {
       );
       expect(kept, isNotNull);
       // `gone` is neither the session being written nor a running one.
-      expect(
-        dir.listSync().map((e) => p.basename(e.path)),
-        [HandoffPacketFiles.fileNameFor('fresh')],
-      );
+      expect(dir.listSync().map((e) => p.basename(e.path)), [
+        HandoffPacketFiles.fileNameFor('fresh'),
+      ]);
       expect(files.retire('fresh'), isTrue);
       expect(files.retire('fresh'), isFalse);
     });
@@ -1497,5 +1522,4 @@ void main() {
       expect(actions.sent, isEmpty);
     });
   });
-
 }
