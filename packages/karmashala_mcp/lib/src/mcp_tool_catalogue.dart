@@ -118,6 +118,12 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // true` is a read on either, and the annotation describes the worst.
   'session_handoff': McpToolAnnotations(movesAttention: true),
   'session_fork': McpToolAnnotations(movesAttention: true),
+  // A fork that also rolls the working tree back, so it inherits
+  // `checkpoint_restore`'s hazard: it can discard uncommitted work.
+  'session_fork_from_checkpoint': McpToolAnnotations(
+    destructive: true,
+    movesAttention: true,
+  ),
   // Spawns an external terminal window running the generated tmux script.
   'open_sessions_in_tmux': McpToolAnnotations(movesAttention: true),
 
@@ -520,6 +526,11 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'session_fork': McpToolListing(
     McpToolCategory.sessions,
     'Branch a session into one that shares its history and then diverges.',
+  ),
+  'session_fork_from_checkpoint': McpToolListing(
+    McpToolCategory.sessions,
+    'Fork a session and roll its files back to a checkpoint; not its '
+    'conversation.',
   ),
   'get_usage': McpToolListing(
     McpToolCategory.sessions,

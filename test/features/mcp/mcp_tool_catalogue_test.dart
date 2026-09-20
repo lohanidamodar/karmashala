@@ -101,9 +101,11 @@ void main() {
       // Reattaches and focuses the pane and rewrites the selected session; an
       // imported session opens an external terminal window instead.
       'open_session',
-      // Both launch the continuing session into a focused tab.
+      // Both launch the continuing session into a focused tab, and the
+      // checkpoint fork launches one too — on top of rewriting the files.
       'session_handoff',
       'session_fork',
+      'session_fork_from_checkpoint',
       // A new external terminal window running the generated tmux script.
       'open_sessions_in_tmux',
       // Takes the pane away; the next tab becomes active and takes the keys.

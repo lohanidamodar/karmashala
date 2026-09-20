@@ -11,7 +11,9 @@ const Duration launchDedupeWindow = Duration(minutes: 2);
 bool startsAnAgent(String tool, Map<String, dynamic> arguments) =>
     switch (tool) {
       'open_new_session' || 'open_sessions_in_tmux' => true,
-      'session_handoff' || 'session_fork' => arguments['preview'] != true,
+      'session_handoff' ||
+      'session_fork' ||
+      'session_fork_from_checkpoint' => arguments['preview'] != true,
       _ => false,
     };
 

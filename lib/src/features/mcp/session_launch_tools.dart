@@ -4,8 +4,14 @@ import '../agents/application/agent_providers.dart';
 import '../agents/application/agent_usage_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
+import '../checkpoints/application/checkpoint_fork.dart';
+import '../checkpoints/application/checkpoint_providers.dart';
+import '../checkpoints/application/checkpoint_service.dart';
+import '../checkpoints/domain/checkpoint.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
 import '../environments/application/environment_providers.dart';
+import '../explorer/application/checkout.dart';
 import '../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../sessions/application/session_handoff_service.dart';
@@ -35,6 +41,7 @@ class SessionLaunchTools {
     'open_session',
     'session_handoff',
     'session_fork',
+    'session_fork_from_checkpoint',
   };
 
   static bool handles(String name) => _names.contains(name);
@@ -72,6 +79,17 @@ class SessionLaunchTools {
           sessionId: args['sessionId'] as String?,
           instruction: args['instruction'] as String?,
           newWorktree: args['newWorktree'] == true,
+          preview: args['preview'] == true,
+        ),
+        // Named, never defaulted to the caller: this one rewrites files, and a
+        // destructive verb must not pick its own target from an omission.
+        'session_fork_from_checkpoint' => _sessionForkFromCheckpoint(
+          sessionId: args['sessionId'] as String?,
+          checkpointId: args['checkpointId'] as String?,
+          turn: (args['turn'] as num?)?.round(),
+          instruction: args['instruction'] as String?,
+          newWorktree: args['newWorktree'] == true,
+          confirm: args['confirm'] == true,
           preview: args['preview'] == true,
         ),
         _ => throw ArgumentError('Unknown tool: $name'),
@@ -342,6 +360,190 @@ class SessionLaunchTools {
         'worktree': launched.session.worktree!.path,
     };
   }
+
+  /// Forks a session **and** puts its working tree back to a checkpoint. The
+  /// two halves are independent, and the answer names each one separately
+  /// rather than reporting a fork that only half happened.
+  Future<Object?> _sessionForkFromCheckpoint({
+    String? sessionId,
+    String? checkpointId,
+    int? turn,
+    String? instruction,
+    bool newWorktree = false,
+    bool confirm = false,
+    bool preview = false,
+  }) async {
+    if (sessionId == null) throw ArgumentError('Missing sessionId.');
+    final checkpoints = _container.read(checkpointServiceProvider);
+    final checkpoint = _forkCheckpoint(
+      checkpoints,
+      sessionId: sessionId,
+      checkpointId: checkpointId,
+      turn: turn,
+    );
+
+    final handoff = _container.read(sessionHandoffServiceProvider);
+    final plan = handoff.forkPlanFor(sessionId);
+    final others = _sessionsSharing(checkpoint.repository, sessionId);
+    final fileRefusal = checkpointForkFileRefusal(
+      intoNewWorktree: newWorktree,
+      unsupportedEnvironmentReason: checkpoints.unsupportedReason(
+        checkpoint.repository,
+      ),
+      otherSessionsInCheckout: others,
+    );
+
+    if (preview) {
+      return {
+        'preview': true,
+        'route': plan.kind.name,
+        'explanation': plan.explanation,
+        'checkpoint': _forkCheckpointJson(checkpoint),
+        'conversation': _forkConversationJson(),
+        'files': {
+          'wouldRestore': fileRefusal == null,
+          'repository': checkpoint.repository.path,
+          'reason': ?fileRefusal,
+        },
+      };
+    }
+    if (plan.isRefused) throw StateError(plan.explanation);
+
+    // The files first: a refusal here must not leave a session behind, and the
+    // fork is meant to start in the tree it was asked for.
+    RestoreOutcome? restored;
+    if (fileRefusal == null) {
+      try {
+        restored = await checkpoints.restore(checkpoint, confirm: confirm);
+      } on CheckpointConflict catch (conflict) {
+        throw StateError(
+          '${conflict.message} Nothing was changed and no session was '
+          'started. The current working tree is saved as checkpoint '
+          '${conflict.safetyCheckpoint?.id}.',
+        );
+      }
+      _container.read(checkpointsRevisionProvider.notifier).bump();
+    }
+
+    final launched = await handoff.forkSession(
+      sessionId: sessionId,
+      instruction: instruction ?? '',
+      intoNewWorktree: newWorktree,
+    );
+
+    final halves = checkpointForkHalves(
+      route: plan.kind.name,
+      checkpoint: checkpoint,
+      fileRefusal: fileRefusal,
+      alreadyThere: restored?.alreadyThere,
+      restoredFiles: restored?.files.length ?? 0,
+    );
+    return {
+      'sessionId': launched.session.id,
+      'title': launched.session.title,
+      'parentSessionId': sessionId,
+      'link': SessionLink.fork.name,
+      'route': plan.kind.name,
+      'explanation': plan.explanation,
+      'checkpoint': _forkCheckpointJson(checkpoint),
+      // Both halves, always both keys: a caller reading one of them must not
+      // have to infer the other from what is missing.
+      'delivered': halves.delivered,
+      'notDelivered': halves.notDelivered,
+      'conversation': _forkConversationJson(),
+      'files': {
+        'restored': restored != null && !restored.alreadyThere,
+        'repository': checkpoint.repository.path,
+        'reason': ?fileRefusal,
+        if (restored != null) ...{
+          'alreadyThere': restored.alreadyThere,
+          'safetyCheckpointId': restored.safetyCheckpoint?.id,
+          'paths': [
+            for (final file in restored.files)
+              {'path': file.path, 'status': file.type.name},
+          ],
+        },
+      },
+      if (launched.session.worktree != null)
+        'worktree': launched.session.worktree!.path,
+    };
+  }
+
+  /// The checkpoint the caller named, by id or by turn. Refuses rather than
+  /// guessing: a checkpoint of another session is not a smaller right answer.
+  Checkpoint _forkCheckpoint(
+    CheckpointService service, {
+    required String sessionId,
+    String? checkpointId,
+    int? turn,
+  }) {
+    if ((checkpointId == null) == (turn == null)) {
+      throw ArgumentError(
+        'Name exactly one of checkpointId or turn. checkpoint_list shows both.',
+      );
+    }
+    if (checkpointId != null) {
+      final checkpoint = service.byId(checkpointId);
+      if (checkpoint == null) {
+        throw StateError('No checkpoint with id $checkpointId.');
+      }
+      if (checkpoint.sessionId != sessionId) {
+        throw StateError(
+          'Checkpoint $checkpointId belongs to session '
+          '${checkpoint.sessionId}, not $sessionId.',
+        );
+      }
+      return checkpoint;
+    }
+    final chain = service.forSession(sessionId);
+    final checkpoint = checkpointAtTurn(chain, turn!);
+    if (checkpoint == null) {
+      final available = forkableTurns(chain);
+      throw StateError(
+        available.isEmpty
+            ? 'That session has no checkpoint recorded against a turn, so '
+                  'there is no turn to fork from. Name a checkpointId from '
+                  'checkpoint_list instead.'
+            : 'That session has no checkpoint for turn $turn. It has turns '
+                  '${available.join(', ')}.',
+      );
+    }
+    return checkpoint;
+  }
+
+  /// The **other** sessions recorded as working in [repository]. Empty is not a
+  /// promise of solitude — only a worktree is that — but a non-empty answer is
+  /// a directory this call must not rewrite.
+  List<String> _sessionsSharing(EnvironmentPath repository, String sessionId) =>
+      [
+        for (final session in sessionsWorkingIn(
+          repository,
+          excluding: sessionId,
+          among: _container.read(sessionDaoProvider).getAll(),
+          pathsMatch: samePath,
+        ))
+          session.title,
+      ];
+
+  Map<String, Object?> _forkCheckpointJson(Checkpoint checkpoint) => {
+    'id': checkpoint.id,
+    'sequence': checkpoint.sequence,
+    'turn': checkpoint.turn,
+    'reason': checkpoint.reason.name,
+    'label': checkpoint.label,
+    'prompt': checkpoint.prompt,
+    'createdAt': checkpoint.createdAt.toIso8601String(),
+    'repository': checkpoint.repository.path,
+    'environmentId': checkpoint.repository.environmentId,
+  };
+
+  /// Constant on purpose: there is no route here that rewinds a conversation,
+  /// so this key can never come back saying one was.
+  Map<String, Object?> _forkConversationJson() => {
+    'carried': 'whole',
+    'rewoundToTurn': false,
+    'note': kForkCarriesTheWholeConversation,
+  };
 
   Future<Object?> _getUsage({String? cli, String? environmentId}) async {
     final agentId = parseCli(_container, cli) ?? AgentIds.claudeCode;
@@ -682,6 +884,75 @@ const List<Map<String, dynamic>> sessionHandoffToolSchemas = [
         'preview': {
           'type': 'boolean',
           'description': 'Report the plan without starting anything.',
+        },
+      },
+      'required': ['sessionId'],
+    },
+  },
+  {
+    'name': 'session_fork_from_checkpoint',
+    'description':
+        'Fork a session AND put its working tree back to one of its '
+        'checkpoints, named by checkpointId or by turn. TWO HALVES, and only '
+        'one of them is a rewind: the files go back to the checkpoint, and '
+        'the CONVERSATION IS CARRIED WHOLE — no agent CLI here can resume a '
+        'conversation at a turn, so the fork still remembers everything said '
+        'after that point, including edits the files no longer hold. Say what '
+        'you rolled back in "instruction". The result lists "delivered" and '
+        '"notDelivered" separately and never claims a half it did not do. '
+        'DESTRUCTIVE on the file half: it discards edits made since that '
+        'checkpoint, exactly as checkpoint_restore does, taking a safety '
+        'checkpoint first and refusing a tree that has moved unless "confirm" '
+        'is true. It refuses the file half outright — and says so rather than '
+        'failing — when another session is working in that checkout, when the '
+        'repository cannot be checkpointed from here, or when newWorktree is '
+        'true, because a checkpoint restores only into the checkout it was '
+        'taken in. Use preview:true to read both decisions before committing.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'sessionId': {
+          'type': 'string',
+          'description':
+              'Session to fork, from list_sessions (kind "native"). Named, '
+              'never defaulted to you: this one rewrites files.',
+        },
+        'checkpointId': {
+          'type': 'string',
+          'description':
+              'Checkpoint id from checkpoint_list. Name this or "turn", not '
+              'both. It must belong to the session being forked.',
+        },
+        'turn': {
+          'type': 'number',
+          'description':
+              'Fork from the state that turn began in — the turnStart '
+              'checkpoint of that turn, or the earliest one recorded for it.',
+        },
+        'instruction': {
+          'type': 'string',
+          'description':
+              'Opening message for the fork. This is where the fork learns '
+              'what was rolled back; it cannot tell from its own memory.',
+        },
+        'newWorktree': {
+          'type': 'boolean',
+          'description':
+              'Fork into a fresh Git worktree. Default false. True gives the '
+              'branches separate files and gives up the restore: the worktree '
+              'is a fresh checkout of the branch, not the checkpoint.',
+        },
+        'confirm': {
+          'type': 'boolean',
+          'description':
+              'Restore even though the working tree has moved since the last '
+              'checkpoint. Requires the user to have said so.',
+        },
+        'preview': {
+          'type': 'boolean',
+          'description':
+              'Report both halves without starting anything and without '
+              'touching a file.',
         },
       },
       'required': ['sessionId'],

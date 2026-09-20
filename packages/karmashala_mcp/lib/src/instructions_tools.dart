@@ -181,6 +181,23 @@ annotated destructive: nothing un-happens it.
 **`session_end` ends the process.** The transcript survives. The turn in flight
 does not, and nothing brings it back.
 
+**`session_fork_from_checkpoint` delivers two halves, and only one is a
+rewind.** The files go back to the checkpoint you named; the conversation is
+carried **whole**. No agent CLI here can resume a conversation at a turn, so
+the fork still remembers making edits its files no longer hold, and it will
+carry on from there unless you say otherwise in `instruction`. The result
+lists `delivered` and `notDelivered` separately for exactly this reason —
+read both, and never read a missing key as a half that happened.
+
+The file half is the destructive one, on `checkpoint_restore`'s terms: a safety
+checkpoint first, and a tree that has moved refused unless `confirm`. It is
+**refused outright**, and named in `notDelivered` rather than failing the call,
+when another session is recorded working in that checkout — rolling it back
+would take work that is not yours — when the repository cannot be checkpointed
+from here, and when `newWorktree` is true, because a checkpoint restores only
+into the checkout it was taken in. `preview: true` reports both decisions
+without touching a file.
+
 **Starting sessions is capped on purpose.** Sessions you start with
 `open_new_session` are recorded as your children and nesting is limited. If a
 call is refused for depth, that is the answer: do the work yourself rather than
@@ -307,6 +324,11 @@ So the safe order when you are unsure is: `checkpoint_list` to see what exists,
 
 `checkpoint_capture` is cheap and non-destructive. Taking one before something
 irreversible costs a moment and buys the ability to be wrong.
+
+**A restore rewinds files, never a conversation.** The agent still believes it
+made the edits you rolled back. `session_fork_from_checkpoint` is the verb that
+does both at once, and it is honest about the same gap:
+`instructions(topic: "sessions")` says what it delivers and what it refuses.
 ''',
   ),
   McpGuide(

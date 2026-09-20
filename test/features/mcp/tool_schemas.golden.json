@@ -553,6 +553,53 @@
       }
     },
     {
+      "name": "session_fork_from_checkpoint",
+      "description": "Fork a session AND put its working tree back to one of its checkpoints, named by checkpointId or by turn. TWO HALVES, and only one of them is a rewind: the files go back to the checkpoint, and the CONVERSATION IS CARRIED WHOLE — no agent CLI here can resume a conversation at a turn, so the fork still remembers everything said after that point, including edits the files no longer hold. Say what you rolled back in \"instruction\". The result lists \"delivered\" and \"notDelivered\" separately and never claims a half it did not do. DESTRUCTIVE on the file half: it discards edits made since that checkpoint, exactly as checkpoint_restore does, taking a safety checkpoint first and refusing a tree that has moved unless \"confirm\" is true. It refuses the file half outright — and says so rather than failing — when another session is working in that checkout, when the repository cannot be checkpointed from here, or when newWorktree is true, because a checkpoint restores only into the checkout it was taken in. Use preview:true to read both decisions before committing.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Session to fork, from list_sessions (kind \"native\"). Named, never defaulted to you: this one rewrites files."
+          },
+          "checkpointId": {
+            "type": "string",
+            "description": "Checkpoint id from checkpoint_list. Name this or \"turn\", not both. It must belong to the session being forked."
+          },
+          "turn": {
+            "type": "number",
+            "description": "Fork from the state that turn began in — the turnStart checkpoint of that turn, or the earliest one recorded for it."
+          },
+          "instruction": {
+            "type": "string",
+            "description": "Opening message for the fork. This is where the fork learns what was rolled back; it cannot tell from its own memory."
+          },
+          "newWorktree": {
+            "type": "boolean",
+            "description": "Fork into a fresh Git worktree. Default false. True gives the branches separate files and gives up the restore: the worktree is a fresh checkout of the branch, not the checkpoint."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Restore even though the working tree has moved since the last checkpoint. Requires the user to have said so."
+          },
+          "preview": {
+            "type": "boolean",
+            "description": "Report both halves without starting anything and without touching a file."
+          }
+        },
+        "required": [
+          "sessionId"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
       "name": "open_sessions_in_tmux",
       "description": "Open several sessions together as windows in a single tmux session (WSL), in one new terminal tab. All sessions must live in the same WSL distribution. Pass the session ids from list_sessions. Non-destructive: if a tmux session with the given name already exists it is NOT killed — the sessions are appended as new windows without switching the focused window of any running tab.",
       "inputSchema": {
@@ -4310,6 +4357,10 @@
     "session_fork": {
       "category": "sessions",
       "summary": "Branch a session into one that shares its history and then diverges."
+    },
+    "session_fork_from_checkpoint": {
+      "category": "sessions",
+      "summary": "Fork a session and roll its files back to a checkpoint; not its conversation."
     },
     "open_sessions_in_tmux": {
       "category": "sessions",
