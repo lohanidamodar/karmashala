@@ -33,6 +33,7 @@ import 'section_membership_dialog.dart';
 import '../../automations/application/scheduled_resume_providers.dart';
 import '../../automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala_ui/rows.dart';
+import '../../sessions/presentation/export_session_action.dart';
 
 /// The two rows that stand for a session, wherever the app draws one: the tree
 /// and the sections must be the same object. Both watch inside their own
@@ -284,6 +285,14 @@ class NativeSessionRow extends ConsumerWidget {
               label: 'Copy resume command',
               icon: AppIcons.copy,
             ),
+            // The whole session as one file, for a bug report or an archive.
+            // It says inside itself what it could not read, so what leaves
+            // here cannot be mistaken for the whole story.
+            DesktopMenuItem(
+              value: 'export',
+              label: 'Export session…',
+              icon: AppIcons.package,
+            ),
             DesktopMenuItem(
               value: 'rename',
               label: 'Rename',
@@ -343,6 +352,8 @@ class NativeSessionRow extends ConsumerWidget {
                 () => actions.nativeResumeShellCommand(session.id),
               ),
             );
+          case 'export':
+            await exportSession(context, ref, session.id);
           case 'rename':
             unawaited(renameNativeSession(context, ref, session));
           case 'delete':
