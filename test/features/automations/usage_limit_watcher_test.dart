@@ -4,6 +4,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/usage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
 import 'package:karmashala/src/features/automations/application/usage_limit_watcher.dart';
 import 'package:karmashala/src/features/automations/domain/scheduled_resume.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
@@ -101,26 +102,28 @@ void main() {
   group('Codex, from its rollout\'s own record', () {
     setUp(build);
 
-    test('a turn ending at the ceiling is offered a resume at the reset',
-        () async {
-      rollout = limited();
-      changes.add(entry());
-      await h.settle();
+    test(
+      'a turn ending at the ceiling is offered a resume at the reset',
+      () async {
+        rollout = limited();
+        changes.add(entry());
+        await h.settle();
 
-      expect(rolloutReads, ['/rollouts/s1.jsonl']);
-      final posted = notice()!;
-      expect(posted.message, startsWith('Codex CLI hit its 5-hour limit.'));
-      expect(posted.message, contains('Resets'));
-      expect(posted.sticky, isTrue);
-      expect(posted.action?.label, 'Resume then');
-      expect(posted.secondaryAction?.label, 'Options…');
-      // Nothing is armed by noticing.
-      expect(h.live('s1'), isNull);
+        expect(rolloutReads, ['/rollouts/s1.jsonl']);
+        final posted = notice()!;
+        expect(posted.message, startsWith('Codex CLI hit its 5-hour limit.'));
+        expect(posted.message, contains('Resets'));
+        expect(posted.sticky, isTrue);
+        expect(posted.action?.label, 'Resume then');
+        expect(posted.secondaryAction?.label, 'Options…');
+        // Nothing is armed by noticing.
+        expect(h.live('s1'), isNull);
 
-      final item = h.container.read(attentionInboxProvider).items.single;
-      expect(item.kind, InboxItemKind.usageLimit);
-      expect(item.detail, posted.message);
-    });
+        final item = h.container.read(attentionInboxProvider).items.single;
+        expect(item.kind, InboxItemKind.usageLimit);
+        expect(item.detail, posted.message);
+      },
+    );
 
     test('"Resume then" arms it with the defaults, in one click', () async {
       rollout = limited();
@@ -183,18 +186,20 @@ void main() {
       expect(rolloutReads, isEmpty);
     });
 
-    test('a session already waiting on a resume is not offered another',
-        () async {
-      rollout = limited();
-      changes.add(entry());
-      await h.settle();
-      notice()!.action!.onPressed();
-      h.container.read(sessionNoticesProvider.notifier).dismiss('s1');
-      rollout = limited(resetsIn: const Duration(days: 2));
-      changes.add(entry());
-      await h.settle();
-      expect(notice(), isNull);
-    });
+    test(
+      'a session already waiting on a resume is not offered another',
+      () async {
+        rollout = limited();
+        changes.add(entry());
+        await h.settle();
+        notice()!.action!.onPressed();
+        h.container.read(sessionNoticesProvider.notifier).dismiss('s1');
+        rollout = limited(resetsIn: const Duration(days: 2));
+        changes.add(entry());
+        await h.settle();
+        expect(notice(), isNull);
+      },
+    );
   });
 
   group('the setting', () {
@@ -218,20 +223,22 @@ void main() {
       expect(notice()!.secondaryAction?.label, 'Cancel');
     });
 
-    test('and a mode that asks is refused in the gate\'s words, not armed',
-        () async {
-      h.container
-          .read(settingsControllerProvider.notifier)
-          .setUsageLimitBehavior(UsageLimitBehavior.schedule);
-      SessionDao(h.db).updatePermissionMode('s1', null);
-      rollout = limited();
-      changes.add(entry());
-      await h.settle();
+    test(
+      'and a mode that asks is refused in the gate\'s words, not armed',
+      () async {
+        h.container
+            .read(settingsControllerProvider.notifier)
+            .setUsageLimitBehavior(UsageLimitBehavior.schedule);
+        SessionDao(h.db).updatePermissionMode('s1', null);
+        rollout = limited();
+        changes.add(entry());
+        await h.settle();
 
-      expect(h.live('s1'), isNull);
-      expect(notice()!.message, contains('stops and asks'));
-      expect(notice()!.action?.label, 'Options…');
-    });
+        expect(h.live('s1'), isNull);
+        expect(notice()!.message, contains('stops and asks'));
+        expect(notice()!.action?.label, 'Options…');
+      },
+    );
 
     test('"do nothing" reads nothing and says nothing', () async {
       h.container
@@ -242,6 +249,111 @@ void main() {
       await h.settle();
       expect(rolloutReads, isEmpty);
       expect(notice(), isNull);
+    });
+  });
+
+  group('a session that already resumes on its reset', () {
+    setUp(build);
+
+    /// What the world looks like after one resume-on-reset ran to the end.
+    void hadResumed({
+      String message = 'carry on',
+      bool notify = true,
+      String? windowLabel = '5-hour',
+      ScheduledResumeState state = ScheduledResumeState.done,
+    }) {
+      final armed = h.controller.schedule(
+        ResumeRequest(
+          sessionId: 's1',
+          fireAt: h.now.subtract(const Duration(hours: 1)),
+          windowLabel: windowLabel,
+          resetsAt: windowLabel == null
+              ? null
+              : h.now.subtract(const Duration(hours: 1)),
+          message: message,
+          notify: notify,
+        ),
+      );
+      h.controller.end(armed, state, 'Resumed, and sent "$message".');
+    }
+
+    test(
+      'is armed again when the limit comes back, with its own choices',
+      () async {
+        hadResumed();
+        rollout = limited();
+        changes.add(entry());
+        await h.settle();
+
+        final again = h.live('s1')!;
+        expect(again.windowLabel, '5-hour');
+        expect(again.message, 'carry on');
+        expect(again.notify, isTrue);
+        expect(again.scheduledBy, 'the user');
+        expect(
+          again.fireAt,
+          h.now.add(const Duration(hours: 2)).add(kResumeResetMargin),
+        );
+        // Said, not asked: nobody clicked this time.
+        expect(notice()!.message, contains('set up again'));
+        expect(notice()!.message, contains('Cancel stops it'));
+        expect(notice()!.secondaryAction?.label, 'Cancel');
+      },
+    );
+
+    test('stops coming back once it is cancelled', () async {
+      hadResumed(state: ScheduledResumeState.cancelled);
+      rollout = limited();
+      changes.add(entry());
+      await h.settle();
+
+      expect(h.live('s1'), isNull);
+      expect(notice()!.action?.label, 'Resume then');
+    });
+
+    test('a resume that failed is offered, not repeated unasked', () async {
+      hadResumed(state: ScheduledResumeState.failed);
+      rollout = limited();
+      changes.add(entry());
+      await h.settle();
+
+      expect(h.live('s1'), isNull);
+      expect(notice()!.action?.label, 'Resume then');
+    });
+
+    test('a time the user picked is one moment, not an arrangement', () async {
+      hadResumed(windowLabel: null);
+      rollout = limited();
+      changes.add(entry());
+      await h.settle();
+
+      expect(h.live('s1'), isNull);
+      expect(notice()!.action?.label, 'Resume then');
+    });
+
+    test('"do nothing" still means nothing, standing or not', () async {
+      hadResumed();
+      h.container
+          .read(settingsControllerProvider.notifier)
+          .setUsageLimitBehavior(UsageLimitBehavior.nothing);
+      rollout = limited();
+      changes.add(entry());
+      await h.settle();
+
+      expect(h.live('s1'), isNull);
+      expect(notice(), isNull);
+    });
+
+    test('a renewal the gate refuses says why, rather than arming', () async {
+      hadResumed();
+      SessionDao(h.db).updatePermissionMode('s1', null);
+      rollout = limited();
+      changes.add(entry());
+      await h.settle();
+
+      expect(h.live('s1'), isNull);
+      expect(notice()!.message, contains('stops and asks'));
+      expect(notice()!.action?.label, 'Options…');
     });
   });
 
@@ -259,26 +371,31 @@ void main() {
       );
       await h.settle();
       expect(rolloutReads, isEmpty);
-      expect(notice()!.message, startsWith('Claude Code hit its 5-hour limit.'));
+      expect(
+        notice()!.message,
+        startsWith('Claude Code hit its 5-hour limit.'),
+      );
       expect(
         AgentInstallationDao(h.db).getById('a1')!.agentId,
         AgentIds.claudeCode,
       );
     });
 
-    test('`rate_limit` with nothing spent is a passing 429, not a limit',
-        () async {
-      h.usage.answer = h.reading(percent: 41);
-      changes.add(
-        entry(
-          status: AgentActivityStatus.failed,
-          failureReason: 'rate_limit',
-          agentId: AgentIds.claudeCode,
-        ),
-      );
-      await h.settle();
-      expect(notice(), isNull);
-    });
+    test(
+      '`rate_limit` with nothing spent is a passing 429, not a limit',
+      () async {
+        h.usage.answer = h.reading(percent: 41);
+        changes.add(
+          entry(
+            status: AgentActivityStatus.failed,
+            failureReason: 'rate_limit',
+            agentId: AgentIds.claudeCode,
+          ),
+        );
+        await h.settle();
+        expect(notice(), isNull);
+      },
+    );
 
     test('another failure asks for no usage at all', () async {
       changes.add(

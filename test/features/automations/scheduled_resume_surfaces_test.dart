@@ -58,7 +58,9 @@ void main() {
       final resume = arm();
       await tester.pump();
       expect(
-        find.text('resumes ${formatResetClock(resume.fireAt, h.now.toLocal())}'),
+        find.text(
+          'resumes ${formatResetClock(resume.fireAt, h.now.toLocal())}',
+        ),
         findsOneWidget,
       );
       expect(find.byTooltip(RegExp('sends "continue"')), findsOneWidget);
@@ -108,9 +110,7 @@ void main() {
   });
 
   testWidgets('the header clock says what a click would do', (tester) async {
-    await tester.pumpWidget(
-      host(const ScheduledResumeButton(sessionId: 's1')),
-    );
+    await tester.pumpWidget(host(const ScheduledResumeButton(sessionId: 's1')));
     expect(find.byTooltip('Resume when usage resets…'), findsOneWidget);
     arm();
     await tester.pump();
@@ -130,7 +130,10 @@ void main() {
       expect(find.text('Port the importer'), findsOneWidget);
       expect(find.text('Tidy the importer tests'), findsOneWidget);
       expect(find.textContaining('· in 2h5m'), findsNWidgets(2));
-      expect(find.text('a time you chose — usage is not checked'), findsWidgets);
+      expect(
+        find.text('a time you chose — usage is not checked'),
+        findsWidgets,
+      );
 
       await tester.tap(find.text('Cancel').first);
       await tester.pump();
@@ -206,7 +209,7 @@ void main() {
       h.controller.end(
         arm(sessionId: 's2'),
         ScheduledResumeState.failed,
-        'Gave up after 5 checks: the 5-hour window is still at its limit. '
+        'Gave up after 5 checks: no reading newer than the reset arrived. '
         'Nothing was resumed or sent — schedule it again once the limit is '
         'back.',
       );

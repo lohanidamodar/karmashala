@@ -155,9 +155,53 @@ class UsageLimitWatcher extends Notifier<int> {
     _file(entry, hit);
     if (behavior == UsageLimitBehavior.schedule) {
       _scheduleUnasked(hit);
-    } else {
-      _offer(hit);
+      return;
     }
+    // Asked once for this session, and it worked: the limit coming back is the
+    // case that arrangement was made for, so it is made again rather than
+    // re-offered. Cancelling the row is what ends the chain.
+    final standing = _standingArrangement(hit.sessionId);
+    if (standing != null) {
+      _renew(hit, standing);
+      return;
+    }
+    _offer(hit);
+  }
+
+  /// The resume this session should keep renewing, or null.
+  ///
+  /// Only a resume that waited on a usage **window** and reached it: a time
+  /// the user picked is one moment, not an arrangement, and a cancelled or
+  /// failed row is not something to repeat unasked.
+  ScheduledResume? _standingArrangement(String sessionId) {
+    final last = ref.read(scheduledResumeDaoProvider).lastEndedFor(sessionId);
+    if (last == null || last.state != ScheduledResumeState.done) return null;
+    return last.windowLabel == null ? null : last;
+  }
+
+  /// Arms [previous] again for this limit, with everything the user chose the
+  /// first time — the message, the mode, whether to notify, and who armed it.
+  void _renew(UsageLimitHit hit, ScheduledResume previous) {
+    final ScheduledResume resume;
+    try {
+      resume = ref
+          .read(scheduledResumeControllerProvider)
+          .schedule(
+            ResumeRequest.atReset(
+              sessionId: hit.sessionId,
+              window: hit.window,
+              message: previous.message,
+              permissionMode: previous.permissionMode,
+              notify: previous.notify,
+              latePolicy: previous.latePolicy,
+              scheduledBy: previous.scheduledBy,
+            ),
+          );
+    } on ScheduledResumeRefused catch (refused) {
+      _offer(hit, refusal: refused.reason);
+      return;
+    }
+    _say(hit, resume, renewed: true);
   }
 
   /// The limit behind [entry], or null. Per agent, and only from evidence the
@@ -308,7 +352,7 @@ class UsageLimitWatcher extends Notifier<int> {
     }
   }
 
-  void _say(UsageLimitHit hit, ScheduledResume resume) {
+  void _say(UsageLimitHit hit, ScheduledResume resume, {bool renewed = false}) {
     final now = _now.toLocal();
     final requests = ref.read(resumeDialogRequestProvider.notifier);
     ref
@@ -320,7 +364,11 @@ class UsageLimitWatcher extends Notifier<int> {
                 '${hit.sentence(now)} Resumes '
                 '${formatResetClock(resume.fireAt, now)}'
                 '${resume.sendsMessage ? ' and sends '
-                          '"${resume.message}"' : ''}.',
+                          '"${resume.message}"' : ''}.'
+                // Said, because nobody clicked anything this time.
+                '${renewed ? ' You had this session resuming at the reset, so '
+                          'it was set up again — Cancel stops it coming '
+                          'back.' : ''}',
             action: SessionNoticeAction(
               label: 'Change…',
               onPressed: () => requests.open([hit.sessionId]),

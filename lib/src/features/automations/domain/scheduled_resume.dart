@@ -6,12 +6,20 @@ library;
 /// reset a little before the quota is really back.
 const Duration kResumeResetMargin = Duration(seconds: 75);
 
-/// How many times a fire may find the account still limited before giving up.
-const int kResumeMaxAttempts = 5;
+/// How many fires may find a usage reading *older than the reset it would have
+/// to describe* before the resume gives up. Only that: a window that is still
+/// at its limit is waited out however long it takes, because a limit reached
+/// again is the case a resume-on-reset exists for. Cancelling is what stops it.
+const int kResumeMaxStaleReadings = 5;
 
 /// First wait when the provider says "still limited" and names no new reset.
 /// Doubles per attempt, and is already longer than the usage ask floor.
 const Duration kResumeRetryBase = Duration(minutes: 5);
+
+/// The longest that doubling wait ever grows to. A blind backoff goes on for
+/// as long as the limit does, so without a ceiling it would drift into looking
+/// once a day at a session somebody is waiting on.
+const Duration kResumeRetryCeiling = Duration(minutes: 30);
 
 /// Two resets closer than this are the same reset: Codex derives its reset
 /// from `reset_after_seconds`, which drifts by seconds between readings.

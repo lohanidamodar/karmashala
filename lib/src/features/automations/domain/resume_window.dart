@@ -123,16 +123,23 @@ bool _later(DateTime? a, DateTime? b) {
   return b == null || a.isAfter(b);
 }
 
-/// When to look again after a fire found the account still limited, or null
-/// when [attempts] are used up. [attempts] counts the fire that just happened.
-DateTime? nextResumeAttempt({
+/// When to look again after a fire found the account still limited.
+/// [attempts] counts the fire that just happened.
+///
+/// **Never gives up.** A resume armed at a reset is an arrangement to wait
+/// out the limit, and a limit reached again is the thing it was armed for, so
+/// there is no attempt at which giving up is the better answer — the row stays
+/// visible with its Cancel, and cancelling is what ends it. A named reset is
+/// aimed at however many times it has moved; without one the wait doubles up
+/// to [kResumeRetryCeiling].
+DateTime nextResumeAttempt({
   required int attempts,
   required DateTime now,
   DateTime? until,
 }) {
-  if (attempts >= kResumeMaxAttempts) return null;
   if (until != null) return until.add(kResumeResetMargin);
-  return now.add(kResumeRetryBase * (1 << (attempts - 1).clamp(0, 8)));
+  final doubled = kResumeRetryBase * (1 << (attempts - 1).clamp(0, 8));
+  return now.add(doubled > kResumeRetryCeiling ? kResumeRetryCeiling : doubled);
 }
 
 /// Whether a fresh reading shows [resume]'s window rolled over before its

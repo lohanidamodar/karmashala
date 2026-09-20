@@ -102,10 +102,9 @@ void main() {
 
     test('a reading taken before the reset it shows says nothing', () {
       final check = checkReset(
-        reading(
-          [window('5-hour', 100, const Duration(minutes: -1))],
-          fetchedAt: now.subtract(const Duration(minutes: 2)),
-        ),
+        reading([
+          window('5-hour', 100, const Duration(minutes: -1)),
+        ], fetchedAt: now.subtract(const Duration(minutes: 2))),
         now: now,
       );
       expect(check, isA<ReadingPredatesReset>());
@@ -141,11 +140,26 @@ void main() {
       );
     });
 
-    test('and gives up when the attempts are spent', () {
+    test('the doubling stops at the ceiling rather than at a day', () {
       expect(
-        nextResumeAttempt(attempts: kResumeMaxAttempts, now: now),
-        isNull,
+        nextResumeAttempt(attempts: 20, now: now),
+        now.add(kResumeRetryCeiling),
       );
+    });
+
+    test('never gives up, however many attempts have been made', () {
+      // A limit reached again is the case a resume-on-reset was armed for.
+      final until = now.add(const Duration(hours: 5));
+      for (final attempts in [1, 5, 40, 400]) {
+        expect(
+          nextResumeAttempt(attempts: attempts, now: now, until: until),
+          until.add(kResumeResetMargin),
+        );
+        expect(
+          nextResumeAttempt(attempts: attempts, now: now),
+          isA<DateTime>().having((at) => at.isAfter(now), 'is later', isTrue),
+        );
+      }
     });
   });
 

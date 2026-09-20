@@ -104,6 +104,19 @@ class ScheduledResumeDao {
     return rows.isEmpty ? null : _row(rows.first);
   }
 
+  /// The newest ended row for [sessionId], or null. What says whether this
+  /// session has a standing arrangement to resume when its limit resets, and
+  /// how the last one ended — a cancelled one is the user calling it off.
+  ScheduledResume? lastEndedFor(String sessionId) {
+    final rows = _db.query(
+      'SELECT * FROM scheduled_resumes WHERE session_id = ? '
+      'AND state NOT IN $_live '
+      'ORDER BY COALESCE(finished_at, fire_at) DESC LIMIT 1;',
+      [sessionId],
+    );
+    return rows.isEmpty ? null : _row(rows.first);
+  }
+
   /// Every live row, soonest first.
   List<ScheduledResume> live() => _db
       .query(

@@ -161,7 +161,7 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
         return switched ? switchedNote.trim() : '';
       case ReadingPredatesReset():
         final attempts = resume.attempts + 1;
-        if (attempts >= kResumeMaxAttempts) {
+        if (attempts >= kResumeMaxStaleReadings) {
           _giveUp(resume, attempts, 'no reading newer than the reset arrived');
           return null;
         }
@@ -184,16 +184,15 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
         );
         return null;
       case StillLimited(:final label, :final until):
+        // No attempt limit. The account being at its limit *again* is exactly
+        // what this row was armed for, so it goes back to waiting however many
+        // times that happens; cancelling it is what stops it.
         final attempts = resume.attempts + 1;
         final again = nextResumeAttempt(
           attempts: attempts,
           now: now,
           until: until,
         );
-        if (again == null) {
-          _giveUp(resume, attempts, 'the $label window is still at its limit');
-          return null;
-        }
         _controller.reschedule(
           resume,
           fireAt: again,
@@ -211,6 +210,9 @@ class ScheduledResumeRunner implements ScheduledResumeFiring {
     }
   }
 
+  /// The one way a resume ends itself: the account could not be *read*, which
+  /// says nothing about whether it would work. A limit that is simply still
+  /// there is waited out instead, for as long as it lasts.
   void _giveUp(ScheduledResume resume, int attempts, String why) {
     _finish(
       resume.copyWith(attempts: attempts),
