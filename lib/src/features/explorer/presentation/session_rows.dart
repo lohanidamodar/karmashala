@@ -33,6 +33,8 @@ import 'section_membership_dialog.dart';
 import '../../automations/application/scheduled_resume_providers.dart';
 import '../../automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala_ui/rows.dart';
+import '../../github/application/pull_request_context_service.dart';
+import '../../github/presentation/pull_request_context_dialog.dart';
 import '../../sessions/presentation/export_session_action.dart';
 
 /// The two rows that stand for a session, wherever the app draws one: the tree
@@ -285,6 +287,14 @@ class NativeSessionRow extends ConsumerWidget {
               label: 'Copy resume command',
               icon: AppIcons.copy,
             ),
+            // Read when the menu opens: offered only once something has been
+            // attached, because an empty dialog reads as a broken feature.
+            if (ref.read(sentContextCardsProvider(session.id)).isNotEmpty)
+              DesktopMenuItem(
+                value: 'context-sent',
+                label: 'Context sent to this session…',
+                icon: AppIcons.article,
+              ),
             // The whole session as one file, for a bug report or an archive.
             // It says inside itself what it could not read, so what leaves
             // here cannot be mistaken for the whole story.
@@ -352,6 +362,8 @@ class NativeSessionRow extends ConsumerWidget {
                 () => actions.nativeResumeShellCommand(session.id),
               ),
             );
+          case 'context-sent':
+            await SentContextCardsDialog.show(context, session.id);
           case 'export':
             await exportSession(context, ref, session.id);
           case 'rename':

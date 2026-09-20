@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +11,7 @@ import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../../git/application/remote_links.dart';
 import '../../github/application/github_providers.dart';
+import '../../github/presentation/pull_request_context_dialog.dart';
 import '../../git/presentation/remote_link.dart';
 import 'package:karmashala_git/github.dart';
 import '../../repositories/application/repository_providers.dart';
@@ -245,6 +248,15 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
         'Move this session to another agent, or fork it. '
         '$kContinueWithPromise';
     void continueWith() => ContinueWithDialog.show(context, widget.sessionId);
+    // Attaching the pull request the strip is already showing: the facts are
+    // here, so the way to hand them to the agent belongs here too.
+    void attachContext() => unawaited(
+      PullRequestContextDialog.show(context, ref, widget.sessionId),
+    );
+    const attachTooltip =
+        'Attach this pull request — its branches, conflicts, failing checks and '
+        'open review conversations — to the session. You see the exact text '
+        'before it is sent, and it is kept so you can read it back.';
 
     // In the row of controls, not in the line of facts: "facts above, controls
     // below" is this strip's redesign, and a pressable fact would undo it.
@@ -287,6 +299,14 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
                 onPressed: _busy ? null : offer.onPressed,
               ),
             ),
+          if (delivery?.pullRequest != null)
+            _BarAction(
+              icon: AppIcons.gitMerge,
+              label: 'Attach PR…',
+              tooltip: attachTooltip,
+              compact: widget.compact,
+              onPressed: _busy ? null : attachContext,
+            ),
           if (canContinue)
             _BarAction(
               icon: AppIcons.arrowBendDownRight,
@@ -318,6 +338,13 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
             tooltip: offer.tooltip,
             onPressed: _busy ? null : offer.onPressed,
           ),
+        ),
+      if (delivery?.pullRequest != null)
+        ActionChip(
+          avatar: const Icon(AppIcons.gitMerge, size: Chrome.iconAction),
+          label: const Text('Attach PR…'),
+          tooltip: attachTooltip,
+          onPressed: _busy ? null : attachContext,
         ),
       if (canContinue)
         ActionChip(
@@ -652,9 +679,7 @@ String _actionTooltip(OfferedAction offered) {
   final reason = offered.disabledReason;
   if (reason != null) return reason;
   final prompt = offered.prompt;
-  return prompt == null
-      ? _appActionTooltip(offered.action)
-      : 'Sends “$prompt”';
+  return prompt == null ? _appActionTooltip(offered.action) : 'Sends “$prompt”';
 }
 
 String _appActionTooltip(DeliveryAction action) => switch (action) {
