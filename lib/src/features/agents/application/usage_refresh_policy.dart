@@ -93,9 +93,20 @@ class UsageRefreshController extends Notifier<int> {
 
   /// A chip is on screen for this account. The timer is shared, so the first
   /// chip to close must not take the schedule from one still on screen.
+  ///
+  /// **Arming waits for the frame to end.** A chip retains from its `build`,
+  /// and [ensurePolling] reads `windowFocusedProvider` — mounting a provider
+  /// inside a widget build marks the tree dirty mid-build, the same hazard
+  /// [build] above sidesteps by arming at the floor. It throws where it is
+  /// noticed least: the holder is recorded, the exception unwinds, and the
+  /// chip is left with no timer, so usage quietly stops refreshing. The
+  /// holder is recorded now because [release] may arrive before the tick.
   void retain(Object holder) {
     _holders.add(holder);
-    ensurePolling();
+    scheduleMicrotask(() {
+      if (_disposed || !_holders.contains(holder)) return;
+      ensurePolling();
+    });
   }
 
   /// A chip left the tree. The tick stops only when the last one has.

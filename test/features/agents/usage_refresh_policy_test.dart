@@ -527,4 +527,62 @@ void main() {
 
     expect(service.calls, isEmpty);
   });
+
+  test(
+    'retaining does not arm the tick inside the caller, but does arm it',
+    () async {
+      // A chip calls `retain` from its `build`, and arming reads
+      // `windowFocusedProvider`. Mounting a provider inside a widget build marks
+      // the tree dirty mid-build, which Flutter throws on — and it throws where
+      // it costs most: the holder is already recorded, so the unwound build
+      // leaves an account with a chip on screen and no timer behind it. Usage
+      // then stops refreshing and nothing says so.
+      //
+      // Observed in the field before this was deferred: six
+      // `UncontrolledProviderScope ... already in the process of building
+      // widgets` reports naming `UsageChip` in half an hour of ordinary use.
+      db = seedUsageDatabase();
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          clockProvider.overrideWithValue(clock),
+          agentUsageServiceProvider.overrideWithValue(service),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      // Focused, or arming is refused for a reason that has nothing to do
+      // with what this test is about.
+      container.read(windowFocusedProvider.notifier).set(true);
+      // Held alive the way a chip on screen holds it: the provider is
+      // autoDispose, and an unwatched controller is gone by the next
+      // microtask — which is precisely when the deferred arm runs.
+      final alive = container.listen(
+        usageRefreshProvider(claudeAccount),
+        (_, _) {},
+      );
+      addTearDown(alive.close);
+      final policy = container.read(
+        usageRefreshProvider(claudeAccount).notifier,
+      );
+      // `build` arms one of its own; this test is about what `retain` adds.
+      policy.stopPolling();
+      expect(policy.isPolling, isFalse);
+
+      policy.retain(Object());
+      expect(
+        policy.isPolling,
+        isFalse,
+        reason: 'arming inside the caller is what reaches a provider mid-build',
+      );
+
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        policy.isPolling,
+        isTrue,
+        reason: 'deferred, not dropped — the chip must still get its tick',
+      );
+      policy.stopPolling();
+    },
+  );
 }
