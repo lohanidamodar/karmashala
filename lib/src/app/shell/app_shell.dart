@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,6 +20,8 @@ import '../../features/automations/application/usage_limit_watcher.dart';
 import '../../features/automations/presentation/resume_on_reset_dialog.dart';
 import '../../features/editor/application/editor_auto_save.dart';
 import '../../features/editor/presentation/editor_close_guard.dart';
+import '../../features/sessions/application/quit_resume_launch.dart';
+import '../../features/sessions/presentation/quit_sessions_dialog.dart';
 import '../../features/environments/presentation/environment_health_dialog.dart';
 import '../../features/flutter_apps/application/flutter_gate_observer.dart';
 import '../../features/git/application/worktree_setup_providers.dart';
@@ -93,8 +97,9 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
   }
 
-  /// Removes the before-quit guard this shell registered.
+  /// Removes the before-quit guards this shell registered.
   late final void Function() _removeQuitGuard;
+  late final void Function() _removeSessionQuitGuard;
 
   @override
   void initState() {
@@ -107,8 +112,18 @@ class _AppShellState extends ConsumerState<AppShell> {
           () async =>
               !mounted || await confirmQuitWithUnsavedWork(context, ref),
         );
+    // Registered after it, so the files question comes first: an answer about
+    // unsaved edits is the one that cannot be taken back.
+    _removeSessionQuitGuard = ref
+        .read(beforeQuitHooksProvider)
+        .addGuard(
+          'running sessions',
+          () async =>
+              !mounted || await confirmQuitWithRunningSessions(context, ref),
+        );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      unawaited(reopenSessionsFromLastQuit(ref));
       final database = ref.read(databaseProvider);
       if (database.readMetadata(MetadataKeys.environmentHealthOnboarding) !=
           'pending') {
@@ -122,6 +137,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   void dispose() {
     _removeQuitGuard();
+    _removeSessionQuitGuard();
     super.dispose();
   }
 
