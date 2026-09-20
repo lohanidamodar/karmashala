@@ -41,7 +41,14 @@ Future<String> _buildHost() async {
   if (result.exitCode != 0) {
     throw StateError('host build failed: ${result.stdout}${result.stderr}');
   }
-  return '$root/bundle/bin/karmashala_host${Platform.isWindows ? '.exe' : ''}';
+  // Absolute, always. `CreateProcess` will not resolve a bare relative path
+  // written with forward slashes — `build/…/karmashala_host.exe` comes back as
+  // "the system cannot find the file specified" even when the file is sitting
+  // right there — so the whole `live` tag failed on Windows while passing on
+  // posix, where the same string spawns fine. Measured 2026-09-20.
+  final built =
+      '$root/bundle/bin/karmashala_host${Platform.isWindows ? '.exe' : ''}';
+  return File(built).absolute.path;
 }
 
 /// A real `karmashala_host serve` in a home of its own, so a test never touches
