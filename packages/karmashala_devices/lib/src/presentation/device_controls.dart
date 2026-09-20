@@ -113,8 +113,16 @@ class _DeviceControlBarState extends State<DeviceControlBar> {
 
 /// Where a screenshot goes, or `null` on a host with no home directory. The
 /// Desktop, and shared so Android and iOS cannot drift into two folders.
-String? desktopScreenshotPath(String what) {
-  final home = Platform.environment['HOME'];
+///
+/// [environment] is handed in only by tests: `HOME` on Windows is whatever the
+/// shell that launched the run decided it was — Git Bash exports the profile
+/// as `C:\Users\<user>`, PowerShell leaves it unset — so a test that read the
+/// real one would assert a different string depending on who started it.
+String? desktopScreenshotPath(
+  String what, {
+  @visibleForTesting Map<String, String>? environment,
+}) {
+  final home = (environment ?? Platform.environment)['HOME'];
   if (home == null) return null;
   final stamp = DateTime.now()
       .toIso8601String()

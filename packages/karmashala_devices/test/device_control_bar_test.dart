@@ -160,13 +160,20 @@ void main() {
   });
 
   group('desktopScreenshotPath', () {
+    // The home is named rather than read. Reading it made this suite agree
+    // with whichever shell started it: Git Bash hands the Dart process
+    // `HOME=C:\Users\<user>`, whose drive letter is a colon and failed the
+    // colon check, while PowerShell sets no `HOME` at all and the test used
+    // to return early and assert nothing. Neither of those is a verdict on
+    // the code under test.
+    const home = {'HOME': '/Users/someone'};
+
     test('puts both platforms on the Desktop under the same name', () {
       // The Simulator's own Cmd+S writes there, and it is the one place a
       // person will look. Drifting into two folders is the failure this shared
       // helper exists to prevent.
-      final ios = desktopScreenshotPath('Simulator');
-      final android = desktopScreenshotPath('Android');
-      if (ios == null || android == null) return; // No HOME: nothing to check.
+      final ios = desktopScreenshotPath('Simulator', environment: home)!;
+      final android = desktopScreenshotPath('Android', environment: home)!;
 
       expect(ios, contains('/Desktop/Simulator Screen Shot '));
       expect(android, contains('/Desktop/Android Screen Shot '));
@@ -176,6 +183,12 @@ void main() {
         isNot(contains(':')),
         reason: 'a colon in a filename is a path separator to the Finder',
       );
+    });
+
+    test('a host with no home directory is given no path at all', () {
+      // The branch the early return used to hide: the callers check for null
+      // and say so, rather than writing to a path built from the word "null".
+      expect(desktopScreenshotPath('Simulator', environment: const {}), isNull);
     });
   });
 }
