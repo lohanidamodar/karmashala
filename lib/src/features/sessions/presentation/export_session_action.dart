@@ -34,6 +34,11 @@ Future<void> exportSession(
           pickOneDirectory(
             what: 'Where to save the export',
             context: context,
+            // Nothing here knows a folder on this computer worth suggesting —
+            // an archive is for somewhere personal, not for the checkout this
+            // session ran in. The fallback chain picks one that exists rather
+            // than letting the shell restore its own last folder.
+            startNear: null,
             confirmButtonText: 'Export here',
           ));
   if (folder == null) return;
