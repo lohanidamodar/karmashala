@@ -65,6 +65,11 @@ String? rebindSessionFromHook(
   final sessions = container.read(sessionDaoProvider);
   // Already somebody's. The overwhelmingly common case, and one indexed read.
   if (sessions.getByExternalSessionId(conversationId) != null) return null;
+  // A conversation named after a row **is** that row's: the app launches Claude
+  // Code with the row id as its session id. Such an id can read as unowned
+  // after that row has itself been re-pointed, and handing it to another pane
+  // is how one bad rebind became a chain of them (2026-09-20).
+  if (sessions.getById(conversationId) != null) return null;
 
   final live = <String>[
     for (final pane in container.read(adoptablePanesProvider)())
@@ -100,7 +105,10 @@ String? rebindSessionFromHook(
     final directory =
         session.workingDirectory ??
         session.worktree ??
-        container.read(repositoryDaoProvider).getById(session.repositoryId)?.path;
+        container
+            .read(repositoryDaoProvider)
+            .getById(session.repositoryId)
+            ?.path;
     panes.add(
       BoundPane(
         sessionId: session.id,

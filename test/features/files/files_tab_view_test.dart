@@ -10,7 +10,6 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/environments/application/environments_controller.dart';
 import 'package:karmashala/src/features/files/application/file_space_providers.dart';
 import 'package:karmashala/src/features/files/data/local_file_space.dart';
 import 'package:karmashala/src/features/files/presentation/file_panel_view.dart';

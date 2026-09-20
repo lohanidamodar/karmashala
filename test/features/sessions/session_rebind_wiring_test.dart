@@ -126,6 +126,19 @@ void main() {
     expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
   });
 
+  test('a conversation named after one of our own rows is that row\'s', () {
+    // Claude Code is launched with the row id as its session id, so an id that
+    // names a row belongs to it — even while that row names something else,
+    // which is how one wrong rebind turned into a chain of them.
+    launched('s1', paneId: 'pane-1');
+    sessions.insert(session(id: 's2', status: SessionStatus.running));
+    sessions.updateExternalSessionId('s2', 'cli-elsewhere');
+    final container = containerWith(['pane-1']);
+
+    expect(rebind(container, 's2'), isNull);
+    expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+  });
+
   test('two quiet panes are a coin toss, and nothing is written', () {
     launched('s1', paneId: 'pane-1');
     launched('s2', paneId: 'pane-2');

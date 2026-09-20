@@ -52,10 +52,18 @@ class BoundPane {
 ///    decisive one: two panes running the same agent in the same folder are
 ///    told apart by which of them has gone quiet, which no directory or title
 ///    comparison can do.
-/// 2. When any quiet pane was started in the directory the hook reports, only
-///    those are considered. A tie-break, never a filter on its own: an agent's
-///    *live* directory moves during a session, so a mismatch is not evidence.
-/// 3. Exactly one survivor, or nothing. Re-pointing the wrong row would put
+/// 2. **A pane in the hook's own directory settles it, quiet or not.** When
+///    some live pane was started where the hook says it is running, only the
+///    quiet ones there may take it — and when none of those is quiet, nobody
+///    does. Without this a hook from one project could take a pane in another,
+///    which is what happened on 2026-09-20: a session that had been building
+///    for longer than the quiet window was re-pointed at a conversation from a
+///    folder it had never been in, and that in turn orphaned the conversation
+///    it had named, which the next hook handed to somebody else.
+/// 3. Otherwise the directory is only a tie-break: an agent's *live* directory
+///    moves during a session, so a mismatch against every pane is not evidence
+///    against any of them.
+/// 4. Exactly one survivor, or nothing. Re-pointing the wrong row would put
 ///    one session's transcript under another's name, which is worse than the
 ///    stale reading this fixes.
 String? sessionToRebind({
@@ -74,6 +82,9 @@ String? sessionToRebind({
     for (final pane in quiet)
       if (pane.startedHere) pane,
   ];
+  // The hook's folder has a pane of its own, and it is not one of the quiet
+  // ones: this conversation is that pane's business, not a stranger's.
+  if (here.isEmpty && panes.any((pane) => pane.startedHere)) return null;
   final considered = here.isEmpty ? quiet : here;
   return considered.length == 1 ? considered.single.sessionId : null;
 }

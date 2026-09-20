@@ -102,5 +102,44 @@ void main() {
     test('no panes at all is nothing to re-point', () {
       expect(sessionToRebind(panes: const [], now: _now), isNull);
     });
+
+    test('a busy pane in the hook\'s own folder keeps a stranger from taking '
+        'it', () {
+      // 2026-09-20, the owner's machine: a session that had been building for
+      // longer than the quiet window was handed a conversation from a project
+      // it had never been in, because the pane that folder *did* have was busy
+      // and so was never a candidate. Its own conversation was orphaned by the
+      // move, and the next hook for that one took another row.
+      final chosen = sessionToRebind(
+        panes: [
+          const BoundPane(sessionId: 'building', conversationId: 'a'),
+          BoundPane(
+            sessionId: 'in-that-folder',
+            conversationId: 'b',
+            startedHere: true,
+            lastHeardFrom: _now.subtract(const Duration(seconds: 2)),
+          ),
+        ],
+        now: _now,
+      );
+
+      expect(chosen, isNull);
+    });
+
+    test('a quiet pane in the hook\'s own folder still takes it', () {
+      final chosen = sessionToRebind(
+        panes: [
+          const BoundPane(sessionId: 'elsewhere', conversationId: 'a'),
+          const BoundPane(
+            sessionId: 'there',
+            conversationId: 'b',
+            startedHere: true,
+          ),
+        ],
+        now: _now,
+      );
+
+      expect(chosen, 'there');
+    });
   });
 }
