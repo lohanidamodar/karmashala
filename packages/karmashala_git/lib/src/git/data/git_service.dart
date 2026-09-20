@@ -484,11 +484,7 @@ class GitService {
 
   /// Updates the remote-tracking refs without touching the working tree.
   Future<void> fetch(EnvironmentPath repo, {String? remote}) async {
-    final result = await _git(repo, [
-      'fetch',
-      if (remote != null) remote,
-      '--prune',
-    ]);
+    final result = await _git(repo, ['fetch', ?remote, '--prune']);
     if (!result.ok) {
       throw GitException('git fetch failed: ${result.stderr.trim()}');
     }
