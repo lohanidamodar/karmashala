@@ -339,6 +339,26 @@ If localization is not enabled:
 
 Add tests in proportion to risk and user impact.
 
+**One `flutter test` at a time in a checkout.** Concurrent runs fight over
+`build/native_assets/windows/sqlite3.dll` and die in ways that read as test
+failures — a load error, or a suite that fails for no reason the diff explains.
+Several sessions share this checkout, so when more than one may be running,
+take an advisory lock rather than trusting timing:
+
+```sh
+LOCK="<a path both sessions can see>/flutter-test.lock"
+while ! (set -o noclobber; echo $$ > "$LOCK") 2>/dev/null; do sleep 10; done
+trap 'rm -f "$LOCK"' EXIT
+```
+
+Release it as soon as the run finishes, and only if it is yours. A pure-Dart
+package (`dart test` in `packages/agent_cli`) does not need the lock.
+
+**A gate run on a shared checkout is a gate over everybody's work.** When
+another session has uncommitted changes, a failure may not be yours and a pass
+does not prove your change is green in isolation. Say which it was. Do not
+stash or revert somebody else's work to find out.
+
 Prefer:
 
 - Unit tests for business logic, formatters, validators, services, and pure
