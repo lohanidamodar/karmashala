@@ -182,10 +182,23 @@ void main() {
       agentSessionId: 'cli-1',
       event: event,
     );
-    // The recorder hears a turn's edges through the registry's stream. Let the
-    // event reach it, or `settled` awaits a queue the capture has not joined
-    // yet and the turn's checkpoint is read before it is taken.
-    await pumpEventQueue();
+  }
+
+  /// Waits until [count] checkpoints of [path] exist, or gives up and lets the
+  /// expectation say what is actually there. The recorder is awaited first;
+  /// the poll is for a loaded machine, where the git a capture spawns can take
+  /// longer than the hook route's own patience.
+  Future<void> untilCheckpoints(String path, int count) async {
+    final recorder = container.read(sessionCheckpointRecorderProvider.notifier);
+    final deadline = DateTime.now().add(const Duration(seconds: 20));
+    while (CheckpointDao(
+          db,
+        ).forSession('s1').where((c) => c.repository.path == path).length <
+        count) {
+      if (DateTime.now().isAfter(deadline)) return;
+      await recorder.settled('s1');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
   }
 
   List<Checkpoint> ofRepo(String path) => [
@@ -217,14 +230,19 @@ void main() {
       // The tool runs only once the hook has answered.
       File(file).writeAsStringSync('one\nTWO\nthree\n');
       await hook(AgentActivityStatus.idle, 'Stop', '{"session_id":"cli-1"}');
-      await container
-          .read(sessionCheckpointRecorderProvider.notifier)
-          .settled('s1');
+      await untilCheckpoints(app, 2);
 
       final nested = ofRepo(app);
       expect(
         [for (final c in nested) c.reason],
         [CheckpointReason.turnStart, CheckpointReason.turn],
+        // Under a loaded run this has come back with the turn's end missing.
+        // The recorder's own reason is the difference between "git said the
+        // tree was unchanged" and "the end of the turn was never seen", and
+        // guessing between those cost an afternoon.
+        reason:
+            'skip reason: '
+            '${container.read(checkpointSkipReasonsProvider)['s1'] ?? 'none'}',
       );
       expect(nested.first.files, isEmpty, reason: 'taken before the edit');
       expect(nested.last.files.map((f) => f.path), ['main.txt']);
@@ -265,9 +283,7 @@ void main() {
         }),
       );
       await hook(AgentActivityStatus.idle, 'Stop', '{"session_id":"cli-1"}');
-      await container
-          .read(sessionCheckpointRecorderProvider.notifier)
-          .settled('s1');
+      await untilCheckpoints(hub, 1);
 
       expect(ofRepo(outside), isEmpty);
       expect(ofRepo(hub), hasLength(1), reason: 'its own checkout, once');
@@ -308,9 +324,7 @@ void main() {
         '{"session_id":"cli-1","prompt":"Carry on"}',
       );
       await hook(AgentActivityStatus.idle, 'Stop', '{"session_id":"cli-1"}');
-      await container
-          .read(sessionCheckpointRecorderProvider.notifier)
-          .settled('s1');
+      await untilCheckpoints(worktree, 1);
 
       expect(
         container.read(checkpointSkipReasonsProvider)['s1'] ?? '',

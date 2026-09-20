@@ -119,8 +119,38 @@ class SessionCheckpointRecorder extends Notifier<int> {
 
   /// Completes when [sessionId]'s queued captures have, so a hook about to let
   /// a tool write can hold it until the before-turn checkpoint exists.
-  Future<void> settled(String sessionId) =>
-      _queues[sessionId] ?? Future<void>.value();
+  ///
+  /// **The wait for the queue to be joined is the point.** A turn's edges reach
+  /// this recorder through the status registry's stream, so a hook that asks
+  /// the moment it has published "working" can find an empty queue and let the
+  /// tool run — and the before-turn snapshot is then taken of a tree the tool
+  /// has already edited, which is the one thing an undo-the-turn checkpoint
+  /// must not be. A timer tick runs after every pending microtask and stream
+  /// event, so what was published has been queued by the time the queue is
+  /// read; the second pass covers a capture that queues another.
+  Future<void> settled(String sessionId) async {
+    var quiet = 0;
+    for (var pass = 0; pass < _settlePasses && quiet < _settleQuiet; pass++) {
+      await Future<void>.delayed(Duration.zero);
+      final queued = _queues[sessionId];
+      if (queued == null) {
+        quiet++;
+        continue;
+      }
+      quiet = 0;
+      await queued;
+    }
+  }
+
+  /// Ticks with nothing queued that end the wait. The status a hook publishes
+  /// takes several event-loop turns to become a queued capture, so one empty
+  /// reading proves nothing.
+  static const int _settleQuiet = 3;
+
+  /// The most ticks one wait costs. A bound rather than a promise: the hook
+  /// route also holds its own timeout, and an agent is never left waiting on
+  /// a queue that keeps refilling.
+  static const int _settlePasses = 24;
 
   /// A hook named a new path mid-turn: a repository it is in that has no
   /// before-turn checkpoint yet gets one now, before the tool runs.

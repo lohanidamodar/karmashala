@@ -241,6 +241,44 @@ void main() {
     expect(reasonsFor('s1'), ['turnStart', 'turn']);
   });
 
+  test(
+    'the hook holds the tool until the before-turn checkpoint is taken',
+    () async {
+      // What a PreToolUse hook does: publish the status, then hold the agent's
+      // Edit on `holdToolForCheckpoint`. The hold used to read a queue the
+      // capture had not joined yet — the registry publishes through a stream —
+      // so it returned at once, the tool wrote, and the "before" snapshot was
+      // taken of a tree that already held the change it exists to undo.
+      // The hook route finds the session by the CLI's own id.
+      SessionDao(db).updateExternalSessionId('s1', 'cli-1');
+      startRecorder();
+      await pumpEventQueue();
+      reports.record(
+        AgentStatusReport(
+          agentId: AgentIds.claudeCode,
+          sessionId: 'cli-1',
+          status: AgentActivityStatus.working,
+          source: AgentStatusSource.hook,
+          observedAt: clock.nowUtc(),
+          detail: 'UserPromptSubmit',
+        ),
+      );
+      registry.hookReported(
+        const AgentSessionKey(AgentIds.claudeCode, 'cli-1'),
+      );
+
+      // No pump: the hold is the only thing between the turn starting and the
+      // agent's first tool writing to the tree.
+      await holdToolForCheckpoint(
+        container,
+        agentSessionId: 'cli-1',
+        event: 'PreToolUse',
+      );
+
+      expect(reasonsFor('s1'), ['turnStart']);
+    },
+  );
+
   test('a session whose row is not `running` is checkpointed too', () async {
     // A pane restored after a restart can be live and hooked while its row
     // still carries what the liveness reconciler last wrote.
