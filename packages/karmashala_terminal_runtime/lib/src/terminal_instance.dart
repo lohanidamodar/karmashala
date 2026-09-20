@@ -19,6 +19,7 @@ import 'pane_terminal.dart';
 import 'process_shutdown.dart';
 import 'pty_launch.dart';
 import 'pty_output_coalescer.dart';
+import 'scrollback_replay.dart';
 import 'terminal_grid_text.dart';
 import 'terminal_ingest_budget.dart';
 
@@ -525,7 +526,7 @@ class PtyTerminalInstance
 /// history is visibly separate. Does nothing when there is nothing to restore.
 void writeRestoredScrollback(Terminal terminal, String? scrollback) {
   if (scrollback == null || scrollback.isEmpty) return;
-  terminal.write(scrollback);
+  replayScrollback(terminal, scrollback);
   writeRestoreMarker(terminal);
 }
 
@@ -756,7 +757,9 @@ class DormantTerminalInstance
       built.onResize = (columns, rows, _, _) =>
           hint.grid = (columns: columns, rows: rows);
     }
-    if (restoredScrollback.isNotEmpty) built.write(restoredScrollback);
+    if (restoredScrollback.isNotEmpty) {
+      replayScrollback(built, restoredScrollback);
+    }
     return built;
   }
 

@@ -2,6 +2,7 @@ import 'package:xterm2/xterm.dart';
 
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'scrollback_codec.dart';
+import 'scrollback_replay.dart';
 
 /// A pane's parsed scrollback, handed back while nobody can see it — the
 /// storage half of the ingest tiers, split out so it is testable without a PTY.
@@ -47,6 +48,8 @@ class ScrollbackPark {
     // Trailing reset: every encoded *line* opens with `ESC[0m`, but the last
     // one can leave a colour in effect, and what follows this is live process
     // output that never asked to be painted in it.
-    if (parked.isNotEmpty) terminal.write('$parked\x1b[0m\r\n');
+    // Through [replayScrollback]: this pane is live, so its `onOutput` is
+    // wired to the process and a reply to anything in here would be typed at it.
+    if (parked.isNotEmpty) replayScrollback(terminal, '$parked\x1b[0m\r\n');
   }
 }

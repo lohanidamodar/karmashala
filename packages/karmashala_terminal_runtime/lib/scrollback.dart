@@ -7,4 +7,5 @@ library;
 export 'src/cold_screen.dart';
 export 'src/scrollback_codec.dart';
 export 'src/scrollback_park.dart';
+export 'src/scrollback_replay.dart';
 export 'src/scrollback_spool.dart';
