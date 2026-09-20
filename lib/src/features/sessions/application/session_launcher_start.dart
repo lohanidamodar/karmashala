@@ -300,7 +300,7 @@ extension SessionStartVerbs on SessionLauncher {
 
     try {
       final result = switch (request.surface) {
-        SessionSurface.pane => _startInPane(
+        SessionSurface.pane => await _startInPane(
           session,
           request,
           descriptor,

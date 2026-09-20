@@ -3,7 +3,7 @@ part of 'session_launcher.dart';
 /// Putting the process somewhere: a PTY pane inside the app, or a terminal
 /// window we do not own. The same launch twice, differing only in the wrapper.
 extension SessionSurfaceStarters on SessionLauncher {
-  SessionLaunchResult _startInPane(
+  Future<SessionLaunchResult> _startInPane(
     Session session,
     SessionLaunchRequest request,
     AgentDescriptor? descriptor,
@@ -14,7 +14,7 @@ extension SessionSurfaceStarters on SessionLauncher {
     String? firstMessage,
     String? systemPromptFilePath,
     String? workingDirectoryNotice,
-  ) {
+  ) async {
     // The one resolver: this is the launch that CLAUDE.md 17 is about, and a
     // wrong environment here is silent for whoever ran it.
     final environment = _ref
@@ -29,6 +29,17 @@ extension SessionSurfaceStarters on SessionLauncher {
         descriptor != null &&
         descriptor.launch.selfUpdate.canSuppress &&
         !_ref.read(agentsMayUpdateThemselvesProvider);
+    // An inherited ANTHROPIC_API_KEY outranks the CLI's own login, so a pane
+    // launched from a developer's shell silently bills the API. Re-derived per
+    // launch, like the switch above, and never stored.
+    final credentials = await _ref.read(inheritedCredentialDecisionProvider)(
+      request.installation,
+      // Only a pane that inherits this process's environment can be changed by
+      // removing something from it.
+      inheritsHostEnvironment:
+          environment.wslDistribution == null && environment.sshHostId == null,
+      settingsEnvironment: _ref.read(terminalEnvOverlayProvider),
+    );
     final launch = AgentPaneLaunch(
       agentId: request.installation.agentId,
       executable: request.installation.executable.path,
@@ -54,6 +65,7 @@ extension SessionSurfaceStarters on SessionLauncher {
       environment: suppressUpdate
           ? descriptor.launch.selfUpdate.disableEnvironment
           : const {},
+      removedEnvironment: credentials.removed,
       workingDirectory: workingDirectory.path,
       wslDistribution: environment.wslDistribution,
       sshHostId: environment.sshHostId,
@@ -88,8 +100,20 @@ extension SessionSurfaceStarters on SessionLauncher {
       'worktree=${request.useWorktree} '
       // Often "none", which is not an error — but it is the answer to "why
       // can't the agent see Karmashala's tools".
-      'mcp=${mcp == null ? 'none' : 'yes'}',
+      'mcp=${mcp == null ? 'none' : 'yes'} '
+      // Names only; a value never reaches a log line.
+      'credentials=${credentials.logSummary}',
     );
+    // A strip is the app changing what the user's shell said. Quiet, factual,
+    // and in the session's own bar rather than a dialog.
+    if (credentials.changedEnvironment) {
+      _ref
+          .read(sessionNoticesProvider.notifier)
+          .post(
+            session.id,
+            SessionNotice(message: inheritedCredentialNotice(credentials)),
+          );
+    }
     return SessionLaunchResult(
       session: session.copyWith(paneId: opened.paneId),
       paneId: opened.paneId,

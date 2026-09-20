@@ -11,6 +11,7 @@ class PtyLaunch {
     this.arguments = const [],
     this.workingDirectory,
     this.environment = const {},
+    this.removedEnvironment = const {},
     this.exactArgv = false,
   });
 
@@ -21,6 +22,11 @@ class PtyLaunch {
   /// Extra variables layered over the host environment for this child only —
   /// an agent pane uses it to tell the agent which session it is running in.
   final Map<String, String> environment;
+
+  /// Names deleted from the host environment for this child only. Inheriting
+  /// is the default everywhere else, so *not* passing something on has to be
+  /// said out loud rather than expressed as an absence.
+  final Set<String> removedEnvironment;
 
   /// Whether [arguments] are an **exact argv** the child must receive as
   /// written. A spawner that builds one Windows command line owes them
@@ -37,6 +43,7 @@ class PtyLaunch {
       other.exactArgv == exactArgv &&
       other.workingDirectory == workingDirectory &&
       _mapEquals(other.environment, environment) &&
+      _setEquals(other.removedEnvironment, removedEnvironment) &&
       _listEquals(other.arguments, arguments);
 
   @override
@@ -48,6 +55,7 @@ class PtyLaunch {
     Object.hashAllUnordered(
       environment.entries.map((e) => '${e.key}=${e.value}'),
     ),
+    Object.hashAllUnordered(removedEnvironment),
   );
 
   /// Names the launch **without any environment value** — [environment] carries
@@ -55,7 +63,11 @@ class PtyLaunch {
   @override
   String toString() =>
       'PtyLaunch($executable, ${arguments.length} argument(s), '
-      '${environment.length} environment variable(s))';
+      '${environment.length} environment variable(s)'
+      '${removedEnvironment.isEmpty ? '' : ', ${removedEnvironment.length} removed'})';
+
+  static bool _setEquals(Set<String> a, Set<String> b) =>
+      a.length == b.length && a.containsAll(b);
 
   static bool _mapEquals(Map<String, String> a, Map<String, String> b) {
     if (a.length != b.length) return false;
@@ -161,6 +173,58 @@ PtyLaunch ptyLaunchFor(
   }
 }
 
+/// The environment a PTY child is handed: [host], minus [removed], minus the
+/// POSIX `PATH`/`SHELL`/`WSL*` that leak from a WSL launch and break `wsl.exe`,
+/// with [extra] layered last.
+///
+/// [extra] wins over [removed] by construction — a name Karmashala itself
+/// supplies is one the child really is given, whatever the shell exported.
+Map<String, String> ptyChildEnvironment({
+  required Map<String, String> host,
+  Map<String, String> extra = const {},
+  Set<String> removed = const {},
+  required bool hostIsWindows,
+}) {
+  final env = Map<String, String>.of(host);
+  if (removed.isNotEmpty) {
+    // Windows environment names are case-insensitive, so a removal there has to
+    // be too, or `anthropic_api_key` survives a strip of `ANTHROPIC_API_KEY`.
+    // POSIX names are not, and two spellings really are two variables.
+    final wanted = hostIsWindows
+        ? {for (final name in removed) name.toLowerCase()}
+        : removed;
+    env.removeWhere(
+      (key, _) => wanted.contains(hostIsWindows ? key.toLowerCase() : key),
+    );
+  }
+
+  // WSL-interop / Unix-shell leaks; harmless no-ops on a clean launch.
+  final shell = env['SHELL'];
+  if (shell != null && shell.startsWith('/')) env.remove('SHELL');
+  env
+    ..remove('WSLENV')
+    ..remove('WSL_INTEROP')
+    ..remove('WSL_DISTRO_NAME');
+
+  // A POSIX PATH means we were launched from a Unix shell — rebuild a Windows
+  // PATH so wsl.exe / powershell.exe / cmd.exe resolve.
+  final path = env['Path'] ?? env['PATH'];
+  if (path != null && path.startsWith('/')) {
+    final sysRoot = env['SystemRoot'] ?? env['windir'] ?? r'C:\Windows';
+    env
+      ..remove('PATH')
+      ..['Path'] =
+          '$sysRoot\\System32;$sysRoot;'
+          '$sysRoot\\System32\\WindowsPowerShell\\v1.0;'
+          '$sysRoot\\System32\\wbem';
+  }
+
+  // Layered last so a caller's variables survive the scrubbing above — an agent
+  // pane sets WSLENV deliberately, and it must not be the one just removed.
+  env.addAll(extra);
+  return env;
+}
+
 /// [environment] plus the `WSLENV` a Win32 variable must be named in to cross
 /// into a distribution. `/u`, never `/p`, which rewrites path-like values.
 Map<String, String> withWslEnv(Map<String, String> environment) {
@@ -177,11 +241,13 @@ PtyLaunch throughCommandPrompt(
   List<String> parts, {
   String? workingDirectory,
   Map<String, String> environment = const {},
+  Set<String> removedEnvironment = const {},
 }) => PtyLaunch(
   executable: 'cmd.exe',
   arguments: ['/c', parts.map(quoteWindowsCommandArgument).join(' ')],
   workingDirectory: workingDirectory,
   environment: environment,
+  removedEnvironment: removedEnvironment,
 );
 
 /// Builds the ConPTY launch that runs an agent CLI in a pane. The session id
@@ -214,12 +280,19 @@ PtyLaunch agentPtyLaunchFor(
     },
   ),
   context ?? LaunchContext.forAgent(launch, hostIsWindows: true),
+  // Names, not values: what this launch must *not* inherit from the user's
+  // shell. Volatile like [AgentPaneLaunch.environment] beside it.
+  removedEnvironment: launch.removedEnvironment,
 );
 
 /// The **one** place a command gets a wrapper put in front of it for a ConPTY.
 /// It consumes a [ShellCommand] and returns a [PtyLaunch] with no route back,
 /// so "wrap the wrapped launch again" is not a mistake that compiles.
-PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
+PtyLaunch wrapForPty(
+  ShellCommand command,
+  LaunchContext context, {
+  Set<String> removedEnvironment = const {},
+}) {
   switch (context.kind) {
     case ShellContextKind.posix:
       // Already inside the target shell, so there is nothing to cross — in
@@ -229,6 +302,7 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         arguments: command.arguments,
         workingDirectory: command.workingDirectory,
         environment: command.environment,
+        removedEnvironment: removedEnvironment,
       );
     case ShellContextKind.windowsNative:
     case ShellContextKind.powerShell:
@@ -247,6 +321,7 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         ],
         workingDirectory: command.workingDirectory,
         environment: command.environment,
+        removedEnvironment: removedEnvironment,
         exactArgv: true,
       );
     case ShellContextKind.commandPrompt:
@@ -256,6 +331,7 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         command.parts,
         workingDirectory: command.workingDirectory,
         environment: command.environment,
+        removedEnvironment: removedEnvironment,
       );
     case ShellContextKind.wsl:
       // `wsl.exe … -- <command>` hands its tail to the login shell, which
@@ -275,6 +351,9 @@ PtyLaunch wrapForPty(ShellCommand command, LaunchContext context) {
         // wsl.exe sets the child's directory itself, and a Win32 variable
         // only crosses into the distro if `WSLENV` names it.
         environment: withWslEnv(command.environment),
+        // Applied to the `wsl.exe` process, which is all this host owns: a
+        // variable the distribution's own profile exports is out of reach.
+        removedEnvironment: removedEnvironment,
       );
   }
 }

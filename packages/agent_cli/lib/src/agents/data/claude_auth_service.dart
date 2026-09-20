@@ -182,6 +182,23 @@ class ClaudeAuthService {
     );
   }
 
+  /// Whether an interactive `claude /login` exists here and has not lapsed.
+  ///
+  /// **Presence and expiry only** — the credential is never returned, compared
+  /// or logged, and nothing but the recorded `expiresAt` is read out of it. A
+  /// Keychain refusal answers `false` for the same reason a missing file does:
+  /// a credential we could not read is not one a launch may rely on.
+  ///
+  /// An access token past its expiry answers `false` even though Claude Code
+  /// would usually refresh it. That is the safe direction for the one caller:
+  /// it only ever *withholds* something from a child process.
+  Future<bool> hasUsableLogin(ClaudeAuthPaths paths) async {
+    final snapshot = await readSnapshot(paths);
+    if (!snapshot.isSignedIn) return false;
+    final expiresAt = snapshot.accessTokenExpiresAt;
+    return expiresAt == null || expiresAt.isAfter(clock.nowUtc());
+  }
+
   /// The `claudeAiOauth` blob as the Keychain holds it.
   ///
   /// The Keychain holds exactly what the file holds elsewhere — the same

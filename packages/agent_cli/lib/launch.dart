@@ -15,4 +15,5 @@ export 'src/agents/data/codex_adapter.dart'
 export 'src/agents/data/generic_agent_adapter.dart'
     show genericLaunchArgs, parseGenericAgentLine;
 export 'src/agents/domain/agent_adapter.dart' show AgentLaunch;
+export 'src/agents/domain/anthropic_credential_env.dart';
 export 'src/cli_detection/domain/agent_command_line.dart';

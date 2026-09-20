@@ -44,6 +44,7 @@ class AgentPaneLaunch {
     this.arguments = const [],
     this.mcpArguments = const [],
     this.environment = const {},
+    this.removedEnvironment = const {},
     this.workingDirectory,
     this.wslDistribution,
     this.sshHostId,
@@ -70,6 +71,11 @@ class AgentPaneLaunch {
   /// `DISABLE_AUTOUPDATER`). Never stored — it is policy of *now*, re-derived
   /// each launch from the setting, exactly like [mcpArguments].
   final Map<String, String> environment;
+
+  /// Names withheld from the launched process, by the same volatile rule as
+  /// [environment]: which of the user's shell variables must not reach this
+  /// agent is a judgement about *now*, re-made every launch.
+  final Set<String> removedEnvironment;
 
   /// The command line as it is actually run: the volatile flags, then the
   /// durable ones. MCP first, because Codex's `-c` is a global option and its
@@ -108,6 +114,7 @@ class AgentPaneLaunch {
         arguments: arguments,
         mcpArguments: mcpArguments,
         environment: environment,
+        removedEnvironment: removedEnvironment,
         workingDirectory: workingDirectory,
         wslDistribution: wslDistribution,
         sshHostId: sshHostId,

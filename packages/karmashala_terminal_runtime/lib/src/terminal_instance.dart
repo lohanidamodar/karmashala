@@ -271,7 +271,10 @@ class PtyTerminalInstance
     _pty = Pty.start(
       launch.executable,
       arguments: start.arguments,
-      environment: _ptyEnvironment(launch.environment),
+      environment: _ptyEnvironment(
+        launch.environment,
+        launch.removedEnvironment,
+      ),
       workingDirectory: startIn,
       repeatExecutableOnWindows: start.repeatExecutable,
     );
@@ -545,37 +548,17 @@ void writeRestoreMarker(Terminal terminal) {
 
 String _two(int value) => value.toString().padLeft(2, '0');
 
-/// Builds the environment for a Windows PTY child: the host's, minus the POSIX
-/// `PATH`/`SHELL`/`WSL*` that leak from a WSL launch and break `wsl.exe`.
-Map<String, String> _ptyEnvironment([Map<String, String> extra = const {}]) {
-  final env = Map<String, String>.of(Platform.environment);
-
-  // WSL-interop / Unix-shell leaks; harmless no-ops on a clean launch.
-  final shell = env['SHELL'];
-  if (shell != null && shell.startsWith('/')) env.remove('SHELL');
-  env
-    ..remove('WSLENV')
-    ..remove('WSL_INTEROP')
-    ..remove('WSL_DISTRO_NAME');
-
-  // A POSIX PATH means we were launched from a Unix shell — rebuild a Windows
-  // PATH so wsl.exe / powershell.exe / cmd.exe resolve.
-  final path = env['Path'] ?? env['PATH'];
-  if (path != null && path.startsWith('/')) {
-    final sysRoot = env['SystemRoot'] ?? env['windir'] ?? r'C:\Windows';
-    env
-      ..remove('PATH')
-      ..['Path'] =
-          '$sysRoot\\System32;$sysRoot;'
-          '$sysRoot\\System32\\WindowsPowerShell\\v1.0;'
-          '$sysRoot\\System32\\wbem';
-  }
-
-  // Layered last so a caller's variables survive the scrubbing above — an agent
-  // pane sets WSLENV deliberately, and it must not be the one just removed.
-  env.addAll(extra);
-  return env;
-}
+/// This process's environment, shaped for a PTY child. The rule itself is
+/// [ptyChildEnvironment], so it can be asserted without spawning anything.
+Map<String, String> _ptyEnvironment([
+  Map<String, String> extra = const {},
+  Set<String> removed = const {},
+]) => ptyChildEnvironment(
+  host: Platform.environment,
+  extra: extra,
+  removed: removed,
+  hostIsWindows: Platform.isWindows,
+);
 
 /// A [TerminalInstance] that failed to spawn: it renders the error in its buffer
 /// so the panel surfaces *why* instead of crashing the app.
