@@ -251,7 +251,25 @@ void main() {
           'tool_input': {'file_path': file},
         }),
       );
-      // The tool runs only once the hook has answered.
+      // The tool runs only once the hook has answered — and here, only once
+      // the before-turn snapshot has actually been taken.
+      //
+      // `holdToolForCheckpoint` waits for that snapshot but gives up after
+      // `kCheckpointHookHold` (1.5 s), because the installed hook script gives
+      // `curl` two seconds and the hold has to fit inside that. On a loaded
+      // machine the hold expires, the tool writes, and the queued snapshot
+      // then runs against a tree the edit is already in — so the turn's end
+      // finds nothing changed, records nothing, and this test waits out its
+      // whole budget for a checkpoint that can never arrive.
+      //
+      // That is a real property of the product under load and is written up in
+      // `docs/PACKAGE_SPLIT_3.md`; it is **not** what this test is about. This
+      // test asserts that an edit in a nested, ignored clone is checkpointed
+      // before and after, so it waits for the snapshot unbounded rather than
+      // racing a timeout sized for a hook script.
+      await container
+          .read(sessionCheckpointRecorderProvider.notifier)
+          .settled('s1');
       File(file).writeAsStringSync('one\nTWO\nthree\n');
       await hook(AgentActivityStatus.idle, 'Stop', '{"session_id":"cli-1"}');
       await untilCheckpoints(app, 2);
