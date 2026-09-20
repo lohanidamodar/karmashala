@@ -117,7 +117,21 @@ class _DirectoryWatch {
           _rearm();
         }
       },
-      onError: out.addError,
+      onError: (Object error, StackTrace stack) {
+        // A watched directory that is deleted under us ends the watch on
+        // Linux, but on Windows `ReadDirectoryChangesW` fails on the open
+        // handle instead and arrives here as an access-denied. Both are the
+        // same event — the directory is gone — so both re-arm on whatever
+        // ancestor is still there. Only an error from a directory that is
+        // still standing is a real failure, and that one still reaches the
+        // caller; the existence check is also what stops a permanent refusal
+        // from re-arming in a loop.
+        if (!Directory(watching).existsSync()) {
+          _rearm();
+        } else {
+          out.addError(error, stack);
+        }
+      },
       onDone: () {
         // Only a vanished directory is re-armed, so a closed watch cannot loop.
         if (!Directory(watching).existsSync()) _rearm();
