@@ -33,23 +33,25 @@ void main() {
     if (dir.existsSync()) dir.deleteSync(recursive: true);
   });
 
-  String logOnDisk() => sink.file.existsSync() ? sink.file.readAsStringSync() : '';
+  String logOnDisk() =>
+      sink.file.existsSync() ? sink.file.readAsStringSync() : '';
 
   test('the file picker is on disk before the picker is shown', () async {
     var logWhenShown = '';
 
     final chosen = await pickOneFile(
       what: 'an SSH private key',
-      show: ({
-        List<XTypeGroup> acceptedTypeGroups = const [],
-        String? confirmButtonText,
-        String? initialDirectory,
-      }) async {
-        // Where the platform thread would go away for as long as the dialog is
-        // up — and, in the reported failure, for good.
-        logWhenShown = logOnDisk();
-        return XFile(r'C:\Users\someone\.ssh\id_ed25519');
-      },
+      show:
+          ({
+            List<XTypeGroup> acceptedTypeGroups = const [],
+            String? confirmButtonText,
+            String? initialDirectory,
+          }) async {
+            // Where the platform thread would go away for as long as the dialog is
+            // up — and, in the reported failure, for good.
+            logWhenShown = logOnDisk();
+            return XFile(r'C:\Users\someone\.ssh\id_ed25519');
+          },
     );
 
     expect(logWhenShown, contains('opening the file picker'));
@@ -75,11 +77,12 @@ void main() {
   test('the outcome is logged, and says which button it was', () async {
     await pickOneFile(
       what: 'an image to attach',
-      show: ({
-        List<XTypeGroup> acceptedTypeGroups = const [],
-        String? confirmButtonText,
-        String? initialDirectory,
-      }) async => null,
+      show:
+          ({
+            List<XTypeGroup> acceptedTypeGroups = const [],
+            String? confirmButtonText,
+            String? initialDirectory,
+          }) async => null,
     );
     await Diagnostics.instance.flushFile();
 
@@ -109,22 +112,25 @@ void main() {
           return null;
         };
 
-    test('registrants are stopped before the dialog and started after', () async {
-      final quiet = PickerQuiet();
-      final told = <bool>[];
-      quiet.register(told.add);
-      var toldWhenShown = <bool>[];
+    test(
+      'registrants are stopped before the dialog and started after',
+      () async {
+        final quiet = PickerQuiet();
+        final told = <bool>[];
+        quiet.register(told.add);
+        var toldWhenShown = <bool>[];
 
-      await pickOneFile(
-        what: 'a build to install',
-        quiet: quiet,
-        show: occupying(() => toldWhenShown = [...told]),
-      );
+        await pickOneFile(
+          what: 'a build to install',
+          quiet: quiet,
+          show: occupying(() => toldWhenShown = [...told]),
+        );
 
-      expect(toldWhenShown, [true]);
-      expect(told, [true, false]);
-      expect(quiet.isQuiet, isFalse);
-    });
+        expect(toldWhenShown, [true]);
+        expect(told, [true, false]);
+        expect(quiet.isQuiet, isFalse);
+      },
+    );
 
     test('the directory picker announces to the same registry', () async {
       final quiet = PickerQuiet();
@@ -358,11 +364,12 @@ void main() {
 
       await pickOneFile(
         what: 'a terminal program',
-        show: ({
-          List<XTypeGroup> acceptedTypeGroups = const [],
-          String? confirmButtonText,
-          String? initialDirectory,
-        }) async => XFile(file.path),
+        show:
+            ({
+              List<XTypeGroup> acceptedTypeGroups = const [],
+              String? confirmButtonText,
+              String? initialDirectory,
+            }) async => XFile(file.path),
       );
 
       expect(lastPickedDirectory, home.path);
@@ -375,14 +382,15 @@ void main() {
         startNear: r'\\wsl.localhost\archlinux\home\dlohani',
         probe: only({r'C:\Users\someone'}),
         environment: env,
-        show: ({
-          List<XTypeGroup> acceptedTypeGroups = const [],
-          String? confirmButtonText,
-          String? initialDirectory,
-        }) async {
-          opened = initialDirectory;
-          return null;
-        },
+        show:
+            ({
+              List<XTypeGroup> acceptedTypeGroups = const [],
+              String? confirmButtonText,
+              String? initialDirectory,
+            }) async {
+              opened = initialDirectory;
+              return null;
+            },
       );
       await Diagnostics.instance.flushFile();
 
@@ -475,10 +483,9 @@ void main() {
       );
       return [
         Directory('${repository.path}/lib'),
-        for (final member
-            in Directory('${repository.path}/packages').listSync().whereType<
-              Directory
-            >())
+        for (final member in Directory(
+          '${repository.path}/packages',
+        ).listSync().whereType<Directory>())
           if (Directory('${member.path}/lib').existsSync())
             Directory('${member.path}/lib'),
       ];
@@ -570,14 +577,17 @@ void main() {
     });
   });
 
+  _whichBrowser();
+
   test('a host that refuses the picker is logged, not thrown', () async {
     final chosen = await pickOneFile(
       what: 'a terminal program',
-      show: ({
-        List<XTypeGroup> acceptedTypeGroups = const [],
-        String? confirmButtonText,
-        String? initialDirectory,
-      }) async => throw MissingPluginException('no file_selector here'),
+      show:
+          ({
+            List<XTypeGroup> acceptedTypeGroups = const [],
+            String? confirmButtonText,
+            String? initialDirectory,
+          }) async => throw MissingPluginException('no file_selector here'),
     );
     await Diagnostics.instance.flushFile();
 
@@ -586,5 +596,66 @@ void main() {
       logOnDisk(),
       contains('the file picker for a terminal program failed after'),
     );
+  });
+}
+
+/// Which browser a "Browse…" opens. The freeze the in-app browser exists to
+/// avoid came back through here: a call that named the local environment was
+/// sent to the host dialog whatever the user had chosen.
+void _whichBrowser() {
+  BrowseSource source(String id, {required bool local}) => BrowseSource(
+    id: id,
+    label: id,
+    local: local,
+    home: () async => '/',
+    lister: (_) async => const [],
+  );
+
+  final sources = [
+    source('windows', local: true),
+    source('wsl:Ubuntu', local: false),
+    source('ssh:box', local: false),
+  ];
+
+  group('browsesInApp', () {
+    test('a local environment follows the setting, both ways', () {
+      expect(
+        browsesInApp('windows', sources: sources, preference: true),
+        isTrue,
+        reason: 'the in-app browser is what Windows defaults to',
+      );
+      expect(
+        browsesInApp('windows', sources: sources, preference: false),
+        isFalse,
+      );
+    });
+
+    test('another machine is always the app\'s own browser', () {
+      for (final id in ['wsl:Ubuntu', 'ssh:box']) {
+        expect(
+          browsesInApp(id, sources: sources, preference: false),
+          isTrue,
+          reason: '$id cannot be shown by the host dialog',
+        );
+      }
+    });
+
+    test('an environment nothing knows about, and none at all, follow the '
+        'setting', () {
+      expect(browsesInApp('gone', sources: sources, preference: true), isTrue);
+      expect(browsesInApp(null, sources: sources, preference: false), isFalse);
+    });
+
+    test('a caller that has already decided wins', () {
+      expect(
+        browsesInApp(
+          'ssh:box',
+          forced: false,
+          sources: sources,
+          preference: true,
+        ),
+        isFalse,
+      );
+    });
   });
 }

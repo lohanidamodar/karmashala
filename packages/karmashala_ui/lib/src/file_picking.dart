@@ -440,13 +440,32 @@ void _fail(
 /// no choice to offer — see the `inApp` parameter of [pickOneFile].
 bool _inApp(bool? forced, BuildContext? context, String? environmentId) {
   if (context == null || !context.mounted) return false;
+  return browsesInApp(environmentId, forced: forced);
+}
+
+/// Whether a "Browse…" pointed at [environmentId] opens **the app's own**
+/// browser. [forced] is a caller that has already decided; [sources] and
+/// [preference] are the seams a test stands in.
+///
+/// Another machine can only be browsed in the app — the host's dialog cannot
+/// show a distribution or a host. **This** machine is not forced the other
+/// way: naming the local environment used to send every "Browse…" that knew
+/// where it was pointing to the host dialog, past the user's own setting and
+/// past the Windows default — which is the freeze this library exists to
+/// avoid, and it is what New Project's "Browse…" did.
+bool browsesInApp(
+  String? environmentId, {
+  bool? forced,
+  @visibleForTesting List<BrowseSource>? sources,
+  @visibleForTesting bool? preference,
+}) {
   if (forced != null) return forced;
   if (environmentId != null) {
-    for (final source in BrowseSources.all) {
-      if (source.id == environmentId) return !source.local;
+    for (final source in sources ?? BrowseSources.all) {
+      if (source.id == environmentId && !source.local) return true;
     }
   }
-  return FilePickerChoice.inApp;
+  return preference ?? FilePickerChoice.inApp;
 }
 
 /// Where to open when the browser is pointed at another machine. The local
