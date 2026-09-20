@@ -10,7 +10,7 @@ import '../../sessions/application/session_handoff_service.dart';
 import 'package:karmashala_session/resume.dart';
 import '../../sessions/presentation/continue_with_dialog.dart';
 import '../application/attention_inbox.dart';
-import '../domain/inbox_item.dart';
+import 'package:karmashala_notifications/attention.dart';
 
 /// The attention inbox: everything pending, newest first, each item one click
 /// from its source — the list behind the number the badges show.

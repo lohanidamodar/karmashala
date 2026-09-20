@@ -1,15 +1,12 @@
 import 'dart:async';
 
 import 'package:agent_cli/descriptors.dart';
-import '../domain/agent_session_key.dart';
-import '../domain/agent_status_transition.dart';
-import '../domain/evidence_line.dart';
-import '../domain/inbox_item.dart';
-import '../domain/notification_policy.dart';
-import '../domain/notification_request.dart';
-import '../domain/notification_settings.dart';
-import '../domain/session_attention.dart';
-import '../domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala_notifications/transitions.dart';
+import 'package:karmashala_notifications/evidence.dart';
+import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/policy.dart';
+import 'package:karmashala_notifications/toasts.dart';
 import 'session_status_registry.dart';
 
 /// Turns what changed about an agent's status into decisions. Hooks arrive

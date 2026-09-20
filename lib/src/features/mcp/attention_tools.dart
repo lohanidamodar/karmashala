@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import '../notes/application/notes_providers.dart';
 import '../notes/domain/note.dart';
 import '../notifications/application/attention_inbox.dart';
-import '../notifications/domain/inbox_item.dart';
+import 'package:karmashala_notifications/attention.dart';
 import '../sessions/application/session_providers.dart';
 import 'todo_tools.dart';
 

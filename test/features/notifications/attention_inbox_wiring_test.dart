@@ -6,11 +6,9 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
-import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
-import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
-import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
-import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';

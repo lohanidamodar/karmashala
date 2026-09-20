@@ -11,9 +11,9 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/unattended_preflight.dart';
-import 'package:karmashala/src/features/automations/data/automation_dao.dart';
-import 'package:karmashala/src/features/automations/domain/automation.dart';
-import 'package:karmashala/src/features/automations/domain/unattended_gate.dart';
+import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/unattended.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';

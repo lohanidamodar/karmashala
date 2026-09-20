@@ -1,9 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
-import '../../notifications/domain/agent_session_key.dart';
-import '../../notifications/domain/inbox_item.dart';
-import '../../notifications/domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala_notifications/attention.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import '../domain/follow_up.dart';

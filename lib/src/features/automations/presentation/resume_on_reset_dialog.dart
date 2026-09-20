@@ -19,8 +19,7 @@ import '../../sessions/application/session_launcher.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/scheduled_resume_providers.dart';
-import '../domain/resume_window.dart';
-import '../domain/scheduled_resume.dart';
+import 'package:karmashala_automations/resumes.dart';
 import 'minute_ticker.dart';
 
 /// The choice that is not a usage window.

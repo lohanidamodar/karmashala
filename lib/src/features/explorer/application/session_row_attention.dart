@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../notifications/application/attention_inbox.dart';
-import '../../notifications/domain/inbox_item.dart';
+import 'package:karmashala_notifications/attention.dart';
 
 /// What a session row says about the unseen attention items for it.
 enum SessionRowAttention {

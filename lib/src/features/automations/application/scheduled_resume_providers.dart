@@ -18,9 +18,9 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/usage_limit_settings.dart';
-import '../data/scheduled_resume_dao.dart';
-import '../domain/scheduled_resume.dart';
-import '../domain/unattended_gate.dart';
+import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/resumes.dart';
+import 'package:karmashala_automations/unattended.dart';
 import 'automation_providers.dart';
 import 'unattended_preflight.dart';
 

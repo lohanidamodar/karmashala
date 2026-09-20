@@ -5,8 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:local_notifier/local_notifier.dart';
 
 import 'package:karmashala_core/logging.dart';
-import '../domain/notification_request.dart';
-import 'notification_presenter.dart';
+import 'package:karmashala_notifications/toasts.dart';
 
 /// Desktop OS notifications, via `local_notifier`. Windows toasts need the app
 /// to own a Start Menu shortcut with its AUMID; macOS and Linux are untested.

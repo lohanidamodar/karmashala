@@ -1,27 +1,13 @@
+import 'package:karmashala_core/verdicts.dart';
+
 import 'verdict_attribution.dart';
 import 'verification_artifact.dart';
 import 'verification_step.dart';
 import 'verification_target.dart';
 
-/// What the run concluded. [inconclusive] is a first-class answer: an agent
-/// that never reached the page must not pick a pass or fail it did not observe.
-enum VerificationVerdict {
-  pass('Pass'),
-  fail('Fail'),
-  inconclusive('Inconclusive');
-
-  const VerificationVerdict(this.label);
-
-  final String label;
-
-  static VerificationVerdict? parse(String? value) {
-    if (value == null) return null;
-    for (final verdict in values) {
-      if (verdict.name == value) return verdict;
-    }
-    return null;
-  }
-}
+// The three answers are shared vocabulary rather than this feature's alone;
+// callers that have always found `VerificationVerdict` here still do.
+export 'package:karmashala_core/verdicts.dart';
 
 /// A recorded attempt to prove that something works. A run with no verdict is
 /// still open — being recorded right now, or abandoned.

@@ -7,7 +7,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/github.dart';
 import '../../notifications/application/delivery_attention.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../notifications/domain/session_attention.dart';
+import 'package:karmashala_notifications/attention.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_providers.dart';

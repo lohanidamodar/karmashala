@@ -9,7 +9,6 @@ import '../../agents/application/agent_installations_controller.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_usage_providers.dart';
 import '../../agents/application/usage_history.dart';
-import '../../agents/domain/usage_pace.dart';
 import '../../agents/domain/usage_sample.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environments_controller.dart';

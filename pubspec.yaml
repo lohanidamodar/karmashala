@@ -28,6 +28,7 @@ workspace:
   - packages/agent_cli
   - packages/host
   - packages/karmashala_agent_reporting
+  - packages/karmashala_automations
   - packages/karmashala_browser
   - packages/karmashala_companion
   - packages/karmashala_core
@@ -36,6 +37,7 @@ workspace:
   - packages/karmashala_git
   - packages/karmashala_mcp
   - packages/karmashala_media
+  - packages/karmashala_notifications
   - packages/karmashala_remote
   - packages/karmashala_session
   - packages/karmashala_ssh
@@ -95,6 +97,21 @@ dependencies:
   # (docs/PACKAGE_SPLIT_2.md, the mcp/ssh correction). Pure Dart.
   karmashala_mcp:
     path: packages/karmashala_mcp
+  # Work that starts itself: cron and interval schedules, the fires a sleeping
+  # machine missed, the unattended gate, scheduled resumes and project checks,
+  # and the three DAOs over them. The DAOs take an `AppDatabase`; their
+  # providers stay in the app (docs/PACKAGE_SPLIT_3.md, Tier 2). Pure Dart.
+  karmashala_automations:
+    path: packages/karmashala_automations
+  # What is asking for the user's attention, as values: the key a session is
+  # followed by, the attention kinds and the inbox that queues them, the status
+  # and delivery transitions, the policy that decides whether a change is worth
+  # interrupting someone for, and the toast with its presenter port. Not the
+  # watcher, the dispatcher, the providers or the desktop presenter —
+  # `local_notifier` is a desktop plugin and the phone reads these same values.
+  # Pure Dart.
+  karmashala_notifications:
+    path: packages/karmashala_notifications
   karmashala_session:
     path: packages/karmashala_session
   # Reaching a machine over SSH and running the session host on it: the

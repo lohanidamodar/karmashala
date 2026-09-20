@@ -7,8 +7,8 @@ import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_launcher.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
-import '../domain/automation.dart';
-import '../domain/unattended_gate.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/unattended.dart';
 import 'automation_providers.dart';
 
 /// The one place a scheduled or queued fire is checked against the unattended

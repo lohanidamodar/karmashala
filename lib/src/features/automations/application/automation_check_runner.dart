@@ -12,9 +12,8 @@ import '../../terminal/application/visible_command_pane.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import '../../verification/application/verification_providers.dart';
 import '../../verification/domain/verification_run.dart';
-import '../domain/automation_check_verdict.dart';
-import '../domain/automation_run.dart';
-import '../domain/project_check.dart';
+import 'package:karmashala_automations/checks.dart';
+import 'package:karmashala_automations/runs.dart';
 import 'automation_providers.dart';
 
 /// The `agentId` a project check's pane is opened under — namespaced, so it

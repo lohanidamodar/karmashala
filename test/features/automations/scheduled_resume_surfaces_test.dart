@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
     show formatResetClock;
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
-import 'package:karmashala/src/features/automations/domain/scheduled_resume.dart';
+import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/automations/presentation/resume_on_reset_dialog.dart';
 import 'package:karmashala/src/features/automations/presentation/scheduled_resume_chip.dart';
 import 'package:karmashala/src/features/automations/presentation/scheduled_resumes_section.dart';

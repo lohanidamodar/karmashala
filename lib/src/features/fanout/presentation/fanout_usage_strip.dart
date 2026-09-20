@@ -11,7 +11,6 @@ import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_session/resume.dart';
 import '../../agents/presentation/usage_chip.dart';
-import '../../agents/domain/usage_pace.dart';
 import '../../agents/presentation/usage_window_meter.dart';
 import 'package:karmashala_ui/charts.dart';
 

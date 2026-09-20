@@ -1,8 +1,8 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/notifications/data/notification_settings_repository.dart';
-import 'package:karmashala/src/features/notifications/domain/notification_settings.dart';
+import 'package:karmashala_notifications/persistence.dart';
+import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/settings/application/settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

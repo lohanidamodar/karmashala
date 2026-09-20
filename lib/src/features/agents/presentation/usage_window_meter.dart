@@ -4,7 +4,6 @@ import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../domain/usage_pace.dart';
 import 'usage_chip.dart' show formatResetClock, formatUsageDuration;
 
 /// The colour a severity is drawn in. Semantic, never the accent: a quota meter

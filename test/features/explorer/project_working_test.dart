@@ -9,8 +9,7 @@ import 'package:karmashala/src/features/explorer/application/project_working.dar
 import 'package:karmashala/src/features/explorer/application/session_diff_stat.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
-import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';

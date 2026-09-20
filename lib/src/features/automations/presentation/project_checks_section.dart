@@ -9,7 +9,7 @@ import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/automation_providers.dart';
-import '../domain/project_check.dart';
+import 'package:karmashala_automations/checks.dart';
 
 /// The preconditions the unattended gate refuses without, on the automations'
 /// own page: a refusal three screens from its fix is a setting nobody finds.

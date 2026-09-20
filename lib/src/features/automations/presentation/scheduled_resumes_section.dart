@@ -14,7 +14,7 @@ import '../../settings/presentation/settings_catalog.dart';
 import '../../settings/presentation/settings_row.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../application/scheduled_resume_providers.dart';
-import '../domain/scheduled_resume.dart';
+import 'package:karmashala_automations/resumes.dart';
 import 'minute_ticker.dart';
 import 'resume_on_reset_dialog.dart';
 

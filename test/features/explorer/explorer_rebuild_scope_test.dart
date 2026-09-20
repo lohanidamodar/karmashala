@@ -9,7 +9,7 @@ import 'package:karmashala/src/features/agents/presentation/usage_chip.dart'
     show formatResetClock;
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
-import 'package:karmashala/src/features/automations/domain/scheduled_resume.dart';
+import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_service.dart';
 import 'package:karmashala/src/features/cli_detection/application/project_import_service.dart';

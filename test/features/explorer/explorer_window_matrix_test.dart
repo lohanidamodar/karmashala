@@ -19,9 +19,8 @@ import 'package:karmashala/src/features/file_explorer/application/file_explorer_
 import 'package:karmashala/src/features/file_explorer/data/file_listing_service.dart';
 import 'package:karmashala/src/features/file_explorer/presentation/file_explorer_view.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
-import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
-import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
-import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
+import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/notifications/presentation/attention_inbox_view.dart';
 import 'package:karmashala_ui/tokens.dart';
 

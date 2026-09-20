@@ -10,8 +10,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../application/automation_providers.dart';
 import '../application/unattended_preflight.dart';
-import '../domain/automation.dart';
-import '../domain/cron_schedule.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/schedules.dart';
 
 /// Arming an automation, which is the whole of the authorisation. The gate's
 /// own sentence disables the button, so it cannot drift from the write's.

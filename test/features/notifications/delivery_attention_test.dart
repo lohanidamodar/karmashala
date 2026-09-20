@@ -5,11 +5,10 @@ import 'package:karmashala/src/features/environments/data/execution_environment_
 import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
 import 'package:karmashala/src/features/notifications/application/delivery_attention.dart';
-import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
-import 'package:karmashala/src/features/notifications/domain/delivery_transition.dart';
-import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
-import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
-import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala_notifications/transitions.dart';
+import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';

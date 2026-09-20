@@ -3,12 +3,10 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
-import '../data/automation_dao.dart';
-import '../data/project_check_dao.dart';
-import '../domain/automation.dart';
-import '../domain/automation_check_verdict.dart';
-import '../domain/automation_run.dart';
-import '../domain/project_check.dart';
+import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/checks.dart';
+import 'package:karmashala_automations/runs.dart';
 
 final automationDaoProvider = Provider<AutomationDao>(
   (ref) => AutomationDao(ref.watch(databaseProvider)),

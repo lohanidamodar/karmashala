@@ -9,8 +9,7 @@ import '../../agents/data/agent_installation_dao.dart';
 import '../../cli_detection/data/imported_session_dao.dart';
 import '../../sessions/data/session_dao.dart';
 import 'package:karmashala_session/session.dart';
-import '../domain/agent_session_key.dart';
-import '../domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
 
 /// Every session worth holding a status for. [load] never touches the disk: it
 /// reads the sampler's last answer, so any workspace size costs no stat.

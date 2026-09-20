@@ -1,11 +1,10 @@
 import 'dart:async';
 
 import 'package:karmashala/src/features/notifications/data/desktop_notification_presenter.dart';
-import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
-import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
-import 'package:karmashala/src/features/notifications/domain/notification_request.dart';
-import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
-import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala_notifications/policy.dart';
+import 'package:karmashala_notifications/toasts.dart';
+import 'package:karmashala_notifications/attention.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_notifier/local_notifier.dart';

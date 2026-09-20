@@ -26,11 +26,11 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below. Every one of the sixteen — `core`, `media`,
-  `agent_cli`, `agent_reporting`, `browser`, `companion`, `devices`, `mcp`,
-  `remote`, `session`, `ssh`, `git`, `flutter_apps`, `terminal_core`,
-  `terminal_runtime` and `ui` — is extracted and cut over: the app holds no
-  copy of any of them.
+  A key of the map below. Every one of them — `core`, `media`, `agent_cli`,
+  `agent_reporting`, `automations`, `browser`, `companion`, `devices`, `mcp`,
+  `notifications`, `remote`, `session`, `ssh`, `git`, `flutter_apps`,
+  `terminal_core`, `terminal_runtime` and `ui` — is extracted and cut over: the
+  app holds no copy of any of them.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -133,6 +133,19 @@ $map = [ordered]@{
     # Nothing under `lib/` or `test/` is this package's alone: what remains of
     # `features/agents` is `agent_cli`'s app half, which already owns it.
     owns = @()
+  }
+  automations = @{
+    pkg  = 'packages/karmashala_automations'
+    # `test/features/automations` whole: what is left in it is the app's half —
+    # the scheduler and its timer, the runner, the check runner, the undo, the
+    # resume observer and the usage watcher, their providers, the page and its
+    # dialogs, and every suite that binds one of them to a real database or a
+    # real widget tree. One suite outside the folder reads a scheduled resume:
+    # the explorer's rebuild-scope guard. No golden is mapped — no tool schema,
+    # frame or tree pins a value this package owns.
+    app  = @('test/features/automations',
+             'test/features/explorer/explorer_rebuild_scope_test.dart')
+    owns = @('lib/src/features/automations', 'test/features/automations')
   }
   git = @{
     pkg  = 'packages/karmashala_git'
@@ -295,6 +308,30 @@ $map = [ordered]@{
              'test/app/dialog_window_matrix_test.dart',
              'test/app/minimum_window_matrix_test.dart')
     owns = @('lib/src/features/ssh', 'test/features/ssh')
+  }
+  notifications = @{
+    pkg  = 'packages/karmashala_notifications'
+    # `test/features/notifications` whole: what is left in it is the app's
+    # half — the status watcher and registry, the dispatcher, the watched
+    # session loader, the providers, the inbox views and the desktop
+    # presenter's wiring. Fifteen features read these values, so "every suite
+    # that exercises it" would be most of the gate; mapped instead are the
+    # explorer folder (every row's attention is an inbox item) and the eight
+    # suites outside it that name a package type directly. One golden reaches
+    # it and pins a value it owns: the tool schemas, where `inbox_list` and
+    # `inbox_dismiss` publish `needsApproval`, `checksFailed`,
+    # `changesRequested` and `readyToMerge` as their enum.
+    app  = @('test/features/notifications', 'test/features/explorer',
+             'test/app/shell/attention_inbox_shell_test.dart',
+             'test/app/shell/workbench_test.dart',
+             'test/features/follow_ups/follow_up_inbox_wiring_test.dart',
+             'test/features/mcp/attention_control_tools_test.dart',
+             'test/features/mcp/tool_schemas_golden_test.dart',
+             'test/features/remote/push_inbox_wiring_test.dart',
+             'test/features/remote/remote_bindings_test.dart',
+             'test/features/sessions/session_wait_test.dart',
+             'test/features/projects/project_delete_async_test.dart')
+    owns = @('lib/src/features/notifications', 'test/features/notifications')
   }
   ui = @{
     pkg  = 'packages/karmashala_ui'

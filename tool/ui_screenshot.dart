@@ -18,11 +18,9 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/notifications/application/attention_inbox.dart';
-import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
-import 'package:karmashala/src/features/notifications/domain/inbox_item.dart';
-import 'package:karmashala/src/features/notifications/domain/notification_policy.dart';
-import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
-import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/policy.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
@@ -116,7 +114,6 @@ Future<void> _loadFonts(String fontDir) async {
 /// A file the editor scene opens, with no disk behind it.
 const _sampleFile = r'C:\src\karmashala\lib\src\app\shell\side_panel.dart';
 const _sampleSource = """
-import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/tokens.dart';
 import 'side_panel_state.dart';

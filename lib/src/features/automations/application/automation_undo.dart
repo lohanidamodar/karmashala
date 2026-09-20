@@ -6,8 +6,7 @@ import '../../checkpoints/data/checkpoint_dao.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../domain/automation_run.dart';
-import '../domain/undo_run.dart';
+import 'package:karmashala_automations/runs.dart';
 import 'automation_providers.dart';
 
 /// Taking back what an unattended run did: files always, commits only when

@@ -4,7 +4,7 @@ import 'package:karmashala_core/logging.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';
 import 'package:agent_cli/read.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../notifications/domain/notification_request.dart';
+import 'package:karmashala_notifications/toasts.dart';
 import '../../sessions/application/session_actions.dart';
 
 /// Deletes CLI session files **behind** the workspace change that asked for

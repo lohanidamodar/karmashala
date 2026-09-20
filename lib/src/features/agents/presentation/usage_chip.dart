@@ -8,11 +8,10 @@ import '../../../app/shell/workbench_tabs.dart';
 import '../../settings/presentation/settings_nav.dart';
 import '../application/agent_usage_providers.dart';
 import '../application/usage_refresh_policy.dart';
-import '../domain/usage_pace.dart';
 import 'package:agent_cli/usage.dart';
 import 'usage_chip_popover.dart';
 
-export '../domain/usage_pace.dart'
+export 'package:agent_cli/usage.dart'
     show kUsageWarningPercent, kUsageCriticalPercent;
 
 /// The glyph size and gap the status bar's other items use. Named rather than

@@ -3,11 +3,10 @@ import 'package:riverpod/riverpod.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_session/delivery.dart';
-import '../domain/agent_session_key.dart';
-import '../domain/delivery_transition.dart';
-import '../domain/inbox_item.dart';
-import '../domain/notification_policy.dart';
-import '../domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
+import 'package:karmashala_notifications/transitions.dart';
+import 'package:karmashala_notifications/attention.dart';
+import 'package:karmashala_notifications/policy.dart';
 import 'attention_inbox.dart';
 
 /// Turns delivery state into attention-inbox items. No poller of its own: it

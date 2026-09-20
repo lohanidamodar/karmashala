@@ -11,10 +11,9 @@ import 'package:karmashala/src/features/explorer/application/explorer_sections.d
 import 'package:karmashala/src/features/explorer/domain/explorer_section.dart';
 import 'package:karmashala/src/features/explorer/application/explorer_view_mode.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
-import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
+import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/notifications/domain/session_attention.dart';
-import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/git/application/checkout_probe_queue.dart';

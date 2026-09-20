@@ -9,9 +9,9 @@ import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart'
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/automations/application/automation_providers.dart';
 import 'package:karmashala/src/features/automations/application/automation_runner.dart';
-import 'package:karmashala/src/features/automations/data/automation_dao.dart';
-import 'package:karmashala/src/features/automations/domain/automation.dart';
-import 'package:karmashala/src/features/automations/domain/automation_run.dart';
+import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';

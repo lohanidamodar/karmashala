@@ -6,8 +6,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../checkpoints/application/checkpoint_service.dart';
 import '../application/automation_undo.dart';
-import '../domain/automation_run.dart';
-import '../domain/undo_run.dart';
+import 'package:karmashala_automations/runs.dart';
 
 /// Taking back what one unattended run did. Files unconditionally; the commits
 /// checkbox is disabled with [undoCommitsRefusal]'s reason.

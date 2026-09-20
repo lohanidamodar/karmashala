@@ -19,8 +19,7 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/notifications/application/session_status_registry.dart';
-import 'package:karmashala/src/features/notifications/domain/agent_session_key.dart';
-import 'package:karmashala/src/features/notifications/domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
@@ -286,6 +285,11 @@ void main() {
       expect(File(file).readAsStringSync(), 'one\ntwo\n');
     },
     skip: hasGit ? false : 'git is not on PATH',
+    // Above [waitForCapture], so the poll's own give-up — which says how long
+    // it waited — runs before the harness kills the test. package:test's
+    // default is 30 s, which cut the wait off at a fifth of its bound and made
+    // the raised bound unreachable.
+    timeout: const Timeout(Duration(minutes: 3)),
   );
 
   test(
@@ -319,6 +323,11 @@ void main() {
       expect(ofRepo(hub), hasLength(1), reason: 'its own checkout, once');
     },
     skip: hasGit ? false : 'git is not on PATH',
+    // Above [waitForCapture], so the poll's own give-up — which says how long
+    // it waited — runs before the harness kills the test. package:test's
+    // default is 30 s, which cut the wait off at a fifth of its bound and made
+    // the raised bound unreachable.
+    timeout: const Timeout(Duration(minutes: 3)),
   );
 
   test(
@@ -364,6 +373,11 @@ void main() {
       expect(ofRepo(worktree), hasLength(1));
     },
     skip: hasGit ? false : 'git is not on PATH',
+    // Above [waitForCapture], so the poll's own give-up — which says how long
+    // it waited — runs before the harness kills the test. package:test's
+    // default is 30 s, which cut the wait off at a fifth of its bound and made
+    // the raised bound unreachable.
+    timeout: const Timeout(Duration(minutes: 3)),
   );
 
   test('pruning leaves a chain git holds, of only the kept trees', () async {

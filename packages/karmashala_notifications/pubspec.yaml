@@ -1,0 +1,41 @@
+name: karmashala_notifications
+description: >-
+  What is asking for the user's attention, as values: the key a session is
+  followed by and the session the watcher carries, the attention kinds and the
+  inbox that queues them, the status and delivery transitions a poll produces,
+  the policy that decides whether a change is worth interrupting someone for
+  and the settings that tune it, the toast handed to the OS and the port that
+  hands it over, and the one line of an agent's own words both the toast and
+  the inbox quote. Not the watcher, the dispatcher, the providers or any UI,
+  and not the desktop presenter — `local_notifier` is a desktop plugin and the
+  phone reads these same values. Pure Dart, so it runs under `dart test`
+  without a `flutter_tester`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # `AgentActivityStatus`, `AgentStatusSource` and `AgentWaitKind` — what a
+  # status transition is observed as, and what the policy reads off it.
+  agent_cli:
+    path: ../agent_cli
+  # `PullRequest` and its checks: the three delivery reasons are read off one.
+  karmashala_git:
+    path: ../karmashala_git
+  # `SessionDelivery` — the ladder a delivery transition is a step on.
+  karmashala_session:
+    path: ../karmashala_session
+  # The `app_metadata` row the settings round-trip through. The repository
+  # takes an `AppDatabase`; its provider stays in the app.
+  karmashala_store:
+    path: ../karmashala_store
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

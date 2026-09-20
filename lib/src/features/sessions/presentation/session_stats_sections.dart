@@ -6,7 +6,6 @@ import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../agents/domain/usage_pace.dart';
 import '../../agents/presentation/usage_window_meter.dart';
 
 /// What is printed where a route could not supply a number. A word, not a zero:

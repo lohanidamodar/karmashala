@@ -6,8 +6,7 @@ import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../domain/agent_session_key.dart';
-import '../domain/watched_session.dart';
+import 'package:karmashala_notifications/watched.dart';
 
 /// How often the registry recomputes every known session's status.
 const Duration kStatusCycleInterval = Duration(milliseconds: 1200);

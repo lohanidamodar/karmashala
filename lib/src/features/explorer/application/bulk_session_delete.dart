@@ -5,7 +5,7 @@ import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../cli_detection/data/cli_session_mutator.dart';
 import 'package:agent_cli/read.dart';
 import '../../notifications/application/notification_providers.dart';
-import '../../notifications/domain/notification_request.dart';
+import 'package:karmashala_notifications/toasts.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';

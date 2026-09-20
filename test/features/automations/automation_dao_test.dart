@@ -1,11 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/automations/data/automation_dao.dart';
-import 'package:karmashala/src/features/automations/data/project_check_dao.dart';
-import 'package:karmashala/src/features/automations/domain/automation.dart';
-import 'package:karmashala/src/features/automations/domain/automation_run.dart';
-import 'package:karmashala/src/features/automations/domain/project_check.dart';
+import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/runs.dart';
+import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';

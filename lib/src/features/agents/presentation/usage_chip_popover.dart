@@ -8,7 +8,6 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environments_controller.dart';
 import '../application/usage_history.dart';
-import '../domain/usage_pace.dart';
 import '../domain/usage_sample.dart';
 import 'usage_chip.dart';
 import 'usage_history_charts.dart';

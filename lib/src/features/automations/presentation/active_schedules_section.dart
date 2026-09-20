@@ -11,9 +11,9 @@ import '../../settings/presentation/settings_section.dart';
 import '../application/automation_providers.dart';
 import '../application/scheduled_resume_providers.dart';
 import '../application/unattended_preflight.dart';
-import '../domain/automation.dart';
-import '../domain/cron_schedule.dart';
-import '../domain/scheduled_resume.dart';
+import 'package:karmashala_automations/automations.dart';
+import 'package:karmashala_automations/schedules.dart';
+import 'package:karmashala_automations/resumes.dart';
 import 'minute_ticker.dart';
 
 /// Everything that will fire on its own — armed automations and waiting

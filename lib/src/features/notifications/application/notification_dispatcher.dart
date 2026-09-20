@@ -1,8 +1,7 @@
 import 'dart:async';
 
-import '../data/notification_presenter.dart';
-import '../domain/notification_policy.dart';
-import '../domain/notification_request.dart';
+import 'package:karmashala_notifications/toasts.dart';
+import 'package:karmashala_notifications/policy.dart';
 
 /// How long an event that means *something is waiting on you* may be held —
 /// under a second still reads as immediate, and absorbs a fan-out burst.

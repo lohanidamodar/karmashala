@@ -6,7 +6,7 @@ import '../../follow_ups/application/follow_up_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
-import '../domain/inbox_item.dart';
+import 'package:karmashala_notifications/attention.dart';
 import 'notification_providers.dart';
 
 /// Holds the attention inbox and keeps it honest about what the user has seen.

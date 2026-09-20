@@ -14,13 +14,12 @@ import '../../environments/application/environment_providers.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../notifications/application/session_status_registry.dart';
-import '../../notifications/domain/inbox_item.dart';
+import 'package:karmashala_notifications/attention.dart';
 import '../../sessions/application/session_notice.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../settings/domain/usage_limit_settings.dart';
-import '../domain/resume_window.dart';
-import '../domain/scheduled_resume.dart';
+import 'package:karmashala_automations/resumes.dart';
 import 'scheduled_resume_providers.dart';
 
 /// Claude Code's own word, in `StopFailure.error`, for a turn a limit ended.

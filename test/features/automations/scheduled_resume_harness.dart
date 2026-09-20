@@ -11,12 +11,11 @@ import 'package:karmashala/src/features/automations/application/automation_sched
 import 'package:karmashala/src/features/automations/application/automation_timer.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_observer.dart';
 import 'package:karmashala/src/features/automations/application/scheduled_resume_providers.dart';
-import 'package:karmashala/src/features/automations/data/scheduled_resume_dao.dart';
-import 'package:karmashala/src/features/automations/domain/scheduled_resume.dart';
+import 'package:karmashala_automations/persistence.dart';
+import 'package:karmashala_automations/resumes.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
-import 'package:karmashala/src/features/notifications/data/notification_presenter.dart';
-import 'package:karmashala/src/features/notifications/domain/notification_request.dart';
+import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
