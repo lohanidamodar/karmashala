@@ -164,6 +164,15 @@ class CheckpointDao {
     return [for (final row in rows) row['session_id']! as String];
   }
 
+  /// Puts [label] on an existing checkpoint. Written after the fact because
+  /// what it records — whether the tool this snapshot exists to undo had
+  /// already been released when it was taken — is only known once the capture
+  /// has returned.
+  void relabel(String id, String label) => _db.execute(
+    'UPDATE session_checkpoints SET label = ? WHERE id = ?;',
+    [label, id],
+  );
+
   void deleteForSession(String sessionId) => _db.execute(
     'DELETE FROM session_checkpoints WHERE session_id = ?;',
     [sessionId],

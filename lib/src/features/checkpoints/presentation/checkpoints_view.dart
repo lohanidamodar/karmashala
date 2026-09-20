@@ -414,6 +414,11 @@ class _FileRow extends StatelessWidget {
 String checkpointTitle(Checkpoint checkpoint) {
   final turn = checkpoint.turn;
   return switch (checkpoint.reason) {
+    // An automatic before-turn checkpoint carries a label only when the
+    // recorder could not verify it was taken before the turn's first edit, and
+    // that label says so in place of the title that would claim it was.
+    CheckpointReason.turnStart when checkpoint.label != null =>
+      checkpoint.label!,
     CheckpointReason.turnStart when turn != null => 'Before turn $turn',
     CheckpointReason.turn when turn != null => 'After turn $turn',
     CheckpointReason.turnStart => 'Before turn #${checkpoint.sequence}',

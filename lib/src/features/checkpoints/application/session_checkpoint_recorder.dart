@@ -47,6 +47,14 @@ final checkpointSkipReasonsProvider =
 const String kAutomaticCheckpointsOff =
     'automatic checkpoints are off in Settings › Agents › Checkpoints';
 
+/// What a before-turn checkpoint is called when the tool it was taken for had
+/// already been released: the row's own words for the give-up
+/// [SessionCheckpointRecorder.noteHoldExpired] records. A whole title rather
+/// than a suffix, because it *replaces* "Before turn N" — the plain title
+/// asserts the one thing this checkpoint cannot be shown to be.
+String lateTurnStartLabel(int turn) =>
+    'Before turn $turn — may already include its first edit';
+
 /// How far past its limit a repository's chain may grow before it is pruned.
 int checkpointPruneSlack(int keep) => keep ~/ 10 < 10 ? 10 : keep ~/ 10;
 
@@ -72,6 +80,10 @@ class SessionCheckpointRecorder extends Notifier<int> {
 
   /// The repositories already given a before-turn checkpoint this turn.
   final Map<String, Set<String>> _startedIn = {};
+
+  /// The sessions whose tool was released this turn before their before-turn
+  /// snapshot was confirmed taken. See [noteHoldExpired].
+  final Set<String> _released = {};
 
   /// The last message logged per session and repository, so a repeat is not.
   final Map<String, String> _lastLogged = {};
@@ -152,6 +164,30 @@ class SessionCheckpointRecorder extends Notifier<int> {
   /// a queue that keeps refilling.
   static const int _settlePasses = 24;
 
+  /// A `PreToolUse` hold gave up: [sessionId]'s tool was released before its
+  /// before-turn snapshot was confirmed taken.
+  ///
+  /// **The hold is bounded and the bound is not ours to lift.** It has to fit
+  /// inside the two seconds the installed hook script gives `curl`, and a wait
+  /// longer than that does not hold the tool any longer — `curl` dies and the
+  /// agent carries on. So a capture that has not finished by then cannot be
+  /// waited for, and every before-turn checkpoint this turn writes afterwards
+  /// may be of a tree the tool has already edited. It *may*: the snapshot can
+  /// still win by a microsecond, and nothing here can tell. That is the point.
+  /// An undo point whose one claim — that it is the tree before the turn —
+  /// cannot be verified says so on its own row rather than implying it.
+  ///
+  /// Reset as the next turn begins, so the mark belongs to the turn that
+  /// earned it and no later one inherits it.
+  void noteHoldExpired(String sessionId) {
+    if (!_released.add(sessionId)) return;
+    _log.warning(
+      'Session $sessionId released a tool before its before-turn checkpoint '
+      'was taken: this turn may have no undo point taken before its first '
+      'edit.',
+    );
+  }
+
   /// A hook named a new path mid-turn: a repository it is in that has no
   /// before-turn checkpoint yet gets one now, before the tool runs.
   void noteTouched(String sessionId) {
@@ -188,6 +224,11 @@ class SessionCheckpointRecorder extends Notifier<int> {
       final sessionId = entry.session.openId;
       final edge = _turns.observe(sessionId, entry.report.status);
       if (edge == null) return;
+      // Here rather than inside the capture, because a capture is queued and a
+      // hold can give up while it waits: reset at the moment the turn begins
+      // and no hold of *this* turn can be forgotten, and none of the last
+      // turn's can be inherited.
+      if (edge == TurnEdge.started) _released.remove(sessionId);
       unawaited(_serial(sessionId, () => _captureTurn(sessionId, edge)));
     } on Object catch (error, stack) {
       _log.warning('Checkpoint recorder skipped a status move.', error, stack);
@@ -270,6 +311,17 @@ class SessionCheckpointRecorder extends Notifier<int> {
           'unchanged since its last checkpoint.',
         );
         return;
+      }
+      // **Asked now, not before the capture.** What makes a before-turn
+      // snapshot untrustworthy is the tool having been released *by the time
+      // it was taken* — and the hold can give up while this very capture is
+      // running `git add -A`. A row written before the give-up is genuinely
+      // before the edit and is left alone.
+      if (reason == CheckpointReason.turnStart &&
+          _released.contains(sessionId)) {
+        ref
+            .read(checkpointDaoProvider)
+            .relabel(checkpoint.id, lateTurnStartLabel(turn.number));
       }
       ref.read(checkpointsRevisionProvider.notifier).bump();
       _log.info(

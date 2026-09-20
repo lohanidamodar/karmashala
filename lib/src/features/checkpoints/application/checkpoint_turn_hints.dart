@@ -112,6 +112,13 @@ const Duration kCheckpointHookHold = Duration(milliseconds: 1500);
 /// Holds a `PreToolUse` callback until [agentSessionId]'s queued captures are
 /// done, at most [kCheckpointHookHold], so a repository the tool is about to
 /// change is checkpointed before it does. Anything else returns at once.
+///
+/// **Giving up is not the same as succeeding, and it used to look identical.**
+/// The bound cannot be raised into a guarantee: it has to fit inside the two
+/// seconds the hook script gives `curl`, and holding longer than `curl` will
+/// wait does not hold the tool — `curl` dies and the agent runs anyway. So a
+/// hold that expires is a released tool and an unverified undo point, and it
+/// is reported to the recorder, which marks the checkpoints that follow.
 Future<void> holdToolForCheckpoint(
   ProviderContainer container, {
   required String agentSessionId,
@@ -122,8 +129,11 @@ Future<void> holdToolForCheckpoint(
       .read(sessionDaoProvider)
       .getByExternalSessionId(agentSessionId);
   if (session == null) return;
-  await container
-      .read(sessionCheckpointRecorderProvider.notifier)
+  final recorder = container.read(sessionCheckpointRecorderProvider.notifier);
+  await recorder
       .settled(session.id)
-      .timeout(kCheckpointHookHold, onTimeout: () {});
+      .timeout(
+        kCheckpointHookHold,
+        onTimeout: () => recorder.noteHoldExpired(session.id),
+      );
 }
