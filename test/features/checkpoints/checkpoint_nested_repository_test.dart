@@ -184,18 +184,43 @@ void main() {
     );
   }
 
+  /// How long the poll below will wait before it decides nothing more is
+  /// coming.
+  ///
+  /// **A hang-guard, not a performance bound**, and the distinction is the
+  /// whole reason this constant has a comment. What the test asserts is that
+  /// the turn's end *is* checkpointed, not that it is checkpointed quickly:
+  /// every capture spawns a real `git` in a real temporary clone, and under a
+  /// full-suite run those spawns compete with every other suite's. At 20 s
+  /// this was the flakiest test in the repository — green alone in 11 s, red
+  /// in the full gate — because it had quietly become a measurement of how
+  /// busy the machine was. Nothing here should ever take two minutes; if it
+  /// does, the failure that follows is a real one and says so.
+  const waitForCapture = Duration(minutes: 2);
+
+  /// How long the poll gave up after, or null while it has not given up.
+  /// Read by the expectation, so a give-up is never silent.
+  Duration? gaveUpAfter;
+
   /// Waits until [count] checkpoints of [path] exist, or gives up and lets the
   /// expectation say what is actually there. The recorder is awaited first;
   /// the poll is for a loaded machine, where the git a capture spawns can take
   /// longer than the hook route's own patience.
   Future<void> untilCheckpoints(String path, int count) async {
     final recorder = container.read(sessionCheckpointRecorderProvider.notifier);
-    final deadline = DateTime.now().add(const Duration(seconds: 20));
+    // Per wait, not per file: three tests share this closure, and a give-up
+    // reported against the wrong one would be worse than no report.
+    gaveUpAfter = null;
+    final started = DateTime.now();
+    final deadline = started.add(waitForCapture);
     while (CheckpointDao(
           db,
         ).forSession('s1').where((c) => c.repository.path == path).length <
         count) {
-      if (DateTime.now().isAfter(deadline)) return;
+      if (DateTime.now().isAfter(deadline)) {
+        gaveUpAfter = DateTime.now().difference(started);
+        return;
+      }
       await recorder.settled('s1');
       await Future<void>.delayed(const Duration(milliseconds: 20));
     }
@@ -239,10 +264,15 @@ void main() {
         // Under a loaded run this has come back with the turn's end missing.
         // The recorder's own reason is the difference between "git said the
         // tree was unchanged" and "the end of the turn was never seen", and
-        // guessing between those cost an afternoon.
+        // guessing between those cost an afternoon. The third possibility —
+        // that the wait simply ran out — used to look identical to the second,
+        // so the poll now says when it gave up.
         reason:
             'skip reason: '
-            '${container.read(checkpointSkipReasonsProvider)['s1'] ?? 'none'}',
+            '${container.read(checkpointSkipReasonsProvider)['s1'] ?? 'none'}'
+            '${gaveUpAfter == null ? '' : '; the poll gave up after '
+                      '${gaveUpAfter!.inSeconds}s, so this is a wait that ran '
+                      'out rather than a capture that was refused'}',
       );
       expect(nested.first.files, isEmpty, reason: 'taken before the edit');
       expect(nested.last.files.map((f) => f.path), ['main.txt']);
