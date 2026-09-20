@@ -5,6 +5,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../explorer/application/checkout.dart';
 import '../../explorer/application/checkout_picker.dart';
 import '../../projects/application/project_providers.dart';
+import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../workspaces/application/workspaces_controller.dart';
 
@@ -134,11 +135,7 @@ class SessionDestinationPicker extends ConsumerWidget {
         ),
         const SizedBox(height: Insets.md),
         if (offered.isEmpty)
-          Text(
-            'This project has no Git repositories to run in. '
-            'Rescan it for checkouts first.',
-            style: Theme.of(context).textTheme.bodySmall,
-          )
+          Text(kNowhereToRunIn, style: Theme.of(context).textTheme.bodySmall)
         else
           DropdownButtonFormField<String>(
             // Keyed by the project: after a project change a `FormField`'s kept
@@ -166,9 +163,7 @@ class SessionDestinationPicker extends ConsumerWidget {
             ],
             onChanged: enabled
                 ? (id) {
-                    final picked = offered
-                        .firstWhere((o) => o.$1.id == id)
-                        .$1;
+                    final picked = offered.firstWhere((o) => o.$1.id == id).$1;
                     onChanged(
                       SessionDestination(
                         projectId: destination.projectId,

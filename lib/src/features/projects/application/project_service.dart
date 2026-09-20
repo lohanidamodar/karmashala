@@ -92,8 +92,34 @@ class ProjectService {
       repositoryDao.insert(repo);
       repositories.add(repo);
     }
+    if (repositories.isEmpty) {
+      repositories.add(_recordRoot(project, name: name, root: root, now: now));
+    }
 
     return ProjectCreationResult(project: project, repositories: repositories);
+  }
+
+  /// The project's own folder as the place its sessions run. **Git is not the
+  /// point**: Claude Code, Codex and Antigravity all start in a plain
+  /// directory, and a project with no checkout row could not be given a
+  /// session at all — "this project has no Git repositories to run in" was the
+  /// whole of what the New Session dialog could say about a folder that simply
+  /// was not a clone.
+  Repository _recordRoot(
+    Project project, {
+    required String name,
+    required EnvironmentPath root,
+    required DateTime now,
+  }) {
+    final repo = Repository(
+      id: ids.newId(),
+      projectId: project.id,
+      name: name,
+      path: root,
+      createdAt: now,
+    );
+    repositoryDao.insert(repo);
+    return repo;
   }
 
   /// Creates a project for [target] from a folder picked on the Windows host —
@@ -142,6 +168,11 @@ class ProjectService {
       );
       repositoryDao.insert(repo);
       repositories.add(repo);
+    }
+    if (repositories.isEmpty) {
+      repositories.add(
+        _recordRoot(project, name: name, root: project.root, now: now),
+      );
     }
     return ProjectCreationResult(project: project, repositories: repositories);
   }
@@ -194,7 +225,8 @@ class ProjectService {
             ? '${r'"$HOME"'}/${_posixQuote(path.substring(2))}'
             : _posixQuote(path);
         final cloneEscaped = "'${url.replaceAll("'", r"'\''")}'";
-        final cloneScript = '''
+        final cloneScript =
+            '''
 TARGET=$targetExpression
 if [ -d "\$TARGET/.git" ]; then
   echo "EXISTS"
@@ -204,10 +236,7 @@ fi
 cd "\$TARGET" && pwd
 ''';
         final result = await runner.run(
-          CommandRequest(
-            executable: 'sh',
-            arguments: ['-c', cloneScript],
-          ),
+          CommandRequest(executable: 'sh', arguments: ['-c', cloneScript]),
         );
         if (!result.ok) {
           throw RepositoryDiscoveryException(
@@ -224,10 +253,7 @@ cd "\$TARGET" && pwd
             dir.parent.createSync(recursive: true);
           }
           final result = await runner.run(
-            CommandRequest(
-              executable: 'git',
-              arguments: ['clone', url, path],
-            ),
+            CommandRequest(executable: 'git', arguments: ['clone', url, path]),
           );
           if (!result.ok) {
             throw RepositoryDiscoveryException(
@@ -256,10 +282,7 @@ cd "\$TARGET" && pwd
       }
     }
 
-    final root = EnvironmentPath(
-      environmentId: target.id,
-      path: resolvedPath,
-    );
+    final root = EnvironmentPath(environmentId: target.id, path: resolvedPath);
 
     final discovered = await discovery.discover(root, maxDepth: maxDepth);
 
@@ -274,38 +297,10 @@ cd "\$TARGET" && pwd
 
     final repositories = <Repository>[];
     if (discovered.isEmpty) {
-      var rootIsRepo = false;
-      if (target.kind == EnvironmentKind.ssh) {
-        if (runnerFactory != null) {
-          final runner = runnerFactory!.forEnvironment(target);
-          final check = await runner.run(
-            CommandRequest(
-              executable: 'sh',
-              arguments: [
-                '-c',
-                'test -e \'${resolvedPath.replaceAll("'", r"'\''")}/.git\'',
-              ],
-            ),
-          );
-          rootIsRepo = check.ok;
-        }
-      } else {
-        rootIsRepo =
-            Directory(p.join(resolvedPath, '.git')).existsSync() ||
-            File(p.join(resolvedPath, '.git')).existsSync();
-      }
-
-      if (rootIsRepo) {
-        final repo = Repository(
-          id: ids.newId(),
-          projectId: project.id,
-          name: name,
-          path: root,
-          createdAt: now,
-        );
-        repositoryDao.insert(repo);
-        repositories.add(repo);
-      }
+      // The folder itself, whether or not it is a clone: nothing here needs a
+      // `.git` to be checked for — a session runs in a directory. The probe
+      // this replaces cost an SSH round trip to decide the same thing.
+      repositories.add(_recordRoot(project, name: name, root: root, now: now));
     } else {
       for (final d in discovered) {
         final repo = Repository(
@@ -350,13 +345,9 @@ cd "\$TARGET" && pwd
     final discovered = await discovery.discover(scanRoot, maxDepth: maxDepth);
     EnvironmentPath toProject(EnvironmentPath hostPath) =>
         projectEnvironment.kind == EnvironmentKind.ssh ||
-        projectEnvironment.id == windows.id
+            projectEnvironment.id == windows.id
         ? hostPath
-        : translator.translate(
-            hostPath,
-            from: windows,
-            to: projectEnvironment,
-          );
+        : translator.translate(hostPath, from: windows, to: projectEnvironment);
     final now = clock.nowUtc();
     final added = <Repository>[];
     for (final d in discovered) {
@@ -371,6 +362,14 @@ cd "\$TARGET" && pwd
       );
       repositoryDao.insert(repo);
       added.add(repo);
+    }
+    // A project that still has nowhere to run gets its own folder, which is
+    // what a rescan of a plain directory is asking for. Old projects, made
+    // before a folder was enough, are repaired by the same rescan.
+    if (existing.isEmpty && added.isEmpty) {
+      added.add(
+        _recordRoot(project, name: project.name, root: project.root, now: now),
+      );
     }
     return added;
   }
@@ -432,7 +431,8 @@ extension ProjectEditing on ProjectService {
       if (target == null || windows == null) {
         throw StateError('Moving a project root needs its environments.');
       }
-      final scanRoot = target.kind == EnvironmentKind.ssh || target.id == windows.id
+      final scanRoot =
+          target.kind == EnvironmentKind.ssh || target.id == windows.id
           ? root
           : translator.translate(root, from: target, to: windows);
       discovered = await discovery.discover(scanRoot, maxDepth: maxDepth);

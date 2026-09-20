@@ -838,7 +838,14 @@
                 "environmentName": "Windows",
                 "environmentId": "windows",
                 "environmentKind": "windowsNative",
-                "checkouts": []
+                "checkouts": [
+                  {
+                    "repositoryId": "new-4",
+                    "name": "Workspace",
+                    "path": "<projectFolder>",
+                    "agents": []
+                  }
+                ]
               }
             }
           ]
@@ -862,7 +869,7 @@
             {
               "type": "result",
               "payload": {
-                "sessionId": "new-4",
+                "sessionId": "new-5",
                 "title": "From the phone",
                 "permissionMode": "mode=manual"
               }

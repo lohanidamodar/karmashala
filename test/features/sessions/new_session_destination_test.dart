@@ -366,7 +366,7 @@ void main() {
       await open(tester, container);
 
       expect(
-        find.textContaining('no Git repositories to run in'),
+        find.textContaining('nowhere recorded to run in'),
         findsOneWidget,
       );
       expect(tester.widget<FilledButton>(startButton()).onPressed, isNull);

@@ -409,7 +409,7 @@ class ProjectRowActions {
     if (repo == null) {
       // The dialog opens on the current selection, so opening it here would
       // point it at whichever other project was last selected.
-      _say('This project has no Git repositories to run in.');
+      _say(kNowhereToRunIn);
       return;
     }
     ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
@@ -565,7 +565,7 @@ class ProjectRowActions {
           .getByProject(project.id)
           .firstOrNull;
       if (repo == null) {
-        _say('This project has no Git repositories to run in.');
+        _say(kNowhereToRunIn);
       } else {
         _startSession(repository: repo, installation: installation);
       }

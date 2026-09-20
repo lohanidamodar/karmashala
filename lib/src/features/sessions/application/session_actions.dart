@@ -599,7 +599,7 @@ class SessionActions {
   String newSessionShellCommand(String projectId) {
     final repos = _ref.read(repositoryDaoProvider).getByProject(projectId);
     if (repos.isEmpty) {
-      throw StateError('This project has no Git repositories to run in.');
+      throw StateError(kNowhereToRunIn);
     }
     final repo = repos.first;
     final installs = _ref
