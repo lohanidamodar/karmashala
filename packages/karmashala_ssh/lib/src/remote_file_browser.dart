@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dartssh2/dartssh2.dart';
 
 import 'package:agent_cli/process.dart';
@@ -79,6 +81,132 @@ class RemoteFileBrowser {
     return entries;
   }
 
+  /// What is at [path], or null when nothing is. A delete asks first: a
+  /// directory removed as a file fails, and the reverse takes a tree.
+  Future<RemoteEntryKind?> kindOf(EnvironmentPath path) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    try {
+      return _kindOf(await sftp.stat(path.path, followLink: false));
+    } on SftpError {
+      return null;
+    }
+  }
+
+  /// Creates the directory [path].
+  Future<void> makeDirectory(EnvironmentPath path) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    await _run('create ${path.path}', () => sftp.mkdir(path.path));
+  }
+
+  /// Creates an empty file at [path]. Refuses when something is already there:
+  /// opening for writing would otherwise truncate it without a word.
+  Future<void> makeFile(EnvironmentPath path) async {
+    _requireOwnEnvironment(path);
+    if (await kindOf(path) != null) {
+      throw RemoteBrowseException(
+        'Something named ${_baseName(path.path)} is already there',
+      );
+    }
+    final sftp = await _client();
+    await _run('create ${path.path}', () async {
+      final file = await sftp.open(
+        path.path,
+        mode: SftpFileOpenMode.create | SftpFileOpenMode.write,
+      );
+      await file.close();
+    });
+  }
+
+  /// Renames [from] to [to] on the same host.
+  Future<void> rename(EnvironmentPath from, EnvironmentPath to) async {
+    _requireOwnEnvironment(from);
+    _requireOwnEnvironment(to);
+    final sftp = await _client();
+    await _run(
+      'rename ${from.path}',
+      () => sftp.rename(from.path, to.path),
+    );
+  }
+
+  /// Removes [path]. A directory needs [recursive], and its contents are
+  /// removed depth first — SFTP has no "remove a tree".
+  Future<void> remove(EnvironmentPath path, {bool recursive = false}) async {
+    _requireOwnEnvironment(path);
+    final kind = await kindOf(path);
+    if (kind == null) {
+      throw RemoteBrowseException('${path.path} is not there any more');
+    }
+    final sftp = await _client();
+    if (kind != RemoteEntryKind.directory) {
+      await _run('delete ${path.path}', () => sftp.remove(path.path));
+      return;
+    }
+    if (recursive) {
+      for (final entry in await list(path)) {
+        await remove(entry.path, recursive: true);
+      }
+    }
+    await _run('delete ${path.path}', () => sftp.rmdir(path.path));
+  }
+
+  /// Copies the remote file [path] into [sink], reporting the bytes moved.
+  /// The caller owns [sink] and closes it.
+  Future<void> readInto(
+    EnvironmentPath path,
+    Sink<List<int>> sink, {
+    void Function(int bytes)? onProgress,
+  }) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    await _run('read ${path.path}', () async {
+      final file = await sftp.open(path.path);
+      try {
+        var moved = 0;
+        await for (final chunk in file.read()) {
+          sink.add(chunk);
+          moved += chunk.length;
+          onProgress?.call(moved);
+        }
+      } finally {
+        await file.close();
+      }
+    });
+  }
+
+  /// Writes [chunks] to the remote file [path], replacing what is there.
+  Future<void> writeFrom(
+    EnvironmentPath path,
+    Stream<List<int>> chunks, {
+    void Function(int bytes)? onProgress,
+  }) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    await _run('write ${path.path}', () async {
+      final file = await sftp.open(
+        path.path,
+        mode:
+            SftpFileOpenMode.create |
+            SftpFileOpenMode.truncate |
+            SftpFileOpenMode.write,
+      );
+      try {
+        var moved = 0;
+        await for (final chunk in chunks) {
+          final bytes = chunk is Uint8List
+              ? chunk
+              : Uint8List.fromList(chunk);
+          await file.writeBytes(bytes, offset: moved);
+          moved += bytes.length;
+          onProgress?.call(moved);
+        }
+      } finally {
+        await file.close();
+      }
+    });
+  }
+
   /// Releases the SFTP channel. The SSH connection itself stays open.
   Future<void> close() async {
     final sftp = _sftp;
@@ -99,6 +227,24 @@ class RemoteFileBrowser {
         cause: e,
       );
     }
+  }
+
+  /// Runs one SFTP call, turning the server's status into a sentence that
+  /// names what was being done — `SftpStatusError(3)` alone says nothing.
+  Future<void> _run(String what, Future<void> Function() body) async {
+    try {
+      await body();
+    } on SftpError catch (error) {
+      throw RemoteBrowseException(
+        'Cannot $what on ${connection.host.address}',
+        cause: error,
+      );
+    }
+  }
+
+  static String _baseName(String path) {
+    final cut = path.lastIndexOf('/');
+    return cut < 0 ? path : path.substring(cut + 1);
   }
 
   Future<SftpClient> _client() async {
