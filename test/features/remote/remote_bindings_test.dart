@@ -1737,4 +1737,159 @@ void main() {
     expect(open?.toolUseId, 'toolu_9');
     expect(open?.questions.single.options.last.label, 'Banana');
   });
+
+  // The companion poll re-read the whole file every two seconds with nothing
+  // checking whether it had changed. Measured 2026-09-20 on the owner's
+  // machine: the live transcript is 61 MB and a parse is 650-870 ms.
+  group('a record that has not moved is answered from a stat', () {
+    late File transcript;
+    var status = AgentActivityStatus.working;
+
+    String call(String id, String command, String at) =>
+        '${jsonEncode({
+          'type': 'assistant',
+          'timestamp': at,
+          'message': {
+            'content': [
+              {
+                'type': 'tool_use',
+                'id': id,
+                'name': 'Bash',
+                'input': {'command': command},
+              },
+            ],
+          },
+        })}\n';
+
+    setUp(() {
+      status = AgentActivityStatus.working;
+      final dir = Directory.systemTemp.createTempSync('karmashala_rev_');
+      addTearDown(() => removeTempDirectory(dir));
+      transcript = File(ph.join(dir.path, 'ext-s-rev.jsonl'))
+        ..writeAsStringSync(
+          call('t1', 'git status', '2026-09-20T10:00:00.000Z'),
+        );
+      locator.paths['claudeCode/ext-s-rev'] = transcript.path;
+
+      container.dispose();
+      container = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          sessionTranscriptLocatorProvider.overrideWithValue(locator),
+          repositoryDiscoveryServiceProvider.overrideWithValue(discovery),
+          autoImportRunnerProvider.overrideWithValue(
+            (_) async => const ImportSummary(),
+          ),
+          remoteDeliveryStageProvider.overrideWithValue(
+            (sessionId) async => 'working',
+          ),
+          remoteApprovalEvidenceProvider.overrideWithValue(
+            (sessionId) async => null,
+          ),
+          remoteSessionPresenceProvider.overrideWithValue(
+            (sessionId) => (note: null, lastSeen: null),
+          ),
+          // Read at call time, so the status word can move without the
+          // container forgetting what it knows about the file.
+          sessionStatusLookupProvider.overrideWithValue(
+            (sessionId) => AgentStatusReport(
+              agentId: 'claudeCode',
+              sessionId: sessionId,
+              status: status,
+              observedAt: now,
+              source: AgentStatusSource.hook,
+            ),
+          ),
+        ],
+      );
+
+      seedWorkspace();
+      AgentInstallationDao(db).insert(
+        AgentInstallation(
+          id: 'i-claude',
+          agentId: 'claudeCode',
+          executable: path(r'C:\bin\claude.exe'),
+          createdAt: now,
+        ),
+      );
+      SessionDao(db).insert(
+        Session(
+          id: 's-rev',
+          repositoryId: 'r1',
+          agentInstallationId: 'i-claude',
+          title: 'Running now',
+          useWorktree: false,
+          status: SessionStatus.running,
+          createdAt: now,
+          surface: SessionSurface.pane,
+          externalSessionId: 'ext-s-rev',
+        ),
+      );
+    });
+
+    test('the cheap reading says what the read said', () async {
+      final bindings = container.read(remoteHostBindingsProvider);
+      final read = await bindings.transcriptFor('s-rev');
+      expect(read.activity.calls.single.summary, contains('git status'));
+
+      final cheap = await bindings.readRecordState('s-rev');
+
+      expect(cheap.revision, isNotNull);
+      expect(cheap.activity, isNotNull);
+      expect(
+        cheap.activity!.calls.single.startedAt,
+        read.activity.calls.single.startedAt,
+      );
+    });
+
+    // What is still owed when the file is exactly where it was: the calls are
+    // the file's, but whether anything is running is the status word's.
+    test(
+      '...and still follows the status word, with no byte changed',
+      () async {
+        final bindings = container.read(remoteHostBindingsProvider);
+        await bindings.transcriptFor('s-rev');
+
+        status = AgentActivityStatus.idle;
+        final cheap = await bindings.readRecordState('s-rev');
+
+        expect(cheap.revision, isNotNull);
+        expect(cheap.activity!.calls, isEmpty);
+        expect(cheap.activity!.absence, isNull);
+      },
+    );
+
+    test('an appended record refuses to answer cheaply', () async {
+      final bindings = container.read(remoteHostBindingsProvider);
+      await bindings.transcriptFor('s-rev');
+
+      transcript.writeAsStringSync(
+        call('t2', 'flutter test', '2026-09-20T10:00:05.000Z'),
+        mode: FileMode.append,
+      );
+      final cheap = await bindings.readRecordState('s-rev');
+
+      expect(cheap.activity, isNull, reason: 'the caller must read it');
+    });
+
+    test('a session never read here is not answered from nothing', () async {
+      final cheap = await container
+          .read(remoteHostBindingsProvider)
+          .readRecordState('s-rev');
+
+      expect(cheap.revision, isNull);
+      expect(cheap.activity, isNull);
+    });
+
+    test('a record that vanished is a read, not an unchanged file', () async {
+      final bindings = container.read(remoteHostBindingsProvider);
+      await bindings.transcriptFor('s-rev');
+
+      transcript.deleteSync();
+      final cheap = await bindings.readRecordState('s-rev');
+
+      expect(cheap.revision, isNull);
+      expect(cheap.activity, isNull);
+    });
+  });
 }

@@ -99,6 +99,11 @@ class HostSessionApi {
   /// Below this a read is not what is starving anything, so it earns no wait.
   static const Duration _pollBackoffFloor = Duration(milliseconds: 20);
 
+  /// The record revision each watched session was last **read** at. Per device
+  /// on purpose: a revision is what this phone has been served up to, so
+  /// another device's read must never consume this one's delta.
+  final Map<String, String> _readRevisions = <String, String>{};
+
   final Stopwatch _uptime = Stopwatch()..start();
   final Map<String, String> _lastSnapshots = <String, String>{};
 
@@ -193,6 +198,7 @@ class HostSessionApi {
           _subscribed.remove(sessionId);
           _transcriptCursors.remove(sessionId);
           _pollNotBefore.remove(sessionId);
+          _readRevisions.remove(sessionId);
           _lastSnapshots.remove(sessionId);
           _lastActivity.remove(sessionId);
           await _result(envelope.id, const {});
@@ -598,12 +604,47 @@ class HostSessionApi {
     final startedAt = _uptime.elapsed;
     final notBefore = _pollNotBefore[sessionId];
     if (notBefore != null && startedAt < notBefore) return;
+    // A `stat`, not a read: an append-only record that has not moved has no
+    // turn this device has not been served, and re-reading one is the whole
+    // cost of the poll. The backoff above still governs how often this runs;
+    // this decides whether the run has anything to pay for.
+    final RemoteRecordReading reading;
+    try {
+      reading = await bindings.readRecordState(sessionId);
+    } on Object {
+      return;
+    }
+    final revision = reading.revision;
+    final unchanged = reading.activity;
+    if (revision != null &&
+        unchanged != null &&
+        revision == _readRevisions[sessionId]) {
+      // **Still owed, with the file exactly where it was.** The cursor cannot
+      // have moved — nothing was appended — but what the session is *doing* is
+      // read from the row and the status word, which move without it. This is
+      // the same obligation `_pushActivity` is called early for below, and a
+      // bare "unchanged, return" would swallow it.
+      await _pushActivity(sessionId, unchanged);
+      return;
+    }
     final RemoteSessionRecord record;
     try {
       record = await bindings.transcriptFor(sessionId);
     } on Object {
       return;
     }
+    // The revision as it was **before** the read, so a write that lands during
+    // one is not remembered as served. Called only where this poll has carried
+    // everything the read found: a delta the transport refused must be built
+    // again, and a file remembered as served would never be read for it.
+    void served() {
+      if (revision == null) {
+        _readRevisions.remove(sessionId);
+      } else {
+        _readRevisions[sessionId] = revision;
+      }
+    }
+
     final page = record.page;
     // Measured after the read, so the budget is set by what this transcript
     // actually costs rather than by a guess about its size.
@@ -618,6 +659,7 @@ class HostSessionApi {
     final cursor = known;
     if (page.cursor <= cursor || cursor > page.messages.length) {
       _transcriptCursors[sessionId] = page.cursor;
+      served();
       return;
     }
     // One page, never the whole delta: a session that grew by thousands of
@@ -640,7 +682,11 @@ class HostSessionApi {
         hasNewer: end < total,
       ).toJson(),
     );
-    if (delivered) _transcriptCursors[sessionId] = end;
+    if (!delivered) return;
+    _transcriptCursors[sessionId] = end;
+    // Only once this device is level with the file. A page that left more
+    // behind must not be skipped over by a `stat` saying nothing moved.
+    if (end == total) served();
   }
 
   /// States what a session is doing, when that is not what this device was last

@@ -50,6 +50,7 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     deliveryStageFor: (sessionId) =>
         ref.read(remoteDeliveryStageProvider)(sessionId),
     transcriptFor: (sessionId) => remoteTranscriptFor(ref, sessionId),
+    readRecordState: (sessionId) => remoteRecordReading(ref, sessionId),
     // The composer's own route. Async so an imported-session refusal is a
     // failed future, never a synchronous escape past a caller's error handling.
     sendPrompt: (sessionId, text, {attachment}) async {

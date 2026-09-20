@@ -31,6 +31,18 @@ typedef RemoteSessionRecord = ({
   RemoteSessionActivity activity,
 });
 
+/// A **`stat`, never a parse**: what identifies the record's state on disk now,
+/// and what that state says the session is doing.
+///
+/// [revision] is null for "could not tell", which is never equal to anything,
+/// so a caller holding one always re-reads. [activity] is non-null only when
+/// this host can speak for *this* revision without reading it — otherwise the
+/// caller must pay [RemoteHostBindings.transcriptFor] for the answer.
+typedef RemoteRecordReading = ({
+  String? revision,
+  RemoteSessionActivity? activity,
+});
+
 class RemoteHostBindings {
   const RemoteHostBindings({
     required this.hostName,
@@ -53,6 +65,7 @@ class RemoteHostBindings {
     this.answerQuestion = _noQuestions,
     this.answerMenu = _noMenus,
     this.usage = _noUsage,
+    this.readRecordState = _recordStateUnknown,
   });
 
   /// What `host.status` calls this desktop.
@@ -74,6 +87,12 @@ class RemoteHostBindings {
   /// Attribution is rebuilt from typed fields, never parsed out. Answers with
   /// the activity that same read implies — see [RemoteSessionRecord].
   final Future<RemoteSessionRecord> Function(String sessionId) transcriptFor;
+
+  /// The cheap half of [transcriptFor], for a poll that may have nothing to
+  /// read: one `stat` of the file the last read came from. Defaults to
+  /// "could not tell", so a host that cannot answer is polled exactly as
+  /// before.
+  final Future<RemoteRecordReading> Function(String sessionId) readRecordState;
 
   /// Routes a prompt into the session exactly as the desktop composer does.
   /// **A prompt carrying an [attachment] is offered, not sent**: it lands in the
@@ -164,6 +183,9 @@ class RemoteHostBindings {
   /// not have allowed. Defaults to refusing.
   final Future<RemoteUsageSnapshot> Function() usage;
 }
+
+Future<RemoteRecordReading> _recordStateUnknown(String sessionId) async =>
+    (revision: null, activity: null);
 
 Future<RemoteUsageSnapshot> _noUsage() async => throw const RemoteApiRefusal(
   ErrorCode.badRequest,

@@ -1078,6 +1078,212 @@ void main() {
     );
   });
 
+  // Measured on the owner's machine 2026-09-20: the live transcript is 61 MB
+  // and one parse costs 650-870 ms — paid every two seconds, per phone with
+  // the session open, whether or not a byte changed.
+  group('a record that has not moved is not read again', () {
+    Future<Harness> watching() async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        const RemoteTranscriptMessage(role: 'user', text: 'go on then'),
+      ];
+      harness.fake.revisions['s1'] = 'r1';
+      await harness.watch('s1');
+      // The poll that records the revision this device has been served up to.
+      await harness.api.pollTranscript('s1');
+      return harness;
+    }
+
+    test('a still file costs a stat and no read at all', () async {
+      final harness = await watching();
+      final reads = harness.fake.transcriptReads;
+      final stats = harness.fake.recordStateReads;
+
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+
+      expect(harness.fake.transcriptReads, reads);
+      expect(harness.fake.recordStateReads - stats, 3);
+    });
+
+    // The obligation `_pushActivity` is called before the cursor check for: a
+    // change the phone is waiting on need not be anything the file says.
+    test('but what the phone is still owed goes out anyway', () async {
+      final harness = await watching();
+      final reads = harness.fake.transcriptReads;
+      final before = harness.sent.length;
+
+      harness.fake.activities['s1'] = RemoteSessionActivity(
+        sessionId: 's1',
+        observedAt: DateTime.utc(2026, 9, 20, 12),
+        calls: [
+          RemoteActivityCall(
+            summary: 'Bash(flutter test)',
+            toolName: 'Bash',
+            startedAt: DateTime.utc(2026, 9, 20, 11),
+          ),
+        ],
+      );
+      await harness.api.pollTranscript('s1');
+
+      expect(harness.fake.transcriptReads, reads, reason: 'nothing re-parsed');
+      expect(harness.sent.length, before + 1);
+      expect(harness.last.type, FrameType.sessionActivity);
+      expect(
+        RemoteSessionActivity.fromJson(
+          harness.last.payload,
+        ).calls.single.summary,
+        'Bash(flutter test)',
+      );
+    });
+
+    test('and a record that did move is read, delta and all', () async {
+      final harness = await watching();
+      final reads = harness.fake.transcriptReads;
+      harness.sent.clear();
+
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'agent', text: 'brand new'),
+      );
+      harness.fake.revisions['s1'] = 'r2';
+      await harness.api.pollTranscript('s1');
+
+      expect(harness.fake.transcriptReads - reads, 1);
+      expect(harness.last.type, FrameType.transcriptAppended);
+      expect(
+        RemoteTranscriptPage.fromJson(
+          harness.last.payload,
+        ).messages.single.text,
+        'brand new',
+      );
+    });
+
+    // The revision is recorded where the cursor is: only once the frame went
+    // out. A `stat` must never be able to say "nothing to do" about a delta
+    // this device never received.
+    test('a delta the transport refused is built again', () async {
+      final harness = await watching();
+      harness.fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'agent', text: 'brand new'),
+      );
+      harness.fake.revisions['s1'] = 'r2';
+      harness.delivers = false;
+      await harness.api.pollTranscript('s1');
+      harness.delivers = true;
+      harness.sent.clear();
+
+      // Nothing has been appended since — the file is word for word the one
+      // the refused frame was built from.
+      await harness.api.pollTranscript('s1');
+
+      expect(harness.last.type, FrameType.transcriptAppended);
+      expect(
+        RemoteTranscriptPage.fromJson(
+          harness.last.payload,
+        ).messages.single.text,
+        'brand new',
+      );
+    });
+
+    test('and a page that left more behind is not skipped over', () async {
+      final harness = await watching();
+      for (var i = 0; i < kRemoteTranscriptPageMax + 3; i++) {
+        harness.fake.transcripts['s1']!.add(
+          RemoteTranscriptMessage(role: 'agent', text: 'm$i'),
+        );
+      }
+      harness.fake.revisions['s1'] = 'r2';
+      await harness.api.pollTranscript('s1');
+      expect(
+        RemoteTranscriptPage.fromJson(harness.last.payload).hasNewer,
+        isTrue,
+      );
+      harness.sent.clear();
+
+      await harness.api.pollTranscript('s1');
+
+      final rest = RemoteTranscriptPage.fromJson(harness.last.payload);
+      expect(rest.messages, hasLength(3));
+      expect(rest.hasNewer, isFalse);
+    });
+
+    test('a host that cannot tell is polled exactly as before', () async {
+      final harness = Harness();
+      harness.fake.transcripts['s1'] = [
+        const RemoteTranscriptMessage(role: 'user', text: 'hello'),
+      ];
+      await harness.watch('s1');
+      final reads = harness.fake.transcriptReads;
+
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+      await harness.api.pollTranscript('s1');
+
+      expect(harness.fake.transcriptReads - reads, 3);
+    });
+
+    // The revision is what THIS phone has been served up to, so it is held per
+    // device: a second phone reading the growth must not spend it.
+    test("one device's read does not spend another's delta", () async {
+      final fake = FakeRemoteBindings()..addSession('s1');
+      fake.transcripts['s1'] = [
+        const RemoteTranscriptMessage(role: 'user', text: 'go on then'),
+      ];
+      fake.revisions['s1'] = 'r1';
+      final frames = <String, List<SentFrame>>{'a': [], 'b': []};
+      var seq = 0;
+      HostSessionApi apiFor(String which) => HostSessionApi(
+        device: fakeDevice(),
+        bindings: fake.bindings,
+        send: (type, {id, payload = const {}}) async {
+          frames[which]!.add((type: type, id: id, payload: payload));
+          return true;
+        },
+      );
+      final a = apiFor('a');
+      final b = apiFor('b');
+      for (final api in [a, b]) {
+        for (final type in [
+          FrameType.sessionSubscribe,
+          FrameType.transcriptGet,
+        ]) {
+          await api.handleEnvelope(
+            Envelope.of(
+              type,
+              seq: seq++,
+              id: 'q$seq',
+              payload: const {'sessionId': 's1'},
+              version: kProtocolVersion,
+            ),
+          );
+        }
+        await api.pollTranscript('s1');
+      }
+
+      fake.transcripts['s1']!.add(
+        const RemoteTranscriptMessage(role: 'agent', text: 'brand new'),
+      );
+      fake.revisions['s1'] = 'r2';
+      await b.pollTranscript('s1');
+      frames['a']!.clear();
+      await a.pollTranscript('s1');
+
+      expect(
+        frames['a']!.map((f) => f.type),
+        contains(FrameType.transcriptAppended),
+      );
+      expect(
+        RemoteTranscriptPage.fromJson(
+          frames['a']!
+              .lastWhere((f) => f.type == FrameType.transcriptAppended)
+              .payload,
+        ).messages.single.text,
+        'brand new',
+      );
+    });
+  });
+
   group('a task-notification envelope is folded down before it crosses', () {
     // Seen on the phone, 2026-09-02: a subagent completion landed as a turn
     // whose text was the raw payload, and it was most of the screen.

@@ -133,15 +133,29 @@ SessionActivity sessionActivityFrom({
   required SessionSurface surface,
   required AgentActivityStatus? status,
   required List<TranscriptMessage>? messages,
+}) => sessionActivityOf(
+  rowStatus: rowStatus,
+  surface: surface,
+  status: status,
+  calls: messages == null ? null : outstandingCallsIn(messages),
+);
+
+/// The same rule for a caller that already holds the calls — a poll whose file
+/// has not moved re-derives nothing, and there is still only one rule.
+SessionActivity sessionActivityOf({
+  required SessionStatus rowStatus,
+  required SessionSurface surface,
+  required AgentActivityStatus? status,
+  required List<OutstandingCall>? calls,
 }) {
   if (_isOver(rowStatus)) return SessionActivity.none;
   if (status != AgentActivityStatus.working) return SessionActivity.none;
   // A session outside our panes renders from the engine's event log, which has
   // no result event to clear a call with, so it cannot answer this at all.
-  if (surface != SessionSurface.pane || messages == null) {
+  if (surface != SessionSurface.pane || calls == null) {
     return const SessionActivity.blind(ActivityBlindSpot.noRecord);
   }
-  return SessionActivity(outstandingCallsIn(messages));
+  return SessionActivity(calls);
 }
 
 /// **What one session is doing right now**, from the transcript the

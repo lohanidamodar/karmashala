@@ -3,6 +3,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
@@ -22,6 +23,109 @@ import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/host.dart';
 import 'remote_binding_support.dart';
 
+/// How many sessions' record memos are kept. A phone reads one session at a
+/// time and the entries are tiny, so this is a ceiling, not a working set.
+const int kRemoteRecordMemoMax = 64;
+
+/// What the last read of one session's record found, so the next poll can tell
+/// a file that has not moved from one that has — and answer for it — with a
+/// `stat` instead of a parse.
+///
+/// **The turns are not kept.** Only the calls they implied: the unanswered
+/// ones of one session, three small fields each. Keeping the parse instead
+/// would trade the poll's CPU for the memory this app is already growing.
+class _RecordMemo {
+  const _RecordMemo({
+    required this.path,
+    required this.revision,
+    required this.calls,
+    required this.native,
+  });
+
+  final String path;
+  final String revision;
+  final List<OutstandingCall> calls;
+
+  /// Which branch read it. A superseded imported id can start resolving to a
+  /// live row, and the two answer the activity question differently.
+  final bool native;
+}
+
+/// One memo per session, oldest dropped past [kRemoteRecordMemoMax].
+class _RecordMemos {
+  final Map<String, _RecordMemo> _bySession = <String, _RecordMemo>{};
+
+  _RecordMemo? read(String sessionId) => _bySession[sessionId];
+
+  void write(String sessionId, _RecordMemo memo) {
+    // Re-inserted so insertion order is recency, which is what the cap drops.
+    _bySession.remove(sessionId);
+    _bySession[sessionId] = memo;
+    while (_bySession.length > kRemoteRecordMemoMax) {
+      _bySession.remove(_bySession.keys.first);
+    }
+  }
+}
+
+final _recordMemosProvider = Provider<_RecordMemos>((ref) => _RecordMemos());
+
+/// `(modified, size)`, for the same reason the desktop chat view uses it:
+/// mtime is not distinct per write on NTFS, and an append-only transcript
+/// always moves its size. Null is "could not tell", never "unchanged".
+Future<String?> _revisionOf(String path) async {
+  try {
+    final stat = await File(path).stat();
+    if (stat.type == FileSystemEntityType.notFound) return null;
+    return '${stat.modified.microsecondsSinceEpoch}:${stat.size}';
+  } on Object {
+    return null;
+  }
+}
+
+/// Whether a session's record has moved since this host last read it, and what
+/// it is doing if it has not — **one `stat`**, no store scan and no parse.
+///
+/// Answers `activity: null` for anything it cannot speak for without reading:
+/// a session never read here, a file that moved, or one that is gone.
+Future<RemoteRecordReading> remoteRecordReading(
+  Ref ref,
+  String sessionId,
+) async {
+  final memo = ref.read(_recordMemosProvider).read(sessionId);
+  if (memo == null) return (revision: null, activity: null);
+  final revision = await _revisionOf(memo.path);
+  if (revision == null || revision != memo.revision) {
+    return (revision: revision, activity: null);
+  }
+  final resolved = resolveRemoteSession(ref, sessionId);
+  final session = resolved.native;
+  if ((session != null) != memo.native) {
+    return (revision: revision, activity: null);
+  }
+  if (session == null) {
+    if (resolved.imported == null) return (revision: null, activity: null);
+    return (
+      revision: revision,
+      activity: _activityOf(ref, sessionId, SessionActivity.none),
+    );
+  }
+  return (
+    revision: revision,
+    // The calls are the file's; the row and the status word are read fresh,
+    // because those are what move while the file stands still.
+    activity: _activityOf(
+      ref,
+      session.id,
+      sessionActivityOf(
+        rowStatus: session.status,
+        surface: session.surface,
+        status: ref.read(sessionActivityLookupProvider)(session.id),
+        calls: memo.calls,
+      ),
+    ),
+  );
+}
+
 /// The same source selection as `SessionTranscriptView`. Attribution is REBUILT
 /// from the parent's typed fields, never parsed out of the text.
 Future<RemoteSessionRecord> remoteTranscriptFor(
@@ -35,8 +139,23 @@ Future<RemoteSessionRecord> remoteTranscriptFor(
     if (imported != null) {
       // Imported history is not a running session: it has no row to be
       // `working`, so the one rule answers "nothing is running" for it.
+      final revision = await _revisionOf(imported.filePath);
+      final page = await _importedTranscript(imported);
+      if (revision != null) {
+        ref
+            .read(_recordMemosProvider)
+            .write(
+              sessionId,
+              _RecordMemo(
+                path: imported.filePath,
+                revision: revision,
+                calls: const <OutstandingCall>[],
+                native: false,
+              ),
+            );
+      }
       return (
-        page: await _importedTranscript(imported),
+        page: page,
         activity: _activityOf(ref, sessionId, SessionActivity.none),
       );
     }
@@ -50,8 +169,30 @@ Future<RemoteSessionRecord> remoteTranscriptFor(
           messages: _eventLogMessages(ref, session.id),
           absence: null,
           turns: null,
+          path: null,
+          revision: null,
         );
   var messages = record.messages;
+  // Derived once: the memo below and the activity are the same answer.
+  final turns = record.turns;
+  final calls = turns == null ? null : outstandingCallsIn(turns);
+  final path = record.path;
+  final revision = record.revision;
+  if (path != null && revision != null && calls != null) {
+    // Keyed on the id the caller asked with, because that is the id the next
+    // poll will ask with — a superseded imported id resolves the same way.
+    ref
+        .read(_recordMemosProvider)
+        .write(
+          sessionId,
+          _RecordMemo(
+            path: path,
+            revision: revision,
+            calls: calls,
+            native: true,
+          ),
+        );
+  }
 
   final attribution = _attributionOf(ref, session);
   if (attribution != null) {
@@ -79,13 +220,13 @@ Future<RemoteSessionRecord> remoteTranscriptFor(
     activity: _activityOf(
       ref,
       session.id,
-      sessionActivityFrom(
+      sessionActivityOf(
         rowStatus: session.status,
         surface: session.surface,
         // The registry's cached answer, read synchronously: the same word the
         // desktop badge shows, and no poll of its own.
         status: ref.read(sessionActivityLookupProvider)(session.id),
-        messages: record.turns,
+        calls: calls,
       ),
     ),
   );
@@ -145,12 +286,20 @@ typedef _AgentRecord = ({
   /// The parse the [messages] were cut from, so activity is read off the same
   /// read. **Null means there was no record** — not "nothing is outstanding".
   List<TranscriptMessage>? turns,
+
+  /// The file [turns] were parsed from, and what it looked like **before** the
+  /// parse — so a write that landed during one is not remembered as read.
+  /// Null when nothing was parsed and there is nothing to remember.
+  String? path,
+  String? revision,
 });
 
 const _AgentRecord _nothingKnown = (
   messages: <RemoteTranscriptMessage>[],
   absence: null,
   turns: null,
+  path: null,
+  revision: null,
 );
 
 /// A structural nothing, in the wire's own words — which of the two the reading
@@ -161,6 +310,8 @@ _AgentRecord _structuralNothing(SessionChatView reading) => (
       ? RemoteTranscriptAbsence.noTranscriptFile
       : RemoteTranscriptAbsence.noChatView,
   turns: null,
+  path: null,
+  revision: null,
 );
 
 /// The agent's own transcript file, read once, not polled. A **structural**
@@ -186,6 +337,9 @@ Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
   );
   if (chatView.keepsNoRecord) return _structuralNothing(chatView);
   if (path == null || !chatView.hasChatView) return _nothingKnown;
+  // Taken before the parse, so an append landing mid-parse is not remembered
+  // as one this read served.
+  final revision = await _revisionOf(path);
   final messages = await readCliTranscriptOffThread(path, agentId);
   return (
     messages: [
@@ -195,6 +349,8 @@ Future<_AgentRecord> _agentRecordMessages(Ref ref, Session session) async {
     ],
     absence: null,
     turns: messages,
+    path: path,
+    revision: revision,
   );
 }
 

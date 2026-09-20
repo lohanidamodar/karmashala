@@ -91,6 +91,15 @@ class FakeRemoteBindings {
   /// poll sweep run rather than infer it.
   int transcriptReads = 0;
 
+  /// What each session's record looks like on disk *now*. Unset is a host that
+  /// cannot tell — what every test that never sets it gets, and what every
+  /// binding without the reading answers — so the poll reads as it always did.
+  final Map<String, String> revisions = {};
+
+  /// How many cheap readings the fake has served, so a test can tell a `stat`
+  /// from a parse.
+  int recordStateReads = 0;
+
   /// Held open, every transcript read waits here — a store big enough that the
   /// parse does not finish inside the phone's request timeout. The owner's
   /// largest is 115 MB, which is what put `session.subscribe` past it.
@@ -138,6 +147,19 @@ class FakeRemoteBindings {
       if (gate != null) await gate.future;
       if (stageCost > Duration.zero) await Future<void>.delayed(stageCost);
       return stages[id];
+    },
+    readRecordState: (id) async {
+      recordStateReads++;
+      final revision = revisions[id];
+      return (
+        revision: revision,
+        // The production binding can only speak for a revision it has read, so
+        // an unknown one is answered by reading, exactly as before.
+        activity: revision == null
+            ? null
+            : activities[id] ??
+                  RemoteSessionActivity(sessionId: id, observedAt: observedAt),
+      );
     },
     transcriptFor: (id) async {
       transcriptReads++;
