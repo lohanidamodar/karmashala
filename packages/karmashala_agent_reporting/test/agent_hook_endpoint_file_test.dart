@@ -390,6 +390,7 @@ const _shells = [
     prefix: <String>[],
     environment: EnvironmentKind.localPosix,
     extension: 'sh',
+    spell: _forwardSlashes,
     // `head -c` cuts an oversized payload and posts what is left, so the probe
     // is followed by a callback.
     oversizedRequests: 2,
@@ -400,11 +401,32 @@ const _shells = [
     prefix: <String>['/c'],
     environment: EnvironmentKind.windowsNative,
     extension: 'cmd',
+    spell: _asGiven,
     // `cmd` has no `head -c`: it spills stdin, measures it, and posts nothing
     // when it is over the bound. The probe is the only request.
     oversizedRequests: 1,
   ),
 ];
+
+/// The script's path in the spelling `sh` has to be handed it.
+///
+/// The generated `sh` finds the endpoint file beside itself with
+/// `here="${0%/*}"` — a parameter expansion that cuts at `/` and cannot see a
+/// `\`. In the field that is always right, because the command installed into
+/// the agent's config is `sh "$HOME/<store>/<marker>.sh"`. Here it is not:
+/// `p.join` spells a Windows temp path with backslashes, `$here` swallows the
+/// whole path, no endpoint file is found and the script exits 0 having dialled
+/// nothing — which is why this group's three "expects a request" cases waited
+/// out the 30 s timeout on Windows while its three "expects silence" cases
+/// passed for a reason that had nothing to do with the property they name.
+/// Git Bash's MSYS `sh` — the only `sh` a stock Windows box has — resolves
+/// `C:/...` perfectly well, so the fix is the separator and not the shell. On
+/// a POSIX host this is a no-op: `p.join` never produced a backslash there.
+String _forwardSlashes(String path) => path.replaceAll(r'\', '/');
+
+/// `cmd.exe` keeps Windows spelling: `/` is its switch character, and `%~dp0`
+/// has no trouble with a backslash path.
+String _asGiven(String path) => path;
 
 typedef _Shell = ({
   String name,
@@ -412,6 +434,11 @@ typedef _Shell = ({
   List<String> prefix,
   EnvironmentKind environment,
   String extension,
+
+  /// How this interpreter must be handed the script's path — see
+  /// [_forwardSlashes]. The two shells locate their own directory with
+  /// different idioms and do not accept the same spelling.
+  String Function(String) spell,
 
   /// How many requests an over-bound payload puts on the wire here — the two
   /// shells stop differently, and the count is what each case waits for.
@@ -523,7 +550,11 @@ void _runForReal(
 
       final process = await Process.start(shell.executable, [
         ...shell.prefix,
-        p.join(scratch.path, '$agentHookMarker.${shell.extension}'),
+        // Spelled for the interpreter, not for Dart: the script locates the
+        // endpoint file relative to the path it was invoked by.
+        shell.spell(
+          p.join(scratch.path, '$agentHookMarker.${shell.extension}'),
+        ),
         'Stop',
       ]);
       process.stdin.add(utf8.encode(payload));
@@ -655,6 +686,14 @@ class _Received {
 /// profile has no `sh` on its `PATH`, so between the two families every machine
 /// runs one of them and a CI matrix runs both. What must never happen is a
 /// silent pass — the reason is spelled out so a run that proved nothing says so.
+///
+/// Where a Windows box *does* have one — a shell started under Git Bash puts
+/// MSYS `sh` and `curl` on the `PATH` — both families run, and both are meant
+/// to. That is not a reason to skip: MSYS `sh` runs the generated script
+/// unaltered, provided it is handed the path in the spelling [_forwardSlashes]
+/// gives it. A `sh` that reads paths in some other namespace would find no
+/// script and send nothing; that shows up as the first case in the group
+/// failing, not as a group that quietly proves nothing.
 String? _whyShellCannotRun(_Shell shell) {
   if (shell.executable == 'cmd.exe' && !Platform.isWindows) {
     return 'cmd.exe is Windows-only, and the .cmd script is only ever run '
