@@ -157,6 +157,7 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
 
       final file = File(path);
       DateTime? lastModified;
+      int? lastSize;
       var first = true;
       while (true) {
         // Paused, not stopped: the loop keeps its cadence and `lastModified`,
@@ -167,20 +168,26 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
           continue;
         }
         DateTime? modified;
+        int? size;
         try {
           // `stat()`, not the sync pair: on a `\\wsl.localhost\...` share the
           // pair measures 1.19 ms against 0.07 ms locally, on the UI isolate.
           final stat = await file.stat();
-          modified = stat.type == FileSystemEntityType.notFound
-              ? null
-              : stat.modified;
+          final missing = stat.type == FileSystemEntityType.notFound;
+          modified = missing ? null : stat.modified;
+          size = missing ? null : stat.size;
         } catch (_) {
           modified = null;
+          size = null;
         }
         var spent = Duration.zero;
-        if (first || modified != lastModified) {
+        // Size as well as mtime: mtime is not distinct per write, so an append
+        // landing in the tick already read is invisible to the clock alone,
+        // and an append-only transcript always moves its size.
+        if (first || modified != lastModified || size != lastSize) {
           first = false;
           lastModified = modified;
+          lastSize = size;
           final parse = Stopwatch()..start();
           // Off the UI isolate: this parse is seconds on a long conversation.
           yield await readCliTranscriptOffThread(path, agentId);

@@ -4,6 +4,7 @@ import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
+import '../../util/bounded_lines.dart';
 import '../../util/bounded_text.dart';
 import '../../agents/domain/agent_ids.dart';
 import '../../agents/domain/agent_plan.dart';
@@ -201,11 +202,10 @@ Future<List<TranscriptMessage>> readCliTranscript(
   // one the file yields, and only this loop can see that happen.
   CompactionBoundary? pendingCompaction;
   try {
-    await for (final line
-        in file
-            .openRead()
-            .transform(utf8.decoder)
-            .transform(const LineSplitter())) {
+    // Bounded rather than `LineSplitter`: a record is materialised whole and
+    // `jsonDecode` has no streaming form, so the largest record — not the
+    // file — is this reader's peak memory. See [kMaxTranscriptLineBytes].
+    await for (final line in boundedLines(file)) {
       if (line.isEmpty) continue;
       final Object? decoded;
       try {
