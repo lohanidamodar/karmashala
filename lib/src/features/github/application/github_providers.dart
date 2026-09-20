@@ -7,7 +7,6 @@ import '../../environments/application/environment_resolver.dart';
 import '../../environments/data/execution_environment_dao.dart';
 import '../../git/application/changes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../data/github_service.dart';
 import 'package:karmashala_git/github.dart';
 
 /// Resolves the right [GitHubService] (and runner) for a repository's

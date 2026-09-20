@@ -10,13 +10,15 @@
 /// * `usage.dart` — tokens, rate limits and which account is signed in.
 ///
 /// Plus `discovery.dart` (which environments exist, and what is installed in
-/// each) and `process.dart` (the runners everything above executes through).
+/// each), `context.dart` (what a session started in a directory would be
+/// given) and `process.dart` (the runners everything above executes through).
 ///
 /// Import this library for all of it, or one of the above for the part you
 /// want.
 library;
 
 export 'ask.dart';
+export 'context.dart';
 export 'descriptors.dart';
 export 'discovery.dart';
 export 'launch.dart';

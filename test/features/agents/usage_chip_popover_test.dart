@@ -8,7 +8,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/data/usage_sample_dao.dart';
-import 'package:karmashala/src/features/agents/domain/usage_sample.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip.dart';
 import 'package:karmashala/src/features/agents/presentation/usage_chip_popover.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';

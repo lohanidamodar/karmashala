@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/github/domain/pull_request_context.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_git/pull_request_context.dart';
 import 'package:karmashala_git/github.dart';
 
 /// The text an agent is handed about a pull request. One renderer, so the

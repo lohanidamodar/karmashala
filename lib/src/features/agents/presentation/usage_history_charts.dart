@@ -7,7 +7,6 @@ import 'package:karmashala_ui/charts.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../application/usage_history.dart';
-import '../domain/usage_sample.dart';
 import 'usage_chip.dart' show formatResetClock;
 
 /// The longest history any usage surface reads at once.

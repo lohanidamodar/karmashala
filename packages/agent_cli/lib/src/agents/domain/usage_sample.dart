@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 /// One measured quota window at one moment, as the usage history keeps it.
 @immutable

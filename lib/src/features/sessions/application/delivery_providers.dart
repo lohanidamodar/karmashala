@@ -8,7 +8,6 @@ import '../../git/application/changes_providers.dart';
 import '../../git/application/checkout_probe_queue.dart';
 import 'package:karmashala_git/git.dart';
 import '../../github/application/github_providers.dart';
-import '../../github/data/github_service.dart';
 import 'package:karmashala_git/github.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../notifications/application/delivery_attention.dart';
