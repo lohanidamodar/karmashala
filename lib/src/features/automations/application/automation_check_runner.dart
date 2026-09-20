@@ -9,7 +9,7 @@ import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
-import '../../terminal/data/terminal_grid_text.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import '../../verification/application/verification_providers.dart';
 import '../../verification/domain/verification_run.dart';
 import '../domain/automation_check_verdict.dart';

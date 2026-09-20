@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/data/pane_terminal.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:xterm2/xterm.dart';
 
 /// [PaneTerminal] under the render object that drives it: the view asks for the

@@ -26,10 +26,11 @@
   verdict is laundered by another command reports green for a red run.
 
 .PARAMETER Package
-  A key of the map below. Every one of the fifteen — `core`, `media`,
+  A key of the map below. Every one of the sixteen — `core`, `media`,
   `agent_cli`, `agent_reporting`, `browser`, `companion`, `devices`, `mcp`,
-  `remote`, `session`, `ssh`, `git`, `flutter_apps`, `terminal_core` and `ui`
-  — is extracted and cut over: the app holds no copy of any of them.
+  `remote`, `session`, `ssh`, `git`, `flutter_apps`, `terminal_core`,
+  `terminal_runtime` and `ui` — is extracted and cut over: the app holds no
+  copy of any of them.
 
 .PARAMETER Changed
   Map `git diff --name-only` (against the merge base with main, plus anything
@@ -210,6 +211,29 @@ $map = [ordered]@{
              'test/features/mcp/tool_schemas_golden_test.dart',
              'test/features/sessions/session_launch_golden_test.dart')
     owns = @('lib/src/features/terminal', 'test/features/terminal')
+  }
+  terminal_runtime = @{
+    pkg  = 'packages/karmashala_terminal_runtime'
+    # A Flutter package: it drives an `xterm2` `Terminal` and paints cast
+    # frames into a frame sink, so its own half runs under `flutter test`.
+    flutter = $true
+    # Both terminal folders whole: what is left in them is the app's half —
+    # the controllers and their providers, the panel and its views, and the
+    # suites that bind an instance to a real database, a real window or a real
+    # WSL distribution. Three goldens outside them reach the package: the
+    # workbench tree (the shell lays panes out over a running instance), the
+    # tool schemas (the terminal, tmux and session tools are served over the
+    # system terminal service and the grid readings) and the session launches
+    # (what a launcher builds is a `PtyLaunch`). The terminal panel tree
+    # golden sits inside the first folder.
+    app  = @('test/features/terminal', 'test/terminal',
+             'test/app/shell/workbench_tree_golden_test.dart',
+             'test/features/mcp/tool_schemas_golden_test.dart',
+             'test/features/sessions/session_launch_golden_test.dart')
+    # Nothing under `lib/` is this package's alone: what remains of
+    # `features/terminal` is the app's application and presentation halves,
+    # which `terminal_core` already owns.
+    owns = @()
   }
   session = @{
     pkg  = 'packages/karmashala_session'

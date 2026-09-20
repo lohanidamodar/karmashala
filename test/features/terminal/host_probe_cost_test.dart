@@ -4,7 +4,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/editor/application/code_editor_providers.dart';
 import 'package:karmashala/src/features/editor/data/code_editor_service.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
-import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
 import '../../support/fake_command_runner.dart';
 

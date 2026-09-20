@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
-import '../data/theme_discovery.dart';
+import 'package:karmashala_terminal_runtime/themes.dart';
 
 /// Themes found on this machine, Ghostty first then Warp. Scanning is
 /// synchronous file I/O, so only Settings ever reads this.

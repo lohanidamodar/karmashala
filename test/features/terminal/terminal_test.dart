@@ -1,5 +1,5 @@
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
+import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/profiles.dart';

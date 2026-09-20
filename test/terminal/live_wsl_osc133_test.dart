@@ -13,9 +13,9 @@ import 'package:karmashala/src/features/environments/application/local_environme
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/mcp/terminal_tools.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/launch.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 

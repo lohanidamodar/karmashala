@@ -20,7 +20,7 @@ import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_session/session.dart';

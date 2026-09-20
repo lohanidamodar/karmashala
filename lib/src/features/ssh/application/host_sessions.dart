@@ -3,7 +3,7 @@ import 'package:karmashala_ssh/connection.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:riverpod/riverpod.dart';
 
-import '../../terminal/data/host_pane_link.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'host_session_providers.dart';
 import 'ssh_failure.dart';
 

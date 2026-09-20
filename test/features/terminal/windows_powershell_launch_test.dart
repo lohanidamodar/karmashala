@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/apps/installed_applications_service.dart';
-import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
+import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/shell_integration.dart';
 

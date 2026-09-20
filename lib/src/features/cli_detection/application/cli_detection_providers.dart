@@ -16,7 +16,7 @@ import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/data/terminal_grid_text.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import '../data/cli_session_mutator.dart';
 import 'codex_app_server_providers.dart';

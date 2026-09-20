@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/core/apps/installed_application.dart';
+import 'package:karmashala_core/apps.dart';
 
 /// **The desktop's own list, read rather than guessed.**
 ///

@@ -4,7 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../settings/application/settings_controller.dart';
 import 'package:karmashala_ssh/host.dart';
-import '../data/local_host_access.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart';
 
 /// The session host on this machine, or null where there cannot be one. One per
 /// app run: the reading is memoised on it, and a second instance would measure

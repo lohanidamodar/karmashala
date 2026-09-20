@@ -19,7 +19,7 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/terminal/application/scrollback_autosave.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
+import 'package:karmashala_terminal_runtime/scrollback.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

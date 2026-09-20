@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:karmashala/src/features/terminal/data/cold_screen.dart';
-import 'package:karmashala/src/features/terminal/data/scrollback_park.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_ingest_budget.dart';
+import 'package:karmashala_terminal_runtime/scrollback.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
+import 'package:karmashala_terminal_runtime/ingest.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';

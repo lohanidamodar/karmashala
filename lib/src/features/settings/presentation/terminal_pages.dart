@@ -5,7 +5,7 @@ import '../../../app/shell/shell_shortcuts.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../terminal/application/terminal_theme_controller.dart';
-import '../../terminal/data/theme_discovery.dart';
+import 'package:karmashala_terminal_runtime/themes.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import '../application/settings_controller.dart';
 import '../domain/settings.dart';

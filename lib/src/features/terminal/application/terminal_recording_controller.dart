@@ -9,9 +9,8 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_media/media.dart';
 import '../../../core/media/video_support_provider.dart';
 import '../../../core/paths/app_support_directory.dart';
-import '../data/cast_frame_renderer.dart';
-import '../data/cast_recorder.dart';
-import '../data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/recording.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/cast.dart';
 import 'terminal_sessions_controller.dart';
 

@@ -10,7 +10,7 @@ import 'package:karmashala_media/media.dart';
 import '../../../core/media/video_support_provider.dart';
 import 'package:agent_cli/process.dart';
 import '../application/terminal_recording_controller.dart';
-import '../data/cast_frame_renderer.dart';
+import 'package:karmashala_terminal_runtime/recording.dart';
 import 'terminal_panel.dart';
 
 /// Shows what a finished recording is, where it went, and what can be made

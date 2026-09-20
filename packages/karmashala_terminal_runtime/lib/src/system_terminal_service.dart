@@ -6,7 +6,7 @@ import 'package:agent_cli/process.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
-import '../../../core/apps/installed_application.dart';
+import 'package:karmashala_core/apps.dart';
 import 'pty_launch.dart';
 
 /// A standalone terminal emulator installed on the host that we can launch

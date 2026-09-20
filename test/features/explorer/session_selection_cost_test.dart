@@ -30,7 +30,7 @@ import 'package:karmashala/src/features/sessions/application/session_ui_provider
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
-import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' hide Session;
 

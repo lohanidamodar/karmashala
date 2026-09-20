@@ -5,7 +5,7 @@ import 'package:agent_cli/stream.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
-import '../../terminal/data/terminal_grid_text.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_session/launch.dart';
 import 'session_providers.dart';

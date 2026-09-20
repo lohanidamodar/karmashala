@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/data/pane_terminal.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:xterm2/xterm.dart';
 
 /// A divider drag lays a pane out at every width it passes through. Each one

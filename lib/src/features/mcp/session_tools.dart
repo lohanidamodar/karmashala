@@ -12,7 +12,7 @@ import '../sessions/application/session_wait.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
-import '../terminal/data/terminal_grid_text.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 
 /// Operating a session that already exists. Every tool takes an optional
 /// `sessionId` and falls back to the caller the *transport* authenticated.

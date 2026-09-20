@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/data/prompt_typer.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 
 /// `testWidgets` for its fake clock: `pump(duration)` is the quiet spell.
 void main() {

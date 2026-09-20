@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';

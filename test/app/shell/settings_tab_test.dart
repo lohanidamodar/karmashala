@@ -15,7 +15,7 @@ import 'package:karmashala/src/features/settings/presentation/settings_screen.da
 import 'package:karmashala/src/features/settings/presentation/settings_tab_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_theme_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';

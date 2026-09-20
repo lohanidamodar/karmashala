@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
+import 'package:karmashala_terminal_runtime/scrollback.dart';
 import 'package:xterm2/xterm.dart';
 
 /// Stored scrollback is read back into a pane of whatever width the window has

@@ -41,6 +41,7 @@ workspace:
   - packages/karmashala_ssh
   - packages/karmashala_store
   - packages/karmashala_terminal_core
+  - packages/karmashala_terminal_runtime
   - packages/karmashala_ui
   - packages/local_ipc
 
@@ -114,6 +115,13 @@ dependencies:
   # (docs/PACKAGE_SPLIT_2.md, Revision 2).
   karmashala_terminal_core:
     path: packages/karmashala_terminal_core
+  # What a terminal does: the three running instances, the PTY launch and
+  # shutdown, the ingest budget and coalescer, the scrollback codec, spool and
+  # park, the grid readings and command blocks, the cast recorder and renderer,
+  # the theme readers and the host's own terminal emulators. Not the DAOs'
+  # providers — those stay here (docs/PACKAGE_SPLIT_3.md, Tier 1).
+  karmashala_terminal_runtime:
+    path: packages/karmashala_terminal_runtime
   # The design system: tokens, the Phosphor glyph table, the assembled theme
   # and the desktop chrome every surface wears.
   karmashala_ui:

@@ -17,8 +17,8 @@ import 'package:karmashala/src/features/notifications/application/notification_p
 import 'package:karmashala/src/features/remote/relay_local/local_relay_providers.dart';
 import 'package:karmashala/src/features/remote/relay_local/local_relay_service.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/process_shutdown.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/launch.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

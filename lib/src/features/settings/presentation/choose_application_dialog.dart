@@ -4,7 +4,7 @@ import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../../core/apps/installed_application.dart';
+import 'package:karmashala_core/apps.dart';
 import '../../../core/apps/installed_applications_providers.dart';
 
 /// Picks one of the applications this desktop already lists, or `null` when the

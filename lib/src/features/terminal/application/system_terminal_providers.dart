@@ -2,7 +2,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/process/command_runner_providers.dart';
 import '../../settings/application/settings_controller.dart';
-import '../data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
 /// The host-backed [SystemTerminalService] (detect + launch external terminals).
 final systemTerminalServiceProvider = Provider<SystemTerminalService>(

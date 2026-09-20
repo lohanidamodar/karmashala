@@ -1,7 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../process/command_runner_providers.dart';
-import 'installed_application.dart';
+import 'package:karmashala_core/apps.dart';
 import 'installed_applications_service.dart';
 
 final installedApplicationsServiceProvider =

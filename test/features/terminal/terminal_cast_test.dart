@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/data/cast_recorder.dart';
+import 'package:karmashala_terminal_runtime/recording.dart';
 import 'package:karmashala_terminal_core/cast.dart';
 
 /// A clock a test drives by hand, because a recording is about time and a test

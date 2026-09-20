@@ -14,7 +14,7 @@ import '../../media/presentation/session_image_dialog.dart';
 import '../application/terminal_link_actions.dart';
 import '../application/terminal_paste.dart';
 import '../application/terminal_sessions_controller.dart';
-import '../data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/grid.dart';
 
 /// One pane's terminal grid, plus the Ctrl+click (Cmd on macOS) affordance over

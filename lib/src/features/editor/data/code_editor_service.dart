@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:agent_cli/process.dart';
 
-import '../../../core/apps/installed_application.dart';
+import 'package:karmashala_core/apps.dart';
 
 /// A code editor installed on the host that we can open a folder in (as opposed
 /// to launching an agent in a terminal).

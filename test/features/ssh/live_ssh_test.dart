@@ -11,7 +11,7 @@ import 'package:agent_cli/discovery.dart' hide Clock, SystemClock;
 import 'package:karmashala/src/core/util/agent_cli_bridge.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala/src/features/terminal/data/host_pane_link.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_host/protocol.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala_ssh/files.dart';

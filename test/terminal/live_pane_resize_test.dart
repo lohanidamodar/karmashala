@@ -5,9 +5,8 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/data/pane_terminal.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
 /// What the process in a pane believes its size is, after the app tells it a

@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:karmashala/src/features/terminal/data/theme_discovery.dart';
+import 'package:karmashala_terminal_runtime/themes.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 late Directory _root;

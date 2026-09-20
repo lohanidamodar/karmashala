@@ -1,9 +1,6 @@
 import 'dart:convert';
 
-import 'package:riverpod/riverpod.dart';
-
 import 'package:karmashala_store/database.dart';
-import '../../../core/database/database_providers.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 
@@ -460,7 +457,3 @@ class TerminalLayoutDao {
     return PaneLayout.fromJson(decoded);
   }
 }
-
-final terminalLayoutDaoProvider = Provider<TerminalLayoutDao>(
-  (ref) => TerminalLayoutDao(ref.watch(databaseProvider)),
-);

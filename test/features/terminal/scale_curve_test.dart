@@ -7,8 +7,7 @@ import 'package:karmashala/src/features/sessions/application/session_providers.d
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/pty_output_coalescer.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_ingest_budget.dart';
+import 'package:karmashala_terminal_runtime/ingest.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/profiles.dart';

@@ -29,7 +29,7 @@ import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_mcp/catalogue.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
-import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';

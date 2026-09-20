@@ -4,7 +4,7 @@ import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/data/terminal_grid_text.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_session/session.dart';
 import 'session_providers.dart';
 import 'session_signals.dart';

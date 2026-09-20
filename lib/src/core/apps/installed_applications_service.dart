@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:agent_cli/process.dart';
 import 'package:path/path.dart' as p;
 
-import 'installed_application.dart';
+import 'package:karmashala_core/apps.dart';
 
 /// Reads the desktop's own list of applications. One pass, on demand — nothing
 /// polls (§19), and the answer is cached by the provider for the session.

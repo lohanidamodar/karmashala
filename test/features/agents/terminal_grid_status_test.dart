@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:karmashala_agent_reporting/status.dart';
 import 'package:agent_cli/descriptors.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';
 

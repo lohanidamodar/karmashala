@@ -16,7 +16,7 @@ import '../../settings/application/settings_controller.dart';
 import '../application/terminal_scroll.dart';
 import '../application/terminal_search_controller.dart';
 import '../application/terminal_sessions_controller.dart';
-import '../data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/shell_integration.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';

@@ -5,8 +5,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala/src/features/ssh/data/known_host_dao.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
-import 'package:karmashala/src/features/terminal/data/ssh_terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'fake_host_access.dart';

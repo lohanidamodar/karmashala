@@ -16,7 +16,7 @@ import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala/src/features/todos/application/todos_providers.dart';
 
 import '../features/terminal/fake_instance.dart';

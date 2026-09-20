@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/data/process_shutdown.dart';
+import 'package:karmashala_terminal_runtime/launch.dart';
 
 /// Closing a pane must not wait on a process that will not go.
 ///

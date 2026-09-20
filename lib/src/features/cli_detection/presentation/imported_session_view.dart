@@ -11,7 +11,7 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/presentation/chat_transcript.dart';
 import '../../sessions/presentation/message_composer.dart';
 import '../../terminal/application/system_terminal_providers.dart';
-import '../../terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/cli_detection_providers.dart';
 import 'package:agent_cli/read.dart';
 

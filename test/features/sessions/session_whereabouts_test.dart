@@ -23,7 +23,7 @@ import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
 import '../terminal/fake_instance.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
-import 'package:karmashala/src/features/terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../../support/fake_command_runner.dart';
 
 /// Captured from codex-cli 0.151.0 on 2026-08-30, by holding thread

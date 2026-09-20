@@ -23,7 +23,7 @@ import '../../sessions/presentation/session_changed_files_dialog.dart';
 import '../../sessions/presentation/session_recap_card.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../terminal/application/system_terminal_providers.dart';
-import '../../terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/explorer_actions.dart';
 import '../application/session_diff_stat.dart';
 import '../application/session_row_attention.dart';

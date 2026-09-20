@@ -6,7 +6,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/picking.dart';
 import 'package:karmashala_ui/tokens.dart';
 
-import '../../../core/apps/installed_application.dart';
+import 'package:karmashala_core/apps.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../application/settings_controller.dart';

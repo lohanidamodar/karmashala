@@ -12,7 +12,7 @@ import 'package:karmashala/src/features/media/domain/session_media_item.dart';
 import 'package:karmashala/src/features/media/presentation/session_image_dialog.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_link_actions.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:xterm2/xterm.dart';
 

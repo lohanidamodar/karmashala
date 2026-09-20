@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:karmashala/src/features/terminal/data/pty_output_coalescer.dart';
+import 'package:karmashala_terminal_runtime/ingest.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/core.dart';

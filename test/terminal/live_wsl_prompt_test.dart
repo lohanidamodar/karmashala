@@ -7,8 +7,7 @@ import 'dart:io';
 
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/data/pty_launch.dart';
-import 'package:karmashala/src/features/terminal/data/process_shutdown.dart';
+import 'package:karmashala_terminal_runtime/launch.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
 /// What a **prompt** turns into by the time the agent in a WSL pane reads it.

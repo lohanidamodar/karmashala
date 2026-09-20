@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/terminal/data/local_host_access.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart';
 
 void main() {
   late Directory beside;

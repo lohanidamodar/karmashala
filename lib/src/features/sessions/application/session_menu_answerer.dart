@@ -3,7 +3,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/data/terminal_grid_text.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_status_providers.dart';

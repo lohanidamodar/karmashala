@@ -10,7 +10,7 @@ import '../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../repositories/application/repository_providers.dart';
 import '../terminal/application/system_terminal_providers.dart';
-import '../terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'agent_lookup.dart';
 import 'package:karmashala_mcp/launch.dart';
 

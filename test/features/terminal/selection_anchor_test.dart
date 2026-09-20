@@ -1,6 +1,6 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';

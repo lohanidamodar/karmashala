@@ -6,7 +6,7 @@ import 'dart:io';
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/sessions/application/session_menu_answerer.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_grid_text.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 
 import 'live_agent_screen.dart';
 

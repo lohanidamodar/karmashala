@@ -13,7 +13,7 @@ import '../../explorer/application/explorer_actions.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../terminal/application/system_terminal_providers.dart';
-import '../../terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/session_defaults.dart';
 import '../application/session_launcher.dart';
 import 'package:karmashala_git/repositories.dart';

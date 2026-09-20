@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/pty_output_coalescer.dart';
-import 'package:karmashala/src/features/terminal/data/scrollback_park.dart';
+import 'package:karmashala_terminal_runtime/ingest.dart';
+import 'package:karmashala_terminal_runtime/scrollback.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/terminal/presentation/terminal_panel.dart';

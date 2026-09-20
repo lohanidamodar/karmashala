@@ -6,7 +6,7 @@ import 'package:xterm2/xterm.dart';
 import '../application/terminal_link_actions.dart';
 import '../application/terminal_recording_controller.dart';
 import '../application/terminal_sessions_controller.dart';
-import '../data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'session_status.dart';
 import 'terminal_pane_view.dart';
 

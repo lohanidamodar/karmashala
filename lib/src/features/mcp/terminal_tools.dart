@@ -4,9 +4,8 @@ import 'package:karmashala_terminal_core/geometry.dart';
 import '../editor/application/editor_tab_actions.dart';
 import '../editor/application/open_documents.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
-import '../terminal/data/command_run_watch.dart';
-import '../terminal/data/terminal_grid_text.dart';
-import '../terminal/data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import '../terminal/application/terminal_profiles.dart';
 

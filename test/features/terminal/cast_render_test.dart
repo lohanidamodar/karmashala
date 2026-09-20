@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:karmashala_media/media.dart';
-import 'package:karmashala/src/features/terminal/data/cast_frame_renderer.dart';
+import 'package:karmashala_terminal_runtime/recording.dart';
 import 'package:karmashala_terminal_core/cast.dart';
 import 'package:path/path.dart' as p;
 import 'package:xterm2/xterm.dart';

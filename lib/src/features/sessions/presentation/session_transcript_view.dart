@@ -24,7 +24,7 @@ import '../../notes/application/notes_providers.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../terminal/application/system_terminal_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
-import '../../terminal/data/system_terminal_service.dart';
+import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import '../application/session_actions.dart';
 import '../application/session_chat_source.dart';
 import '../application/session_chat_view_providers.dart';

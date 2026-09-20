@@ -6,9 +6,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/host_terminal_instance.dart';
-import 'package:karmashala/src/features/terminal/data/local_host_access.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 
 /// Which pane the *real* factory builds, so "the setting decides" is asserted

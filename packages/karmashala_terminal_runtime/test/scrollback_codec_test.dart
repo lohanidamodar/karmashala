@@ -1,4 +1,4 @@
-import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
+import 'package:karmashala_terminal_runtime/scrollback.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm2/xterm.dart';

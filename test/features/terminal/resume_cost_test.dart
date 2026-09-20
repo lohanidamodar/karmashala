@@ -1,9 +1,8 @@
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
-import 'package:karmashala/src/features/terminal/data/command_block_recorder.dart';
-import 'package:karmashala/src/features/terminal/data/scrollback_codec.dart';
-import 'package:karmashala/src/features/terminal/data/scrollback_park.dart';
-import 'package:karmashala/src/features/terminal/data/terminal_instance.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
+import 'package:karmashala_terminal_runtime/scrollback.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:flutter/foundation.dart';

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala/src/features/terminal/data/host_pane_link.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_host/protocol.dart';
 
 /// A channel with a host behind it, driven by the test. It parses what the app

@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ssh/host.dart';
-import 'package:karmashala/src/features/terminal/data/local_host_access.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_host/karmashala_host.dart';
 
 /// The app's end of the local transport, against a **real** session host in

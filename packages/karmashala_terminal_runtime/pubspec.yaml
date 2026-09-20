@@ -1,0 +1,69 @@
+name: karmashala_terminal_runtime
+description: >-
+  What a terminal does: the three running instances (a local ConPTY, a session
+  host's pane and an SSH channel), the command line each is launched with, the
+  coalescer that feeds bytes to a frame, the scrollback codec, spool and park,
+  the grid readings and command blocks taken back off the screen, the cast
+  recorder and its frame renderer, the Warp and Ghostty theme readers and the
+  system terminals the host already has installed. `karmashala_terminal_core`
+  is what a terminal *is*; this is what one *does*. A Flutter package —
+  `xterm2`'s `Terminal` is the thing being driven — so its suites run under
+  `flutter test`.
+version: 0.1.0
+publish_to: none
+
+# The app's pub workspace resolves this member; there is no lock file of its
+# own and no `pub get` to run inside it.
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # The terminal being driven: `Terminal`, its buffer and its key encoding.
+  xterm2:
+    git:
+      url: https://github.com/lohanidamodar/xterm2.git
+      ref: 728e89d5630e530bdf303afb72b0778fa2f9d307
+  # A pane paints into a frame: `SchedulerBinding`, `ChangeNotifier`, and the
+  # `painting` layer the cast renderer draws its frames with.
+  flutter:
+    sdk: flutter
+  # The vendored ConPTY/forkpty binding a local pane is started on.
+  flutter_pty:
+    path: ../flutter_pty
+  # The profile, the pane lifetime, the grid palette, OSC shell integration and
+  # the cast format this layer produces values of.
+  karmashala_terminal_core:
+    path: ../karmashala_terminal_core
+  # Logging, and `InstalledApplication` — what a system terminal is found as.
+  karmashala_core:
+    path: ../karmashala_core
+  # A pane on a deployed session host: the wire protocol and where the host
+  # keeps its files.
+  karmashala_host:
+    path: ../host
+  # The SSH connection an ssh pane runs in, and the host access a host pane
+  # links through.
+  karmashala_ssh:
+    path: ../karmashala_ssh
+  # The layout and preset tables the two DAOs read and write. The DAOs take an
+  # `AppDatabase`; their providers stay in the app.
+  karmashala_store:
+    path: ../karmashala_store
+  # Frame sinks, for rendering a recorded cast to GIF, PNG or MP4.
+  karmashala_media:
+    path: ../karmashala_media
+  # A launch names a command and an agent: the process and agent descriptors.
+  agent_cli:
+    path: ../agent_cli
+  # The SSH session and channel an ssh pane is a shell on.
+  dartssh2: ^3.3.1
+  path: ^1.9.1
+  # Warp themes are YAML.
+  yaml: ^3.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  lints: ^6.1.0
