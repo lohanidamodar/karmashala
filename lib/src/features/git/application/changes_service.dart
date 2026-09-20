@@ -239,4 +239,61 @@ class ChangesService {
     required String branch,
     required String sha,
   }) => _gitFor(repo).updateRef(repo, 'refs/heads/$branch', sha);
+
+  /// Stages [paths], or everything when none are named.
+  ///
+  /// The index is not the working tree, so nothing here tells Quick Open its
+  /// files moved — only [discard] and [pull] rewrite what is on disk.
+  Future<void> stage(EnvironmentPath repo, {List<String> paths = const []}) =>
+      paths.isEmpty
+      ? _gitFor(repo).stageAll(repo)
+      : _gitFor(repo).stage(repo, paths);
+
+  Future<void> unstage(EnvironmentPath repo, List<String> paths) =>
+      _gitFor(repo).unstage(repo, paths);
+
+  /// Throws away the changes to [paths]: tracked ones are rewound, untracked
+  /// ones are deleted. Split by the caller, because they are different acts and
+  /// the second has no undo — see `GitService.deleteUntracked`.
+  Future<void> discard(
+    EnvironmentPath repo, {
+    List<String> tracked = const [],
+    List<String> untracked = const [],
+  }) async {
+    try {
+      await _gitFor(repo).discard(repo, tracked);
+      await _gitFor(repo).deleteUntracked(repo, untracked);
+    } finally {
+      // Even a half-done discard has rewritten files.
+      if (tracked.isNotEmpty || untracked.isNotEmpty) {
+        onWorkingTreeChanged?.call(repo);
+      }
+    }
+  }
+
+  /// Commits what is staged. Throws [GitException] carrying git's own sentence
+  /// — "nothing to commit" and a rejected hook both arrive this way.
+  Future<void> commit(EnvironmentPath repo, String message) =>
+      _gitFor(repo).commit(repo, message);
+
+  Future<void> fetch(EnvironmentPath repo) => _gitFor(repo).fetch(repo);
+
+  /// Brings the upstream in. Fast-forward only unless the caller chose
+  /// otherwise; either way the working tree has moved by the end.
+  Future<void> pull(
+    EnvironmentPath repo, {
+    bool rebase = false,
+    bool merge = false,
+  }) async {
+    try {
+      await _gitFor(repo).pull(repo, rebase: rebase, merge: merge);
+    } finally {
+      onWorkingTreeChanged?.call(repo);
+    }
+  }
+
+  /// Pushes the checked-out branch. [remote] and [branch] together publish a
+  /// branch that has no upstream yet (`push -u`).
+  Future<void> push(EnvironmentPath repo, {String? remote, String? branch}) =>
+      _gitFor(repo).push(repo, remote: remote, branch: branch);
 }

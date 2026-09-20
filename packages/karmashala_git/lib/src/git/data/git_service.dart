@@ -428,6 +428,93 @@ class GitService {
     }
   }
 
+  /// Stages exactly [paths] — repository-relative, as `status` reports them.
+  /// `--` because a path that looks like a revision is still a path.
+  Future<void> stage(EnvironmentPath repo, List<String> paths) async {
+    if (paths.isEmpty) return;
+    final result = await _git(repo, ['add', '--', ...paths]);
+    if (!result.ok) {
+      throw GitException('git add failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Takes [paths] out of the index, leaving the working tree alone.
+  ///
+  /// `restore --staged` rather than `reset`: on a repository with no commits
+  /// yet there is no HEAD to reset against, and unstaging the first file of a
+  /// new repository is exactly when a user reaches for this.
+  Future<void> unstage(EnvironmentPath repo, List<String> paths) async {
+    if (paths.isEmpty) return;
+    final result = await _git(repo, ['restore', '--staged', '--', ...paths]);
+    if (!result.ok) {
+      throw GitException('git restore --staged failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Throws away the working-tree changes to [paths], staged and unstaged
+  /// alike. **Tracked files only** — an untracked file is not git's to delete,
+  /// and [deleteUntracked] says so in its own name.
+  Future<void> discard(EnvironmentPath repo, List<String> paths) async {
+    if (paths.isEmpty) return;
+    final result = await _git(repo, [
+      'restore',
+      '--staged',
+      '--worktree',
+      '--',
+      ...paths,
+    ]);
+    if (!result.ok) {
+      throw GitException('git restore failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Deletes untracked [paths] (`git clean -f --`), which is what "discard"
+  /// means for a file git has never seen. Separate from [discard] because it
+  /// removes a file rather than rewinding one, and nothing undoes it.
+  Future<void> deleteUntracked(
+    EnvironmentPath repo,
+    List<String> paths,
+  ) async {
+    if (paths.isEmpty) return;
+    final result = await _git(repo, ['clean', '-f', '-d', '--', ...paths]);
+    if (!result.ok) {
+      throw GitException('git clean failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Updates the remote-tracking refs without touching the working tree.
+  Future<void> fetch(EnvironmentPath repo, {String? remote}) async {
+    final result = await _git(repo, [
+      'fetch',
+      if (remote != null) remote,
+      '--prune',
+    ]);
+    if (!result.ok) {
+      throw GitException('git fetch failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Brings the upstream's commits into the checked-out branch.
+  ///
+  /// `--ff-only` by default: nothing here is attended, and a pull that stops
+  /// with conflicts in a checkout an agent is working in is a worse outcome
+  /// than a refusal the caller can show. [rebase] and [merge] are the two ways
+  /// to say "do it anyway", and they are the user's to choose.
+  Future<void> pull(
+    EnvironmentPath repo, {
+    bool rebase = false,
+    bool merge = false,
+  }) async {
+    final result = await _git(repo, [
+      'pull',
+      if (rebase) '--rebase' else if (merge) '--no-rebase' else '--ff-only',
+      if (merge) '--no-edit',
+    ]);
+    if (!result.ok) {
+      throw GitException('git pull failed: ${result.stderr.trim()}');
+    }
+  }
+
   /// Commits staged changes with [message].
   Future<void> commit(EnvironmentPath repo, String message) async {
     final result = await _git(repo, ['commit', '-m', message]);

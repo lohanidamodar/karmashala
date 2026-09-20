@@ -223,6 +223,23 @@ final mergeInProgressProvider = FutureProvider.autoDispose<bool>((ref) async {
   return await ref.read(changesServiceProvider).mergeInProgress(path) ?? false;
 });
 
+/// The branch of the checkout being viewed, its upstream, and how far apart
+/// they are — one `git status --porcelain=v2 --branch`, read only while a
+/// surface that shows a branch is on screen.
+///
+/// Separate from [repositoryChangesProvider] on purpose: that one is the file
+/// list and repaints per file row, this one is the header, and a stage must
+/// not repaint the list to move an "ahead" count.
+final workingTreeStatusProvider = FutureProvider.autoDispose<WorkingTreeStatus>(
+  (ref) async {
+    final path = ref.watch(viewedCheckoutProvider);
+    if (path == null) return WorkingTreeStatus.unknown;
+    await _requireRepository(ref, path);
+    return ref.read(changesServiceProvider).statusWithBranch(path);
+  },
+  retry: _retryOnlyRealFailures,
+);
+
 /// The current branch of the selected repository.
 final currentBranchProvider = FutureProvider.autoDispose<String?>((ref) async {
   final id = ref.watch(selectedRepositoryIdProvider);
@@ -299,4 +316,3 @@ final selectedCheckoutGitTroubleProvider = Provider.autoDispose<GitTroubleReport
     final trouble => GitTroubleReport(trouble),
   };
 });
-

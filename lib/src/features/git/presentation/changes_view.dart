@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/primitives.dart';
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/process.dart';
 import 'package:path/path.dart' as p;
 import '../application/diff_tab_actions.dart';
+import 'commit_box.dart';
 import 'diff_counts.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../application/changes_providers.dart';
 import '../application/review_threads.dart';
+import '../application/working_copy_controller.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_git/git.dart';
@@ -65,6 +68,10 @@ class ChangesView extends ConsumerWidget {
           ],
         ),
         const WorktreeBrowseNotice(),
+        // Flexible, not fixed: this panel is dragged down to 240px, and the
+        // file list must not be squeezed out by a commit box that will not
+        // give way. It scrolls inside whatever it is left.
+        const Flexible(child: CommitBox()),
         const Expanded(child: _ChangedFiles()),
       ],
     );
@@ -281,9 +288,8 @@ class _ChangedFiles extends ConsumerWidget {
     return ref
         .watch(repositoryChangesProvider)
         .when(
-          loading: () => const Center(
-            child: InlineSpinner(size: InlineSpinnerSize.large),
-          ),
+          loading: () =>
+              const Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
           error: (e, _) => _NoChangesToRead(error: e),
           data: (files) => files.isEmpty
               ? const PanePlaceholder(
@@ -296,12 +302,137 @@ class _ChangedFiles extends ConsumerWidget {
 
   /// The same list, in review order — tiered, never filtered; git's own
   /// alphabetical order opens every review on `pubspec.lock`.
+  ///
+  /// Grouped the way a source-control pane groups: what is going into the next
+  /// commit, then what is not. A file can be in both when part of it is
+  /// staged, and it is listed in both — that is what git means by it, and one
+  /// row saying "staged" would be a lie about the other half.
   Widget _ordered(List<FileChange> files) {
-    final ordered = orderedForReview(files, (file) => file.path);
+    final conflicts = [
+      for (final file in files)
+        if (file.type == FileChangeType.conflicted) file,
+    ];
+    final staged = [
+      for (final file in files)
+        if (file.staged && file.type != FileChangeType.conflicted) file,
+    ];
+    final unstaged = [
+      for (final file in files)
+        if (file.unstaged && file.type != FileChangeType.conflicted) file,
+    ];
+    final sections = [
+      if (conflicts.isNotEmpty)
+        (
+          title: 'Conflicts',
+          files: orderedForReview(conflicts, (f) => f.path),
+          staged: false,
+          conflicted: true,
+        ),
+      if (staged.isNotEmpty)
+        (
+          title: 'Staged changes',
+          files: orderedForReview(staged, (f) => f.path),
+          staged: true,
+          conflicted: false,
+        ),
+      if (unstaged.isNotEmpty)
+        (
+          title: 'Changes',
+          files: orderedForReview(unstaged, (f) => f.path),
+          staged: false,
+          conflicted: false,
+        ),
+    ];
+    // One flat list of rows and headers rather than nested scrollers: a
+    // sticky-per-section ListView inside a 240px panel scrolls two ways.
+    final rows = <Widget>[];
+    for (final section in sections) {
+      rows.add(
+        _SectionHeader(
+          title: section.title,
+          count: section.files.length,
+          files: section.files,
+          staged: section.staged,
+          conflicted: section.conflicted,
+        ),
+      );
+      for (final file in section.files) {
+        rows.add(_ChangedFileRow(file: file, inStagedSection: section.staged));
+      }
+    }
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
-      itemCount: ordered.length,
-      itemBuilder: (context, index) => _ChangedFileRow(file: ordered[index]),
+      itemCount: rows.length,
+      itemBuilder: (context, index) => rows[index],
+    );
+  }
+}
+
+/// A group's name, how many files are in it, and the two verbs that act on all
+/// of them. Its own widget so the buttons repaint without the rows.
+class _SectionHeader extends ConsumerWidget {
+  const _SectionHeader({
+    required this.title,
+    required this.count,
+    required this.files,
+    required this.staged,
+    required this.conflicted,
+  });
+
+  final String title;
+  final int count;
+  final List<FileChange> files;
+  final bool staged;
+  final bool conflicted;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final busy = ref.watch(
+      workingCopyControllerProvider.select((state) => state.isBusy),
+    );
+    final copy = ref.read(workingCopyControllerProvider.notifier);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Insets.sm, Insets.xs, Insets.xs, 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${title.toUpperCase()}  $count',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                letterSpacing: 0.6,
+              ),
+            ),
+          ),
+          if (!conflicted)
+            IconButton(
+              tooltip: staged ? 'Unstage all' : 'Stage all',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                staged ? AppIcons.minusCircle : AppIcons.plus,
+                size: Chrome.iconSmall,
+              ),
+              onPressed: busy
+                  ? null
+                  : () => staged
+                        ? copy.unstage([for (final f in files) f.path])
+                        : copy.stage([for (final f in files) f.path]),
+            ),
+          if (!staged && !conflicted)
+            IconButton(
+              tooltip: 'Discard all changes',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(
+                AppIcons.arrowCounterClockwise,
+                size: Chrome.iconSmall,
+              ),
+              onPressed: busy
+                  ? null
+                  : () => confirmDiscard(context, ref, files),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -310,9 +441,13 @@ class _ChangedFiles extends ConsumerWidget {
 /// sits in, and how many lines moved. A tap reads it in a tab — the sidebar is
 /// for finding a change, not for reading one through a 300px window.
 class _ChangedFileRow extends ConsumerWidget {
-  const _ChangedFileRow({required this.file});
+  const _ChangedFileRow({required this.file, this.inStagedSection = false});
 
   final FileChange file;
+
+  /// Which group this row is drawn in, which is what its verbs act on: the
+  /// same path can be listed twice when half of it is staged.
+  final bool inStagedSection;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -375,6 +510,7 @@ class _ChangedFileRow extends ConsumerWidget {
                 const SizedBox(width: Insets.xs),
                 DiffCountLabel(added: stat.added!, removed: stat.removed!),
               ],
+              _RowActions(file: file, inStagedSection: inStagedSection),
               const SizedBox(width: Insets.sm),
               Tooltip(
                 message: changeWords(file),
@@ -392,6 +528,110 @@ class _ChangedFileRow extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Stage, unstage and discard for one row. Drawn always rather than on hover:
+/// this panel is often driven by keyboard and read on a laptop trackpad, and a
+/// control that appears only under the pointer cannot be found by either.
+class _RowActions extends ConsumerWidget {
+  const _RowActions({required this.file, required this.inStagedSection});
+
+  final FileChange file;
+  final bool inStagedSection;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (file.type == FileChangeType.conflicted) {
+      // A conflict is resolved in the file, then staged like anything else;
+      // offering "discard" beside it invites throwing away the resolution.
+      return _RowButton(
+        tooltip: 'Stage the resolution',
+        icon: AppIcons.plus,
+        onPressed: () =>
+            ref.read(workingCopyControllerProvider.notifier).stage([file.path]),
+      );
+    }
+    final copy = ref.read(workingCopyControllerProvider.notifier);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!inStagedSection)
+          _RowButton(
+            tooltip: 'Discard changes',
+            icon: AppIcons.arrowCounterClockwise,
+            onPressed: () => confirmDiscard(context, ref, [file]),
+          ),
+        _RowButton(
+          tooltip: inStagedSection ? 'Unstage' : 'Stage',
+          icon: inStagedSection ? AppIcons.minusCircle : AppIcons.plus,
+          onPressed: () => inStagedSection
+              ? copy.unstage([file.path])
+              : copy.stage([file.path]),
+        ),
+      ],
+    );
+  }
+}
+
+class _RowButton extends ConsumerWidget {
+  const _RowButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final busy = ref.watch(
+      workingCopyControllerProvider.select((state) => state.isBusy),
+    );
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
+      iconSize: Chrome.iconSmall,
+      icon: Icon(icon, size: Chrome.iconSmall),
+      onPressed: busy ? null : onPressed,
+    );
+  }
+}
+
+/// Asks before throwing work away, and says which of the two acts it is: a
+/// tracked file is rewound, an untracked one is deleted and nothing brings it
+/// back. Karmashala's own checkpoints do not cover an untracked file either.
+Future<void> confirmDiscard(
+  BuildContext context,
+  WidgetRef ref,
+  List<FileChange> files,
+) async {
+  final untracked = [
+    for (final file in files)
+      if (file.type == FileChangeType.untracked) file,
+  ];
+  final what = files.length == 1
+      ? '"${p.posix.basename(files.single.path)}"'
+      : '${files.length} files';
+  final confirmed = await showConfirmDialog(
+    context,
+    destructive: true,
+    title: 'Discard changes to $what?',
+    message: untracked.isEmpty
+        ? 'The working-tree changes go back to the last commit. Anything not '
+              'committed is lost.'
+        : untracked.length == files.length
+        ? 'These files are untracked, so discarding deletes them. Nothing '
+              'brings them back — git has never seen them.'
+        : '${untracked.length} of them are untracked and will be deleted; the '
+              'rest go back to the last commit.',
+    confirmLabel: 'Discard',
+  );
+  if (!confirmed) return;
+  await ref.read(workingCopyControllerProvider.notifier).discard(files);
 }
 
 /// What this pane says when there is no diff to draw — three things, not one.
