@@ -177,6 +177,7 @@ class _FileDiffViewState extends ConsumerState<FileDiffView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (parsed.isPartial) PartialDiffBanner(parsed: parsed),
                   Expanded(
                     child: Listener(
                       onPointerSignal: _onPointerSignal,
@@ -623,6 +624,73 @@ class _ThreadCard extends StatelessWidget {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Says, above a diff that was cut short, that it was cut short.
+///
+/// A view that stopped at its row limit and drew nothing about it would read
+/// as the whole change — and the reader would come away believing they had
+/// reviewed it. This is the same rule the repository's own guide states about
+/// commands: say plainly what you could not show, in as much detail as what
+/// you could. The `+N −M` in the header is still the count for the **whole**
+/// patch, which the banner says, because two numbers that disagree with the
+/// rows under them are worse than one explained number.
+class PartialDiffBanner extends StatelessWidget {
+  const PartialDiffBanner({required this.parsed, super.key});
+
+  final ParsedDiff parsed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final semantic = SemanticColors.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: Insets.md,
+        vertical: Insets.sm,
+      ),
+      decoration: BoxDecoration(
+        color: semantic.attention.withValues(alpha: 0.12),
+        border: Border(bottom: BorderSide(color: theme.dividerColor)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            AppIcons.warning,
+            size: Chrome.iconSmall,
+            color: semantic.attention,
+          ),
+          const SizedBox(width: Insets.sm),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Partial diff. ',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: semantic.attention,
+                    ),
+                  ),
+                  TextSpan(
+                    text:
+                        'Showing the first ${parsed.lines.length} of '
+                        '${parsed.totalLines} lines — ${parsed.omittedLines} '
+                        'are not drawn. The +/− count is for the whole patch, '
+                        'so what you can read here is not proof that you have '
+                        'seen the complete change. Copy diff takes all of it.',
+                  ),
+                ],
+              ),
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
