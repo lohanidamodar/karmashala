@@ -5,11 +5,12 @@ import 'package:test/test.dart';
 
 /// A [RemoteHome] that keeps what was written, so a test can read it back.
 class _FakeHome implements RemoteHome {
-  _FakeHome({this.homePath = '/home/dlohani', Map<String, String>? existing})
-    : files = {...?existing};
+  _FakeHome({Map<String, String>? existing}) : files = {...?existing};
 
+  /// Fixed: no test has ever needed a second home, and a parameter nothing
+  /// passes is a knob that reads as configurable and is not.
   @override
-  final String homePath;
+  final String homePath = '/home/dlohani';
 
   final Map<String, String> files;
 
