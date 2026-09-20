@@ -12,19 +12,29 @@ extension SessionInputVerbs on SessionLauncher {
     return SessionAttribution(sessionId: sender.id, title: sender.title);
   }
 
-  /// Types [text] into a PTY-hosted session, exactly as if the user had; there
-  /// is no second write path. False when the session has no live pane.
+  /// Types [text] into a PTY-hosted session and presses Return, exactly as if
+  /// the user had; there is no second write path. False when the session has
+  /// no live pane. A send that reads its Return back off the screen goes
+  /// through [SessionMessageTypist], which types with [typeInto] and presses
+  /// the Return itself.
   bool sendTo(String sessionId, String text) {
+    if (!typeInto(sessionId, text)) return false;
+    // CR, not LF: a PTY line discipline reads CR as "submit".
+    return pressKeys(sessionId, '\r');
+  }
+
+  /// Types [text] into a PTY-hosted session, without the Return that sends it.
+  /// False when the session has no live pane.
+  bool typeInto(String sessionId, String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return false;
     final terminal = _liveTerminalFor(sessionId);
     if (terminal == null) return false;
-    // CR, not LF: a PTY line discipline reads CR as "submit". The `Ctrl+E` ends
-    // Codex's paste burst, which would otherwise fold the Return to a newline.
+    // The `Ctrl+E` ends Codex's paste burst, which would otherwise fold the
+    // Return that follows into a newline.
     terminal
       ..textInput(trimmed)
-      ..textInput(kEndOfLineKey)
-      ..textInput('\r');
+      ..textInput(kEndOfLineKey);
     return true;
   }
 

@@ -67,8 +67,20 @@ void main() {
           dump(step);
           continue;
         }
+        // `split:a|b|c` — each part its own write, back to back, the way three
+        // `textInput` calls reach the pty.
+        if (step.startsWith('split:')) {
+          for (final part in step.substring(6).split('|')) {
+            screen.send(part);
+          }
+          await Future<void>.delayed(settle);
+          dump('split');
+          continue;
+        }
         if (step.startsWith('type:')) {
           await screen.write(step.substring(5));
+          await Future<void>.delayed(settle);
+          dump('typed');
           continue;
         }
         await screen.press(step);

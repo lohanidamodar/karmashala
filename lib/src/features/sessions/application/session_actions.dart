@@ -28,6 +28,7 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
 import 'session_engine_provider.dart';
 import 'session_launcher.dart';
+import 'session_message_typist.dart';
 import 'session_notice.dart';
 import 'session_providers.dart';
 import 'session_ui_providers.dart';
@@ -50,9 +51,7 @@ class SessionActions {
     // The narrowest signal on purpose: the coarse word cost 108 session reads
     // at a hundred sessions.
     _publish(SessionChange.renamed(id));
-    _ref
-        .read(terminalSessionsControllerProvider.notifier)
-        .notifyTitleChanged();
+    _ref.read(terminalSessionsControllerProvider.notifier).notifyTitleChanged();
     final store = await _propagateNativeRename(id, title);
     _log.info('Renamed $id: byUser=true store=$store');
   }
@@ -95,7 +94,10 @@ class SessionActions {
       await mutator.rename(detected, title);
       return 'transcript';
     } catch (error) {
-      _log.warning('Could not rename $id in the ${installation.agentId} store', error);
+      _log.warning(
+        'Could not rename $id in the ${installation.agentId} store',
+        error,
+      );
       return 'failed';
     }
   }
@@ -154,13 +156,11 @@ class SessionActions {
 
   /// Where this session's CLI store would live: the directory it runs in, or
   /// failing that its repository's.
-  ExecutionEnvironment? _environmentOf(Session session, Repository repo) =>
-      _ref
-          .read(executionEnvironmentDaoProvider)
-          .getById(
-            session.workingDirectory?.environmentId ??
-                repo.path.environmentId,
-          );
+  ExecutionEnvironment? _environmentOf(Session session, Repository repo) => _ref
+      .read(executionEnvironmentDaoProvider)
+      .getById(
+        session.workingDirectory?.environmentId ?? repo.path.environmentId,
+      );
 
   /// Takes one native row out of the workspace and nothing else. Publishes
   /// nothing — the caller does, so a batch can publish once.
@@ -392,8 +392,12 @@ class SessionActions {
     if (trimmed.isEmpty) return;
 
     // A PTY-hosted session is typed into, not messaged: chat and terminal are
-    // two views of one session, so there is one write path into the agent.
-    if (_ref.read(sessionLauncherProvider).sendTo(sessionId, trimmed)) {
+    // two views of one session, so there is one write path into the agent. The
+    // typist reads the Return back off the screen — a composer that folded it
+    // into a newline is pressed again rather than left holding the message.
+    if (await _ref
+        .read(sessionMessageTypistProvider)
+        .send(sessionId, trimmed)) {
       _log.info('Continued $sessionId: typed into its pane');
       return;
     }

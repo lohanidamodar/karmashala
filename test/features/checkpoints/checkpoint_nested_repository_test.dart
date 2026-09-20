@@ -182,6 +182,10 @@ void main() {
       agentSessionId: 'cli-1',
       event: event,
     );
+    // The recorder hears a turn's edges through the registry's stream. Let the
+    // event reach it, or `settled` awaits a queue the capture has not joined
+    // yet and the turn's checkpoint is read before it is taken.
+    await pumpEventQueue();
   }
 
   List<Checkpoint> ofRepo(String path) => [
