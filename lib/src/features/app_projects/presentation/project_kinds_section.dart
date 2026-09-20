@@ -3,10 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../settings/presentation/settings_section.dart';
-import '../domain/built_in_projects.dart';
-import '../domain/established.dart';
-import '../domain/project_descriptor.dart';
-import '../domain/project_kind.dart';
+import 'package:karmashala_flutter_apps/projects.dart';
 
 /// Settings → Environments: what Karmashala can do with each kind of project.
 /// All data off `builtInProjectDescriptors`, and nothing is measured to show it.

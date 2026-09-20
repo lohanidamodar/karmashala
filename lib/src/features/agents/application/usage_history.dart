@@ -3,7 +3,6 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../data/usage_sample_dao.dart';
-import '../domain/usage_sample.dart';
 
 /// How long usage history is kept.
 const Duration kUsageHistoryKeep = Duration(days: 30);

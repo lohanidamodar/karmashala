@@ -11,7 +11,7 @@ import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
-import '../domain/agent_context.dart';
+import 'package:agent_cli/context.dart';
 import 'agent_providers.dart';
 
 /// How long a reading is worth reusing. Configuration files move when somebody

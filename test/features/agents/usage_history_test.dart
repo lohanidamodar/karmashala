@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/agents/application/usage_history.dart';
 import 'package:karmashala/src/features/agents/data/usage_sample_dao.dart';
-import 'package:karmashala/src/features/agents/domain/usage_sample.dart';
 import 'package:karmashala_store/database.dart';
 
 import '../../support/fakes.dart';

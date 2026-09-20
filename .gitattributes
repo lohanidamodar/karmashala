@@ -9,3 +9,9 @@
 # checkout under core.autocrlf=true cannot turn every golden test red.
 *.golden.txt text eol=lf
 *.golden.json text eol=lf
+
+# Real `git diff` output, split on LF by the unified-diff parser. Pinned for
+# the same reason as the goldens: under core.autocrlf=true a fresh checkout
+# otherwise leaves a carriage return on every path and turns eleven
+# karmashala_git tests red.
+*.diff text eol=lf

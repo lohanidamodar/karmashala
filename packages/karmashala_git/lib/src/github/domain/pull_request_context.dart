@@ -7,7 +7,7 @@
 /// after — and a second formatter somewhere would quietly break it.
 library;
 
-import 'package:karmashala_git/github.dart';
+import 'pull_request_snapshot.dart';
 
 /// One part of a pull request that can be attached.
 enum PullRequestContextPart {

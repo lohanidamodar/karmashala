@@ -11,7 +11,6 @@ import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_usage_providers.dart';
 import 'package:karmashala/src/features/agents/data/usage_sample_dao.dart';
-import 'package:karmashala/src/features/agents/domain/usage_sample.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/settings/presentation/agent_usage_section.dart';
 import 'package:karmashala_store/database.dart';

@@ -1,11 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:karmashala/src/features/app_projects/domain/apk_output_metadata.dart';
-import 'package:karmashala/src/features/app_projects/domain/built_in_projects.dart';
-import 'package:karmashala/src/features/app_projects/domain/established.dart';
-import 'package:karmashala/src/features/app_projects/domain/gradle_project.dart';
-import 'package:karmashala/src/features/app_projects/domain/project_descriptor.dart';
-import 'package:karmashala/src/features/app_projects/domain/project_detection.dart';
-import 'package:karmashala/src/features/app_projects/domain/project_kind.dart';
+import 'package:test/test.dart';
+import 'package:karmashala_flutter_apps/projects.dart';
 
 /// The probe's own settings script, which built successfully on 2026-09-09.
 const String _probeSettings = '''

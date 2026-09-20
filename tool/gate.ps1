@@ -178,11 +178,14 @@ $map = [ordered]@{
     # readings and the two panes — plus the two fakes the package cannot lend
     # it. The tool schemas golden is the one golden outside the folder that
     # reaches the package: the six `flutter_*` tools are served over its types.
-    app  = @('test/features/flutter_apps',
-             'test/features/mcp/tool_schemas_golden_test.dart',
-             # Reads the package's `readPubspec` from outside the mapped folder.
-             'test/features/app_projects/project_descriptor_test.dart')
-    owns = @('lib/src/features/flutter_apps', 'test/features/flutter_apps')
+    # `test/features/app_projects` joined it in round 3: the generic project
+    # scanner and every kind it detects are the package's now, and what is
+    # left in that folder is the app's half — the build loop and tools over a
+    # real database, and the settings section that lists the kinds.
+    app  = @('test/features/flutter_apps', 'test/features/app_projects',
+             'test/features/mcp/tool_schemas_golden_test.dart')
+    owns = @('lib/src/features/flutter_apps', 'test/features/flutter_apps',
+             'lib/src/features/app_projects', 'test/features/app_projects')
   }
   devices = @{
     pkg  = 'packages/karmashala_devices'

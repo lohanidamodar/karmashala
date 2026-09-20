@@ -21,7 +21,7 @@ import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
 import '../../sessions/application/session_actions.dart';
 import '../../sessions/application/session_providers.dart';
-import '../domain/pull_request_context.dart';
+import 'package:karmashala_git/pull_request_context.dart';
 
 /// The event type a sent card is filed under.
 const String kPullRequestContextEvent = 'context.pull_request';

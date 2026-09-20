@@ -13,7 +13,7 @@ import '../../sessions/application/session_ui_providers.dart';
 import '../../sessions/application/session_working_directory.dart';
 import '../application/agent_context_readings.dart';
 import '../application/agent_providers.dart';
-import '../domain/agent_context.dart';
+import 'package:agent_cli/context.dart';
 
 /// Which session the panel describes: the one **on screen**, the same rule
 /// `planPanelSessionIdProvider` follows.

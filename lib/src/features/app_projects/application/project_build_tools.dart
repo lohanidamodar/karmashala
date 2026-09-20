@@ -4,8 +4,7 @@ import 'package:path/path.dart' as p;
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
-import '../domain/project_build.dart';
-import '../domain/project_descriptor.dart';
+import 'package:karmashala_flutter_apps/projects.dart';
 import 'project_build_loop.dart';
 
 /// The `project_build` tool: what a checkout is, and the artifact its toolchain

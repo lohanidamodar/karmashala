@@ -13,7 +13,7 @@ import 'package:karmashala/src/features/git/application/changes_service.dart';
 import 'package:karmashala/src/features/git/application/worktree_service.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/github/application/github_providers.dart';
-import 'package:karmashala/src/features/github/data/github_service.dart';
+import 'package:karmashala_git/github.dart';
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';

@@ -1,6 +1,6 @@
 import 'package:karmashala_store/database.dart';
 
-import '../domain/usage_sample.dart';
+import 'package:agent_cli/usage.dart';
 
 /// Data-access for the usage history (schema v51).
 class UsageSampleDao {

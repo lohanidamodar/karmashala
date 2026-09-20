@@ -7,7 +7,7 @@
 /// files, and it carries the age of that reading like every other one.
 library;
 
-import 'package:agent_cli/descriptors.dart';
+import 'agent_mcp_config.dart';
 
 /// Where one entry was read, which is also what the user would edit to change
 /// it. Ordered most specific first, which is the order the panel draws.

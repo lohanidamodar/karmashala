@@ -1,4 +1,4 @@
-import 'package:karmashala_flutter_apps/flutter_apps.dart';
+import 'flutter_project.dart';
 import 'built_in_projects.dart';
 import 'gradle_project.dart';
 import 'package_json.dart';

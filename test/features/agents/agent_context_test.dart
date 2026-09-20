@@ -1,7 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/application/agent_context_readings.dart';
-import 'package:karmashala/src/features/agents/domain/agent_context.dart';
+import 'package:agent_cli/context.dart';
 
 /// The shape Claude Code really keeps on disk, measured 2026-09-13 against
 /// ~/.claude.json: `mcpServers` at the top, one entry per directory under

@@ -1,9 +1,8 @@
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/github/data/github_service.dart';
 import 'package:karmashala_git/github.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
-import '../../support/fake_command_runner.dart';
+import '../support/fake_command_runner.dart';
 
 void main() {
   const repo = EnvironmentPath(environmentId: 'windows', path: r'C:\app');

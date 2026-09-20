@@ -8,7 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 
 import '../../sessions/application/session_notice.dart';
 import '../application/pull_request_context_service.dart';
-import '../domain/pull_request_context.dart';
+import 'package:karmashala_git/pull_request_context.dart';
 
 /// Attaches a pull request's context to a session, showing the exact text.
 ///
