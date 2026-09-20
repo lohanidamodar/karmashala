@@ -64,9 +64,9 @@ class ResumingLauncher extends SessionLauncher {
     requests.add(request);
     final failed = failure;
     if (failed != null) throw failed;
-    final resumed = SessionDao(_harness.db)
-        .getAllByExternalSessionId(request.resumeExternalSessionId!)
-        .first;
+    final resumed = SessionDao(
+      _harness.db,
+    ).getAllByExternalSessionId(request.resumeExternalSessionId!).first;
     _harness.attachPane(resumed.id);
     return SessionLaunchResult(session: resumed);
   }
@@ -155,8 +155,8 @@ class ResumeHarness {
         .panes
         .first;
     SessionDao(db).updatePaneId(sessionId, paneId);
-    panes.instanceFor(paneId)!.terminal.onOutput =
-        (data) => typed.putIfAbsent(sessionId, () => []).add(data);
+    panes.instanceFor(paneId)!.terminal.onOutput = (data) =>
+        typed.putIfAbsent(sessionId, () => []).add(data);
     return paneId;
   }
 

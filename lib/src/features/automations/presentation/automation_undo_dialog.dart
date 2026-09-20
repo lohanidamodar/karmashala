@@ -16,11 +16,13 @@ class AutomationUndoDialog extends ConsumerStatefulWidget {
 
   final AutomationRun run;
 
-  static Future<void> show(BuildContext context, {required AutomationRun run}) =>
-      showDialog<void>(
-        context: context,
-        builder: (_) => AutomationUndoDialog(run: run),
-      );
+  static Future<void> show(
+    BuildContext context, {
+    required AutomationRun run,
+  }) => showDialog<void>(
+    context: context,
+    builder: (_) => AutomationUndoDialog(run: run),
+  );
 
   @override
   ConsumerState<AutomationUndoDialog> createState() =>
@@ -42,7 +44,9 @@ class _AutomationUndoDialogState extends ConsumerState<AutomationUndoDialog> {
   }
 
   Future<void> _measure() async {
-    final commits = await ref.read(automationUndoProvider).commitsOf(widget.run);
+    final commits = await ref
+        .read(automationUndoProvider)
+        .commitsOf(widget.run);
     if (!mounted) return;
     setState(() => _commits = commits);
   }

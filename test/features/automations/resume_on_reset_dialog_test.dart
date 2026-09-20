@@ -70,22 +70,26 @@ void main() {
   FilledButton confirm(WidgetTester tester) =>
       tester.widget<FilledButton>(find.byType(FilledButton));
 
-  testWidgets('the window at its limit is preselected, with its reset in words',
-      (tester) async {
-    h.usage.answer = limited();
-    await open(tester, ['s1']);
+  testWidgets(
+    'the window at its limit is preselected, with its reset in words',
+    (tester) async {
+      h.usage.answer = limited();
+      await open(tester, ['s1']);
 
-    expect(find.text('5-hour window — at its limit'), findsOneWidget);
-    expect(find.text('7-day window'), findsOneWidget);
-    expect(find.textContaining('100% · resets in 1h12m'), findsOneWidget);
-    expect(find.text('A time I choose'), findsOneWidget);
-    expect(
-      tester.widget<RadioGroup<String>>(find.byType(RadioGroup<String>)).groupValue,
-      '5-hour',
-    );
-    expect(find.text('continue'), findsOneWidget);
-    expect(confirm(tester).onPressed, isNotNull);
-  });
+      expect(find.text('5-hour window — at its limit'), findsOneWidget);
+      expect(find.text('7-day window'), findsOneWidget);
+      expect(find.textContaining('100% · resets in 1h12m'), findsOneWidget);
+      expect(find.text('A time I choose'), findsOneWidget);
+      expect(
+        tester
+            .widget<RadioGroup<String>>(find.byType(RadioGroup<String>))
+            .groupValue,
+        '5-hour',
+      );
+      expect(find.text('continue'), findsOneWidget);
+      expect(confirm(tester).onPressed, isNotNull);
+    },
+  );
 
   testWidgets('confirming arms it, with what was chosen', (tester) async {
     h.usage.answer = limited();

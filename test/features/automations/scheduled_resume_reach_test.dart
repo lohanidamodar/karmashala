@@ -25,21 +25,23 @@ void main() {
     fireAt: h.now.add(const Duration(hours: 2)),
   );
 
-  test('list_sessions shows a waiting resume, and nothing when none waits',
-      () async {
-    final tools = InventoryTools(h.container);
-    Future<Map<String, dynamic>> row() async =>
-        ((await tools.call('list_sessions', const {}))! as List)
-            .cast<Map<String, dynamic>>()
-            .single;
+  test(
+    'list_sessions shows a waiting resume, and nothing when none waits',
+    () async {
+      final tools = InventoryTools(h.container);
+      Future<Map<String, dynamic>> row() async =>
+          ((await tools.call('list_sessions', const {}))! as List)
+              .cast<Map<String, dynamic>>()
+              .single;
 
-    expect(await row(), isNot(contains('scheduledResume')));
-    final resume = h.controller.schedule(inTwoHours());
-    expect((await row())['scheduledResume'], {
-      'state': 'pending',
-      'fireAt': resume.fireAt.toIso8601String(),
-    });
-  });
+      expect(await row(), isNot(contains('scheduledResume')));
+      final resume = h.controller.schedule(inTwoHours());
+      expect((await row())['scheduledResume'], {
+        'state': 'pending',
+        'fireAt': resume.fireAt.toIso8601String(),
+      });
+    },
+  );
 
   test('no served tool arms, changes or cancels a resume', () {
     // Arming one is a person's act or the setting a person chose. A tool that

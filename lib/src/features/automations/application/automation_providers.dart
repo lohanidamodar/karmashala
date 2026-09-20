@@ -27,8 +27,9 @@ class AutomationsRevision extends Notifier<int> {
   void bump() => state = state + 1;
 }
 
-final automationsRevisionProvider =
-    NotifierProvider<AutomationsRevision, int>(AutomationsRevision.new);
+final automationsRevisionProvider = NotifierProvider<AutomationsRevision, int>(
+  AutomationsRevision.new,
+);
 
 final automationsProvider = Provider<List<Automation>>((ref) {
   ref.watch(automationsRevisionProvider);

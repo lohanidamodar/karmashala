@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:karmashala_ui/karmashala_ui.dart' show ItemCard, LabeledValueRow;
+import 'package:karmashala_ui/karmashala_ui.dart'
+    show ItemCard, LabeledValueRow;
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../core/util/clock_provider.dart';
@@ -187,7 +188,8 @@ class _ResumeCard extends ConsumerWidget {
           value: resume.sendsMessage ? '"${resume.message}"' : 'nothing',
         ),
         _Line(label: 'By', value: resume.scheduledBy),
-        if (resume.reason.isNotEmpty) _Line(label: 'Note', value: resume.reason),
+        if (resume.reason.isNotEmpty)
+          _Line(label: 'Note', value: resume.reason),
       ],
       actions: [
         if (waiting) ...[

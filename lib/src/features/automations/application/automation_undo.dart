@@ -20,7 +20,9 @@ class AutomationUndo {
   /// What [run] left on the branch, measured now. A reading that could not be
   /// taken is `null`, never zero: `published` is as fresh as the last fetch.
   Future<RunCommits> commitsOf(AutomationRun run) async {
-    final automation = _ref.read(automationDaoProvider).getById(run.automationId);
+    final automation = _ref
+        .read(automationDaoProvider)
+        .getById(run.automationId);
     if (automation == null) return RunCommits.unread;
     final repository = _ref
         .read(repositoryDaoProvider)
@@ -60,7 +62,9 @@ class AutomationUndo {
         repository.path,
         commit.sha,
       );
-      if (remotes == null) return RunCommits(baseSha: baseSha, commits: made, published: null);
+      if (remotes == null) {
+        return RunCommits(baseSha: baseSha, commits: made, published: null);
+      }
       everAsked = true;
       if (remotes.isNotEmpty) published++;
     }
@@ -91,9 +95,7 @@ class AutomationUndo {
         'nothing to put the files back to.',
       );
     }
-    return _ref
-        .read(checkpointServiceProvider)
-        .restore(base, confirm: confirm);
+    return _ref.read(checkpointServiceProvider).restore(base, confirm: confirm);
   }
 
   /// Whether the commits may be dropped, in the tooltip's words; null means yes.
@@ -105,7 +107,9 @@ class AutomationUndo {
     final refusal = undoCommitsRefusal(summary);
     if (refusal != null) throw StateError(refusal);
 
-    final automation = _ref.read(automationDaoProvider).getById(run.automationId);
+    final automation = _ref
+        .read(automationDaoProvider)
+        .getById(run.automationId);
     final repository = automation == null
         ? null
         : _ref.read(repositoryDaoProvider).getById(automation.repositoryId);

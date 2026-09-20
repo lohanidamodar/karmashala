@@ -38,12 +38,15 @@ void main() {
   });
 
   group('verification is mandatory when nobody is watching', () {
-    test('verification off is refused, and the sentence names the checkout', () {
-      final refusal = unattendedRefusal(input(verificationEnabled: false));
-      expect(refusal?.kind, UnattendedRefusalKind.verificationDisabled);
-      expect(refusal!.reason, contains('Verification is off for app'));
-      expect(refusal.reason, contains('project check'));
-    });
+    test(
+      'verification off is refused, and the sentence names the checkout',
+      () {
+        final refusal = unattendedRefusal(input(verificationEnabled: false));
+        expect(refusal?.kind, UnattendedRefusalKind.verificationDisabled);
+        expect(refusal!.reason, contains('Verification is off for app'));
+        expect(refusal.reason, contains('project check'));
+      },
+    );
 
     test('verification on with no check at all is refused', () {
       final refusal = unattendedRefusal(input(projectCheckCount: 0));
@@ -107,7 +110,10 @@ void main() {
 
     test('"accept edits" still asks before commands, so it is refused too', () {
       final refusal = unattendedRefusal(
-        input(permits: PermissionRisk.acceptEdits, permissionLabel: 'Accept edits'),
+        input(
+          permits: PermissionRisk.acceptEdits,
+          permissionLabel: 'Accept edits',
+        ),
       );
       expect(refusal?.kind, UnattendedRefusalKind.permissionModeCanPrompt);
     });
@@ -127,19 +133,25 @@ void main() {
       }
     });
 
-    test('an agent that is no longer installed is refused, not substituted', () {
-      final refusal = unattendedRefusal(input(agentInstalled: false));
-      expect(refusal?.kind, UnattendedRefusalKind.agentUnavailable);
-      expect(refusal!.reason, contains('no longer installed'));
-      expect(refusal.reason, contains('Nothing is substituted'));
-    });
+    test(
+      'an agent that is no longer installed is refused, not substituted',
+      () {
+        final refusal = unattendedRefusal(input(agentInstalled: false));
+        expect(refusal?.kind, UnattendedRefusalKind.agentUnavailable);
+        expect(refusal!.reason, contains('no longer installed'));
+        expect(refusal.reason, contains('Nothing is substituted'));
+      },
+    );
 
-    test('an agent whose modes were never established is refused, not assumed', () {
-      final refusal = unattendedRefusal(input(permits: null));
-      expect(refusal?.kind, UnattendedRefusalKind.permissionModeUnknown);
-      expect(refusal!.reason, contains('has not established'));
-      expect(refusal.reason, contains('Claude Code'));
-    });
+    test(
+      'an agent whose modes were never established is refused, not assumed',
+      () {
+        final refusal = unattendedRefusal(input(permits: null));
+        expect(refusal?.kind, UnattendedRefusalKind.permissionModeUnknown);
+        expect(refusal!.reason, contains('has not established'));
+        expect(refusal.reason, contains('Claude Code'));
+      },
+    );
   });
 
   group('the environment must be reachable from here', () {
@@ -147,54 +159,71 @@ void main() {
       final refusal = unattendedRefusal(
         input(
           reach: UnattendedReach.unnamed,
-          reachReason: 'No checkout, so nothing says where its commands would run',
+          reachReason:
+              'No checkout, so nothing says where its commands would run',
         ),
       );
       expect(refusal?.kind, UnattendedRefusalKind.environmentUnnamed);
       expect(refusal!.reason, contains('cannot say where'));
-      expect(refusal.reason, contains('nothing says where its commands would run'));
-    });
-
-    test('an SSH checkout with no way to dial it is refused, in the resolver\'s words', () {
-      final refusal = unattendedRefusal(
-        input(
-          reach: UnattendedReach.unreachable,
-          reachReason:
-              'No SSH connection pool is configured; cannot run commands in ssh:1',
-        ),
+      expect(
+        refusal.reason,
+        contains('nothing says where its commands would run'),
       );
-      expect(refusal?.kind, UnattendedRefusalKind.environmentUnreachable);
-      expect(refusal!.reason, contains('cannot reach where'));
-      expect(refusal.reason, contains('No SSH connection pool is configured'));
-      expect(refusal.reason, contains('cannot be armed'));
     });
+
+    test(
+      'an SSH checkout with no way to dial it is refused, in the resolver\'s words',
+      () {
+        final refusal = unattendedRefusal(
+          input(
+            reach: UnattendedReach.unreachable,
+            reachReason:
+                'No SSH connection pool is configured; cannot run commands in ssh:1',
+          ),
+        );
+        expect(refusal?.kind, UnattendedRefusalKind.environmentUnreachable);
+        expect(refusal!.reason, contains('cannot reach where'));
+        expect(
+          refusal.reason,
+          contains('No SSH connection pool is configured'),
+        );
+        expect(refusal.reason, contains('cannot be armed'));
+      },
+    );
   });
 
-  test('the checkout is named before the mode, and the mode before the machine', () {
-    // Everything wrong at once: the first sentence is the one the arm form can
-    // offer a fix for.
-    final all = input(
-      verificationEnabled: false,
-      projectCheckCount: 0,
-      permits: PermissionRisk.ask,
-      reach: UnattendedReach.unreachable,
-    );
-    expect(
-      unattendedRefusal(all)?.kind,
-      UnattendedRefusalKind.verificationDisabled,
-    );
-    expect(
-      unattendedRefusal(input(projectCheckCount: 0, permits: PermissionRisk.ask))
-          ?.kind,
-      UnattendedRefusalKind.noProjectChecks,
-    );
-    expect(
-      unattendedRefusal(
-        input(permits: PermissionRisk.ask, reach: UnattendedReach.unreachable),
-      )?.kind,
-      UnattendedRefusalKind.permissionModeCanPrompt,
-    );
-  });
+  test(
+    'the checkout is named before the mode, and the mode before the machine',
+    () {
+      // Everything wrong at once: the first sentence is the one the arm form can
+      // offer a fix for.
+      final all = input(
+        verificationEnabled: false,
+        projectCheckCount: 0,
+        permits: PermissionRisk.ask,
+        reach: UnattendedReach.unreachable,
+      );
+      expect(
+        unattendedRefusal(all)?.kind,
+        UnattendedRefusalKind.verificationDisabled,
+      );
+      expect(
+        unattendedRefusal(
+          input(projectCheckCount: 0, permits: PermissionRisk.ask),
+        )?.kind,
+        UnattendedRefusalKind.noProjectChecks,
+      );
+      expect(
+        unattendedRefusal(
+          input(
+            permits: PermissionRisk.ask,
+            reach: UnattendedReach.unreachable,
+          ),
+        )?.kind,
+        UnattendedRefusalKind.permissionModeCanPrompt,
+      );
+    },
+  );
 
   test('a refusal is never wordless', () {
     for (final refusal in [

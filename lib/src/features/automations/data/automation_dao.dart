@@ -343,7 +343,8 @@ class AutomationDao {
       name: row['name']! as String,
       // A row naming no schedule at all cannot come out of `insert`; reading
       // one as a one-shot in the past is the reading that fires nothing.
-      schedule: schedule ?? AutomationSchedule.once(dateFromIso(row['armed_at'])),
+      schedule:
+          schedule ?? AutomationSchedule.once(dateFromIso(row['armed_at'])),
       agentInstallationId: row['agent_installation_id']! as String,
       prompt: row['prompt']! as String,
       permissionMode: PermissionSelection.parse(

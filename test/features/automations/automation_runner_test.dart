@@ -117,9 +117,11 @@ void main() {
     container
         .read(projectCheckDaoProvider)
         .setVerificationEnabled('r1', enabled: true, now: testTime);
-    container
-        .read(automationControllerProvider)
-        .addCheck('r1', 'the test suite', const ['flutter', 'test']);
+    container.read(automationControllerProvider).addCheck(
+      'r1',
+      'the test suite',
+      const ['flutter', 'test'],
+    );
   }
 
   AutomationRun theRun() => AutomationDao(db).runsFor('auto1').single;
@@ -129,9 +131,9 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
     AutomationDao(db).insert(automation());
     checkpoints = _FakeCheckpoints(db);
     container = ProviderContainer(
@@ -151,24 +153,29 @@ void main() {
   AutomationRunner runner() => container.read(automationRunnerProvider);
 
   group('the gate runs again at fire time', () {
-    test('a refusal is a recorded failure carrying the refusal\'s own words', () async {
-      // Nothing was configured: the arming-time precondition is absent now.
-      await runner().fire(automation(), due);
-      final run = theRun();
-      expect(run.state, AutomationRunState.failed);
-      expect(run.reason, contains('Verification is off for app'));
-      expect(run.scheduledFor, due);
-      expect(run.finishedAt, isNotNull);
-      // Nothing was captured and nothing was started.
-      expect(checkpoints.captures, isEmpty);
-      expect(launcher.requests, isEmpty);
-    });
+    test(
+      'a refusal is a recorded failure carrying the refusal\'s own words',
+      () async {
+        // Nothing was configured: the arming-time precondition is absent now.
+        await runner().fire(automation(), due);
+        final run = theRun();
+        expect(run.state, AutomationRunState.failed);
+        expect(run.reason, contains('Verification is off for app'));
+        expect(run.scheduledFor, due);
+        expect(run.finishedAt, isNotNull);
+        // Nothing was captured and nothing was started.
+        expect(checkpoints.captures, isEmpty);
+        expect(launcher.requests, isEmpty);
+      },
+    );
 
-    test('a refused fire is still recorded, so the occurrence is not re-found',
-        () async {
-      await runner().fire(automation(), due);
-      expect(AutomationDao(db).lastObservedOccurrence('auto1'), due);
-    });
+    test(
+      'a refused fire is still recorded, so the occurrence is not re-found',
+      () async {
+        await runner().fire(automation(), due);
+        expect(AutomationDao(db).lastObservedOccurrence('auto1'), due);
+      },
+    );
 
     test('a mode that would prompt is refused at fire time too', () async {
       makeReady();
@@ -188,10 +195,13 @@ void main() {
     test('records the base before the agent touches anything', () async {
       await runner().fire(automation(), due);
       final capture = checkpoints.captures.single;
-      expect(capture.repo, const EnvironmentPath(
-        environmentId: 'windows',
-        path: r'C:\src\demo\app',
-      ));
+      expect(
+        capture.repo,
+        const EnvironmentPath(
+          environmentId: 'windows',
+          path: r'C:\src\demo\app',
+        ),
+      );
       // Keyed by the run, not by a session — the session does not exist yet.
       expect(capture.sessionId, theRun().id);
       // A run with no base is a run that cannot be taken back.
@@ -199,16 +209,19 @@ void main() {
       expect(theRun().baseCheckpointId, 'cp1');
     });
 
-    test('starts the session with the prompt, in the automation\'s mode', () async {
-      await runner().fire(automation(), due);
-      final request = launcher.requests.single;
-      expect(request.firstMessage, 'Run the checks and fix what broke.');
-      expect(request.title, 'Nightly sweep');
-      expect(request.purpose, SessionPurpose.newSession);
-      expect(request.permissionOverride?.canonical, 'mode=auto');
-      expect(request.repository.id, 'r1');
-      expect(request.installation.id, 'a1');
-    });
+    test(
+      'starts the session with the prompt, in the automation\'s mode',
+      () async {
+        await runner().fire(automation(), due);
+        final request = launcher.requests.single;
+        expect(request.firstMessage, 'Run the checks and fix what broke.');
+        expect(request.title, 'Nightly sweep');
+        expect(request.purpose, SessionPurpose.newSession);
+        expect(request.permissionOverride?.canonical, 'mode=auto');
+        expect(request.repository.id, 'r1');
+        expect(request.installation.id, 'a1');
+      },
+    );
 
     test('the run is running, and names the session', () async {
       await runner().fire(automation(), due);
@@ -238,41 +251,55 @@ void main() {
       expect(theRun().reason, contains('nobody there to answer'));
     });
 
-    test('a base that could not be recorded stops the run before it starts',
-        () async {
-      checkpoints.failure = StateError('git said no');
-      await runner().fire(automation(), due);
-      expect(theRun().state, AutomationRunState.failed);
-      expect(theRun().reason, contains('nothing to undo it with'));
-      expect(launcher.requests, isEmpty);
-    });
-
-    test('a launch that failed is a recorded failure, not a silent one', () async {
-      launcher.failure = const SessionLaunchRefused('takes no opening message');
-      await runner().fire(automation(), due);
-      expect(theRun().state, AutomationRunState.failed);
-      expect(theRun().reason, contains('takes no opening message'));
-      expect(theRun().finishedAt, isNotNull);
-    });
-  });
-
-  test('a drained queue entry becomes the run rather than a second row', () async {
-    makeReady();
-    final waiting = AutomationRun(
-      id: 'waiting',
-      automationId: 'auto1',
-      scheduledFor: due,
-      firedAt: testTime,
-      state: AutomationRunState.queued,
-      reason: 'This checkout is busy.',
+    test(
+      'a base that could not be recorded stops the run before it starts',
+      () async {
+        checkpoints.failure = StateError('git said no');
+        await runner().fire(automation(), due);
+        expect(theRun().state, AutomationRunState.failed);
+        expect(theRun().reason, contains('nothing to undo it with'));
+        expect(launcher.requests, isEmpty);
+      },
     );
-    AutomationDao(db).insertRun(waiting);
-    await runner().fire(automation(), due, note: 'started when it came free',
-        queued: waiting);
-    final runs = AutomationDao(db).runsFor('auto1');
-    expect(runs, hasLength(1));
-    expect(runs.single.id, 'waiting');
-    expect(runs.single.state, AutomationRunState.running);
-    expect(runs.single.reason, 'started when it came free');
+
+    test(
+      'a launch that failed is a recorded failure, not a silent one',
+      () async {
+        launcher.failure = const SessionLaunchRefused(
+          'takes no opening message',
+        );
+        await runner().fire(automation(), due);
+        expect(theRun().state, AutomationRunState.failed);
+        expect(theRun().reason, contains('takes no opening message'));
+        expect(theRun().finishedAt, isNotNull);
+      },
+    );
   });
+
+  test(
+    'a drained queue entry becomes the run rather than a second row',
+    () async {
+      makeReady();
+      final waiting = AutomationRun(
+        id: 'waiting',
+        automationId: 'auto1',
+        scheduledFor: due,
+        firedAt: testTime,
+        state: AutomationRunState.queued,
+        reason: 'This checkout is busy.',
+      );
+      AutomationDao(db).insertRun(waiting);
+      await runner().fire(
+        automation(),
+        due,
+        note: 'started when it came free',
+        queued: waiting,
+      );
+      final runs = AutomationDao(db).runsFor('auto1');
+      expect(runs, hasLength(1));
+      expect(runs.single.id, 'waiting');
+      expect(runs.single.state, AutomationRunState.running);
+      expect(runs.single.reason, 'started when it came free');
+    },
+  );
 }

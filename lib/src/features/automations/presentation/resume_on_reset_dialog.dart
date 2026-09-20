@@ -51,10 +51,8 @@ class ResumeOnResetDialog extends ConsumerStatefulWidget {
     if (sessionIds.isEmpty) return Future<void>.value();
     return showDialog<void>(
       context: context,
-      builder: (_) => ResumeOnResetDialog(
-        sessionIds: sessionIds,
-        namedWindow: namedWindow,
-      ),
+      builder: (_) =>
+          ResumeOnResetDialog(sessionIds: sessionIds, namedWindow: namedWindow),
     );
   }
 
@@ -178,7 +176,8 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
     final request = choice == null
         ? null
         : _requestFor(sessionId, choice, windows);
-    final timeProblem = choice == _chosenTime && _time != null && request == null
+    final timeProblem =
+        choice == _chosenTime && _time != null && request == null
         ? 'That time has already passed.'
         : null;
 
@@ -383,8 +382,7 @@ class _ResumeOnResetDialogState extends ConsumerState<ResumeOnResetDialog> {
     final choice = _choice ?? _eachReset;
     final time = _time;
     final ready =
-        choice == _eachReset ||
-        (time != null && time.isAfter(_now.toLocal()));
+        choice == _eachReset || (time != null && time.isAfter(_now.toLocal()));
 
     return AlertDialog(
       title: DesktopDialogTitle(

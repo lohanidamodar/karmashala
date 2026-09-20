@@ -47,7 +47,9 @@ void main() {
 
   group('automations', () {
     test('a cron automation round-trips, schedule and mode included', () {
-      dao.insert(nightly(permission: const PermissionSelection({'mode': 'auto'})));
+      dao.insert(
+        nightly(permission: const PermissionSelection({'mode': 'auto'})),
+      );
       final read = dao.getById('auto1')!;
       expect(read.name, 'Nightly sweep');
       expect(read.schedule.cron, '0 3 * * *');
@@ -254,10 +256,7 @@ void main() {
     test('a blank name and an empty command are both refused, in words', () {
       expect(projectCheckNameRefusal('  '), contains('needs a name'));
       expect(projectCheckNameRefusal('analyze'), isNull);
-      expect(
-        projectCheckCommandRefusal(const []),
-        contains('checks nothing'),
-      );
+      expect(projectCheckCommandRefusal(const []), contains('checks nothing'));
       expect(projectCheckCommandRefusal(const ['flutter', 'analyze']), isNull);
     });
   });

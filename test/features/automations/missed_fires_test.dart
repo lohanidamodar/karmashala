@@ -19,10 +19,7 @@ void main() {
 
   group('a recurring automation', () {
     test('no miss: nothing was due while we were away', () {
-      final decision = decide(
-        since: at(2026, 9, 9, 3),
-        now: at(2026, 9, 9, 9),
-      );
+      final decision = decide(since: at(2026, 9, 9, 3), now: at(2026, 9, 9, 9));
       expect(decision, isA<NoMissedFires>());
     });
 
@@ -108,18 +105,21 @@ void main() {
       expect(missed.scheduledFor, at(2026, 9, 9, 9));
     });
 
-    test('a minutely schedule always has a fresh occurrence, so it catches up', () {
-      final decision = decide(
-        schedule: const AutomationSchedule.cron('* * * * *'),
-        since: at(2026, 8, 26),
-        now: at(2026, 9, 9, 9),
-      );
-      final catchUp = decision as CatchUpMissedFire;
-      expect(catchUp.scheduledFor, at(2026, 9, 9, 9));
-      expect(catchUp.capped, isTrue);
-      // One run, and the whole fortnight behind it recorded as missed.
-      expect(catchUp.older!.missedCount, kMaxCountedMisses - 1);
-    });
+    test(
+      'a minutely schedule always has a fresh occurrence, so it catches up',
+      () {
+        final decision = decide(
+          schedule: const AutomationSchedule.cron('* * * * *'),
+          since: at(2026, 8, 26),
+          now: at(2026, 9, 9, 9),
+        );
+        final catchUp = decision as CatchUpMissedFire;
+        expect(catchUp.scheduledFor, at(2026, 9, 9, 9));
+        expect(catchUp.capped, isTrue);
+        // One run, and the whole fortnight behind it recorded as missed.
+        expect(catchUp.older!.missedCount, kMaxCountedMisses - 1);
+      },
+    );
 
     test('occurrences before the floor were never ours to claim', () {
       // Armed five minutes ago; a daily 03:00 has run for years and none of it
@@ -157,7 +157,10 @@ void main() {
         since: at(2026, 9, 9),
         now: at(2026, 9, 9, 9),
       );
-      expect((decision as CatchUpMissedFire).scheduledFor, at(2026, 9, 9, 8, 55));
+      expect(
+        (decision as CatchUpMissedFire).scheduledFor,
+        at(2026, 9, 9, 8, 55),
+      );
     });
 
     test('one long past is a miss, not a fire tomorrow', () {

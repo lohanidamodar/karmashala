@@ -67,7 +67,8 @@ String? undoCommitsRefusal(RunCommits summary) {
 }
 
 /// Whether the commits may be dropped.
-bool canUndoRunCommits(RunCommits summary) => undoCommitsRefusal(summary) == null;
+bool canUndoRunCommits(RunCommits summary) =>
+    undoCommitsRefusal(summary) == null;
 
 /// The checkbox's label. The count is the whole point, so it leads.
 String undoCommitsLabel(RunCommits summary) {

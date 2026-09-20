@@ -57,28 +57,31 @@ void main() {
   void makeReady() {
     final checks = container.read(projectCheckDaoProvider);
     checks.setVerificationEnabled('r1', enabled: true, now: testTime);
-    container
-        .read(automationControllerProvider)
-        .addCheck('r1', 'the test suite', const ['flutter', 'test']);
+    container.read(automationControllerProvider).addCheck(
+      'r1',
+      'the test suite',
+      const ['flutter', 'test'],
+    );
   }
 
-  ProviderContainer build({List<Override> extra = const []}) => ProviderContainer(
-    overrides: [
-      databaseProvider.overrideWithValue(db),
-      clockProvider.overrideWithValue(FixedClock(testTime)),
-      idGeneratorProvider.overrideWithValue(SequentialIdGenerator('c-')),
-      ...extra,
-    ],
-  );
+  ProviderContainer build({List<Override> extra = const []}) =>
+      ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          idGeneratorProvider.overrideWithValue(SequentialIdGenerator('c-')),
+          ...extra,
+        ],
+      );
 
   setUp(() {
     db = AppDatabase.memory();
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
     AutomationDao(db).insert(automation());
     container = build();
     addTearDown(container.dispose);
@@ -118,7 +121,10 @@ void main() {
     test('a check deleted after arming lapses the automation', () {
       makeReady();
       expect(refusalFor(automation()), isNull);
-      final check = container.read(projectCheckDaoProvider).forRepository('r1').single;
+      final check = container
+          .read(projectCheckDaoProvider)
+          .forRepository('r1')
+          .single;
       container.read(automationControllerProvider).removeCheck(check.id);
       // The fire is the moment that matters, not the arming.
       expect(
@@ -165,7 +171,12 @@ void main() {
     test('every rung the gate allows is one this agent really has', () {
       // The rungs are not invented here: each is a value on Claude Code's own
       // axis, with its own evidence.
-      for (final mode in const ['plan', 'dontAsk', 'auto', 'bypassPermissions']) {
+      for (final mode in const [
+        'plan',
+        'dontAsk',
+        'auto',
+        'bypassPermissions',
+      ]) {
         expect(
           refusalFor(automation(mode: PermissionSelection({'mode': mode}))),
           isNull,
@@ -174,7 +185,9 @@ void main() {
       }
       for (final mode in const ['manual', 'acceptEdits']) {
         expect(
-          refusalFor(automation(mode: PermissionSelection({'mode': mode})))?.kind,
+          refusalFor(
+            automation(mode: PermissionSelection({'mode': mode})),
+          )?.kind,
           UnattendedRefusalKind.permissionModeCanPrompt,
           reason: '$mode asks',
         );
@@ -214,9 +227,11 @@ void main() {
       container
           .read(projectCheckDaoProvider)
           .setVerificationEnabled('r2', enabled: true, now: testTime);
-      container
-          .read(automationControllerProvider)
-          .addCheck('r2', 'the test suite', const ['flutter', 'test']);
+      container.read(automationControllerProvider).addCheck(
+        'r2',
+        'the test suite',
+        const ['flutter', 'test'],
+      );
 
       final refusal = refusalFor(automation(repositoryId: 'r2'))!;
       expect(refusal.kind, UnattendedRefusalKind.environmentUnreachable);
@@ -234,38 +249,45 @@ void main() {
       expect(refusal.reason, contains('this checkout'));
     });
 
-    test('a WSL checkout whose distribution went away is refused as unnamed', () {
-      ExecutionEnvironmentDao(db).upsert(
-        ExecutionEnvironment(
-          id: 'wsl:gone',
-          kind: EnvironmentKind.wsl,
-          name: 'gone',
-          createdAt: testTime,
-        ),
-      );
-      RepositoryDao(db).insert(
-        repository(
-          id: 'r3',
-          name: 'inside',
-          environmentId: 'wsl:gone',
-          path: '/home/me/app',
-        ),
-      );
-      container
-          .read(projectCheckDaoProvider)
-          .setVerificationEnabled('r3', enabled: true, now: testTime);
-      container
-          .read(automationControllerProvider)
-          .addCheck('r3', 'the test suite', const ['flutter', 'test']);
-      final refusal = refusalFor(automation(repositoryId: 'r3'))!;
-      expect(refusal.kind, UnattendedRefusalKind.environmentUnnamed);
-      expect(refusal.reason, contains('has no distribution name'));
-    });
+    test(
+      'a WSL checkout whose distribution went away is refused as unnamed',
+      () {
+        ExecutionEnvironmentDao(db).upsert(
+          ExecutionEnvironment(
+            id: 'wsl:gone',
+            kind: EnvironmentKind.wsl,
+            name: 'gone',
+            createdAt: testTime,
+          ),
+        );
+        RepositoryDao(db).insert(
+          repository(
+            id: 'r3',
+            name: 'inside',
+            environmentId: 'wsl:gone',
+            path: '/home/me/app',
+          ),
+        );
+        container
+            .read(projectCheckDaoProvider)
+            .setVerificationEnabled('r3', enabled: true, now: testTime);
+        container.read(automationControllerProvider).addCheck(
+          'r3',
+          'the test suite',
+          const ['flutter', 'test'],
+        );
+        final refusal = refusalFor(automation(repositoryId: 'r3'))!;
+        expect(refusal.kind, UnattendedRefusalKind.environmentUnnamed);
+        expect(refusal.reason, contains('has no distribution name'));
+      },
+    );
   });
 
   test('the gate\'s inputs are the app\'s own facts, not defaults', () {
     makeReady();
-    final input = container.read(unattendedPreflightProvider).inputFor(automation());
+    final input = container
+        .read(unattendedPreflightProvider)
+        .inputFor(automation());
     expect(input.repositoryName, 'app');
     expect(input.verificationEnabled, isTrue);
     expect(input.projectCheckCount, 1);

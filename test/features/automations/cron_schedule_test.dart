@@ -20,12 +20,18 @@ void main() {
     });
 
     test('a step, a range and a list all parse', () {
-      expect(CronSchedule.parse('*/15 * * * *')!.nextAfter(at(2026, 9, 9, 1, 2)),
-          at(2026, 9, 9, 1, 15));
-      expect(CronSchedule.parse('0 9-17 * * *')!.nextAfter(at(2026, 9, 9, 8)),
-          at(2026, 9, 9, 9));
-      expect(CronSchedule.parse('0 6,18 * * *')!.nextAfter(at(2026, 9, 9, 7)),
-          at(2026, 9, 9, 18));
+      expect(
+        CronSchedule.parse('*/15 * * * *')!.nextAfter(at(2026, 9, 9, 1, 2)),
+        at(2026, 9, 9, 1, 15),
+      );
+      expect(
+        CronSchedule.parse('0 9-17 * * *')!.nextAfter(at(2026, 9, 9, 8)),
+        at(2026, 9, 9, 9),
+      );
+      expect(
+        CronSchedule.parse('0 6,18 * * *')!.nextAfter(at(2026, 9, 9, 7)),
+        at(2026, 9, 9, 18),
+      );
     });
 
     test('weekdays, with Sunday spelled either way', () {
@@ -73,11 +79,14 @@ void main() {
       expect(cronRefusal('  '), contains('0 3 * * *'));
     });
 
-    test('an expression that never comes round is refused with that reason', () {
-      // The 30th of February parses and never happens.
-      expect(CronSchedule.parse('0 0 30 2 *'), isNotNull);
-      expect(cronRefusal('0 0 30 2 *'), contains('never comes round'));
-    });
+    test(
+      'an expression that never comes round is refused with that reason',
+      () {
+        // The 30th of February parses and never happens.
+        expect(CronSchedule.parse('0 0 30 2 *'), isNotNull);
+        expect(cronRefusal('0 0 30 2 *'), contains('never comes round'));
+      },
+    );
 
     test('one it can read is not refused', () {
       expect(cronRefusal('0 3 * * *'), isNull);
@@ -104,13 +113,22 @@ void main() {
   group('counting what was due', () {
     test('an empty window yields nothing', () {
       final cron = CronSchedule.parse('0 3 * * *')!;
-      expect(cron.occurrencesBetween(at(2026, 9, 9, 4), at(2026, 9, 9, 5)), isEmpty);
-      expect(cron.occurrencesBetween(at(2026, 9, 9, 5), at(2026, 9, 9, 4)), isEmpty);
+      expect(
+        cron.occurrencesBetween(at(2026, 9, 9, 4), at(2026, 9, 9, 5)),
+        isEmpty,
+      );
+      expect(
+        cron.occurrencesBetween(at(2026, 9, 9, 5), at(2026, 9, 9, 4)),
+        isEmpty,
+      );
     });
 
     test('a night of downtime counts every occurrence, ascending', () {
       final cron = CronSchedule.parse('0 * * * *')!;
-      final due = cron.occurrencesBetween(at(2026, 9, 8, 17), at(2026, 9, 9, 9));
+      final due = cron.occurrencesBetween(
+        at(2026, 9, 8, 17),
+        at(2026, 9, 9, 9),
+      );
       expect(due, hasLength(16));
       expect(due.first, at(2026, 9, 8, 18));
       expect(due.last, at(2026, 9, 9, 9));

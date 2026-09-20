@@ -37,7 +37,8 @@ enum AutomationRunState {
     AutomationRunState.finished => 'Finished',
     AutomationRunState.failed => 'Failed',
     AutomationRunState.missed => 'Missed',
-    AutomationRunState.unrecognised => 'Recorded in a way this build cannot read',
+    AutomationRunState.unrecognised =>
+      'Recorded in a way this build cannot read',
   };
 }
 

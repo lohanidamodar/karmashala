@@ -63,8 +63,11 @@ void main() {
       container.read(terminalSessionsControllerProvider).tabs.length;
 
   /// The pane the sequence has just opened — the newest tab in the window.
-  String newestPane() =>
-      container.read(terminalSessionsControllerProvider).tabs.last.focusedPaneId;
+  String newestPane() => container
+      .read(terminalSessionsControllerProvider)
+      .tabs
+      .last
+      .focusedPaneId;
 
   /// Runs the event queue until [ready] holds, or gives up.
   ///
@@ -81,8 +84,12 @@ void main() {
   Future<void> endTheAgentsSession({bool opensPane = true}) async {
     container
         .read(paneExitProvider.notifier)
-        .record(const PaneExit(paneId: 'agent-pane', sessionId: 's1', exitCode: 0));
-    await until(() => opensPane ? tabCount() > 0 : theRun().checksObservedAt != null);
+        .record(
+          const PaneExit(paneId: 'agent-pane', sessionId: 's1', exitCode: 0),
+        );
+    await until(
+      () => opensPane ? tabCount() > 0 : theRun().checksObservedAt != null,
+    );
   }
 
   /// The pane a check is running in stopping, with the code it stopped on.
@@ -90,7 +97,9 @@ void main() {
     final before = verdicts().length;
     container
         .read(paneExitProvider.notifier)
-        .record(PaneExit(paneId: newestPane(), sessionId: null, exitCode: exitCode));
+        .record(
+          PaneExit(paneId: newestPane(), sessionId: null, exitCode: exitCode),
+        );
     await until(() => verdicts().length > before);
   }
 
@@ -100,9 +109,9 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
     AutomationDao(db).insert(automation());
     SessionDao(db).insert(session(status: SessionStatus.running));
     AutomationDao(db).insertRun(
@@ -158,22 +167,24 @@ void main() {
     expect(theRun().checksObservedAt, testTime);
   });
 
-  test('the command runs in the repository\'s own environment, visibly',
-      () async {
-    addCheck('the test suite', const ['flutter', 'test']);
-    await endTheAgentsSession();
+  test(
+    'the command runs in the repository\'s own environment, visibly',
+    () async {
+      addCheck('the test suite', const ['flutter', 'test']);
+      await endTheAgentsSession();
 
-    final terminals = container.read(
-      terminalSessionsControllerProvider.notifier,
-    );
-    final launch =
-        (terminals.instanceFor(newestPane()) as FakeTerminalInstance)
-            .agentLaunch!;
-    expect(launch.executable, 'flutter');
-    expect(launch.arguments, ['test']);
-    expect(launch.workingDirectory, r'C:\src\demo\app');
-    expect(launch.agentId, kProjectCheckAgentId);
-  });
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final launch =
+          (terminals.instanceFor(newestPane()) as FakeTerminalInstance)
+              .agentLaunch!;
+      expect(launch.executable, 'flutter');
+      expect(launch.arguments, ['test']);
+      expect(launch.workingDirectory, r'C:\src\demo\app');
+      expect(launch.agentId, kProjectCheckAgentId);
+    },
+  );
 
   test('a check with no exit code is inconclusive, never a pass', () async {
     addCheck('the test suite', const ['flutter', 'test']);
@@ -187,22 +198,24 @@ void main() {
     expect(theRun().checksObservedAt, testTime);
   });
 
-  test('a run with no checks records that none ran, never that they passed',
-      () async {
-    await endTheAgentsSession(opensPane: false);
-    await container.read(automationCheckRunnerProvider).drain();
+  test(
+    'a run with no checks records that none ran, never that they passed',
+    () async {
+      await endTheAgentsSession(opensPane: false);
+      await container.read(automationCheckRunnerProvider).drain();
 
-    expect(verdicts(), isEmpty);
-    // Observed and empty is not the same fact as never looked at.
-    expect(theRun().checksObservedAt, testTime);
-    final line = describeAutomationChecks(
-      verdicts(),
-      observedAt: theRun().checksObservedAt,
-    );
-    expect(line, contains('No project check is configured'));
-    expect(line, isNot(contains('passed')));
-    expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
-  });
+      expect(verdicts(), isEmpty);
+      // Observed and empty is not the same fact as never looked at.
+      expect(theRun().checksObservedAt, testTime);
+      final line = describeAutomationChecks(
+        verdicts(),
+        observedAt: theRun().checksObservedAt,
+      );
+      expect(line, contains('No project check is configured'));
+      expect(line, isNot(contains('passed')));
+      expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
+    },
+  );
 
   test('a run nobody has checked yet says so, rather than nothing', () {
     expect(theRun().checksObservedAt, isNull);

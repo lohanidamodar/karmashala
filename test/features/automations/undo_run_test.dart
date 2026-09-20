@@ -68,14 +68,23 @@ void main() {
   });
 
   test('the checkbox leads with the count, because that is the point', () {
-    expect(undoCommitsLabel(summary(commits: 1)), 'Also drop the commit this run made');
-    expect(undoCommitsLabel(summary(commits: 4)), 'Also drop the 4 commits this run made');
+    expect(
+      undoCommitsLabel(summary(commits: 1)),
+      'Also drop the commit this run made',
+    );
+    expect(
+      undoCommitsLabel(summary(commits: 4)),
+      'Also drop the 4 commits this run made',
+    );
   });
 
   test('restoring the files has a description and no refusal of its own', () {
     // Always offered: the base snapshot holds every byte and putting it back
     // changes nothing outside this machine.
-    expect(undoFilesLabel(RunCommits.unread), contains('before this run started'));
+    expect(
+      undoFilesLabel(RunCommits.unread),
+      contains('before this run started'),
+    );
     expect(undoFilesLabel(summary(published: 2)), isNotEmpty);
   });
 

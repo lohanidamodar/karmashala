@@ -4,8 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala_git/git.dart'
-    show joinCommandLine, splitCommandLine;
+import 'package:karmashala_git/git.dart' show joinCommandLine, splitCommandLine;
 import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../settings/presentation/settings_section.dart';
