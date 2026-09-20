@@ -62,9 +62,11 @@ void main() {
     container
         .read(projectCheckDaoProvider)
         .setVerificationEnabled('r1', enabled: true, now: testTime);
-    container
-        .read(automationControllerProvider)
-        .addCheck('r1', 'the test suite', const ['flutter', 'test']);
+    container.read(automationControllerProvider).addCheck(
+      'r1',
+      'the test suite',
+      const ['flutter', 'test'],
+    );
   }
 
   void record(AutomationRunState state, String reason, {String id = 'run1'}) =>
@@ -84,9 +86,9 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
@@ -108,9 +110,7 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(child: AutomationsPage()),
-          ),
+          home: Scaffold(body: SingleChildScrollView(child: AutomationsPage())),
         ),
       ),
     );
@@ -206,8 +206,12 @@ void main() {
       'Edit "Nightly sweep"',
     );
 
-    // The mode dropdown, not the agent one above it.
-    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    // The mode dropdown, not the agent one above it. Scrolled to first: the
+    // form is longer than the dialog now that the schedule has three shapes.
+    final mode = find.byType(DropdownButtonFormField<String>).last;
+    await tester.ensureVisible(mode);
+    await tester.pumpAndSettle();
+    await tester.tap(mode);
     await tester.pumpAndSettle();
 
     // Claude Code already says "Plan", so it is not said twice; the two rungs
@@ -280,10 +284,7 @@ void main() {
     makeReady();
     arm(nightly(mode: const PermissionSelection({'mode': 'manual'})));
     await pumpPage(tester);
-    expect(
-      find.textContaining('nobody there to answer'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('nobody there to answer'), findsOneWidget);
     expect(find.textContaining('rather than quietly widened'), findsOneWidget);
   });
 
@@ -381,7 +382,10 @@ void main() {
       );
       await pumpPage(tester);
       expect(find.text('Failed'), findsOneWidget);
-      expect(find.textContaining('Verification is off for app'), findsOneWidget);
+      expect(
+        find.textContaining('Verification is off for app'),
+        findsOneWidget,
+      );
     });
   });
 

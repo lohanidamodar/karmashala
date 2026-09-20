@@ -253,12 +253,26 @@ String describeSchedule(Automation automation, {required DateTime now}) {
     if (!automation.enabled) return 'Once, at $at — paused';
     return at.isAfter(now.toLocal()) ? 'Once, at $at' : 'Once, at $at — passed';
   }
+  if (schedule.isInterval) {
+    final every = 'every ${describeGap(schedule.gap!)} after each run';
+    // The one pausing nobody asked for says which it was.
+    if (!automation.enabled) {
+      final stopped = automation.disabledReason;
+      return stopped == null ? '$every — paused' : '$every — stopped: $stopped';
+    }
+    return every;
+  }
   final cron = CronSchedule.parse(schedule.cron!);
   if (cron == null) {
     return '"${schedule.cron}" — this build cannot read that schedule, so '
         'nothing is due';
   }
-  if (!automation.enabled) return '${schedule.cron} — paused';
+  if (!automation.enabled) {
+    final stopped = automation.disabledReason;
+    return stopped == null
+        ? '${schedule.cron} — paused'
+        : '${schedule.cron} — stopped: $stopped';
+  }
   final next = cron.nextAfter(now);
   if (next == null) return '${schedule.cron} — never comes round';
   return '${schedule.cron} — next ${next.toLocal()}';

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:karmashala_core/logging.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
@@ -16,6 +17,7 @@ import '../../sessions/application/session_status_providers.dart';
 import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import '../../terminal/application/pane_exit_signal.dart';
+import '../data/automation_dao.dart';
 import '../domain/automation.dart';
 import '../domain/automation_run.dart';
 import 'automation_check_runner.dart';
@@ -67,7 +69,9 @@ class AutomationRunner implements AutomationFiring {
       _ref.read(automationsRevisionProvider.notifier).bump();
     }
 
-    final refusal = _ref.read(unattendedPreflightProvider).refusalFor(automation);
+    final refusal = _ref
+        .read(unattendedPreflightProvider)
+        .refusalFor(automation);
     if (refusal != null) {
       settle(AutomationRunState.failed, refusal.reason);
       return;
@@ -132,7 +136,10 @@ class AutomationRunner implements AutomationFiring {
       dao.updateRun(run);
       _ref.read(automationsRevisionProvider.notifier).bump();
     } on Object catch (error) {
-      settle(AutomationRunState.failed, 'The session could not be started: $error');
+      settle(
+        AutomationRunState.failed,
+        'The session could not be started: $error',
+      );
     }
   }
 }
@@ -164,7 +171,9 @@ class AutomationRunObserver extends Notifier<int> {
       if (exit == null) return;
       // Read first, because a project check's pane is not a session's and its
       // rows have to be taken in the exit's own moment. Nothing polls.
-      ref.read(automationCheckRunnerProvider).noteExit(exit.paneId, exit.exitCode);
+      ref
+          .read(automationCheckRunnerProvider)
+          .noteExit(exit.paneId, exit.exitCode);
       final sessionId = exit.sessionId;
       if (sessionId == null) return;
       final ending = endingOfPaneExit(exit.exitCode);
@@ -179,7 +188,9 @@ class AutomationRunObserver extends Notifier<int> {
       if (run.state != AutomationRunState.running) continue;
       final sessionId = run.sessionId;
       if (sessionId == null) continue;
-      if (sessions.getById(sessionId)?.status != SessionStatus.running) continue;
+      if (sessions.getById(sessionId)?.status != SessionStatus.running) {
+        continue;
+      }
       ref.listen(agentSessionStatusProvider(sessionId), (previous, next) {
         final to = next.value?.status;
         if (to == null) return;
@@ -253,14 +264,44 @@ class AutomationRunObserver extends Notifier<int> {
     // stopped — so a failed ending gets its checks run too, started not awaited.
     ref.read(automationCheckRunnerProvider).start(finished);
 
+    // Against the failure budget **before** the row is re-read, so the count
+    // this disabling decision is made on includes the run that just ended.
+    dao.recordOutcome(
+      run.automationId,
+      failed: state == AutomationRunState.failed,
+    );
+
     final automation = dao.getById(run.automationId);
     if (automation == null) return;
+    _stopIfFailedOut(dao, automation);
     // A busy checkout queues; this is the other half of that sentence.
     unawaited(
-      ref.read(automationSchedulerProvider.notifier).drain(
-        automation.repositoryId,
-      ),
+      ref
+          .read(automationSchedulerProvider.notifier)
+          .drain(automation.repositoryId),
     );
+  }
+
+  /// Disables an automation that has failed its way through its budget.
+  ///
+  /// Nothing did this before, so a broken automation failed every night
+  /// forever and the only signal was a list of red rows nobody reads. The
+  /// disabling says why, and a run that succeeds clears the count — so this
+  /// only ever fires on a run of failures, not on a bad week.
+  static final _log = AppLogger.named('automations');
+
+  void _stopIfFailedOut(AutomationDao dao, Automation automation) {
+    if (!automation.enabled || !automation.hasFailedOut) return;
+    final reason =
+        'Stopped after ${automation.consecutiveFailures} failed runs in a '
+        'row. Nothing was changed about it — look at the runs below, fix what '
+        'they are failing on, and switch it back on.';
+    dao.disable(automation.id, reason);
+    _log.warning(
+      'automations: disabled "${automation.name}" (${automation.id}) after '
+      '${automation.consecutiveFailures} consecutive failures.',
+    );
+    ref.read(automationsRevisionProvider.notifier).bump();
   }
 
   /// The run's verdict for one ending, or **null when the ending is not one**.

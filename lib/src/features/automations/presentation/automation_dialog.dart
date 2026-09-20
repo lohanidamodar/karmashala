@@ -41,29 +41,47 @@ class AutomationDialog extends ConsumerStatefulWidget {
 class _AutomationDialogState extends ConsumerState<AutomationDialog> {
   late final TextEditingController _name;
   late final TextEditingController _cron;
+  late final TextEditingController _every;
   late final TextEditingController _prompt;
-  late bool _recurring;
+  late AutomationScheduleKind _kind;
+  late bool _everyUnitHours;
   DateTime? _once;
   String? _installationId;
   PermissionSelection? _mode;
+  late AutomationLatePolicy _latePolicy;
 
   @override
   void initState() {
     super.initState();
     final existing = widget.existing;
+    final schedule = existing?.schedule;
     _name = TextEditingController(text: existing?.name ?? '');
-    _recurring = existing?.schedule.isRecurring ?? true;
-    _cron = TextEditingController(text: existing?.schedule.cron ?? '0 3 * * *');
-    _once = existing?.schedule.firesAt;
+    _kind = switch (schedule) {
+      null => AutomationScheduleKind.every,
+      _ when schedule.isInterval => AutomationScheduleKind.every,
+      _ when schedule.isOnce => AutomationScheduleKind.once,
+      _ => AutomationScheduleKind.cron,
+    };
+    _cron = TextEditingController(text: schedule?.cron ?? '0 3 * * *');
+    // Hours when the gap divides into whole ones: "every 2 hours" rather than
+    // "every 120 minutes", which is the same schedule and a worse sentence.
+    final gap = schedule?.gap ?? const Duration(hours: 1);
+    _everyUnitHours = gap.inMinutes % 60 == 0 && gap.inHours >= 1;
+    _every = TextEditingController(
+      text: '${_everyUnitHours ? gap.inHours : gap.inMinutes}',
+    );
+    _once = schedule?.firesAt;
     _prompt = TextEditingController(text: existing?.prompt ?? '');
     _installationId = existing?.agentInstallationId;
     _mode = existing?.permissionMode;
+    _latePolicy = existing?.latePolicy ?? AutomationLatePolicy.ask;
   }
 
   @override
   void dispose() {
     _name.dispose();
     _cron.dispose();
+    _every.dispose();
     _prompt.dispose();
     super.dispose();
   }
@@ -75,15 +93,37 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
         .getByEnvironment(repository.path.environmentId);
   }
 
-  AutomationSchedule? get _schedule {
-    if (_recurring) {
-      return cronRefusal(_cron.text) == null
-          ? AutomationSchedule.cron(_cron.text.trim())
-          : null;
-    }
-    final at = _once;
-    return at == null ? null : AutomationSchedule.once(at.toUtc());
+  /// The gap the "every" fields spell, or null when they do not spell one.
+  Duration? get _gap {
+    final value = int.tryParse(_every.text.trim());
+    if (value == null || value <= 0) return null;
+    return _everyUnitHours ? Duration(hours: value) : Duration(minutes: value);
   }
+
+  AutomationSchedule? get _schedule => switch (_kind) {
+    AutomationScheduleKind.every =>
+      _gap == null ? null : AutomationSchedule.every(_gap!),
+    AutomationScheduleKind.cron =>
+      cronRefusal(_cron.text) == null
+          ? AutomationSchedule.cron(_cron.text.trim())
+          : null,
+    AutomationScheduleKind.once =>
+      _once == null ? null : AutomationSchedule.once(_once!.toUtc()),
+  };
+
+  /// Why the schedule as spelled cannot be armed, or null.
+  String? get _scheduleRefusal => switch (_kind) {
+    AutomationScheduleKind.every =>
+      _gap == null
+          ? 'How often? A whole number of minutes or hours.'
+          : _gap! < kMinimumInterval
+          ? 'The shortest gap is ${describeGap(kMinimumInterval)} — below that '
+                'the next run is due before the last one could have finished.'
+          : null,
+    AutomationScheduleKind.cron => cronRefusal(_cron.text),
+    AutomationScheduleKind.once =>
+      _once == null ? 'A one-shot needs a moment to fire at.' : null,
+  };
 
   /// The automation this form would write, or null when a field is not filled
   /// in yet. Built so the gate can be asked about it *before* it exists.
@@ -103,6 +143,11 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
       permissionMode: _mode,
       enabled: existing?.enabled ?? true,
       armedAt: existing?.armedAt ?? DateTime.now().toUtc(),
+      latePolicy: _latePolicy,
+      stopAfterFailures:
+          existing?.stopAfterFailures ?? kDefaultStopAfterFailures,
+      consecutiveFailures: existing?.consecutiveFailures ?? 0,
+      maxRuntime: existing?.maxRuntime,
     );
   }
 
@@ -116,15 +161,13 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
     final installations = _installations;
     final candidate = _candidate;
     final refusal = candidate == null ? null : preflight.refusalFor(candidate);
-    final scheduleRefusal = _recurring
-        ? cronRefusal(_cron.text)
-        : _once == null
-        ? 'A one-shot needs a moment to fire at.'
-        : null;
+    final scheduleRefusal = _scheduleRefusal;
     final selected = installations
         .where((i) => i.id == _installationId)
         .firstOrNull;
-    final descriptor = selected == null ? null : registry.byId(selected.agentId);
+    final descriptor = selected == null
+        ? null
+        : registry.byId(selected.agentId);
 
     return AlertDialog(
       title: DesktopDialogTitle(
@@ -150,14 +193,23 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
             ),
             const SizedBox(height: Insets.sm),
             _ScheduleFields(
-              recurring: _recurring,
+              kind: _kind,
               cronController: _cron,
+              everyController: _every,
+              everyUnitHours: _everyUnitHours,
               once: _once,
               refusal: scheduleRefusal,
-              onRecurringChanged: (value) =>
-                  setState(() => _recurring = value),
+              onKindChanged: (value) => setState(() => _kind = value),
               onCronChanged: () => setState(() {}),
+              onEveryChanged: () => setState(() {}),
+              onEveryUnitChanged: (hours) =>
+                  setState(() => _everyUnitHours = hours),
               onPickMoment: _pickMoment,
+            ),
+            const SizedBox(height: Insets.sm),
+            _LatePolicyField(
+              value: _latePolicy,
+              onChanged: (value) => setState(() => _latePolicy = value),
             ),
             const SizedBox(height: Insets.sm),
             _AgentField(
@@ -228,13 +280,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
     );
     if (time == null || !mounted) return;
     setState(() {
-      _once = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-      );
+      _once = DateTime(date.year, date.month, date.day, time.hour, time.minute);
     });
   }
 
@@ -266,24 +312,51 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
 /// Repeating or once, and when.
 class _ScheduleFields extends StatelessWidget {
   const _ScheduleFields({
-    required this.recurring,
+    required this.kind,
     required this.cronController,
+    required this.everyController,
+    required this.everyUnitHours,
     required this.once,
     required this.refusal,
-    required this.onRecurringChanged,
+    required this.onKindChanged,
     required this.onCronChanged,
+    required this.onEveryChanged,
+    required this.onEveryUnitChanged,
     required this.onPickMoment,
   });
 
-  final bool recurring;
+  final AutomationScheduleKind kind;
   final TextEditingController cronController;
+
+  /// The number in "every N …". A controller, because a half-typed number is
+  /// a state the field has to be able to be in.
+  final TextEditingController everyController;
+  final bool everyUnitHours;
   final DateTime? once;
 
   /// Why the schedule cannot be armed as written, or null.
   final String? refusal;
-  final ValueChanged<bool> onRecurringChanged;
+  final ValueChanged<AutomationScheduleKind> onKindChanged;
   final VoidCallback onCronChanged;
+  final VoidCallback onEveryChanged;
+  final ValueChanged<bool> onEveryUnitChanged;
   final VoidCallback onPickMoment;
+
+  /// Writes the cron a preset stands for, once the user has said when.
+  Future<void> _preset(
+    BuildContext context, {
+    required bool weekdaysOnly,
+  }) async {
+    final at = await showTimePicker(
+      context: context,
+      initialTime: const TimeOfDay(hour: 3, minute: 0),
+      helpText: weekdaysOnly ? 'Weekdays at' : 'Every day at',
+    );
+    if (at == null) return;
+    cronController.text =
+        '${at.minute} ${at.hour} * * ${weekdaysOnly ? '1-5' : '*'}';
+    onCronChanged();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -293,18 +366,96 @@ class _ScheduleFields extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // A segmented control rather than two radios: `RadioListTile`'s
+        // A segmented control rather than radios: `RadioListTile`'s
         // `groupValue` is deprecated in this SDK.
-        SegmentedButton<bool>(
+        SegmentedButton<AutomationScheduleKind>(
           segments: const [
-            ButtonSegment(value: true, label: Text('Repeating')),
-            ButtonSegment(value: false, label: Text('Once')),
+            ButtonSegment(
+              value: AutomationScheduleKind.every,
+              label: Text('Every…'),
+            ),
+            ButtonSegment(
+              value: AutomationScheduleKind.cron,
+              label: Text('At a time'),
+            ),
+            ButtonSegment(
+              value: AutomationScheduleKind.once,
+              label: Text('Once'),
+            ),
           ],
-          selected: {recurring},
-          onSelectionChanged: (selection) =>
-              onRecurringChanged(selection.first),
+          selected: {kind},
+          onSelectionChanged: (selection) => onKindChanged(selection.first),
         ),
-        if (recurring)
+        if (kind == AutomationScheduleKind.every)
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 96,
+                      child: TextField(
+                        controller: everyController,
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => onEveryChanged(),
+                        decoration: const InputDecoration(labelText: 'Every'),
+                      ),
+                    ),
+                    const SizedBox(width: Insets.sm),
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: false, label: Text('minutes')),
+                        ButtonSegment(value: true, label: Text('hours')),
+                      ],
+                      selected: {everyUnitHours},
+                      onSelectionChanged: (s) => onEveryUnitChanged(s.first),
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: Insets.xs),
+                  child: Text(
+                    // The distinction that makes this not sugar over cron, said
+                    // where the choice is made rather than in a doc comment.
+                    'Measured from the end of one run to the start of the '
+                    'next, so a run that takes longer than the gap is never '
+                    'followed straight away by another.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else if (kind == AutomationScheduleKind.cron) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: Insets.xs),
+            child: Wrap(
+              spacing: Insets.xs,
+              children: [
+                // The cron these write is left visible and editable: a preset
+                // that hid what it meant would be a fourth thing to learn.
+                ActionChip(
+                  label: const Text('Every day at…'),
+                  onPressed: () => _preset(context, weekdaysOnly: false),
+                ),
+                ActionChip(
+                  label: const Text('Weekdays at…'),
+                  onPressed: () => _preset(context, weekdaysOnly: true),
+                ),
+                ActionChip(
+                  label: const Text('Every hour'),
+                  onPressed: () {
+                    cronController.text = '0 * * * *';
+                    onCronChanged();
+                  },
+                ),
+              ],
+            ),
+          ),
           TextField(
             controller: cronController,
             onChanged: (_) => onCronChanged(),
@@ -315,8 +466,8 @@ class _ScheduleFields extends StatelessWidget {
                   'minute hour day-of-month month day-of-week, '
                   'in this machine\'s own time',
             ),
-          )
-        else
+          ),
+        ] else
           Row(
             children: [
               Expanded(
@@ -441,4 +592,41 @@ class _PermissionModeField extends StatelessWidget {
           onChanged(value == null ? null : PermissionSelection.parse(value)),
     );
   }
+}
+
+/// Which of the three shapes a schedule is. The dialog's own axis, not the
+/// domain's: the domain has three constructors, and a segmented control needs
+/// one value to be selected.
+enum AutomationScheduleKind { every, cron, once }
+
+/// What this automation does about an occurrence the app slept through.
+///
+/// Per automation, because the right answer is about the work: a nightly
+/// dependency sweep is worth running at noon, and a "post the standup summary"
+/// is not worth running at all once the standup is over.
+class _LatePolicyField extends StatelessWidget {
+  const _LatePolicyField({required this.value, required this.onChanged});
+
+  final AutomationLatePolicy value;
+  final ValueChanged<AutomationLatePolicy> onChanged;
+
+  @override
+  Widget build(BuildContext context) => InputDecorator(
+    decoration: const InputDecoration(
+      labelText: 'If Karmashala was not running at the time',
+      border: InputBorder.none,
+      isDense: true,
+    ),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<AutomationLatePolicy>(
+        value: value,
+        isExpanded: true,
+        items: [
+          for (final policy in AutomationLatePolicy.values)
+            DropdownMenuItem(value: policy, child: Text(policy.label)),
+        ],
+        onChanged: (chosen) => chosen == null ? null : onChanged(chosen),
+      ),
+    ),
+  );
 }

@@ -93,6 +93,10 @@ DateTime? nextFireOf(Automation automation, {required DateTime now}) {
     final at = schedule.firesAt!;
     return at.isAfter(now) ? at : null;
   }
+  // An interval's next moment depends on when its last run finished, which is
+  // the scheduler's to know; this list says "not due again" rather than
+  // guessing at a time the timer is not actually armed for.
+  if (schedule.isInterval) return null;
   return CronSchedule.parse(schedule.cron!)?.nextAfter(now);
 }
 
@@ -122,8 +126,14 @@ class _AutomationRow extends ConsumerWidget {
       detail: [
         repository?.name ?? 'a checkout that is no longer here',
         ?automation.schedule.cron,
+        if (automation.schedule.isInterval)
+          'every ${describeGap(automation.schedule.gap!)} after each run',
       ].join(' · '),
-      when: when == null ? 'not due again' : _describeWhen(when, now),
+      when: when == null
+          ? (automation.schedule.isInterval
+                ? 'after the next run'
+                : 'not due again')
+          : _describeWhen(when, now),
       // The gate's own words, on hover: the card below carries them in full.
       warning: refusal == null
           ? null
@@ -210,10 +220,7 @@ class _ActiveRow extends StatelessWidget {
               ],
             ),
           ),
-          if (warning != null) ...[
-            warning!,
-            const SizedBox(width: Insets.sm),
-          ],
+          if (warning != null) ...[warning!, const SizedBox(width: Insets.sm)],
           Text(when, style: theme.textTheme.bodySmall),
         ],
       ),

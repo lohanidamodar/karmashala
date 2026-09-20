@@ -15,7 +15,9 @@ void main() {
         row['name']! as String: row['notnull']! as int,
     };
     expect(columns, containsPair('color', 0));
-    expect(db.schemaVersion, 54);
+    // At least this one has run. The exact head belongs to whichever migration
+    // is newest, which is not this file's business.
+    expect(db.schemaVersion, greaterThanOrEqualTo(54));
 
     db.execute(
       "INSERT INTO workspaces (id, name, created_at) VALUES ('w', 'Work', 't');",

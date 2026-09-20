@@ -17,9 +17,11 @@ class AutomationDao {
 
   void insert(Automation automation) => _db.execute(
     'INSERT INTO automations '
-    '(id, repository_id, name, cron, fires_at, agent_installation_id, prompt, '
-    'permission_mode, enabled, armed_at) '
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    '(id, repository_id, name, cron, fires_at, every_seconds, '
+    'agent_installation_id, prompt, permission_mode, enabled, armed_at, '
+    'late_policy, stop_after_failures, consecutive_failures, '
+    'disabled_reason, max_runtime_seconds) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       automation.id,
       automation.repositoryId,
@@ -28,11 +30,17 @@ class AutomationDao {
       automation.schedule.firesAt == null
           ? null
           : isoFromDate(automation.schedule.firesAt!),
+      automation.schedule.everySeconds,
       automation.agentInstallationId,
       automation.prompt,
       automation.permissionMode?.canonical,
       intFromBool(automation.enabled),
       isoFromDate(automation.armedAt),
+      automation.latePolicy.name,
+      automation.stopAfterFailures,
+      automation.consecutiveFailures,
+      automation.disabledReason,
+      automation.maxRuntime?.inSeconds,
     ],
   );
 
@@ -40,21 +48,57 @@ class AutomationDao {
   /// `armed_at` moves with an edit: changing it is authorising the new thing.
   void update(Automation automation) => _db.execute(
     'UPDATE automations SET name = ?, cron = ?, fires_at = ?, '
-    'agent_installation_id = ?, prompt = ?, permission_mode = ?, enabled = ?, '
-    'armed_at = ? WHERE id = ?;',
+    'every_seconds = ?, agent_installation_id = ?, prompt = ?, '
+    'permission_mode = ?, enabled = ?, armed_at = ?, late_policy = ?, '
+    'stop_after_failures = ?, consecutive_failures = ?, disabled_reason = ?, '
+    'max_runtime_seconds = ? WHERE id = ?;',
     [
       automation.name,
       automation.schedule.cron,
       automation.schedule.firesAt == null
           ? null
           : isoFromDate(automation.schedule.firesAt!),
+      automation.schedule.everySeconds,
       automation.agentInstallationId,
       automation.prompt,
       automation.permissionMode?.canonical,
       intFromBool(automation.enabled),
       isoFromDate(automation.armedAt),
+      automation.latePolicy.name,
+      automation.stopAfterFailures,
+      automation.consecutiveFailures,
+      automation.disabledReason,
+      automation.maxRuntime?.inSeconds,
       automation.id,
     ],
+  );
+
+  /// Records the outcome of one run against its automation's failure budget.
+  ///
+  /// A success clears the count **and** the reason it was disabled for, so an
+  /// automation somebody re-enables after fixing it starts from zero rather
+  /// than one failure away from stopping again.
+  void recordOutcome(String id, {required bool failed}) {
+    if (!failed) {
+      _db.execute(
+        'UPDATE automations SET consecutive_failures = 0, '
+        'disabled_reason = NULL WHERE id = ?;',
+        [id],
+      );
+      return;
+    }
+    _db.execute(
+      'UPDATE automations SET consecutive_failures = consecutive_failures + 1 '
+      'WHERE id = ?;',
+      [id],
+    );
+  }
+
+  /// Disables [id] and says why — the one disabling nobody asked for, so it
+  /// must never be silent.
+  void disable(String id, String reason) => _db.execute(
+    'UPDATE automations SET enabled = 0, disabled_reason = ? WHERE id = ?;',
+    [reason, id],
   );
 
   /// Pauses or resumes one, leaving everything else — including its arming —
@@ -229,6 +273,50 @@ class AutomationDao {
     return rows.isEmpty ? null : _run(rows.first);
   }
 
+  /// When this automation's last run **ended**, or null when none has.
+  ///
+  /// What an interval schedule counts its gap from. Deliberately the finish
+  /// and not the occurrence: a gap measured from the start would let a run
+  /// that overran be followed immediately by the next one, which is the
+  /// overlap the interval kind exists to prevent.
+  DateTime? lastFinishedAt(String automationId) {
+    final rows = _db.query(
+      'SELECT MAX(finished_at) AS at FROM automation_runs '
+      'WHERE automation_id = ? AND finished_at IS NOT NULL;',
+      [automationId],
+    );
+    final value = rows.isEmpty ? null : rows.first['at'];
+    return value == null ? null : dateFromIso(value);
+  }
+
+  /// Whether this automation has a run of its own still live — the guard that
+  /// stops two occurrences of *one* automation stacking, which the
+  /// per-checkout guard does not catch when they are in different checkouts.
+  AutomationRun? liveRunOf(String automationId) {
+    for (final run in liveRuns()) {
+      if (run.automationId == automationId) return run;
+    }
+    return null;
+  }
+
+  /// When this install last *did* anything about this automation — fired it,
+  /// queued it, or filed a miss — or null when it never has.
+  ///
+  /// An interval counts from this rather than from the occurrence it last
+  /// recorded. The difference only shows on a miss: filing "the 17:10 one was
+  /// too late" and then counting from 17:10 makes 17:20 immediately due too,
+  /// and a ten-hour sleep files sixty misses one tick at a time. Counting from
+  /// when the miss was *filed* says the honest thing instead — the backlog is
+  /// not being worked through, and the next one is a gap from now.
+  DateTime? lastTouchedAt(String automationId) {
+    final rows = _db.query(
+      'SELECT MAX(fired_at) AS at FROM automation_runs WHERE automation_id = ?;',
+      [automationId],
+    );
+    final value = rows.isEmpty ? null : rows.first['at'];
+    return value == null ? null : dateFromIso(value);
+  }
+
   /// The newest occurrence this install has recorded anything about, or null —
   /// the floor a missed-fire sweep counts from.
   DateTime? lastObservedOccurrence(String automationId) {
@@ -242,20 +330,35 @@ class AutomationDao {
   }
 
   Automation _automation(Map<String, Object?> row) {
-    final cron = row['cron'] as String?;
     final firesAt = row['fires_at'];
+    final schedule = AutomationSchedule.fromRow(
+      cron: row['cron'] as String?,
+      firesAt: firesAt == null ? null : dateFromIso(firesAt),
+      everySeconds: row['every_seconds'] as int?,
+    );
+    final seconds = row['max_runtime_seconds'] as int?;
     return Automation(
       id: row['id']! as String,
       repositoryId: row['repository_id']! as String,
       name: row['name']! as String,
-      schedule: cron != null && cron.isNotEmpty
-          ? AutomationSchedule.cron(cron)
-          : AutomationSchedule.once(dateFromIso(firesAt)),
+      // A row naming no schedule at all cannot come out of `insert`; reading
+      // one as a one-shot in the past is the reading that fires nothing.
+      schedule: schedule ?? AutomationSchedule.once(dateFromIso(row['armed_at'])),
       agentInstallationId: row['agent_installation_id']! as String,
       prompt: row['prompt']! as String,
-      permissionMode: PermissionSelection.parse(row['permission_mode'] as String?),
+      permissionMode: PermissionSelection.parse(
+        row['permission_mode'] as String?,
+      ),
       enabled: boolFromInt(row['enabled']),
       armedAt: dateFromIso(row['armed_at']),
+      latePolicy: AutomationLatePolicy.fromName(row['late_policy'] as String?),
+      stopAfterFailures:
+          row['stop_after_failures'] as int? ?? kDefaultStopAfterFailures,
+      consecutiveFailures: row['consecutive_failures'] as int? ?? 0,
+      disabledReason: row['disabled_reason'] as String?,
+      maxRuntime: seconds == null || seconds <= 0
+          ? null
+          : Duration(seconds: seconds),
     );
   }
 

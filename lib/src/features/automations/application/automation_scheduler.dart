@@ -84,6 +84,16 @@ class AutomationScheduler extends Notifier<int> {
       final next = resume.fireAt.isAfter(after) ? resume.fireAt : after;
       if (soonest == null || next.isBefore(soonest)) soonest = next;
     }
+    // A run with a ceiling has a moment of its own: without it the timer would
+    // not wake until the next occurrence, which a held checkout prevents.
+    for (final run in _dao.liveRuns()) {
+      if (run.state != AutomationRunState.running) continue;
+      final ceiling = _dao.getById(run.automationId)?.maxRuntime;
+      if (ceiling == null) continue;
+      final deadline = run.firedAt.add(ceiling);
+      final next = deadline.isAfter(after) ? deadline : after;
+      if (soonest == null || next.isBefore(soonest)) soonest = next;
+    }
     return soonest;
   }
 
@@ -93,7 +103,23 @@ class AutomationScheduler extends Notifier<int> {
       final at = schedule.firesAt!;
       return at.isAfter(after) ? at : null;
     }
+    if (schedule.isInterval) {
+      // From the finish, never from the clock: a run still going has no next
+      // occurrence yet, which is exactly how an interval avoids overlapping
+      // itself without a queue.
+      if (_dao.liveRunOf(automation.id) != null) return null;
+      final due = _intervalFloor(automation).add(schedule.gap!);
+      return due.isAfter(after) ? due : after;
+    }
     return CronSchedule.parse(schedule.cron!)?.nextAfter(after);
+  }
+
+  /// What an interval counts its gap from: the last run's finish, or the
+  /// arming for one that has never run.
+  DateTime _intervalFloor(Automation automation) {
+    final finished = _dao.lastFinishedAt(automation.id);
+    if (finished == null) return automation.armedAt;
+    return finished.isAfter(automation.armedAt) ? finished : automation.armedAt;
   }
 
   /// Arms the one timer for the next occurrence, replacing whatever was armed.
@@ -122,13 +148,37 @@ class AutomationScheduler extends Notifier<int> {
   /// The floor is never before arming, or a new one would discover the epoch.
   Future<void> reconcile() async {
     final now = _now;
-    var changed = false;
+    var changed = _reapOverrunning(now);
     for (final automation in _dao.enabled()) {
       final decision = missedFireDecision(
         schedule: automation.schedule,
         since: _floorFor(automation),
         now: now,
+        grace: _graceFor(automation, now),
       );
+      // An automation with one of its own occurrences already in flight is not
+      // also due. Two of *one* automation stacked would run the same prompt
+      // twice back to back for no reason, and the per-checkout queue never
+      // sees it when they are in different checkouts. The occurrence is
+      // recorded rather than dropped: a silent skip reads as a broken
+      // schedule, which is the one thing it must not look like.
+      final live = _dao.liveRunOf(automation.id);
+      if (live != null) {
+        // An interval has no occurrence at all while one of its runs is in
+        // flight — its next one *is* "the gap after this finishes" — so there
+        // is nothing that was skipped and nothing to file.
+        if (automation.schedule.isInterval) continue;
+        final due = switch (decision) {
+          MissedFires(:final scheduledFor) => scheduledFor,
+          CatchUpMissedFire(:final scheduledFor) => scheduledFor,
+          NoMissedFires() => null,
+        };
+        if (due != null) {
+          _recordSkipped(automation, due, now, _alreadyRunningReason(live));
+          changed = true;
+        }
+        continue;
+      }
       switch (decision) {
         case NoMissedFires():
           continue;
@@ -149,6 +199,42 @@ class AutomationScheduler extends Notifier<int> {
     }
     if (await _reconcileResumes(now)) changed = true;
     if (changed) ref.read(automationsRevisionProvider.notifier).bump();
+  }
+
+  /// Fails any run that has held its checkout past its automation's ceiling,
+  /// and frees the queue behind it.
+  ///
+  /// **The agent's own process is left running.** A run that overran may be an
+  /// agent mid-edit, and killing it would be a worse outcome than a late run;
+  /// what this reclaims is the *queue*, which otherwise never moves again. The
+  /// row says exactly that, so nobody reads a failed run as a stopped one.
+  bool _reapOverrunning(DateTime now) {
+    var changed = false;
+    for (final run in _dao.liveRuns()) {
+      if (run.state != AutomationRunState.running) continue;
+      final automation = _dao.getById(run.automationId);
+      final ceiling = automation?.maxRuntime;
+      if (automation == null || ceiling == null) continue;
+      final ranFor = now.difference(run.firedAt);
+      if (ranFor <= ceiling) continue;
+      _dao.updateRun(
+        run.copyWith(
+          state: AutomationRunState.failed,
+          finishedAt: now,
+          reason:
+              'Gave up waiting after ${describeGap(ranFor)}, past the '
+              '${describeGap(ceiling)} this automation allows. The checkout is '
+              'free again for whatever is waiting. **The agent itself was not '
+              'stopped** — it may still be working, and ending it mid-edit '
+              'would be worse than a late run; end its session yourself if it '
+              'is stuck.',
+        ),
+      );
+      _dao.recordOutcome(run.automationId, failed: true);
+      changed = true;
+      unawaited(drain(automation.repositoryId));
+    }
+    return changed;
   }
 
   /// The same catch-up rule, per resume: inside the grace it runs, beyond it
@@ -239,10 +325,63 @@ class AutomationScheduler extends Notifier<int> {
   }
 
   DateTime _floorFor(Automation automation) {
+    // An interval's occurrences are "the gap after the last finish", so its
+    // floor is that finish — not the last occurrence, which for a run that
+    // overran is earlier and would make it look overdue the moment it ended.
+    // It is also floored at the newest occurrence anything has been *recorded*
+    // about: an interval whose miss was filed has no finish to count from, and
+    // without this it would file that same miss again on every tick.
+    if (automation.schedule.isInterval) {
+      final finish = _intervalFloor(automation);
+      final touched = _dao.lastTouchedAt(automation.id);
+      if (touched == null || finish.isAfter(touched)) return finish;
+      return touched;
+    }
     final observed = _dao.lastObservedOccurrence(automation.id);
     if (observed == null) return automation.armedAt;
     return observed.isAfter(automation.armedAt) ? observed : automation.armedAt;
   }
+
+  /// How late an occurrence of [automation] may be and still run — the
+  /// per-automation answer to "the app was asleep".
+  Duration _graceFor(Automation automation, DateTime now) =>
+      switch (automation.latePolicy) {
+        // However late: widened past any occurrence there could be.
+        AutomationLatePolicy.run =>
+          now.difference(automation.armedAt).abs() + kMissedFireGrace,
+        AutomationLatePolicy.ask => kMissedFireGrace,
+        // Nothing is ever fresh enough, so every miss is recorded as one.
+        AutomationLatePolicy.skip => Duration.zero,
+      };
+
+  /// Files an occurrence that was not run because this automation was already
+  /// running one of its own.
+  void _recordSkipped(
+    Automation automation,
+    DateTime scheduledFor,
+    DateTime now,
+    String reason,
+  ) => _dao.insertRun(
+    AutomationRun(
+      id: _newId(),
+      automationId: automation.id,
+      scheduledFor: scheduledFor,
+      firedAt: now,
+      state: AutomationRunState.missed,
+      reason: reason,
+    ),
+  );
+
+  /// What such a row says.
+  String _alreadyRunningReason(AutomationRun live) =>
+      live.state == AutomationRunState.running
+      ? 'This automation was still running the occurrence due '
+            '${live.scheduledFor.toLocal()}, so this one was not started. One '
+            'run of an automation at a time — the same prompt twice over is '
+            'not the schedule doing its job.'
+      : 'This automation already had the occurrence due '
+            '${live.scheduledFor.toLocal()} waiting for its checkout, so this '
+            'one was not queued behind it as well.';
 
   void _recordMissed(Automation automation, MissedFires missed, DateTime now) {
     _dao.insertRun(

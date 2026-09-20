@@ -75,6 +75,24 @@ MissedFireDecision missedFireDecision({
 }) {
   if (!since.isBefore(now)) return const NoMissedFires();
 
+  if (schedule.isInterval) {
+    // An interval has no calendar: its occurrences *are* "the gap after the
+    // last run", so there is only ever one to catch up on however long the
+    // app was down. Ten missed hours of a ten-minute gap is one run due now,
+    // not sixty — running sixty would be catching up on time, not on work.
+    final due = since.add(schedule.gap!);
+    if (due.isAfter(now)) return const NoMissedFires();
+    final lateBy = now.difference(due);
+    return lateBy <= grace
+        ? CatchUpMissedFire(scheduledFor: due, missedCount: 1, capped: false)
+        : MissedFires(
+            scheduledFor: due,
+            missedCount: 1,
+            capped: false,
+            lateBy: lateBy,
+          );
+  }
+
   if (schedule.isOnce) {
     final at = schedule.firesAt!;
     // A one-shot before the floor was already dealt with; one after `now` is

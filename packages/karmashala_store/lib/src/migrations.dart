@@ -63,6 +63,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   52: _migrateToV52,
   53: _migrateToV53,
   54: _migrateToV54,
+  55: _migrateToV55,
 };
 
 /// Was this pane running when its row was written? `DEFAULT 0` is the honest
@@ -1381,4 +1382,29 @@ void _migrateToV54(Database db) {
       .map((row) => row['name'] as String);
   if (columns.contains('color')) return;
   db.execute('ALTER TABLE workspaces ADD COLUMN color TEXT;');
+}
+
+/// Recurring automations grow up: a gap measured from the last run's finish,
+/// a per-automation late policy, a failure budget that disables a broken one
+/// rather than letting it fail every night forever, and a runtime ceiling so a
+/// hung run cannot hold its checkout for good.
+///
+/// Every column has a default that reproduces the old behaviour exactly, so an
+/// existing automation keeps firing the way it did.
+void _migrateToV55(Database db) {
+  final columns = db
+      .select('PRAGMA table_info(automations);')
+      .map((row) => row['name'] as String)
+      .toSet();
+  void add(String name, String definition) {
+    if (columns.contains(name)) return;
+    db.execute('ALTER TABLE automations ADD COLUMN $name $definition;');
+  }
+
+  add('every_seconds', 'INTEGER');
+  add('late_policy', "TEXT NOT NULL DEFAULT 'ask'");
+  add('stop_after_failures', 'INTEGER NOT NULL DEFAULT 3');
+  add('consecutive_failures', 'INTEGER NOT NULL DEFAULT 0');
+  add('disabled_reason', 'TEXT');
+  add('max_runtime_seconds', 'INTEGER');
 }

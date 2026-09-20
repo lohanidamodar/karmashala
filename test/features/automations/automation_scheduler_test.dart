@@ -37,8 +37,8 @@ class _RecordingFiring implements AutomationFiring {
 
   final AutomationDao _dao;
   final _MovableClock _clock;
-  final List<({String automationId, DateTime scheduledFor, String note})> fired =
-      [];
+  final List<({String automationId, DateTime scheduledFor, String note})>
+  fired = [];
 
   /// What the recorded run is left in. `running` is the real runner's answer
   /// once a session is up.
@@ -147,14 +147,27 @@ void main() {
       expect(timer.arms, 0);
     });
 
-    test('the timer is armed for the soonest occurrence across all of them', () {
-      dao.insert(nightly(id: 'a', schedule: const AutomationSchedule.cron('0 5 * * *')));
-      dao.insert(nightly(id: 'b', schedule: const AutomationSchedule.cron('0 3 * * *')));
-      scheduler();
-      // 17:00 to 03:00 is ten hours; the 05:00 one is not what it waits for.
-      expect(timer.armedFor, const Duration(hours: 10));
-      expect(timer.arms, 1, reason: 'one timer, not one per automation');
-    });
+    test(
+      'the timer is armed for the soonest occurrence across all of them',
+      () {
+        dao.insert(
+          nightly(
+            id: 'a',
+            schedule: const AutomationSchedule.cron('0 5 * * *'),
+          ),
+        );
+        dao.insert(
+          nightly(
+            id: 'b',
+            schedule: const AutomationSchedule.cron('0 3 * * *'),
+          ),
+        );
+        scheduler();
+        // 17:00 to 03:00 is ten hours; the 05:00 one is not what it waits for.
+        expect(timer.armedFor, const Duration(hours: 10));
+        expect(timer.arms, 1, reason: 'one timer, not one per automation');
+      },
+    );
 
     test('a paused automation is not waited for', () {
       dao.insert(nightly(enabled: false));
@@ -162,41 +175,52 @@ void main() {
       expect(timer.isArmed, isFalse);
     });
 
-    test('a long wait is capped and re-armed rather than held as one timer', () {
-      dao.insert(
-        nightly(schedule: AutomationSchedule.once(at(2027, 1, 1, 3))),
-      );
-      scheduler();
-      expect(timer.armedFor, kMaxTimerDelay);
-    });
+    test(
+      'a long wait is capped and re-armed rather than held as one timer',
+      () {
+        dao.insert(
+          nightly(schedule: AutomationSchedule.once(at(2027, 1, 1, 3))),
+        );
+        scheduler();
+        expect(timer.armedFor, kMaxTimerDelay);
+      },
+    );
 
-    test('a change re-arms; nothing asks again on a cadence of its own', () async {
-      dao.insert(nightly());
-      scheduler();
-      expect(timer.arms, 1);
-      container.read(automationControllerProvider).save(
-        nightly(schedule: const AutomationSchedule.cron('0 1 * * *')),
-      );
-      // Riverpod disarms on invalidation and re-arms on the rebuild a
-      // microtask later; the gap is the whole of the "poll" this does not do.
-      await Future<void>.delayed(Duration.zero);
-      // 17:00 to 01:00 is eight hours.
-      expect(timer.armedFor, const Duration(hours: 8));
-      expect(timer.arms, greaterThan(1));
-    });
+    test(
+      'a change re-arms; nothing asks again on a cadence of its own',
+      () async {
+        dao.insert(nightly());
+        scheduler();
+        expect(timer.arms, 1);
+        container
+            .read(automationControllerProvider)
+            .save(
+              nightly(schedule: const AutomationSchedule.cron('0 1 * * *')),
+            );
+        // Riverpod disarms on invalidation and re-arms on the rebuild a
+        // microtask later; the gap is the whole of the "poll" this does not do.
+        await Future<void>.delayed(Duration.zero);
+        // 17:00 to 01:00 is eight hours.
+        expect(timer.armedFor, const Duration(hours: 8));
+        expect(timer.arms, greaterThan(1));
+      },
+    );
 
-    test('the timer re-arms after it fires, even when it found nothing', () async {
-      dao.insert(nightly());
-      scheduler();
-      final armsBefore = timer.arms;
-      timer.fire();
-      await Future<void>.delayed(Duration.zero);
-      // A tick that found nothing to do writes nothing, so nothing else would
-      // have re-armed it. A timer that fired and did not re-arm is a scheduler
-      // that has quietly stopped.
-      expect(timer.arms, greaterThan(armsBefore));
-      expect(timer.isArmed, isTrue);
-    });
+    test(
+      'the timer re-arms after it fires, even when it found nothing',
+      () async {
+        dao.insert(nightly());
+        scheduler();
+        final armsBefore = timer.arms;
+        timer.fire();
+        await Future<void>.delayed(Duration.zero);
+        // A tick that found nothing to do writes nothing, so nothing else would
+        // have re-armed it. A timer that fired and did not re-arm is a scheduler
+        // that has quietly stopped.
+        expect(timer.arms, greaterThan(armsBefore));
+        expect(timer.isArmed, isTrue);
+      },
+    );
   });
 
   group('what reconcile does about a laptop that was shut', () {
@@ -250,18 +274,19 @@ void main() {
       },
     );
 
-    test('a second reconcile does not fire the same occurrence again', () async {
-      dao.insert(nightly());
-      clock.now = at(2026, 9, 9, 3, 10);
-      await scheduler().reconcile();
-      await scheduler().reconcile();
-      expect(firing.fired, hasLength(1));
-    });
+    test(
+      'a second reconcile does not fire the same occurrence again',
+      () async {
+        dao.insert(nightly());
+        clock.now = at(2026, 9, 9, 3, 10);
+        await scheduler().reconcile();
+        await scheduler().reconcile();
+        expect(firing.fired, hasLength(1));
+      },
+    );
 
     test('a one-shot that was missed is over, not left armed', () async {
-      dao.insert(
-        nightly(schedule: AutomationSchedule.once(at(2026, 9, 9, 3))),
-      );
+      dao.insert(nightly(schedule: AutomationSchedule.once(at(2026, 9, 9, 3))));
       clock.now = at(2026, 9, 9, 9);
       await scheduler().reconcile();
       expect(dao.runsFor('auto1').single.state, AutomationRunState.missed);
@@ -269,9 +294,7 @@ void main() {
     });
 
     test('a one-shot that fired is over too, and keeps its row', () async {
-      dao.insert(
-        nightly(schedule: AutomationSchedule.once(at(2026, 9, 9, 3))),
-      );
+      dao.insert(nightly(schedule: AutomationSchedule.once(at(2026, 9, 9, 3))));
       clock.now = at(2026, 9, 9, 3, 5);
       await scheduler().reconcile();
       expect(firing.fired, hasLength(1));
@@ -290,28 +313,31 @@ void main() {
   });
 
   group('a busy checkout queues, it does not race', () {
-    test('a fire arriving while a run is live is enqueued, and says so', () async {
-      dao.insert(nightly(id: 'first', name: 'First'));
-      dao.insert(
-        nightly(
-          id: 'second',
-          name: 'Second',
-          schedule: const AutomationSchedule.cron('5 3 * * *'),
-        ),
-      );
-      clock.now = at(2026, 9, 9, 3, 2);
-      await scheduler().reconcile();
-      expect(firing.fired.single.automationId, 'first');
+    test(
+      'a fire arriving while a run is live is enqueued, and says so',
+      () async {
+        dao.insert(nightly(id: 'first', name: 'First'));
+        dao.insert(
+          nightly(
+            id: 'second',
+            name: 'Second',
+            schedule: const AutomationSchedule.cron('5 3 * * *'),
+          ),
+        );
+        clock.now = at(2026, 9, 9, 3, 2);
+        await scheduler().reconcile();
+        expect(firing.fired.single.automationId, 'first');
 
-      clock.now = at(2026, 9, 9, 3, 6);
-      await scheduler().reconcile();
-      expect(firing.fired, hasLength(1), reason: 'the second did not start');
-      final queued = dao.runsFor('second').single;
-      expect(queued.state, AutomationRunState.queued);
-      expect(queued.scheduledFor, at(2026, 9, 9, 3, 5).toUtc());
-      expect(queued.reason, contains('This checkout is busy'));
-      expect(queued.reason, contains('"First" is running there'));
-    });
+        clock.now = at(2026, 9, 9, 3, 6);
+        await scheduler().reconcile();
+        expect(firing.fired, hasLength(1), reason: 'the second did not start');
+        final queued = dao.runsFor('second').single;
+        expect(queued.state, AutomationRunState.queued);
+        expect(queued.scheduledFor, at(2026, 9, 9, 3, 5).toUtc());
+        expect(queued.reason, contains('This checkout is busy'));
+        expect(queued.reason, contains('"First" is running there'));
+      },
+    );
 
     test('another checkout is not blocked by it', () async {
       dao.insert(nightly(id: 'first'));
@@ -325,30 +351,33 @@ void main() {
       );
     });
 
-    test('draining starts the waiting run in place, not a second row', () async {
-      dao.insert(nightly(id: 'first', name: 'First'));
-      dao.insert(
-        nightly(
-          id: 'second',
-          name: 'Second',
-          schedule: const AutomationSchedule.cron('5 3 * * *'),
-        ),
-      );
-      clock.now = at(2026, 9, 9, 3, 2);
-      await scheduler().reconcile();
-      clock.now = at(2026, 9, 9, 3, 6);
-      await scheduler().reconcile();
+    test(
+      'draining starts the waiting run in place, not a second row',
+      () async {
+        dao.insert(nightly(id: 'first', name: 'First'));
+        dao.insert(
+          nightly(
+            id: 'second',
+            name: 'Second',
+            schedule: const AutomationSchedule.cron('5 3 * * *'),
+          ),
+        );
+        clock.now = at(2026, 9, 9, 3, 2);
+        await scheduler().reconcile();
+        clock.now = at(2026, 9, 9, 3, 6);
+        await scheduler().reconcile();
 
-      // The owner finishes.
-      final owner = dao.runsFor('first').single;
-      dao.updateRun(owner.copyWith(state: AutomationRunState.finished));
-      await scheduler().drain('r1');
+        // The owner finishes.
+        final owner = dao.runsFor('first').single;
+        dao.updateRun(owner.copyWith(state: AutomationRunState.finished));
+        await scheduler().drain('r1');
 
-      expect(firing.fired.last.automationId, 'second');
-      final runs = dao.runsFor('second');
-      expect(runs, hasLength(1), reason: 'the waiting row became the run');
-      expect(runs.single.state, AutomationRunState.running);
-    });
+        expect(firing.fired.last.automationId, 'second');
+        final runs = dao.runsFor('second');
+        expect(runs, hasLength(1), reason: 'the waiting row became the run');
+        expect(runs.single.state, AutomationRunState.running);
+      },
+    );
 
     test('draining a checkout that is still busy starts nothing', () async {
       dao.insert(nightly(id: 'first', name: 'First'));
@@ -387,11 +416,22 @@ void main() {
           .runsFor('second')
           .where((r) => r.state == AutomationRunState.queued)
           .toList();
-      expect(queued, hasLength(2));
-      expect(
-        queued.every((r) => r.reason.contains('This checkout is busy')),
-        isTrue,
-      );
+      // One waiting occurrence, not two: a second of the *same* automation
+      // behind the first would run the same prompt twice back to back.
+      expect(queued, hasLength(1));
+      expect(queued.single.reason, contains('This checkout is busy'));
+      // And the one that was not queued behind it is recorded rather than
+      // dropped — beside the genuinely-missed occurrence from before any of
+      // this was running, which is a different row for a different reason.
+      final skipped = dao
+          .runsFor('second')
+          .where(
+            (r) =>
+                r.state == AutomationRunState.missed &&
+                r.reason.contains('already had the occurrence due'),
+          )
+          .toList();
+      expect(skipped, hasLength(1));
       // FIFO: the drain takes the oldest occurrence, not the newest.
       final owner = dao.runsFor('first').last;
       dao.updateRun(owner.copyWith(state: AutomationRunState.finished));
