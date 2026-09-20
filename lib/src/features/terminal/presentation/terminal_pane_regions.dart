@@ -60,6 +60,11 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
     if (diffTargetOf(paneId) case final target?) {
       return DiffTabView(key: ValueKey(paneId), target: target);
     }
+    // Keyed by the pane, as the editor is: two browsers can share a region,
+    // and without a key the one leaving hands the other its two machines.
+    if (isFilesPane(paneId)) {
+      return FilesTabView(key: ValueKey(paneId), paneId: paneId);
+    }
     // A document id we cannot read is still a document: saying so beats
     // drawing the empty-terminal slot the instance lookup below would.
     if (isDocumentPane(paneId)) {

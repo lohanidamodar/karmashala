@@ -137,6 +137,11 @@ class SftpFileSpace extends FileSpace {
     );
   }
 
+  /// Null, always: a file on a host is bytes over a wire, never a path this
+  /// process can open.
+  @override
+  String? hostPathOf(EnvironmentPath path) => null;
+
   @override
   Future<void> close() => browser.close();
 

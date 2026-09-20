@@ -9,6 +9,7 @@ import '../../notes/presentation/note_edit_dialog.dart';
 import '../../notes/presentation/note_tab_view.dart';
 import '../../settings/application/settings_controller.dart';
 import '../../editor/presentation/editor_tab_view.dart';
+import '../../files/presentation/files_tab_view.dart';
 import '../../git/application/diff_tab_actions.dart';
 import '../../git/presentation/diff_tab_view.dart';
 import '../../settings/presentation/settings_tab_view.dart';

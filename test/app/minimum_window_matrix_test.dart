@@ -30,8 +30,6 @@ import 'package:karmashala/src/features/notifications/application/session_status
 import 'package:karmashala/src/features/settings/presentation/settings_nav.dart';
 import 'package:karmashala/src/features/settings/presentation/watch_set_section.dart';
 import 'package:karmashala/src/features/settings/presentation/settings_screen.dart';
-import 'package:karmashala_ssh/connection.dart';
-import 'package:karmashala/src/features/ssh/presentation/remote_file_browser_dialog.dart';
 import 'package:karmashala/src/features/ssh/presentation/ssh_host_dialog.dart';
 import 'package:karmashala/src/features/detail/presentation/repository_info_view.dart';
 import 'package:karmashala/src/features/terminal/application/system_terminal_providers.dart';
@@ -341,46 +339,11 @@ void main() {
     );
   });
 
-  // --- B3: the four hard-sized dialogs the senior review found uncovered -----
+  // --- B3: the hard-sized dialogs the senior review found uncovered ----------
   //
   // Each of these asks for a fixed box that is wider or taller than the whole
   // supported window, and none of them had a test that pumped it small enough
   // to notice.
-
-  testWidgets('RemoteFileBrowserDialog', (tester) async {
-    // Offline on purpose: the host is not saved, so `forHostId` refuses before
-    // any socket is opened and the dialog settles into its error state. The
-    // 620x460 content box under test is the same in every state, and the live
-    // listing is covered by `test/features/ssh/live_ssh_ui_test.dart`.
-    final db = AppDatabase.memory();
-    addTearDown(db.close);
-    ExecutionEnvironmentDao(db).upsert(windowsEnv());
-
-    final container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        ...noProcessOverrides(),
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-      ],
-    );
-    addTearDown(container.dispose);
-
-    final host = SshHost(
-      id: 'unsaved',
-      name: 'build-box',
-      host: 'build-box.example',
-      port: 22,
-      username: 'dev',
-      authMethod: SshAuthMethod.privateKey,
-      createdAt: testTime,
-    );
-
-    await expectSurvivesWindowMatrix(
-      tester,
-      build: () => app(container, RemoteFileBrowserDialog(host: host)),
-      because: 'the content is a hard 620x460 inside a 720x560 window',
-    );
-  });
 
   testWidgets('EnvironmentHealthDialog', (tester) async {
     final db = AppDatabase.memory();

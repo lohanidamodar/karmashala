@@ -9,6 +9,7 @@ import '../../projects/presentation/new_project_dialog.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
+import '../../files/application/files_tab_actions.dart';
 import '../application/ssh_hosts_controller.dart';
 import 'package:karmashala_ssh/connection.dart';
 import 'ssh_connection_status_chip.dart';
@@ -17,7 +18,6 @@ import 'host_sessions_dialog.dart';
 import 'pair_phone_dialog.dart';
 import 'pair_phone_entry.dart';
 import 'ssh_host_dialog.dart';
-import 'remote_file_browser_dialog.dart';
 
 /// The saved remote hosts, and everything you can do to one. Remote hosts
 /// cannot be discovered, so this list *is* how an SSH environment comes to be.
@@ -121,7 +121,7 @@ class _HostCard extends ConsumerWidget {
             context,
             initialEnvironmentId: host.environmentId,
           ),
-        'browse' => RemoteFileBrowserDialog.show(context, host: host),
+        'browse' => openFilesTabOn(ref, host.environmentId),
         'edit' => SshHostDialog.show(context, existing: host),
         'pair_phone' => PairPhoneDialog.show(context, host: host),
         _ => _remove(context, ref),
@@ -212,8 +212,7 @@ class _HostCard extends ConsumerWidget {
                   label: const Text('New project'),
                 ),
                 TextButton.icon(
-                  onPressed: () =>
-                      RemoteFileBrowserDialog.show(context, host: host),
+                  onPressed: () => openFilesTabOn(ref, host.environmentId),
                   icon: const Icon(AppIcons.folderOpen),
                   label: const Text('Browse files'),
                 ),

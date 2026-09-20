@@ -24,6 +24,29 @@ void activateTerminalTab(WidgetRef ref, String tabId) {
   releaseHijackedSelection(ref, inGroup: terminals.groupOfTab(tabId));
 }
 
+/// Opens the file browser on [leftEnvironmentId] and [rightEnvironmentId], or
+/// brings forward the one already open on that pair. The two machines and the
+/// two starting folders are the tab's id, so a restore reopens it where it was.
+void openFilesTab(
+  WidgetRef ref, {
+  required String leftEnvironmentId,
+  required String rightEnvironmentId,
+  String leftPath = '',
+  String rightPath = '',
+}) {
+  final tabId = ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .openDocumentTab(
+        filesPaneId(
+          leftEnvironmentId: leftEnvironmentId,
+          rightEnvironmentId: rightEnvironmentId,
+          leftPath: leftPath,
+          rightPath: rightPath,
+        ),
+      );
+  activateTerminalTab(ref, tabId);
+}
+
 /// Opens Settings as a workbench tab, or brings the open one forward, landing it
 /// on [section] — scrolled to [anchor] when one is given. Asking twice focuses
 /// that tab rather than opening a second.

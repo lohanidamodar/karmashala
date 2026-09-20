@@ -88,3 +88,47 @@ String diffPaneId({
 
 /// Whether [paneId] is a file's diff.
 bool isDiffPane(String paneId) => diffPaneTarget(paneId) != null;
+
+/// The prefix the file browser's pane id carries. It names the two machines it
+/// opens on and where each starts, so restore reopens the same two folders —
+/// and so a second browser onto the same pair is the tab already open.
+const String kFilesPanePrefix = '${kDocumentPanePrefix}files:';
+
+/// The pane id for a browser between [leftEnvironmentId]:[leftPath] and
+/// [rightEnvironmentId]:[rightPath]. An empty path means "wherever that
+/// machine opens", which is its home folder.
+String filesPaneId({
+  required String leftEnvironmentId,
+  required String rightEnvironmentId,
+  String leftPath = '',
+  String rightPath = '',
+}) =>
+    '$kFilesPanePrefix$leftEnvironmentId$kPaneFieldSeparator$leftPath'
+    '$kPaneFieldSeparator$rightEnvironmentId$kPaneFieldSeparator$rightPath';
+
+/// The two sides [paneId] names, or null when it is not a browser pane or is
+/// malformed. Only the environments must be there: a side with no path opens
+/// where that machine opens.
+({
+  String leftEnvironmentId,
+  String leftPath,
+  String rightEnvironmentId,
+  String rightPath,
+})?
+filesPaneSides(String paneId) {
+  if (!paneId.startsWith(kFilesPanePrefix)) return null;
+  final fields = paneId
+      .substring(kFilesPanePrefix.length)
+      .split(kPaneFieldSeparator);
+  if (fields.length != 4) return null;
+  if (fields[0].isEmpty || fields[2].isEmpty) return null;
+  return (
+    leftEnvironmentId: fields[0],
+    leftPath: fields[1],
+    rightEnvironmentId: fields[2],
+    rightPath: fields[3],
+  );
+}
+
+/// Whether [paneId] is the file browser.
+bool isFilesPane(String paneId) => filesPaneSides(paneId) != null;

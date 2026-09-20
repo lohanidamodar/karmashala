@@ -124,4 +124,48 @@ void main() {
       expect(isNotePane(editorPaneId('/a/b.md')), isFalse);
     });
   });
+
+  group('a file browser pane id', () {
+    test('round-trips both machines and both folders', () {
+      final id = filesPaneId(
+        leftEnvironmentId: 'windows',
+        leftPath: r'C:src',
+        rightEnvironmentId: 'ssh:box',
+        rightPath: '/srv/www',
+      );
+
+      expect(isFilesPane(id), isTrue);
+      expect(isDocumentPane(id), isTrue);
+      expect(isEditorPane(id), isFalse);
+      expect(isDiffPane(id), isFalse);
+      final sides = filesPaneSides(id)!;
+      expect(sides.leftEnvironmentId, 'windows');
+      expect(sides.leftPath, r'C:src');
+      expect(sides.rightEnvironmentId, 'ssh:box');
+      expect(sides.rightPath, '/srv/www');
+    });
+
+    test('a side with no folder opens where that machine opens', () {
+      final id = filesPaneId(
+        leftEnvironmentId: 'windows',
+        rightEnvironmentId: 'wsl:Ubuntu',
+      );
+
+      final sides = filesPaneSides(id)!;
+      expect(sides.leftPath, isEmpty);
+      expect(sides.rightPath, isEmpty);
+    });
+
+    test('an id missing a machine names no browser at all', () {
+      expect(filesPaneSides(kFilesPanePrefix), isNull);
+      expect(
+        filesPaneSides(
+          filesPaneId(leftEnvironmentId: '', rightEnvironmentId: 'x'),
+        ),
+        isNull,
+      );
+      expect(isFilesPane(kSettingsPaneId), isFalse);
+      expect(isFilesPane(editorPaneId('/a/b.md')), isFalse);
+    });
+  });
 }

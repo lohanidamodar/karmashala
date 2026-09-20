@@ -94,6 +94,7 @@ IconData? _documentIconFor(TerminalTab tab) {
   if (isEditorPane(paneId)) return AppIcons.fileCode;
   if (isDiffPane(paneId)) return AppIcons.gitDiff;
   if (isNotePane(paneId)) return AppIcons.note;
+  if (isFilesPane(paneId)) return AppIcons.folderOpen;
   return null;
 }
 

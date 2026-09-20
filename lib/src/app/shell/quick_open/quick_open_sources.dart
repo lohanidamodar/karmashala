@@ -29,6 +29,7 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/resume.dart';
 import 'package:karmashala_session/launch.dart';
 import '../../../features/sessions/presentation/new_session_dialog.dart';
+import '../../../features/files/application/files_tab_actions.dart';
 import '../../../features/settings/application/settings_controller.dart';
 import '../../../features/settings/presentation/settings_nav.dart';
 import '../../../features/snippets/application/snippet_insertion.dart';
@@ -177,9 +178,8 @@ class QuickOpenSources {
           subtitle: waiting.label,
           icon: AppIcons.x,
           keywords: keywords,
-          onSelect: () => ref
-              .read(scheduledResumeControllerProvider)
-              .cancelFor(sessionId),
+          onSelect: () =>
+              ref.read(scheduledResumeControllerProvider).cancelFor(sessionId),
         ),
       if (all > 0)
         _command(
@@ -187,10 +187,8 @@ class QuickOpenSources {
           subtitle: all == 1 ? '1 waiting' : '$all waiting',
           icon: AppIcons.clock,
           keywords: keywords,
-          onSelect: () => openSettingsTab(
-            ref,
-            anchor: SettingsAnchor.scheduledResumes,
-          ),
+          onSelect: () =>
+              openSettingsTab(ref, anchor: SettingsAnchor.scheduledResumes),
         ),
     ];
   }
@@ -267,8 +265,9 @@ class QuickOpenSources {
         shortcut: 'Ctrl+`',
         // The focused group: a command that names no tab means the group the
         // keyboard is in.
-        onSelect: () =>
-            ref.read(terminalSessionsControllerProvider.notifier).showTerminalHere(),
+        onSelect: () => ref
+            .read(terminalSessionsControllerProvider.notifier)
+            .showTerminalHere(),
       ),
       // [_openTabs] lists only the tabs that are *nothing but* tabs; this is
       // the other question — "show me my tabs" — and opens the strip's picker.
@@ -325,7 +324,8 @@ class QuickOpenSources {
       // record of the conversation they name.
       _command(
         'Review sessions with no conversation',
-        subtitle: 'Rows an agent cannot resume — remove them, or start a '
+        subtitle:
+            'Rows an agent cannot resume — remove them, or start a '
             'conversation in them',
         icon: AppIcons.warningCircle,
         keywords: const [
@@ -337,6 +337,13 @@ class QuickOpenSources {
           'tidy',
         ],
         onSelect: () => UnresumableSessionsDialog.show(context),
+      ),
+      _command(
+        'Browse files',
+        subtitle: 'This machine, a distribution or a host — side by side',
+        icon: AppIcons.folderOpen,
+        keywords: const ['files', 'sftp', 'upload', 'download', 'copy'],
+        onSelect: () => openFilesTabHere(ref),
       ),
       _command(
         'Open Settings',
@@ -602,7 +609,12 @@ class QuickOpenSources {
               title: session.title,
               // The age of the newest reading, or nothing when we hold none —
               // never "just now" for a session we cannot speak for (§19).
-              subtitle: [where, agent, ?note, ?lastActive.label(now)].join(' · '),
+              subtitle: [
+                where,
+                agent,
+                ?note,
+                ?lastActive.label(now),
+              ].join(' · '),
               detail: session.status.name,
               icon: AppIcons.chatCircle,
               keywords: [
@@ -752,9 +764,8 @@ class QuickOpenSources {
           // keyword stops the fuzzy scorer dropping an excerpt that lacks it.
           keywords: [query, agent],
           weight: _conversationWeight,
-          onSelect: () => dismiss(
-            () => _focusSession(openId, imported: native == null),
-          ),
+          onSelect: () =>
+              dismiss(() => _focusSession(openId, imported: native == null)),
         ),
       );
     }
@@ -792,8 +803,12 @@ class QuickOpenSources {
   }
 
   static String _describeShape(TerminalPreset preset) {
-    final tabs = preset.tabs.length == 1 ? '1 tab' : '${preset.tabs.length} tabs';
-    final panes = preset.paneCount == 1 ? '1 pane' : '${preset.paneCount} panes';
+    final tabs = preset.tabs.length == 1
+        ? '1 tab'
+        : '${preset.tabs.length} tabs';
+    final panes = preset.paneCount == 1
+        ? '1 pane'
+        : '${preset.paneCount} panes';
     return '$tabs · $panes';
   }
 

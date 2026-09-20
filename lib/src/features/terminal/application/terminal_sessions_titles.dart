@@ -46,6 +46,7 @@ extension TerminalPaneTitles on TerminalSessionsController {
     // A document names itself: no shell named its window and it is in no
     // directory.
     if (isSettingsPane(paneId)) return 'Settings';
+    if (isFilesPane(paneId)) return 'Files';
     // A host path, which may be spelled for Windows: the windows context reads
     // `/` and `\` alike, as the editor's own `_hostPaths` does.
     if (editorPanePath(paneId) case final path?) return p.windows.basename(path);

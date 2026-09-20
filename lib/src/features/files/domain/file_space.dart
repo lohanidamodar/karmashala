@@ -101,6 +101,11 @@ abstract class FileSpace {
     void Function(int bytes)? onProgress,
   });
 
+  /// The same place spelled for `dart:io` on this desktop, or null when this
+  /// machine's files can only be reached by asking it. What tells a copy
+  /// whether it is bytes over a wire or a file the process can open itself.
+  String? hostPathOf(EnvironmentPath path);
+
   /// Releases whatever this held open. The SSH connection itself is not this
   /// object's to close.
   Future<void> close();

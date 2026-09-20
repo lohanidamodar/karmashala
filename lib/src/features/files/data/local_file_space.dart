@@ -195,6 +195,12 @@ class LocalFileSpace extends FileSpace {
   }
 
   @override
+  String? hostPathOf(EnvironmentPath path) {
+    requireOwnPath(path);
+    return bridge.toHost(path.path);
+  }
+
+  @override
   Future<void> close() async {}
 
   /// A copy where both ends are reachable with `dart:io` is still a copy: the
