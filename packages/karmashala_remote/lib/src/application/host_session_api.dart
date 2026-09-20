@@ -43,7 +43,11 @@ class HostSessionApi {
        _projects = projectLedger ?? SessionStartLedger<RemoteWorkspaceProject>(),
        _prompts = promptLedger ?? SessionStartLedger<RemotePromptDelivery>();
 
-  final PairedDevice device;
+  /// The device this api serves. **Not final**: permissions edited on the
+  /// desktop are enforced from the next frame, on the link the phone already
+  /// holds — re-pairing to widen a grant is what this replaces.
+  PairedDevice device;
+
   final RemoteHostBindings bindings;
   final RemoteSend _send;
 
@@ -104,8 +108,10 @@ class HostSessionApi {
 
   Set<String> get subscribedSessions => Set.unmodifiable(_subscribed);
 
-  /// The `host.status` greeting: the supported version range, and where this
-  /// host can be reached, so a phone's saved relay set heals over the live link.
+  /// The `host.status` greeting: the supported version range, where this host
+  /// can be reached — so a phone's saved relay set heals over the live link —
+  /// and what this device is granted now, so a permission edited here reaches
+  /// the phone without re-pairing.
   Future<void> sendHostStatus() => _send(
     FrameType.hostStatus,
     payload: RemoteHostStatus(
@@ -113,6 +119,7 @@ class HostSessionApi {
       hostName: bindings.hostName,
       relays: relays?.call() ?? const [],
       lanHint: lanHint?.call(),
+      capabilities: device.capabilities,
     ).toJson(),
   );
 

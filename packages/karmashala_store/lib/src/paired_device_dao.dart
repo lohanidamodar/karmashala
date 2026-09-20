@@ -91,6 +91,17 @@ class PairedDeviceDao {
     ]);
   }
 
+  /// What this device may do from now on. Editable after pairing: a grant is
+  /// the desktop's to change, and re-pairing to widen one threw the phone's
+  /// key, generation and push token away to say something this row can say.
+  /// A revoked row is left alone — it has no key to grant anything to.
+  void updateCapabilities(String id, CapabilitySet capabilities) {
+    _db.execute(
+      'UPDATE paired_devices SET capabilities = ? WHERE id = ? AND revoked = 0;',
+      [capabilities.bits, id],
+    );
+  }
+
   /// Revokes a device: the key is **deleted**, not merely flagged, so a
   /// revoked row can never seal or open another frame.
   void revoke(String id) {

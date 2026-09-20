@@ -48,17 +48,24 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
 
   /// The refresh that removes re-pairing for good: the host says where it can
   /// be met and this phone's saved candidates become that, health carried over
-  /// for the relays that survive. An empty announcement changes nothing.
+  /// for the relays that survive — and what this phone is granted now, which
+  /// the desktop can edit without a new pairing. An empty announcement changes
+  /// nothing.
   Future<void> _applyHostStatus(RemoteHostStatus status) async {
     final record = _record;
     if (record == null || _closed) return;
-    if (status.relays.isEmpty && status.lanHint == null) return;
+    // The grant the host enforces from here on. An older host sends none and
+    // the phone keeps what it was paired with.
+    final granted = status.capabilities;
+    final grantMoved =
+        granted != null && granted.bits != record.capabilities.bits;
+    if (status.relays.isEmpty && status.lanHint == null && !grantMoved) return;
     final merged = mergeRelayCandidates(record.candidates, status.relays);
     final sameRelays =
         merged.length == record.candidates.length &&
         !merged.indexed.any((e) => e.$2.key != record.candidates[e.$1].key);
     final hint = status.lanHint ?? record.lanHint;
-    if (sameRelays && hint == record.lanHint) return;
+    if (sameRelays && hint == record.lanHint && !grantMoved) return;
     try {
       _all = await stored.CompanionConnections.mutate(store, (all) {
         final saved = all.byHost(record.hostId.value);
@@ -67,14 +74,24 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
           saved.copyWith(
             candidates: mergeRelayCandidates(saved.candidates, status.relays),
             lanHint: hint,
+            capabilities: granted,
           ),
         );
         return all;
       });
       if (_all.activeHostId?.value == record.hostId.value) {
         _record = _all.active ?? _record;
+        // What the phone may do changed: every screen reads it from here.
+        final current = _record;
+        if (grantMoved && current != null) {
+          _pairing.value = _publicPairing(current);
+        }
       }
-      onLog?.call('saved relay candidates refreshed from host.status');
+      onLog?.call(
+        grantMoved
+            ? 'this phone\'s permissions were changed on the desktop'
+            : 'saved relay candidates refreshed from host.status',
+      );
     } on Object catch (error) {
       onLog?.call('relay candidate refresh failed: $error');
     }

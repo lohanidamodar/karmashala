@@ -339,6 +339,21 @@ class RemoteHostService {
     await cancelPairing();
   }
 
+  /// Changes what [deviceId] may do, **without touching its key or its link**:
+  /// the row is written, the live runtime is told, and the phone hears its new
+  /// grant on a fresh `host.status`. Enforcement is per frame, so the next one
+  /// is already judged by this set.
+  Future<void> updateCapabilities(
+    String deviceId,
+    CapabilitySet capabilities,
+  ) async {
+    devices.updateCapabilities(deviceId, capabilities);
+    final updated = devices.getById(deviceId);
+    onDevicesChanged?.call();
+    if (updated == null || updated.revoked) return;
+    await _runtimes[deviceId]?.applyGrant(updated);
+  }
+
   /// Deletes the device's key, tears down its channels and stops listening for
   /// it. Its frames are junk from here on: nothing holds a key that opens them.
   Future<void> revoke(String deviceId) async {
@@ -534,6 +549,18 @@ class _DeviceRuntime {
   final SessionStartLedger<RemoteSessionStarted> _resumes = SessionStartLedger<RemoteSessionStarted>();
   final SessionStartLedger<RemoteWorkspaceProject> _projects = SessionStartLedger<RemoteWorkspaceProject>();
   final SessionStartLedger<RemotePromptDelivery> _prompts = SessionStartLedger<RemotePromptDelivery>();
+
+  /// Takes the device's new grant without dropping anything: the row this
+  /// runtime carries, the api that judges its frames, and a `host.status` so
+  /// the phone shows what it may do now. Queued like every other task, so it
+  /// cannot land between a frame and its answer.
+  Future<void> applyGrant(PairedDevice updated) {
+    device = updated;
+    return run((api) async {
+      api.device = updated;
+      await api.sendHostStatus();
+    });
+  }
 
   bool _sweeping = false;
 

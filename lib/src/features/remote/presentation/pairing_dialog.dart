@@ -11,6 +11,7 @@ import '../application/remote_access_controller.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_remote/pairing.dart';
 import '../pairing/pairing_relay_endpoints.dart';
+import 'capability_labels.dart';
 
 /// The pairing dialog: what the phone may do, then the QR code, then the
 /// confirmation that a phone proved the key and was stored.
@@ -127,19 +128,6 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
     _begin();
   }
 
-  static String _label(Capability capability) => switch (capability) {
-    Capability.viewSessions => 'View sessions',
-    Capability.readTranscript => 'Read transcripts',
-    Capability.sendPrompt => 'Send prompts',
-    Capability.approve => 'Answer approvals',
-    Capability.receiveNotifications => 'Notifications',
-    Capability.startSession => 'Start new sessions',
-    Capability.addProject => 'Add projects',
-    Capability.viewActivity => 'See what is running',
-    Capability.sendAttachment => 'Send files',
-    Capability.viewUsage => 'See usage limits',
-  };
-
   void _selectEndpoint(int index) {
     setState(() => _endpoint = index);
     // The shown code names the old relay; root a fresh one here.
@@ -194,7 +182,7 @@ class _PairingDialogState extends ConsumerState<PairingDialog> {
                 children: [
                   for (final capability in Capability.values)
                     FilterChip(
-                      label: Text(_label(capability)),
+                      label: Text(capabilityLabel(capability)),
                       selected: _granted.contains(capability),
                       onSelected: (value) => _toggle(capability, value),
                     ),

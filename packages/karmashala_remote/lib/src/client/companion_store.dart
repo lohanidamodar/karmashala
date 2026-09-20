@@ -120,11 +120,12 @@ class CompanionPairing {
     String? directEndpoint,
     HostRoute? route,
     CompanionRoutePin? pin,
+    CapabilitySet? capabilities,
   }) => CompanionPairing(
     hostId: hostId,
     deviceId: deviceId,
     deviceKey: deviceKey,
-    capabilities: capabilities,
+    capabilities: capabilities ?? this.capabilities,
     relay: relay ?? this.relay,
     generation: generation ?? this.generation,
     hostName: hostName,

@@ -1178,10 +1178,16 @@ class RemoteHostStatus {
     required this.hostName,
     this.relays = const [],
     this.lanHint,
+    this.capabilities,
   });
 
   final VersionRange versions;
   final String hostName;
+
+  /// What this device is granted **now**, so permissions edited on the desktop
+  /// reach the phone without re-pairing. Null from a host that does not send
+  /// it, and the phone then keeps what it was paired with.
+  final CapabilitySet? capabilities;
 
   /// Every relay this host is serving right now; the phone replaces its saved
   /// candidate set with this. Additive — an older host sends none and the phone
@@ -1198,6 +1204,7 @@ class RemoteHostStatus {
     if (relays.isNotEmpty)
       'relays': [for (final url in relays) url.toString()],
     if (lanHint != null) 'lan': lanHint,
+    if (capabilities != null) 'caps': capabilities!.bits,
   };
 
   static RemoteHostStatus fromJson(Map<String, Object?> json) {
@@ -1206,11 +1213,13 @@ class RemoteHostStatus {
       throw const ProtocolException('bad host status');
     }
     final lan = json['lan'];
+    final caps = json['caps'];
     return RemoteHostStatus(
       versions: VersionRange.fromJson(versions),
       hostName: json['host'] is String ? json['host']! as String : '',
       relays: relayUrisFrom(json['relays']),
       lanHint: lan is String && lan.isNotEmpty ? lan : null,
+      capabilities: caps is int && caps >= 0 ? CapabilitySet(caps) : null,
     );
   }
 }

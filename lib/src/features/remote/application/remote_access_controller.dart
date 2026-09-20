@@ -174,6 +174,25 @@ class RemoteAccessController {
     _ref.read(pairedDevicesRevisionProvider.notifier).bump();
   }
 
+  /// Changes what a paired device may do. The pairing itself is untouched:
+  /// same key, same generation, same link — a phone does not re-pair to be
+  /// granted one more thing, and is not forgotten to be granted one less.
+  /// Works with the service off too; the row is what the next link reads.
+  Future<void> updateCapabilities(
+    PairedDevice device,
+    CapabilitySet capabilities,
+  ) async {
+    final service = _service;
+    if (service != null) {
+      await service.updateCapabilities(device.id, capabilities);
+    } else {
+      _ref
+          .read(pairedDeviceDaoProvider)
+          .updateCapabilities(device.id, capabilities);
+    }
+    _ref.read(pairedDevicesRevisionProvider.notifier).bump();
+  }
+
   /// Revokes a device: key deleted, frames rejected. Works with the service
   /// off too — a revocation must never wait for a listener.
   Future<void> revoke(PairedDevice device) async {

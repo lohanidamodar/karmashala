@@ -1187,6 +1187,70 @@ void main() {
     expect(asked, isFalse);
     expect(fake.pushes, isEmpty);
   });
+
+  test(
+    'permissions edited on the desktop reach the phone on the pairing it '
+    'already has',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final gateway = makeGateway();
+      final session = await service!.beginPairing(
+        capabilities: CapabilitySet.of(const [Capability.viewSessions]),
+      );
+      final paired = await gateway.pairWithQr(session.payload.encode());
+      await session.done;
+      await awaitLink(gateway, CompanionLinkState.connected);
+      expect(paired.capabilities.has(Capability.sendPrompt), isFalse);
+      final device = dao.getAll().single;
+
+      // Refused while it is not granted: enforcement is per frame.
+      await expectLater(
+        gateway.sendPrompt('s1', 'before'),
+        throwsA(isA<GatewayException>()),
+      );
+      expect(fake.prompts, isEmpty);
+
+      await service!.updateCapabilities(
+        device.id,
+        CapabilitySet.of(const [
+          Capability.viewSessions,
+          Capability.sendPrompt,
+        ]),
+      );
+
+      // The phone hears it on the link it already holds — no new code, no
+      // scan, and the screens that gate on the grant follow.
+      await eventually(
+        () async => gateway.capabilities.has(Capability.sendPrompt),
+        reason: 'the phone hears its widened grant',
+      );
+      expect(gateway.pairing!.capabilities.has(Capability.sendPrompt), isTrue);
+      await gateway.sendPrompt('s1', 'after');
+      expect(fake.prompts, [(sessionId: 's1', text: 'after')]);
+
+      // Same pairing throughout: same row, same key, same generation.
+      final after = dao.getAll().single;
+      expect(after.id, device.id);
+      expect(after.deviceKey, device.deviceKey);
+      expect(after.generation, device.generation);
+
+      // And narrowing lands the same way.
+      await service!.updateCapabilities(
+        device.id,
+        CapabilitySet.of(const [Capability.viewSessions]),
+      );
+      await eventually(
+        () async => !gateway.capabilities.has(Capability.sendPrompt),
+        reason: 'the phone hears its narrowed grant',
+      );
+      await expectLater(
+        gateway.sendPrompt('s1', 'after the narrowing'),
+        throwsA(isA<GatewayException>()),
+      );
+      expect(fake.prompts, [(sessionId: 's1', text: 'after')]);
+    },
+  );
 }
 
 /// Forwards TCP to the host's LAN listener so a test can kill the LAN leg —

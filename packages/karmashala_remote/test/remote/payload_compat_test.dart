@@ -281,6 +281,27 @@ void main() {
       expect(status.relays, announced.relays);
       expect(status.lanHint, announced.lanHint);
     });
+
+    test('the grant it carries is what the phone may do now, and absent from '
+        'a host that never edits one', () {
+      final granted = CapabilitySet.of(const [
+        Capability.viewSessions,
+        Capability.sendPrompt,
+      ]);
+      final withGrant = RemoteHostStatus(
+        versions: kSupportedVersions,
+        hostName: 'Desktop',
+        capabilities: granted,
+      );
+
+      expect(
+        RemoteHostStatus.fromJson(withGrant.toJson()).capabilities?.bits,
+        granted.bits,
+      );
+      // An older host sends no `caps`, and the phone keeps what it paired with.
+      expect(announced.toJson().containsKey('caps'), isFalse);
+      expect(RemoteHostStatus.fromJson(announced.toJson()).capabilities, isNull);
+    });
   });
 
   group("an approval request's wait kind is additive too", () {

@@ -97,6 +97,51 @@ void main() {
     expect(dao.getAll(), hasLength(1), reason: 'the list still shows it');
   });
 
+  group('editing what a device may do', () {
+    // Widening a grant used to mean pairing again, which threw the key, the
+    // generation and the push token away to say something this row can say.
+    test('the grant is changed and nothing else about the pairing is', () {
+      dao.insert(device());
+      final before = dao.getById(idA)!;
+      final granted = CapabilitySet.of(const [
+        Capability.viewSessions,
+        Capability.approve,
+      ]);
+
+      dao.updateCapabilities(idA, granted);
+
+      final after = dao.getById(idA)!;
+      expect(after.capabilities.bits, granted.bits);
+      expect(after.deviceKey, before.deviceKey);
+      expect(after.generation, before.generation);
+      expect(after.name, before.name);
+      expect(after.createdAt, before.createdAt);
+    });
+
+    test('a revoked device is not granted anything', () {
+      dao.insert(device());
+      dao.revoke(idA);
+
+      dao.updateCapabilities(
+        idA,
+        CapabilitySet.of(const [Capability.viewSessions]),
+      );
+
+      final after = dao.getById(idA)!;
+      expect(after.revoked, isTrue);
+      expect(
+        after.capabilities.bits,
+        CapabilitySet.all.bits,
+        reason: 'the row is a record of what was granted, and it is over',
+      );
+      expect(
+        after.deviceKey,
+        isEmpty,
+        reason: 'nothing can be granted to a row with no key',
+      );
+    });
+  });
+
   test('the generation counter persists — the loop-64 contract', () {
     dao.insert(device());
 

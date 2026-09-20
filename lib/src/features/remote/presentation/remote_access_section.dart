@@ -12,6 +12,7 @@ import '../application/ssh_relays.dart';
 import 'package:karmashala_remote/remote.dart';
 import '../relay_local/local_relay_providers.dart';
 import '../relay_local/local_relay_service.dart';
+import 'device_permissions_dialog.dart';
 import 'pairing_dialog.dart';
 import 'rename_device_dialog.dart';
 import 'ssh_relays_panel.dart';
@@ -434,6 +435,27 @@ class _DeviceRow extends ConsumerWidget {
     ref.read(remoteAccessControllerProvider).rename(device, name);
   }
 
+  Future<void> _permissions(BuildContext context, WidgetRef ref) async {
+    final granted = await DevicePermissionsDialog.show(
+      context,
+      device.name,
+      device.capabilities,
+    );
+    if (granted == null) return;
+    await ref
+        .read(remoteAccessControllerProvider)
+        .updateCapabilities(device, granted);
+  }
+
+  /// How much of what this build can grant the device holds — the row says
+  /// where a phone stands without opening the dialog.
+  static String _grantSummary(CapabilitySet granted) {
+    final held = Capability.values.where(granted.has).length;
+    if (held == Capability.values.length) return 'all permissions';
+    if (held == 0) return 'no permissions';
+    return '$held of ${Capability.values.length} permissions';
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -470,6 +492,7 @@ class _DeviceRow extends ConsumerWidget {
                               ? 'Relay on ${sshRelay!.hostName}'
                               : 'Hosted relay',
                           if (parked) 'paused — that relay is off',
+                          _grantSummary(device.capabilities),
                           _lastSeen(device.lastSeenAt),
                         ].join(' · '),
                   style: theme.textTheme.labelSmall?.copyWith(
@@ -482,6 +505,12 @@ class _DeviceRow extends ConsumerWidget {
             ),
           ),
           if (!device.revoked) ...[
+            IconButton(
+              tooltip: 'Permissions',
+              iconSize: Chrome.icon,
+              icon: const Icon(AppIcons.listChecks),
+              onPressed: () => _permissions(context, ref),
+            ),
             IconButton(
               tooltip: 'Rename',
               iconSize: Chrome.icon,
