@@ -34,7 +34,10 @@ class FlutterSdkService {
         return _unreachable(now, error.message);
       }
       if (!alive.ok) {
-        return _unreachable(now, firstNonEmptyLine(alive.stderr) ?? 'it did not answer');
+        return _unreachable(
+          now,
+          firstNonEmptyLine(alive.stderr) ?? 'it did not answer',
+        );
       }
     }
 
@@ -83,7 +86,10 @@ class FlutterSdkService {
     final CommandResult versioned;
     try {
       versioned = await runner.run(
-        CommandRequest(executable: path, arguments: const <String>['--version']),
+        CommandRequest(
+          executable: path,
+          arguments: const <String>['--version'],
+        ),
       );
     } on CommandException catch (error) {
       return FlutterSdkReading.refused(
@@ -120,7 +126,10 @@ class FlutterSdkService {
     final CommandResult versioned;
     try {
       versioned = await runner.run(
-        CommandRequest(executable: path, arguments: const <String>['--version']),
+        CommandRequest(
+          executable: path,
+          arguments: const <String>['--version'],
+        ),
       );
     } on CommandException catch (error) {
       return FlutterSdkReading.refused(

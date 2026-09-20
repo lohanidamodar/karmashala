@@ -136,8 +136,10 @@ void main() {
       ),
       isNull,
     );
-    expect(dao.setStatus('nope', ReviewThreadStatus.resolved, now: testTime),
-        isNull);
+    expect(
+      dao.setStatus('nope', ReviewThreadStatus.resolved, now: testTime),
+      isNull,
+    );
   });
 
   test('a repository reads newest activity first, filtered by path', () {
@@ -148,9 +150,8 @@ void main() {
       at: testTime.add(const Duration(minutes: 2)),
     );
     expect(dao.forRepository('r1').map((t) => t.id), ['t-2', 't-1']);
-    expect(
-      dao.forRepository('r1', path: 'lib/a.dart').map((t) => t.id),
-      ['t-1'],
-    );
+    expect(dao.forRepository('r1', path: 'lib/a.dart').map((t) => t.id), [
+      't-1',
+    ]);
   });
 }

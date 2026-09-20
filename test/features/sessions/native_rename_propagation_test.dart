@@ -42,7 +42,10 @@ void main() {
   });
   tearDown(() => db.close());
 
-  void seedSession({String agentId = AgentIds.codex, String? externalId = 'u1'}) {
+  void seedSession({
+    String agentId = AgentIds.codex,
+    String? externalId = 'u1',
+  }) {
     AgentInstallationDao(db).insert(agentInstallation(agentId: agentId));
     SessionDao(db).insert(
       session(title: 'Session 0').copyWith(externalSessionId: externalId),
@@ -66,21 +69,26 @@ void main() {
     return container;
   }
 
-  test('renaming a Codex row tells Codex, and keeps the name the user own', () async {
-    seedSession();
-    final container = mount();
+  test(
+    'renaming a Codex row tells Codex, and keeps the name the user own',
+    () async {
+      seedSession();
+      final container = mount();
 
-    await container.read(sessionActionsProvider).renameNative('s1', 'Renamed');
+      await container
+          .read(sessionActionsProvider)
+          .renameNative('s1', 'Renamed');
 
-    expect(server.lastNameSet, {'threadId': 'u1', 'name': 'Renamed'});
-    final row = SessionDao(db).getById('s1')!;
-    expect(row.title, 'Renamed');
-    expect(
-      row.titleByUser,
-      isTrue,
-      reason: 'the flag that stops the CLI title sync taking the name back',
-    );
-  });
+      expect(server.lastNameSet, {'threadId': 'u1', 'name': 'Renamed'});
+      final row = SessionDao(db).getById('s1')!;
+      expect(row.title, 'Renamed');
+      expect(
+        row.titleByUser,
+        isTrue,
+        reason: 'the flag that stops the CLI title sync taking the name back',
+      );
+    },
+  );
 
   test('the workspace row is renamed before Codex is asked anything', () {
     seedSession();
@@ -113,34 +121,37 @@ void main() {
     expect(SessionDao(db).getById('s1')!.title, 'Renamed');
   });
 
-  test('a Codex-side name notification updates the row and both title surfaces', () async {
-    seedSession();
-    final container = ProviderContainer(
-      overrides: [
-        databaseProvider.overrideWithValue(db),
-        commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(fallback: runner),
-        ),
-      ],
-    );
-    addTearDown(container.dispose);
-    final beforeSessions = container.read(sessionsRevisionProvider);
-    final beforeTerminals = container
-        .read(terminalSessionsControllerProvider)
-        .titleRevision;
-    final client = container
-        .read(codexAppServersProvider)
-        .forEnvironment('windows')!;
+  test(
+    'a Codex-side name notification updates the row and both title surfaces',
+    () async {
+      seedSession();
+      final container = ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(fallback: runner),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final beforeSessions = container.read(sessionsRevisionProvider);
+      final beforeTerminals = container
+          .read(terminalSessionsControllerProvider)
+          .titleRevision;
+      final client = container
+          .read(codexAppServersProvider)
+          .forEnvironment('windows')!;
 
-    await client.setThreadName('u1', 'Renamed in Codex');
+      await client.setThreadName('u1', 'Renamed in Codex');
 
-    final row = SessionDao(db).getById('s1')!;
-    expect(row.title, 'Renamed in Codex');
-    expect(row.titleByUser, isFalse);
-    expect(container.read(sessionsRevisionProvider), beforeSessions + 1);
-    expect(
-      container.read(terminalSessionsControllerProvider).titleRevision,
-      greaterThan(beforeTerminals),
-    );
-  });
+      final row = SessionDao(db).getById('s1')!;
+      expect(row.title, 'Renamed in Codex');
+      expect(row.titleByUser, isFalse);
+      expect(container.read(sessionsRevisionProvider), beforeSessions + 1);
+      expect(
+        container.read(terminalSessionsControllerProvider).titleRevision,
+        greaterThan(beforeTerminals),
+      );
+    },
+  );
 }

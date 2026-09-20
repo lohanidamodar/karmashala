@@ -154,35 +154,35 @@ class RemoteSessionSnapshot {
     bool clearAttention = false,
     String? environmentBadge,
   }) => RemoteSessionSnapshot(
-        sessionId: sessionId,
-        title: title,
-        status: status,
-        archived: archived,
-        attention: clearAttention ? null : (attention ?? this.attention),
-        stage: stage ?? this.stage,
-        repositoryId: repositoryId,
-        repositoryName: repositoryName,
-        createdAt: createdAt,
-        agentLabel: agentLabel,
-        whereabouts: whereabouts,
-        lastActivityAt: lastActivityAt,
-        imported: imported,
-        projectId: projectId,
-        projectName: projectName,
-        projectPath: projectPath,
-        pinned: pinned,
-        folderMissing: folderMissing,
-        subPath: subPath,
-        worktree: worktree,
-        branch: branch,
-        attachments: attachments,
-        environmentBadge: environmentBadge ?? this.environmentBadge,
-        environmentName: environmentName,
-        environmentId: environmentId,
-        environmentKind: environmentKind,
-        model: model,
-        usageLimit: usageLimit,
-      );
+    sessionId: sessionId,
+    title: title,
+    status: status,
+    archived: archived,
+    attention: clearAttention ? null : (attention ?? this.attention),
+    stage: stage ?? this.stage,
+    repositoryId: repositoryId,
+    repositoryName: repositoryName,
+    createdAt: createdAt,
+    agentLabel: agentLabel,
+    whereabouts: whereabouts,
+    lastActivityAt: lastActivityAt,
+    imported: imported,
+    projectId: projectId,
+    projectName: projectName,
+    projectPath: projectPath,
+    pinned: pinned,
+    folderMissing: folderMissing,
+    subPath: subPath,
+    worktree: worktree,
+    branch: branch,
+    attachments: attachments,
+    environmentBadge: environmentBadge ?? this.environmentBadge,
+    environmentName: environmentName,
+    environmentId: environmentId,
+    environmentKind: environmentKind,
+    model: model,
+    usageLimit: usageLimit,
+  );
 
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
@@ -919,7 +919,10 @@ class RemoteQuestionAnswerRequest {
   Map<String, Object?> toJson() => {
     'sessionId': sessionId,
     'toolUseId': toolUseId,
-    if (decline) 'decline': true else 'answers': [for (final a in answers) a.toJson()],
+    if (decline)
+      'decline': true
+    else
+      'answers': [for (final a in answers) a.toJson()],
   };
 
   static RemoteQuestionAnswerRequest fromJson(Map<String, Object?> json) {
@@ -931,7 +934,9 @@ class RemoteQuestionAnswerRequest {
     final decline = json['decline'] == true;
     final answers = json['answers'];
     if (!decline && (answers is! List || answers.isEmpty)) {
-      throw const ProtocolException('a question answer needs answers or a decline');
+      throw const ProtocolException(
+        'a question answer needs answers or a decline',
+      );
     }
     return RemoteQuestionAnswerRequest(
       sessionId: sessionId,
@@ -939,7 +944,10 @@ class RemoteQuestionAnswerRequest {
       decline: decline,
       answers: decline
           ? const []
-          : [for (final a in answers! as List) RemoteQuestionAnswer.fromJson(a)],
+          : [
+              for (final a in answers! as List)
+                RemoteQuestionAnswer.fromJson(a),
+            ],
     );
   }
 }
@@ -1201,8 +1209,7 @@ class RemoteHostStatus {
   Map<String, Object?> toJson() => {
     'versions': versions.toJson(),
     'host': hostName,
-    if (relays.isNotEmpty)
-      'relays': [for (final url in relays) url.toString()],
+    if (relays.isNotEmpty) 'relays': [for (final url in relays) url.toString()],
     if (lanHint != null) 'lan': lanHint,
     if (capabilities != null) 'caps': capabilities!.bits,
   };
@@ -1428,7 +1435,8 @@ class RemoteCheckoutOption {
       agents: [
         if (agents is List)
           for (final entry in agents)
-            if (entry is Map<String, Object?>) RemoteAgentOption.fromJson(entry),
+            if (entry is Map<String, Object?>)
+              RemoteAgentOption.fromJson(entry),
       ],
     );
   }

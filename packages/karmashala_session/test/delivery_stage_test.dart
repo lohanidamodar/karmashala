@@ -161,10 +161,7 @@ void main() {
     // got, and these are answers to a different question ("what is in the
     // way") that `deliveryActionsFor` asks instead.
     test('a local count above zero is proof', () {
-      expect(
-        const SessionDelivery(behindBase: 3).isBehindBase,
-        isTrue,
-      );
+      expect(const SessionDelivery(behindBase: 3).isBehindBase, isTrue);
     });
 
     test('a count of zero is proof of nothing, because nothing fetches', () {

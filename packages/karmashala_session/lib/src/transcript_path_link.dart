@@ -62,7 +62,11 @@ final RegExp kTranscriptPathPattern = RegExp(
 
 /// A path found in a transcript.
 class TranscriptPathToken {
-  const TranscriptPathToken({required this.text, required this.path, this.line});
+  const TranscriptPathToken({
+    required this.text,
+    required this.path,
+    this.line,
+  });
 
   /// Exactly the characters matched, as the agent wrote them — including any
   /// `:12`. This is what the link shows.

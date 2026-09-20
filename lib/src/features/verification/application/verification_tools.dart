@@ -53,7 +53,8 @@ class VerificationTools {
       );
     }
     // Counted, not compared pairwise: a run verifies exactly one thing.
-    if ([url != null, serial != null, isChange].where((set) => set).length > 1) {
+    if ([url != null, serial != null, isChange].where((set) => set).length >
+        1) {
       throw const VerificationException(
         'A run verifies one thing: pass url, serial or change, not several.',
       );

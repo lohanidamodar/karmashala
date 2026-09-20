@@ -84,25 +84,31 @@ void main() {
       c.read(agentInstallationsControllerProvider.notifier);
 
   group('the startup check', () {
-    test('a workspace whose paths all open repairs nothing and spawns nothing', () async {
-      AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _real),
-      );
-      container = workspaceWith(
-        probe: FakePathProbe(files: const {_real}),
-        responder: (_) => fail('nothing should have been spawned'),
-      );
+    test(
+      'a workspace whose paths all open repairs nothing and spawns nothing',
+      () async {
+        AgentInstallationDao(
+          db,
+        ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+        container = workspaceWith(
+          probe: FakePathProbe(files: const {_real}),
+          responder: (_) => fail('nothing should have been spawned'),
+        );
 
-      final report = await controllerOf(container).repairBrokenPaths();
+        final report = await controllerOf(container).repairBrokenPaths();
 
-      // Counted, not timed: the check's whole claim to running on every launch
-      // is that a healthy workspace costs a handful of stats and no processes.
-      expect(runner.requests, isEmpty);
-      expect(report.isClean, isTrue);
-      expect(report.broken, isEmpty);
-      expect(report.scan, isNull);
-      expect(report.summary, 'Every stored agent path is where it should be.');
-    });
+        // Counted, not timed: the check's whole claim to running on every launch
+        // is that a healthy workspace costs a handful of stats and no processes.
+        expect(runner.requests, isEmpty);
+        expect(report.isClean, isTrue);
+        expect(report.broken, isEmpty);
+        expect(report.scan, isNull);
+        expect(
+          report.summary,
+          'Every stored agent path is where it should be.',
+        );
+      },
+    );
 
     test('a stored path that no longer exists triggers a repair', () async {
       AgentInstallationDao(db).insert(
@@ -130,9 +136,9 @@ void main() {
       expect(report.unresolved, isEmpty);
       // Only the broken agent was asked about, in only its own environment.
       expect(
-        runner.requests.where((r) => r.executable == 'where').map(
-          (r) => r.arguments.single,
-        ),
+        runner.requests
+            .where((r) => r.executable == 'where')
+            .map((r) => r.arguments.single),
         ['codex'],
       );
     });
@@ -160,9 +166,7 @@ void main() {
                 stdout: 'codex-cli 0.153.4',
                 stderr: '',
               ),
-        hostEnvironment: const {
-          'LOCALAPPDATA': r'C:\Users\d\AppData\Local',
-        },
+        hostEnvironment: const {'LOCALAPPDATA': r'C:\Users\d\AppData\Local'},
       );
 
       final report = await controllerOf(container).repairBrokenPaths();
@@ -207,34 +211,40 @@ void main() {
         report.unresolved.single.reachability,
         ExecutableReachability.unreachable,
       );
-      expect(container.read(agentInstallationsControllerProvider), hasLength(1));
+      expect(
+        container.read(agentInstallationsControllerProvider),
+        hasLength(1),
+      );
     });
 
-    test('an unreachable row is reported as unreachable, not as missing', () async {
-      // "Codex is not installed" and "Codex is installed somewhere I cannot
-      // reach" imply opposite actions, so the report must not merge them.
-      AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _stored),
-      );
-      container = workspaceWith(
-        probe: _UnreadableJunction(),
-        responder: (req) => req.executable == 'where'
-            ? _notOnPath
-            : throw CommandException('nothing there'),
-      );
+    test(
+      'an unreachable row is reported as unreachable, not as missing',
+      () async {
+        // "Codex is not installed" and "Codex is installed somewhere I cannot
+        // reach" imply opposite actions, so the report must not merge them.
+        AgentInstallationDao(
+          db,
+        ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+        container = workspaceWith(
+          probe: _UnreadableJunction(),
+          responder: (req) => req.executable == 'where'
+              ? _notOnPath
+              : throw CommandException('nothing there'),
+        );
 
-      final report = await controllerOf(container).repairBrokenPaths();
-      final environment = report.scan!.environments.single;
+        final report = await controllerOf(container).repairBrokenPaths();
+        final environment = report.scan!.environments.single;
 
-      expect(environment.unreachablePaths, hasLength(1));
-      expect(environment.removed, isEmpty);
-      expect(environment.missing, isEmpty, reason: 'nothing was established');
-      // And the row is not counted as found either — that would be the same
-      // false claim facing the other way.
-      expect(environment.found, isEmpty);
-      expect(report.summary, contains('cannot be reached'));
-      expect(report.stillUnreachable, hasLength(1));
-    });
+        expect(environment.unreachablePaths, hasLength(1));
+        expect(environment.removed, isEmpty);
+        expect(environment.missing, isEmpty, reason: 'nothing was established');
+        // And the row is not counted as found either — that would be the same
+        // false claim facing the other way.
+        expect(environment.found, isEmpty);
+        expect(report.summary, contains('cannot be reached'));
+        expect(report.stillUnreachable, hasLength(1));
+      },
+    );
 
     test('a row whose agent is genuinely gone is still removed', () async {
       // The guard must not cost the app its ability to notice an uninstall: a
@@ -317,7 +327,11 @@ void main() {
       ProjectDao(db).insert(project());
       RepositoryDao(db).insert(repository());
       AgentInstallationDao(db).insert(
-        agentInstallation(id: 'codex-row', agentId: AgentIds.codex, path: _stored),
+        agentInstallation(
+          id: 'codex-row',
+          agentId: AgentIds.codex,
+          path: _stored,
+        ),
       );
       SessionDao(db).insert(session(agentInstallationId: 'codex-row'));
       container = workspaceWith(
@@ -337,7 +351,10 @@ void main() {
         db.query('SELECT agent_installation_id FROM sessions;').single.values,
         ['codex-row'],
       );
-      expect(AgentInstallationDao(db).getById('codex-row')!.executable.path, _real);
+      expect(
+        AgentInstallationDao(db).getById('codex-row')!.executable.path,
+        _real,
+      );
     });
   });
 
@@ -408,29 +425,49 @@ void main() {
       expect(report.repaired, hasLength(1));
     });
 
-    test('setExecutablePath records the choice and refuses a duplicate', () async {
-      AgentInstallationDao(db)
-        ..insert(
-          agentInstallation(id: 'a', agentId: AgentIds.codex, path: r'C:\a\codex.exe'),
-        )
-        ..insert(
-          agentInstallation(id: 'b', agentId: AgentIds.codex, path: r'C:\b\codex.exe'),
+    test(
+      'setExecutablePath records the choice and refuses a duplicate',
+      () async {
+        AgentInstallationDao(db)
+          ..insert(
+            agentInstallation(
+              id: 'a',
+              agentId: AgentIds.codex,
+              path: r'C:\a\codex.exe',
+            ),
+          )
+          ..insert(
+            agentInstallation(
+              id: 'b',
+              agentId: AgentIds.codex,
+              path: r'C:\b\codex.exe',
+            ),
+          );
+        container = workspaceWith(
+          probe: FakePathProbe(),
+          responder: (_) => fail('setting a path spawns nothing'),
         );
-      container = workspaceWith(
-        probe: FakePathProbe(),
-        responder: (_) => fail('setting a path spawns nothing'),
-      );
-      final controller = controllerOf(container);
+        final controller = controllerOf(container);
 
-      expect(controller.setExecutablePath('a', r'  C:\chosen\codex.exe  '), isTrue);
-      final row = AgentInstallationDao(db).getById('a')!;
-      expect(row.executable.path, r'C:\chosen\codex.exe', reason: 'trimmed');
-      expect(row.executableByUser, isTrue);
+        expect(
+          controller.setExecutablePath('a', r'  C:\chosen\codex.exe  '),
+          isTrue,
+        );
+        final row = AgentInstallationDao(db).getById('a')!;
+        expect(row.executable.path, r'C:\chosen\codex.exe', reason: 'trimmed');
+        expect(row.executableByUser, isTrue);
 
-      expect(controller.setExecutablePath('b', r'C:\chosen\codex.exe'), isFalse);
-      expect(controller.setExecutablePath('b', '   '), isFalse);
-      expect(AgentInstallationDao(db).getById('b')!.executable.path, r'C:\b\codex.exe');
-    });
+        expect(
+          controller.setExecutablePath('b', r'C:\chosen\codex.exe'),
+          isFalse,
+        );
+        expect(controller.setExecutablePath('b', '   '), isFalse);
+        expect(
+          AgentInstallationDao(db).getById('b')!.executable.path,
+          r'C:\b\codex.exe',
+        );
+      },
+    );
   });
 }
 

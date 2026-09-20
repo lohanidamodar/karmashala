@@ -47,10 +47,7 @@ void main() {
     expect(find.byIcon(AppIcons.clock), findsOneWidget);
     final line = metaLine(tester);
     expect(line.indexOf('resumes 14:05'), lessThan(line.indexOf('Codex CLI')));
-    expect(
-      find.byTooltip(RegExp('then sends "continue"')),
-      findsOneWidget,
-    );
+    expect(find.byTooltip(RegExp('then sends "continue"')), findsOneWidget);
   });
 
   testWidgets('a row with nothing scheduled draws no clock', (tester) async {

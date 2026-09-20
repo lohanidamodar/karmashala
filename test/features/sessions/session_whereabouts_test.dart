@@ -66,8 +66,10 @@ const _rejectedSandboxLines = [
 /// **The pattern the app actually ships**, not a copy of it. A test that
 /// declared its own regular expression would keep passing on the day the
 /// declared one stopped matching, which is the only day it matters.
-final _codexRejectedValue =
-    AgentRegistry.builtIn.byId(AgentIds.codex)!.launch.rejectedValue;
+final _codexRejectedValue = AgentRegistry.builtIn
+    .byId(AgentIds.codex)!
+    .launch
+    .rejectedValue;
 
 final _exclusive = AgentDescriptor(
   id: 'exclusive',
@@ -105,9 +107,7 @@ class _StaticSettings extends SettingsController {
       // Never shell out: an external launch must not open a real terminal.
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-      agentRegistryProvider.overrideWithValue(
-        AgentRegistry([_exclusive]),
-      ),
+      agentRegistryProvider.overrideWithValue(AgentRegistry([_exclusive])),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
     ],
   );
@@ -444,8 +444,10 @@ void main() {
       // Claude Code's refusal has a different shape, and no installation here
       // has ever been seen to disagree with what is declared for it. An
       // undeclared pattern is "we cannot explain this", never a guess.
-      final claude =
-          AgentRegistry.builtIn.byId(AgentIds.claudeCode)!.launch.rejectedValue;
+      final claude = AgentRegistry.builtIn
+          .byId(AgentIds.claudeCode)!
+          .launch
+          .rejectedValue;
       expect(claude.isEmpty, isTrue);
       expect(claude.matchedBy(_rejectedValueLines), isNull);
     });

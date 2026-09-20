@@ -157,57 +157,69 @@ void main() {
   }
 
   group('clicking the card', () {
-    test('continues the conversation the store names for the directory', () async {
-      writeLastConversations({_repoPath: _conversation});
-      insertPhantom();
+    test(
+      'continues the conversation the store names for the directory',
+      () async {
+        writeLastConversations({_repoPath: _conversation});
+        insertPhantom();
 
-      final result = await container
-          .read(explorerActionsProvider)
-          .openNative('phantom');
+        final result = await container
+            .read(explorerActionsProvider)
+            .openNative('phantom');
 
-      expect(result.outcome, ExplorerOutcome.resumed);
-      // Named, not merely opened: the app says which conversation it is about
-      // to continue before continuing it.
-      expect(result.message, contains(_conversation));
-      // And the row is no longer a phantom, so the *next* click is an ordinary
-      // resume of a row that knows its own conversation.
-      expect(SessionDao(db).getById('phantom')!.externalSessionId, _conversation);
-    });
+        expect(result.outcome, ExplorerOutcome.resumed);
+        // Named, not merely opened: the app says which conversation it is about
+        // to continue before continuing it.
+        expect(result.message, contains(_conversation));
+        // And the row is no longer a phantom, so the *next* click is an ordinary
+        // resume of a row that knows its own conversation.
+        expect(
+          SessionDao(db).getById('phantom')!.externalSessionId,
+          _conversation,
+        );
+      },
+    );
 
-    test('says there is nothing to continue when the store names none', () async {
-      writeLastConversations({r'C:\elsewhere': _conversation});
-      insertPhantom();
+    test(
+      'says there is nothing to continue when the store names none',
+      () async {
+        writeLastConversations({r'C:\elsewhere': _conversation});
+        insertPhantom();
 
-      final result = await container
-          .read(explorerActionsProvider)
-          .openNative('phantom');
+        final result = await container
+            .read(explorerActionsProvider)
+            .openNative('phantom');
 
-      expect(result.outcome, ExplorerOutcome.selected);
-      expect(result.message, contains(_repoPath));
-      expect(result.message, isNot(contains('No resumable CLI session id')));
-      expect(SessionDao(db).getById('phantom')!.externalSessionId, isNull);
-    });
+        expect(result.outcome, ExplorerOutcome.selected);
+        expect(result.message, contains(_repoPath));
+        expect(result.message, isNot(contains('No resumable CLI session id')));
+        expect(SessionDao(db).getById('phantom')!.externalSessionId, isNull);
+      },
+    );
 
-    test('refuses when another session already holds that conversation', () async {
-      writeLastConversations({_repoPath: _conversation});
-      insertPhantom(id: 'held', externalId: _conversation);
-      insertPhantom();
+    test(
+      'refuses when another session already holds that conversation',
+      () async {
+        writeLastConversations({_repoPath: _conversation});
+        insertPhantom(id: 'held', externalId: _conversation);
+        insertPhantom();
 
-      final result = await container
-          .read(explorerActionsProvider)
-          .openNative('phantom');
+        final result = await container
+            .read(explorerActionsProvider)
+            .openNative('phantom');
 
-      expect(result.outcome, ExplorerOutcome.selected);
-      expect(result.message, contains('another session'));
-      expect(SessionDao(db).getById('phantom')!.externalSessionId, isNull);
-    });
+        expect(result.outcome, ExplorerOutcome.selected);
+        expect(result.message, contains('another session'));
+        expect(SessionDao(db).getById('phantom')!.externalSessionId, isNull);
+      },
+    );
 
     test('an agent whose store says nothing keeps the old words', () async {
       // Claude Code has no "latest conversation here" notion to fall back on,
       // and inventing one would be the recency guess this registry refuses.
-      AgentInstallationDao(db).insert(
-        agentInstallation(id: 'a2', agentId: AgentIds.claudeCode),
-      );
+      AgentInstallationDao(
+        db,
+      ).insert(agentInstallation(id: 'a2', agentId: AgentIds.claudeCode));
       SessionDao(db).insert(
         Session(
           id: 'claude-phantom',

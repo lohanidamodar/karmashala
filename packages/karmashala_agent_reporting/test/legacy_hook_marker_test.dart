@@ -34,7 +34,10 @@ void main() {
       for (final marker in legacyAgentHookMarkers) {
         final entry = {
           'hooks': [
-            {'type': 'command', 'command': 'curl -s "http://x/?marker=$marker"'},
+            {
+              'type': 'command',
+              'command': 'curl -s "http://x/?marker=$marker"',
+            },
           ],
         };
         expect(

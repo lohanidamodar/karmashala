@@ -97,7 +97,10 @@ void main() {
     testWidgets('a URL is left to markdown, and is never carved up', (
       tester,
     ) async {
-      await pumpProse(tester, 'Read https://example.com/docs/setup.html first.');
+      await pumpProse(
+        tester,
+        'Read https://example.com/docs/setup.html first.',
+      );
 
       // Markdown autolinks it, as it always did — one link, and not ours.
       expect(recognizers(tester), hasLength(1));
@@ -114,10 +117,7 @@ void main() {
     });
 
     testWidgets('a fenced code block is not touched', (tester) async {
-      await pumpProse(
-        tester,
-        'Run this:\n\n```sh\ncat lib/main.dart\n```\n',
-      );
+      await pumpProse(tester, 'Run this:\n\n```sh\ncat lib/main.dart\n```\n');
 
       expect(links(tester), isEmpty);
     });

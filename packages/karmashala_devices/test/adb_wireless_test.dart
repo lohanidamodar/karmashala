@@ -95,18 +95,21 @@ void main() {
       ]);
     });
 
-    test('brackets an IPv6 host so its colons are not read as a port', () async {
-      final runner = FakeCommandRunner(
-        responder: (_) => _out('Failed: Unable to start pairing client.\n'),
-      );
-      final adb = AdbService(runner: runner, sdk: _sdk());
+    test(
+      'brackets an IPv6 host so its colons are not read as a port',
+      () async {
+        final runner = FakeCommandRunner(
+          responder: (_) => _out('Failed: Unable to start pairing client.\n'),
+        );
+        final adb = AdbService(runner: runner, sdk: _sdk());
 
-      await adb.pair(
-        const PairingAddress(host: 'fe80::1', port: 41733),
-        code: '123456',
-      );
-      expect(runner.requests.single.arguments[1], '[fe80::1]:41733');
-    });
+        await adb.pair(
+          const PairingAddress(host: 'fe80::1', port: 41733),
+          code: '123456',
+        );
+        expect(runner.requests.single.arguments[1], '[fe80::1]:41733');
+      },
+    );
 
     test('an adb that cannot be started is a refusal that says so', () async {
       final runner = FakeCommandRunner(
@@ -128,23 +131,26 @@ void main() {
       );
     });
 
-    test('never starts a streaming process — pairing is run to completion', () async {
-      final runner = FakeCommandRunner(
-        responder: (_) =>
-            _out('Successfully paired to 10.0.0.5:41733 [guid=adb-a-b]\n'),
-      );
-      final adb = AdbService(runner: runner, sdk: _sdk());
+    test(
+      'never starts a streaming process — pairing is run to completion',
+      () async {
+        final runner = FakeCommandRunner(
+          responder: (_) =>
+              _out('Successfully paired to 10.0.0.5:41733 [guid=adb-a-b]\n'),
+        );
+        final adb = AdbService(runner: runner, sdk: _sdk());
 
-      await adb.pair(
-        const PairingAddress(host: '10.0.0.5', port: 41733),
-        code: '123456',
-      );
-      expect(
-        runner.startRequests,
-        isEmpty,
-        reason: 'a streaming spawn is charged to the calling isolate',
-      );
-    });
+        await adb.pair(
+          const PairingAddress(host: '10.0.0.5', port: 41733),
+          code: '123456',
+        );
+        expect(
+          runner.startRequests,
+          isEmpty,
+          reason: 'a streaming spawn is charged to the calling isolate',
+        );
+      },
+    );
   });
 
   group('connect', () {

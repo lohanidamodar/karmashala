@@ -117,10 +117,9 @@ void main() {
       );
       final stamp = transcript.lastModifiedSync();
 
-      await SessionMediaStore(cache).refresh(
-        transcript.path,
-        AgentIds.claudeCode,
-      );
+      await SessionMediaStore(
+        cache,
+      ).refresh(transcript.path, AgentIds.claudeCode);
 
       final after = await readCliTranscript(
         transcript.path,

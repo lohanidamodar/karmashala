@@ -15,6 +15,7 @@ class PtySpawnRequest {
   /// argv[0] is the executable; it is resolved on PATH by the launcher.
   final List<String> argv;
   final String? workingDirectory;
+
   /// **Overrides**, on both platforms: laid over the host process's own
   /// environment rather than replacing it. A block with no `SystemRoot` cannot
   /// load a DLL on Windows, and one with no `PATH` or `HOME` cannot run a shell
@@ -65,6 +66,7 @@ class PtyException implements Exception {
   final int? errno;
 
   @override
-  String toString() =>
-      errno == null ? 'PtyException: $message' : 'PtyException: $message (errno $errno)';
+  String toString() => errno == null
+      ? 'PtyException: $message'
+      : 'PtyException: $message (errno $errno)';
 }

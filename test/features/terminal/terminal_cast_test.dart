@@ -19,11 +19,7 @@ void main() {
   group('CastRecorder', () {
     test('stamps each chunk with when it arrived', () {
       final clock = _ManualClock();
-      final recorder = CastRecorder(
-        columns: 80,
-        rows: 24,
-        clock: clock.read,
-      );
+      final recorder = CastRecorder(columns: 80, rows: 24, clock: clock.read);
 
       recorder.addOutput(_bytes('hello'));
       clock.advance(const Duration(milliseconds: 1500));
@@ -108,10 +104,7 @@ void main() {
         events: [
           const CastEvent.output(Duration.zero, 'PS> '),
           CastEvent.resize(const Duration(milliseconds: 250), 120, 40),
-          const CastEvent.output(
-            Duration(milliseconds: 1250),
-            'ok\r\n',
-          ),
+          const CastEvent.output(Duration(milliseconds: 1250), 'ok\r\n'),
         ],
       );
 

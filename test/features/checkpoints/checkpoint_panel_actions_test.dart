@@ -168,7 +168,9 @@ void main() {
     db.close();
   });
 
-  List<List<String>> gitCalls() => [for (final r in runner.requests) r.arguments];
+  List<List<String>> gitCalls() => [
+    for (final r in runner.requests) r.arguments,
+  ];
 
   /// Bounded pumps: a row spins while work is in flight, so nothing settles.
   Future<void> settle(WidgetTester tester) async {
@@ -258,7 +260,8 @@ void main() {
         await settle(tester);
       }
 
-      final patch = files.written['C:/src/demo/app/.git/karmashala/apply.patch'];
+      final patch =
+          files.written['C:/src/demo/app/.git/karmashala/apply.patch'];
       expect(patch, contains('lib/a.dart'));
       expect(
         patch,

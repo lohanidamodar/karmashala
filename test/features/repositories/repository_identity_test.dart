@@ -190,8 +190,11 @@ void main() {
       );
     });
 
-    test('a clone with no origin stays null, and nothing groups on it', () async {
-      expect(await identityAfterReading(null), isNull);
-    });
+    test(
+      'a clone with no origin stays null, and nothing groups on it',
+      () async {
+        expect(await identityAfterReading(null), isNull);
+      },
+    );
   });
 }

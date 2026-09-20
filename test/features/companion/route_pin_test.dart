@@ -124,8 +124,8 @@ void main() {
     localUri = Uri.parse('ws://127.0.0.1:${local.port}');
     store = stored.InMemoryCompanionStore();
     // Never the internet: the phone's configured relay is this suite's hosted.
-    store.values[RemoteCompanionGateway.kPairingRelayStoreKey] =
-        hostedUri.toString();
+    store.values[RemoteCompanionGateway.kPairingRelayStoreKey] = hostedUri
+        .toString();
     relayDials.clear();
   });
 
@@ -222,185 +222,203 @@ void main() {
   bool pinnedTrouble(RemoteCompanionGateway gateway) =>
       gateway.linkTrouble?.contains('pinned') ?? false;
 
-  test('pinned to one relay, the phone uses only it, stays off the others when '
-      'it stops answering, and Auto brings it back',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    await startService();
-    final gateway = await pairedPhone();
-    expect(
-      gateway.connections.single.relays,
-      containsAll(<Uri>[hostedUri, localUri]),
-      reason: 'the picker offers what the desktop announced',
-    );
+  test(
+    'pinned to one relay, the phone uses only it, stays off the others when '
+    'it stops answering, and Auto brings it back',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      expect(
+        gateway.connections.single.relays,
+        containsAll(<Uri>[hostedUri, localUri]),
+        reason: 'the picker offers what the desktop announced',
+      );
 
-    await gateway.setRoutePin(hostId(gateway), CompanionRoutePin.relay(localUri));
-    await until(
-      () =>
-          gateway.link == CompanionLinkState.connected &&
-          gateway.activeRelay == localUri,
-      reason: 'a pin takes effect at once, on the route it names',
-    );
-    expect(gateway.connections.single.pin, CompanionRoutePin.relay(localUri));
-    expect((await saved()).pin, CompanionRoutePin.relay(localUri));
+      await gateway.setRoutePin(
+        hostId(gateway),
+        CompanionRoutePin.relay(localUri),
+      );
+      await until(
+        () =>
+            gateway.link == CompanionLinkState.connected &&
+            gateway.activeRelay == localUri,
+        reason: 'a pin takes effect at once, on the route it names',
+      );
+      expect(gateway.connections.single.pin, CompanionRoutePin.relay(localUri));
+      expect((await saved()).pin, CompanionRoutePin.relay(localUri));
 
-    // Take the pinned relay away.
-    final dialsBefore = relayDials.length;
-    await local.close();
-    localClosed = true;
-    await until(
-      () => gateway.link != CompanionLinkState.connected,
-      reason: 'the phone notices the pinned relay went',
-    );
-    await until(
-      () => pinnedTrouble(gateway),
-      reason: 'the phone says the pinned route is not answering',
-    );
-    // Long enough for several heal-and-redial rounds at the test's backoff.
-    await Future<void>.delayed(const Duration(seconds: 3));
-    expect(gateway.link, isNot(CompanionLinkState.connected));
-    expect(
-      relayDials.skip(dialsBefore).where((url) => url == hostedUri),
-      isEmpty,
-      reason: 'a pin is "only": the hosted relay is never tried behind it',
-    );
+      // Take the pinned relay away.
+      final dialsBefore = relayDials.length;
+      await local.close();
+      localClosed = true;
+      await until(
+        () => gateway.link != CompanionLinkState.connected,
+        reason: 'the phone notices the pinned relay went',
+      );
+      await until(
+        () => pinnedTrouble(gateway),
+        reason: 'the phone says the pinned route is not answering',
+      );
+      // Long enough for several heal-and-redial rounds at the test's backoff.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      expect(gateway.link, isNot(CompanionLinkState.connected));
+      expect(
+        relayDials.skip(dialsBefore).where((url) => url == hostedUri),
+        isEmpty,
+        reason: 'a pin is "only": the hosted relay is never tried behind it',
+      );
 
-    await gateway.setRoutePin(hostId(gateway), CompanionRoutePin.auto);
-    await until(
-      () =>
-          gateway.link == CompanionLinkState.connected &&
-          gateway.activeRelay == hostedUri,
-      reason: 'Auto finds the route that still answers',
-    );
-    expect(gateway.linkTrouble, isNull);
-    expect((await saved()).pin, CompanionRoutePin.auto);
-  });
+      await gateway.setRoutePin(hostId(gateway), CompanionRoutePin.auto);
+      await until(
+        () =>
+            gateway.link == CompanionLinkState.connected &&
+            gateway.activeRelay == hostedUri,
+        reason: 'Auto finds the route that still answers',
+      );
+      expect(gateway.linkTrouble, isNull);
+      expect((await saved()).pin, CompanionRoutePin.auto);
+    },
+  );
 
-  test('a pin survives a restart of the phone',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    await startService();
-    final first = await pairedPhone();
-    await first.setRoutePin(hostId(first), CompanionRoutePin.relay(localUri));
-    await until(
-      () =>
-          first.link == CompanionLinkState.connected &&
-          first.activeRelay == localUri,
-      reason: 'pinned to the local relay',
-    );
-    await first.close();
-    gateways.remove(first);
+  test(
+    'a pin survives a restart of the phone',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final first = await pairedPhone();
+      await first.setRoutePin(hostId(first), CompanionRoutePin.relay(localUri));
+      await until(
+        () =>
+            first.link == CompanionLinkState.connected &&
+            first.activeRelay == localUri,
+        reason: 'pinned to the local relay',
+      );
+      await first.close();
+      gateways.remove(first);
 
-    relayDials.clear();
-    final second = makeGateway();
-    await until(
-      () => second.link == CompanionLinkState.connected,
-      reason: 'the restarted phone reconnects',
-    );
-    expect(second.activeRelay, localUri);
-    expect(relayDials.toSet(), {localUri}, reason: 'and dialled nothing else');
-    expect(second.connections.single.pin, CompanionRoutePin.relay(localUri));
-  });
+      relayDials.clear();
+      final second = makeGateway();
+      await until(
+        () => second.link == CompanionLinkState.connected,
+        reason: 'the restarted phone reconnects',
+      );
+      expect(second.activeRelay, localUri);
+      expect(relayDials.toSet(), {
+        localUri,
+      }, reason: 'and dialled nothing else');
+      expect(second.connections.single.pin, CompanionRoutePin.relay(localUri));
+    },
+  );
 
-  test('pinned to the LAN, the relays are never dialled, even when the LAN '
-      'goes', timeout: const Timeout(Duration(minutes: 2)), () async {
-    final started = await startService();
-    final shim = await _LanCut.inFrontOf(started.lanPortBound!);
-    final scout = _ScriptedScout(
-      attemptTimeout: const Duration(seconds: 1),
-      dialer: (host, port) => LanTransport(
-        host: '127.0.0.1',
-        port: shim.port,
-        connectTimeout: const Duration(seconds: 1),
-        backoff: fastBackoff(),
-      )..start(),
-    );
-    final gateway = await pairedPhone(scout: scout);
-    expect(gateway.linkPath, CompanionLinkPath.relay);
+  test(
+    'pinned to the LAN, the relays are never dialled, even when the LAN '
+    'goes',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      final started = await startService();
+      final shim = await _LanCut.inFrontOf(started.lanPortBound!);
+      final scout = _ScriptedScout(
+        attemptTimeout: const Duration(seconds: 1),
+        dialer: (host, port) => LanTransport(
+          host: '127.0.0.1',
+          port: shim.port,
+          connectTimeout: const Duration(seconds: 1),
+          backoff: fastBackoff(),
+        )..start(),
+      );
+      final gateway = await pairedPhone(scout: scout);
+      expect(gateway.linkPath, CompanionLinkPath.relay);
 
-    final relaysBefore = relayDials.length;
-    await gateway.setRoutePin(hostId(gateway), CompanionRoutePin.lan);
-    // Nothing on the LAN has been heard yet (a loopback relay announces no LAN
-    // address), so the pin says so rather than taking the relay it was on.
-    await until(
-      () => pinnedTrouble(gateway),
-      reason: 'pinned to a LAN it has not heard, the phone says so',
-    );
-    // Then the desktop's beacon arrives, as it does once the phone is home.
-    scout.hear(
-      DiscoveredHost(
-        address: InternetAddress('192.168.99.99'),
-        advert: LanAdvert(port: shim.port, tag: 'test'),
-        seenAt: DateTime.now(),
-      ),
-    );
-    await until(
-      () =>
-          gateway.link == CompanionLinkState.connected &&
-          gateway.linkPath == CompanionLinkPath.lan,
-      reason: 'the LAN pin reaches the desktop once it is heard',
-    );
-    expect(gateway.linkTrouble, isNull);
+      final relaysBefore = relayDials.length;
+      await gateway.setRoutePin(hostId(gateway), CompanionRoutePin.lan);
+      // Nothing on the LAN has been heard yet (a loopback relay announces no LAN
+      // address), so the pin says so rather than taking the relay it was on.
+      await until(
+        () => pinnedTrouble(gateway),
+        reason: 'pinned to a LAN it has not heard, the phone says so',
+      );
+      // Then the desktop's beacon arrives, as it does once the phone is home.
+      scout.hear(
+        DiscoveredHost(
+          address: InternetAddress('192.168.99.99'),
+          advert: LanAdvert(port: shim.port, tag: 'test'),
+          seenAt: DateTime.now(),
+        ),
+      );
+      await until(
+        () =>
+            gateway.link == CompanionLinkState.connected &&
+            gateway.linkPath == CompanionLinkPath.lan,
+        reason: 'the LAN pin reaches the desktop once it is heard',
+      );
+      expect(gateway.linkTrouble, isNull);
 
-    await shim.cut();
-    await until(
-      () => gateway.link != CompanionLinkState.connected,
-      reason: 'the phone notices the LAN went',
-    );
-    await until(
-      () => pinnedTrouble(gateway),
-      reason: 'the phone says the pinned route is not answering',
-    );
-    await Future<void>.delayed(const Duration(seconds: 3));
-    expect(gateway.link, isNot(CompanionLinkState.connected));
-    expect(
-      relayDials.length,
-      relaysBefore,
-      reason: 'pinned to the LAN, no relay was dialled at all',
-    );
+      await shim.cut();
+      await until(
+        () => gateway.link != CompanionLinkState.connected,
+        reason: 'the phone notices the LAN went',
+      );
+      await until(
+        () => pinnedTrouble(gateway),
+        reason: 'the phone says the pinned route is not answering',
+      );
+      await Future<void>.delayed(const Duration(seconds: 3));
+      expect(gateway.link, isNot(CompanionLinkState.connected));
+      expect(
+        relayDials.length,
+        relaysBefore,
+        reason: 'pinned to the LAN, no relay was dialled at all',
+      );
 
-    await gateway.setRoutePin(hostId(gateway), CompanionRoutePin.auto);
-    await until(
-      () => gateway.link == CompanionLinkState.connected,
-      reason: 'Auto falls back to a relay',
-    );
-    expect(gateway.linkPath, CompanionLinkPath.relay);
-  });
+      await gateway.setRoutePin(hostId(gateway), CompanionRoutePin.auto);
+      await until(
+        () => gateway.link == CompanionLinkState.connected,
+        reason: 'Auto falls back to a relay',
+      );
+      expect(gateway.linkPath, CompanionLinkPath.relay);
+    },
+  );
 
-  test('pinned to a relay, a beacon from the desktop is not followed',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    final started = await startService();
-    final scout = _ScriptedScout(
-      attemptTimeout: const Duration(seconds: 1),
-      dialer: (host, port) => LanTransport(
-        host: '127.0.0.1',
-        port: started.lanPortBound!,
-        connectTimeout: const Duration(seconds: 1),
-        backoff: fastBackoff(),
-      )..start(),
-    );
-    final gateway = await pairedPhone(scout: scout);
-    await gateway.setRoutePin(
-      hostId(gateway),
-      CompanionRoutePin.relay(hostedUri),
-    );
-    await until(
-      () =>
-          gateway.link == CompanionLinkState.connected &&
-          gateway.activeRelay == hostedUri,
-      reason: 'pinned to the hosted relay',
-    );
-    final dials = scout.dials;
+  test(
+    'pinned to a relay, a beacon from the desktop is not followed',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      final started = await startService();
+      final scout = _ScriptedScout(
+        attemptTimeout: const Duration(seconds: 1),
+        dialer: (host, port) => LanTransport(
+          host: '127.0.0.1',
+          port: started.lanPortBound!,
+          connectTimeout: const Duration(seconds: 1),
+          backoff: fastBackoff(),
+        )..start(),
+      );
+      final gateway = await pairedPhone(scout: scout);
+      await gateway.setRoutePin(
+        hostId(gateway),
+        CompanionRoutePin.relay(hostedUri),
+      );
+      await until(
+        () =>
+            gateway.link == CompanionLinkState.connected &&
+            gateway.activeRelay == hostedUri,
+        reason: 'pinned to the hosted relay',
+      );
+      final dials = scout.dials;
 
-    scout.hear(
-      DiscoveredHost(
-        address: InternetAddress('192.168.99.99'),
-        advert: LanAdvert(port: started.lanPortBound!, tag: 'test'),
-        seenAt: DateTime.now(),
-      ),
-    );
-    await Future<void>.delayed(const Duration(seconds: 2));
+      scout.hear(
+        DiscoveredHost(
+          address: InternetAddress('192.168.99.99'),
+          advert: LanAdvert(port: started.lanPortBound!, tag: 'test'),
+          seenAt: DateTime.now(),
+        ),
+      );
+      await Future<void>.delayed(const Duration(seconds: 2));
 
-    expect(scout.dials, dials, reason: 'no LAN dial behind a relay pin');
-    expect(gateway.linkPath, CompanionLinkPath.relay);
-    expect(gateway.activeRelay, hostedUri);
-  });
+      expect(scout.dials, dials, reason: 'no LAN dial behind a relay pin');
+      expect(gateway.linkPath, CompanionLinkPath.relay);
+      expect(gateway.activeRelay, hostedUri);
+    },
+  );
 }

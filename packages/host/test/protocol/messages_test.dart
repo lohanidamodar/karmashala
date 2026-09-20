@@ -5,7 +5,11 @@ import 'package:test/test.dart';
 
 T roundTrip<T extends HostMessage>(T message) {
   final frames = FrameParser().add(message.toFrame().encode());
-  expect(frames, hasLength(1), reason: 'a message must encode to exactly one frame');
+  expect(
+    frames,
+    hasLength(1),
+    reason: 'a message must encode to exactly one frame',
+  );
   return decodeMessage(frames.single) as T;
 }
 
@@ -18,7 +22,9 @@ void main() {
 
   group('client to host', () {
     test('hello carries the version it speaks and who is speaking', () {
-      final decoded = roundTrip(const HelloMessage(requestId: 9, clientId: 'pane-1'));
+      final decoded = roundTrip(
+        const HelloMessage(requestId: 9, clientId: 'pane-1'),
+      );
       expect(decoded.requestId, 9);
       expect(decoded.clientId, 'pane-1');
       expect(decoded.protocolVersion, kProtocolVersion);
@@ -51,19 +57,22 @@ void main() {
       expect(decoded.rows, 43);
     });
 
-    test('an absent working directory decodes as absent, not as an empty path', () {
-      final decoded = roundTrip(
-        const OpenMessage(
-          requestId: 1,
-          sessionId: 's',
-          argv: ['/bin/sh'],
-          environment: {},
-          columns: 80,
-          rows: 24,
-        ),
-      );
-      expect(decoded.workingDirectory, isNull);
-    });
+    test(
+      'an absent working directory decodes as absent, not as an empty path',
+      () {
+        final decoded = roundTrip(
+          const OpenMessage(
+            requestId: 1,
+            sessionId: 's',
+            argv: ['/bin/sh'],
+            environment: {},
+            columns: 80,
+            rows: 24,
+          ),
+        );
+        expect(decoded.workingDirectory, isNull);
+      },
+    );
 
     test('attach carries the exact offset the pane last rendered', () {
       final decoded = roundTrip(
@@ -81,7 +90,10 @@ void main() {
     test('input is raw bytes with no framing tax beyond the header', () {
       final payload = Uint8List.fromList([0x1b, 0x5b, 0x41, 0x00, 0xff]);
       final message = InputMessage(3, payload);
-      expect(message.toFrame().encode(), hasLength(Frame.headerBytes + payload.length));
+      expect(
+        message.toFrame().encode(),
+        hasLength(Frame.headerBytes + payload.length),
+      );
       expect(roundTrip(message).bytes, payload);
     });
 
@@ -100,32 +112,48 @@ void main() {
   });
 
   group('host to client', () {
-    test('welcome reports what the host measured about itself, with an age', () {
-      final decoded = roundTrip(
-        WelcomeMessage(
-          requestId: 1,
-          protocolVersion: kProtocolVersion,
-          hostVersion: '0.1.0',
-          operatingSystem: 'linux',
-          architecture: 'x64',
-          ptyLibrary: 'libc.so.6',
-          pid: 4242,
-          startedAt: t0.subtract(const Duration(hours: 2)),
-          observedAt: t0,
-        ),
-      );
-      expect(decoded.hostVersion, '0.1.0');
-      expect(decoded.ptyLibrary, 'libc.so.6');
-      expect(decoded.architecture, 'x64');
-      expect(decoded.observedAt, t0);
-      expect(decoded.startedAt, t0.subtract(const Duration(hours: 2)));
-    });
+    test(
+      'welcome reports what the host measured about itself, with an age',
+      () {
+        final decoded = roundTrip(
+          WelcomeMessage(
+            requestId: 1,
+            protocolVersion: kProtocolVersion,
+            hostVersion: '0.1.0',
+            operatingSystem: 'linux',
+            architecture: 'x64',
+            ptyLibrary: 'libc.so.6',
+            pid: 4242,
+            startedAt: t0.subtract(const Duration(hours: 2)),
+            observedAt: t0,
+          ),
+        );
+        expect(decoded.hostVersion, '0.1.0');
+        expect(decoded.ptyLibrary, 'libc.so.6');
+        expect(decoded.architecture, 'x64');
+        expect(decoded.observedAt, t0);
+        expect(decoded.startedAt, t0.subtract(const Duration(hours: 2)));
+      },
+    );
 
     test('output is an offset and then the bytes, untouched', () {
-      final bytes = Uint8List.fromList([0x1b, 0x5d, 0x31, 0x33, 0x33, 0x3b, 0x41, 0x07]);
+      final bytes = Uint8List.fromList([
+        0x1b,
+        0x5d,
+        0x31,
+        0x33,
+        0x33,
+        0x3b,
+        0x41,
+        0x07,
+      ]);
       final decoded = roundTrip(OutputMessage(2, 4096, bytes));
       expect(decoded.offset, 4096);
-      expect(decoded.bytes, bytes, reason: 'OSC 133 must survive byte for byte');
+      expect(
+        decoded.bytes,
+        bytes,
+        reason: 'OSC 133 must survive byte for byte',
+      );
       expect(decoded.nextOffset, 4096 + bytes.length);
     });
 
@@ -259,22 +287,36 @@ void main() {
         ]),
       );
 
-      expect(decoded.summaries.map((s) => s.id), ['running', 'exited', 'unknown']);
+      expect(decoded.summaries.map((s) => s.id), [
+        'running',
+        'exited',
+        'unknown',
+      ]);
       expect(decoded.summaries[0].lifecycle, isA<SessionRunning>());
       expect(decoded.summaries[0].workingDirectory, '/srv');
       expect(decoded.summaries[0].writeHolder, 'pane-1');
       expect(decoded.summaries[1].lifecycle.exitCode, 1);
       expect(decoded.summaries[2].lifecycle.exitCode, isNull);
-      expect((decoded.summaries[2].lifecycle as SessionEndedWithoutCode).reason, 'not reaped');
+      expect(
+        (decoded.summaries[2].lifecycle as SessionEndedWithoutCode).reason,
+        'not reaped',
+      );
     });
 
-    test('error carries a code a client can branch on and words a user can read', () {
-      final decoded = roundTrip(
-        const ErrorMessage(3, ProtocolErrorCode.protocolMismatch, 'host speaks 1, client 99'),
-      );
-      expect(decoded.code, ProtocolErrorCode.protocolMismatch);
-      expect(decoded.message, 'host speaks 1, client 99');
-    });
+    test(
+      'error carries a code a client can branch on and words a user can read',
+      () {
+        final decoded = roundTrip(
+          const ErrorMessage(
+            3,
+            ProtocolErrorCode.protocolMismatch,
+            'host speaks 1, client 99',
+          ),
+        );
+        expect(decoded.code, ProtocolErrorCode.protocolMismatch);
+        expect(decoded.message, 'host speaks 1, client 99');
+      },
+    );
 
     test('an error code this build has never heard of reads as internal', () {
       expect(ProtocolErrorCode.fromCode(9999), ProtocolErrorCode.internal);
@@ -287,7 +329,12 @@ void main() {
 
     test('claimed reports who holds it after the attempt', () {
       final decoded = roundTrip(
-        const ClaimedMessage(requestId: 2, sessionRef: 4, holdsWriteToken: true, writeHolder: 'me'),
+        const ClaimedMessage(
+          requestId: 2,
+          sessionRef: 4,
+          holdsWriteToken: true,
+          writeHolder: 'me',
+        ),
       );
       expect(decoded.holdsWriteToken, isTrue);
       expect(decoded.writeHolder, 'me');

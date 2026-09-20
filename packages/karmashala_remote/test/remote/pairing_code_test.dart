@@ -99,9 +99,7 @@ void main() {
     test('the committed vectors still hold', () async {
       final vectors =
           jsonDecode(
-                File(
-                  'test/remote/remote_test_vectors.json',
-                ).readAsStringSync(),
+                File('test/remote/remote_test_vectors.json').readAsStringSync(),
               )
               as Map<String, Object?>;
       final pairing = vectors['pairingCode']! as Map<String, Object?>;

@@ -105,7 +105,9 @@ class SessionWaitService {
       }
 
       if (launcher.livePaneFor(sessionId) == null) {
-        settle(_ended(sessionId, report, changed: changed, inputSent: inputSent));
+        settle(
+          _ended(sessionId, report, changed: changed, inputSent: inputSent),
+        );
         return;
       }
       if (blockedOn(sessionId) case final block?) {
@@ -139,9 +141,9 @@ class SessionWaitService {
       );
     }
 
-    final statuses = _ref.read(sessionStatusStreamProvider)(sessionId).listen(
-      consider,
-    );
+    final statuses = _ref
+        .read(sessionStatusStreamProvider)(sessionId)
+        .listen(consider);
     // Only a process that stopped *by itself* reaches here; closing a pane and
     // `session_end` both drop the listener before disposing.
     final exits = _ref.listen(paneExitProvider, (_, exit) {
@@ -346,7 +348,8 @@ class SessionWaitOutcome {
 typedef WaitDeadline = Future<void> Function(Duration bound);
 
 final waitDeadlineProvider = Provider<WaitDeadline>(
-  (ref) => (bound) => Future<void>.delayed(bound),
+  (ref) =>
+      (bound) => Future<void>.delayed(bound),
 );
 
 final sessionWaitProvider = Provider<SessionWaitService>(

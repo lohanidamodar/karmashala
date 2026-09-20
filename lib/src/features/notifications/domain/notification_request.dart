@@ -134,14 +134,14 @@ class NotificationCoalescer {
   /// permission prompt and for its 60s idle nudge; unrecorded takes the weaker.
   String _headline(NotificationReason reason, AgentWaitKind waiting) =>
       switch (reason) {
-    NotificationReason.finished => 'Agent finished',
-    NotificationReason.needsInput =>
-      waiting == AgentWaitKind.approval
-          ? 'Agent needs your approval'
-          : 'Agent is waiting for you',
-    NotificationReason.failed => 'Agent failed',
-    NotificationReason.checksFailed => 'Checks failed',
-    NotificationReason.changesRequested => 'Changes requested',
-    NotificationReason.readyToMerge => 'Ready to merge',
-  };
+        NotificationReason.finished => 'Agent finished',
+        NotificationReason.needsInput =>
+          waiting == AgentWaitKind.approval
+              ? 'Agent needs your approval'
+              : 'Agent is waiting for you',
+        NotificationReason.failed => 'Agent failed',
+        NotificationReason.checksFailed => 'Checks failed',
+        NotificationReason.changesRequested => 'Changes requested',
+        NotificationReason.readyToMerge => 'Ready to merge',
+      };
 }

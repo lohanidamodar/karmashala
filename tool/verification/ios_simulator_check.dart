@@ -38,8 +38,10 @@ void main(List<String> args) async {
   stdout.writeln('$_tick WebDriverAgent ${wda.source.name}: ${wda.appPath}');
 
   final simulators = await simctl.listSimulators();
-  stdout.writeln('$_tick ${simulators.length} simulators, '
-      '${simulators.where((s) => s.isAvailable).length} available');
+  stdout.writeln(
+    '$_tick ${simulators.length} simulators, '
+    '${simulators.where((s) => s.isAvailable).length} available',
+  );
 
   final IosSimulator target;
   if (args.isNotEmpty) {
@@ -111,8 +113,10 @@ void main(List<String> args) async {
       );
       stdout.writeln('       (${visible.length} with a real rectangle)');
       for (final node in visible.take(6)) {
-        stdout.writeln('       ${node.className.padRight(14)} '
-            '${node.label}  ${node.bounds ?? ''}');
+        stdout.writeln(
+          '       ${node.className.padRight(14)} '
+          '${node.label}  ${node.bounds ?? ''}',
+        );
       }
     });
 
@@ -183,11 +187,14 @@ void main(List<String> args) async {
           if (frame.length < shortest) shortest = frame.length;
           dimensions = _jpegSize(frame) ?? dimensions;
           final soi = frame.length > 1 && frame[0] == 0xFF && frame[1] == 0xD8;
-          final eoi = frame.length > 1 &&
+          final eoi =
+              frame.length > 1 &&
               frame[frame.length - 2] == 0xFF &&
               frame[frame.length - 1] == 0xD9;
           if (!soi || !eoi) {
-            malformed.add('frame $frames: soi=$soi eoi=$eoi len=${frame.length}');
+            malformed.add(
+              'frame $frames: soi=$soi eoi=$eoi len=${frame.length}',
+            );
           }
           if (frames >= 30 && !done.isCompleted) done.complete();
         },
@@ -199,7 +206,10 @@ void main(List<String> args) async {
         },
       );
       try {
-        await done.future.timeout(const Duration(seconds: 15), onTimeout: () {});
+        await done.future.timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {},
+        );
       } finally {
         await subscription.cancel();
         await feed.stop();
@@ -219,7 +229,6 @@ void main(List<String> args) async {
         throw StateError('frames were not whole JPEGs: ${malformed.take(3)}');
       }
     });
-
   } finally {
     await backend.detach(target.udid);
     stdout.writeln('$_tick WebDriverAgent stopped');

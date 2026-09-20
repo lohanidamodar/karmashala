@@ -71,10 +71,9 @@ void main() {
   ({String personal, String games}) seed({String? filedUnder}) {
     final workspaces = container.read(workspacesControllerProvider.notifier);
     final personal = workspaces.create('Personal').id;
-    final games = workspaces.create(
-      'Game dev',
-      description: 'Weekend things',
-    ).id;
+    final games = workspaces
+        .create('Game dev', description: 'Weekend things')
+        .id;
     container
         .read(projectDaoProvider)
         .insert(
@@ -132,7 +131,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(workspaceOfProject(), ids.games);
-    expect(find.textContaining('Moved "Roguelike" to Game dev'), findsOneWidget);
+    expect(
+      find.textContaining('Moved "Roguelike" to Game dev'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('moving between contexts is one gesture, not two', (
@@ -254,7 +256,8 @@ void main() {
       // under test and Tab inside a `showMenu` route is the framework's ring,
       // not this pane's.
       checkFocus: false,
-      because: 'the row menu grew a context list and the Explorer is 200px wide',
+      because:
+          'the row menu grew a context list and the Explorer is 200px wide',
     );
   });
 }

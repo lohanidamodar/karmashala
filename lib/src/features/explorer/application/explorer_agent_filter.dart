@@ -38,7 +38,9 @@ class SessionAgents {
 final sessionAgentsProvider = Provider<SessionAgents>(
   (ref) => SessionAgents(
     byInstallation: {
-      for (final installation in ref.watch(agentInstallationsControllerProvider))
+      for (final installation in ref.watch(
+        agentInstallationsControllerProvider,
+      ))
         installation.id: installation.agentId,
     },
     registry: ref.watch(agentRegistryProvider),

@@ -147,20 +147,14 @@ class _KeyFacts extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Key algorithm', style: theme.textTheme.labelSmall),
-          SelectableText(
-            keyType,
-            style: MonoStyles.label,
-          ),
+          SelectableText(keyType, style: MonoStyles.label),
           const SizedBox(height: Insets.sm),
           Text('Fingerprint', style: theme.textTheme.labelSmall),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: SelectableText(
-                  fingerprint,
-                  style: MonoStyles.label,
-                ),
+                child: SelectableText(fingerprint, style: MonoStyles.label),
               ),
               IconButton(
                 tooltip: 'Copy fingerprint',

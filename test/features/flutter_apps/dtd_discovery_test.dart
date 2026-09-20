@@ -23,13 +23,19 @@ void main() {
 
   /// The daemon writes one of these when it starts. Shape verified against the
   /// real file on 2026-09-09.
-  void writePidFile(int pid, String wsUri, {String workspaceRoot = r'C:\kw\app'}) =>
-      File('${pidFiles.path}${Platform.pathSeparator}$pid').writeAsStringSync(
-        '{"wsUri":"$wsUri","epoch":1788941794103,"pid":$pid,'
-        '"workspaceRoot":"${workspaceRoot.replaceAll(r'\', r'\\')}"}',
-      );
+  void writePidFile(
+    int pid,
+    String wsUri, {
+    String workspaceRoot = r'C:\kw\app',
+  }) => File('${pidFiles.path}${Platform.pathSeparator}$pid').writeAsStringSync(
+    '{"wsUri":"$wsUri","epoch":1788941794103,"pid":$pid,'
+    '"workspaceRoot":"${workspaceRoot.replaceAll(r'\', r'\\')}"}',
+  );
 
-  FakeDtd serveDaemon(String wsUri, {List<Map<String, Object?>> apps = const []}) {
+  FakeDtd serveDaemon(
+    String wsUri, {
+    List<Map<String, Object?>> apps = const [],
+  }) {
     final daemon = FakeDtd(apps: apps);
     daemons[wsUri] = daemon;
     return daemon;
@@ -86,7 +92,10 @@ void main() {
     serveDaemon(
       daemon,
       apps: [
-        {'uri': app, 'name': 'Kind: Flutter - Device: sdk gphone64 - Package: vmprobe'},
+        {
+          'uri': app,
+          'name': 'Kind: Flutter - Device: sdk gphone64 - Package: vmprobe',
+        },
       ],
     );
     serveApp(app);
@@ -102,31 +111,40 @@ void main() {
     expect(row.observedAt, at);
   });
 
-  test('nothing is asked of the user: no out-file, no pasted address', () async {
-    const daemon = 'ws://127.0.0.1:1/d=';
-    const app = 'ws://127.0.0.1:2/a=/ws';
-    writePidFile(11, daemon);
-    serveDaemon(daemon, apps: [
-      {'uri': app},
-    ]);
-    serveApp(app);
+  test(
+    'nothing is asked of the user: no out-file, no pasted address',
+    () async {
+      const daemon = 'ws://127.0.0.1:1/d=';
+      const app = 'ws://127.0.0.1:2/a=/ws';
+      writePidFile(11, daemon);
+      serveDaemon(
+        daemon,
+        apps: [
+          {'uri': app},
+        ],
+      );
+      serveApp(app);
 
-    await apps().look();
+      await apps().look();
 
-    expect(outFiles.listSync(), isEmpty);
-    expect(registry().attached, hasLength(1));
-    // The label falls back to the project directory, never to a bare id.
-    expect(registry().apps.single.label, 'app');
-  });
+      expect(outFiles.listSync(), isEmpty);
+      expect(registry().attached, hasLength(1));
+      // The label falls back to the project directory, never to a bare id.
+      expect(registry().apps.single.label, 'app');
+    },
+  );
 
   test('the first daemon ever, whose directory did not exist at the first '
       'look, arrives without another look', () async {
     const daemon = 'ws://127.0.0.1:1/d=';
     const app = 'ws://127.0.0.1:2/first=/ws';
     pidFiles.deleteSync(recursive: true);
-    serveDaemon(daemon, apps: [
-      {'uri': app},
-    ]);
+    serveDaemon(
+      daemon,
+      apps: [
+        {'uri': app},
+      ],
+    );
     serveApp(app);
 
     await apps().look();
@@ -164,9 +182,12 @@ void main() {
     const daemon = 'ws://127.0.0.1:1/d=';
     const app = 'ws://127.0.0.1:2/a=/ws';
     writePidFile(11, daemon);
-    final fake = serveDaemon(daemon, apps: [
-      {'uri': app},
-    ]);
+    final fake = serveDaemon(
+      daemon,
+      apps: [
+        {'uri': app},
+      ],
+    );
     serveApp(app);
 
     await apps().look();
@@ -192,23 +213,32 @@ void main() {
     expect(opened, hasLength(1));
   });
 
-  test('a daemon whose pid file outlived it is dropped, not reported', () async {
-    writePidFile(11, 'ws://127.0.0.1:9/dead=');
+  test(
+    'a daemon whose pid file outlived it is dropped, not reported',
+    () async {
+      writePidFile(11, 'ws://127.0.0.1:9/dead=');
 
-    await apps().look();
+      await apps().look();
 
-    expect(registry().discoveryFailure, isNull);
-    expect(registry().apps, isEmpty);
-    expect(describeRegistry(registry()), 'No Flutter app is running that we can see.');
-  });
+      expect(registry().discoveryFailure, isNull);
+      expect(registry().apps, isEmpty);
+      expect(
+        describeRegistry(registry()),
+        'No Flutter app is running that we can see.',
+      );
+    },
+  );
 
   test('a row whose daemon stopped naming it is dropped', () async {
     const daemon = 'ws://127.0.0.1:1/d=';
     const app = 'ws://127.0.0.1:2/a=/ws';
     writePidFile(11, daemon);
-    serveDaemon(daemon, apps: [
-      {'uri': app},
-    ]);
+    serveDaemon(
+      daemon,
+      apps: [
+        {'uri': app},
+      ],
+    );
     // Nothing answers on the app, so the row is a candidate that stays only as
     // long as the daemon names it.
     await apps().look();

@@ -212,8 +212,6 @@ class _Listening {
     served?.end();
     unawaited(frames?.cancel());
     unawaited(states?.cancel());
-    unawaited(
-      transport.close().catchError((Object _) {}),
-    );
+    unawaited(transport.close().catchError((Object _) {}));
   }
 }

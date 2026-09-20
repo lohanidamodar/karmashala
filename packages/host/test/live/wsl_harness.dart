@@ -20,7 +20,12 @@ class WslHarness {
   /// Null when this machine has no WSL, so a test skips with a reason.
   static String? unavailableReason() {
     if (!Platform.isWindows) return 'live-wsl needs Windows with WSL';
-    final probe = Process.runSync('wsl.exe', ['-d', _distribution, '--', 'true']);
+    final probe = Process.runSync('wsl.exe', [
+      '-d',
+      _distribution,
+      '--',
+      'true',
+    ]);
     if (probe.exitCode != 0) {
       return 'wsl -d $_distribution is not runnable (exit ${probe.exitCode})';
     }
@@ -68,7 +73,8 @@ class WslHarness {
   /// Installs the whole bundle under [target], so `bin/` keeps `lib/` beside it
   /// and the executable can find the library it was built with. Copied into the
   /// distribution's own filesystem first: DrvFs cannot carry the execute bit.
-  String installScript(String target) => '''
+  String installScript(String target) =>
+      '''
 rm -rf $target
 mkdir -p $target
 cp -r ${toWslPath(bundle.path)}/. $target/
@@ -79,10 +85,17 @@ chmod +x ${executableIn(target)}
   /// does not survive Windows rebuilding the command line. The name must be
   /// unique across isolates — pid plus a static counter collides, silently.
   ProcessResult runSync(String script) {
-    final tag = '${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 32)}';
+    final tag =
+        '${DateTime.now().microsecondsSinceEpoch}-${_random.nextInt(1 << 32)}';
     final file = File('${bundle.parent.path}/wsl-script-$tag.sh')
       ..writeAsStringSync(script.replaceAll('\r\n', '\n'));
-    final result = Process.runSync('wsl.exe', ['-d', distribution, '--', 'sh', toWslPath(file.path)]);
+    final result = Process.runSync('wsl.exe', [
+      '-d',
+      distribution,
+      '--',
+      'sh',
+      toWslPath(file.path),
+    ]);
     file.deleteSync();
     return result;
   }
@@ -91,7 +104,9 @@ chmod +x ${executableIn(target)}
   void runOrThrow(String script) {
     final result = runSync(script);
     if (result.exitCode != 0) {
-      throw StateError('wsl script failed (${result.exitCode}): ${result.stdout}${result.stderr}');
+      throw StateError(
+        'wsl script failed (${result.exitCode}): ${result.stdout}${result.stderr}',
+      );
     }
   }
 

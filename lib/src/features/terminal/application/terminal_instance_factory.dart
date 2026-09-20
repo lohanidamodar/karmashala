@@ -51,8 +51,7 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
             title: agentLaunch?.title ?? 'SSH terminal',
             profileId: profile.id,
             message: 'The saved SSH host "$sshHostId" no longer exists.',
-            workingDirectory:
-                workingDirectory ?? agentLaunch?.workingDirectory,
+            workingDirectory: workingDirectory ?? agentLaunch?.workingDirectory,
             agentLaunch: agentLaunch,
             restoredScrollback: restoredScrollback,
             adoptTerminal: adoptTerminal,

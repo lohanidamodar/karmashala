@@ -9,7 +9,10 @@ void main() {
   group('sessionIdOf', () {
     test('reads field 6 past a comm that holds spaces and parentheses', () {
       expect(sessionIdOf('4242 (sh) S 1 4242 4242 34816 4300 4194560 0'), 4242);
-      expect(sessionIdOf('4300 (node (claude) x) R 4242 4300 4242 34816 4300 0'), 4242);
+      expect(
+        sessionIdOf('4300 (node (claude) x) R 4242 4300 4242 34816 4300 0'),
+        4242,
+      );
     });
 
     test('a truncated line is nobody', () {
@@ -24,7 +27,9 @@ void main() {
 
     void process(int pid, {required int sid, String comm = 'p'}) {
       Directory('${proc.path}/$pid').createSync();
-      File('${proc.path}/$pid/stat').writeAsStringSync('$pid ($comm) S 1 $pid $sid 0 0');
+      File(
+        '${proc.path}/$pid/stat',
+      ).writeAsStringSync('$pid ($comm) S 1 $pid $sid 0 0');
     }
 
     test('names every process in the session but the leader, and no other', () {
@@ -38,16 +43,22 @@ void main() {
       expect(sessionMembers(100, proc: proc)..sort(), [101, 102]);
     });
 
-    test('a process that vanished between the listing and the read is skipped', () {
-      process(100, sid: 100);
-      process(101, sid: 100);
-      Directory('${proc.path}/102').createSync(); // no stat: gone already
+    test(
+      'a process that vanished between the listing and the read is skipped',
+      () {
+        process(100, sid: 100);
+        process(101, sid: 100);
+        Directory('${proc.path}/102').createSync(); // no stat: gone already
 
-      expect(sessionMembers(100, proc: proc), [101]);
-    });
+        expect(sessionMembers(100, proc: proc), [101]);
+      },
+    );
 
     test('no /proc means no members, not a fault', () {
-      expect(sessionMembers(1, proc: Directory('${proc.path}/absent')), isEmpty);
+      expect(
+        sessionMembers(1, proc: Directory('${proc.path}/absent')),
+        isEmpty,
+      );
     });
   });
 
@@ -55,7 +66,11 @@ void main() {
     test('lays the client\'s overrides over the host process\'s own', () {
       final merged = childEnvironment(
         const {'TERM': 'xterm-256color'},
-        base: const {'PATH': '/usr/bin:/bin', 'HOME': '/home/d', 'TERM': 'dumb'},
+        base: const {
+          'PATH': '/usr/bin:/bin',
+          'HOME': '/home/d',
+          'TERM': 'dumb',
+        },
       );
 
       // The bug this is written for: until 2026-09-16 the child's environment
@@ -68,10 +83,9 @@ void main() {
     });
 
     test('an empty override map still inherits everything', () {
-      expect(
-        childEnvironment(const {}, base: const {'PATH': '/bin'}),
-        {'PATH': '/bin'},
-      );
+      expect(childEnvironment(const {}, base: const {'PATH': '/bin'}), {
+        'PATH': '/bin',
+      });
     });
 
     test('names are case-sensitive, unlike the Windows branch', () {

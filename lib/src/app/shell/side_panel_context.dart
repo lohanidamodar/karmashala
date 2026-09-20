@@ -85,9 +85,8 @@ class _SidePanelContextLineState extends ConsumerState<SidePanelContextLine> {
         if (_rescanResult != null) setState(() => _rescanResult = null);
       },
       onSelected: (picked) => switch (picked) {
-        final Repository checkout => ref
-            .read(checkoutPickerProvider)
-            .select(checkout),
+        final Repository checkout =>
+          ref.read(checkoutPickerProvider).select(checkout),
         _ => _rescan(repository.projectId),
       },
       itemBuilder: (context) => [
@@ -247,8 +246,8 @@ class SidePanelWorktrees extends ConsumerWidget {
               path: worktree.path.path,
               selected: rows[Checkout(worktree.path)]?.id == selected?.id,
               onTap: switch (rows[Checkout(worktree.path)]) {
-                final Repository row => () =>
-                    ref.read(checkoutPickerProvider).select(row),
+                final Repository row =>
+                  () => ref.read(checkoutPickerProvider).select(row),
                 _ => null,
               },
             ),
@@ -287,9 +286,7 @@ class _WorktreeChip extends StatelessWidget {
           ? '$path\nNot in this workspace yet — rescan to add it'
           : path,
       child: Material(
-        color: selected
-            ? StateLayers.selected(scheme)
-            : Colors.transparent,
+        color: selected ? StateLayers.selected(scheme) : Colors.transparent,
         borderRadius: BorderRadius.circular(Radii.sm),
         child: InkWell(
           onTap: onTap,

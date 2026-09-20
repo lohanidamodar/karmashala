@@ -29,23 +29,29 @@ class _DeadStdinHandle extends FakeProcessHandle {
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
 
 void main() {
-  test('a CLI that exits non-zero reports its stderr, not a clean completion', () async {
-    final handle = FakeProcessHandle();
-    final session = _LineSession(Future.value(handle));
-    final events = <AgentEvent>[];
-    final done = session.events.listen(events.add).asFuture<void>();
-    await _settle();
+  test(
+    'a CLI that exits non-zero reports its stderr, not a clean completion',
+    () async {
+      final handle = FakeProcessHandle();
+      final session = _LineSession(Future.value(handle));
+      final events = <AgentEvent>[];
+      final done = session.events.listen(events.add).asFuture<void>();
+      await _settle();
 
-    handle.emitStderr('No conversation found with session ID: 8d3f');
-    handle.complete(1);
-    await done;
+      handle.emitStderr('No conversation found with session ID: 8d3f');
+      handle.complete(1);
+      await done;
 
-    final error = events.single;
-    expect(error.type, SessionEventTypes.error);
-    expect(error.data['exitCode'], 1);
-    expect(error.data['message'], contains('exited with code 1'));
-    expect(error.data['message'], contains('No conversation found with session ID: 8d3f'));
-  });
+      final error = events.single;
+      expect(error.type, SessionEventTypes.error);
+      expect(error.data['exitCode'], 1);
+      expect(error.data['message'], contains('exited with code 1'));
+      expect(
+        error.data['message'],
+        contains('No conversation found with session ID: 8d3f'),
+      );
+    },
+  );
 
   test('a clean exit adds no error and closes the events', () async {
     final handle = FakeProcessHandle();
@@ -81,34 +87,45 @@ void main() {
     expect(tail.last, 'e99');
   });
 
-  test('a fault on the stdout stream is an error event, not an unhandled one', () async {
-    final handle = FakeProcessHandle();
-    final session = _LineSession(Future.value(handle));
-    final events = <AgentEvent>[];
-    final done = session.events.listen(events.add).asFuture<void>();
-    await _settle();
+  test(
+    'a fault on the stdout stream is an error event, not an unhandled one',
+    () async {
+      final handle = FakeProcessHandle();
+      final session = _LineSession(Future.value(handle));
+      final events = <AgentEvent>[];
+      final done = session.events.listen(events.add).asFuture<void>();
+      await _settle();
 
-    handle.emitStdout('fine');
-    handle.emitStdoutError(const FormatException('Unexpected extension byte'));
-    handle.complete(0);
-    await done;
+      handle.emitStdout('fine');
+      handle.emitStdoutError(
+        const FormatException('Unexpected extension byte'),
+      );
+      handle.complete(0);
+      await done;
 
-    expect(events.map((e) => e.type), ['line', SessionEventTypes.error]);
-    expect(events.last.data['message'], contains('Unexpected extension byte'));
-  });
+      expect(events.map((e) => e.type), ['line', SessionEventTypes.error]);
+      expect(
+        events.last.data['message'],
+        contains('Unexpected extension byte'),
+      );
+    },
+  );
 
-  test('a message that cannot be written is reported through the events', () async {
-    final handle = _DeadStdinHandle();
-    final session = _LineSession(Future.value(handle));
-    final events = <AgentEvent>[];
-    session.events.listen(events.add);
-    await _settle();
+  test(
+    'a message that cannot be written is reported through the events',
+    () async {
+      final handle = _DeadStdinHandle();
+      final session = _LineSession(Future.value(handle));
+      final events = <AgentEvent>[];
+      session.events.listen(events.add);
+      await _settle();
 
-    await session.send('hello?');
+      await session.send('hello?');
 
-    expect(events.single.type, SessionEventTypes.error);
-    expect(events.single.data['message'], contains('stdin is closed'));
-  });
+      expect(events.single.type, SessionEventTypes.error);
+      expect(events.single.data['message'], contains('stdin is closed'));
+    },
+  );
 
   test('a session stopped by its owner reports no exit error', () async {
     final handle = FakeProcessHandle();

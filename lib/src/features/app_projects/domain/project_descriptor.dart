@@ -17,26 +17,20 @@ enum ProjectTarget {
 enum ApplicationIdSource {
   /// `output-metadata.json`, written by AGP beside the APK: it carries both
   /// `applicationId` and `outputFile`, so nothing here parses a build script.
-  buildOutputMetadata(
-    'output-metadata.json beside the artifact',
-  ),
+  buildOutputMetadata('output-metadata.json beside the artifact'),
 
   /// An `applicationId` literal in the module's build script — the only source
   /// available before a build. A literal only: `"$flavour"` is Gradle's to say.
-  moduleBuildScript(
-    'the applicationId literal in the module build script',
-  ),
+  moduleBuildScript('the applicationId literal in the module build script'),
 
   /// `CFBundleIdentifier` from the built `.app` bundle's `Info.plist`, which is
   /// what `device_install_app` already reads back on iOS.
-  bundleInfoPlist('CFBundleIdentifier in the built bundle'),
-  ;
+  bundleInfoPlist('CFBundleIdentifier in the built bundle');
 
   const ApplicationIdSource(this.label);
 
   final String label;
 }
-
 
 /// Which program runs a [ProjectBuildSpec.command]. A field, not an assumption,
 /// because `gradlew` is a file in the project rather than a name on PATH.
@@ -53,8 +47,7 @@ enum ProjectBuildTool {
   xcodebuild('xcodebuild'),
 
   /// The project's own package script, run through its package manager.
-  packageScript('the project\'s package script'),
-  ;
+  packageScript('the project\'s package script');
 
   const ProjectBuildTool(this.label);
 

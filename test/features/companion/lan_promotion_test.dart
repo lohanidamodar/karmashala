@@ -20,8 +20,7 @@ import 'dart:io';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala_remote/client.dart'
-    as stored;
+import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -194,8 +193,8 @@ void main() {
     );
     relayUri = Uri.parse('ws://127.0.0.1:${relay.port}');
     store = stored.InMemoryCompanionStore();
-    store.values[RemoteCompanionGateway.kPairingRelayStoreKey] =
-        relayUri.toString();
+    store.values[RemoteCompanionGateway.kPairingRelayStoreKey] = relayUri
+        .toString();
     relayTransports.clear();
     lanTransports.clear();
     logs.clear();
@@ -316,15 +315,15 @@ void main() {
 
   /// Every promotion says how it ended, on the gateway's own log — which is
   /// what lets this file wait for the *event* rather than for a duration.
-  int outcomes() =>
-      logs.where((l) => l.startsWith('lan promotion:')).length;
+  int outcomes() => logs.where((l) => l.startsWith('lan promotion:')).length;
 
   Future<void> beaconOnce(ScriptedScout scout, DiscoveredHost host) async {
     final before = outcomes();
     scout.hear(host);
     await until(
       () => outcomes() > before,
-      reason: 'every beacon that reaches the promotion is answered — a dial, '
+      reason:
+          'every beacon that reaches the promotion is answered — a dial, '
           'or a hold-off that says how many beacons are left',
     );
   }
@@ -335,103 +334,200 @@ void main() {
   ];
 
   group('a promotion is a second link, not a drop', () {
-    test('every row crosses exactly once, and the link never says it is down',
-        timeout: const Timeout(Duration(minutes: 3)), () async {
-      final started = await startService();
-      fake.transcripts['s1'] = conversation(12);
-      final scout = ScriptedScout(
-        attemptTimeout: const Duration(seconds: 2),
-        dialer: (host, port) {
-          final transport = CountingLanTransport(
+    test(
+      'every row crosses exactly once, and the link never says it is down',
+      timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+        final started = await startService();
+        fake.transcripts['s1'] = conversation(12);
+        final scout = ScriptedScout(
+          attemptTimeout: const Duration(seconds: 2),
+          dialer: (host, port) {
+            final transport = CountingLanTransport(
+              host: '127.0.0.1',
+              port: started.lanPortBound!,
+              connectTimeout: const Duration(seconds: 2),
+              backoff: fastBackoff(),
+            )..start();
+            lanTransports.add(transport);
+            return transport;
+          },
+        );
+        final gateway = await pairedPhone(scout: scout);
+
+        final rows = <List<CompanionChatMessage>>[];
+        final watching = gateway.transcript('s1').listen(rows.add);
+        addTearDown(watching.cancel);
+        await until(
+          () => rows.isNotEmpty && rows.last.length == 12,
+          reason: 'the phone reads the transcript over the relay first',
+        );
+
+        // Three turns while the relay is still the link.
+        fake.transcripts['s1']!.addAll(conversation(3, from: 12));
+        await started.pollTranscriptsNow();
+        await until(
+          () => rows.last.length == 15,
+          reason: 'the relay carries what it is there to carry',
+        );
+
+        final states = <CompanionLinkState>[];
+        final watch = gateway.linkStates.listen(states.add);
+        addTearDown(watch.cancel);
+        final upSince = gateway.linkSince;
+
+        await beaconOnce(scout, beaconAt(started.lanPortBound!));
+        await until(
+          () => gateway.linkPath == CompanionLinkPath.lan,
+          reason: 'the beacon named a desktop on this network and it answered',
+        );
+
+        expect(
+          states.where((s) => s != CompanionLinkState.connected),
+          isEmpty,
+          reason:
+              'the whole point: nothing about the switch may be visible as '
+              'an outage, because there was not one',
+        );
+        expect(
+          gateway.linkSince,
+          upSince,
+          reason:
+              'the link is the same link — its age keeps running, and a '
+              'stamp that moved would be claiming a break that did not happen',
+        );
+
+        // Four more turns, now over the LAN.
+        fake.transcripts['s1']!.addAll(conversation(4, from: 15));
+        await started.pollTranscriptsNow();
+        await until(
+          () => rows.last.length == 19,
+          reason: 'the new link carries what the old one was carrying',
+        );
+
+        expect(
+          [for (final message in rows.last) message.text],
+          [for (var i = 0; i < 19; i++) 'm$i'],
+          reason:
+              'exactly once, in order, across the switch — a re-read of the '
+              'tail would show the last page twice and a gap walk would show '
+              'the join',
+        );
+        expect(
+          rows.any((frame) => frame.length < 12),
+          isFalse,
+          reason: 'and the view never went backwards on the way',
+        );
+
+        // Hello, one subscribe, one cursor re-arm. The host builds a fresh
+        // session api per generation, so both of the latter are carrying state
+        // over rather than recovering from a loss.
+        expect(
+          lanTransports.single.sent,
+          3,
+          reason: 'what a promotion costs on the wire',
+        );
+      },
+    );
+
+    test(
+      'a LAN dial that fails leaves the relay link carrying',
+      timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+        await startService();
+        final scout = ScriptedScout(
+          attemptTimeout: const Duration(milliseconds: 300),
+          // Nothing is listening: a firewall on the advertised LAN port, the
+          // ordinary case on a freshly installed desktop.
+          dialer: (host, port) => LanTransport.dial(
+            host: '127.0.0.1',
+            port: 1,
+            connectTimeout: const Duration(milliseconds: 100),
+            backoff: fastBackoff(),
+          ),
+        );
+        final gateway = await pairedPhone(scout: scout);
+        expect((await gateway.listSessions()).single.id, 's1');
+
+        final states = <CompanionLinkState>[];
+        final watch = gateway.linkStates.listen(states.add);
+        addTearDown(watch.cancel);
+        final sentBefore = relayTransports.last.sent;
+
+        await beaconOnce(scout, beaconAt(41234));
+
+        expect(scout.dials, 1, reason: 'worth trying — once');
+        expect(gateway.link, CompanionLinkState.connected);
+        expect(gateway.linkPath, CompanionLinkPath.relay);
+        expect(
+          states.where((s) => s != CompanionLinkState.connected),
+          isEmpty,
+          reason:
+              'a dial that found nobody is not news about the link that '
+              'works — it never learned anything about the relay at all',
+        );
+        expect(
+          (await gateway.listSessions()).single.id,
+          's1',
+          reason:
+              'and the relay still answers, which is the only proof that '
+              'matters',
+        );
+        expect(
+          relayTransports.last.sent,
+          greaterThan(sentBefore),
+          reason: 'frames kept flowing on it throughout, counted',
+        );
+      },
+    );
+
+    test(
+      'a link that answers the hello and then carries nothing does not get '
+      'the switch',
+      timeout: const Timeout(Duration(minutes: 3)),
+      () async {
+        final started = await startService();
+        final scout = ScriptedScout(
+          attemptTimeout: const Duration(seconds: 2),
+          dialer: (host, port) => DeafAfterHelloTransport(
             host: '127.0.0.1',
             port: started.lanPortBound!,
             connectTimeout: const Duration(seconds: 2),
             backoff: fastBackoff(),
-          )..start();
-          lanTransports.add(transport);
-          return transport;
-        },
-      );
-      final gateway = await pairedPhone(scout: scout);
+          )..start(),
+        );
+        final gateway = await pairedPhone(
+          scout: scout,
+          // Short, so the frame that will never be answered is not what this
+          // test spends its time on.
+          requestTimeout: const Duration(milliseconds: 400),
+          // Long, so the heal cannot answer the question before the assertion
+          // does: what is being pinned here is the switch, not the recovery.
+          linkHealGrace: const Duration(seconds: 5),
+        );
 
-      final rows = <List<CompanionChatMessage>>[];
-      final watching = gateway.transcript('s1').listen(rows.add);
-      addTearDown(watching.cancel);
-      await until(
-        () => rows.isNotEmpty && rows.last.length == 12,
-        reason: 'the phone reads the transcript over the relay first',
-      );
+        await beaconOnce(scout, beaconAt(started.lanPortBound!));
 
-      // Three turns while the relay is still the link.
-      fake.transcripts['s1']!.addAll(conversation(3, from: 12));
-      await started.pollTranscriptsNow();
-      await until(
-        () => rows.last.length == 15,
-        reason: 'the relay carries what it is there to carry',
-      );
+        expect(
+          gateway.linkPath,
+          CompanionLinkPath.relay,
+          reason:
+              'a sealed round trip proves who is there, not that the path '
+              'carries — so the switch is not finished until the new link has '
+              'carried a frame, and this one never did',
+        );
+        expect(scout.dials, 1);
+      },
+    );
+  });
 
-      final states = <CompanionLinkState>[];
-      final watch = gateway.linkStates.listen(states.add);
-      addTearDown(watch.cancel);
-      final upSince = gateway.linkSince;
-
-      await beaconOnce(scout, beaconAt(started.lanPortBound!));
-      await until(
-        () => gateway.linkPath == CompanionLinkPath.lan,
-        reason: 'the beacon named a desktop on this network and it answered',
-      );
-
-      expect(
-        states.where((s) => s != CompanionLinkState.connected),
-        isEmpty,
-        reason: 'the whole point: nothing about the switch may be visible as '
-            'an outage, because there was not one',
-      );
-      expect(
-        gateway.linkSince,
-        upSince,
-        reason: 'the link is the same link — its age keeps running, and a '
-            'stamp that moved would be claiming a break that did not happen',
-      );
-
-      // Four more turns, now over the LAN.
-      fake.transcripts['s1']!.addAll(conversation(4, from: 15));
-      await started.pollTranscriptsNow();
-      await until(
-        () => rows.last.length == 19,
-        reason: 'the new link carries what the old one was carrying',
-      );
-
-      expect(
-        [for (final message in rows.last) message.text],
-        [for (var i = 0; i < 19; i++) 'm$i'],
-        reason: 'exactly once, in order, across the switch — a re-read of the '
-            'tail would show the last page twice and a gap walk would show '
-            'the join',
-      );
-      expect(
-        rows.any((frame) => frame.length < 12),
-        isFalse,
-        reason: 'and the view never went backwards on the way',
-      );
-
-      // Hello, one subscribe, one cursor re-arm. The host builds a fresh
-      // session api per generation, so both of the latter are carrying state
-      // over rather than recovering from a loss.
-      expect(
-        lanTransports.single.sent,
-        3,
-        reason: 'what a promotion costs on the wire',
-      );
-    });
-
-    test('a LAN dial that fails leaves the relay link carrying', timeout:
-        const Timeout(Duration(minutes: 3)), () async {
+  test(
+    'a failed promotion waits out beacons, doubling — never a clock',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
       await startService();
       final scout = ScriptedScout(
-        attemptTimeout: const Duration(milliseconds: 300),
-        // Nothing is listening: a firewall on the advertised LAN port, the
-        // ordinary case on a freshly installed desktop.
+        attemptTimeout: const Duration(milliseconds: 200),
         dialer: (host, port) => LanTransport.dial(
           host: '127.0.0.1',
           port: 1,
@@ -440,137 +536,62 @@ void main() {
         ),
       );
       final gateway = await pairedPhone(scout: scout);
-      expect((await gateway.listSessions()).single.id, 's1');
+      final host = beaconAt(41234);
 
-      final states = <CompanionLinkState>[];
-      final watch = gateway.linkStates.listen(states.add);
-      addTearDown(watch.cancel);
-      final sentBefore = relayTransports.last.sent;
-
-      await beaconOnce(scout, beaconAt(41234));
-
-      expect(scout.dials, 1, reason: 'worth trying — once');
+      // 1, 2, 4: each failure asks for twice as many beacons as the last, and
+      // every beacon in between is answered by counting rather than by dialling.
+      // The tenth beacon is the fourth attempt, which is the whole claim.
+      const dialsAfterBeacon = [1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 4];
+      for (var i = 0; i < dialsAfterBeacon.length; i++) {
+        await beaconOnce(scout, host);
+        expect(
+          scout.dials,
+          dialsAfterBeacon[i],
+          reason: 'beacon ${i + 1} of ${dialsAfterBeacon.length}',
+        );
+      }
       expect(gateway.link, CompanionLinkState.connected);
       expect(gateway.linkPath, CompanionLinkPath.relay);
-      expect(
-        states.where((s) => s != CompanionLinkState.connected),
-        isEmpty,
-        reason: 'a dial that found nobody is not news about the link that '
-            'works — it never learned anything about the relay at all',
-      );
-      expect(
-        (await gateway.listSessions()).single.id,
-        's1',
-        reason: 'and the relay still answers, which is the only proof that '
-            'matters',
-      );
-      expect(
-        relayTransports.last.sent,
-        greaterThan(sentBefore),
-        reason: 'frames kept flowing on it throughout, counted',
-      );
-    });
+      expect((await gateway.listSessions()).single.id, 's1');
+    },
+  );
 
-    test('a link that answers the hello and then carries nothing does not get '
-        'the switch', timeout: const Timeout(Duration(minutes: 3)), () async {
+  test(
+    'a LAN link that dies after a promotion falls back through the loop '
+    'that was always there',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
       final started = await startService();
+      final cut = await LanCut.inFrontOf(started.lanPortBound!);
+      addTearDown(cut.cut);
       final scout = ScriptedScout(
-        attemptTimeout: const Duration(seconds: 2),
-        dialer: (host, port) => DeafAfterHelloTransport(
+        attemptTimeout: const Duration(milliseconds: 600),
+        dialer: (host, port) => LanTransport.dial(
           host: '127.0.0.1',
-          port: started.lanPortBound!,
-          connectTimeout: const Duration(seconds: 2),
+          port: cut.port,
+          connectTimeout: const Duration(milliseconds: 500),
           backoff: fastBackoff(),
-        )..start(),
+        ),
       );
-      final gateway = await pairedPhone(
-        scout: scout,
-        // Short, so the frame that will never be answered is not what this
-        // test spends its time on.
-        requestTimeout: const Duration(milliseconds: 400),
-        // Long, so the heal cannot answer the question before the assertion
-        // does: what is being pinned here is the switch, not the recovery.
-        linkHealGrace: const Duration(seconds: 5),
+      final gateway = await pairedPhone(scout: scout);
+
+      await beaconOnce(scout, beaconAt(cut.port));
+      await until(
+        () => gateway.linkPath == CompanionLinkPath.lan,
+        reason: 'the promotion lands first',
       );
 
-      await beaconOnce(scout, beaconAt(started.lanPortBound!));
-
-      expect(
-        gateway.linkPath,
-        CompanionLinkPath.relay,
-        reason: 'a sealed round trip proves who is there, not that the path '
-            'carries — so the switch is not finished until the new link has '
-            'carried a frame, and this one never did',
+      // The desktop is still there; the network between it and this phone is
+      // not. Today's rules from here: the loop re-dials every saved path.
+      await cut.cut();
+      await until(
+        () =>
+            gateway.link == CompanionLinkState.connected &&
+            gateway.linkPath == CompanionLinkPath.relay,
+        timeout: const Duration(seconds: 30),
+        reason: 'the relay takes the link back with no help from anything new',
       );
-      expect(scout.dials, 1);
-    });
-  });
-
-  test('a failed promotion waits out beacons, doubling — never a clock',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    final scout = ScriptedScout(
-      attemptTimeout: const Duration(milliseconds: 200),
-      dialer: (host, port) => LanTransport.dial(
-        host: '127.0.0.1',
-        port: 1,
-        connectTimeout: const Duration(milliseconds: 100),
-        backoff: fastBackoff(),
-      ),
-    );
-    final gateway = await pairedPhone(scout: scout);
-    final host = beaconAt(41234);
-
-    // 1, 2, 4: each failure asks for twice as many beacons as the last, and
-    // every beacon in between is answered by counting rather than by dialling.
-    // The tenth beacon is the fourth attempt, which is the whole claim.
-    const dialsAfterBeacon = [1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 4];
-    for (var i = 0; i < dialsAfterBeacon.length; i++) {
-      await beaconOnce(scout, host);
-      expect(
-        scout.dials,
-        dialsAfterBeacon[i],
-        reason: 'beacon ${i + 1} of ${dialsAfterBeacon.length}',
-      );
-    }
-    expect(gateway.link, CompanionLinkState.connected);
-    expect(gateway.linkPath, CompanionLinkPath.relay);
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
-
-  test('a LAN link that dies after a promotion falls back through the loop '
-      'that was always there', timeout: const Timeout(Duration(minutes: 3)),
-      () async {
-    final started = await startService();
-    final cut = await LanCut.inFrontOf(started.lanPortBound!);
-    addTearDown(cut.cut);
-    final scout = ScriptedScout(
-      attemptTimeout: const Duration(milliseconds: 600),
-      dialer: (host, port) => LanTransport.dial(
-        host: '127.0.0.1',
-        port: cut.port,
-        connectTimeout: const Duration(milliseconds: 500),
-        backoff: fastBackoff(),
-      ),
-    );
-    final gateway = await pairedPhone(scout: scout);
-
-    await beaconOnce(scout, beaconAt(cut.port));
-    await until(
-      () => gateway.linkPath == CompanionLinkPath.lan,
-      reason: 'the promotion lands first',
-    );
-
-    // The desktop is still there; the network between it and this phone is
-    // not. Today's rules from here: the loop re-dials every saved path.
-    await cut.cut();
-    await until(
-      () =>
-          gateway.link == CompanionLinkState.connected &&
-          gateway.linkPath == CompanionLinkPath.relay,
-      timeout: const Duration(seconds: 30),
-      reason: 'the relay takes the link back with no help from anything new',
-    );
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
+      expect((await gateway.listSessions()).single.id, 's1');
+    },
+  );
 }

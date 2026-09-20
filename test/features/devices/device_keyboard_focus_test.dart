@@ -188,9 +188,7 @@ void main() {
     addTearDown(field.dispose);
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: TextField(focusNode: field, autofocus: true),
-        ),
+        home: Scaffold(body: TextField(focusNode: field, autofocus: true)),
       ),
     );
     await tester.pumpAndSettle();

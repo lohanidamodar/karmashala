@@ -86,12 +86,9 @@ void main() {
       ),
     );
     if (verdict != null) {
-      VerificationDao(db).finishRun(
-        id,
-        verdict: verdict,
-        reason: reason,
-        finishedAt: testTime,
-      );
+      VerificationDao(
+        db,
+      ).finishRun(id, verdict: verdict, reason: reason, finishedAt: testTime);
     }
   }
 
@@ -210,13 +207,16 @@ void main() {
       expect(raised.summary, contains('the isolate pool deadlocks on Windows'));
     });
 
-    test('a session that recorded nothing says "not recorded", not a guess', () {
-      // An empty decision record means nobody wrote anything down. It is not
-      // evidence about the session, so nothing is invented to fill the line.
-      ended('s1', SessionStatus.failed);
-      sweep();
-      expect(followUps.open().single.summary, isNull);
-    });
+    test(
+      'a session that recorded nothing says "not recorded", not a guess',
+      () {
+        // An empty decision record means nobody wrote anything down. It is not
+        // evidence about the session, so nothing is invented to fill the line.
+        ended('s1', SessionStatus.failed);
+        sweep();
+        expect(followUps.open().single.summary, isNull);
+      },
+    );
   });
 
   group('it does not repeat itself', () {
@@ -238,10 +238,9 @@ void main() {
       sweep();
 
       expect(followUps.open(), isEmpty);
-      expect(
-        db.query('SELECT resolution FROM session_follow_ups;').single,
-        {'resolution': 'dismissed'},
-      );
+      expect(db.query('SELECT resolution FROM session_follow_ups;').single, {
+        'resolution': 'dismissed',
+      });
     });
 
     test('a dismissal survives a restart', () {
@@ -257,20 +256,22 @@ void main() {
   });
 
   group('it retires what has moved on', () {
-    test('a session handed on after the fact carries its follow-up with it', () {
-      ended('s1', SessionStatus.failed);
-      sweep();
-      expect(followUps.open(), hasLength(1));
+    test(
+      'a session handed on after the fact carries its follow-up with it',
+      () {
+        ended('s1', SessionStatus.failed);
+        sweep();
+        expect(followUps.open(), hasLength(1));
 
-      child('s2', of: 's1', link: SessionLink.handoff);
-      sweep();
+        child('s2', of: 's1', link: SessionLink.handoff);
+        sweep();
 
-      expect(followUps.open(), isEmpty);
-      expect(
-        db.query('SELECT resolution FROM session_follow_ups;').single,
-        {'resolution': 'carriedForward'},
-      );
-    });
+        expect(followUps.open(), isEmpty);
+        expect(db.query('SELECT resolution FROM session_follow_ups;').single, {
+          'resolution': 'carriedForward',
+        });
+      },
+    );
 
     test('a deleted session leaves nothing to open', () {
       ended('s1', SessionStatus.failed);
@@ -279,10 +280,9 @@ void main() {
       sweep();
 
       expect(followUps.open(), isEmpty);
-      expect(
-        db.query('SELECT resolution FROM session_follow_ups;').single,
-        {'resolution': 'sessionGone'},
-      );
+      expect(db.query('SELECT resolution FROM session_follow_ups;').single, {
+        'resolution': 'sessionGone',
+      });
     });
   });
 
@@ -295,9 +295,7 @@ void main() {
       ended('s1', SessionStatus.failed);
       ended('s2', SessionStatus.completed);
       run('v1', sessionId: 's2');
-      final before = {
-        for (final s in sessions.getAll()) s.id: s.status,
-      };
+      final before = {for (final s in sessions.getAll()) s.id: s.status};
 
       sweep();
       sweep();

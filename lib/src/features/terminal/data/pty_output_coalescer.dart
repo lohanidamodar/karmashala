@@ -202,7 +202,9 @@ class PtyOutputCoalescer {
     // What this pane may parse *now*, out of one budget shared by every pane in
     // the app: the active pane has a reserve nothing else can take, hidden ones
     // share a pool, so a hundred of them cost what a pool costs.
-    final wanted = _pendingBytes < maxFlushBytes ? _pendingBytes : maxFlushBytes;
+    final wanted = _pendingBytes < maxFlushBytes
+        ? _pendingBytes
+        : maxFlushBytes;
     var budget = _budget.take(_tier, wanted);
     if (budget <= 0) {
       // Nothing this interval. The bytes stay queued (bounded by

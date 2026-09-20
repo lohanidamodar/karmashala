@@ -15,7 +15,8 @@ class SessionHostStatusLine extends ConsumerStatefulWidget {
   const SessionHostStatusLine({super.key});
 
   @override
-  ConsumerState<SessionHostStatusLine> createState() => _SessionHostStatusLineState();
+  ConsumerState<SessionHostStatusLine> createState() =>
+      _SessionHostStatusLineState();
 }
 
 class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {

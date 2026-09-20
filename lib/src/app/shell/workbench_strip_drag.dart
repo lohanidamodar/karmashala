@@ -105,7 +105,8 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
       final leading = offMiddle.abs() <= _centreSlack
           ? _comesFromTheRight(data)
           : offMiddle < 0;
-      final ctrl = HardwareKeyboard.instance.isControlPressed ||
+      final ctrl =
+          HardwareKeyboard.instance.isControlPressed ||
           HardwareKeyboard.instance.isMetaPressed;
       if (leading != _dropLeading || ctrl != _ctrlPressed) {
         setState(() {
@@ -130,9 +131,9 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
     final group = widget.groupId;
     final tabs = group == null
         ? ref.read(terminalTabsProvider)
-        : ref.read(terminalSessionsControllerProvider.notifier).tabsInGroup(
-            group,
-          );
+        : ref
+              .read(terminalSessionsControllerProvider.notifier)
+              .tabsInGroup(group);
     return tabs.indexWhere((tab) => tab.id == tabId);
   }
 
@@ -168,7 +169,8 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
           return;
         }
         if (details.data case TabDrag(:final tabId)) {
-          final ctrl = HardwareKeyboard.instance.isControlPressed ||
+          final ctrl =
+              HardwareKeyboard.instance.isControlPressed ||
               HardwareKeyboard.instance.isMetaPressed ||
               _ctrlPressed;
           // Ctrl-drop divides the **workspace** and puts the tab in the new
@@ -217,11 +219,7 @@ class _TabDropTargetState extends ConsumerState<_TabDropTarget> {
           );
         }
 
-        return _markedForDrop(
-          context,
-          widget.chip,
-          leading: _dropLeading,
-        );
+        return _markedForDrop(context, widget.chip, leading: _dropLeading);
       },
     );
   }

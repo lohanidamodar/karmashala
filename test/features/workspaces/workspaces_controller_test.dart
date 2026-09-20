@@ -65,8 +65,10 @@ void main() {
     test('renames, and lets a workspace keep its own name', () {
       final one = controller().create('Personal');
       controller().rename(one.id, 'Personal projects');
-      expect(container.read(workspacesControllerProvider).single.name,
-          'Personal projects');
+      expect(
+        container.read(workspacesControllerProvider).single.name,
+        'Personal projects',
+      );
       // Renaming to what it already is must not trip the duplicate check.
       controller().rename(one.id, 'Personal projects');
       controller().create('Appwrite');
@@ -135,8 +137,10 @@ void main() {
 
       controller().delete(games.id);
 
-      expect(container.read(workspaceScopeProvider),
-          WorkspaceScope.of(personal.id));
+      expect(
+        container.read(workspaceScopeProvider),
+        WorkspaceScope.of(personal.id),
+      );
     });
   });
 
@@ -151,38 +155,42 @@ void main() {
       container
           .read(workspaceScopeProvider.notifier)
           .select(WorkspaceScope.of(games.id));
-      expect(
-        container.read(workspaceScopedProjectsProvider).map((p) => p.id),
-        ['p2'],
-      );
-
-      container.read(workspaceScopeProvider.notifier).select(WorkspaceScope.all);
-      expect(
-        container.read(workspaceScopedProjectsProvider).map((p) => p.id),
-        ['p1', 'p2', 'p3'],
-      );
-    });
-
-    test('an unassigned project is reachable under All and under Unassigned',
-        () {
-      seedProjects();
-      final games = controller().create('Game dev');
-      controller().assign('p2', games.id);
-
-      expect(
-        container.read(workspaceScopedProjectsProvider).map((p) => p.id),
-        contains('p3'),
-        reason: 'never hidden by default',
-      );
+      expect(container.read(workspaceScopedProjectsProvider).map((p) => p.id), [
+        'p2',
+      ]);
 
       container
           .read(workspaceScopeProvider.notifier)
-          .select(WorkspaceScope.unassigned);
-      expect(
-        container.read(workspaceScopedProjectsProvider).map((p) => p.id),
-        ['p1', 'p3'],
-      );
+          .select(WorkspaceScope.all);
+      expect(container.read(workspaceScopedProjectsProvider).map((p) => p.id), [
+        'p1',
+        'p2',
+        'p3',
+      ]);
     });
+
+    test(
+      'an unassigned project is reachable under All and under Unassigned',
+      () {
+        seedProjects();
+        final games = controller().create('Game dev');
+        controller().assign('p2', games.id);
+
+        expect(
+          container.read(workspaceScopedProjectsProvider).map((p) => p.id),
+          contains('p3'),
+          reason: 'never hidden by default',
+        );
+
+        container
+            .read(workspaceScopeProvider.notifier)
+            .select(WorkspaceScope.unassigned);
+        expect(
+          container.read(workspaceScopedProjectsProvider).map((p) => p.id),
+          ['p1', 'p3'],
+        );
+      },
+    );
 
     test('a context with nothing in it shows nothing, not everything', () {
       seedProjects();
@@ -202,10 +210,9 @@ void main() {
       expect(container.read(workspaceScopedProjectsProvider), isEmpty);
 
       controller().assign('p2', games.id);
-      expect(
-        container.read(workspaceScopedProjectsProvider).map((p) => p.id),
-        ['p2'],
-      );
+      expect(container.read(workspaceScopedProjectsProvider).map((p) => p.id), [
+        'p2',
+      ]);
     });
   });
 
@@ -226,11 +233,10 @@ void main() {
           .select(WorkspaceScope.of(games.id));
 
       expect(container.read(selectedProjectIdProvider), 'p1');
-      expect(
-        container.read(workspaceScopedProjectsProvider).map((p) => p.id),
-        ['p1', 'p2'],
-        reason: 'the project being worked in is never filtered away',
-      );
+      expect(container.read(workspaceScopedProjectsProvider).map((p) => p.id), [
+        'p1',
+        'p2',
+      ], reason: 'the project being worked in is never filtered away');
     });
 
     test('is not smuggled in twice when it is in scope anyway', () {
@@ -243,10 +249,9 @@ void main() {
           .read(workspaceScopeProvider.notifier)
           .select(WorkspaceScope.of(games.id));
 
-      expect(
-        container.read(workspaceScopedProjectsProvider).map((p) => p.id),
-        ['p2'],
-      );
+      expect(container.read(workspaceScopedProjectsProvider).map((p) => p.id), [
+        'p2',
+      ]);
     });
 
     test('no selection means no exception to the filter', () {
@@ -258,10 +263,9 @@ void main() {
           .read(workspaceScopeProvider.notifier)
           .select(WorkspaceScope.of(games.id));
 
-      expect(
-        container.read(workspaceScopedProjectsProvider).map((p) => p.id),
-        ['p2'],
-      );
+      expect(container.read(workspaceScopedProjectsProvider).map((p) => p.id), [
+        'p2',
+      ]);
     });
   });
 }

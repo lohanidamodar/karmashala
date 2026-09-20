@@ -62,8 +62,7 @@ void main() {
       expect(
         dao.storedTabCount(),
         1,
-        reason:
-            'the stored layout must outlive a restore that found nothing',
+        reason: 'the stored layout must outlive a restore that found nothing',
       );
       expect(
         dao.loadLayout().tabs.single.panes.single.scrollback,

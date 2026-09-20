@@ -64,58 +64,69 @@ void main() {
     }
   }
 
-  group('Claude Code', skip: claude == null ? 'set KARMASHALA_CLAUDE' : false, () {
-    test('folder trust: choosing "Yes" trusts it, where Enter exits', () async {
-      final screen = LiveAgentScreen.start(
-        argv: [claude!, '--model', 'haiku'],
-        workingDirectory: freshFolder(),
-        environment: const {'CLAUDE_CODE_FORCE_SESSION_PERSISTENCE': '1'},
-      );
-      addTearDown(screen.close);
-      final answerer = answererOn(screen, AgentIds.claudeCode);
-      final menu = await menuShowing(answerer, 'Yes, I trust this folder');
-      expect(menu.options[menu.highlighted], 'No, exit');
-
-      await answerer.choose(
-        's',
-        menuId: menu.id,
-        option: menu.options.indexOf('Yes, I trust this folder'),
-      );
-
-      await screen.until(
-        (s) => s.contains('for shortcuts') || s.contains('shift+tab'),
-        what: 'the composer',
-      );
-    }, timeout: const Timeout(Duration(minutes: 3)));
-
-    test('a project MCP server: choosing the first option, from the last',
+  group(
+    'Claude Code',
+    skip: claude == null ? 'set KARMASHALA_CLAUDE' : false,
+    () {
+      test(
+        'folder trust: choosing "Yes" trusts it, where Enter exits',
         () async {
-      final screen = LiveAgentScreen.start(
-        argv: [claude!, '--model', 'haiku'],
-        workingDirectory: freshFolder(
-          files: {
-            '.mcp.json':
-                '{"mcpServers":{"probe":{"command":"cmd","args":["/c","exit"]}}}',
-          },
-        ),
-        environment: const {'CLAUDE_CODE_FORCE_SESSION_PERSISTENCE': '1'},
-      );
-      addTearDown(screen.close);
-      final answerer = answererOn(screen, AgentIds.claudeCode);
-      final trust = await menuShowing(answerer, 'Yes, I trust this folder');
-      await answerer.choose('s', menuId: trust.id, option: 1);
+          final screen = LiveAgentScreen.start(
+            argv: [claude!, '--model', 'haiku'],
+            workingDirectory: freshFolder(),
+            environment: const {'CLAUDE_CODE_FORCE_SESSION_PERSISTENCE': '1'},
+          );
+          addTearDown(screen.close);
+          final answerer = answererOn(screen, AgentIds.claudeCode);
+          final menu = await menuShowing(answerer, 'Yes, I trust this folder');
+          expect(menu.options[menu.highlighted], 'No, exit');
 
-      final mcp = await menuShowing(answerer, 'Use this MCP server');
-      expect(mcp.highlighted, mcp.options.length - 1);
-      final chosen = await answerer.choose('s', menuId: mcp.id, option: 0);
+          await answerer.choose(
+            's',
+            menuId: menu.id,
+            option: menu.options.indexOf('Yes, I trust this folder'),
+          );
 
-      expect(chosen, 'Use this MCP server');
-      await screen.until(
-        (s) => s.contains('for shortcuts') || s.contains('shift+tab'),
-        what: 'the composer',
+          await screen.until(
+            (s) => s.contains('for shortcuts') || s.contains('shift+tab'),
+            what: 'the composer',
+          );
+        },
+        timeout: const Timeout(Duration(minutes: 3)),
       );
-    }, timeout: const Timeout(Duration(minutes: 3)));
-  });
+
+      test(
+        'a project MCP server: choosing the first option, from the last',
+        () async {
+          final screen = LiveAgentScreen.start(
+            argv: [claude!, '--model', 'haiku'],
+            workingDirectory: freshFolder(
+              files: {
+                '.mcp.json':
+                    '{"mcpServers":{"probe":{"command":"cmd","args":["/c","exit"]}}}',
+              },
+            ),
+            environment: const {'CLAUDE_CODE_FORCE_SESSION_PERSISTENCE': '1'},
+          );
+          addTearDown(screen.close);
+          final answerer = answererOn(screen, AgentIds.claudeCode);
+          final trust = await menuShowing(answerer, 'Yes, I trust this folder');
+          await answerer.choose('s', menuId: trust.id, option: 1);
+
+          final mcp = await menuShowing(answerer, 'Use this MCP server');
+          expect(mcp.highlighted, mcp.options.length - 1);
+          final chosen = await answerer.choose('s', menuId: mcp.id, option: 0);
+
+          expect(chosen, 'Use this MCP server');
+          await screen.until(
+            (s) => s.contains('for shortcuts') || s.contains('shift+tab'),
+            what: 'the composer',
+          );
+        },
+        timeout: const Timeout(Duration(minutes: 3)),
+      );
+    },
+  );
 
   group('Codex', skip: codex == null ? 'set KARMASHALA_CODEX' : false, () {
     // Only while this Codex has an update to offer; without one the menu
@@ -152,8 +163,11 @@ void main() {
 
       await answerer.choose('s', menuId: trust.id, option: 1);
 
-      expect(await screen.exitCode.timeout(const Duration(seconds: 20)),
-          isNotNull, reason: '"No, quit" quits');
+      expect(
+        await screen.exitCode.timeout(const Duration(seconds: 20)),
+        isNotNull,
+        reason: '"No, quit" quits',
+      );
     }, timeout: const Timeout(Duration(minutes: 2)));
 
     test('directory trust: "Yes, continue" reaches the composer', () async {

@@ -113,7 +113,9 @@ void main() {
 
   test('repointed sessions follow the installation they moved to', () {
     dao.insert(agentInstallation(id: 'shim', path: '/tmp/shim/claude'));
-    dao.insert(agentInstallation(id: 'real', path: '/home/me/.local/bin/claude'));
+    dao.insert(
+      agentInstallation(id: 'real', path: '/home/me/.local/bin/claude'),
+    );
     giveItASession(installationId: 'shim');
 
     dao.repointSessions(from: 'shim', to: 'real');
@@ -131,10 +133,7 @@ void main() {
       dao.insert(agentInstallation(path: r'C:\stale\codex.exe'));
       giveItASession();
 
-      expect(
-        dao.updatePath('a1', r'C:\real\codex.exe', byUser: false),
-        isTrue,
-      );
+      expect(dao.updatePath('a1', r'C:\real\codex.exe', byUser: false), isTrue);
 
       final moved = dao.getById('a1')!;
       expect(moved.executable.path, r'C:\real\codex.exe');
@@ -178,8 +177,14 @@ void main() {
         'INSERT INTO agent_installations '
         '(id, agent_kind, environment_id, executable_path, version, created_at) '
         'VALUES (?, ?, ?, ?, ?, ?);',
-        ['legacy', AgentIds.codex, 'windows', r'C:\old\codex.exe', '1.0.0',
-         isoFromDate(testTime)],
+        [
+          'legacy',
+          AgentIds.codex,
+          'windows',
+          r'C:\old\codex.exe',
+          '1.0.0',
+          isoFromDate(testTime),
+        ],
       );
       expect(dao.getById('legacy')!.executableByUser, isFalse);
     });

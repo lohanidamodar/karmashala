@@ -1,4 +1,3 @@
-
 import 'package:flutter/widgets.dart';
 
 /// Marks a subtree deliberately holding the physical keyboard. "Is it a text

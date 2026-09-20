@@ -130,8 +130,9 @@ void main() {
 
   test('todo_add writes one and todos_list reads it back', () async {
     final added =
-        (await callTool('todo_add', {'body': 'Ship the todo panel'}))
-                .structured!
+        (await callTool('todo_add', {
+              'body': 'Ship the todo panel',
+            })).structured!
             as Map<String, Object?>;
     expect(added['body'], 'Ship the todo panel');
     expect(added['done'], isFalse);
@@ -160,10 +161,9 @@ void main() {
   test('"none" files it nowhere, and an id files it there', () async {
     final unfiled =
         (await callTool('todo_add', {
-                  'body': 'belongs to nothing',
-                  'projectId': 'none',
-                }, 's1'))
-                .structured!
+              'body': 'belongs to nothing',
+              'projectId': 'none',
+            }, 's1')).structured!
             as Map<String, Object?>;
     expect(
       unfiled['projectId'],
@@ -173,10 +173,9 @@ void main() {
 
     final elsewhere =
         (await callTool('todo_add', {
-                  'body': 'belongs to the other one',
-                  'projectId': 'p2',
-                }, 's1'))
-                .structured!
+              'body': 'belongs to the other one',
+              'projectId': 'p2',
+            }, 's1')).structured!
             as Map<String, Object?>;
     expect(elsewhere['projectId'], 'p2');
   });
@@ -198,8 +197,9 @@ void main() {
   });
 
   test('todo_done finishes one without removing it, and reopens it', () async {
-    final added = (await callTool('todo_add', {'body': 'tick me'})).structured!
-        as Map<String, Object?>;
+    final added =
+        (await callTool('todo_add', {'body': 'tick me'})).structured!
+            as Map<String, Object?>;
 
     final finished =
         (await callTool('todo_done', {'id': added['id']})).structured!
@@ -213,8 +213,10 @@ void main() {
     expect(await listTodos({'includeDone': true}), hasLength(1));
 
     final reopened =
-        (await callTool('todo_done', {'id': added['id'], 'done': false}))
-                .structured!
+        (await callTool('todo_done', {
+              'id': added['id'],
+              'done': false,
+            })).structured!
             as Map<String, Object?>;
     expect(reopened['done'], isFalse);
     expect(reopened['doneAt'], isNull);
@@ -248,8 +250,9 @@ void main() {
   group('notes', () {
     test('note_add files under the session’s project by default', () async {
       final added =
-          (await callTool('note_add', {'body': 'about the toolbar'}, 's1'))
-                  .structured!
+          (await callTool('note_add', {
+                'body': 'about the toolbar',
+              }, 's1')).structured!
               as Map<String, Object?>;
       expect(added['projectId'], 'p1');
     });
@@ -257,19 +260,17 @@ void main() {
     test('note_add takes "none" and an explicit id', () async {
       final loose =
           (await callTool('note_add', {
-                    'body': 'belongs to nothing',
-                    'projectId': 'none',
-                  }, 's1'))
-                  .structured!
+                'body': 'belongs to nothing',
+                'projectId': 'none',
+              }, 's1')).structured!
               as Map<String, Object?>;
       expect(loose['projectId'], isNull);
 
       final elsewhere =
           (await callTool('note_add', {
-                    'body': 'belongs elsewhere',
-                    'projectId': 'p2',
-                  }, 's1'))
-                  .structured!
+                'body': 'belongs elsewhere',
+                'projectId': 'p2',
+              }, 's1')).structured!
               as Map<String, Object?>;
       expect(elsewhere['projectId'], 'p2');
     });

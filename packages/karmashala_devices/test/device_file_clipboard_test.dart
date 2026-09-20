@@ -37,10 +37,7 @@ void main() {
         mode: DeviceFileClipboardMode.copy,
       );
       expect(
-        clip.refusalFor(
-          intoSerial: 'emulator-5554',
-          directory: '/sdcard/DCIM',
-        ),
+        clip.refusalFor(intoSerial: 'emulator-5554', directory: '/sdcard/DCIM'),
         contains('already in /sdcard/DCIM'),
       );
     });

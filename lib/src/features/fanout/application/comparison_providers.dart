@@ -56,10 +56,7 @@ VerdictAttribution attributionShownFor(
   ComparisonCandidate candidate,
   CandidateEvidenceLookup lookup,
 ) =>
-    evidenceShownFor(
-      candidate,
-      lookup,
-    )?.attributionFor(candidate.sessionId) ??
+    evidenceShownFor(candidate, lookup)?.attributionFor(candidate.sessionId) ??
     VerdictAttribution.notRecorded;
 
 /// The comparisons list, and the one operation on it that is not a fan-out.

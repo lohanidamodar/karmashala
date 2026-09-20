@@ -13,8 +13,9 @@ extension TerminalPaneTitles on TerminalSessionsController {
   String titleForTab(String tabId) {
     final tab = _tabById(tabId);
     if (tab == null) return 'Terminal';
-    final visible =
-        tab.layout.visiblePanes.where((p) => !_isEmptyRegion(p)).toList();
+    final visible = tab.layout.visiblePanes
+        .where((p) => !_isEmptyRegion(p))
+        .toList();
     if (visible.length > 1) {
       // Deduplicated: a split inherits the selected repository's directory, so
       // both panes report the same label and the join printed it twice.
@@ -49,7 +50,8 @@ extension TerminalPaneTitles on TerminalSessionsController {
     if (isFilesPane(paneId)) return 'Files';
     // A host path, which may be spelled for Windows: the windows context reads
     // `/` and `\` alike, as the editor's own `_hostPaths` does.
-    if (editorPanePath(paneId) case final path?) return p.windows.basename(path);
+    if (editorPanePath(paneId) case final path?)
+      {return p.windows.basename(path);}
     if (notePaneNoteId(paneId) case final noteId?) {
       for (final note in ref.read(notesProvider)) {
         if (note.id == noteId) return note.displayTitle;

@@ -31,7 +31,10 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
 
   void _updateZone(Offset globalPos) {
     final box = context.findRenderObject() as RenderBox?;
-    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+    if (box != null &&
+        box.hasSize &&
+        box.size.width > 0 &&
+        box.size.height > 0) {
       final local = box.globalToLocal(globalPos);
       final dx = (local.dx / box.size.width).clamp(0.0, 1.0);
       final dy = (local.dy / box.size.height).clamp(0.0, 1.0);
@@ -56,8 +59,10 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
         final accepts = switch (data) {
           TabDrag(:final tabId) =>
             group != null && sessions.canMoveTabBesideGroup(tabId, group),
-          PaneDrag(:final paneId) =>
-            sessions.canSplitPaneWithPane(widget.paneId, paneId),
+          PaneDrag(:final paneId) => sessions.canSplitPaneWithPane(
+            widget.paneId,
+            paneId,
+          ),
         };
         if (accepts) {
           _updateZone(details.offset);
@@ -72,7 +77,8 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
       },
       onAcceptWithDetails: (details) {
         final zone = _activeZone ?? _SplitDropZone.right;
-        final axis = (zone == _SplitDropZone.left || zone == _SplitDropZone.right)
+        final axis =
+            (zone == _SplitDropZone.left || zone == _SplitDropZone.right)
             ? SplitAxis.horizontal
             : SplitAxis.vertical;
         final insertBefore =
@@ -105,7 +111,8 @@ class _PaneDropTargetState extends ConsumerState<_PaneDropTarget> {
 
         final theme = Theme.of(context);
         final isHorizontal =
-            _activeZone == _SplitDropZone.left || _activeZone == _SplitDropZone.right;
+            _activeZone == _SplitDropZone.left ||
+            _activeZone == _SplitDropZone.right;
 
         return Stack(
           children: [

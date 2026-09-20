@@ -171,10 +171,7 @@ void main() {
         platform: TargetPlatform.windows,
         size: const Size(1440, 900),
       );
-      await tester.tap(
-        find.byType(IconButton),
-        kind: PointerDeviceKind.touch,
-      );
+      await tester.tap(find.byType(IconButton), kind: PointerDeviceKind.touch);
       await tester.pumpAndSettle();
 
       expect(seen, UiDensity.pointer);

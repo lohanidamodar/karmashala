@@ -116,15 +116,14 @@ class _CountingDatabase extends AppDatabase {
 }
 
 class _CountingLocator extends CliStoreLocator {
-  _CountingLocator(this.stores) : super(runnerFor: ((_) => FakeCommandRunner()));
+  _CountingLocator(this.stores)
+    : super(runnerFor: ((_) => FakeCommandRunner()));
 
   final List<CliStore> stores;
   int calls = 0;
 
   @override
-  Future<List<CliStore>> locate(
-    List<ExecutionEnvironment> environments,
-  ) async {
+  Future<List<CliStore>> locate(List<ExecutionEnvironment> environments) async {
     calls++;
     return stores;
   }
@@ -173,143 +172,34 @@ void main() {
 
   /// A store that exists and reads to the end, holding nothing — so every row
   /// below is genuinely `absent` and the reading has the most work to do.
-  void emptyStore(String name) => Directory(
-    p.join(tmp.path, name, 'projects'),
-  ).createSync(recursive: true);
+  void emptyStore(String name) =>
+      Directory(p.join(tmp.path, name, 'projects')).createSync(recursive: true);
 
   /// One reading over [rows] dead sessions, returning what it cost.
   Future<_Cost> readingOver(int rows) async {
-      final db = _CountingDatabase();
-      addTearDown(db.close);
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      ExecutionEnvironmentDao(db).upsert(wslEnv());
-      ProjectDao(db).insert(project());
-      RepositoryDao(db).insert(repository());
-      AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
-      emptyStore('.claude');
-      emptyStore('.wsl-claude');
-
-      final locator = _CountingLocator([
-        CliStore(
-          environmentId: 'windows',
-          homesByAgentId: {'claudeish': p.join(tmp.path, '.claude')},
-        ),
-        CliStore(
-          environmentId: 'wsl:Ubuntu',
-          homesByAgentId: {'claudeish': p.join(tmp.path, '.wsl-claude')},
-        ),
-      ]);
-      final listings = <String>[];
-      final index = _CountingIndex(listings);
-
-      final container = ProviderContainer(
-        overrides: [
-          ...fakeTerminalOverrides(database: db),
-          clockProvider.overrideWithValue(FixedClock(testTime)),
-          hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
-          commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(),
-          ),
-          idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-          agentRegistryProvider.overrideWithValue(
-            const AgentRegistry([_claudeish]),
-          ),
-          settingsControllerProvider.overrideWith(_StaticSettings.new),
-          agentSessionStatusProvider.overrideWith(
-            (ref, id) => const Stream<AgentStatusReport>.empty(),
-          ),
-          cliStoreLocatorProvider.overrideWithValue(locator),
-          conversationStoreIndexProvider.overrideWithValue(index),
-        ],
-      );
-      addTearDown(container.dispose);
-
-      final dao = container.read(sessionDaoProvider);
-      for (var i = 0; i < rows; i++) {
-        dao.insert(
-          session(id: 'dead-$i', title: 'Session $i').copyWith(
-            externalSessionId: 'dead-$i',
-            status: SessionStatus.running,
-            createdAt: testTime.subtract(const Duration(hours: 2)),
-          ),
-        );
-      }
-      db.reset();
-
-      await container.read(unresumableSessionsProvider.notifier).refresh();
-
-      expect(
-        container.read(unresumableSessionsProvider).removable,
-        hasLength(rows),
-        reason: 'every row must actually be judged, or the counts are '
-            'measuring a reading that did nothing',
-      );
-      return _Cost(
-        locates: locator.calls,
-        listings: index.listings,
-        singleProbes: listings.where((l) => l.startsWith('single/')).length,
-        statements: db.statements,
-      );
-  }
-
-  test('one reading costs the same at 1, 10 and 120 dead rows', () async {
-    final one = await readingOver(1);
-    final ten = await readingOver(10);
-    final many = await readingOver(120);
-
-    // One reading is one locate and one listing per store, at every size.
-    for (final cost in [one, ten, many]) {
-      expect(cost.locates, 1, reason: 'one reading is one locate');
-      expect(
-        cost.listings,
-        2,
-        reason: 'one listing per store, not one per row — the whole point of '
-            'the sweep',
-      );
-      expect(
-        cost.singleProbes,
-        0,
-        reason: 'the single-row probe is the per-row storm this replaces',
-      );
-    }
-
-    // And the SQL is flat: the baseline, not a constant somebody has to keep
-    // up to date.
-    expect(
-      ten.statements,
-      one.statements,
-      reason: 'ten rows cost ${ten.statements} statements against '
-          '${one.statements} for one',
-    );
-    expect(
-      many.statements,
-      one.statements,
-      reason: '120 rows cost ${many.statements} statements against '
-          '${one.statements} for one — something in the path reads per row',
-    );
-    // A sanity floor, so a reading that somehow issued no SQL at all cannot
-    // pass by being equally free at every size.
-    expect(one.statements, greaterThan(0));
-    expect(one.statements, lessThan(12));
-  });
-
-  test('screening a workspace with no candidate touches no store at all', () async {
-    // 120 rows, none of which ever made a promise: the free half answers on
-    // its own and the disk is never opened.
     final db = _CountingDatabase();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
+    ExecutionEnvironmentDao(db).upsert(wslEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
     AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
+    emptyStore('.claude');
+    emptyStore('.wsl-claude');
 
     final locator = _CountingLocator([
       CliStore(
         environmentId: 'windows',
         homesByAgentId: {'claudeish': p.join(tmp.path, '.claude')},
       ),
+      CliStore(
+        environmentId: 'wsl:Ubuntu',
+        homesByAgentId: {'claudeish': p.join(tmp.path, '.wsl-claude')},
+      ),
     ]);
     final listings = <String>[];
+    final index = _CountingIndex(listings);
+
     final container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
@@ -327,19 +217,16 @@ void main() {
           (ref, id) => const Stream<AgentStatusReport>.empty(),
         ),
         cliStoreLocatorProvider.overrideWithValue(locator),
-        conversationStoreIndexProvider.overrideWithValue(
-          _CountingIndex(listings),
-        ),
+        conversationStoreIndexProvider.overrideWithValue(index),
       ],
     );
     addTearDown(container.dispose);
 
     final dao = container.read(sessionDaoProvider);
-    for (var i = 0; i < 120; i++) {
-      // An id the CLI chose for itself, which is not a promise of ours.
+    for (var i = 0; i < rows; i++) {
       dao.insert(
-        session(id: 'row-$i').copyWith(
-          externalSessionId: 'cli-chose-$i',
+        session(id: 'dead-$i', title: 'Session $i').copyWith(
+          externalSessionId: 'dead-$i',
           status: SessionStatus.running,
           createdAt: testTime.subtract(const Duration(hours: 2)),
         ),
@@ -349,11 +236,129 @@ void main() {
 
     await container.read(unresumableSessionsProvider.notifier).refresh();
 
-    expect(locator.calls, 0);
-    expect(listings, isEmpty);
-    // Fewer than a reading that swept, because the sweep's own environment
-    // read never happened — and in no case per row.
-    expect(db.statements, lessThan(12));
-    expect(container.read(unresumableSessionsProvider).hasRun, isTrue);
+    expect(
+      container.read(unresumableSessionsProvider).removable,
+      hasLength(rows),
+      reason:
+          'every row must actually be judged, or the counts are '
+          'measuring a reading that did nothing',
+    );
+    return _Cost(
+      locates: locator.calls,
+      listings: index.listings,
+      singleProbes: listings.where((l) => l.startsWith('single/')).length,
+      statements: db.statements,
+    );
+  }
+
+  test('one reading costs the same at 1, 10 and 120 dead rows', () async {
+    final one = await readingOver(1);
+    final ten = await readingOver(10);
+    final many = await readingOver(120);
+
+    // One reading is one locate and one listing per store, at every size.
+    for (final cost in [one, ten, many]) {
+      expect(cost.locates, 1, reason: 'one reading is one locate');
+      expect(
+        cost.listings,
+        2,
+        reason:
+            'one listing per store, not one per row — the whole point of '
+            'the sweep',
+      );
+      expect(
+        cost.singleProbes,
+        0,
+        reason: 'the single-row probe is the per-row storm this replaces',
+      );
+    }
+
+    // And the SQL is flat: the baseline, not a constant somebody has to keep
+    // up to date.
+    expect(
+      ten.statements,
+      one.statements,
+      reason:
+          'ten rows cost ${ten.statements} statements against '
+          '${one.statements} for one',
+    );
+    expect(
+      many.statements,
+      one.statements,
+      reason:
+          '120 rows cost ${many.statements} statements against '
+          '${one.statements} for one — something in the path reads per row',
+    );
+    // A sanity floor, so a reading that somehow issued no SQL at all cannot
+    // pass by being equally free at every size.
+    expect(one.statements, greaterThan(0));
+    expect(one.statements, lessThan(12));
   });
+
+  test(
+    'screening a workspace with no candidate touches no store at all',
+    () async {
+      // 120 rows, none of which ever made a promise: the free half answers on
+      // its own and the disk is never opened.
+      final db = _CountingDatabase();
+      addTearDown(db.close);
+      ExecutionEnvironmentDao(db).upsert(windowsEnv());
+      ProjectDao(db).insert(project());
+      RepositoryDao(db).insert(repository());
+      AgentInstallationDao(db).insert(agentInstallation(agentId: 'claudeish'));
+
+      final locator = _CountingLocator([
+        CliStore(
+          environmentId: 'windows',
+          homesByAgentId: {'claudeish': p.join(tmp.path, '.claude')},
+        ),
+      ]);
+      final listings = <String>[];
+      final container = ProviderContainer(
+        overrides: [
+          ...fakeTerminalOverrides(database: db),
+          clockProvider.overrideWithValue(FixedClock(testTime)),
+          hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+          commandRunnerFactoryProvider.overrideWithValue(
+            FakeCommandRunnerFactory(),
+          ),
+          idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
+          agentRegistryProvider.overrideWithValue(
+            const AgentRegistry([_claudeish]),
+          ),
+          settingsControllerProvider.overrideWith(_StaticSettings.new),
+          agentSessionStatusProvider.overrideWith(
+            (ref, id) => const Stream<AgentStatusReport>.empty(),
+          ),
+          cliStoreLocatorProvider.overrideWithValue(locator),
+          conversationStoreIndexProvider.overrideWithValue(
+            _CountingIndex(listings),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final dao = container.read(sessionDaoProvider);
+      for (var i = 0; i < 120; i++) {
+        // An id the CLI chose for itself, which is not a promise of ours.
+        dao.insert(
+          session(id: 'row-$i').copyWith(
+            externalSessionId: 'cli-chose-$i',
+            status: SessionStatus.running,
+            createdAt: testTime.subtract(const Duration(hours: 2)),
+          ),
+        );
+      }
+      db.reset();
+
+      await container.read(unresumableSessionsProvider.notifier).refresh();
+
+      expect(locator.calls, 0);
+      expect(listings, isEmpty);
+      // Fewer than a reading that swept, because the sweep's own environment
+      // read never happened — and in no case per row.
+      expect(db.statements, lessThan(12));
+      expect(container.read(unresumableSessionsProvider).hasRun, isTrue);
+    },
+  );
 }

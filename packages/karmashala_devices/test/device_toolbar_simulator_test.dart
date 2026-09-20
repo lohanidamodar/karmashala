@@ -175,11 +175,7 @@ void main() {
       // Android's — while an iPhone filled the pane; pressing it started a
       // scrcpy stream, after which the button did say Stop and stopped that
       // stream instead, leaving the simulator's picture where it was.
-      final fake = await pump(
-        tester,
-        live: _running(),
-        devices: [_device()],
-      );
+      final fake = await pump(tester, live: _running(), devices: [_device()]);
 
       expect(
         find.text('Live view'),
@@ -223,9 +219,9 @@ void main() {
       final fake = await pump(tester, live: _running(), devices: [_device()]);
 
       expect(
-        tester.widget<DropdownButton<String>>(
-          find.byType(DropdownButton<String>),
-        ).value,
+        tester
+            .widget<DropdownButton<String>>(find.byType(DropdownButton<String>))
+            .value,
         'simulator:$_udid',
         reason: 'the picker names what the pane is showing',
       );
@@ -257,11 +253,7 @@ void main() {
       // Deselecting the simulator is not enough: the pane shows that picture
       // ahead of every Android branch, so it would stay on screen with the
       // picker naming a device that is not in it.
-      final fake = await pump(
-        tester,
-        live: _running(),
-        devices: [_device()],
-      );
+      final fake = await pump(tester, live: _running(), devices: [_device()]);
 
       await tester.tap(find.byType(DropdownButton<String>));
       await tester.pumpAndSettle();
@@ -280,11 +272,7 @@ void main() {
       // Android path — so a stalled simulator picture could only be recovered
       // by Stop followed by Live view, on the platform where starting again
       // costs twenty seconds.
-      final fake = await pump(
-        tester,
-        live: _running(),
-        devices: [_device()],
-      );
+      final fake = await pump(tester, live: _running(), devices: [_device()]);
 
       await tester.tap(find.byTooltip('Restart live view'));
       await tester.pumpAndSettle();
@@ -324,10 +312,7 @@ void main() {
             ),
           )
           .icon!;
-      expect(
-        glyphOf('simulator-home'),
-        isNot(glyphOf('simulator-record')),
-      );
+      expect(glyphOf('simulator-home'), isNot(glyphOf('simulator-record')));
     });
 
     testWidgets('each simulator control has a glyph of its own meaning', (
@@ -416,7 +401,9 @@ void main() {
       );
 
       expect(
-        tester.widget<IconButton>(find.byKey(const Key('android-record'))).onPressed,
+        tester
+            .widget<IconButton>(find.byKey(const Key('android-record')))
+            .onPressed,
         isNull,
       );
       expect(

@@ -37,29 +37,35 @@ void main() {
   });
   tearDown(() => db.close());
 
-  Future<RemoteUsageSnapshot> read(ProviderContainer container) => container
-      .read(Provider<Future<RemoteUsageSnapshot> Function()>(
-        (ref) => () => remoteUsageSnapshot(ref),
-      ))();
+  Future<RemoteUsageSnapshot> read(ProviderContainer container) =>
+      container.read(
+        Provider<Future<RemoteUsageSnapshot> Function()>(
+          (ref) =>
+              () => remoteUsageSnapshot(ref),
+        ),
+      )();
 
-  test('one account per agent and machine, with its windows and pace', () async {
-    service.answer = usageSnapshot(percent: 90);
-    final snapshot = await read(containerFor());
+  test(
+    'one account per agent and machine, with its windows and pace',
+    () async {
+      service.answer = usageSnapshot(percent: 90);
+      final snapshot = await read(containerFor());
 
-    final account = snapshot.accounts.single;
-    expect(account.agentId, AgentIds.claudeCode);
-    expect(account.agentName, 'Claude Code');
-    expect(account.email, 'owner@example.com');
-    expect(account.readAt, testTime);
-    expect(account.windows.map((w) => w.label), ['5-hour', '7-day']);
-    final five = account.windows.first;
-    expect(five.percent, 90);
-    expect(five.span, kUsageFiveHourWindow);
-    // 90% used with 2h11m of 5h left: far over an even rate.
-    expect(five.pace, RemoteUsagePace.overPace);
-    expect(five.limitAt, isNotNull);
-    expect(snapshot.observedAt, testTime);
-  });
+      final account = snapshot.accounts.single;
+      expect(account.agentId, AgentIds.claudeCode);
+      expect(account.agentName, 'Claude Code');
+      expect(account.email, 'owner@example.com');
+      expect(account.readAt, testTime);
+      expect(account.windows.map((w) => w.label), ['5-hour', '7-day']);
+      final five = account.windows.first;
+      expect(five.percent, 90);
+      expect(five.span, kUsageFiveHourWindow);
+      // 90% used with 2h11m of 5h left: far over an even rate.
+      expect(five.pace, RemoteUsagePace.overPace);
+      expect(five.limitAt, isNotNull);
+      expect(snapshot.observedAt, testTime);
+    },
+  );
 
   test('a refused reading says why, and invents no windows', () async {
     service.failure = UsageException('Signed out of Claude Code.');
@@ -94,7 +100,10 @@ void main() {
   test('thinning keeps the first and last point', () {
     final samples = [
       for (var i = 0; i < 200; i++)
-        RemoteUsageSample(at: testTime.add(Duration(minutes: i)), percent: i * 1.0),
+        RemoteUsageSample(
+          at: testTime.add(Duration(minutes: i)),
+          percent: i * 1.0,
+        ),
     ];
     final thinned = thinUsageSamples(samples);
     expect(thinned.length, kRemoteUsageSamples);

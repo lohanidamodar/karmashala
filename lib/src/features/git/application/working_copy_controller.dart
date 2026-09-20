@@ -136,7 +136,9 @@ class WorkingCopyController extends Notifier<WorkingCopyState> {
       final url = await ref
           .read(gitHubReviewServiceProvider)
           .createPullRequest(repo, title: title, body: body);
-      state = WorkingCopyState(note: url.isEmpty ? 'Pull request opened.' : url);
+      state = WorkingCopyState(
+        note: url.isEmpty ? 'Pull request opened.' : url,
+      );
       return url;
     } on Object catch (error) {
       state = WorkingCopyState(error: _sentence('$error'));

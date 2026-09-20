@@ -44,7 +44,10 @@ void main() {
   /// `$HOME` in the generated command name this very directory at run time.
   String storeHomeOf(AgentDescriptor descriptor) {
     final dir = Directory(
-      p.joinAll([home.path, ...p.posix.split(descriptor.store!.homeDirectoryName)]),
+      p.joinAll([
+        home.path,
+        ...p.posix.split(descriptor.store!.homeDirectoryName),
+      ]),
     )..createSync(recursive: true);
     return dir.path;
   }
@@ -55,20 +58,18 @@ void main() {
   File endpointOf(AgentDescriptor descriptor) =>
       File(p.join(storeHomeOf(descriptor), '$agentHookMarker.endpoint'));
 
-  File scriptOf(AgentDescriptor descriptor, EnvironmentKind environment) => File(
-    p.join(
-      storeHomeOf(descriptor),
-      environment == EnvironmentKind.windowsNative
-          ? '$agentHookMarker.cmd'
-          : '$agentHookMarker.sh',
-    ),
-  );
+  File scriptOf(AgentDescriptor descriptor, EnvironmentKind environment) =>
+      File(
+        p.join(
+          storeHomeOf(descriptor),
+          environment == EnvironmentKind.windowsNative
+              ? '$agentHookMarker.cmd'
+              : '$agentHookMarker.sh',
+        ),
+      );
 
   /// Two launches of the same app: different ephemeral port, different token.
-  const first = AgentHookEndpoint(
-    port: 47821,
-    token: 'AAAAtokenFromLaunchOne',
-  );
+  const first = AgentHookEndpoint(port: 47821, token: 'AAAAtokenFromLaunchOne');
   const second = AgentHookEndpoint(
     port: 51099,
     token: 'BBBBtokenFromLaunchTwo',
@@ -84,12 +85,13 @@ void main() {
     for (final descriptor in agents) {
       for (final environment in environments) {
         test('${descriptor.id} in ${environment.name}', () {
-          String commandWith(AgentHookEndpoint endpoint) => installer.hookCommand(
-            descriptor: descriptor,
-            event: 'Stop',
-            endpoint: endpoint,
-            environment: environment,
-          )!;
+          String commandWith(AgentHookEndpoint endpoint) =>
+              installer.hookCommand(
+                descriptor: descriptor,
+                event: 'Stop',
+                endpoint: endpoint,
+                environment: environment,
+              )!;
 
           // The headline. Two launches that agree about neither the port nor
           // the token write the same bytes into the user's file — and so does
@@ -195,7 +197,8 @@ void main() {
       final hooks = root['hooks']! as Map<String, Object?>;
       return [
         for (final group in hooks['Stop']! as List)
-          if (!revealHookCommands(jsonEncode(group)).contains(agentHookMarker)) group,
+          if (!revealHookCommands(jsonEncode(group)).contains(agentHookMarker))
+            group,
       ];
     }
 
@@ -228,7 +231,10 @@ void main() {
           storeHome: storeHomeOf(descriptor),
         );
         final afterUninstall = config.readAsStringSync();
-        expect(revealHookCommands(afterUninstall), isNot(contains(agentHookMarker)));
+        expect(
+          revealHookCommands(afterUninstall),
+          isNot(contains(agentHookMarker)),
+        );
         expect(theirHalf(descriptor, afterUninstall), before);
         for (final bytes in untouchedBytes(descriptor)) {
           expect(afterUninstall, contains(bytes), reason: descriptor.id);
@@ -259,7 +265,10 @@ void main() {
           endpoint: first,
           environment: EnvironmentKind.localPosix,
         );
-        expect(scriptOf(descriptor, EnvironmentKind.localPosix).existsSync(), isTrue);
+        expect(
+          scriptOf(descriptor, EnvironmentKind.localPosix).existsSync(),
+          isTrue,
+        );
         expect(endpointOf(descriptor).existsSync(), isTrue);
 
         final removed = await installer.uninstall(
@@ -300,21 +309,24 @@ void main() {
     );
     setUp(asked.clear);
 
-    test('the staged endpoint file is hardened before it holds a token', () async {
-      final claude = agents.firstWhere((a) => a.id == 'claudeCode');
+    test(
+      'the staged endpoint file is hardened before it holds a token',
+      () async {
+        final claude = agents.firstWhere((a) => a.id == 'claudeCode');
 
-      await tracked.install(
-        descriptor: claude,
-        storeHome: storeHomeOf(claude),
-        endpoint: first,
-        environment: EnvironmentKind.localPosix,
-      );
+        await tracked.install(
+          descriptor: claude,
+          storeHome: storeHomeOf(claude),
+          endpoint: first,
+          environment: EnvironmentKind.localPosix,
+        );
 
-      expect(asked, hasLength(1));
-      expect(asked.single.$1, endsWith('.karmashala-tmp'));
-      expect(revealHookCommands(asked.single.$1), contains(agentHookMarker));
-      expect(asked.single.$2, EnvironmentKind.localPosix);
-    });
+        expect(asked, hasLength(1));
+        expect(asked.single.$1, endsWith('.karmashala-tmp'));
+        expect(revealHookCommands(asked.single.$1), contains(agentHookMarker));
+        expect(asked.single.$2, EnvironmentKind.localPosix);
+      },
+    );
 
     test('a staging file a killed quit left is swept, not inherited', () async {
       // `_writeAtomically` cleans up in a `finally`, and a process that ends
@@ -556,9 +568,7 @@ void _runForReal(
       );
 
       expect(exitCode, 0, reason: 'and it still costs the agent nothing');
-      final callbacks = received
-          .where((r) => r.authorization != null)
-          .toList();
+      final callbacks = received.where((r) => r.authorization != null).toList();
       for (final callback in callbacks) {
         expect(
           callback.body.length,

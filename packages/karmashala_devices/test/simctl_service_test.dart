@@ -104,11 +104,13 @@ void main() {
   });
 
   group('screenSize', () {
-    test('enumerates the displays and returns the phone, not the first', () async {
-      // Real output from a booted iPhone 17 Pro. This fixture used to be one I
-      // made up, which is how the parser shipped matching nothing at all.
-      final runner = FakeCommandRunner(
-        responder: (_) => _ok('''
+    test(
+      'enumerates the displays and returns the phone, not the first',
+      () async {
+        // Real output from a booted iPhone 17 Pro. This fixture used to be one I
+        // made up, which is how the parser shipped matching nothing at all.
+        final runner = FakeCommandRunner(
+          responder: (_) => _ok('''
 Port:
     UUID: 08246516-F8D9-42CB-A4E5-CF060FFC65D7
     Class: Unknown
@@ -138,12 +140,13 @@ Port:
         width              = 1206
         height             = 2622
 '''),
-      );
-      final size = await _service(runner).screenSize(_udid);
+        );
+        final size = await _service(runner).screenSize(_udid);
 
-      expect(_argv(runner), ['simctl', 'io', _udid, 'enumerate']);
-      expect(size, const DeviceScreenSize(width: 1206, height: 2622));
-    });
+        expect(_argv(runner), ['simctl', 'io', _udid, 'enumerate']);
+        expect(size, const DeviceScreenSize(width: 1206, height: 2622));
+      },
+    );
 
     test('returns null when simctl cannot be reached', () async {
       final runner = FakeCommandRunner(

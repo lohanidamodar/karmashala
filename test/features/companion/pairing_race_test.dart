@@ -10,8 +10,7 @@ import 'dart:io';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala_remote/client.dart'
-    as stored;
+import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/pairing.dart' hide PairingException;
@@ -170,64 +169,70 @@ void main() {
     return scout;
   }
 
-  test('a typed code pairs over the LAN while the relay is dead',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    // The desktop believes in a relay that is not there — TODAY's situation.
-    final dead = await deadRelay();
-    await startService(relayOverride: dead);
-    await advertiseHost();
-    final gateway = makeGateway(lan: await listeningScout());
-    // The phone's configured relay is dead too: only the LAN can carry this.
-    await gateway.setPairingRelay(dead);
+  test(
+    'a typed code pairs over the LAN while the relay is dead',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      // The desktop believes in a relay that is not there — TODAY's situation.
+      final dead = await deadRelay();
+      await startService(relayOverride: dead);
+      await advertiseHost();
+      final gateway = makeGateway(lan: await listeningScout());
+      // The phone's configured relay is dead too: only the LAN can carry this.
+      await gateway.setPairingRelay(dead);
 
-    final stages = <CompanionPairingStage>[];
-    final sub = gateway.pairingProgress.listen((p) => stages.add(p.stage));
-    final session = await service!.beginPairing(
-      capabilities: CapabilitySet.all,
-    );
-    final code = PairingCode.encode(session.payload.typedSecret!);
+      final stages = <CompanionPairingStage>[];
+      final sub = gateway.pairingProgress.listen((p) => stages.add(p.stage));
+      final session = await service!.beginPairing(
+        capabilities: CapabilitySet.all,
+      );
+      final code = PairingCode.encode(session.payload.typedSecret!);
 
-    final paired = await gateway.pairWithCode(code);
-    final device = await session.done;
-    await sub.cancel();
+      final paired = await gateway.pairWithCode(code);
+      final device = await session.done;
+      await sub.cancel();
 
-    expect(paired.hostName, 'TestHost');
-    expect(
-      paired.hostId,
-      service!.hostId,
-      reason: 'the host id travelled in the sealed confirm, not the code',
-    );
-    expect(paired.capabilities.has(Capability.approve), isTrue);
-    expect(dao.getActive().single.id, device.id);
-    expect(stages.first, CompanionPairingStage.codeAccepted);
-    expect(stages, contains(CompanionPairingStage.searching));
-    expect(stages, contains(CompanionPairingStage.proving));
-    expect(stages.last, CompanionPairingStage.paired);
+      expect(paired.hostName, 'TestHost');
+      expect(
+        paired.hostId,
+        service!.hostId,
+        reason: 'the host id travelled in the sealed confirm, not the code',
+      );
+      expect(paired.capabilities.has(Capability.approve), isTrue);
+      expect(dao.getActive().single.id, device.id);
+      expect(stages.first, CompanionPairingStage.codeAccepted);
+      expect(stages, contains(CompanionPairingStage.searching));
+      expect(stages, contains(CompanionPairingStage.proving));
+      expect(stages.last, CompanionPairingStage.paired);
 
-    // The link then comes up — over the LAN, since the relay is a corpse.
-    await gateway.linkStates
-        .firstWhere((s) => s == CompanionLinkState.connected)
-        .timeout(const Duration(seconds: 60));
-    expect(gateway.linkPath, CompanionLinkPath.lan);
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
+      // The link then comes up — over the LAN, since the relay is a corpse.
+      await gateway.linkStates
+          .firstWhere((s) => s == CompanionLinkState.connected)
+          .timeout(const Duration(seconds: 60));
+      expect(gateway.linkPath, CompanionLinkPath.lan);
+      expect((await gateway.listSessions()).single.id, 's1');
+    },
+  );
 
-  test('a scanned QR pairs over the LAN while its relay is dead',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    final dead = await deadRelay();
-    await startService(relayOverride: dead);
-    await advertiseHost();
-    final gateway = makeGateway(lan: await listeningScout());
+  test(
+    'a scanned QR pairs over the LAN while its relay is dead',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      final dead = await deadRelay();
+      await startService(relayOverride: dead);
+      await advertiseHost();
+      final gateway = makeGateway(lan: await listeningScout());
 
-    final session = await service!.beginPairing(
-      capabilities: CapabilitySet.all,
-    );
-    final paired = await gateway.pairWithQr(session.payload.encode());
-    await session.done;
+      final session = await service!.beginPairing(
+        capabilities: CapabilitySet.all,
+      );
+      final paired = await gateway.pairWithQr(session.payload.encode());
+      await session.done;
 
-    expect(paired.hostName, 'TestHost');
-    expect(dao.getActive(), hasLength(1));
-  });
+      expect(paired.hostName, 'TestHost');
+      expect(dao.getActive(), hasLength(1));
+    },
+  );
 
   test('a typed code pairs over the relay when no desktop beacons', () async {
     await startService();

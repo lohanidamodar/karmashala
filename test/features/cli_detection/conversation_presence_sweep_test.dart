@@ -104,18 +104,21 @@ void main() {
   }
 
   group('idsIn', () {
-    test('lists every Claude conversation across every project bucket', () async {
-      writeClaude(home('.claude'), '-c-src-demo', 'one');
-      writeClaude(home('.claude'), '-mnt-c-src-other', 'two');
+    test(
+      'lists every Claude conversation across every project bucket',
+      () async {
+        writeClaude(home('.claude'), '-c-src-demo', 'one');
+        writeClaude(home('.claude'), '-mnt-c-src-other', 'two');
 
-      expect(
-        await const ConversationStoreIndex().idsIn(
-          storeHome: home('.claude'),
-          format: AgentStoreFormat.claudeJsonl,
-        ),
-        {'one', 'two'},
-      );
-    });
+        expect(
+          await const ConversationStoreIndex().idsIn(
+            storeHome: home('.claude'),
+            format: AgentStoreFormat.claudeJsonl,
+          ),
+          {'one', 'two'},
+        );
+      },
+    );
 
     test('a Codex id survives the dashes in its own timestamp', () async {
       // `rollout-<timestamp>-<id>.jsonl`, and the timestamp is full of dashes —
@@ -131,21 +134,24 @@ void main() {
       );
     });
 
-    test('a store that is not there answers null, never an empty set', () async {
-      // The distinction the delete decision rests on.
-      expect(
-        await const ConversationStoreIndex().idsIn(
-          storeHome: home('.nowhere'),
-          format: AgentStoreFormat.claudeJsonl,
-        ),
-        isNull,
-      );
-    });
+    test(
+      'a store that is not there answers null, never an empty set',
+      () async {
+        // The distinction the delete decision rests on.
+        expect(
+          await const ConversationStoreIndex().idsIn(
+            storeHome: home('.nowhere'),
+            format: AgentStoreFormat.claudeJsonl,
+          ),
+          isNull,
+        );
+      },
+    );
 
     test('a store that is there and empty answers an empty set', () async {
-      Directory(p.join(home('.claude'), 'projects')).createSync(
-        recursive: true,
-      );
+      Directory(
+        p.join(home('.claude'), 'projects'),
+      ).createSync(recursive: true);
 
       expect(
         await const ConversationStoreIndex().idsIn(

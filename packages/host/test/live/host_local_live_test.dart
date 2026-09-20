@@ -26,7 +26,8 @@ void main() {
             ? 'libSystem'
             : 'libc',
       ),
-      reason: 'the host reports which pty layer it measured, never which it assumed',
+      reason:
+          'the host reports which pty layer it measured, never which it assumed',
     );
     expect(host.greeting, contains('restored 0 session(s)'));
     // A real `serve` opened a store, minted this machine's id and bound the
@@ -43,80 +44,100 @@ void main() {
 
   tearDownAll(() => host.kill());
 
-  test('a client reaches the socket, runs a shell, and reads its exit code', () async {
-    final client = await LocalHostClient.connect(host.socketPath, 'pane-1');
-    addTearDown(client.close);
+  test(
+    'a client reaches the socket, runs a shell, and reads its exit code',
+    () async {
+      final client = await LocalHostClient.connect(host.socketPath, 'pane-1');
+      addTearDown(client.close);
 
-    final welcome = await client.expect<WelcomeMessage>();
-    expect(welcome.protocolVersion, kProtocolVersion);
-    expect(welcome.hostVersion, kHostVersion);
-    expect(welcome.operatingSystem, Platform.operatingSystem);
+      final welcome = await client.expect<WelcomeMessage>();
+      expect(welcome.protocolVersion, kProtocolVersion);
+      expect(welcome.hostVersion, kHostVersion);
+      expect(welcome.operatingSystem, Platform.operatingSystem);
 
-    client.send(
-      OpenMessage(
-        requestId: client.nextId(),
-        sessionId: 'local-a',
-        argv: probeShell,
-        environment: const {'TERM': 'xterm-256color'},
-        columns: 80,
-        rows: 24,
-      ),
-    );
-    final attached = await client.expect<AttachedMessage>();
-    expect(attached.sessionId, 'local-a');
-    expect(attached.holdsWriteToken, isTrue);
-    expect(attached.replayFromOffset, 0);
+      client.send(
+        OpenMessage(
+          requestId: client.nextId(),
+          sessionId: 'local-a',
+          argv: probeShell,
+          environment: const {'TERM': 'xterm-256color'},
+          columns: 80,
+          rows: 24,
+        ),
+      );
+      final attached = await client.expect<AttachedMessage>();
+      expect(attached.sessionId, 'local-a');
+      expect(attached.holdsWriteToken, isTrue);
+      expect(attached.replayFromOffset, 0);
 
-    client
-      ..type(attached.sessionRef, setA)
-      ..type(attached.sessionRef, setB)
-      ..type(attached.sessionRef, echoAB);
-    expect(await client.output('karmashala'), isTrue, reason: client.tail(400));
+      client
+        ..type(attached.sessionRef, setA)
+        ..type(attached.sessionRef, setB)
+        ..type(attached.sessionRef, echoAB);
+      expect(
+        await client.output('karmashala'),
+        isTrue,
+        reason: client.tail(400),
+      );
 
-    client.type(attached.sessionRef, 'exit 7');
-    final exited = await client.expect<ExitedMessage>();
-    // The child's own code, and null rather than zero when it was not collected.
-    expect(exited.exitCode, 7);
-    expect(exited.sessionId, 'local-a');
-  });
+      client.type(attached.sessionRef, 'exit 7');
+      final exited = await client.expect<ExitedMessage>();
+      // The child's own code, and null rather than zero when it was not collected.
+      expect(exited.exitCode, 7);
+      expect(exited.sessionId, 'local-a');
+    },
+  );
 
-  test('a second client sees the session listed and is refused the write token', () async {
-    final owner = await LocalHostClient.connect(host.socketPath, 'pane-owner');
-    addTearDown(owner.close);
-    await owner.expect<WelcomeMessage>();
-    owner.send(
-      OpenMessage(
-        requestId: owner.nextId(),
-        sessionId: 'local-b',
-        argv: probeShell,
-        environment: const {},
-        columns: 80,
-        rows: 24,
-      ),
-    );
-    final held = await owner.expect<AttachedMessage>();
-    expect(held.holdsWriteToken, isTrue);
+  test(
+    'a second client sees the session listed and is refused the write token',
+    () async {
+      final owner = await LocalHostClient.connect(
+        host.socketPath,
+        'pane-owner',
+      );
+      addTearDown(owner.close);
+      await owner.expect<WelcomeMessage>();
+      owner.send(
+        OpenMessage(
+          requestId: owner.nextId(),
+          sessionId: 'local-b',
+          argv: probeShell,
+          environment: const {},
+          columns: 80,
+          rows: 24,
+        ),
+      );
+      final held = await owner.expect<AttachedMessage>();
+      expect(held.holdsWriteToken, isTrue);
 
-    final observer = await LocalHostClient.connect(host.socketPath, 'pane-observer');
-    addTearDown(observer.close);
-    await observer.expect<WelcomeMessage>();
-    observer.send(ListMessage(observer.nextId()));
-    final listed = await observer.expect<SessionsMessage>();
-    expect(listed.summaries.map((s) => s.id), contains('local-b'));
+      final observer = await LocalHostClient.connect(
+        host.socketPath,
+        'pane-observer',
+      );
+      addTearDown(observer.close);
+      await observer.expect<WelcomeMessage>();
+      observer.send(ListMessage(observer.nextId()));
+      final listed = await observer.expect<SessionsMessage>();
+      expect(listed.summaries.map((s) => s.id), contains('local-b'));
 
-    observer.send(
-      AttachMessage(
-        requestId: observer.nextId(),
-        sessionId: 'local-b',
-        sinceOffset: 0,
-        claimWrite: true,
-      ),
-    );
-    final second = await observer.expect<AttachedMessage>();
-    expect(second.holdsWriteToken, isFalse, reason: 'single writer, many readers');
-    expect(second.writeHolder, 'pane-owner');
+      observer.send(
+        AttachMessage(
+          requestId: observer.nextId(),
+          sessionId: 'local-b',
+          sinceOffset: 0,
+          claimWrite: true,
+        ),
+      );
+      final second = await observer.expect<AttachedMessage>();
+      expect(
+        second.holdsWriteToken,
+        isFalse,
+        reason: 'single writer, many readers',
+      );
+      expect(second.writeHolder, 'pane-owner');
 
-    owner.send(CloseMessage(owner.nextId(), 'local-b'));
-    await owner.expect<ClosedMessage>();
-  });
+      owner.send(CloseMessage(owner.nextId(), 'local-b'));
+      await owner.expect<ClosedMessage>();
+    },
+  );
 }

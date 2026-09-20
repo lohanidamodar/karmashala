@@ -19,4 +19,3 @@ final projectServiceProvider = Provider<ProjectService>(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
   ),
 );
-

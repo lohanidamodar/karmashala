@@ -56,7 +56,11 @@ branch refs/heads/feature/login
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
     RepositoryDao(db).insert(
-      repository(id: 'r2', name: 'app-feature', path: r'C:\src\demo\app-feature'),
+      repository(
+        id: 'r2',
+        name: 'app-feature',
+        path: r'C:\src\demo\app-feature',
+      ),
     );
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(session(id: 's1', title: 'Work'));
@@ -155,8 +159,8 @@ branch refs/heads/feature/login
       final structured =
           (await callTool('list_checkouts', {'projectId': 'p1'})).structured!
               as Map<String, Object?>;
-      final checkouts =
-          (structured['checkouts']! as List<Object?>).cast<Map<String, Object?>>();
+      final checkouts = (structured['checkouts']! as List<Object?>)
+          .cast<Map<String, Object?>>();
 
       expect(checkouts, hasLength(2));
       expect(checkouts.first['repositoryId'], 'r1');
@@ -238,8 +242,8 @@ branch refs/heads/feature/login
       final structured =
           (await callTool('delivery_status', {'sessionId': 's1'})).structured!
               as Map<String, Object?>;
-      final actions =
-          (structured['actions']! as List<Object?>).cast<Map<String, Object?>>();
+      final actions = (structured['actions']! as List<Object?>)
+          .cast<Map<String, Object?>>();
 
       expect(actions, isNotEmpty);
       for (final action in actions) {

@@ -35,10 +35,7 @@ class WorktreeSetup {
   /// A row this code did not write reads as empty rather than throwing: an
   /// unparseable setting must not stop a worktree being created.
   static WorktreeSetup fromJson(String? command, String? copyPaths) =>
-      WorktreeSetup(
-        command: _strings(command),
-        copyPaths: _strings(copyPaths),
-      );
+      WorktreeSetup(command: _strings(command), copyPaths: _strings(copyPaths));
 
   static List<String> _strings(String? raw) {
     if (raw == null || raw.isEmpty) return const [];
@@ -351,8 +348,7 @@ class WorktreeSetupReport {
   /// Null when the setting names no command.
   final WorktreeCommandVerdict? command;
 
-  WorktreeSetupVerdict get verdict =>
-      WorktreeSetupVerdict.of(copies, command);
+  WorktreeSetupVerdict get verdict => WorktreeSetupVerdict.of(copies, command);
 
   /// The rows that need looking at, for a surface with room for a few lines.
   Iterable<WorktreeCopyVerdict> get problems =>
@@ -397,7 +393,8 @@ class WorktreeSetupReport {
       ranAt: ranAt,
       copies: [
         for (final entry in (decoded['copies'] as List?) ?? const [])
-          if (entry is Map<String, Object?>) WorktreeCopyVerdict.fromJson(entry),
+          if (entry is Map<String, Object?>)
+            WorktreeCopyVerdict.fromJson(entry),
       ],
       command: command is Map<String, Object?>
           ? WorktreeCommandVerdict.fromJson(command)

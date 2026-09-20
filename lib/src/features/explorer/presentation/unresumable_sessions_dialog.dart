@@ -84,7 +84,8 @@ class _UnresumableSessionsDialogState
       title: DesktopDialogTitle(
         icon: AppIcons.warningCircle,
         title: 'Sessions with no conversation',
-        subtitle: 'Rows whose agent has no record of the conversation they '
+        subtitle:
+            'Rows whose agent has no record of the conversation they '
             'name. Remove them, or start a conversation in one to keep it.',
       ),
       content: SizedBox(
@@ -137,9 +138,7 @@ class _UnresumableSessionsDialogState
           onPressed: ticked.isEmpty
               ? null
               : () {
-                  controller.remove([
-                    for (final row in ticked) row.session.id,
-                  ]);
+                  controller.remove([for (final row in ticked) row.session.id]);
                   setState(() => _excluded.clear());
                 },
           child: Text(

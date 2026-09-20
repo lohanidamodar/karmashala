@@ -48,43 +48,47 @@ void main() {
         ),
       );
 
-      expect(
-        entries.map((e) => '${e.name}:${e.origin.name}'),
-        ['dart:project', 'appwrite:directory', 'grafana:user'],
-      );
+      expect(entries.map((e) => '${e.name}:${e.origin.name}'), [
+        'dart:project',
+        'appwrite:directory',
+        'grafana:user',
+      ]);
       expect(entries.first.source, '/home/d/work/.mcp.json');
       expect(entries.last.source, '.claude.json');
     });
 
-    test('a project server the user has not answered is not claimed as given', () {
-      final entries = mcpServersFrom(
-        _claudeSpec,
-        const AgentConfigSources(
-          directory: '/home/d/work',
-          projectConfig: {
-            'mcpServers': {
-              'dart': {'type': 'stdio'},
-              'other': {'type': 'stdio'},
-            },
-          },
-          userConfig: {
-            'projects': {
-              '/home/d/work': {
-                'disabledMcpjsonServers': ['other'],
+    test(
+      'a project server the user has not answered is not claimed as given',
+      () {
+        final entries = mcpServersFrom(
+          _claudeSpec,
+          const AgentConfigSources(
+            directory: '/home/d/work',
+            projectConfig: {
+              'mcpServers': {
+                'dart': {'type': 'stdio'},
+                'other': {'type': 'stdio'},
               },
             },
-          },
-        ),
-      );
+            userConfig: {
+              'projects': {
+                '/home/d/work': {
+                  'disabledMcpjsonServers': ['other'],
+                },
+              },
+            },
+          ),
+        );
 
-      expect(
-        {for (final e in entries) e.name: e.standing},
-        {
-          'dart': AgentContextStanding.awaitingApproval,
-          'other': AgentContextStanding.refused,
-        },
-      );
-    });
+        expect(
+          {for (final e in entries) e.name: e.standing},
+          {
+            'dart': AgentContextStanding.awaitingApproval,
+            'other': AgentContextStanding.refused,
+          },
+        );
+      },
+    );
 
     test('per-directory servers are read for this directory only', () {
       final entries = mcpServersFrom(
@@ -224,7 +228,9 @@ void main() {
 
     test('reads a plain inline description', () {
       expect(
-        skillDescriptionIn('---\nname: a\ndescription: does a thing\n---\nbody'),
+        skillDescriptionIn(
+          '---\nname: a\ndescription: does a thing\n---\nbody',
+        ),
         'does a thing',
       );
     });

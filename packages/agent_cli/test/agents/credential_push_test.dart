@@ -90,9 +90,7 @@ void main() {
       const raw =
           '{"oauthAccount":{"emailAddress":"old@example.com"},'
           '"projects":{"g:/x":1,"G:/x":2}}';
-      final home = _FakeHome(
-        existing: {'/home/dlohani/.claude.json': raw},
-      );
+      final home = _FakeHome(existing: {'/home/dlohani/.claude.json': raw});
 
       await pushClaudeAccount(account, home);
 
@@ -103,22 +101,25 @@ void main() {
       expect(after, isNot(contains('old@example.com')));
     });
 
-    test('an account captured without an identity writes only the token', () async {
-      final home = _FakeHome();
+    test(
+      'an account captured without an identity writes only the token',
+      () async {
+        final home = _FakeHome();
 
-      final written = await pushClaudeAccount(
-        ClaudeAccount(
-          id: 'a2',
-          email: 'me@example.com',
-          claudeAiOauth: const {'accessToken': 'tok'},
-          capturedAt: DateTime.utc(2026),
-        ),
-        home,
-      );
+        final written = await pushClaudeAccount(
+          ClaudeAccount(
+            id: 'a2',
+            email: 'me@example.com',
+            claudeAiOauth: const {'accessToken': 'tok'},
+            capturedAt: DateTime.utc(2026),
+          ),
+          home,
+        );
 
-      expect(written, ['/home/dlohani/.claude/.credentials.json']);
-      expect(home.files.containsKey('/home/dlohani/.claude.json'), isFalse);
-    });
+        expect(written, ['/home/dlohani/.claude/.credentials.json']);
+        expect(home.files.containsKey('/home/dlohani/.claude.json'), isFalse);
+      },
+    );
   });
 
   group('pushing a Codex account', () {
@@ -129,7 +130,9 @@ void main() {
         CodexAccount(
           id: 'c1',
           accountId: 'acct',
-          auth: const {'tokens': {'access_token': 'tok'}},
+          auth: const {
+            'tokens': {'access_token': 'tok'},
+          },
           capturedAt: DateTime.utc(2026),
         ),
         home,

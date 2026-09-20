@@ -29,7 +29,9 @@ final deviceCommandRunnerFactoryProvider = Provider<CommandRunnerFactory>(
 /// where still writes somewhere real and never into a user's profile.
 final deviceDataDirectoryProvider = Provider<Future<Directory> Function()>(
   (ref) => () async {
-    final directory = Directory(p.join(Directory.systemTemp.path, 'karmashala'));
+    final directory = Directory(
+      p.join(Directory.systemTemp.path, 'karmashala'),
+    );
     await directory.create(recursive: true);
     return directory;
   },
@@ -88,8 +90,7 @@ class DeviceSlimmingState {
 
 /// Where the slimming preferences are kept. The app's implementation projects
 /// them out of its settings and writes back through the same controller.
-abstract class DeviceSlimmingPreferences
-    extends Notifier<DeviceSlimmingState> {
+abstract class DeviceSlimmingPreferences extends Notifier<DeviceSlimmingState> {
   void setAndroidSlimming(bool value);
   void setAndroidSlimmingEnabled(List<String> ids);
   void setAndroidEmulatorGpu(String id);

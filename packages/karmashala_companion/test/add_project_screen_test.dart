@@ -61,7 +61,11 @@ class _AddGateway extends FakeCompanionGateway {
   }
 }
 
-Future<void> _fill(WidgetTester tester, {String name = 'Demo', String path = r'C:\work\demo'}) async {
+Future<void> _fill(
+  WidgetTester tester, {
+  String name = 'Demo',
+  String path = r'C:\work\demo',
+}) async {
   await tester.enterText(find.byType(TextField).at(0), name);
   await tester.enterText(find.byType(TextField).at(1), path);
 }
@@ -81,7 +85,9 @@ void main() {
     expect(find.byType(TextField), findsNothing);
   });
 
-  testWidgets('blank name or path is validated without a gateway call', (tester) async {
+  testWidgets('blank name or path is validated without a gateway call', (
+    tester,
+  ) async {
     final gateway = _AddGateway();
     await pumpPhone(tester, gateway: gateway, home: const AddProjectScreen());
     await _tapAdd(tester);
@@ -89,7 +95,10 @@ void main() {
     expect(gateway.calls, isEmpty);
     await tester.enterText(find.byType(TextField).first, 'Demo');
     await _tapAdd(tester);
-    expect(find.text('Enter the project path on your desktop.'), findsOneWidget);
+    expect(
+      find.text('Enter the project path on your desktop.'),
+      findsOneWidget,
+    );
     expect(gateway.calls, isEmpty);
   });
 
@@ -104,8 +113,11 @@ void main() {
     expect(gateway.calls.single.path, r'C:\work\demo');
   });
 
-  testWidgets('failed call retains both values and retry reuses request id', (tester) async {
-    final gateway = _AddGateway()..failure = const GatewayException('Desktop refused the project.');
+  testWidgets('failed call retains both values and retry reuses request id', (
+    tester,
+  ) async {
+    final gateway = _AddGateway()
+      ..failure = const GatewayException('Desktop refused the project.');
     await pumpPhone(tester, gateway: gateway, home: const AddProjectScreen());
     await _fill(tester);
     await _tapAdd(tester);
@@ -128,9 +140,13 @@ void main() {
     await _tapAdd(tester);
     await _tapAdd(tester);
     expect(gateway.calls, hasLength(1));
-    gateway.pending!.complete(const RemoteWorkspaceProject(
-      projectId: 'p1', name: 'Demo', path: r'C:\work\demo',
-    ));
+    gateway.pending!.complete(
+      const RemoteWorkspaceProject(
+        projectId: 'p1',
+        name: 'Demo',
+        path: r'C:\work\demo',
+      ),
+    );
     await tester.pumpAndSettle();
   });
 
@@ -154,9 +170,13 @@ void main() {
     await _fill(tester);
     await _tapAdd(tester);
     await gateway.switchTo(fakeHostId(1));
-    gateway.pending!.complete(const RemoteWorkspaceProject(
-      projectId: 'p1', name: 'Demo', path: r'C:\work\demo',
-    ));
+    gateway.pending!.complete(
+      const RemoteWorkspaceProject(
+        projectId: 'p1',
+        name: 'Demo',
+        path: r'C:\work\demo',
+      ),
+    );
     await tester.pumpAndSettle();
     expect(find.byType(AddProjectScreen), findsOneWidget);
     expect(find.textContaining('active desktop changed'), findsOneWidget);
@@ -164,83 +184,97 @@ void main() {
 
   testWidgets('phone and tablet layouts do not overflow', (tester) async {
     final gateway = _AddGateway();
-    await pumpPhone(tester, gateway: gateway, home: const AddProjectScreen(), size: kPhoneSize);
+    await pumpPhone(
+      tester,
+      gateway: gateway,
+      home: const AddProjectScreen(),
+      size: kPhoneSize,
+    );
     expect(tester.takeException(), isNull);
-    await tester.pumpWidget(buildPhoneApp(gateway: gateway, home: const AddProjectScreen()));
+    await tester.pumpWidget(
+      buildPhoneApp(gateway: gateway, home: const AddProjectScreen()),
+    );
     tester.view.physicalSize = const Size(1440, 900);
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
 
-  test('project/workspace pulls ignore session churn and refresh on host changes', () async {
-    final gateway = _AddGateway(
-      connections: [
-        CompanionConnection(hostId: fakeHostId(0), name: 'One', active: true),
-        CompanionConnection(hostId: fakeHostId(1), name: 'Two', active: false),
-      ],
-    );
-    final container = ProviderContainer(
-      overrides: [companionGatewayProvider.overrideWithValue(gateway)],
-    );
-    addTearDown(container.dispose);
-    // Keep the providers alive like the visible projects screen does. A bare
-    // read.future can auto-dispose between emissions and would not prove that
-    // session churn is harmless while the screen is open.
-    final projectsVisible = container.listen(
-      companionProjectsProvider,
-      (previous, next) {},
-      fireImmediately: true,
-    );
-    final workspaceVisible = container.listen(
-      companionWorkspaceProvider,
-      (previous, next) {},
-      fireImmediately: true,
-    );
-    final sessionsVisible = container.listen(
-      companionSessionsProvider,
-      (previous, next) {},
-      fireImmediately: true,
-    );
-    addTearDown(projectsVisible.close);
-    addTearDown(workspaceVisible.close);
-    addTearDown(sessionsVisible.close);
+  test(
+    'project/workspace pulls ignore session churn and refresh on host changes',
+    () async {
+      final gateway = _AddGateway(
+        connections: [
+          CompanionConnection(hostId: fakeHostId(0), name: 'One', active: true),
+          CompanionConnection(
+            hostId: fakeHostId(1),
+            name: 'Two',
+            active: false,
+          ),
+        ],
+      );
+      final container = ProviderContainer(
+        overrides: [companionGatewayProvider.overrideWithValue(gateway)],
+      );
+      addTearDown(container.dispose);
+      // Keep the providers alive like the visible projects screen does. A bare
+      // read.future can auto-dispose between emissions and would not prove that
+      // session churn is harmless while the screen is open.
+      final projectsVisible = container.listen(
+        companionProjectsProvider,
+        (previous, next) {},
+        fireImmediately: true,
+      );
+      final workspaceVisible = container.listen(
+        companionWorkspaceProvider,
+        (previous, next) {},
+        fireImmediately: true,
+      );
+      final sessionsVisible = container.listen(
+        companionSessionsProvider,
+        (previous, next) {},
+        fireImmediately: true,
+      );
+      addTearDown(projectsVisible.close);
+      addTearDown(workspaceVisible.close);
+      addTearDown(sessionsVisible.close);
 
-    await Future.wait([
-      container.read(companionProjectsProvider.future),
-      container.read(companionWorkspaceProvider.future),
-    ]);
-    await Future<void>.delayed(Duration.zero);
-    expect(gateway.projectLists, 1);
-    expect(gateway.workspaceLists, 1);
-    for (var i = 0; i < 20; i++) {
-      gateway.setSessions([summary('s$i')]);
-    }
-    await Future<void>.delayed(Duration.zero);
-    expect(gateway.projectLists, 1);
-    expect(gateway.workspaceLists, 1);
+      await Future.wait([
+        container.read(companionProjectsProvider.future),
+        container.read(companionWorkspaceProvider.future),
+      ]);
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.projectLists, 1);
+      expect(gateway.workspaceLists, 1);
+      for (var i = 0; i < 20; i++) {
+        gateway.setSessions([summary('s$i')]);
+      }
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.projectLists, 1);
+      expect(gateway.workspaceLists, 1);
 
-    gateway.setLink(CompanionLinkState.disconnected);
-    await Future<void>.delayed(Duration.zero);
-    expect(gateway.projectLists, 1);
-    expect(gateway.workspaceLists, 1);
-    await gateway.reconnect();
-    await Future<void>.delayed(Duration.zero);
-    await Future.wait([
-      container.read(companionProjectsProvider.future),
-      container.read(companionWorkspaceProvider.future),
-    ]);
-    expect(gateway.projectLists, 2);
-    expect(gateway.workspaceLists, 2);
+      gateway.setLink(CompanionLinkState.disconnected);
+      await Future<void>.delayed(Duration.zero);
+      expect(gateway.projectLists, 1);
+      expect(gateway.workspaceLists, 1);
+      await gateway.reconnect();
+      await Future<void>.delayed(Duration.zero);
+      await Future.wait([
+        container.read(companionProjectsProvider.future),
+        container.read(companionWorkspaceProvider.future),
+      ]);
+      expect(gateway.projectLists, 2);
+      expect(gateway.workspaceLists, 2);
 
-    await gateway.switchTo(fakeHostId(1));
-    await Future<void>.delayed(Duration.zero);
-    await Future.wait([
-      container.read(companionProjectsProvider.future),
-      container.read(companionWorkspaceProvider.future),
-    ]);
-    expect(gateway.projectLists, 3);
-    expect(gateway.workspaceLists, 3);
-    expect(gateway.projectHostIds.last, fakeHostId(1));
-    expect(gateway.workspaceHostIds.last, fakeHostId(1));
-  });
+      await gateway.switchTo(fakeHostId(1));
+      await Future<void>.delayed(Duration.zero);
+      await Future.wait([
+        container.read(companionProjectsProvider.future),
+        container.read(companionWorkspaceProvider.future),
+      ]);
+      expect(gateway.projectLists, 3);
+      expect(gateway.workspaceLists, 3);
+      expect(gateway.projectHostIds.last, fakeHostId(1));
+      expect(gateway.workspaceHostIds.last, fakeHostId(1));
+    },
+  );
 }

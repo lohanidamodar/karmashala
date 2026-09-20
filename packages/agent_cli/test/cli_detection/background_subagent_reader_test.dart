@@ -60,7 +60,11 @@ void main() {
       '"canReadOutputFile":true}}';
 
   /// The envelope the CLI wakes the session with when the agent reports back.
-  String reported(String agentId, String toolUseId, {String status = 'completed'}) =>
+  String reported(
+    String agentId,
+    String toolUseId, {
+    String status = 'completed',
+  }) =>
       '{"type":"user","timestamp":"2026-09-08T10:33:00.000Z",'
       '"message":{"role":"user","content":"<task-notification>\\n'
       '<task-id>$agentId</task-id>\\n<tool-use-id>$toolUseId</tool-use-id>\\n'
@@ -87,23 +91,25 @@ void main() {
   TranscriptMessage agentRow(List<TranscriptMessage> messages) =>
       messages.firstWhere((m) => m.tool?.name == 'Agent');
 
-  test('a launched-and-unreported background subagent is marked on its call',
-      () async {
-    writeParent([
-      agentCall('toolu_1', 'Show background subagents while they run'),
-      launched('toolu_1', 'a809fe33a06af42de', 'Show background subagents'),
-    ]);
+  test(
+    'a launched-and-unreported background subagent is marked on its call',
+    () async {
+      writeParent([
+        agentCall('toolu_1', 'Show background subagents while they run'),
+        launched('toolu_1', 'a809fe33a06af42de', 'Show background subagents'),
+      ]);
 
-    final row = agentRow(await read());
+      final row = agentRow(await read());
 
-    // Not outstanding — the CLI answered the call 0.2 minutes in — and yet
-    // running. That is the whole gap this closes.
-    expect(row.pendingToolUseId, isNull);
-    expect(row.pendingBackgroundAgentId, 'a809fe33a06af42de');
-    // The age comes off the transcript's own timestamp, as every reading here
-    // must: the call was issued at 09:17:25.733Z.
-    expect(row.at, DateTime.utc(2026, 9, 8, 9, 17, 25, 733));
-  });
+      // Not outstanding — the CLI answered the call 0.2 minutes in — and yet
+      // running. That is the whole gap this closes.
+      expect(row.pendingToolUseId, isNull);
+      expect(row.pendingBackgroundAgentId, 'a809fe33a06af42de');
+      // The age comes off the transcript's own timestamp, as every reading here
+      // must: the call was issued at 09:17:25.733Z.
+      expect(row.at, DateTime.utc(2026, 9, 8, 9, 17, 25, 733));
+    },
+  );
 
   test('an envelope naming its task id retires it', () async {
     writeParent([
@@ -152,23 +158,25 @@ void main() {
     }
   });
 
-  test('an agent that died without reporting is retired by the next boundary',
-      () async {
-    // **The case that makes this honest.** In the owner's largest session 95 of
-    // 311 background subagents never got an envelope — killed with a CLI that
-    // went away, or by the kill gesture — and drawing all 95 as running is the
-    // confident false statement the whole design exists to delete. The CLI
-    // re-enumerates what is live at each compaction, and that enumeration is
-    // what prunes them: this one is not in it.
-    writeParent([
-      agentCall('toolu_1', 'job'),
-      launched('toolu_1', 'a-dead', 'job'),
-      compactBoundary,
-      stillRunning('a-other'),
-    ]);
+  test(
+    'an agent that died without reporting is retired by the next boundary',
+    () async {
+      // **The case that makes this honest.** In the owner's largest session 95 of
+      // 311 background subagents never got an envelope — killed with a CLI that
+      // went away, or by the kill gesture — and drawing all 95 as running is the
+      // confident false statement the whole design exists to delete. The CLI
+      // re-enumerates what is live at each compaction, and that enumeration is
+      // what prunes them: this one is not in it.
+      writeParent([
+        agentCall('toolu_1', 'job'),
+        launched('toolu_1', 'a-dead', 'job'),
+        compactBoundary,
+        stillRunning('a-other'),
+      ]);
 
-    expect(agentRow(await read()).pendingBackgroundAgentId, isNull);
-  });
+      expect(agentRow(await read()).pendingBackgroundAgentId, isNull);
+    },
+  );
 
   test('an agent the boundary re-states as running survives it', () async {
     // The 76-minute run that spans a compaction. Its launch record is still in
@@ -195,19 +203,21 @@ void main() {
     expect(agentRow(await read()).pendingBackgroundAgentId, isNull);
   });
 
-  test('a boundary re-statement for an agent we never saw launched is ignored',
-      () async {
-    // A `task_status` with no launch record behind it carries no instant to
-    // count from, and an age we invented would be an age we were inventing a
-    // claim about — the same rule that drops a call whose line had no
-    // timestamp.
-    writeParent([compactBoundary, stillRunning('a-unknown')]);
+  test(
+    'a boundary re-statement for an agent we never saw launched is ignored',
+    () async {
+      // A `task_status` with no launch record behind it carries no instant to
+      // count from, and an age we invented would be an age we were inventing a
+      // claim about — the same rule that drops a call whose line had no
+      // timestamp.
+      writeParent([compactBoundary, stillRunning('a-unknown')]);
 
-    expect(
-      (await read()).where((m) => m.pendingBackgroundAgentId != null),
-      isEmpty,
-    );
-  });
+      expect(
+        (await read()).where((m) => m.pendingBackgroundAgentId != null),
+        isEmpty,
+      );
+    },
+  );
 
   test('a foreground call is untouched', () async {
     // Every other CLI, and every Claude Code call that is not a background

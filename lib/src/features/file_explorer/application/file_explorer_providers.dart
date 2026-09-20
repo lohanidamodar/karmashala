@@ -171,6 +171,8 @@ FileRevealRole fileRevealRoleFor(
   final wanted = fileTreeKey(target.hostPath);
   final here = fileTreeKey(entryPath);
   if (wanted == here) return FileRevealRole.target;
-  if (isDirectory && wanted.startsWith('$here/')) return FileRevealRole.onTheWay;
+  if (isDirectory && wanted.startsWith('$here/')) {
+    return FileRevealRole.onTheWay;
+  }
   return FileRevealRole.none;
 }

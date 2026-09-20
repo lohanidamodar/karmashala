@@ -48,8 +48,7 @@ void main() {
           home: Scaffold(
             body: Consumer(
               builder: (context, ref, _) => TextButton(
-                onPressed: () =>
-                    showWorktreeCreateDialog(context, ref, _repo),
+                onPressed: () => showWorktreeCreateDialog(context, ref, _repo),
                 child: const Text('open'),
               ),
             ),
@@ -70,10 +69,7 @@ void main() {
   ) async {
     await open(tester);
 
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Name'),
-      'spike',
-    );
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'spike');
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Create'));
     await tester.pumpAndSettle();

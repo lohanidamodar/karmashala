@@ -125,11 +125,9 @@ void main() {
       ).discover();
 
       expect(runner.requests, isNotEmpty);
-      expect(
-        runner.requests.map((r) => r.timeout).toSet(),
-        {kProbeTimeout},
-        reason: 'a wedged where or --version must not hang discovery forever',
-      );
+      expect(runner.requests.map((r) => r.timeout).toSet(), {
+        kProbeTimeout,
+      }, reason: 'a wedged where or --version must not hang discovery forever');
     });
 
     test('returns nothing when the environment is unavailable', () async {

@@ -119,7 +119,8 @@ void main() {
     );
     addTearDown(container.dispose);
     if (narrow) {
-      container.read(settingsControllerProvider.notifier)
+      container
+          .read(settingsControllerProvider.notifier)
           .setExplorerAgentFilter(const {AgentIds.codex});
     }
     db.reset();
@@ -166,7 +167,8 @@ void main() {
         expect(
           result.cards,
           greaterThan(0),
-          reason: 'the rows really were filed, so the number below is the cost '
+          reason:
+              'the rows really were filed, so the number below is the cost '
               'of doing the work rather than of skipping it',
         );
       });
@@ -236,7 +238,8 @@ void main() {
       expect(
         git.requests,
         isEmpty,
-        reason: 'and it may never start a process, which is the constraint '
+        reason:
+            'and it may never start a process, which is the constraint '
             'saved sections were built to',
       );
     });

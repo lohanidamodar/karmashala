@@ -21,13 +21,18 @@ void main() {
       final transport = endpoint.transportFor(EnvironmentKind.windowsNative);
 
       expect(transport, isA<AgentHookHttpTransport>());
-      expect((transport! as AgentHookHttpTransport).authority, '127.0.0.1:4242');
       expect(
-        endpoint.uriFor(
-          agentId: 'claudeCode',
-          event: 'Stop',
-          environment: EnvironmentKind.windowsNative,
-        ).toString(),
+        (transport! as AgentHookHttpTransport).authority,
+        '127.0.0.1:4242',
+      );
+      expect(
+        endpoint
+            .uriFor(
+              agentId: 'claudeCode',
+              event: 'Stop',
+              environment: EnvironmentKind.windowsNative,
+            )
+            .toString(),
         'http://127.0.0.1:4242/agent-hook?agent=claudeCode&event=Stop',
       );
     });
@@ -106,7 +111,10 @@ void main() {
             as AgentHookHttpTransport;
 
     expect(http.token, 'tok');
-    expect(endpoint.transportFor(EnvironmentKind.wsl), isA<AgentHookTransport>());
+    expect(
+      endpoint.transportFor(EnvironmentKind.wsl),
+      isA<AgentHookTransport>(),
+    );
     expect(
       endpoint.transportFor(EnvironmentKind.wsl),
       isNot(isA<AgentHookHttpTransport>()),

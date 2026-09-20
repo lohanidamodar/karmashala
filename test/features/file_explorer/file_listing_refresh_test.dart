@@ -74,26 +74,31 @@ void main() {
     expect(t.service.calls, 1, reason: 'a cached listing was re-read');
   });
 
-  test('coming back to the window stops offering a folder that has gone', () async {
-    final t = make(['wt-adopt', 'wt-attr', 'lib']);
-    final first = await t.container.read(directoryListingProvider(dir).future);
-    expect(first.map((e) => e.name), ['wt-adopt', 'wt-attr', 'lib']);
+  test(
+    'coming back to the window stops offering a folder that has gone',
+    () async {
+      final t = make(['wt-adopt', 'wt-attr', 'lib']);
+      final first = await t.container.read(
+        directoryListingProvider(dir).future,
+      );
+      expect(first.map((e) => e.name), ['wt-adopt', 'wt-attr', 'lib']);
 
-    // The worktrees are removed from disk by something outside the app — a
-    // shell, another agent — which is exactly the case no in-app signal covers.
-    t.service.entries = ['lib'];
+      // The worktrees are removed from disk by something outside the app — a
+      // shell, another agent — which is exactly the case no in-app signal covers.
+      t.service.entries = ['lib'];
 
-    t.clock.advance(kFileListingRefreshInterval);
-    altTab(t.container);
+      t.clock.advance(kFileListingRefreshInterval);
+      altTab(t.container);
 
-    final again = await t.container.read(directoryListingProvider(dir).future);
-    expect(
-      again.map((e) => e.name),
-      ['lib'],
-      reason: 'the panel still offers folders that are gone from disk',
-    );
-    expect(t.service.calls, 2);
-  });
+      final again = await t.container.read(
+        directoryListingProvider(dir).future,
+      );
+      expect(again.map((e) => e.name), [
+        'lib',
+      ], reason: 'the panel still offers folders that are gone from disk');
+      expect(t.service.calls, 2);
+    },
+  );
 
   test('an alt-tab storm costs one listing, not one per tab', () async {
     final t = make(['lib']);

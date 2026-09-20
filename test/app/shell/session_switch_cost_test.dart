@@ -179,7 +179,9 @@ void main() {
         agentSessionStatusProvider.overrideWith(
           (ref, id) => const Stream<AgentStatusReport>.empty(),
         ),
-        sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
+        sessionTranscriptProvider.overrideWith(
+          (ref, id) => Stream.value(const []),
+        ),
         importedTranscriptProvider.overrideWith(
           (ref, _) => Stream.value(const []),
         ),
@@ -397,7 +399,9 @@ void main() {
     expect(find.byType(SessionTranscriptView), findsOneWidget);
   });
 
-  testWidgets('switching away from the conversation lets it go', (tester) async {
+  testWidgets('switching away from the conversation lets it go', (
+    tester,
+  ) async {
     // The other half of the rule: a conversation that was asked for belongs to
     // the session it was asked for. Landing on another session's terminal must
     // not keep drawing — or re-reading — the one before it.
@@ -473,12 +477,14 @@ void main() {
       expect(
         cards.values.toSet(),
         hasLength(1),
-        reason: 'the viewport must already be full at the smallest size: $cards',
+        reason:
+            'the viewport must already be full at the smallest size: $cards',
       );
       expect(
         statements.values.toSet(),
         hasLength(1),
-        reason: 'a switch is about two rows, not about the workspace: '
+        reason:
+            'a switch is about two rows, not about the workspace: '
             '$statements',
       );
     });

@@ -46,6 +46,7 @@ class FakePathProbe implements PathProbe {
     return links[path];
   }
 
-  bool _isRefused(String path) =>
-      refused.any((r) => path == r || path.startsWith('$r\\') || path.startsWith('$r/'));
+  bool _isRefused(String path) => refused.any(
+    (r) => path == r || path.startsWith('$r\\') || path.startsWith('$r/'),
+  );
 }

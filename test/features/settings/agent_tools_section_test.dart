@@ -29,9 +29,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(child: AgentToolsSection()),
-        ),
+        home: Scaffold(body: SingleChildScrollView(child: AgentToolsSection())),
       ),
     );
     await tester.pump();

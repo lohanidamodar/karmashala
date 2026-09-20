@@ -55,9 +55,9 @@ void main() {
       (call) async {
         switch (call.method) {
           case 'Clipboard.getData':
-            return clipboard == null ? null : <String, Object?>{
-              'text': clipboard,
-            };
+            return clipboard == null
+                ? null
+                : <String, Object?>{'text': clipboard};
           case 'Clipboard.setData':
             clipboard = (call.arguments as Map)['text'] as String?;
             return null;
@@ -312,7 +312,10 @@ void main() {
     // Ctrl+Shift+<letter>, which has no control character and therefore costs
     // the shell nothing, or a chord that declares its `shellCost` and is
     // contested so Settings can hand it back. Ctrl+V is the only one.
-    final paneOnly = [for (final c in shellChords) if (c.paneOnly) c];
+    final paneOnly = [
+      for (final c in shellChords)
+        if (c.paneOnly) c,
+    ];
     expect(
       [for (final c in paneOnly) c.label],
       ['Ctrl+Shift+C', 'Ctrl+Shift+V', 'Ctrl+V'],

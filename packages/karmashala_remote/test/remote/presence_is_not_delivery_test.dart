@@ -28,60 +28,63 @@ PairedDevice _phone(CompanionPresence presence) => PairedDevice(
 
 void main() {
   group('the delivery path consults nothing about who is looking', () {
-    test('a device the host believes is gone is still offered every row',
-        () async {
-      // `delivers: false` is the host's own strongest evidence of absence. It
-      // must change what happens to the frame, never whether it is built.
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = const [
-        RemoteTranscriptMessage(role: 'user', text: 'hello'),
-      ];
-      await harness.watch('s1');
-      harness.fake.transcripts['s1'] = const [
-        RemoteTranscriptMessage(role: 'user', text: 'hello'),
-        RemoteTranscriptMessage(role: 'agent', text: 'a turn nobody saw'),
-      ];
+    test(
+      'a device the host believes is gone is still offered every row',
+      () async {
+        // `delivers: false` is the host's own strongest evidence of absence. It
+        // must change what happens to the frame, never whether it is built.
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = const [
+          RemoteTranscriptMessage(role: 'user', text: 'hello'),
+        ];
+        await harness.watch('s1');
+        harness.fake.transcripts['s1'] = const [
+          RemoteTranscriptMessage(role: 'user', text: 'hello'),
+          RemoteTranscriptMessage(role: 'agent', text: 'a turn nobody saw'),
+        ];
 
-      harness.delivers = false;
-      await harness.api.pollTranscript('s1');
+        harness.delivers = false;
+        await harness.api.pollTranscript('s1');
 
-      expect(
-        harness.dropped.map((f) => f.type),
-        contains(FrameType.transcriptAppended),
-        reason: 'the row was offered; the link is what refused it',
-      );
-    });
+        expect(
+          harness.dropped.map((f) => f.type),
+          contains(FrameType.transcriptAppended),
+          reason: 'the row was offered; the link is what refused it',
+        );
+      },
+    );
 
-    test('and it is offered again, because a refusal is not a delivery',
-        () async {
-      // What the phone has been *told* is what it actually received: a presence
-      // signal that moved the cursor on a refused frame would lose the turn.
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = const [
-        RemoteTranscriptMessage(role: 'user', text: 'hello'),
-      ];
-      await harness.watch('s1');
-      harness.fake.transcripts['s1'] = const [
-        RemoteTranscriptMessage(role: 'user', text: 'hello'),
-        RemoteTranscriptMessage(role: 'agent', text: 'a turn nobody saw'),
-      ];
+    test(
+      'and it is offered again, because a refusal is not a delivery',
+      () async {
+        // What the phone has been *told* is what it actually received: a presence
+        // signal that moved the cursor on a refused frame would lose the turn.
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = const [
+          RemoteTranscriptMessage(role: 'user', text: 'hello'),
+        ];
+        await harness.watch('s1');
+        harness.fake.transcripts['s1'] = const [
+          RemoteTranscriptMessage(role: 'user', text: 'hello'),
+          RemoteTranscriptMessage(role: 'agent', text: 'a turn nobody saw'),
+        ];
 
-      harness.delivers = false;
-      await harness.api.pollTranscript('s1');
-      harness.delivers = true;
-      harness.sent.clear();
-      await harness.api.pollTranscript('s1');
+        harness.delivers = false;
+        await harness.api.pollTranscript('s1');
+        harness.delivers = true;
+        harness.sent.clear();
+        await harness.api.pollTranscript('s1');
 
-      final page = RemoteTranscriptPage.fromJson(
-        harness.sent
-            .firstWhere((f) => f.type == FrameType.transcriptAppended)
-            .payload,
-      );
-      expect(page.messages.single.text, 'a turn nobody saw');
-    });
+        final page = RemoteTranscriptPage.fromJson(
+          harness.sent
+              .firstWhere((f) => f.type == FrameType.transcriptAppended)
+              .payload,
+        );
+        expect(page.messages.single.text, 'a turn nobody saw');
+      },
+    );
 
-    test('an approval reaches a phone in a pocket, subscribed or not',
-        () async {
+    test('an approval reaches a phone in a pocket, subscribed or not', () async {
       // Deliberately not gated on subscription — the counter-example the api
       // already states in words, pinned here so a presence gate cannot quietly
       // be added beside it.
@@ -103,43 +106,47 @@ void main() {
 
   group('a backgrounded phone gets both', () {
     /// The frame the phone sends to say it is connected but out of sight.
-    Future<void> register(Harness harness, String visibility) => harness.request(
-      FrameType.notificationsRegister,
-      payload: {
-        'token': 't0k',
-        'platform': 'android',
-        'deviceKind': 'phone',
-        'visibility': visibility,
+    Future<void> register(Harness harness, String visibility) =>
+        harness.request(
+          FrameType.notificationsRegister,
+          payload: {
+            'token': 't0k',
+            'platform': 'android',
+            'deviceKind': 'phone',
+            'visibility': visibility,
+          },
+        );
+
+    test(
+      'the stream still carries every row while it says it is hidden',
+      () async {
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = const [
+          RemoteTranscriptMessage(role: 'user', text: 'hello'),
+        ];
+        await register(harness, 'background');
+        await harness.watch('s1');
+        harness.sent.clear();
+
+        harness.fake.transcripts['s1'] = const [
+          RemoteTranscriptMessage(role: 'user', text: 'hello'),
+          RemoteTranscriptMessage(role: 'agent', text: 'a turn it cannot see'),
+        ];
+        await harness.api.pollTranscript('s1');
+
+        final appended = harness.sent
+            .where((f) => f.type == FrameType.transcriptAppended)
+            .toList();
+        expect(
+          appended,
+          hasLength(1),
+          reason:
+              'presence reached the api through nothing; it has no such value',
+        );
+        final page = RemoteTranscriptPage.fromJson(appended.single.payload);
+        expect(page.messages.single.text, 'a turn it cannot see');
       },
     );
-
-    test('the stream still carries every row while it says it is hidden',
-        () async {
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = const [
-        RemoteTranscriptMessage(role: 'user', text: 'hello'),
-      ];
-      await register(harness, 'background');
-      await harness.watch('s1');
-      harness.sent.clear();
-
-      harness.fake.transcripts['s1'] = const [
-        RemoteTranscriptMessage(role: 'user', text: 'hello'),
-        RemoteTranscriptMessage(role: 'agent', text: 'a turn it cannot see'),
-      ];
-      await harness.api.pollTranscript('s1');
-
-      final appended = harness.sent
-          .where((f) => f.type == FrameType.transcriptAppended)
-          .toList();
-      expect(
-        appended,
-        hasLength(1),
-        reason: 'presence reached the api through nothing; it has no such value',
-      );
-      final page = RemoteTranscriptPage.fromJson(appended.single.payload);
-      expect(page.messages.single.text, 'a turn it cannot see');
-    });
 
     /// The push half, over the fan-out the routing actually lives in.
     Future<List<String>> pushesFor(
@@ -169,33 +176,37 @@ void main() {
       return paths;
     }
 
-    test('and the push it used to be denied now leaves for the relay',
-        () async {
-      expect(
-        await pushesFor(
-          const CompanionPresence(
-            deviceKind: CompanionDeviceKind.phone,
-            visibility: CompanionVisibility.background,
+    test(
+      'and the push it used to be denied now leaves for the relay',
+      () async {
+        expect(
+          await pushesFor(
+            const CompanionPresence(
+              deviceKind: CompanionDeviceKind.phone,
+              visibility: CompanionVisibility.background,
+            ),
+            live: true,
           ),
-          live: true,
-        ),
-        ['/v1/push/register', '/v1/push'],
-      );
-    });
+          ['/v1/push/register', '/v1/push'],
+        );
+      },
+    );
 
-    test('a phone looking at the very session is still not pushed at',
-        () async {
-      expect(
-        await pushesFor(
-          const CompanionPresence(
-            visibility: CompanionVisibility.foreground,
-            focusedSessionId: 's1',
+    test(
+      'a phone looking at the very session is still not pushed at',
+      () async {
+        expect(
+          await pushesFor(
+            const CompanionPresence(
+              visibility: CompanionVisibility.foreground,
+              focusedSessionId: 's1',
+            ),
+            live: true,
           ),
-          live: true,
-        ),
-        isEmpty,
-      );
-    });
+          isEmpty,
+        );
+      },
+    );
 
     test('a phone looking at another session is', () async {
       expect(
@@ -210,15 +221,14 @@ void main() {
       );
     });
 
-    test('a phone that says nothing behaves exactly as it did before',
-        () async {
+    test('a phone that says nothing behaves exactly as it did before', () async {
       // The compatibility half: an old companion sends no presence at all, and
       // a live link suppresses its push the way it always has.
       expect(await pushesFor(CompanionPresence.unknown, live: true), isEmpty);
-      expect(
-        await pushesFor(CompanionPresence.unknown, live: false),
-        ['/v1/push/register', '/v1/push'],
-      );
+      expect(await pushesFor(CompanionPresence.unknown, live: false), [
+        '/v1/push/register',
+        '/v1/push',
+      ]);
     });
   });
 

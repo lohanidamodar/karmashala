@@ -41,16 +41,13 @@ class TerminalPresets {
     return preset;
   }
 
-  TerminalPresetOpening open(TerminalPreset preset) => _ref
-      .read(terminalSessionsControllerProvider.notifier)
-      .openPreset(preset);
+  TerminalPresetOpening open(TerminalPreset preset) =>
+      _ref.read(terminalSessionsControllerProvider.notifier).openPreset(preset);
 
   void delete(String id) => _dao.delete(id);
 }
 
-final terminalPresetsProvider = Provider<TerminalPresets>(
-  TerminalPresets.new,
-);
+final terminalPresetsProvider = Provider<TerminalPresets>(TerminalPresets.new);
 
 /// What to tell the user after opening [preset] gave [opening]. Named profiles
 /// rather than a count, which says nothing anybody can act on; null when

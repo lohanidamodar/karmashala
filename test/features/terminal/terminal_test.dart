@@ -59,10 +59,7 @@ void main() {
         workingDirectory: '/home/me/app',
       );
       expect(launch.executable, 'cmd.exe');
-      expect(launch.arguments, [
-        '/c',
-        'wsl.exe -d Ubuntu --cd /home/me/app',
-      ]);
+      expect(launch.arguments, ['/c', 'wsl.exe -d Ubuntu --cd /home/me/app']);
       expect(launch.workingDirectory, isNull);
     });
   });
@@ -145,7 +142,10 @@ void main() {
         terminalSessionsControllerProvider.notifier,
       );
       expect(
-        controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell),
+        controller.splitPaneWith(
+          SplitAxis.horizontal,
+          TerminalProfile.powerShell,
+        ),
         isNull,
       );
     });
@@ -274,7 +274,10 @@ void main() {
       // have no working directory to fall back to, so the borrowed name
       // remains — but the count, which is what made it look like a second tab
       // strip, is gone.
-      controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.commandPrompt);
+      controller.splitPaneWith(
+        SplitAxis.horizontal,
+        TerminalProfile.commandPrompt,
+      );
       expect(controller.titleForTab(tabId), isNot(contains('(')));
     });
   });

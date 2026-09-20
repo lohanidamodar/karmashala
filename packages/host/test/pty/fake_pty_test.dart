@@ -26,7 +26,9 @@ void main() {
 
     test('write, resize and kill are recorded, not simulated', () {
       final launcher = FakePtyLauncher();
-      final handle = launcher.start(const PtySpawnRequest(argv: ['/bin/sh'])) as FakePtyHandle;
+      final handle =
+          launcher.start(const PtySpawnRequest(argv: ['/bin/sh']))
+              as FakePtyHandle;
 
       handle.write(Uint8List.fromList([1, 2, 3]));
       handle.resize(100, 30);
@@ -39,7 +41,9 @@ void main() {
 
     test('output and exit are driven by the test', () async {
       final launcher = FakePtyLauncher();
-      final handle = launcher.start(const PtySpawnRequest(argv: ['/bin/sh'])) as FakePtyHandle;
+      final handle =
+          launcher.start(const PtySpawnRequest(argv: ['/bin/sh']))
+              as FakePtyHandle;
       final seen = <int>[];
       handle.output.listen(seen.addAll);
 
@@ -52,8 +56,12 @@ void main() {
     });
 
     test('a launcher told to fail refuses instead of starting', () {
-      final launcher = FakePtyLauncher()..failWith = const PtyException('no fork for you');
-      expect(() => launcher.start(const PtySpawnRequest(argv: ['/bin/sh'])), throwsA(isA<PtyException>()));
+      final launcher = FakePtyLauncher()
+        ..failWith = const PtyException('no fork for you');
+      expect(
+        () => launcher.start(const PtySpawnRequest(argv: ['/bin/sh'])),
+        throwsA(isA<PtyException>()),
+      );
       expect(launcher.started, isEmpty);
     });
   });
@@ -77,7 +85,10 @@ void main() {
   });
 
   test('PtyException carries errno when there is one', () {
-    expect(const PtyException('openpty failed', errno: 24).toString(), contains('errno 24'));
+    expect(
+      const PtyException('openpty failed', errno: 24).toString(),
+      contains('errno 24'),
+    );
     expect(const PtyException('nope').toString(), isNot(contains('errno')));
   });
 }

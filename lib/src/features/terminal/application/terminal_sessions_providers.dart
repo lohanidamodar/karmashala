@@ -42,9 +42,7 @@ final workspaceGroupTabsProvider = Provider.autoDispose
 /// The tab group [groupId] is showing, or null while the group is empty.
 final workspaceGroupActiveTabProvider = Provider.autoDispose
     .family<String?, String>((ref, groupId) {
-      ref.watch(
-        terminalSessionsControllerProvider.select((s) => s.workspace),
-      );
+      ref.watch(terminalSessionsControllerProvider.select((s) => s.workspace));
       return ref
           .read(terminalSessionsControllerProvider.notifier)
           .activeTabInGroup(groupId);
@@ -109,26 +107,26 @@ final terminalPaneInstanceProvider = Provider.autoDispose
     });
 
 /// The title of tab [tabId], reactive to session renames and OSC updates.
-final terminalTabTitleProvider = Provider.autoDispose
-    .family<String, String>((ref, tabId) {
-      ref.watch(
-        terminalSessionsControllerProvider.select((s) => s.titleRevision),
-      );
-      return ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .titleForTab(tabId);
-    });
+final terminalTabTitleProvider = Provider.autoDispose.family<String, String>((
+  ref,
+  tabId,
+) {
+  ref.watch(terminalSessionsControllerProvider.select((s) => s.titleRevision));
+  return ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .titleForTab(tabId);
+});
 
 /// The title of pane [paneId], reactive to session renames and OSC updates.
-final terminalPaneTitleProvider = Provider.autoDispose
-    .family<String, String>((ref, paneId) {
-      ref.watch(
-        terminalSessionsControllerProvider.select((s) => s.titleRevision),
-      );
-      return ref
-          .read(terminalSessionsControllerProvider.notifier)
-          .titleForPane(paneId);
-    });
+final terminalPaneTitleProvider = Provider.autoDispose.family<String, String>((
+  ref,
+  paneId,
+) {
+  ref.watch(terminalSessionsControllerProvider.select((s) => s.titleRevision));
+  return ref
+      .read(terminalSessionsControllerProvider.notifier)
+      .titleForPane(paneId);
+});
 
 /// Which face each workspace group's active tab shows, defaulting to the
 /// terminal. **Per group, not per window**: three transcripts must fit at once.

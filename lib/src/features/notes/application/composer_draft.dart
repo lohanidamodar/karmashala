@@ -92,8 +92,7 @@ String sessionOfferMessage(SessionOfferOutcome outcome, String title) =>
     switch (outcome) {
       SessionOfferOutcome.typedIntoTerminal =>
         'Typed into $title’s terminal, unsent.',
-      SessionOfferOutcome.queuedForComposer =>
-        'Sent to $title’s message box.',
+      SessionOfferOutcome.queuedForComposer => 'Sent to $title’s message box.',
       SessionOfferOutcome.waitingForAPane =>
         'Waiting for $title — no terminal is running it.',
     };

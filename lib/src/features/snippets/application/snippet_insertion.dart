@@ -133,7 +133,8 @@ SnippetInsertionResult insertSnippet({
     return SnippetInsertionResult(
       SnippetOutcome.paneNotLive,
       paneId: paneId,
-      message: 'That terminal\'s process has exited; there is nothing to type '
+      message:
+          'That terminal\'s process has exited; there is nothing to type '
           'into.',
     );
   }

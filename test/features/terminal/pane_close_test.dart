@@ -79,16 +79,19 @@ void main() {
     expect(report.outcome, ProcessShutdownOutcome.notObserved);
   });
 
-  test('and releases the console on the far side of the bound, not before it', () async {
-    final pane = closeAnImmortalPane();
-    final report = await pane.close;
+  test(
+    'and releases the console on the far side of the bound, not before it',
+    () async {
+      final pane = closeAnImmortalPane();
+      final report = await pane.close;
 
-    // The kill is what is tried first and the release is what happens after the
-    // wait for it is abandoned. The order is the whole sequence: kill the tree
-    // with the quit's bound, then let go.
-    expect(pane.events, ['kill:SIGTERM', 'release']);
-    expect(report.consoleReleased, isTrue);
-  });
+      // The kill is what is tried first and the release is what happens after the
+      // wait for it is abandoned. The order is the whole sequence: kill the tree
+      // with the quit's bound, then let go.
+      expect(pane.events, ['kill:SIGTERM', 'release']);
+      expect(report.consoleReleased, isTrue);
+    },
+  );
 
   test('the log line says the tree was not seen gone', () async {
     final report = await closeAnImmortalPane().close;
@@ -96,7 +99,10 @@ void main() {
     // §19's rule at the line: the console was released next to a tree nobody
     // watched leave, and the log must not round that up to "reaped". A dump was
     // the only way to answer this question on 2026-09-10.
-    expect(report.summary, 'console released, tree not seen gone within the bound');
+    expect(
+      report.summary,
+      'console released, tree not seen gone within the bound',
+    );
   });
 
   test('a quit that arrives mid-reap still keeps the console', () async {
@@ -122,7 +128,11 @@ void main() {
     quitting = true;
     final report = await close;
 
-    expect(events, isEmpty, reason: 'the OS reclaims it; the quit must not wait');
+    expect(
+      events,
+      isEmpty,
+      reason: 'the OS reclaims it; the quit must not wait',
+    );
     expect(report.consoleReleased, isFalse);
     expect(report.summary, contains('console left to the OS (quit)'));
   });
@@ -172,24 +182,30 @@ void main() {
     expect(report.summary, 'console released, tree already gone');
   });
 
-  test('a kill returning first is not the same evidence as the child going', () async {
-    final report = await closePaneProcess(
-      kill: (_) => true,
-      exitCode: Completer<int>().future,
-      pid: 11,
-      supportsGracefulSignal: false,
-      killTree: (_) async {},
-      treeKillBound: const Duration(days: 1),
-      keepPseudoConsole: () => false,
-      releasePseudoConsole: () {},
-    );
+  test(
+    'a kill returning first is not the same evidence as the child going',
+    () async {
+      final report = await closePaneProcess(
+        kill: (_) => true,
+        exitCode: Completer<int>().future,
+        pid: 11,
+        supportsGracefulSignal: false,
+        killTree: (_) async {},
+        treeKillBound: const Duration(days: 1),
+        keepPseudoConsole: () => false,
+        releasePseudoConsole: () {},
+      );
 
-    // `taskkill` came back, which usually means the tree is gone — and usually
-    // is not observed. The log says which.
-    expect(report.outcome, ProcessShutdownOutcome.killReturned);
-    expect(report.outcome.processGone, isFalse);
-    expect(report.summary, 'console released, kill returned, tree not seen gone');
-  });
+      // `taskkill` came back, which usually means the tree is gone — and usually
+      // is not observed. The log says which.
+      expect(report.outcome, ProcessShutdownOutcome.killReturned);
+      expect(report.outcome.processGone, isFalse);
+      expect(
+        report.summary,
+        'console released, kill returned, tree not seen gone',
+      );
+    },
+  );
 
   test('a release that throws does not fail the close', () async {
     // Tearing down a pane must never throw, and after the plugin fix the

@@ -92,11 +92,7 @@ class _EnvVariableDialogState extends ConsumerState<EnvVariableDialog> {
           secret: _secret,
         );
       } else {
-        await controller.add(
-          name: name,
-          value: _value.text,
-          secret: _secret,
-        );
+        await controller.add(name: name, value: _value.text, secret: _secret);
       }
     } on EnvVaultRefusal catch (refusal) {
       if (!mounted) return;

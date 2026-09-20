@@ -35,9 +35,9 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.antigravity),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.antigravity));
     dao = SessionDao(db);
   });
   tearDown(() => db.close());
@@ -89,28 +89,34 @@ void main() {
   );
 
   group('a name the user typed into the CLI reaches the sidebar', () {
-    test('the reported case: /rename in agy, "New session" in the app', () async {
-      dao.insert(row());
-      final renamed = <String, String>{};
-      final sync = service(
-        () => [found(title: 'test me now')],
-        onRenamed: (id, title) => renamed[id] = title,
-      );
+    test(
+      'the reported case: /rename in agy, "New session" in the app',
+      () async {
+        dao.insert(row());
+        final renamed = <String, String>{};
+        final sync = service(
+          () => [found(title: 'test me now')],
+          onRenamed: (id, title) => renamed[id] = title,
+        );
 
-      expect(await sync.sync(), 1);
-      expect(dao.getById('s1')!.title, 'test me now');
-      expect(renamed, {'s1': 'test me now'});
-    });
+        expect(await sync.sync(), 1);
+        expect(dao.getById('s1')!.title, 'test me now');
+        expect(renamed, {'s1': 'test me now'});
+      },
+    );
 
-    test('it is not an Antigravity rule — Claude Code syncs the same way', () async {
-      dao.insert(row());
-      final sync = service(
-        () => [found(cli: AgentIds.claudeCode, title: 'Fix the crash')],
-      );
+    test(
+      'it is not an Antigravity rule — Claude Code syncs the same way',
+      () async {
+        dao.insert(row());
+        final sync = service(
+          () => [found(cli: AgentIds.claudeCode, title: 'Fix the crash')],
+        );
 
-      expect(await sync.sync(), 1);
-      expect(dao.getById('s1')!.title, 'Fix the crash');
-    });
+        expect(await sync.sync(), 1);
+        expect(dao.getById('s1')!.title, 'Fix the crash');
+      },
+    );
 
     test('the placeholder adoption writes is a placeholder too', () async {
       // `SessionAdoptionService._titleFor` falls back to the agent's display
@@ -262,8 +268,7 @@ void main() {
   });
 
   group('and a rename in the CLI still lands after the app restarts', () {
-    test('the reported case: a second /rename, on a new run of the app',
-        () async {
+    test('the reported case: a second /rename, on a new run of the app', () async {
       // The bug: which titles the app had written was remembered **in memory**,
       // so on the next start every row's title looked like the user's and no
       // further `/rename` was ever copied in. The owner renamed in the CLI, the

@@ -16,8 +16,10 @@ void main() {
   final t10 = DateTime.utc(2026, 8, 31, 10);
   final t11 = DateTime.utc(2026, 8, 31, 11);
 
-  SessionActivityOrder order(SessionLastActive lastActive, DateTime createdAt) =>
-      (lastActive: lastActive, createdAt: createdAt);
+  SessionActivityOrder order(
+    SessionLastActive lastActive,
+    DateTime createdAt,
+  ) => (lastActive: lastActive, createdAt: createdAt);
 
   group('the reading', () {
     test('no reading is unknown, never a zero', () {
@@ -47,8 +49,10 @@ void main() {
 
     test('one reading on its own is that reading', () {
       expect(newestLastActive(agentEvidenceAt: t10).at, t10);
-      expect(newestLastActive(storeModifiedAt: t10).source,
-          LastActiveSource.store);
+      expect(
+        newestLastActive(storeModifiedAt: t10).source,
+        LastActiveSource.store,
+      );
     });
 
     test('it never asks a clock', () {
@@ -63,15 +67,15 @@ void main() {
 
     test('"active 3m ago", in the app\'s own wording', () {
       expect(
-        newestLastActive(agentEvidenceAt: t11).label(
-          t11.add(const Duration(minutes: 3)),
-        ),
+        newestLastActive(
+          agentEvidenceAt: t11,
+        ).label(t11.add(const Duration(minutes: 3))),
         'active 3m ago',
       );
       expect(
-        newestLastActive(agentEvidenceAt: t11).label(
-          t11.add(const Duration(days: 2)),
-        ),
+        newestLastActive(
+          agentEvidenceAt: t11,
+        ).label(t11.add(const Duration(days: 2))),
         'active 2d ago',
       );
       expect(

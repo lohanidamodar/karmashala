@@ -162,11 +162,8 @@ Future<List<TranscriptMessage>> readCliTranscriptOffThread(
   String cli, {
   String? subagentsDirectory,
 }) => Isolate.run(
-  () => readCliTranscript(
-    filePath,
-    cli,
-    subagentsDirectory: subagentsDirectory,
-  ),
+  () =>
+      readCliTranscript(filePath, cli, subagentsDirectory: subagentsDirectory),
 );
 
 Future<List<TranscriptMessage>> readCliTranscript(
@@ -456,7 +453,9 @@ void _parseAntigravityLine(
 /// are prepended to the prompt.
 Object? _cleanAntigravityUserInput(Object? content) {
   if (content is! String) return content;
-  final match = RegExp(r'<USER_REQUEST>([\s\S]*?)</USER_REQUEST>').firstMatch(content);
+  final match = RegExp(
+    r'<USER_REQUEST>([\s\S]*?)</USER_REQUEST>',
+  ).firstMatch(content);
   if (match != null) {
     final extracted = match.group(1)?.trim();
     if (extracted != null && extracted.isNotEmpty) {

@@ -45,12 +45,14 @@ List<RemoteWorkspaceProject> listRemoteWorkspace(Ref ref) {
     final environment = environments[environmentId];
     return environment == null ? null : environmentLabel(environment);
   }
+
   String? badgeOf(String environmentId) {
     final environment = environments[environmentId];
     return environment == null ? null : environmentBadge(environment);
   }
 
-  String? kindOf(String environmentId) => environments[environmentId]?.kind.name;
+  String? kindOf(String environmentId) =>
+      environments[environmentId]?.kind.name;
 
   final out = <RemoteWorkspaceProject>[];
   for (final project in ref.read(sortedProjectsProvider)) {
@@ -113,7 +115,8 @@ Future<RemoteWorkspaceProject> addRemoteProject(
 ) async {
   final trimmedName = name.trim();
   final trimmedPath = path.trim();
-  if (trimmedName.isEmpty || trimmedPath.isEmpty ||
+  if (trimmedName.isEmpty ||
+      trimmedPath.isEmpty ||
       trimmedPath.contains(RegExp(r'[\x00-\x1f\x7f]')) ||
       !p.isAbsolute(trimmedPath)) {
     throw const RemoteApiRefusal(
@@ -144,10 +147,9 @@ Future<RemoteWorkspaceProject> addRemoteProject(
       );
     }
   }
-  final result = await ref.read(projectsControllerProvider.notifier).createByDiscovery(
-    name: trimmedName,
-    path: trimmedPath,
-  );
+  final result = await ref
+      .read(projectsControllerProvider.notifier)
+      .createByDiscovery(name: trimmedName, path: trimmedPath);
   final createdEnv = envDao.getById(result.project.environmentId);
   return RemoteWorkspaceProject(
     projectId: result.project.id,
@@ -186,7 +188,10 @@ Future<String> canonicalRemoteProjectPath(String path) async {
   }
   final directory = Directory(trimmed);
   if (!await directory.exists()) {
-    throw const RemoteApiRefusal(ErrorCode.notFound, 'that desktop folder does not exist');
+    throw const RemoteApiRefusal(
+      ErrorCode.notFound,
+      'that desktop folder does not exist',
+    );
   }
   final canonical = (await directory.resolveSymbolicLinks()).trim();
   // A local-looking junction can resolve onto a UNC/network target, so the

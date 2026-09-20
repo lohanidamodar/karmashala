@@ -144,8 +144,7 @@ void main() {
       );
     });
 
-    test('an unanswered interaction stays a fault until the picture answers',
-        () {
+    test('an unanswered interaction stays a fault until the picture answers', () {
       // Deliberately not aged out: once reconnection has given up, this verdict
       // is the only thing holding the restart button on screen.
       final verdict = _judge(
@@ -162,8 +161,10 @@ void main() {
     test('an answered touch never reaches the rule', () {
       // Frames arriving is what "answered" means, and it is checked first.
       expect(
-        _judge(sinceInput: const Duration(seconds: 5), unansweredInputs: 9)
-            ?.state,
+        _judge(
+          sinceInput: const Duration(seconds: 5),
+          unansweredInputs: 9,
+        )?.state,
         DeviceStreamState.live,
       );
     });

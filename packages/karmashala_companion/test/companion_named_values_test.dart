@@ -77,7 +77,9 @@ void main() {
       home: const ConnectionsSection(),
     );
     final badge = tester.widget<Container>(
-      find.ancestor(of: find.text('Active'), matching: find.byType(Container)).first,
+      find
+          .ancestor(of: find.text('Active'), matching: find.byType(Container))
+          .first,
     );
     expect(
       badge.padding,

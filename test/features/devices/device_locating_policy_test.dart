@@ -9,12 +9,12 @@ import 'package:flutter_test/flutter_test.dart';
 /// stated in a file nothing reads is the thing this change exists to stop.
 
 /// The description `tools/list` serves for [name].
-String _description(String name) => LauncherControlServer.toolSchemas
-    .firstWhere(
-      (schema) => schema['name'] == name,
-      orElse: () => throw StateError('no schema for $name'),
-    )['description']!
-    as String;
+String _description(String name) =>
+    LauncherControlServer.toolSchemas.firstWhere(
+          (schema) => schema['name'] == name,
+          orElse: () => throw StateError('no schema for $name'),
+        )['description']!
+        as String;
 
 void main() {
   group('the policy is on the tools it governs', () {

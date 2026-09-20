@@ -29,11 +29,7 @@ class VideoAccessUnit {
 /// A running video feed from one simulator. A **URL**, not a frame stream:
 /// muxing is the backend's business, and frames here would push it into the pane.
 class SimulatorVideoFeed {
-  const SimulatorVideoFeed({
-    required this.url,
-    required this.stop,
-    this.size,
-  });
+  const SimulatorVideoFeed({required this.url, required this.stop, this.size});
 
   /// What the video player opens. Loopback, always.
   final Uri url;
@@ -57,8 +53,7 @@ class SimulatorScreen {
   final DeviceScreenSize? pixels;
 
   /// How many pixels to a point, or null when the pixel size is unknown.
-  double? get scale =>
-      pixels == null ? null : pixels!.width / points.width;
+  double? get scale => pixels == null ? null : pixels!.width / points.width;
 }
 
 /// A hardware button, in the vocabulary iOS actually has. [forDeviceKey] is
@@ -138,11 +133,7 @@ abstract interface class SimulatorBackend {
   /// The screen's two sizes, or null when this backend cannot say.
   Future<SimulatorScreen?> screen(String udid);
 
-  Future<SimulatorVideoFeed> startVideo(
-    String udid, {
-    int fps,
-    double? scale,
-  });
+  Future<SimulatorVideoFeed> startVideo(String udid, {int fps, double? scale});
 
   /// Taps a point **in points**, not pixels. See [SimulatorScreen].
   Future<void> tap(String udid, int x, int y);

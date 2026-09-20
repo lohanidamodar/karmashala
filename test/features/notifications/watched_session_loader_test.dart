@@ -121,64 +121,61 @@ void main() {
     final tally = _Tally();
     final subject = loader();
 
-    await IOOverrides.runZoned(
-      () async {
-        subject.load();
-        await subject.settle();
-        subject.load();
-      },
-      createFile: (path) => _CountingFile(path, tally),
-    );
+    await IOOverrides.runZoned(() async {
+      subject.load();
+      await subject.settle();
+      subject.load();
+    }, createFile: (path) => _CountingFile(path, tally));
 
     expect(tally.sync, 0, reason: 'a synchronous stat is a blocked frame');
     expect(tally.async, greaterThanOrEqualTo(60));
   });
 
-  test('the cold recheck is spread across its window, not paid in one cycle', () async {
-    // The other half of the hitch. Every cold transcript used to be found cold
-    // in the same cycle and given the same deadline, so a minute later they all
-    // came due at once: fifty-nine free ticks and then one that swept the whole
-    // workspace. Spreading the deadlines turns that burst into a hum.
-    const count = 100;
-    for (var i = 0; i < count; i++) {
-      addImported(
-        'i$i',
-        externalId: 'cli-$i',
-        filePath: transcript('t$i', age: const Duration(hours: 6)),
+  test(
+    'the cold recheck is spread across its window, not paid in one cycle',
+    () async {
+      // The other half of the hitch. Every cold transcript used to be found cold
+      // in the same cycle and given the same deadline, so a minute later they all
+      // came due at once: fifty-nine free ticks and then one that swept the whole
+      // workspace. Spreading the deadlines turns that burst into a hum.
+      const count = 100;
+      for (var i = 0; i < count; i++) {
+        addImported(
+          'i$i',
+          externalId: 'cli-$i',
+          filePath: transcript('t$i', age: const Duration(hours: 6)),
+        );
+      }
+      final clock = _MovableClock(testTime);
+      final subject = WatchedSessionLoader(
+        sessionDao: sessions,
+        importedSessionDao: imported,
+        installationDao: installations,
+        hookReports: reports,
+        clock: clock,
+        coldRecheck: const Duration(minutes: 1),
       );
-    }
-    final clock = _MovableClock(testTime);
-    final subject = WatchedSessionLoader(
-      sessionDao: sessions,
-      importedSessionDao: imported,
-      installationDao: installations,
-      hookReports: reports,
-      clock: clock,
-      coldRecheck: const Duration(minutes: 1),
-    );
-    await settled(subject);
+      await settled(subject);
 
-    // Two recheck windows at the real status-cycle rate.
-    var worst = 0;
-    for (var i = 0; i < 100; i++) {
-      clock.now = clock.now.add(const Duration(milliseconds: 1200));
-      final tally = _Tally();
-      await IOOverrides.runZoned(
-        () async {
+      // Two recheck windows at the real status-cycle rate.
+      var worst = 0;
+      for (var i = 0; i < 100; i++) {
+        clock.now = clock.now.add(const Duration(milliseconds: 1200));
+        final tally = _Tally();
+        await IOOverrides.runZoned(() async {
           subject.load();
           await subject.settle();
-        },
-        createFile: (path) => _CountingFile(path, tally),
-      );
-      if (tally.async > worst) worst = tally.async;
-    }
+        }, createFile: (path) => _CountingFile(path, tally));
+        if (tally.async > worst) worst = tally.async;
+      }
 
-    expect(
-      worst,
-      lessThan(count ~/ 4),
-      reason: 'no single cycle may re-read a quarter of the workspace',
-    );
-  });
+      expect(
+        worst,
+        lessThan(count ~/ 4),
+        reason: 'no single cycle may re-read a quarter of the workspace',
+      );
+    },
+  );
 
   test('a transcript that changed recently is watched', () async {
     addImported(
@@ -238,10 +235,7 @@ void main() {
 
   test('a native session with a CLI id is watched', () async {
     sessions.insert(
-      session(id: 's1').copyWith(
-        externalSessionId: 'cli-9',
-        paneId: 'pane-9',
-      ),
+      session(id: 's1').copyWith(externalSessionId: 'cli-9', paneId: 'pane-9'),
     );
 
     final watched = await settled(loader());
@@ -363,18 +357,15 @@ void main() {
       final watched = await settled(loader());
 
       expect(watched, hasLength(count));
-      expect(
-        watched.map((s) => s.key.sessionId).toSet(),
-        {for (var i = 0; i < count; i++) 'cli-$i'},
-      );
+      expect(watched.map((s) => s.key.sessionId).toSet(), {
+        for (var i = 0; i < count; i++) 'cli-$i',
+      });
     });
   }
 
   test('every native session is watched however many there are', () async {
     for (var i = 0; i < 200; i++) {
-      sessions.insert(
-        session(id: 's$i').copyWith(externalSessionId: 'cli-$i'),
-      );
+      sessions.insert(session(id: 's$i').copyWith(externalSessionId: 'cli-$i'));
     }
 
     final watched = await settled(loader());

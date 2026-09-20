@@ -29,8 +29,7 @@ void main() {
   File configToml() => File(p.join(storeHome(), 'config.toml'));
   File posixScript() => File(p.join(storeHome(), '$agentHookMarker.sh'));
   File windowsScript() => File(p.join(storeHome(), '$agentHookMarker.cmd'));
-  File endpointFile() =>
-      File(p.join(storeHome(), '$agentHookMarker.endpoint'));
+  File endpointFile() => File(p.join(storeHome(), '$agentHookMarker.endpoint'));
 
   setUp(() {
     home = Directory.systemTemp.createTempSync('karmashala_codexhook_');
@@ -123,7 +122,10 @@ args = ["blender-mcp"]
       // this session" fires `PermissionRequest` every time and prompts nobody.
       // Claiming `awaitingApproval` from it would put an ordinary working
       // session in the attention inbox.
-      expect(codex.hooks!.eventStatus.containsKey('PermissionRequest'), isFalse);
+      expect(
+        codex.hooks!.eventStatus.containsKey('PermissionRequest'),
+        isFalse,
+      );
     });
   });
 
@@ -338,10 +340,7 @@ args = ["blender-mcp"]
       expect(preToolUse, hasLength(2));
       final theirs = (preToolUse.first as Map).cast<String, Object?>();
       expect(theirs['matcher'], 'shell');
-      expect(
-        ((theirs['hooks']! as List).single as Map)['timeout'],
-        5,
-      );
+      expect(((theirs['hooks']! as List).single as Map)['timeout'], 5);
       expect(
         revealHookCommands(handlersFor('PreToolUse').last['command']),
         contains(agentHookMarker),
@@ -371,45 +370,48 @@ args = ["blender-mcp"]
       expect(configToml().readAsStringSync(), ownerShapedConfigToml);
     });
 
-    test('rewrites the endpoint file for a new port, and nothing else', () async {
-      hooksFile().writeAsStringSync(
-        jsonEncode({
-          'hooks': {
-            'Stop': [
-              {
-                'hooks': [
-                  {'type': 'command', 'command': 'mine.sh'},
-                ],
-              },
-            ],
-          },
-        }),
-      );
-      await installer.install(
-        descriptor: codex,
-        storeHome: storeHome(),
-        endpoint: endpoint,
-        environment: EnvironmentKind.localPosix,
-      );
-      final afterFirst = hooksFile().readAsStringSync();
+    test(
+      'rewrites the endpoint file for a new port, and nothing else',
+      () async {
+        hooksFile().writeAsStringSync(
+          jsonEncode({
+            'hooks': {
+              'Stop': [
+                {
+                  'hooks': [
+                    {'type': 'command', 'command': 'mine.sh'},
+                  ],
+                },
+              ],
+            },
+          }),
+        );
+        await installer.install(
+          descriptor: codex,
+          storeHome: storeHome(),
+          endpoint: endpoint,
+          environment: EnvironmentKind.localPosix,
+        );
+        final afterFirst = hooksFile().readAsStringSync();
 
-      final installed = await installer.install(
-        descriptor: codex,
-        storeHome: storeHome(),
-        endpoint: const AgentHookEndpoint(port: 5555, token: 'tok-2'),
-        environment: EnvironmentKind.localPosix,
-      );
+        final installed = await installer.install(
+          descriptor: codex,
+          storeHome: storeHome(),
+          endpoint: const AgentHookEndpoint(port: 5555, token: 'tok-2'),
+          environment: EnvironmentKind.localPosix,
+        );
 
-      expect(installed, isTrue);
-      // The config is untouched — which is the property the trust grant
-      // survives on — and so is the script, because it is a constant. One file
-      // changed, and it is the one nothing else on the machine reads.
-      expect(hooksFile().readAsStringSync(), afterFirst);
-      expect(posixScript().readAsStringSync(), isNot(contains('5555')));
-      expect(endpointFile().readAsStringSync(), contains('127.0.0.1:5555'));
-      expect(endpointFile().readAsStringSync(), isNot(contains('4242')));
-      expect(handlersFor('Stop').first['command'], 'mine.sh');
-    });
+        expect(installed, isTrue);
+        // The config is untouched — which is the property the trust grant
+        // survives on — and so is the script, because it is a constant. One file
+        // changed, and it is the one nothing else on the machine reads.
+        expect(hooksFile().readAsStringSync(), afterFirst);
+        expect(posixScript().readAsStringSync(), isNot(contains('5555')));
+        expect(endpointFile().readAsStringSync(), contains('127.0.0.1:5555'));
+        expect(endpointFile().readAsStringSync(), isNot(contains('4242')));
+        expect(handlersFor('Stop').first['command'], 'mine.sh');
+      },
+    );
 
     test('is refused for an environment it cannot report from', () async {
       final installed = await installer.install(
@@ -449,25 +451,28 @@ args = ["blender-mcp"]
       expect(script.trimRight(), endsWith('exit 0'));
     });
 
-    test('is a cmd batch file on Windows, and a shell script elsewhere', () async {
-      await installer.install(
-        descriptor: codex,
-        storeHome: storeHome(),
-        endpoint: endpoint,
-        environment: EnvironmentKind.windowsNative,
-      );
+    test(
+      'is a cmd batch file on Windows, and a shell script elsewhere',
+      () async {
+        await installer.install(
+          descriptor: codex,
+          storeHome: storeHome(),
+          endpoint: endpoint,
+          environment: EnvironmentKind.windowsNative,
+        );
 
-      expect(posixScript().existsSync(), isFalse);
-      final script = windowsScript().readAsStringSync();
-      expect(script, startsWith('@echo off\r\n'));
-      expect(script, contains('-o NUL'));
-      // The event is still the script's one argument; what moved is the URL it
-      // is appended to, which now comes out of the endpoint file.
-      expect(script, contains(r'"%KS_URL%%~1"'));
-      expect(script.trimRight(), endsWith('exit /b 0'));
-      // CRLF for the batch file, and CRLF for the file `for /f` reads.
-      expect(endpointFile().readAsStringSync(), contains('\r\n'));
-    });
+        expect(posixScript().existsSync(), isFalse);
+        final script = windowsScript().readAsStringSync();
+        expect(script, startsWith('@echo off\r\n'));
+        expect(script, contains('-o NUL'));
+        // The event is still the script's one argument; what moved is the URL it
+        // is appended to, which now comes out of the endpoint file.
+        expect(script, contains(r'"%KS_URL%%~1"'));
+        expect(script.trimRight(), endsWith('exit /b 0'));
+        // CRLF for the batch file, and CRLF for the file `for /f` reads.
+        expect(endpointFile().readAsStringSync(), contains('\r\n'));
+      },
+    );
   });
 
   group('uninstalling', () {

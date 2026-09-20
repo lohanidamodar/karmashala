@@ -268,9 +268,9 @@ void main() {
       // no caret, nothing to click, and no way to say that the clone inside it
       // was simply never scanned for. A list of one is worth opening when the
       // thing under it is Rescan.
-      RepositoryDao(db).insert(
-        repository(id: 'hub', name: 'demo', path: hubPath),
-      );
+      RepositoryDao(
+        db,
+      ).insert(repository(id: 'hub', name: 'demo', path: hubPath));
       final container = makeContainer();
       container.read(selectedRepositoryIdProvider.notifier).select('hub');
       await pump(tester, container);
@@ -362,7 +362,9 @@ void main() {
 
       // A rescan rebuilds every provider the line reads; the pick survives it.
       discovery.result = const [];
-      await container.read(projectsControllerProvider.notifier).rediscover('p1');
+      await container
+          .read(projectsControllerProvider.notifier)
+          .rediscover('p1');
       await tester.pumpAndSettle();
       expect(container.read(selectedRepositoryIdProvider), 'relay');
 
@@ -467,9 +469,9 @@ void main() {
 
   test('the picker only ever offers checkouts of one project', () {
     // Offering another project's clones would move the Explorer under the user.
-    ProjectDao(db).insert(
-      project(id: 'p2', name: 'Other', path: r'C:\src\other'),
-    );
+    ProjectDao(
+      db,
+    ).insert(project(id: 'p2', name: 'Other', path: r'C:\src\other'));
     insertAllCheckouts();
     RepositoryDao(db).insert(
       repository(
@@ -482,10 +484,9 @@ void main() {
     final container = makeContainer();
     container.read(selectedRepositoryIdProvider.notifier).select('other');
 
-    expect(
-      container.read(projectCheckoutsProvider).map((r) => r.id),
-      ['other'],
-    );
+    expect(container.read(projectCheckoutsProvider).map((r) => r.id), [
+      'other',
+    ]);
   });
 
   testWidgets('a worktree chip selects the checkout it names', (tester) async {

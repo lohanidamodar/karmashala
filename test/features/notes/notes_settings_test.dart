@@ -37,9 +37,9 @@ void main() {
       );
       addTearDown(container.dispose);
 
-      container.read(settingsControllerProvider.notifier).setNotesEnabled(
-        false,
-      );
+      container
+          .read(settingsControllerProvider.notifier)
+          .setNotesEnabled(false);
 
       expect(container.read(notesEnabledProvider), isFalse);
       expect(SettingsRepository(db).load().notesEnabled, isFalse);
@@ -67,10 +67,7 @@ void main() {
 
     test('closes the surface if it is open, rather than leaving a body', () {
       expect(
-        SidePanelSurface.notes.isOffered(
-          debugMode: true,
-          notesEnabled: false,
-        ),
+        SidePanelSurface.notes.isOffered(debugMode: true, notesEnabled: false),
         isFalse,
       );
       expect(
@@ -93,9 +90,9 @@ void main() {
           .read(notesProvider.notifier)
           .capture(body: 'an idea worth keeping');
 
-      container.read(settingsControllerProvider.notifier).setNotesEnabled(
-        false,
-      );
+      container
+          .read(settingsControllerProvider.notifier)
+          .setNotesEnabled(false);
 
       // Hidden everywhere it was offered…
       expect(container.read(notesEnabledProvider), isFalse);
@@ -140,8 +137,10 @@ void main() {
 
       expect(find.byType(NotesSettingsSection), findsOneWidget);
       // The page answers the question the switch raises before it is touched.
-      expect(find.textContaining('Nothing you have saved is deleted'),
-          findsOneWidget);
+      expect(
+        find.textContaining('Nothing you have saved is deleted'),
+        findsOneWidget,
+      );
 
       await tester.tap(find.text('Notes').last);
       await tester.pump();

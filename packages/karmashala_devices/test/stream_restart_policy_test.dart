@@ -23,7 +23,8 @@ void main() {
       final policy = StreamRestartPolicy();
       expect(policy.onHealth(_health(_idle), t0).action, StreamRecovery.none);
       expect(
-        policy.onHealth(_health(_idle), t0.add(const Duration(minutes: 5)))
+        policy
+            .onHealth(_health(_idle), t0.add(const Duration(minutes: 5)))
             .action,
         StreamRecovery.none,
       );
@@ -34,20 +35,14 @@ void main() {
       // Nothing is torn down for this: no process, no forward, no socket, no
       // player. The user sees the picture resume.
       final policy = StreamRestartPolicy();
-      final step = policy.onHealth(
-        _health(_stalled),
-        t0,
-        canResetVideo: true,
-      );
+      final step = policy.onHealth(_health(_stalled), t0, canResetVideo: true);
       expect(step.action, StreamRecovery.resetVideo);
       expect(step.delay, Duration.zero, reason: 'the cheap rungs do not wait');
       expect(policy.attempt, 0, reason: 'no restart has been spent');
     });
 
     test('the ladder climbs only when the rung below did not work', () {
-      final policy = StreamRestartPolicy(
-        stepGrace: const Duration(seconds: 2),
-      );
+      final policy = StreamRestartPolicy(stepGrace: const Duration(seconds: 2));
       var now = t0;
       expect(
         policy.onHealth(_health(_stalled), now, canResetVideo: true).action,
@@ -73,9 +68,7 @@ void main() {
     test('a rung is given its moment before the next one is taken', () {
       // The watchdog re-reports a fault every second; without this the whole
       // ladder would be climbed in three ticks.
-      final policy = StreamRestartPolicy(
-        stepGrace: const Duration(seconds: 2),
-      );
+      final policy = StreamRestartPolicy(stepGrace: const Duration(seconds: 2));
       expect(
         policy.onHealth(_health(_stalled), t0, canResetVideo: true).action,
         StreamRecovery.resetVideo,
@@ -106,11 +99,7 @@ void main() {
       // Nothing downstream can be re-attached to a socket that closed, and
       // there is nobody left to ask for a keyframe.
       final policy = StreamRestartPolicy();
-      final step = policy.onHealth(
-        _health(_ended),
-        t0,
-        canResetVideo: true,
-      );
+      final step = policy.onHealth(_health(_ended), t0, canResetVideo: true);
       expect(step.action, StreamRecovery.restart);
       expect(step.delay, kStreamReconnectBackoff.first);
     });
@@ -125,7 +114,10 @@ void main() {
         now = now.add(const Duration(seconds: 12));
         // Every restart works for a moment before failing again — which is
         // exactly what the flat eleven-second loop looked like.
-        expect(policy.onHealth(_health(_live), now).action, StreamRecovery.none);
+        expect(
+          policy.onHealth(_health(_live), now).action,
+          StreamRecovery.none,
+        );
         now = now.add(const Duration(seconds: 2));
       }
       expect(policy.isExhausted, isTrue);
@@ -143,12 +135,14 @@ void main() {
         const Duration(seconds: 1),
       );
       expect(
-        policy.onHealth(_health(_live), t0.add(const Duration(seconds: 5)))
+        policy
+            .onHealth(_health(_live), t0.add(const Duration(seconds: 5)))
             .action,
         StreamRecovery.none,
       );
       expect(
-        policy.onHealth(_health(_ended), t0.add(const Duration(seconds: 11)))
+        policy
+            .onHealth(_health(_ended), t0.add(const Duration(seconds: 11)))
             .delay,
         const Duration(seconds: 2),
         reason: 'six seconds of health is not a recovery',
@@ -164,7 +158,8 @@ void main() {
         StreamRecovery.resetVideo,
       );
       expect(
-        policy.onHealth(_health(_live), t0.add(const Duration(seconds: 5)))
+        policy
+            .onHealth(_health(_live), t0.add(const Duration(seconds: 5)))
             .action,
         StreamRecovery.none,
       );
@@ -187,14 +182,19 @@ void main() {
       final policy = StreamRestartPolicy(
         settleAfter: const Duration(seconds: 60),
       );
-      expect(policy.onHealth(_health(_ended), t0).action, StreamRecovery.restart);
       expect(
-        policy.onHealth(_health(_idle), t0.add(const Duration(seconds: 5)))
+        policy.onHealth(_health(_ended), t0).action,
+        StreamRecovery.restart,
+      );
+      expect(
+        policy
+            .onHealth(_health(_idle), t0.add(const Duration(seconds: 5)))
             .action,
         StreamRecovery.none,
       );
       expect(
-        policy.onHealth(_health(_ended), t0.add(const Duration(minutes: 2)))
+        policy
+            .onHealth(_health(_ended), t0.add(const Duration(minutes: 2)))
             .delay,
         kStreamReconnectBackoff.first,
       );

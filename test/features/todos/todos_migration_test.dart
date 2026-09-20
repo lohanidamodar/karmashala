@@ -79,7 +79,11 @@ void main() {
       final column = db
           .select('PRAGMA table_info($table);')
           .firstWhere((r) => r['name'] == 'project_id');
-      expect(column['notnull'], 0, reason: '$table.project_id must be nullable');
+      expect(
+        column['notnull'],
+        0,
+        reason: '$table.project_id must be nullable',
+      );
       expect(column['dflt_value'], isNull);
     }
   });

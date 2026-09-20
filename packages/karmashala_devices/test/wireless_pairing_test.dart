@@ -137,10 +137,7 @@ void main() {
       expect(scan.ofType(kAdbConnectServiceType).single.port, 5555);
       expect(
         scan
-            .find(
-              type: kAdbPairingServiceType,
-              name: 'karmashala-A1B2C3D4',
-            )
+            .find(type: kAdbPairingServiceType, name: 'karmashala-A1B2C3D4')
             ?.port,
         41733,
       );
@@ -149,10 +146,7 @@ void main() {
         isNull,
         reason: 'the name alone would find the pairing port here',
       );
-      expect(
-        scan.find(type: kAdbPairingServiceType, name: 'nobody'),
-        isNull,
-      );
+      expect(scan.find(type: kAdbPairingServiceType, name: 'nobody'), isNull);
     });
 
     test('a trailing dot on the service type still matches', () {
@@ -287,10 +281,7 @@ void main() {
           stderr: '',
         ),
       );
-      expect(
-        (result as AdbPairRefused).cause,
-        AdbPairFailure.malformedAddress,
-      );
+      expect((result as AdbPairRefused).cause, AdbPairFailure.malformedAddress);
     });
 
     test('a missing code is its own failure', () {

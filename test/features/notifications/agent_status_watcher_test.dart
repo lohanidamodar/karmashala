@@ -291,32 +291,35 @@ void main() {
     expect(attention, hasLength(1));
   });
 
-  test('a native session with nothing but a screen still reaches the tray', () async {
-    // The audit's P2: the ambient watcher built its queries from agent id,
-    // session id and an optional state path, so a native session — which has no
-    // state path — could only ever be answered by a hook, and read `unknown`
-    // once one went stale. Consolidating on the registry gave the watcher the
-    // same terminal grid the per-card badge had been reading all along, one row
-    // away. This is that, at the pipeline's own level.
-    const native = WatchedSession(
-      key: AgentSessionKey(AgentIds.claudeCode, 'row-native'),
-      label: 'Rename the button',
-      openId: 'row-native',
-      imported: false,
-    );
-    watched = [native];
-    readTail = (_) => const ['  esc to interrupt  '];
-    final watcher = build();
+  test(
+    'a native session with nothing but a screen still reaches the tray',
+    () async {
+      // The audit's P2: the ambient watcher built its queries from agent id,
+      // session id and an optional state path, so a native session — which has no
+      // state path — could only ever be answered by a hook, and read `unknown`
+      // once one went stale. Consolidating on the registry gave the watcher the
+      // same terminal grid the per-card badge had been reading all along, one row
+      // away. This is that, at the pipeline's own level.
+      const native = WatchedSession(
+        key: AgentSessionKey(AgentIds.claudeCode, 'row-native'),
+        label: 'Rename the button',
+        openId: 'row-native',
+        imported: false,
+      );
+      watched = [native];
+      readTail = (_) => const ['  esc to interrupt  '];
+      final watcher = build();
 
-    await watcher.poll();
-    expect(watcher.lastStatusOf(native.key), AgentActivityStatus.working);
+      await watcher.poll();
+      expect(watcher.lastStatusOf(native.key), AgentActivityStatus.working);
 
-    readTail = (_) => const ['  Enter to confirm  '];
-    await watcher.poll();
+      readTail = (_) => const ['  Enter to confirm  '];
+      await watcher.poll();
 
-    expect(attention.single.menuLabel, 'Rename the button — needs approval');
-    expect(notified.single.reason, NotificationReason.needsInput);
-  });
+      expect(attention.single.menuLabel, 'Rename the button — needs approval');
+      expect(notified.single.reason, NotificationReason.needsInput);
+    },
+  );
 
   group('hooks are the primary path', () {
     /// One hook callback, delivered the way `/agent-hook` delivers it: recorded
@@ -356,30 +359,31 @@ void main() {
       expect(inboxUpdates.last.news.single.reason, NotificationReason.finished);
     });
 
-    test('an approval request is delivered without waiting for a poll', () async {
-      final watcher = build();
-      await hookArrives('PreToolUse');
-      await watcher.poll();
-      expect(notified, isEmpty, reason: 'starting work is not news');
+    test(
+      'an approval request is delivered without waiting for a poll',
+      () async {
+        final watcher = build();
+        await hookArrives('PreToolUse');
+        await watcher.poll();
+        expect(notified, isEmpty, reason: 'starting work is not news');
 
-      final polls = inboxUpdates.length;
-      await hookArrives('Notification');
+        final polls = inboxUpdates.length;
+        await hookArrives('Notification');
 
-      expect(
-        notified.single.reason,
-        NotificationReason.needsInput,
-        reason: 'the toast pipeline heard it as the callback landed',
-      );
-      expect(attention.single.kind, AttentionKind.needsInput);
-      expect(inboxUpdates.length, polls + 1);
-      expect(inboxUpdates.last.waiting.single.kind, AttentionKind.needsInput);
-      expect(
-        inboxUpdates.last.watched,
-        {key},
-        reason: 'a hook pass looked at one session and says so',
-      );
-      expect(watcher.lastStatusOf(key), AgentActivityStatus.awaitingApproval);
-    });
+        expect(
+          notified.single.reason,
+          NotificationReason.needsInput,
+          reason: 'the toast pipeline heard it as the callback landed',
+        );
+        expect(attention.single.kind, AttentionKind.needsInput);
+        expect(inboxUpdates.length, polls + 1);
+        expect(inboxUpdates.last.waiting.single.kind, AttentionKind.needsInput);
+        expect(inboxUpdates.last.watched, {
+          key,
+        }, reason: 'a hook pass looked at one session and says so');
+        expect(watcher.lastStatusOf(key), AgentActivityStatus.awaitingApproval);
+      },
+    );
 
     test('the poll that follows does not report it a second time', () async {
       final watcher = build();

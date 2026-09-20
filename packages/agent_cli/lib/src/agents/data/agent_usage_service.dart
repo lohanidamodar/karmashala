@@ -292,8 +292,8 @@ class AgentUsageService {
       AgentIds.codex => _fetchCodex(store, ctx),
       AgentIds.antigravity => _fetchAntigravity(store, ctx),
       _ => throw UsageException(
-          'Usage is not available for ${AgentRegistry.builtIn.displayNameFor(agentId)}.',
-        ),
+        'Usage is not available for ${AgentRegistry.builtIn.displayNameFor(agentId)}.',
+      ),
     };
   }
 
@@ -437,7 +437,8 @@ class AgentUsageService {
       }
     }
 
-    String? email = _emailFromJwt(auth?['id_token'] as String?) ??
+    String? email =
+        _emailFromJwt(auth?['id_token'] as String?) ??
         _emailFromJwt(
           tokenObj is Map<String, dynamic>
               ? tokenObj['id_token'] as String?
@@ -454,11 +455,10 @@ class AgentUsageService {
       }
     }
 
-    final json = await _postJson(
-      _googleCodeAssistUrl,
-      {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-      const {},
-    );
+    final json = await _postJson(_googleCodeAssistUrl, {
+      'Authorization': 'Bearer $token',
+      'Content-Type': 'application/json',
+    }, const {});
 
     return parseAntigravityUsage(
       json,

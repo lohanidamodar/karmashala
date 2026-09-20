@@ -81,7 +81,10 @@ class FakeVmService {
       _send(<String, Object?>{
         'jsonrpc': '2.0',
         'id': id,
-        'error': <String, Object?>{'code': result.code, 'message': result.message},
+        'error': <String, Object?>{
+          'code': result.code,
+          'message': result.message,
+        },
       });
       return;
     }
@@ -107,8 +110,10 @@ class FakeVmService {
           refuseStreams.contains(params['streamId'])
               ? const FakeRpcError(114, 'Stream not supported')
               : const <String, Object?>{'type': 'Success'},
-        'ext.flutter.inspector.isWidgetCreationTracked' =>
-          <String, Object?>{'type': '_extensionType', 'result': true},
+        'ext.flutter.inspector.isWidgetCreationTracked' => <String, Object?>{
+          'type': '_extensionType',
+          'result': true,
+        },
         'ext.flutter.inspector.show' => <String, Object?>{
           'type': '_extensionType',
           'enabled': params['enabled'],
@@ -133,16 +138,15 @@ class FakeVmService {
 
   /// Pushes one event on [streamId]. [event] needs a `kind` and whatever
   /// fields that kind carries.
-  void emit(String streamId, Map<String, Object?> event) => _send(
-    <String, Object?>{
-      'jsonrpc': '2.0',
-      'method': 'streamNotify',
-      'params': <String, Object?>{
-        'streamId': streamId,
-        'event': <String, Object?>{'type': 'Event', ...event},
-      },
-    },
-  );
+  void emit(String streamId, Map<String, Object?> event) =>
+      _send(<String, Object?>{
+        'jsonrpc': '2.0',
+        'method': 'streamNotify',
+        'params': <String, Object?>{
+          'streamId': streamId,
+          'event': <String, Object?>{'type': 'Event', ...event},
+        },
+      });
 
   void emitStdout(String text, {DateTime? at, bool stderr = false}) => emit(
     stderr ? EventStreams.kStderr : EventStreams.kStdout,
@@ -239,7 +243,9 @@ class FakeVmService {
 /// describes the far end's reply instead of our own call site failing.
 class FakeRpcError {
   const FakeRpcError(this.code, this.message);
-  const FakeRpcError.methodNotFound() : code = -32601, message = 'Method not found';
+  const FakeRpcError.methodNotFound()
+    : code = -32601,
+      message = 'Method not found';
   final int code;
   final String message;
 }

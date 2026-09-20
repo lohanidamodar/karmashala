@@ -82,7 +82,9 @@ final conversationPresenceSweepProvider =
 
         final List<CliStore> stores;
         try {
-          final environments = ref.read(executionEnvironmentDaoProvider).getAll();
+          final environments = ref
+              .read(executionEnvironmentDaoProvider)
+              .getAll();
           stores = await ref.read(cliStoreLocatorProvider).locate(environments);
         } on Object {
           // We could not even find out where to look. Nothing read, so nothing

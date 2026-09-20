@@ -29,9 +29,9 @@ void main() {
   FakeVmService serve(String wsUri) =>
       reachable[wsUri] = FakeVmService(selectedWidget: null);
 
-  void writeUriFile(String name, String wsUri) =>
-      File('${temp.path}${Platform.pathSeparator}$name')
-          .writeAsStringSync(wsUri);
+  void writeUriFile(String name, String wsUri) => File(
+    '${temp.path}${Platform.pathSeparator}$name',
+  ).writeAsStringSync(wsUri);
 
   Future<ProviderContainer> pump(WidgetTester tester) async {
     tester.view
@@ -187,7 +187,10 @@ void main() {
     writeUriFile('pixel.uri', phone);
     await pump(tester);
 
-    expect(find.text('2 Flutter apps attached.  ·  checked just now'), findsOneWidget);
+    expect(
+      find.text('2 Flutter apps attached.  ·  checked just now'),
+      findsOneWidget,
+    );
     expect(find.text('windows'), findsOneWidget);
     expect(find.text('pixel'), findsOneWidget);
     // Each row says where it was found and how old that reading is.
@@ -202,8 +205,8 @@ void main() {
   ) async {
     const uri = 'ws://127.0.0.1:1/a=/ws';
     final fake = serve(uri);
-    fake.handlers['ext.flutter.inspector.isWidgetCreationTracked'] =
-        (_) => <String, Object?>{'type': '_extensionType', 'result': false};
+    fake.handlers['ext.flutter.inspector.isWidgetCreationTracked'] = (_) =>
+        <String, Object?>{'type': '_extensionType', 'result': false};
     writeUriFile('release.uri', uri);
     await pump(tester);
 

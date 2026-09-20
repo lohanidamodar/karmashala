@@ -155,7 +155,9 @@ final sessionOutstandingCallsProvider = Provider.autoDispose
       // The one word the rule turns on: `AgentStatusReport` has no value
       // equality, so selecting the report itself would rebuild every 1.2 s.
       final status = ref.watch(
-        agentSessionStatusProvider(sessionId).select((r) => r.asData?.value.status),
+        agentSessionStatusProvider(
+          sessionId,
+        ).select((r) => r.asData?.value.status),
       );
       final working =
           !_isOver(row.status) && status == AgentActivityStatus.working;

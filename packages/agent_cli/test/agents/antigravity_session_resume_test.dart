@@ -135,7 +135,10 @@ void main() {
   group('what the store recorded for the directory', () {
     test('an entry written after the launch is this session', () async {
       writeLastConversations({workdir: conversation});
-      writeConversationFile(conversation, launchedAt.add(const Duration(minutes: 1)));
+      writeConversationFile(
+        conversation,
+        launchedAt.add(const Duration(minutes: 1)),
+      );
 
       final learned = await attributor.attribute(
         descriptor: descriptor,
@@ -152,7 +155,10 @@ void main() {
       // The whole defence: a directory the user has worked in before already
       // names a conversation, and attributing it here would resume that one.
       writeLastConversations({workdir: conversation});
-      writeConversationFile(conversation, launchedAt.subtract(const Duration(hours: 3)));
+      writeConversationFile(
+        conversation,
+        launchedAt.subtract(const Duration(hours: 3)),
+      );
 
       final learned = await attributor.attribute(
         descriptor: descriptor,
@@ -169,7 +175,10 @@ void main() {
       // The sharpest guard: an entry that *changed* can only have been written
       // by the process we started, whatever the clocks say.
       writeLastConversations({workdir: conversation});
-      writeConversationFile(conversation, launchedAt.subtract(const Duration(hours: 3)));
+      writeConversationFile(
+        conversation,
+        launchedAt.subtract(const Duration(hours: 3)),
+      );
 
       final learned = await attributor.attribute(
         descriptor: descriptor,
@@ -185,7 +194,10 @@ void main() {
     test('an unchanged snapshot refuses even when the file looks '
         'fresh', () async {
       writeLastConversations({workdir: conversation});
-      writeConversationFile(conversation, launchedAt.add(const Duration(minutes: 1)));
+      writeConversationFile(
+        conversation,
+        launchedAt.add(const Duration(minutes: 1)),
+      );
 
       final learned = await attributor.attribute(
         descriptor: descriptor,
@@ -203,7 +215,10 @@ void main() {
       // `SessionAdoptionService`'s idempotence rule: the CLI's own id is the
       // key, and one conversation is one session row.
       writeLastConversations({workdir: conversation});
-      writeConversationFile(conversation, launchedAt.add(const Duration(minutes: 1)));
+      writeConversationFile(
+        conversation,
+        launchedAt.add(const Duration(minutes: 1)),
+      );
 
       final learned = await attributor.attribute(
         descriptor: descriptor,
@@ -219,7 +234,10 @@ void main() {
 
     test('a different directory is never borrowed from', () async {
       writeLastConversations({'/somewhere/else': conversation});
-      writeConversationFile(conversation, launchedAt.add(const Duration(minutes: 1)));
+      writeConversationFile(
+        conversation,
+        launchedAt.add(const Duration(minutes: 1)),
+      );
 
       final learned = await attributor.attribute(
         descriptor: descriptor,
@@ -234,7 +252,10 @@ void main() {
 
     test('a trailing separator is the same directory', () async {
       writeLastConversations({'$workdir/': conversation});
-      writeConversationFile(conversation, launchedAt.add(const Duration(minutes: 1)));
+      writeConversationFile(
+        conversation,
+        launchedAt.add(const Duration(minutes: 1)),
+      );
 
       final learned = await attributor.attribute(
         descriptor: descriptor,
@@ -257,10 +278,9 @@ void main() {
 
     test('matches WSL /mnt/c path to Windows C: drive path', () {
       expect(
-        conversationForDirectory(
-          {'/mnt/c/Users/dlohani/projects': conversation},
-          r'C:\Users\dlohani\projects',
-        ),
+        conversationForDirectory({
+          '/mnt/c/Users/dlohani/projects': conversation,
+        }, r'C:\Users\dlohani\projects'),
         conversation,
       );
     });

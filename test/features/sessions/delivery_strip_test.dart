@@ -188,8 +188,9 @@ void main() {
           sessionDeliveryProvider.overrideWith(
             // No answer yet is the same as no answer at all here: the line
             // draws only what the probes established.
-            (ref, _) =>
-                delivery == null ? Completer<SessionDelivery>().future : Future.value(delivery),
+            (ref, _) => delivery == null
+                ? Completer<SessionDelivery>().future
+                : Future.value(delivery),
           ),
         ],
         child: const MaterialApp(
@@ -257,24 +258,25 @@ void main() {
       );
     });
 
-    testWidgets('under the terminal the strip is the actions and nothing else', (
-      tester,
-    ) async {
-      // The facts are drawn by the bar, above this, so drawing them here too
-      // would be the second copy that eventually disagrees with the first.
-      await pump(tester, state, hostedOnTerminal: true);
+    testWidgets(
+      'under the terminal the strip is the actions and nothing else',
+      (tester) async {
+        // The facts are drawn by the bar, above this, so drawing them here too
+        // would be the second copy that eventually disagrees with the first.
+        await pump(tester, state, hostedOnTerminal: true);
 
-      expect(find.text('Commit'), findsOneWidget);
-      expect(find.text('Working'), findsNothing);
-      expect(find.text('work'), findsNothing);
-      expect(find.text('2 uncommitted'), findsNothing);
-      expect(
-        find.byType(ActionChip),
-        findsNothing,
-        reason: 'the bar draws its own control, not a message-column chip',
-      );
-      expect(find.byType(Divider), findsNothing, reason: 'the bar draws it');
-    });
+        expect(find.text('Commit'), findsOneWidget);
+        expect(find.text('Working'), findsNothing);
+        expect(find.text('work'), findsNothing);
+        expect(find.text('2 uncommitted'), findsNothing);
+        expect(
+          find.byType(ActionChip),
+          findsNothing,
+          reason: 'the bar draws its own control, not a message-column chip',
+        );
+        expect(find.byType(Divider), findsNothing, reason: 'the bar draws it');
+      },
+    );
 
     testWidgets('the state line stands on its own for the bar to place', (
       tester,

@@ -424,7 +424,10 @@ void main() {
     await tester.tap(find.text('Hand off'));
     await tester.pumpAndSettle();
     expect(service!.handedOffTo, 'a3');
-    expect(service!.handedOffUnder, const PermissionSelection({'mode': 'bypass'}));
+    expect(
+      service!.handedOffUnder,
+      const PermissionSelection({'mode': 'bypass'}),
+    );
   });
 
   testWidgets('a fork runs under the mode picked for the same agent', (
@@ -605,5 +608,4 @@ void main() {
       findsOneWidget,
     );
   });
-
 }

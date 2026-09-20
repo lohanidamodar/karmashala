@@ -20,8 +20,10 @@ void main() {
         workingDirectoryFromOsc('7', [payload], hostname: hostname);
 
     test('a POSIX path with the host that emitted it', () {
-      expect(read('file://buildbox/home/me/src', hostname: 'buildbox'),
-          '/home/me/src');
+      expect(
+        read('file://buildbox/home/me/src', hostname: 'buildbox'),
+        '/home/me/src',
+      );
     });
 
     test('an empty host is always this machine', () {
@@ -32,15 +34,20 @@ void main() {
     });
 
     test('localhost is this machine too', () {
-      expect(read('file://localhost/home/me', hostname: 'buildbox'), '/home/me');
+      expect(
+        read('file://localhost/home/me', hostname: 'buildbox'),
+        '/home/me',
+      );
     });
 
     test('a Windows path loses the slash before the drive letter', () {
       // `file:///C:/src/app` — the leading slash is real URI syntax, not part
       // of the path.
       expect(read('file:///C:/src/app'), r'C:\src\app');
-      expect(read('file://buildbox/C:/src/app', hostname: 'buildbox'),
-          r'C:\src\app');
+      expect(
+        read('file://buildbox/C:/src/app', hostname: 'buildbox'),
+        r'C:\src\app',
+      );
     });
 
     test('percent-encoded spaces are decoded', () {
@@ -156,10 +163,16 @@ void main() {
 
       pane.terminal.write('\x1b]7;file:///C:/ws/lib\x07\x1b]133;A\x07');
 
-      expect(pane.workingDirectory, r'C:\ws\lib',
-          reason: 'the directory tracker saw OSC 7');
-      expect(pane.commandBlocks!.tracker.pending, isNotNull,
-          reason: 'the recorder saw OSC 133 through the same slot');
+      expect(
+        pane.workingDirectory,
+        r'C:\ws\lib',
+        reason: 'the directory tracker saw OSC 7',
+      );
+      expect(
+        pane.commandBlocks!.tracker.pending,
+        isNotNull,
+        reason: 'the recorder saw OSC 133 through the same slot',
+      );
     });
 
     test('with integration off, OSC 7 still works', () {
@@ -212,9 +225,13 @@ void main() {
         ..write('\x1b]7;file:///C:/ws/lib\x07')
         ..write('\x1b]7;file:///C:/ws/lib\x07');
 
-      expect(notifications, 1,
-          reason: 'a shell that re-emits OSC 7 on every prompt redraw must not '
-              'republish the layout per prompt');
+      expect(
+        notifications,
+        1,
+        reason:
+            'a shell that re-emits OSC 7 on every prompt redraw must not '
+            'republish the layout per prompt',
+      );
     });
   });
 
@@ -298,25 +315,32 @@ void main() {
       controller.closeTab(tab);
 
       // Would throw on a disposed notifier if the listener were still attached.
-      expect(() => pane.terminal.write('\x1b]7;file:///C:/ws/lib\x07'),
-          returnsNormally);
-    });
-
-    test('the stored record is where the pane ended up, not where it began', () {
-      // A restored pane reopens in the directory the user left it in: the
-      // launch directory is an artefact of how the pane was opened, and the
-      // scrollback it comes back holding is the *observed* directory's. It
-      // starts nothing — the directory only decides where a shell would spawn
-      // if the user presses Start.
-      final tab = controller.openTab(
-        TerminalProfile.powerShell,
-        workingDirectory: r'C:\ws',
+      expect(
+        () => pane.terminal.write('\x1b]7;file:///C:/ws/lib\x07'),
+        returnsNormally,
       );
-      paneOf(tab).terminal.write('\x1b]7;file:///C:/ws/lib\x07');
-
-      expect(controller.instanceFor(onlyPaneOf(tab))!.workingDirectory,
-          r'C:\ws\lib');
     });
+
+    test(
+      'the stored record is where the pane ended up, not where it began',
+      () {
+        // A restored pane reopens in the directory the user left it in: the
+        // launch directory is an artefact of how the pane was opened, and the
+        // scrollback it comes back holding is the *observed* directory's. It
+        // starts nothing — the directory only decides where a shell would spawn
+        // if the user presses Start.
+        final tab = controller.openTab(
+          TerminalProfile.powerShell,
+          workingDirectory: r'C:\ws',
+        );
+        paneOf(tab).terminal.write('\x1b]7;file:///C:/ws/lib\x07');
+
+        expect(
+          controller.instanceFor(onlyPaneOf(tab))!.workingDirectory,
+          r'C:\ws\lib',
+        );
+      },
+    );
   });
 
   group('the PowerShell prompt emits OSC 7', () {

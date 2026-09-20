@@ -42,10 +42,7 @@ void main() {
       expect(_ctrl.androidMetaState, AndroidMetaState.ctrlOn);
       expect(_shift.androidMetaState, AndroidMetaState.shiftOn);
       expect(
-        const DesktopModifiers(
-          control: true,
-          shift: true,
-        ).androidMetaState,
+        const DesktopModifiers(control: true, shift: true).androidMetaState,
         AndroidMetaState.ctrlOn | AndroidMetaState.shiftOn,
       );
       expect(
@@ -96,7 +93,10 @@ void main() {
         _down(DesktopKey.printable('a'), character: 'a'),
         _plain,
       );
-      expect(translator.translate(_up(DesktopKey.printable('a')), _plain), isNull);
+      expect(
+        translator.translate(_up(DesktopKey.printable('a')), _plain),
+        isNull,
+      );
     });
 
     test('holding a letter repeats the character', () {
@@ -210,18 +210,12 @@ void main() {
         translator.translate(_down(DesktopKey.controlLeft), _plain),
         isNull,
       );
-      expect(
-        translator.translate(_down(DesktopKey.shiftLeft), _plain),
-        isNull,
-      );
+      expect(translator.translate(_down(DesktopKey.shiftLeft), _plain), isNull);
     });
 
     test('an unmapped key is reported rather than guessed at', () {
       final translator = DeviceKeyTranslator();
-      expect(
-        translator.translate(_down(_f13), _plain),
-        isNull,
-      );
+      expect(translator.translate(_down(_f13), _plain), isNull);
     });
   });
 

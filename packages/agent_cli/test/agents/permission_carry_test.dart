@@ -174,9 +174,10 @@ void main() {
       // An agent that declares no permission vocabulary has no rung to carry
       // onto, and `carryPermission` says so rather than inventing one — which
       // the "no descriptor enforces nothing" case below asserts.
-      for (final agentId in AgentRegistry.builtIn.descriptors
-          .where((d) => d.launch.permission.isKnown)
-          .map((d) => d.id)) {
+      for (final agentId
+          in AgentRegistry.builtIn.descriptors
+              .where((d) => d.launch.permission.isKnown)
+              .map((d) => d.id)) {
         final carried = _carry(PermissionRisk.bypass, agentId);
         expect(carried.risk, PermissionRisk.bypass, reason: agentId);
         expect(carried.fit, PermissionModeFit.exact, reason: agentId);
@@ -219,7 +220,10 @@ void main() {
         sessionRisk: PermissionRisk.ask,
         target: forker,
       );
-      expect(resolved.selection, const PermissionSelection({'mode': 'careful'}));
+      expect(
+        resolved.selection,
+        const PermissionSelection({'mode': 'careful'}),
+      );
       expect(resolved.wasChosen, isFalse);
       expect(resolved.carried.fit, PermissionModeFit.exact);
       expect(resolved.explanation, startsWith('Carried from this session.'));
@@ -247,16 +251,13 @@ void main() {
         target: forker,
       );
       expect(resolved.axes, hasLength(1));
-      expect(
-        resolved.axes.single.options.map((o) => o.id),
-        ['careful', 'trust'],
-      );
+      expect(resolved.axes.single.options.map((o) => o.id), [
+        'careful',
+        'trust',
+      ]);
       // Nothing is offered that the agent cannot express, because every row is
       // one of its own modes.
-      expect(
-        resolved.axes.single.options.every((o) => o.isSelectable),
-        isTrue,
-      );
+      expect(resolved.axes.single.options.every((o) => o.isSelectable), isTrue);
     });
 
     test('an agent with no declared modes offers none and enforces none', () {

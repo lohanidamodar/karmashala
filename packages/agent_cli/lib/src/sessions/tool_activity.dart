@@ -170,9 +170,7 @@ ToolActivity toolActivityFor(String name, Object? input) {
   return ToolActivity(
     name: name,
     subject: subject,
-    imagePath: isFile && looksLikeImagePath(entry.value)
-        ? entry.value
-        : null,
+    imagePath: isFile && looksLikeImagePath(entry.value) ? entry.value : null,
     plan: plan,
   );
 }

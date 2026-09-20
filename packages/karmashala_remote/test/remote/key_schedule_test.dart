@@ -254,9 +254,7 @@ void main() {
     test('the schedule still produces them', () async {
       final vectors =
           jsonDecode(
-                File(
-                  'test/remote/remote_test_vectors.json',
-                ).readAsStringSync(),
+                File('test/remote/remote_test_vectors.json').readAsStringSync(),
               )
               as Map<String, Object?>;
 

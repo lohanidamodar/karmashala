@@ -17,8 +17,7 @@ class HostClipboardRead {
       ? const HostClipboardRead._(HostClipboardOutcome.empty)
       : HostClipboardRead._(HostClipboardOutcome.text, text: text);
 
-  const HostClipboardRead.empty()
-    : this._(HostClipboardOutcome.empty);
+  const HostClipboardRead.empty() : this._(HostClipboardOutcome.empty);
 
   const HostClipboardRead.unavailable(String reason)
     : this._(HostClipboardOutcome.unavailable, reason: reason);

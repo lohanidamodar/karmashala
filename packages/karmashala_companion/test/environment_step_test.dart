@@ -17,18 +17,34 @@ import 'companion_test_support.dart';
 
 void main() {
   List<CompanionSessionSummary> across() => [
-    summary('s1', project: 'popupbits', projectId: 'p1',
-        status: CompanionSessionStatus.idle,
-        environmentId: 'windows', environmentBadge: 'Windows',
-        environmentKind: 'windowsNative'),
-    summary('s2', project: 'content', projectId: 'p2',
-        status: CompanionSessionStatus.idle,
-        environmentId: 'windows', environmentBadge: 'Windows',
-        environmentKind: 'windowsNative'),
-    summary('s3', title: 'On the droplet', project: 'Test ssh', projectId: 'p3',
-        status: CompanionSessionStatus.idle,
-        environmentId: 'ssh:h1', environmentBadge: 'do-box',
-        environmentKind: 'ssh'),
+    summary(
+      's1',
+      project: 'popupbits',
+      projectId: 'p1',
+      status: CompanionSessionStatus.idle,
+      environmentId: 'windows',
+      environmentBadge: 'Windows',
+      environmentKind: 'windowsNative',
+    ),
+    summary(
+      's2',
+      project: 'content',
+      projectId: 'p2',
+      status: CompanionSessionStatus.idle,
+      environmentId: 'windows',
+      environmentBadge: 'Windows',
+      environmentKind: 'windowsNative',
+    ),
+    summary(
+      's3',
+      title: 'On the droplet',
+      project: 'Test ssh',
+      projectId: 'p3',
+      status: CompanionSessionStatus.idle,
+      environmentId: 'ssh:h1',
+      environmentBadge: 'do-box',
+      environmentKind: 'ssh',
+    ),
   ];
 
   testWidgets('two machines are offered before any project', (tester) async {
@@ -80,14 +96,24 @@ void main() {
       tester,
       gateway: FakeCompanionGateway.paired(
         sessions: [
-          summary('s1', project: 'popupbits', projectId: 'p1',
-              status: CompanionSessionStatus.idle,
-              environmentId: 'windows', environmentBadge: 'Windows',
-              environmentKind: 'windowsNative'),
-          summary('s2', project: 'content', projectId: 'p2',
-              status: CompanionSessionStatus.idle,
-              environmentId: 'windows', environmentBadge: 'Windows',
-              environmentKind: 'windowsNative'),
+          summary(
+            's1',
+            project: 'popupbits',
+            projectId: 'p1',
+            status: CompanionSessionStatus.idle,
+            environmentId: 'windows',
+            environmentBadge: 'Windows',
+            environmentKind: 'windowsNative',
+          ),
+          summary(
+            's2',
+            project: 'content',
+            projectId: 'p2',
+            status: CompanionSessionStatus.idle,
+            environmentId: 'windows',
+            environmentBadge: 'Windows',
+            environmentKind: 'windowsNative',
+          ),
         ],
       ),
       home: const SessionListScreen(),
@@ -107,10 +133,18 @@ void main() {
       tester,
       gateway: FakeCompanionGateway.paired(
         sessions: [
-          summary('s1', project: 'popupbits', projectId: 'p1',
-              status: CompanionSessionStatus.idle),
-          summary('s2', project: 'content', projectId: 'p2',
-              status: CompanionSessionStatus.idle),
+          summary(
+            's1',
+            project: 'popupbits',
+            projectId: 'p1',
+            status: CompanionSessionStatus.idle,
+          ),
+          summary(
+            's2',
+            project: 'content',
+            projectId: 'p2',
+            status: CompanionSessionStatus.idle,
+          ),
         ],
       ),
       home: const SessionListScreen(),

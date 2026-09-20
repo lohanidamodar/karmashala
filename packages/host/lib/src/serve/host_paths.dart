@@ -14,7 +14,9 @@ class HostPaths {
     final env = environment ?? Platform.environment;
     if (!Platform.isWindows) {
       final runtimeDir = env['XDG_RUNTIME_DIR'];
-      if (runtimeDir != null && runtimeDir.isNotEmpty && Directory(runtimeDir).existsSync()) {
+      if (runtimeDir != null &&
+          runtimeDir.isNotEmpty &&
+          Directory(runtimeDir).existsSync()) {
         return HostPaths(Directory('$runtimeDir/karmashala'));
       }
     }
@@ -76,7 +78,9 @@ class HostPaths {
       return 'USERNAME is not set, so the owner of ${directory.path} cannot be named';
     }
     final domain = env['USERDOMAIN'];
-    final principal = (domain == null || domain.isEmpty) ? user : '$domain\\$user';
+    final principal = (domain == null || domain.isEmpty)
+        ? user
+        : '$domain\\$user';
     // Well-known SIDs, not localised names. Grant first and strip inheritance
     // second: `/inheritance:r` deletes inherited ACEs rather than converting
     // them, so the other order locks the owner out of their own directory.
@@ -90,7 +94,10 @@ class HostPaths {
     if (granted.exitCode != 0) {
       return 'icacls /grant on ${directory.path} failed: ${granted.stderr}';
     }
-    final stripped = await Process.run('icacls', [directory.path, '/inheritance:r']);
+    final stripped = await Process.run('icacls', [
+      directory.path,
+      '/inheritance:r',
+    ]);
     if (stripped.exitCode != 0) {
       return 'icacls /inheritance:r on ${directory.path} failed: ${stripped.stderr}';
     }

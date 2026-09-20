@@ -68,7 +68,8 @@ class _AgentContextPanelState extends ConsumerState<AgentContextPanel> {
     if (!mounted) return;
     final target = ref.read(agentContextTargetProvider);
     if (target == null) return;
-    if (ref.read(agentContextReadingsProvider.notifier).cached(target) != null) {
+    if (ref.read(agentContextReadingsProvider.notifier).cached(target) !=
+        null) {
       return;
     }
     await readAgentContext(ProviderScope.containerOf(context), target);
@@ -77,12 +78,9 @@ class _AgentContextPanelState extends ConsumerState<AgentContextPanel> {
   @override
   Widget build(BuildContext context) {
     // A different session on screen is a different set of files to read.
-    ref.listen<AgentContextTarget?>(
-      agentContextTargetProvider,
-      (_, next) {
-        if (next != null) _readIfUnread();
-      },
-    );
+    ref.listen<AgentContextTarget?>(agentContextTargetProvider, (_, next) {
+      if (next != null) _readIfUnread();
+    });
     final target = ref.watch(agentContextTargetProvider);
     if (target == null) {
       return const PanePlaceholder(
@@ -257,7 +255,9 @@ class _Section extends StatelessWidget {
             ),
           ),
         ),
-        if (entries.isEmpty) _Message(empty) else
+        if (entries.isEmpty)
+          _Message(empty)
+        else
           for (final entry in entries) _EntryRow(entry: entry),
       ],
     );

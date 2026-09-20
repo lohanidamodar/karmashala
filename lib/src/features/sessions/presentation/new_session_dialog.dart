@@ -27,13 +27,11 @@ class NewSessionDialog extends ConsumerStatefulWidget {
 
   /// Opens the session flow, optionally placing an in-app session in an empty
   /// split instead of creating another workbench tab.
-  static Future<void> show(
-    BuildContext context, {
-    String? targetPaneId,
-  }) => showDialog<void>(
-    context: context,
-    builder: (_) => NewSessionDialog(targetPaneId: targetPaneId),
-  );
+  static Future<void> show(BuildContext context, {String? targetPaneId}) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => NewSessionDialog(targetPaneId: targetPaneId),
+      );
 
   final String? targetPaneId;
 
@@ -83,7 +81,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     if (picked != null && installations.contains(picked)) return picked;
     // The one definition of "which agent, here" — shared with the `+` button
     // in the Explorer, which runs it without asking.
-    return ref.read(sessionDefaultsProvider).forCheckout(checkout).installation ??
+    return ref
+            .read(sessionDefaultsProvider)
+            .forCheckout(checkout)
+            .installation ??
         installations.first;
   }
 

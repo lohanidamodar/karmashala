@@ -74,7 +74,9 @@ void main() {
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // A fixed inbox. The real controller listens to half the app to decide
         // what has been seen, and none of that is what these tests are about.
-        attentionInboxProvider.overrideWith(() => _FixedInbox(() => inboxItems)),
+        attentionInboxProvider.overrideWith(
+          () => _FixedInbox(() => inboxItems),
+        ),
         sessionStatusLookupProvider.overrideWithValue(
           (sessionId) => statusLookup(sessionId),
         ),
@@ -133,15 +135,18 @@ void main() {
   }
 
   group('the two ready states', () {
-    test('a session that was already idle and stayed so answers idle', () async {
-      attachPane('s1');
-      final pending = waitService().wait('s1');
-      reports.add(report(status: AgentActivityStatus.idle));
+    test(
+      'a session that was already idle and stayed so answers idle',
+      () async {
+        attachPane('s1');
+        final pending = waitService().wait('s1');
+        reports.add(report(status: AgentActivityStatus.idle));
 
-      final outcome = await pending;
-      expect(outcome.state, SessionWaitState.idle);
-      expect(outcome.changed, isFalse);
-    });
+        final outcome = await pending;
+        expect(outcome.state, SessionWaitState.idle);
+        expect(outcome.changed, isFalse);
+      },
+    );
 
     test('idle after work answers done, not idle', () async {
       attachPane('s1');
@@ -300,20 +305,22 @@ void main() {
     // refused as "blocked on a person (needsApproval)". Claude Code's
     // 60-second idle nudge files an inbox item, but the agent is waiting for
     // exactly the message the caller is about to send.
-    test('an agent at its own input is not blocked, whatever the inbox holds',
-        () {
-      statusLookup = (_) => report(
-        status: AgentActivityStatus.awaitingApproval,
-        waiting: AgentWaitKind.input,
-        evidence: const ['Claude is waiting for your input'],
-      );
-      inboxItem(
-        's1',
-        kind: InboxItemKind.needsApproval,
-        detail: 'Claude is waiting for your input',
-      );
-      expect(waitService().blockedOn('s1'), isNull);
-    });
+    test(
+      'an agent at its own input is not blocked, whatever the inbox holds',
+      () {
+        statusLookup = (_) => report(
+          status: AgentActivityStatus.awaitingApproval,
+          waiting: AgentWaitKind.input,
+          evidence: const ['Claude is waiting for your input'],
+        );
+        inboxItem(
+          's1',
+          kind: InboxItemKind.needsApproval,
+          detail: 'Claude is waiting for your input',
+        );
+        expect(waitService().blockedOn('s1'), isNull);
+      },
+    );
 
     test('blockedOn is null for a session that is merely busy', () {
       statusLookup = (_) => report(status: AgentActivityStatus.working);
@@ -322,24 +329,27 @@ void main() {
   });
 
   group('ended', () {
-    test('a session with no live pane is over before the wait starts', () async {
-      final pending = waitService().wait('s1');
-      reports.add(report(status: AgentActivityStatus.working));
+    test(
+      'a session with no live pane is over before the wait starts',
+      () async {
+        final pending = waitService().wait('s1');
+        reports.add(report(status: AgentActivityStatus.working));
 
-      final outcome = await pending;
-      expect(outcome.state, SessionWaitState.ended);
-      expect(outcome.exitCodeKnown, isFalse);
-      expect(outcome.exitCode, isNull);
-    });
+        final outcome = await pending;
+        expect(outcome.state, SessionWaitState.ended);
+        expect(outcome.exitCodeKnown, isFalse);
+        expect(outcome.exitCode, isNull);
+      },
+    );
 
     test('a pane exit ends the wait, carrying its code', () async {
       final paneId = attachPane('s1');
       final pending = waitService().wait('s1');
       reports.add(report(status: AgentActivityStatus.working));
       await pumpEventQueue();
-      container.read(paneExitProvider.notifier).record(
-        PaneExit(paneId: paneId, sessionId: 's1', exitCode: 3),
-      );
+      container
+          .read(paneExitProvider.notifier)
+          .record(PaneExit(paneId: paneId, sessionId: 's1', exitCode: 3));
 
       final outcome = await pending;
       expect(outcome.state, SessionWaitState.ended);
@@ -352,9 +362,9 @@ void main() {
       final pending = waitService().wait('s1');
       reports.add(report(status: AgentActivityStatus.working));
       await pumpEventQueue();
-      container.read(paneExitProvider.notifier).record(
-        PaneExit(paneId: paneId, sessionId: 's1', exitCode: null),
-      );
+      container
+          .read(paneExitProvider.notifier)
+          .record(PaneExit(paneId: paneId, sessionId: 's1', exitCode: null));
 
       final outcome = await pending;
       expect(outcome.state, SessionWaitState.ended);
@@ -367,9 +377,11 @@ void main() {
       final pending = waitService().wait('s1');
       reports.add(report(status: AgentActivityStatus.working));
       await pumpEventQueue();
-      container.read(paneExitProvider.notifier).record(
-        PaneExit(paneId: paneId, sessionId: 'somebody-else', exitCode: 0),
-      );
+      container
+          .read(paneExitProvider.notifier)
+          .record(
+            PaneExit(paneId: paneId, sessionId: 'somebody-else', exitCode: 0),
+          );
       await pumpEventQueue();
       deadline.complete();
 
@@ -378,22 +390,25 @@ void main() {
   });
 
   group('the answer carries its own age', () {
-    test('since is when the evidence was produced, not when we looked', () async {
-      attachPane('s1');
-      final written = testTime.subtract(const Duration(minutes: 4));
-      final pending = waitService().wait('s1');
-      reports.add(
-        report(
-          status: AgentActivityStatus.idle,
-          source: AgentStatusSource.stateFile,
-          modifiedAt: written,
-        ),
-      );
+    test(
+      'since is when the evidence was produced, not when we looked',
+      () async {
+        attachPane('s1');
+        final written = testTime.subtract(const Duration(minutes: 4));
+        final pending = waitService().wait('s1');
+        reports.add(
+          report(
+            status: AgentActivityStatus.idle,
+            source: AgentStatusSource.stateFile,
+            modifiedAt: written,
+          ),
+        );
 
-      final outcome = await pending;
-      expect(outcome.since, written);
-      expect(outcome.evidenceAge, const Duration(minutes: 4));
-    });
+        final outcome = await pending;
+        expect(outcome.since, written);
+        expect(outcome.evidenceAge, const Duration(minutes: 4));
+      },
+    );
 
     test('a transcript nothing can read reports null, never false', () async {
       // A hook carries no transcript position and a PTY session keeps no event
@@ -430,35 +445,38 @@ void main() {
       expect(outcome.transcriptChanged, isTrue);
     });
 
-    test('a transcript that stood still reports false, whatever it says', () async {
-      // **The reading is a watermark, not a parse.** Nothing in the wait opens
-      // a transcript or looks at a row, so what a CLI writes *inside* one — a
-      // thinking block among them — cannot reach this answer: the mtime is the
-      // whole evidence, and an unmoved mtime is `false` however much the file
-      // would have to say.
-      attachPane('s1');
-      final pending = waitService().wait('s1');
-      final written = testTime.subtract(const Duration(minutes: 1));
-      reports.add(
-        report(
-          status: AgentActivityStatus.working,
-          source: AgentStatusSource.stateFile,
-          modifiedAt: written,
-        ),
-      );
-      await pumpEventQueue();
-      reports.add(
-        report(
-          status: AgentActivityStatus.idle,
-          source: AgentStatusSource.stateFile,
-          modifiedAt: written,
-        ),
-      );
+    test(
+      'a transcript that stood still reports false, whatever it says',
+      () async {
+        // **The reading is a watermark, not a parse.** Nothing in the wait opens
+        // a transcript or looks at a row, so what a CLI writes *inside* one — a
+        // thinking block among them — cannot reach this answer: the mtime is the
+        // whole evidence, and an unmoved mtime is `false` however much the file
+        // would have to say.
+        attachPane('s1');
+        final pending = waitService().wait('s1');
+        final written = testTime.subtract(const Duration(minutes: 1));
+        reports.add(
+          report(
+            status: AgentActivityStatus.working,
+            source: AgentStatusSource.stateFile,
+            modifiedAt: written,
+          ),
+        );
+        await pumpEventQueue();
+        reports.add(
+          report(
+            status: AgentActivityStatus.idle,
+            source: AgentStatusSource.stateFile,
+            modifiedAt: written,
+          ),
+        );
 
-      final outcome = await pending;
-      expect(outcome.state, SessionWaitState.done);
-      expect(outcome.transcriptChanged, isFalse);
-    });
+        final outcome = await pending;
+        expect(outcome.state, SessionWaitState.done);
+        expect(outcome.transcriptChanged, isFalse);
+      },
+    );
   });
 
   group('the bound', () {
@@ -497,7 +515,10 @@ void main() {
     });
 
     test('the bound is defaulted, clamped, and never zero', () {
-      expect(SessionWaitService.boundFor(null), SessionWaitService.defaultBound);
+      expect(
+        SessionWaitService.boundFor(null),
+        SessionWaitService.defaultBound,
+      );
       expect(SessionWaitService.boundFor(0), SessionWaitService.defaultBound);
       expect(SessionWaitService.boundFor(-5), SessionWaitService.defaultBound);
       expect(SessionWaitService.boundFor(10), const Duration(seconds: 10));

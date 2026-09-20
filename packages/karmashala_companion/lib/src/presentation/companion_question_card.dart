@@ -7,10 +7,7 @@ import 'package:karmashala_remote/companion.dart';
 
 /// Answers an agent's multiple-choice question from the phone.
 typedef CompanionQuestionAnswerFn =
-    Future<void> Function(
-      List<RemoteQuestionAnswer> answers, {
-      bool decline,
-    });
+    Future<void> Function(List<RemoteQuestionAnswer> answers, {bool decline});
 
 /// An agent's multiple-choice question: each question's options to tap, an
 /// own-words box on a single-choice one, and a decline. **No Approve**: on a
@@ -49,7 +46,9 @@ class _CompanionQuestionCardState extends State<CompanionQuestionCard> {
   List<Set<int>> _fresh() => [
     for (final _ in widget.question.questions) <int>{},
   ];
-  List<bool> _freshOther() => [for (final _ in widget.question.questions) false];
+  List<bool> _freshOther() => [
+    for (final _ in widget.question.questions) false,
+  ];
   List<TextEditingController> _freshWords() => [
     for (final _ in widget.question.questions) TextEditingController(),
   ];
@@ -76,9 +75,8 @@ class _CompanionQuestionCardState extends State<CompanionQuestionCard> {
     super.dispose();
   }
 
-  bool _answered(int i) => _other[i]
-      ? _words[i].text.trim().isNotEmpty
-      : _chosen[i].isNotEmpty;
+  bool _answered(int i) =>
+      _other[i] ? _words[i].text.trim().isNotEmpty : _chosen[i].isNotEmpty;
 
   bool get _complete =>
       [for (var i = 0; i < _chosen.length; i++) _answered(i)].every((a) => a);

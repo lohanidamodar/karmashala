@@ -46,7 +46,9 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     case final FallbackSocketLocation location:
       final refused =
           await prepareFallbackSocketDirectory(location) ??
-          await HostPaths(Directory(location.directory)).restrictToCurrentUser();
+          await HostPaths(
+            Directory(location.directory),
+          ).restrictToCurrentUser();
       if (refused != null) {
         errSink.writeln(
           'karmashala_host: refusing to serve — the socket directory could not '
@@ -85,7 +87,8 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
 
   // Read before anything binds, so the first client already sees what the last
   // host left.
-  final store = SessionStore(Directory(paths.sessionsDirectory))..ensureDirectory();
+  final store = SessionStore(Directory(paths.sessionsDirectory))
+    ..ensureDirectory();
   final registry = SessionRegistry(launcher: pty.launcher, store: store);
 
   // The companion half, and it is allowed to be absent. A machine whose SQLite
@@ -137,7 +140,9 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     )
     // Said out loud: coming back with nothing and coming back with four dead
     // sessions are different situations.
-    ..writeln('restored $remembered session(s) from ${paths.sessionsDirectory}');
+    ..writeln(
+      'restored $remembered session(s) from ${paths.sessionsDirectory}',
+    );
   await sink.flush();
 
   final code = await stopping.future;

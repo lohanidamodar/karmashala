@@ -83,9 +83,7 @@ CastPlayback planCastPlayback(
       slice.add(placed[cursor].$2);
       cursor++;
     }
-    steps.add(
-      CastFrameStep(index: i, at: at, hold: interval, events: slice),
-    );
+    steps.add(CastFrameStep(index: i, at: at, hold: interval, events: slice));
   }
 
   // Anything left over — an event past the last frame boundary — belongs to the

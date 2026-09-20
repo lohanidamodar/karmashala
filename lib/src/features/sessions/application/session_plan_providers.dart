@@ -42,10 +42,11 @@ class AgentPlanReading {
 
   /// There is nothing to draw, and [absence] says which nothing it is.
   /// [refusal] is the more specific sentence behind it when there is one.
-  const AgentPlanReading.absent(AgentPlanAbsence this.absence,
-      {this.refusal = ''})
-    : plan = null,
-      writtenAt = null;
+  const AgentPlanReading.absent(
+    AgentPlanAbsence this.absence, {
+    this.refusal = '',
+  }) : plan = null,
+       writtenAt = null;
 
   final AgentPlan? plan;
 

@@ -39,9 +39,9 @@ class _ToolchainsSectionState extends ConsumerState<ToolchainsSection> {
     if (!mounted) return;
     for (final environment in ref.read(environmentsControllerProvider)) {
       if (environment.kind == EnvironmentKind.ssh) continue;
-      if (ref.read(toolchainReadingsProvider.notifier).hasLooked(
-        environment.id,
-      )) {
+      if (ref
+          .read(toolchainReadingsProvider.notifier)
+          .hasLooked(environment.id)) {
         continue;
       }
       await measureToolchains(ProviderScope.containerOf(context), environment);
@@ -108,9 +108,7 @@ class _EnvironmentToolchains extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  ref.watch(
-                    environmentLabelForIdProvider(environment.id),
-                  ),
+                  ref.watch(environmentLabelForIdProvider(environment.id)),
                   style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
@@ -154,10 +152,7 @@ class _EnvironmentToolchains extends ConsumerWidget {
             )
           else
             for (final toolchain in Toolchain.values)
-              _ToolchainRow(
-                toolchain: toolchain,
-                reading: readings[toolchain],
-              ),
+              _ToolchainRow(toolchain: toolchain, reading: readings[toolchain]),
         ],
       ),
     );
@@ -177,12 +172,14 @@ class _ToolchainRow extends StatelessWidget {
     final semantic = SemanticColors.of(context);
     final status = reading?.status ?? ToolchainStatus.unknown;
     final (icon, colour) = switch (status) {
-      ToolchainStatus.present ||
-      ToolchainStatus.presentVersionUnknown => (
+      ToolchainStatus.present || ToolchainStatus.presentVersionUnknown => (
         AppIcons.checkCircle,
         semantic.idle,
       ),
-      ToolchainStatus.missing => (AppIcons.minusCircle, scheme.onSurfaceVariant),
+      ToolchainStatus.missing => (
+        AppIcons.minusCircle,
+        scheme.onSurfaceVariant,
+      ),
       ToolchainStatus.notApplicable => (
         AppIcons.minusCircle,
         scheme.onSurfaceVariant,

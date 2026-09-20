@@ -125,7 +125,7 @@ class AdbDeviceDriver implements DeviceDriver {
                 ? 'No output — $filter is not running on $_serial.'
                 : '$filter is running, but logged nothing'
                       '${minLevel == null ? '' : ' at ${minLevel.name} or '
-                            'above'} in the last $lines lines.'
+                                'above'} in the last $lines lines.'
           : null,
     );
   }
@@ -185,7 +185,6 @@ class AdbDeviceDriver implements DeviceDriver {
   Future<void> terminateApp(String appId) =>
       adb.forceStopPackage(_serial, appId);
 
-
   /// Three places, and the list is short on purpose: a root earns a row only if
   /// it cannot be reached from another one, or its rules differ. An app's own
   /// directory is deliberately not one — it needs `run-as` on a debuggable build.
@@ -242,11 +241,7 @@ class AdbDeviceDriver implements DeviceDriver {
         'and pick a file, or use `adb pull` yourself for the whole tree.',
       );
     }
-    return adb.pullFile(
-      _serial,
-      devicePath: devicePath,
-      hostPath: hostPath,
-    );
+    return adb.pullFile(_serial, devicePath: devicePath, hostPath: hostPath);
   }
 
   @override
@@ -366,8 +361,8 @@ class AdbDeviceDriver implements DeviceDriver {
   String _overwriteRefusal(String path, DeviceFileEntry existing) =>
       '$path already exists on $_serial'
       '${existing.sizeBytes == null ? '' : ' (${existing.sizeBytes} bytes'
-            '${existing.modifiedLabel == null ? '' : ', '
-                  '${existing.modifiedLabel}'})'}. '
+                '${existing.modifiedLabel == null ? '' : ', '
+                          '${existing.modifiedLabel}'})'}. '
       'Nothing was copied. Ask again with overwrite to replace it — there is '
       'no undo on the device.';
 

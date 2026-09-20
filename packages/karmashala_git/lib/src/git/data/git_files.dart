@@ -104,10 +104,11 @@ typedef HostPathOrNone = String? Function(String environmentPath);
 /// How a path inside [env] is spelled for this process, or null when it cannot be
 /// opened from here. `CheckpointService` keeps its own throwing version, because
 /// there the absence is a refusal the user has to be told about.
-HostPathOrNone hostPathMapperFor(ExecutionEnvironment env) => switch (env.kind) {
+HostPathOrNone hostPathMapperFor(
+  ExecutionEnvironment env,
+) => switch (env.kind) {
   // Already this process's own filesystem, whichever local OS it is.
-  EnvironmentKind.windowsNative ||
-  EnvironmentKind.localPosix => (path) => path,
+  EnvironmentKind.windowsNative || EnvironmentKind.localPosix => (path) => path,
   // Reachable, as a `\\wsl.localhost\<distro>\…` UNC share. Not free — §18
   // measures a listing there at 0.79 ms warm — but far cheaper than a process.
   EnvironmentKind.wsl => (path) {

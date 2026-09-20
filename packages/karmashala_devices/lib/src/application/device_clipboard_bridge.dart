@@ -149,10 +149,7 @@ class DeviceClipboardBridge {
       }
       final text = await waiter.future.timeout(timeout);
       return _record(
-        DeviceClipboardRead.text(
-          text,
-          source: DeviceClipboardSource.requested,
-        ),
+        DeviceClipboardRead.text(text, source: DeviceClipboardSource.requested),
       );
     } on TimeoutException {
       return _record(

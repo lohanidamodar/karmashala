@@ -120,10 +120,7 @@ void main() {
     // repository context line above the scoped surfaces would answer a question
     // nobody asked here.
     expect(SidePanelSurface.decisions.scopedToRepository, isFalse);
-    expect(
-      SidePanel.iconFor(SidePanelSurface.decisions).fontPackage,
-      'picons',
-    );
+    expect(SidePanel.iconFor(SidePanelSurface.decisions).fontPackage, 'picons');
   });
 
   testWidgets('the rail opens it and lists the record, oldest first', (
@@ -239,7 +236,10 @@ void main() {
     // Both would name a run or a checkpoint that does not exist — the argument
     // `DecisionControlTools` makes about an agent, unchanged by the writer
     // being a person.
-    expect(kHandWritableKinds, isNot(contains(DecisionKind.verificationVerdict)));
+    expect(
+      kHandWritableKinds,
+      isNot(contains(DecisionKind.verificationVerdict)),
+    );
     expect(kHandWritableKinds, isNot(contains(DecisionKind.checkpointMarked)));
     expect(kHandWritableKinds, contains(DecisionKind.approvalGranted));
   });

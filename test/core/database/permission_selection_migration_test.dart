@@ -38,7 +38,9 @@ void _seedSession(Database db, String id, String install, String? mode) {
 }
 
 String? _modeOf(Database db, String id) =>
-    db.select('SELECT permission_mode FROM sessions WHERE id = ?;', [id]).first
+    db
+            .select('SELECT permission_mode FROM sessions WHERE id = ?;', [id])
+            .first
             .values
             .first
         as String?;
@@ -92,7 +94,11 @@ void main() {
 
     migrate();
 
-    expect({_modeOf(db, 'c'), _modeOf(db, 'x'), _modeOf(db, 'a')}, hasLength(3));
+    expect({
+      _modeOf(db, 'c'),
+      _modeOf(db, 'x'),
+      _modeOf(db, 'a'),
+    }, hasLength(3));
   });
 
   test('a null stays null — it means nobody chose, and still does', () {

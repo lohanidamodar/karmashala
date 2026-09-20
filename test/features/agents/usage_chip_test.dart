@@ -64,7 +64,9 @@ Widget chipIn(ProviderContainer container, {bool visible = true}) =>
       child: MaterialApp(
         home: Scaffold(
           body: Center(
-            child: visible ? const UsageChip(sessionId: 's1') : const SizedBox.shrink(),
+            child: visible
+                ? const UsageChip(sessionId: 's1')
+                : const SizedBox.shrink(),
           ),
         ),
       ),
@@ -156,9 +158,7 @@ void main() {
   Color? colourOf(WidgetTester tester, String label) =>
       tester.widget<Text>(find.text(label)).style?.color;
 
-  testWidgets('draws each period as a percent and a countdown', (
-    tester,
-  ) async {
+  testWidgets('draws each period as a percent and a countdown', (tester) async {
     service.answer = usageSnapshot(percent: 62);
     final container = await pumpChip(tester);
 
@@ -228,7 +228,9 @@ void main() {
     expect(tip, contains('7-day · 97% · resets in 2d'));
     expect(
       tip,
-      contains(formatResetClock(testTime.add(const Duration(days: 2)), testTime)),
+      contains(
+        formatResetClock(testTime.add(const Duration(days: 2)), testTime),
+      ),
       reason: 'each window keeps its own reset clock',
     );
     await quiesce(tester, container);
@@ -462,7 +464,8 @@ void main() {
     expect(
       find.byIcon(AppIcons.question),
       findsOneWidget,
-      reason: 'nothing was measured, so the gauge glyph is not drawn — the '
+      reason:
+          'nothing was measured, so the gauge glyph is not drawn — the '
           'same answer HealthLevel.unknown gives one panel over',
     );
     expect(find.byIcon(AppIcons.circleHalf), findsNothing);
@@ -502,10 +505,7 @@ void main() {
     );
     final tip = tooltipOf(tester);
     expect(tip, contains('Last checked 3m ago'));
-    expect(
-      tip,
-      contains('Refresh failed: Could not reach the usage service'),
-    );
+    expect(tip, contains('Refresh failed: Could not reach the usage service'));
     expect(find.byType(SnackBar), findsNothing);
     await quiesce(tester, container);
   });
@@ -540,7 +540,8 @@ void main() {
     expect(
       find.byIcon(AppIcons.clockCounterClockwise),
       findsOneWidget,
-      reason: 'a number that was not confirmed is drawn as a reading with an '
+      reason:
+          'a number that was not confirmed is drawn as a reading with an '
           'age, not as a live gauge',
     );
 
@@ -804,10 +805,7 @@ void main() {
     test('claims nothing when the reply measured nothing', () {
       // Antigravity's shape: windows the endpoint named, and no reading in any
       // of them. A successful fetch, so not an error — and still not a number.
-      final view = usageChipViewFor(
-        AsyncData(antigravitySnapshot()),
-        testTime,
-      );
+      final view = usageChipViewFor(AsyncData(antigravitySnapshot()), testTime);
       expect(view.label, 'usage —', reason: 'a dash, never a zero');
       expect(view.longLabel, isNull);
       expect(view.tone, UsageTone.muted);
@@ -936,10 +934,7 @@ void main() {
       );
       expect(formatUsageDuration(const Duration(hours: 3)), '3h');
       expect(formatUsageDuration(const Duration(minutes: 45)), '45m');
-      expect(
-        formatUsageDuration(const Duration(days: 3, hours: 4)),
-        '3d4h',
-      );
+      expect(formatUsageDuration(const Duration(days: 3, hours: 4)), '3d4h');
       expect(formatUsageDuration(const Duration(days: 2)), '2d');
       expect(formatUsageDuration(Duration.zero), 'now');
       expect(formatUsageDuration(const Duration(minutes: -5)), 'now');

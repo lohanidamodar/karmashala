@@ -156,18 +156,21 @@ void main() {
   });
 
   group('degrading honestly', () {
-    test('a chord is refused rather than sent stripped of its modifier', () async {
-      final sent = sink.send(
-        _down(DesktopKey.printable('a'), metaState: AndroidMetaState.ctrlOn),
-      );
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'a chord is refused rather than sent stripped of its modifier',
+      () async {
+        final sent = sink.send(
+          _down(DesktopKey.printable('a'), metaState: AndroidMetaState.ctrlOn),
+        );
+        await Future<void>.delayed(Duration.zero);
 
-      expect(sent, isFalse);
-      // Not "a" typed over the selection the user wanted, and not a bare A.
-      expect(backend.typed, isEmpty);
-      expect(backend.pressed, isEmpty);
-      expect(sink.refusal, DeviceKeyboardTransport.webDriverAgent.limitation);
-    });
+        expect(sent, isFalse);
+        // Not "a" typed over the selection the user wanted, and not a bare A.
+        expect(backend.typed, isEmpty);
+        expect(backend.pressed, isEmpty);
+        expect(sink.refusal, DeviceKeyboardTransport.webDriverAgent.limitation);
+      },
+    );
 
     test('a key iOS does not have names itself in the refusal', () async {
       final sent = sink.send(_down(DesktopKey.audioVolumeUp));
@@ -193,43 +196,31 @@ void main() {
       expect(sink.refusal, isNull);
     });
 
-    test('a backend that fails afterwards is reported, not swallowed', () async {
-      backend.failWith = StateError('WebDriverAgent went away');
+    test(
+      'a backend that fails afterwards is reported, not swallowed',
+      () async {
+        backend.failWith = StateError('WebDriverAgent went away');
 
-      // `send` cannot know yet — the request has only been posted — so it
-      // answers true and the failure arrives on the error channel instead.
-      expect(sink.send(const DeviceTextIntent('a')), isTrue);
-      expect(sink.send(_down(DesktopKey.arrowUp)), isTrue);
-      await Future<void>.delayed(Duration.zero);
+        // `send` cannot know yet — the request has only been posted — so it
+        // answers true and the failure arrives on the error channel instead.
+        expect(sink.send(const DeviceTextIntent('a')), isTrue);
+        expect(sink.send(_down(DesktopKey.arrowUp)), isTrue);
+        await Future<void>.delayed(Duration.zero);
 
-      expect(errors, hasLength(2));
-      expect(errors.first, isA<StateError>());
-    });
+        expect(errors, hasLength(2));
+        expect(errors.first, isA<StateError>());
+      },
+    );
   });
 
   group('the desktop-to-iOS key map', () {
     test('covers the editing and navigation keys', () {
       expect(simulatorKeyFor(DesktopKey.arrowUp), SimulatorKey.arrowUp);
-      expect(
-        simulatorKeyFor(DesktopKey.arrowDown),
-        SimulatorKey.arrowDown,
-      );
-      expect(
-        simulatorKeyFor(DesktopKey.arrowLeft),
-        SimulatorKey.arrowLeft,
-      );
-      expect(
-        simulatorKeyFor(DesktopKey.arrowRight),
-        SimulatorKey.arrowRight,
-      );
-      expect(
-        simulatorKeyFor(DesktopKey.backspace),
-        SimulatorKey.backspace,
-      );
-      expect(
-        simulatorKeyFor(DesktopKey.delete),
-        SimulatorKey.forwardDelete,
-      );
+      expect(simulatorKeyFor(DesktopKey.arrowDown), SimulatorKey.arrowDown);
+      expect(simulatorKeyFor(DesktopKey.arrowLeft), SimulatorKey.arrowLeft);
+      expect(simulatorKeyFor(DesktopKey.arrowRight), SimulatorKey.arrowRight);
+      expect(simulatorKeyFor(DesktopKey.backspace), SimulatorKey.backspace);
+      expect(simulatorKeyFor(DesktopKey.delete), SimulatorKey.forwardDelete);
       expect(simulatorKeyFor(DesktopKey.enter), SimulatorKey.returnKey);
       expect(simulatorKeyFor(DesktopKey.escape), SimulatorKey.escape);
       expect(simulatorKeyFor(DesktopKey.tab), SimulatorKey.tab);
@@ -245,14 +236,17 @@ void main() {
       expect(simulatorKeyFor(DesktopKey.browserSearch), isNull);
     });
 
-    test('carries the HID keyboard-page usages the simulator was probed with', () {
-      // Measured against WebDriverAgent 16.11.4 on an iOS 18.2 simulator: page
-      // 0x07 with these usages moved the caret, deleted, dismissed and
-      // submitted.
-      expect(SimulatorKey.arrowLeft.hidUsage, 0x50);
-      expect(SimulatorKey.backspace.hidUsage, 0x2A);
-      expect(SimulatorKey.escape.hidUsage, 0x29);
-      expect(SimulatorKey.returnKey.hidUsage, 0x28);
-    });
+    test(
+      'carries the HID keyboard-page usages the simulator was probed with',
+      () {
+        // Measured against WebDriverAgent 16.11.4 on an iOS 18.2 simulator: page
+        // 0x07 with these usages moved the caret, deleted, dismissed and
+        // submitted.
+        expect(SimulatorKey.arrowLeft.hidUsage, 0x50);
+        expect(SimulatorKey.backspace.hidUsage, 0x2A);
+        expect(SimulatorKey.escape.hidUsage, 0x29);
+        expect(SimulatorKey.returnKey.hidUsage, 0x28);
+      },
+    );
   });
 }

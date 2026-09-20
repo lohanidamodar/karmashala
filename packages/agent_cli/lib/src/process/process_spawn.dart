@@ -49,7 +49,9 @@ int _spawnsHere = 0;
 /// business knowing.
 Future<CommandResult> spawnToCompletion(CommandRequest request) async {
   _spawnsHere++;
-  if (request.stdinText != null || request.timeout != null) return _spawnAttended(request);
+  if (request.stdinText != null || request.timeout != null) {
+    return _spawnAttended(request);
+  }
   final result = await Process.run(
     request.executable,
     request.arguments,
@@ -103,7 +105,9 @@ Future<CommandResult> _spawnAttended(CommandRequest request) async {
   final out = process.stdout.transform(decoder).join();
   final err = process.stderr.transform(decoder).join();
   unawaited(process.stdin.done.catchError((Object _) => process.stdin));
-  if (request.stdinText case final input?) process.stdin.add(utf8.encode(input));
+  if (request.stdinText case final input?) {
+    process.stdin.add(utf8.encode(input));
+  }
   unawaited(process.stdin.close().catchError((Object _) {}));
   final exitCode = await _exitWithin(process, request);
   return CommandResult(

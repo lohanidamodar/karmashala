@@ -192,8 +192,10 @@ void main() {
       // The project is still named — a header, not a row to tap.
       expect(find.byType(ProjectCard), findsOneWidget);
       expect(find.text('popupbits'), findsOneWidget);
-      expect(tester.widget<ProjectCard>(find.byType(ProjectCard)).onTap,
-          isNull);
+      expect(
+        tester.widget<ProjectCard>(find.byType(ProjectCard)).onTap,
+        isNull,
+      );
       expect(find.byType(SessionCard), findsNWidgets(2));
       expect(find.text('Fix the login flow'), findsOneWidget);
     });
@@ -375,8 +377,10 @@ void main() {
   });
 
   group('robustness', () {
-    const longProject = 'a-project-name-that-is-sixty-characters-long-for-sure-abcdef';
-    const longTitle = 'a session title that is sixty characters long, give or take';
+    const longProject =
+        'a-project-name-that-is-sixty-characters-long-for-sure-abcdef';
+    const longTitle =
+        'a session title that is sixty characters long, give or take';
 
     testWidgets('a 60-character project name and session title truncate '
         'rather than overflow', (tester) async {

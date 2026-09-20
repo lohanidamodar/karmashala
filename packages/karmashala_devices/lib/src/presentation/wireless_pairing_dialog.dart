@@ -33,8 +33,7 @@ class WirelessPairingDialog extends ConsumerStatefulWidget {
       _WirelessPairingDialogState();
 }
 
-class _WirelessPairingDialogState
-    extends ConsumerState<WirelessPairingDialog> {
+class _WirelessPairingDialogState extends ConsumerState<WirelessPairingDialog> {
   WirelessPairingMethod _method = WirelessPairingMethod.qrCode;
 
   final _pairingAddress = TextEditingController();
@@ -161,9 +160,7 @@ class _WirelessPairingDialogState
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text(
-            state is WirelessPairingConnected ? 'Done' : 'Cancel',
-          ),
+          child: Text(state is WirelessPairingConnected ? 'Done' : 'Cancel'),
         ),
       ],
     );
@@ -226,89 +223,91 @@ class _WirelessPairingDialogState
   static double _qrSide(BuildContext context) =>
       (MediaQuery.sizeOf(context).width - 128).clamp(120.0, 260.0);
 
-  Widget _outcome(ThemeData theme, WirelessPairingState state) => switch (state) {
-    WirelessPairingIdle() => _method == WirelessPairingMethod.qrCode
-        ? const _Working(label: 'Starting…')
-        : const SizedBox.shrink(),
-    WirelessPairingWatching(:final invite, :final scansLeft) => Column(
-      children: [
-        // Black on white in both themes: a camera wants contrast and many
-        // scanners refuse an inverted QR. Never wider than the dialog.
-        CustomPaint(
-          key: const Key('wireless-pairing-qr'),
-          size: Size.square(_qrSide(context)),
-          painter: QrPainter(invite.encode()),
+  Widget _outcome(ThemeData theme, WirelessPairingState state) =>
+      switch (state) {
+        WirelessPairingIdle() =>
+          _method == WirelessPairingMethod.qrCode
+              ? const _Working(label: 'Starting…')
+              : const SizedBox.shrink(),
+        WirelessPairingWatching(:final invite, :final scansLeft) => Column(
+          children: [
+            // Black on white in both themes: a camera wants contrast and many
+            // scanners refuse an inverted QR. Never wider than the dialog.
+            CustomPaint(
+              key: const Key('wireless-pairing-qr'),
+              size: Size.square(_qrSide(context)),
+              painter: QrPainter(invite.encode()),
+            ),
+            const SizedBox(height: Insets.sm),
+            Text(
+              'Waiting for a phone to scan it — $scansLeft checks left.',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: Insets.sm),
-        Text(
-          'Waiting for a phone to scan it — $scansLeft checks left.',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+        WirelessPairingBusy(:final step) => _Working(
+          label: switch (step) {
+            WirelessPairingStep.pairing => 'Pairing…',
+            WirelessPairingStep.connecting => 'Connecting…',
+          },
         ),
-      ],
-    ),
-    WirelessPairingBusy(:final step) => _Working(
-      label: switch (step) {
-        WirelessPairingStep.pairing => 'Pairing…',
-        WirelessPairingStep.connecting => 'Connecting…',
-      },
-    ),
-    WirelessPairingConnected(:final address) => _Verdict(
-      icon: AppIcons.checkCircle,
-      colour: SemanticColors.of(context).idle,
-      message:
-          'Connected to $address. It is in the device list with everything '
-          'else.',
-    ),
-    WirelessPairingPaired(:final message) => Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _Verdict(
-          icon: AppIcons.warning,
-          colour: theme.colorScheme.tertiary,
-          message: message,
+        WirelessPairingConnected(:final address) => _Verdict(
+          icon: AppIcons.checkCircle,
+          colour: SemanticColors.of(context).idle,
+          message:
+              'Connected to $address. It is in the device list with everything '
+              'else.',
         ),
-        const SizedBox(height: Insets.sm),
-        TextField(
-          key: const Key('wireless-pairing-connect-address'),
-          controller: _connectAddress,
-          decoration: const InputDecoration(
-            labelText: 'IP address & Port',
-            helperText: 'From the Wireless debugging screen itself',
-          ),
+        WirelessPairingPaired(:final message) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Verdict(
+              icon: AppIcons.warning,
+              colour: theme.colorScheme.tertiary,
+              message: message,
+            ),
+            const SizedBox(height: Insets.sm),
+            TextField(
+              key: const Key('wireless-pairing-connect-address'),
+              controller: _connectAddress,
+              decoration: const InputDecoration(
+                labelText: 'IP address & Port',
+                helperText: 'From the Wireless debugging screen itself',
+              ),
+            ),
+            const SizedBox(height: Insets.sm),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                key: const Key('wireless-pairing-connect'),
+                onPressed: () =>
+                    unawaited(_controller.connectTo(_connectAddress.text)),
+                child: const Text('Connect'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: Insets.sm),
-        Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton(
-            key: const Key('wireless-pairing-connect'),
-            onPressed: () =>
-                unawaited(_controller.connectTo(_connectAddress.text)),
-            child: const Text('Connect'),
-          ),
+        WirelessPairingFailed(:final message) => Column(
+          children: [
+            _Verdict(
+              icon: AppIcons.warning,
+              colour: theme.colorScheme.error,
+              message: message,
+            ),
+            if (_method == WirelessPairingMethod.qrCode) ...[
+              const SizedBox(height: Insets.sm),
+              OutlinedButton(
+                key: const Key('wireless-pairing-retry'),
+                onPressed: () => unawaited(_showQrCode()),
+                child: const Text('Try again'),
+              ),
+            ],
+          ],
         ),
-      ],
-    ),
-    WirelessPairingFailed(:final message) => Column(
-      children: [
-        _Verdict(
-          icon: AppIcons.warning,
-          colour: theme.colorScheme.error,
-          message: message,
-        ),
-        if (_method == WirelessPairingMethod.qrCode) ...[
-          const SizedBox(height: Insets.sm),
-          OutlinedButton(
-            key: const Key('wireless-pairing-retry'),
-            onPressed: () => unawaited(_showQrCode()),
-            child: const Text('Try again'),
-          ),
-        ],
-      ],
-    ),
-  };
+      };
 }
 
 class _Working extends StatelessWidget {

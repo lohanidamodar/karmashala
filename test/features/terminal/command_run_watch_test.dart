@@ -32,7 +32,8 @@ void main() {
   group('reading one command\'s output out of the buffer', () {
     test('the recorded PowerShell session gives each command its own', () {
       final terminal = _terminal();
-      final recorder = CommandBlockRecorder(terminal)..attach(_routerFor(terminal));
+      final recorder = CommandBlockRecorder(terminal)
+        ..attach(_routerFor(terminal));
 
       terminal.write(_fixture());
 
@@ -52,7 +53,8 @@ void main() {
       // drawn on, so a reader that took whole lines would hand back the prompt
       // — and, once the user typed again, their next command as well.
       final terminal = _terminal();
-      final recorder = CommandBlockRecorder(terminal)..attach(_routerFor(terminal));
+      final recorder = CommandBlockRecorder(terminal)
+        ..attach(_routerFor(terminal));
 
       terminal
         ..write('\x1b]133;A\x07PS C:\\ws> \x1b]133;B\x07echo hi\r\n')
@@ -71,7 +73,8 @@ void main() {
 
     test('a command still running is read up to the end of the buffer', () {
       final terminal = _terminal();
-      final recorder = CommandBlockRecorder(terminal)..attach(_routerFor(terminal));
+      final recorder = CommandBlockRecorder(terminal)
+        ..attach(_routerFor(terminal));
 
       terminal
         ..write('\x1b]133;A\x07> \x1b]133;B\x07npm run dev\r\n')
@@ -87,7 +90,8 @@ void main() {
 
     test('a cap keeps the tail and says how many lines it dropped', () {
       final terminal = _terminal();
-      final recorder = CommandBlockRecorder(terminal)..attach(_routerFor(terminal));
+      final recorder = CommandBlockRecorder(terminal)
+        ..attach(_routerFor(terminal));
 
       terminal.write('\x1b]133;A\x07> \x1b]133;B\x07seq\r\n\x1b]133;C\x07');
       for (var i = 0; i < 20; i++) {
@@ -115,7 +119,8 @@ void main() {
 
     test('output that scrolled out of history is not passed off as scoped', () {
       final terminal = _terminal(maxLines: 30);
-      final recorder = CommandBlockRecorder(terminal)..attach(_routerFor(terminal));
+      final recorder = CommandBlockRecorder(terminal)
+        ..attach(_routerFor(terminal));
 
       terminal.write('\x1b]133;A\x07> \x1b]133;B\x07seq\r\n\x1b]133;C\x07');
       for (var i = 0; i < 200; i++) {
@@ -133,7 +138,8 @@ void main() {
   group('completion listeners', () {
     test('fire once per completed block, in order', () {
       final terminal = _terminal();
-      final recorder = CommandBlockRecorder(terminal)..attach(_routerFor(terminal));
+      final recorder = CommandBlockRecorder(terminal)
+        ..attach(_routerFor(terminal));
       final ended = <int?>[];
       recorder.tracker.addCompletionListener(
         (block) => ended.add(block.exitCode),
@@ -148,7 +154,8 @@ void main() {
       'a listener that removes itself stops hearing, and the rest do not',
       () {
         final terminal = _terminal();
-        final recorder = CommandBlockRecorder(terminal)..attach(_routerFor(terminal));
+        final recorder = CommandBlockRecorder(terminal)
+          ..attach(_routerFor(terminal));
         final first = <int?>[];
         final all = <int?>[];
         late final void Function(CommandBlock) once;

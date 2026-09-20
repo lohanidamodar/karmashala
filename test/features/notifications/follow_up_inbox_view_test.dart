@@ -58,7 +58,9 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
-          home: Scaffold(body: SizedBox(width: 360, child: AttentionInboxView())),
+          home: Scaffold(
+            body: SizedBox(width: 360, child: AttentionInboxView()),
+          ),
         ),
       ),
     );
@@ -84,7 +86,11 @@ void main() {
     tester,
   ) async {
     SessionDao(db).insert(
-      session(id: 's1', title: 'Ship the parser', status: SessionStatus.completed),
+      session(
+        id: 's1',
+        title: 'Ship the parser',
+        status: SessionStatus.completed,
+      ),
     );
     VerificationDao(db).insertRun(
       VerificationRun(
@@ -143,10 +149,7 @@ void main() {
 
     // Opened, and nothing else: the offer is a way in, never a relaunch.
     expect(container.read(selectedSessionIdProvider), 's1');
-    expect(
-      container.read(attentionInboxProvider).items.single.seen,
-      isTrue,
-    );
+    expect(container.read(attentionInboxProvider).items.single.seen, isTrue);
     expect(SessionDao(db).getById('s1')!.status, SessionStatus.failed);
   });
 

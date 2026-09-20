@@ -48,7 +48,8 @@ void main() {
     expect(
       tester.takeException(),
       isNull,
-      reason: 'a tile reading a double as its expanded flag throws in '
+      reason:
+          'a tile reading a double as its expanded flag throws in '
           'initState, and the page it is on renders nothing at all',
     );
     expect(find.byType(ExpansionTile), findsWidgets);

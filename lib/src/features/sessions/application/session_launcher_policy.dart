@@ -19,7 +19,11 @@ extension SessionPolicyVerbs on SessionLauncher {
       existingSessionDefault: defaults.existingSessions,
       purpose: purpose,
     ).stored;
-    final support = _ref.read(agentRegistryProvider).byId(agentId)?.launch.permission;
+    final support = _ref
+        .read(agentRegistryProvider)
+        .byId(agentId)
+        ?.launch
+        .permission;
     return support?.resolveStored(stored) ?? PermissionSelection.empty;
   }
 
@@ -29,7 +33,11 @@ extension SessionPolicyVerbs on SessionLauncher {
     SessionPurpose purpose, {
     String? sessionMode,
   }) {
-    final support = _ref.read(agentRegistryProvider).byId(agentId)?.launch.permission;
+    final support = _ref
+        .read(agentRegistryProvider)
+        .byId(agentId)
+        ?.launch
+        .permission;
     if (support == null || !support.isKnown) return ResolvedPermission.none;
     return ResolvedPermission.of(
       support,

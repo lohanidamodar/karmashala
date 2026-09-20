@@ -191,7 +191,10 @@ class SshConnection {
         if (_closed) {
           // Closed while the dial was in flight: nothing may keep this client.
           unawaited(client.close());
-          throw SshConnectionException('Connection closed while connecting', retryable: false);
+          throw SshConnectionException(
+            'Connection closed while connecting',
+            retryable: false,
+          );
         }
         _client = client;
         _emit(const SshConnectionState(status: SshConnectionStatus.connected));

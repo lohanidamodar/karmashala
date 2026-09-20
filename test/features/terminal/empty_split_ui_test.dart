@@ -98,7 +98,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(NewSessionDialog), findsOneWidget);
-    expect(find.text('Choose where and how the coding agent should run.'), findsOneWidget);
+    expect(
+      find.text('Choose where and how the coding agent should run.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('closing the empty region collapses the split', (tester) async {
@@ -116,7 +119,11 @@ void main() {
 
     expect(find.byType(EmptyPaneRegion), findsNothing);
     expect(
-      container.read(terminalSessionsControllerProvider).activeTab!.layout.panes,
+      container
+          .read(terminalSessionsControllerProvider)
+          .activeTab!
+          .layout
+          .panes,
       hasLength(1),
     );
   });
@@ -147,8 +154,7 @@ void main() {
       of: find.byType(EmptyPaneRegion),
       matching: find.byWidgetPredicate(
         (widget) =>
-            widget is Scrollable &&
-            widget.axisDirection == AxisDirection.right,
+            widget is Scrollable && widget.axisDirection == AxisDirection.right,
       ),
     );
     expect(sideways, findsNothing, reason: 'the width is capped, not scrolled');
@@ -180,9 +186,7 @@ void main() {
     }
   });
 
-  testWidgets('a tab chip dragged onto the region is refused', (
-    tester,
-  ) async {
+  testWidgets('a tab chip dragged onto the region is refused', (tester) async {
     final container = workbenchContainer();
     final controller = container.read(
       terminalSessionsControllerProvider.notifier,

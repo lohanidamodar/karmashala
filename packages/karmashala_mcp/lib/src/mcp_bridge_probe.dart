@@ -146,16 +146,18 @@ class McpBridgeProbe {
       },
     );
     unawaited(
-      handle.exitCode.then((code) {
-        if (!first.isCompleted) {
-          first.complete(
-            _Reply(
-              McpBridgeVerdict.noHandshake,
-              'The process exited with code $code before answering.',
-            ),
-          );
-        }
-      }).catchError((Object _) {}),
+      handle.exitCode
+          .then((code) {
+            if (!first.isCompleted) {
+              first.complete(
+                _Reply(
+                  McpBridgeVerdict.noHandshake,
+                  'The process exited with code $code before answering.',
+                ),
+              );
+            }
+          })
+          .catchError((Object _) {}),
     );
 
     try {

@@ -65,7 +65,12 @@ void main() {
   void seed() {
     final dao = container.read(projectDaoProvider);
     final workspaces = [
-      for (final name in const ['Personal', 'PopupBits', 'Appwrite', 'Game dev'])
+      for (final name in const [
+        'Personal',
+        'PopupBits',
+        'Appwrite',
+        'Game dev',
+      ])
         container.read(workspacesControllerProvider.notifier).create(name).id,
     ];
     for (var i = 0; i < projectCount; i++) {

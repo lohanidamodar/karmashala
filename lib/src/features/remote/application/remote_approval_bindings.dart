@@ -196,11 +196,9 @@ Future<String> answerRemoteQuestion(
     throw RemoteApiRefusal(ErrorCode.badRequest, '${error.message}');
   }
   try {
-    await ref.read(sessionQuestionTypistProvider).answer(
-      sessionId,
-      open,
-      answers,
-    );
+    await ref
+        .read(sessionQuestionTypistProvider)
+        .answer(sessionId, open, answers);
   } on SessionPromptRefusal catch (refusal) {
     throw RemoteApiRefusal(ErrorCode.badRequest, refusal.message);
   }

@@ -23,7 +23,8 @@ class SystemHealthService {
 
   /// Where the checks look for free space. Injected so a test does not need a
   /// platform channel.
-  Future<Directory> Function() supportDirectory = getApplicationSupportDirectory;
+  Future<Directory> Function() supportDirectory =
+      getApplicationSupportDirectory;
 
   /// Existence check for a filesystem path, injected for the same reason.
   bool Function(String path) directoryExists = (p) => Directory(p).existsSync();
@@ -46,13 +47,15 @@ class SystemHealthService {
         'Agent tools endpoint',
         _checkControlServer,
       ),
-      ...environments.where((e) => e.kind == EnvironmentKind.wsl).map(
-        (environment) => _guard(
-          SystemCheckId.wslInterop,
-          'WSL → Windows interop (${environment.name})',
-          () => _checkWslInterop(environment),
-        ),
-      ),
+      ...environments
+          .where((e) => e.kind == EnvironmentKind.wsl)
+          .map(
+            (environment) => _guard(
+              SystemCheckId.wslInterop,
+              'WSL → Windows interop (${environment.name})',
+              () => _checkWslInterop(environment),
+            ),
+          ),
       _guard(
         SystemCheckId.androidTooling,
         'Android tooling',
@@ -392,7 +395,9 @@ class SystemHealthService {
     if (directory == null) {
       return AvdImageStatus.unknown(name, '$name.ini names no AVD folder');
     }
-    final config = readTextFile(_joinPath([directory, 'config.ini'], separator));
+    final config = readTextFile(
+      _joinPath([directory, 'config.ini'], separator),
+    );
     if (config == null) {
       return AvdImageStatus.unknown(
         name,
@@ -405,7 +410,10 @@ class SystemHealthService {
       separator: separator,
     );
     if (image == null) {
-      return AvdImageStatus.unknown(name, 'its config.ini names no system image');
+      return AvdImageStatus.unknown(
+        name,
+        'its config.ini names no system image',
+      );
     }
     return directoryExists(image)
         ? AvdImageStatus.installed(name, image)
@@ -477,7 +485,10 @@ class SystemHealthService {
 
   // --- helpers -------------------------------------------------------------
 
-  Future<String?> _firstLine(CommandRunner runner, CommandRequest request) async {
+  Future<String?> _firstLine(
+    CommandRunner runner,
+    CommandRequest request,
+  ) async {
     try {
       final result = await runner.run(request);
       for (final line in result.stdout.split(RegExp(r'[\r\n]+'))) {

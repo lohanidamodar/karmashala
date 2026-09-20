@@ -39,7 +39,10 @@ void main() {
 
     test('an agent with no declared store does not', () {
       expect(agentStoreRecordsStats(descriptor(null)), isFalse);
-      expect(agentStoreRecordsStats(descriptor(AgentStoreFormat.none)), isFalse);
+      expect(
+        agentStoreRecordsStats(descriptor(AgentStoreFormat.none)),
+        isFalse,
+      );
       expect(agentStoreRecordsStats(null), isFalse);
     });
   });

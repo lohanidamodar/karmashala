@@ -223,22 +223,25 @@ void main() {
       };
     });
 
-    test('runs after git made the worktree, before the index is told', () async {
-      await withSetup().createForSession(
-        repo: repo,
-        worktreeName: 's1',
-        branch: 'session/s1',
-      );
-      expect(order, [
-        'setup',
-        'moved /home/me/.karmashala-worktrees/app-s1',
-      ], reason: 'the copied files are part of what has just appeared');
-      expect(recorded, hasLength(1));
-      expect(
-        recorded.single.worktreePath,
-        '/home/me/.karmashala-worktrees/app-s1',
-      );
-    });
+    test(
+      'runs after git made the worktree, before the index is told',
+      () async {
+        await withSetup().createForSession(
+          repo: repo,
+          worktreeName: 's1',
+          branch: 'session/s1',
+        );
+        expect(order, [
+          'setup',
+          'moved /home/me/.karmashala-worktrees/app-s1',
+        ], reason: 'the copied files are part of what has just appeared');
+        expect(recorded, hasLength(1));
+        expect(
+          recorded.single.worktreePath,
+          '/home/me/.karmashala-worktrees/app-s1',
+        );
+      },
+    );
 
     test('a setup that blows up still leaves the worktree created', () async {
       setupThrows = StateError('the database went away');
@@ -261,21 +264,17 @@ void main() {
         branch: 'session/s1',
       );
       expect(recorded, isEmpty);
-      expect(
-        runner.requests.map((r) => r.arguments),
+      expect(runner.requests.map((r) => r.arguments), [
         [
-          [
-            '-C',
-            '/home/me/app',
-            'worktree',
-            'add',
-            '-b',
-            'session/s1',
-            '/home/me/.karmashala-worktrees/app-s1',
-          ],
+          '-C',
+          '/home/me/app',
+          'worktree',
+          'add',
+          '-b',
+          'session/s1',
+          '/home/me/.karmashala-worktrees/app-s1',
         ],
-        reason: 'one process: the worktree add, and nothing else',
-      );
+      ], reason: 'one process: the worktree add, and nothing else');
     });
 
     test('git refusing to add a worktree runs no setup at all', () async {

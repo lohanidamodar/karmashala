@@ -21,20 +21,26 @@ void main() {
     expect(read.failure, isNull);
   });
 
-  test('a directory where the file should be is unreadable, and says so', () async {
-    Directory(at('auth.json')).createSync();
-    final read = await readJsonObjectFile(at('auth.json'));
-    expect(read, isA<JsonFileUnreadable>());
-    expect(read.failure, contains('Could not read'));
-    expect(read.failure, contains('auth.json'));
-  });
+  test(
+    'a directory where the file should be is unreadable, and says so',
+    () async {
+      Directory(at('auth.json')).createSync();
+      final read = await readJsonObjectFile(at('auth.json'));
+      expect(read, isA<JsonFileUnreadable>());
+      expect(read.failure, contains('Could not read'));
+      expect(read.failure, contains('auth.json'));
+    },
+  );
 
-  test('text that is not JSON is malformed, with the parser\'s reason', () async {
-    File(at('auth.json')).writeAsStringSync('{"tokens": ');
-    final read = await readJsonObjectFile(at('auth.json'));
-    expect(read, isA<JsonFileMalformed>());
-    expect(read.failure, contains('is not valid JSON'));
-  });
+  test(
+    'text that is not JSON is malformed, with the parser\'s reason',
+    () async {
+      File(at('auth.json')).writeAsStringSync('{"tokens": ');
+      final read = await readJsonObjectFile(at('auth.json'));
+      expect(read, isA<JsonFileMalformed>());
+      expect(read.failure, contains('is not valid JSON'));
+    },
+  );
 
   test('JSON that is not an object is named as such', () async {
     File(at('auth.json')).writeAsStringSync('[1, 2]');

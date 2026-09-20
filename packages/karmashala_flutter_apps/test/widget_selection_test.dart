@@ -32,8 +32,7 @@ void main() {
     });
 
     test('a release build has a widget and no location', () {
-      final node = Map<String, Object?>.from(real)
-        ..remove('creationLocation');
+      final node = Map<String, Object?>.from(real)..remove('creationLocation');
       final selection = WidgetSelection.fromInspectorNode(node)!;
       expect(selection.description, 'Text');
       expect(selection.location, isNull);
@@ -45,7 +44,10 @@ void main() {
 
     test('nothing selected is a real answer, not a malformed one', () {
       expect(WidgetSelection.fromInspectorNode(null), isNull);
-      expect(WidgetSelection.fromInspectorNode(const <String, Object?>{}), isNull);
+      expect(
+        WidgetSelection.fromInspectorNode(const <String, Object?>{}),
+        isNull,
+      );
     });
 
     test('a framework widget says so', () {
@@ -61,14 +63,13 @@ void main() {
   group('WidgetSourceLocation.fromNavigateEvent', () {
     test('reads the framework push', () {
       // Captured 2026-09-08 off the ToolEvent stream.
-      final location = WidgetSourceLocation.fromNavigateEvent(
-        const <Object?, Object?>{
-          'fileUri': 'file:///C:/kw/probeapp/lib/main.dart',
-          'line': 118,
-          'column': 22,
-          'source': 'flutter.inspector',
-        },
-      )!;
+      final location =
+          WidgetSourceLocation.fromNavigateEvent(const <Object?, Object?>{
+            'fileUri': 'file:///C:/kw/probeapp/lib/main.dart',
+            'line': 118,
+            'column': 22,
+            'source': 'flutter.inspector',
+          })!;
       expect(location.line, 118);
       expect(location.column, 22);
     });

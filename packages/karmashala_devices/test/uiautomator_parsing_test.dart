@@ -8,8 +8,7 @@ import 'package:test/test.dart';
 /// Real `uiautomator dump` output, captured from the devices this project is
 /// developed against. Synthetic XML would not have caught that a Flutter app
 /// puts its labels in `content-desc` and leaves `text` empty.
-String _fixture(String name) =>
-    File('test/fixtures/$name').readAsStringSync();
+String _fixture(String name) => File('test/fixtures/$name').readAsStringSync();
 
 /// The emulator's Settings home screen (`com.android.settings`, 1080x2400).
 String get _settingsDump => _fixture('uiautomator_settings.xml');

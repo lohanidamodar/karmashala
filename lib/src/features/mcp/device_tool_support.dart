@@ -45,10 +45,7 @@ abstract class DeviceToolFamily {
   ) async {
     final driver = await _driver(id, verb);
     require(driver, verb, capability);
-    claims.observed(
-      deviceId: driver.target.id,
-      sessionId: callerSessionId,
-    );
+    claims.observed(deviceId: driver.target.id, sessionId: callerSessionId);
     return driver;
   }
 
@@ -69,11 +66,7 @@ abstract class DeviceToolFamily {
     return driver;
   }
 
-  void require(
-    DeviceDriver driver,
-    String verb,
-    DeviceCapability capability,
-  ) {
+  void require(DeviceDriver driver, String verb, DeviceCapability capability) {
     if (!driver.can(capability)) {
       throw DeviceRefusal('$verb: ${driver.missingReason(capability)!}');
     }

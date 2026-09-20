@@ -35,7 +35,8 @@ class SessionStore implements SessionBacklogStore {
     if (!directory.existsSync()) directory.createSync(recursive: true);
   }
 
-  Directory _directoryFor(String id) => Directory('${directory.path}/${_safeName(id)}');
+  Directory _directoryFor(String id) =>
+      Directory('${directory.path}/${_safeName(id)}');
 
   /// A name every filesystem accepts, with a hash suffix so two ids that
   /// sanitise the same way do not share a directory.
@@ -93,7 +94,8 @@ class SessionStore implements SessionBacklogStore {
     try {
       final metaFile = File('${dir.path}/meta.json');
       if (!metaFile.existsSync()) return null;
-      final meta = jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
+      final meta =
+          jsonDecode(metaFile.readAsStringSync()) as Map<String, dynamic>;
       if (meta['version'] != _metaVersion) return null;
       final id = meta['id'] as String;
       final firstOffset = (meta['firstOffset'] as num).toInt();
@@ -149,12 +151,18 @@ class SessionStore implements SessionBacklogStore {
   SessionLifecycle _lifecycleFrom(Map<String, dynamic> meta) {
     final endedAt = meta['endedAt'] == null
         ? DateTime.now().toUtc()
-        : DateTime.fromMicrosecondsSinceEpoch((meta['endedAt'] as num).toInt(), isUtc: true);
+        : DateTime.fromMicrosecondsSinceEpoch(
+            (meta['endedAt'] as num).toInt(),
+            isUtc: true,
+          );
     switch (meta['state']) {
       case 'exited':
         return SessionExited((meta['exitCode'] as num).toInt(), endedAt);
       case 'ended':
-        return SessionEndedWithoutCode(endedAt, meta['reason'] as String? ?? 'unrecorded');
+        return SessionEndedWithoutCode(
+          endedAt,
+          meta['reason'] as String? ?? 'unrecorded',
+        );
       default:
         // Running when the host stopped, so never an exit code and never a
         // zero — the case ExitedMessage's null code exists for.
@@ -193,13 +201,20 @@ class SessionStore implements SessionBacklogStore {
     for (final entity in directory.listSync().whereType<Directory>()) {
       try {
         final meta =
-            jsonDecode(File('${entity.path}/meta.json').readAsStringSync()) as Map<String, dynamic>;
+            jsonDecode(File('${entity.path}/meta.json').readAsStringSync())
+                as Map<String, dynamic>;
         if (meta['state'] == 'running') continue;
         final endedAt = (meta['endedAt'] as num?)?.toInt() ?? 0;
-        ended.add((DateTime.fromMicrosecondsSinceEpoch(endedAt, isUtc: true), entity));
+        ended.add((
+          DateTime.fromMicrosecondsSinceEpoch(endedAt, isUtc: true),
+          entity,
+        ));
       } on Object {
         // Unreadable: it can go with the rest of the old ones.
-        ended.add((DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true), entity));
+        ended.add((
+          DateTime.fromMicrosecondsSinceEpoch(0, isUtc: true),
+          entity,
+        ));
       }
     }
     if (ended.length <= keepEndedSessions) return;
@@ -272,7 +287,8 @@ class SessionRecord implements SessionRecorder {
   void _rotate() {
     final keep = _store.capacityBytes;
     final drop = _onDisk - keep;
-    final reader = File('${_directory.path}/out.bin').openSync()..setPositionSync(drop);
+    final reader = File('${_directory.path}/out.bin').openSync()
+      ..setPositionSync(drop);
     final Uint8List tail;
     try {
       tail = reader.readSync(keep);

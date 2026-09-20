@@ -117,11 +117,10 @@ void main() {
       reconnector.didChangeAppLifecycleState(AppLifecycleState.resumed);
       await Future<void>.delayed(Duration.zero);
 
-      expect(
-        gateway.presenceReports.map((p) => p.visibility),
-        [CompanionVisibility.background, CompanionVisibility.foreground],
-        reason: 'a lifecycle change is one report; nothing else produces any',
-      );
+      expect(gateway.presenceReports.map((p) => p.visibility), [
+        CompanionVisibility.background,
+        CompanionVisibility.foreground,
+      ], reason: 'a lifecycle change is one report; nothing else produces any');
     });
   });
 }

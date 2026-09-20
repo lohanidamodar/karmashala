@@ -37,10 +37,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: DeviceControlBar(
-              controls: deviceClipboardControls(
-                bridge: given,
-                say: said.add,
-              ),
+              controls: deviceClipboardControls(bridge: given, say: said.add),
             ),
           ),
         ),

@@ -24,7 +24,11 @@ void main() {
           body: ChatTranscriptView(
             messages: [
               for (final activity in activities)
-                ChatMessage(role: 'tool', text: activity.summary, tool: activity),
+                ChatMessage(
+                  role: 'tool',
+                  text: activity.summary,
+                  tool: activity,
+                ),
             ],
           ),
         ),
@@ -113,9 +117,7 @@ void main() {
     // (`data.label … || data.tooltip …`), and that is where Flutter puts a
     // `Tooltip`'s message — so this asserts the same thing the app-wide
     // accessibility guard does, at the one control this row adds.
-    final node = tester.getSemantics(
-      find.byTooltip('Show the whole command'),
-    );
+    final node = tester.getSemantics(find.byTooltip('Show the whole command'));
     expect(node.tooltip, contains('Show the whole command'));
     semantics.dispose();
   });

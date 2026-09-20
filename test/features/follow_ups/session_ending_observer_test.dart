@@ -66,9 +66,7 @@ void main() {
     return container;
   }
 
-  Future<void> emit(
-    List<AgentActivityStatus> statuses,
-  ) async {
+  Future<void> emit(List<AgentActivityStatus> statuses) async {
     for (final status in statuses) {
       reports.add(report(status));
       await Future<void>.delayed(Duration.zero);

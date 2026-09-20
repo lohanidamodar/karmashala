@@ -295,7 +295,11 @@ class RemoteHostService {
       capabilities: capabilities,
       // The tab's relay stays the payload's `relay` — an older companion reads
       // that alone — while the QR names every other relay this host serves.
-      relays: [?_localRelayUrl, ..._extraRelays, if (_hostedEnabled) this.relay],
+      relays: [
+        ?_localRelayUrl,
+        ..._extraRelays,
+        if (_hostedEnabled) this.relay,
+      ],
     );
     final session = HostPairingSession(
       payload: payload,
@@ -545,10 +549,14 @@ class _DeviceRuntime {
 
   /// What this phone's `session.start` frames produced. Held here, not on the
   /// api, because the retry it exists for arrives on a fresh generation.
-  final SessionStartLedger<RemoteSessionStarted> _starts = SessionStartLedger<RemoteSessionStarted>();
-  final SessionStartLedger<RemoteSessionStarted> _resumes = SessionStartLedger<RemoteSessionStarted>();
-  final SessionStartLedger<RemoteWorkspaceProject> _projects = SessionStartLedger<RemoteWorkspaceProject>();
-  final SessionStartLedger<RemotePromptDelivery> _prompts = SessionStartLedger<RemotePromptDelivery>();
+  final SessionStartLedger<RemoteSessionStarted> _starts =
+      SessionStartLedger<RemoteSessionStarted>();
+  final SessionStartLedger<RemoteSessionStarted> _resumes =
+      SessionStartLedger<RemoteSessionStarted>();
+  final SessionStartLedger<RemoteWorkspaceProject> _projects =
+      SessionStartLedger<RemoteWorkspaceProject>();
+  final SessionStartLedger<RemotePromptDelivery> _prompts =
+      SessionStartLedger<RemotePromptDelivery>();
 
   /// Takes the device's new grant without dropping anything: the row this
   /// runtime carries, the api that judges its frames, and a `host.status` so
@@ -750,7 +758,8 @@ class _DeviceRuntime {
   void _closeGeneration(int generation) {
     final hex = _rendezvousHexByGeneration.remove(generation);
     if (hex != null) service._lanRoutes.remove(hex);
-    for (final url in _listeners[generation]?.keys.toList() ?? const <String>[]) {
+    for (final url
+        in _listeners[generation]?.keys.toList() ?? const <String>[]) {
       _closeRelayListener(generation, url);
     }
     _listeners.remove(generation);

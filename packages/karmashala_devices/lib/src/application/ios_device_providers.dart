@@ -17,7 +17,9 @@ final simctlServiceProvider = Provider<SimctlService?>((ref) {
   if (!ref.watch(hostCanRunSimulatorsProvider)) return null;
   final environment = localHostEnvironment(DateTime.now().toUtc());
   return SimctlService(
-    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref
+        .watch(deviceCommandRunnerFactoryProvider)
+        .forEnvironment(environment),
   );
 });
 
@@ -31,9 +33,7 @@ final iosSimulatorsProvider = FutureProvider<List<IosSimulator>>((ref) async {
 
 /// The simulator the pane is showing, by udid.
 final selectedSimulatorUdidProvider =
-    NotifierProvider<SelectedSimulatorUdid, String?>(
-      SelectedSimulatorUdid.new,
-    );
+    NotifierProvider<SelectedSimulatorUdid, String?>(SelectedSimulatorUdid.new);
 
 class SelectedSimulatorUdid extends Notifier<String?> {
   @override
@@ -67,7 +67,9 @@ final simulatorBackendProvider = Provider<WdaBackend?>((ref) {
   if (locator.locate() == null) return null;
   final environment = localHostEnvironment(DateTime.now().toUtc());
   final backend = WdaBackend(
-    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref
+        .watch(deviceCommandRunnerFactoryProvider)
+        .forEnvironment(environment),
     simctl: simctl,
     locator: locator,
   );
@@ -129,7 +131,9 @@ final simulatorSlimmingServiceProvider = Provider<SimulatorSlimmingService?>((
   if (!ref.watch(hostCanRunSimulatorsProvider)) return null;
   final environment = localHostEnvironment(DateTime.now().toUtc());
   return SimulatorSlimmingService(
-    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref
+        .watch(deviceCommandRunnerFactoryProvider)
+        .forEnvironment(environment),
   );
 });
 
@@ -226,14 +230,16 @@ final simulatorTransitionsProvider =
 /// 170 exist on this developer's machine, so newest runtime comes first.
 final startableSimulatorsProvider = Provider<List<IosSimulator>>((ref) {
   final simulators = ref.watch(iosSimulatorsProvider).asData?.value ?? const [];
-  final startable = [
-    for (final simulator in simulators)
-      if (simulator.isAvailable && simulator.state == SimulatorState.shutdown)
-        simulator,
-  ]..sort((a, b) {
-    final runtime = b.runtime.compareTo(a.runtime);
-    return runtime != 0 ? runtime : a.name.compareTo(b.name);
-  });
+  final startable =
+      [
+        for (final simulator in simulators)
+          if (simulator.isAvailable &&
+              simulator.state == SimulatorState.shutdown)
+            simulator,
+      ]..sort((a, b) {
+        final runtime = b.runtime.compareTo(a.runtime);
+        return runtime != 0 ? runtime : a.name.compareTo(b.name);
+      });
   return List.unmodifiable(startable);
 });
 

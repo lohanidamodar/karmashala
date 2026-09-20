@@ -138,9 +138,7 @@ void main() {
 
       final paneId = _closeWith(db, (container, controller) {
         final id = controller.openTab(TerminalProfile.powerShell);
-        final pane = controller.instanceFor(
-          _panesOfTab(container, id).single,
-        )!;
+        final pane = controller.instanceFor(_panesOfTab(container, id).single)!;
         (pane as FakeTerminalInstance).exitWith(1);
       }).single;
 
@@ -253,23 +251,21 @@ void main() {
 
   group('an agent pane', () {
     /// A live agent pane and a live shell, both in the active tab, at close.
-    List<String> closeWithAnAgentAndAShell(AppDatabase db) => _closeWith(db, (
-      container,
-      controller,
-    ) {
-      controller.openAgentTab(
-        const AgentPaneLaunch(
-          agentId: 'claudeCode',
-          executable: '/usr/bin/claude',
-          workingDirectory: '/home/dev/repo',
-          title: 'a conversation',
-        ),
-      );
-      controller.splitPaneWith(
-        SplitAxis.horizontal,
-        TerminalProfile.powerShell,
-      );
-    });
+    List<String> closeWithAnAgentAndAShell(AppDatabase db) =>
+        _closeWith(db, (container, controller) {
+          controller.openAgentTab(
+            const AgentPaneLaunch(
+              agentId: 'claudeCode',
+              executable: '/usr/bin/claude',
+              workingDirectory: '/home/dev/repo',
+              title: 'a conversation',
+            ),
+          );
+          controller.splitPaneWith(
+            SplitAxis.horizontal,
+            TerminalProfile.powerShell,
+          );
+        });
 
     test('never starts itself, while the shell beside it does', () {
       final db = AppDatabase.memory();
@@ -279,9 +275,7 @@ void main() {
       final next = fakeTerminalContainer(database: db);
       addTearDown(next.dispose);
       final restored = next.read(terminalSessionsControllerProvider);
-      final controller = next.read(
-        terminalSessionsControllerProvider.notifier,
-      );
+      final controller = next.read(terminalSessionsControllerProvider.notifier);
       final agent = panes.firstWhere(
         (id) => controller.instanceFor(id)!.agentLaunch != null,
       );
@@ -344,25 +338,28 @@ void main() {
       );
     });
 
-    test('a factory that throws costs the pane its process, not the layout', () {
-      final db = AppDatabase.memory();
-      addTearDown(db.close);
-      final paneId = _closeWith(db, (container, controller) {
-        controller.openTab(TerminalProfile.powerShell);
-      }).single;
+    test(
+      'a factory that throws costs the pane its process, not the layout',
+      () {
+        final db = AppDatabase.memory();
+        addTearDown(db.close);
+        final paneId = _closeWith(db, (container, controller) {
+          controller.openTab(TerminalProfile.powerShell);
+        }).single;
 
-      final next = ProviderContainer(
-        overrides: fakeTerminalOverrides(
-          database: db,
-          instanceFactory: _throwingFactory,
-        ),
-      );
-      addTearDown(next.dispose);
-      final restored = next.read(terminalSessionsControllerProvider);
+        final next = ProviderContainer(
+          overrides: fakeTerminalOverrides(
+            database: db,
+            instanceFactory: _throwingFactory,
+          ),
+        );
+        addTearDown(next.dispose);
+        final restored = next.read(terminalSessionsControllerProvider);
 
-      expect(restored.tabs.single.layout.panes, [paneId]);
-      expect(restored.livenessOf(paneId), PaneLiveness.restored);
-    });
+        expect(restored.tabs.single.layout.panes, [paneId]);
+        expect(restored.livenessOf(paneId), PaneLiveness.restored);
+      },
+    );
   });
 }
 
@@ -505,7 +502,9 @@ List<String> _closeWith(
   body,
 ) {
   final container = fakeTerminalContainer(database: db);
-  final controller = container.read(terminalSessionsControllerProvider.notifier);
+  final controller = container.read(
+    terminalSessionsControllerProvider.notifier,
+  );
   body(container, controller);
   for (final tab in container.read(terminalSessionsControllerProvider).tabs) {
     for (final paneId in tab.layout.panes) {

@@ -19,9 +19,7 @@ final decisionsRevisionProvider =
 /// A session's decision record, **oldest first** — the order the handoff packet
 /// renders, because the early rows are the constraints the rest was built on.
 final sessionDecisionsProvider = Provider.autoDispose
-    .family<List<DecisionRecord>, String>(
-      (ref, sessionId) {
-        ref.watch(decisionsRevisionProvider);
-        return ref.watch(decisionRecordDaoProvider).forSession(sessionId);
-      },
-    );
+    .family<List<DecisionRecord>, String>((ref, sessionId) {
+      ref.watch(decisionsRevisionProvider);
+      return ref.watch(decisionRecordDaoProvider).forSession(sessionId);
+    });

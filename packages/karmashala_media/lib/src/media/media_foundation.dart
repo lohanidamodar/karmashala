@@ -62,6 +62,7 @@ typedef _HrAttrGuid =
     Int32 Function(Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>);
 typedef _HrAttrBlob =
     Int32 Function(Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>, Uint32);
+
 /// A COM call went wrong. Carries the `HRESULT` so a report can name it.
 class MediaFoundationException implements Exception {
   MediaFoundationException(this.what, this.hresult);
@@ -128,20 +129,21 @@ class _Mf {
     Pointer<Void>,
     Pointer<Pointer<Void>>,
   )
-  createSinkWriter = _readWrite.lookupFunction<
-    Int32 Function(
-      Pointer<Uint16>,
-      Pointer<Void>,
-      Pointer<Void>,
-      Pointer<Pointer<Void>>,
-    ),
-    int Function(
-      Pointer<Uint16>,
-      Pointer<Void>,
-      Pointer<Void>,
-      Pointer<Pointer<Void>>,
-    )
-  >('MFCreateSinkWriterFromURL');
+  createSinkWriter = _readWrite
+      .lookupFunction<
+        Int32 Function(
+          Pointer<Uint16>,
+          Pointer<Void>,
+          Pointer<Void>,
+          Pointer<Pointer<Void>>,
+        ),
+        int Function(
+          Pointer<Uint16>,
+          Pointer<Void>,
+          Pointer<Void>,
+          Pointer<Pointer<Void>>,
+        )
+      >('MFCreateSinkWriterFromURL');
 
   /// Refcounted by the OS, so once per isolate is both necessary and enough.
   void ensureStarted() {
@@ -202,17 +204,21 @@ final _transcodeContainerType = _guid('150ff23f-4abc-478b-ac4f-e81916b8aaa5');
 final _containerMpeg4 = _guid('dc6cd05d-b9d0-40ef-bd35-fa622c1ab28a');
 final _sampleCleanPoint = _guid('9154733f-e1bd-41bf-81d3-fcd918f71332');
 
-Pointer<NativeFunction<T>> _slot<T extends Function>(Pointer<Void> com, int i) =>
-    Pointer.fromAddress(
-      com.cast<Pointer<Pointer<Void>>>().value[i].address,
-    ).cast<NativeFunction<T>>();
+Pointer<NativeFunction<T>> _slot<T extends Function>(
+  Pointer<Void> com,
+  int i,
+) => Pointer.fromAddress(
+  com.cast<Pointer<Pointer<Void>>>().value[i].address,
+).cast<NativeFunction<T>>();
 
 int _call(Pointer<Void> com, int slot) =>
     _slot<_Hr>(com, slot).asFunction<int Function(Pointer<Void>)>()(com);
 
 void _setU32(Pointer<Void> com, Pointer<Uint8> key, int value) => _check(
-  _slot<_HrAttrU32>(com, _slotSetUint32)
-      .asFunction<int Function(Pointer<Void>, Pointer<Uint8>, int)>()(
+  _slot<_HrAttrU32>(
+    com,
+    _slotSetUint32,
+  ).asFunction<int Function(Pointer<Void>, Pointer<Uint8>, int)>()(
     com,
     key,
     value,
@@ -221,8 +227,10 @@ void _setU32(Pointer<Void> com, Pointer<Uint8> key, int value) => _check(
 );
 
 void _setU64(Pointer<Void> com, Pointer<Uint8> key, int value) => _check(
-  _slot<_HrAttrU64>(com, _slotSetUint64)
-      .asFunction<int Function(Pointer<Void>, Pointer<Uint8>, int)>()(
+  _slot<_HrAttrU64>(
+    com,
+    _slotSetUint64,
+  ).asFunction<int Function(Pointer<Void>, Pointer<Uint8>, int)>()(
     com,
     key,
     value,
@@ -230,14 +238,21 @@ void _setU64(Pointer<Void> com, Pointer<Uint8> key, int value) => _check(
   'SetUINT64',
 );
 
-void _setGuid(Pointer<Void> com, Pointer<Uint8> key, Pointer<Uint8> value) =>
-    _check(
-      _slot<_HrAttrGuid>(com, _slotSetGuid)
-          .asFunction<
-            int Function(Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>)
-          >()(com, key, value),
-      'SetGUID',
-    );
+void _setGuid(
+  Pointer<Void> com,
+  Pointer<Uint8> key,
+  Pointer<Uint8> value,
+) => _check(
+  _slot<_HrAttrGuid>(
+    com,
+    _slotSetGuid,
+  ).asFunction<int Function(Pointer<Void>, Pointer<Uint8>, Pointer<Uint8>)>()(
+    com,
+    key,
+    value,
+  ),
+  'SetGUID',
+);
 
 void _setBlobOn(Pointer<Void> com, Pointer<Uint8> key, Uint8List value) {
   final buffer = calloc<Uint8>(value.length);
@@ -388,18 +403,19 @@ class _Mp4Sink {
       fill(data.value);
       _check(_call(buffer.value, _unlock), 'Unlock');
       _check(
-        _slot<_HrU32>(buffer.value, _setCurrentLength)
-            .asFunction<int Function(Pointer<Void>, int)>()(
+        _slot<_HrU32>(
           buffer.value,
-          length,
-        ),
+          _setCurrentLength,
+        ).asFunction<int Function(Pointer<Void>, int)>()(buffer.value, length),
         'SetCurrentLength',
       );
 
       _check(_mf.createSample(sample), 'MFCreateSample');
       _check(
-        _slot<_HrPtr>(sample.value, _addBuffer)
-            .asFunction<int Function(Pointer<Void>, Pointer<Void>)>()(
+        _slot<_HrPtr>(
+          sample.value,
+          _addBuffer,
+        ).asFunction<int Function(Pointer<Void>, Pointer<Void>)>()(
           sample.value,
           buffer.value,
         ),
@@ -407,16 +423,20 @@ class _Mp4Sink {
       );
       // MF counts in 100-nanosecond units.
       _check(
-        _slot<_HrI64>(sample.value, _setSampleTime)
-            .asFunction<int Function(Pointer<Void>, int)>()(
+        _slot<_HrI64>(
+          sample.value,
+          _setSampleTime,
+        ).asFunction<int Function(Pointer<Void>, int)>()(
           sample.value,
           at.inMicroseconds * 10,
         ),
         'SetSampleTime',
       );
       _check(
-        _slot<_HrI64>(sample.value, _setSampleDuration)
-            .asFunction<int Function(Pointer<Void>, int)>()(
+        _slot<_HrI64>(
+          sample.value,
+          _setSampleDuration,
+        ).asFunction<int Function(Pointer<Void>, int)>()(
           sample.value,
           hold.inMicroseconds * 10,
         ),
@@ -424,8 +444,10 @@ class _Mp4Sink {
       );
       if (keyframe) _setU32(sample.value, _sampleCleanPoint, 1);
       _check(
-        _slot<_HrWrite>(_writer, _writeSample)
-            .asFunction<int Function(Pointer<Void>, int, Pointer<Void>)>()(
+        _slot<_HrWrite>(
+          _writer,
+          _writeSample,
+        ).asFunction<int Function(Pointer<Void>, int, Pointer<Void>)>()(
           _writer,
           _stream,
           sample.value,

@@ -121,9 +121,7 @@ void main() {
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final runner = FakeCommandRunner();
-      final adapter = CodexAdapter(
-        runnerFor: (_) => runner,
-      );
+      final adapter = CodexAdapter(runnerFor: (_) => runner);
 
       adapter.start(
         AgentLaunch(

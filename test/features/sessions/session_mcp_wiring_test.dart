@@ -92,14 +92,16 @@ void main() {
     ProviderContainer container, {
     String agentId = AgentIds.claudeCode,
     String installationId = 'a1',
-  }) => container.read(sessionLauncherProvider).launch(
-    SessionLaunchRequest(
-      repository: repository(),
-      installation: agentInstallation(id: installationId, agentId: agentId),
-      title: 'Work',
-      purpose: SessionPurpose.newSession,
-    ),
-  );
+  }) => container
+      .read(sessionLauncherProvider)
+      .launch(
+        SessionLaunchRequest(
+          repository: repository(),
+          installation: agentInstallation(id: installationId, agentId: agentId),
+          title: 'Work',
+          purpose: SessionPurpose.newSession,
+        ),
+      );
 
   /// What the pane would actually run, which is the two halves put together.
   List<String> paneCommand(ProviderContainer container, String paneId) =>
@@ -114,17 +116,19 @@ void main() {
     String agentId = AgentIds.claudeCode,
     String installationId = 'a1',
   }) async {
-    final launched = await container.read(sessionLauncherProvider).launch(
-      SessionLaunchRequest(
-        repository: repository(),
-        installation: agentInstallation(
-          id: installationId,
-          agentId: agentId,
-        ),
-        title: 'Work',
-        purpose: SessionPurpose.newSession,
-      ),
-    );
+    final launched = await container
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository(),
+            installation: agentInstallation(
+              id: installationId,
+              agentId: agentId,
+            ),
+            title: 'Work',
+            purpose: SessionPurpose.newSession,
+          ),
+        );
     return paneCommand(container, launched.paneId!);
   }
 
@@ -159,24 +163,28 @@ void main() {
       expect(mcp.askedForAFile, isFalse);
     });
 
-    test('the session named in the URL is the session that was launched',
-        () async {
-      final mcp = _FixedMcp(configPath: '/mnt/c/x/session.json');
-      final h = harness(mcp: mcp);
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
+    test(
+      'the session named in the URL is the session that was launched',
+      () async {
+        final mcp = _FixedMcp(configPath: '/mnt/c/x/session.json');
+        final h = harness(mcp: mcp);
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
 
-      final launched = await h.container.read(sessionLauncherProvider).launch(
-        SessionLaunchRequest(
-          repository: repository(),
-          installation: agentInstallation(agentId: AgentIds.claudeCode),
-          title: 'Work',
-          purpose: SessionPurpose.newSession,
-        ),
-      );
+        final launched = await h.container
+            .read(sessionLauncherProvider)
+            .launch(
+              SessionLaunchRequest(
+                repository: repository(),
+                installation: agentInstallation(agentId: AgentIds.claudeCode),
+                title: 'Work',
+                purpose: SessionPurpose.newSession,
+              ),
+            );
 
-      expect(mcp.sessionIds, [launched.session.id]);
-    });
+        expect(mcp.sessionIds, [launched.session.id]);
+      },
+    );
   });
 
   group('an external terminal carries the same thing', () {
@@ -187,16 +195,18 @@ void main() {
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
 
-      await h.container.read(sessionLauncherProvider).launch(
-        SessionLaunchRequest(
-          repository: repository(),
-          installation: agentInstallation(agentId: AgentIds.claudeCode),
-          title: 'Work',
-          purpose: SessionPurpose.newSession,
-          surface: SessionSurface.external,
-        ),
-        externalTerminal: terminal,
-      );
+      await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: AgentIds.claudeCode),
+              title: 'Work',
+              purpose: SessionPurpose.newSession,
+              surface: SessionSurface.external,
+            ),
+            externalTerminal: terminal,
+          );
 
       expect(
         h.runner.startRequests.single.arguments.join(' '),
@@ -231,9 +241,7 @@ void main() {
         paneCommand(first, paneId),
         contains('--mcp-config=/gone/session-abc.json'),
       );
-      first
-          .read(terminalSessionsControllerProvider.notifier)
-          .persistLayout();
+      first.read(terminalSessionsControllerProvider.notifier).persistLayout();
       first.dispose();
 
       // The restart: a different port, a different credential, a config
@@ -275,12 +283,12 @@ void main() {
         db,
         mcp: _FixedMcp(url: 'http://127.0.0.1:1111/mcp/yesterday'),
       );
-      final paneId =
-          (await launchIn(first, agentId: AgentIds.codex, installationId: 'a2'))
-              .paneId!;
-      first
-          .read(terminalSessionsControllerProvider.notifier)
-          .persistLayout();
+      final paneId = (await launchIn(
+        first,
+        agentId: AgentIds.codex,
+        installationId: 'a2',
+      )).paneId!;
+      first.read(terminalSessionsControllerProvider.notifier).persistLayout();
       first.dispose();
 
       final next = containerOver(
@@ -301,38 +309,39 @@ void main() {
       expect(paneCommand(next, paneId).join(' '), isNot(contains('yesterday')));
     });
 
-    test('with the control server down it starts with no MCP flags at all',
-        () async {
-      // The ordinary case, and the one the whole mechanism fails soft into: a
-      // pane without its tools is a smaller loss than a pane that will not
-      // open. Never a stale flag instead.
-      final db = seededDatabase();
-      addTearDown(db.close);
+    test(
+      'with the control server down it starts with no MCP flags at all',
+      () async {
+        // The ordinary case, and the one the whole mechanism fails soft into: a
+        // pane without its tools is a smaller loss than a pane that will not
+        // open. Never a stale flag instead.
+        final db = seededDatabase();
+        addTearDown(db.close);
 
-      final first = containerOver(
-        db,
-        mcp: _FixedMcp(configPath: '/gone/session-abc.json'),
-      );
-      final paneId = (await launchIn(first)).paneId!;
-      first
-          .read(terminalSessionsControllerProvider.notifier)
-          .persistLayout();
-      first.dispose();
+        final first = containerOver(
+          db,
+          mcp: _FixedMcp(configPath: '/gone/session-abc.json'),
+        );
+        final paneId = (await launchIn(first)).paneId!;
+        first.read(terminalSessionsControllerProvider.notifier).persistLayout();
+        first.dispose();
 
-      final next = containerOver(db, idPrefix: 't-');
-      addTearDown(next.dispose);
-      next.read(terminalSessionsControllerProvider.notifier).startPane(paneId);
+        final next = containerOver(db, idPrefix: 't-');
+        addTearDown(next.dispose);
+        next
+            .read(terminalSessionsControllerProvider.notifier)
+            .startPane(paneId);
 
-      expect(paneCommand(next, paneId), [
-        '--permission-mode',
-        'manual',
-        '--session-id',
-        's-0',
-      ]);
-    });
+        expect(paneCommand(next, paneId), [
+          '--permission-mode',
+          'manual',
+          '--session-id',
+          's-0',
+        ]);
+      },
+    );
 
-    test('a layout saved before the fix loses the flag it baked in',
-        () async {
+    test('a layout saved before the fix loses the flag it baked in', () async {
       // The owner will restore an existing layout, whose rows still carry
       // the MCP flag inside `arguments`. Installing the fix has to repair
       // those, not merely stop writing new ones.
@@ -341,30 +350,25 @@ void main() {
 
       final first = containerOver(db);
       final paneId = (await launchIn(first)).paneId!;
-      first
-          .read(terminalSessionsControllerProvider.notifier)
-          .persistLayout();
+      first.read(terminalSessionsControllerProvider.notifier).persistLayout();
       first.dispose();
 
-      db.execute(
-        'UPDATE terminal_panes SET launch_command = ? WHERE id = ?;',
-        [
-          jsonEncode({
-            'agentId': AgentIds.claudeCode,
-            'executable': 'claude',
-            'arguments': [
-              r'--mcp-config=C:\Users\d\AppData\Roaming\com.popupbits'
-                  r'\karmashala\mcp\session-95659659.json',
-              '--permission-mode',
-              'manual',
-              '--session-id',
-              's-0',
-            ],
-            'sessionId': 's-0',
-          }),
-          paneId,
-        ],
-      );
+      db.execute('UPDATE terminal_panes SET launch_command = ? WHERE id = ?;', [
+        jsonEncode({
+          'agentId': AgentIds.claudeCode,
+          'executable': 'claude',
+          'arguments': [
+            r'--mcp-config=C:\Users\d\AppData\Roaming\com.popupbits'
+                r'\karmashala\mcp\session-95659659.json',
+            '--permission-mode',
+            'manual',
+            '--session-id',
+            's-0',
+          ],
+          'sessionId': 's-0',
+        }),
+        paneId,
+      ]);
 
       final next = containerOver(db, idPrefix: 't-');
       addTearDown(next.dispose);
@@ -393,21 +397,23 @@ void main() {
       ]);
     });
 
-    test('an endpoint that cannot be reached from here changes nothing',
-        () async {
-      // What a session over SSH gets, and a WSL session on a host with no
-      // switch: the provisioner answers null and the command line is untouched.
-      final h = harness(mcp: _FixedMcp(access: null));
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
+    test(
+      'an endpoint that cannot be reached from here changes nothing',
+      () async {
+        // What a session over SSH gets, and a WSL session on a host with no
+        // switch: the provisioner answers null and the command line is untouched.
+        final h = harness(mcp: _FixedMcp(access: null));
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
 
-      expect(await paneArguments(h.container), [
-        '--permission-mode',
-        'manual',
-        '--session-id',
-        's-0',
-      ]);
-    });
+        expect(await paneArguments(h.container), [
+          '--permission-mode',
+          'manual',
+          '--session-id',
+          's-0',
+        ]);
+      },
+    );
 
     test('a provisioner that throws never fails a launch', () async {
       // The one rule that outranks everything else here: a session that opens
@@ -425,98 +431,103 @@ void main() {
     });
   });
 
-  test('end to end: the launched session calls a tool through its own config',
-      () async {
-    // The whole path, with nothing faked between the launch and the tool: a
-    // real control server, a real config file written to disk by a real
-    // launch, the URL read back out of that file, a real HTTP request to it,
-    // and a tool that answers about the caller without being told who it is.
-    final tmp = Directory.systemTemp.createTempSync('karmashala_mcp_e2e_');
-    addTearDown(() {
-      if (tmp.existsSync()) tmp.deleteSync(recursive: true);
-    });
-    final h = harness();
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
+  test(
+    'end to end: the launched session calls a tool through its own config',
+    () async {
+      // The whole path, with nothing faked between the launch and the tool: a
+      // real control server, a real config file written to disk by a real
+      // launch, the URL read back out of that file, a real HTTP request to it,
+      // and a tool that answers about the caller without being told who it is.
+      final tmp = Directory.systemTemp.createTempSync('karmashala_mcp_e2e_');
+      addTearDown(() {
+        if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+      });
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
 
-    final server = LauncherControlServer(h.container);
-    await server.start(
-      bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
-      socketDirectory: p.join(tmp.path, 'ipc'),
-      sessionConfigDirectory: p.join(tmp.path, 'mcp'),
-      wslHostAddress: () async => null,
-    );
-    addTearDown(server.stop);
+      final server = LauncherControlServer(h.container);
+      await server.start(
+        bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
+        socketDirectory: p.join(tmp.path, 'ipc'),
+        sessionConfigDirectory: p.join(tmp.path, 'mcp'),
+        wslHostAddress: () async => null,
+      );
+      addTearDown(server.stop);
 
-    final launched = await h.container.read(sessionLauncherProvider).launch(
-      SessionLaunchRequest(
-        repository: repository(),
-        installation: agentInstallation(agentId: AgentIds.claudeCode),
-        title: 'Driven from inside',
-        purpose: SessionPurpose.newSession,
-      ),
-    );
+      final launched = await h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: AgentIds.claudeCode),
+              title: 'Driven from inside',
+              purpose: SessionPurpose.newSession,
+            ),
+          );
 
-    // 1. The launch put a config flag on the agent's command line.
-    final args = paneCommand(h.container, launched.paneId!);
-    final flag = args.firstWhere((a) => a.startsWith('--mcp-config='));
+      // 1. The launch put a config flag on the agent's command line.
+      final args = paneCommand(h.container, launched.paneId!);
+      final flag = args.firstWhere((a) => a.startsWith('--mcp-config='));
 
-    // 2. The file it names is really there, and names one URL.
-    final config =
-        jsonDecode(File(flag.split('=').last).readAsStringSync())
-            as Map<String, Object?>;
-    final url =
-        ((config['mcpServers']! as Map<String, Object?>)['karmashala']!
-            as Map<String, Object?>)['url']! as String;
+      // 2. The file it names is really there, and names one URL.
+      final config =
+          jsonDecode(File(flag.split('=').last).readAsStringSync())
+              as Map<String, Object?>;
+      final url =
+          ((config['mcpServers']! as Map<String, Object?>)['karmashala']!
+                  as Map<String, Object?>)['url']!
+              as String;
 
-    // 3. That URL answers a real MCP tool call…
-    final client = HttpClient();
-    addTearDown(() => client.close(force: true));
-    final request = await client.postUrl(Uri.parse(url));
-    request.headers.contentType = ContentType.json;
-    request.headers.set(
-      HttpHeaders.acceptHeader,
-      'application/json, text/event-stream',
-    );
-    request.write(
-      jsonEncode(<String, Object?>{
-        'jsonrpc': '2.0',
-        'id': 1,
-        'method': 'tools/call',
-        // No sessionId argument at all — the point of the next assertion.
-        'params': <String, Object?>{
-          'name': 'session_transcript',
-          'arguments': <String, Object?>{},
-        },
-        '_meta': <String, Object?>{
-          'io.modelcontextprotocol/protocolVersion': '2026-07-28',
-        },
-      }),
-    );
-    final response = await request.close();
-    final body =
-        jsonDecode(await response.transform(utf8.decoder).join())
-            as Map<String, Object?>;
+      // 3. That URL answers a real MCP tool call…
+      final client = HttpClient();
+      addTearDown(() => client.close(force: true));
+      final request = await client.postUrl(Uri.parse(url));
+      request.headers.contentType = ContentType.json;
+      request.headers.set(
+        HttpHeaders.acceptHeader,
+        'application/json, text/event-stream',
+      );
+      request.write(
+        jsonEncode(<String, Object?>{
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'tools/call',
+          // No sessionId argument at all — the point of the next assertion.
+          'params': <String, Object?>{
+            'name': 'session_transcript',
+            'arguments': <String, Object?>{},
+          },
+          '_meta': <String, Object?>{
+            'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+          },
+        }),
+      );
+      final response = await request.close();
+      final body =
+          jsonDecode(await response.transform(utf8.decoder).join())
+              as Map<String, Object?>;
 
-    expect(response.statusCode, 200);
-    final result = body['result']! as Map<String, Object?>;
-    expect(result['isError'], isNot(true), reason: '$body');
+      expect(response.statusCode, 200);
+      final result = body['result']! as Map<String, Object?>;
+      expect(result['isError'], isNot(true), reason: '$body');
 
-    // 4. …and the tool acted on the session that was launched, without the
-    // agent naming it. That is the identity property: the app stamped it into
-    // the URL, and the model could not have said it.
-    final structured = result['structuredContent'] as Map<String, Object?>?;
-    final reported =
-        structured ??
-        jsonDecode(
-              ((result['content']! as List<Object?>).first
-                  as Map<String, Object?>)['text']!
-                  as String,
-            )
-            as Map<String, Object?>;
-    expect(reported['sessionId'], launched.session.id);
-    expect(reported['title'], 'Driven from inside');
-  });
+      // 4. …and the tool acted on the session that was launched, without the
+      // agent naming it. That is the identity property: the app stamped it into
+      // the URL, and the model could not have said it.
+      final structured = result['structuredContent'] as Map<String, Object?>?;
+      final reported =
+          structured ??
+          jsonDecode(
+                ((result['content']! as List<Object?>).first
+                        as Map<String, Object?>)['text']!
+                    as String,
+              )
+              as Map<String, Object?>;
+      expect(reported['sessionId'], launched.session.id);
+      expect(reported['title'], 'Driven from inside');
+    },
+  );
 }
 
 const _url = 'http://127.0.0.1:51234/mcp/session-token';

@@ -176,5 +176,5 @@ const BrowserRecovery consentRequiredRecovery = BrowserRecovery(
   BrowserRecoveryAction.askUser,
   BrowserRetryAdvice.never,
   'ask the developer to grant it in $kBrowserConsentLocation, then say '
-      'what you will run and why',
+  'what you will run and why',
 );

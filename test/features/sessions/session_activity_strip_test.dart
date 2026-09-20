@@ -283,7 +283,11 @@ void main() {
   testWidgets('a working session with no record to read says so', (
     tester,
   ) async {
-    await pumpStrip(tester, messages: const [], surface: SessionSurface.external);
+    await pumpStrip(
+      tester,
+      messages: const [],
+      surface: SessionSurface.external,
+    );
 
     expect(
       find.text(activityBlindSpotSentence(ActivityBlindSpot.noRecord)),
@@ -338,8 +342,9 @@ void main() {
     expect(semantics.label, contains('Subagent running'));
   });
 
-  testWidgets('it collapses beside foreground calls with no second vocabulary',
-      (tester) async {
+  testWidgets('it collapses beside foreground calls with no second vocabulary', (
+    tester,
+  ) async {
     // One label, and no "background" in it. Whether the CLI held the parent's
     // tool call open or answered it with a stub is a fact about the CLI, not
     // about the user's work — and that detail already changed once, when the
@@ -383,7 +388,11 @@ void main() {
 
   testWidgets('the elapsed time advances on its own', (tester) async {
     final clock = _MovingClock(issued.add(const Duration(seconds: 4)));
-    await pumpStrip(tester, messages: [call(id: 't1')], clock: clock);
+    await pumpStrip(
+      tester,
+      messages: [call(id: 't1')],
+      clock: clock,
+    );
 
     expect(find.text('4s'), findsOneWidget);
 

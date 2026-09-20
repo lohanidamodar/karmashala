@@ -21,7 +21,10 @@ void main() {
 
     test('generated Dart is named by its suffix, not its directory', () {
       expect(reviewTierOf('lib/models/user.g.dart'), ReviewTier.generated);
-      expect(reviewTierOf('lib/models/user.freezed.dart'), ReviewTier.generated);
+      expect(
+        reviewTierOf('lib/models/user.freezed.dart'),
+        ReviewTier.generated,
+      );
       expect(reviewTierOf('lib/models/user.dart'), ReviewTier.source);
     });
 
@@ -32,8 +35,10 @@ void main() {
         ReviewTier.buildOutput,
       );
       expect(reviewTierOf(r'build\app\x'), ReviewTier.buildOutput);
-      expect(reviewTierOf('.dart_tool/package_config.json'),
-          ReviewTier.buildOutput);
+      expect(
+        reviewTierOf('.dart_tool/package_config.json'),
+        ReviewTier.buildOutput,
+      );
       // A file *called* build is not a directory of build output.
       expect(reviewTierOf('tool/build.dart'), ReviewTier.source);
     });
@@ -96,28 +101,30 @@ index 3333333..4444444 100644
 +void main() => runApp(App());
 ''';
 
-    test('the hand-written file comes first, and the lock keeps every line', () {
-      final ordered = orderUnifiedDiffForReview(diff);
+    test(
+      'the hand-written file comes first, and the lock keeps every line',
+      () {
+        final ordered = orderUnifiedDiffForReview(diff);
 
-      expect(
-        ordered.indexOf('diff --git a/lib/main.dart b/lib/main.dart'),
-        lessThan(ordered.indexOf('diff --git a/pubspec.lock b/pubspec.lock')),
-      );
-      expect(ordered, contains('+  version: "1.0.1"'));
-      expect(ordered, contains('+void main() => runApp(App());'));
-      // Reordered, not rewritten: the same lines, and only the order moved.
-      expect(
-        ordered.split('\n')..sort(),
-        diff.split('\n')..sort(),
-      );
-    });
+        expect(
+          ordered.indexOf('diff --git a/lib/main.dart b/lib/main.dart'),
+          lessThan(ordered.indexOf('diff --git a/pubspec.lock b/pubspec.lock')),
+        );
+        expect(ordered, contains('+  version: "1.0.1"'));
+        expect(ordered, contains('+void main() => runApp(App());'));
+        // Reordered, not rewritten: the same lines, and only the order moved.
+        expect(ordered.split('\n')..sort(), diff.split('\n')..sort());
+      },
+    );
 
     test('a diff with one file or none comes back untouched', () {
       expect(orderUnifiedDiffForReview(''), '');
       const single = 'diff --git a/pubspec.lock b/pubspec.lock\n+x\n';
       expect(orderUnifiedDiffForReview(single), single);
-      expect(orderUnifiedDiffForReview('not a diff at all'),
-          'not a diff at all');
+      expect(
+        orderUnifiedDiffForReview('not a diff at all'),
+        'not a diff at all',
+      );
     });
 
     test('a path with a space in it is read to the end of the header', () {
@@ -128,10 +135,7 @@ diff --git a/lib/my file.dart b/lib/my file.dart
 +source
 ''';
       final ordered = orderUnifiedDiffForReview(spaced);
-      expect(
-        ordered.indexOf('+source'),
-        lessThan(ordered.indexOf('+lock')),
-      );
+      expect(ordered.indexOf('+source'), lessThan(ordered.indexOf('+lock')));
     });
   });
 }

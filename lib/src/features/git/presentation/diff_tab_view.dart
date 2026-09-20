@@ -89,10 +89,7 @@ class DiffTabHeader extends ConsumerWidget {
         if (counts != null && (counts.added > 0 || counts.removed > 0))
           Padding(
             padding: const EdgeInsets.only(right: Insets.xs),
-            child: DiffCountLabel(
-              added: counts.added,
-              removed: counts.removed,
-            ),
+            child: DiffCountLabel(added: counts.added, removed: counts.removed),
           ),
         IconButton(
           tooltip: hostFile == null

@@ -57,7 +57,8 @@ void main() {
       responder: (request) => request.arguments.contains('devices')
           ? const CommandResult(
               exitCode: 0,
-              stdout: 'List of devices attached\n'
+              stdout:
+                  'List of devices attached\n'
                   '$_serial\tdevice product:sdk model:Pixel device:emu\n',
               stderr: '',
             )
@@ -145,9 +146,7 @@ void main() {
     expect(find.textContaining('just now'), findsOneWidget);
   });
 
-  testWidgets('a typed path installs, and no dialog is opened', (
-    tester,
-  ) async {
+  testWidgets('a typed path installs, and no dialog is opened', (tester) async {
     // The rule `karmashala_ui's picking.dart` states: every Browse surface also
     // accepts a typed path, because on Windows a picker that never appears
     // leaves nothing to press. This was the last surface without one.
@@ -284,7 +283,10 @@ void main() {
     await tester.tap(find.text('Install…'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('being driven by another agent'), findsOneWidget);
+    expect(
+      find.textContaining('being driven by another agent'),
+      findsOneWidget,
+    );
     expect(find.textContaining('the emulator run'), findsOneWidget);
     // And it did not act anyway: refusing has to mean the device was untouched.
     expect(

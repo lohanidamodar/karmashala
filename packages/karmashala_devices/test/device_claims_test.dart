@@ -90,26 +90,29 @@ void main() {
       expect(busy.claim.holderSessionId, 's1');
     });
 
-    test('the refusal says what will clear it, and that reading is not blocked', () {
-      final registry = claims();
-      registry.claim(
-        deviceId: 'emulator-5554',
-        sessionId: 's1',
-        verb: 'device_tap',
-      );
-
-      final busy = _busy(
-        () => registry.claim(
+    test(
+      'the refusal says what will clear it, and that reading is not blocked',
+      () {
+        final registry = claims();
+        registry.claim(
           deviceId: 'emulator-5554',
-          sessionId: 's2',
+          sessionId: 's1',
           verb: 'device_tap',
-        ),
-      );
+        );
 
-      expect(busy.message, contains('when that session ends'));
-      expect(busy.message, contains('lapses on its own'));
-      expect(busy.message, contains('device_ui_dump'));
-    });
+        final busy = _busy(
+          () => registry.claim(
+            deviceId: 'emulator-5554',
+            sessionId: 's2',
+            verb: 'device_tap',
+          ),
+        );
+
+        expect(busy.message, contains('when that session ends'));
+        expect(busy.message, contains('lapses on its own'));
+        expect(busy.message, contains('device_ui_dump'));
+      },
+    );
 
     test('different devices are driven in parallel', () {
       final registry = claims();
@@ -119,31 +122,36 @@ void main() {
         verb: 'device_tap',
       );
       expect(
-        registry.claim(
-          deviceId: 'emulator-5556',
-          sessionId: 's2',
-          verb: 'device_tap',
-        )!.holderSessionId,
+        registry
+            .claim(
+              deviceId: 'emulator-5556',
+              sessionId: 's2',
+              verb: 'device_tap',
+            )!
+            .holderSessionId,
         's2',
       );
     });
 
-    test('the holder is not refused its own device, and its run is counted', () {
-      final registry = claims();
-      registry.claim(
-        deviceId: 'emulator-5554',
-        sessionId: 's1',
-        verb: 'device_tap',
-      );
-      final again = registry.claim(
-        deviceId: 'emulator-5554',
-        sessionId: 's1',
-        verb: 'device_type',
-      );
-      expect(again!.calls, 2);
-      expect(again.lastVerb, 'device_type');
-      expect(again.takenAt, testTime, reason: 'one run, not two');
-    });
+    test(
+      'the holder is not refused its own device, and its run is counted',
+      () {
+        final registry = claims();
+        registry.claim(
+          deviceId: 'emulator-5554',
+          sessionId: 's1',
+          verb: 'device_tap',
+        );
+        final again = registry.claim(
+          deviceId: 'emulator-5554',
+          sessionId: 's1',
+          verb: 'device_type',
+        );
+        expect(again!.calls, 2);
+        expect(again.lastVerb, 'device_type');
+        expect(again.takenAt, testTime, reason: 'one run, not two');
+      },
+    );
   });
 
   group('a holder that goes away', () {
@@ -159,11 +167,13 @@ void main() {
 
       expect(registry.standing('emulator-5554'), isNull);
       expect(
-        registry.claim(
-          deviceId: 'emulator-5554',
-          sessionId: 's2',
-          verb: 'device_tap',
-        )!.holderSessionId,
+        registry
+            .claim(
+              deviceId: 'emulator-5554',
+              sessionId: 's2',
+              verb: 'device_tap',
+            )!
+            .holderSessionId,
         's2',
       );
     });
@@ -186,11 +196,13 @@ void main() {
       clock.advance(const Duration(seconds: 1));
       expect(registry.standing('emulator-5554'), isNull);
       expect(
-        registry.claim(
-          deviceId: 'emulator-5554',
-          sessionId: 's2',
-          verb: 'device_tap',
-        )!.holderSessionId,
+        registry
+            .claim(
+              deviceId: 'emulator-5554',
+              sessionId: 's2',
+              verb: 'device_tap',
+            )!
+            .holderSessionId,
         's2',
       );
     });
@@ -236,11 +248,13 @@ void main() {
       registry.observed(deviceId: 'emulator-5554', sessionId: 's1');
       expect(registry.standing('emulator-5554'), isNull);
       expect(
-        registry.claim(
-          deviceId: 'emulator-5554',
-          sessionId: 's2',
-          verb: 'device_tap',
-        )!.holderSessionId,
+        registry
+            .claim(
+              deviceId: 'emulator-5554',
+              sessionId: 's2',
+              verb: 'device_tap',
+            )!
+            .holderSessionId,
         's2',
       );
     });

@@ -177,8 +177,9 @@ void main() {
     // that key can meet the host here.
     final onHosted = await clientFor(_localPhone, relay: hostedUri);
     expect(
-      (await onHosted.connect(helloTimeout: const Duration(seconds: 5)))
-          .hostName,
+      (await onHosted.connect(
+        helloTimeout: const Duration(seconds: 5),
+      )).hostName,
       'TestHost',
     );
     expect((await onHosted.listSessions()).single.sessionId, 's1');
@@ -195,8 +196,9 @@ void main() {
       generation: kFirstSessionGeneration + 1,
     );
     expect(
-      (await onLocal.connect(helloTimeout: const Duration(seconds: 5)))
-          .hostName,
+      (await onLocal.connect(
+        helloTimeout: const Duration(seconds: 5),
+      )).hostName,
       'TestHost',
     );
     expect((await onLocal.listSessions()).single.sessionId, 's1');
@@ -227,8 +229,9 @@ void main() {
     // …but the phone that lost its relay simply meets the host on the other.
     final rerouted = await clientFor(_localPhone, relay: hostedUri);
     expect(
-      (await rerouted.connect(helloTimeout: const Duration(seconds: 5)))
-          .hostName,
+      (await rerouted.connect(
+        helloTimeout: const Duration(seconds: 5),
+      )).hostName,
       'TestHost',
     );
     // And the phone that never moved noticed nothing.
@@ -279,8 +282,9 @@ void main() {
     // local one instead — the candidate set is what makes that reachable.
     final stranded = await clientFor(_hostedPhone, relay: localUri);
     expect(
-      (await stranded.connect(helloTimeout: const Duration(seconds: 5)))
-          .hostName,
+      (await stranded.connect(
+        helloTimeout: const Duration(seconds: 5),
+      )).hostName,
       'TestHost',
     );
   });
@@ -304,9 +308,7 @@ void main() {
     await pair(_hostedPhone, relayUrl: hostedUri.toString());
     await startService(localEnabled: false);
     final phone = await clientFor(_hostedPhone, relay: hostedUri);
-    final first = await phone.connect(
-      helloTimeout: const Duration(seconds: 5),
-    );
+    final first = await phone.connect(helloTimeout: const Duration(seconds: 5));
     expect(first.relays, [hostedUri]);
     final announcements = phone.events
         .where((event) => event is HostStatusEvent)

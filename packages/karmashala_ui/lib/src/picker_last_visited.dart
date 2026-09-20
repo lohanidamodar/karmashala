@@ -18,8 +18,7 @@ import 'package:karmashala_core/logging.dart';
 
 /// Runs `reg.exe`. A seam, so a test never touches a real registry.
 @visibleForTesting
-typedef RegistryRunner =
-    Future<ProcessResult> Function(List<String> arguments);
+typedef RegistryRunner = Future<ProcessResult> Function(List<String> arguments);
 
 const _comDlg =
     r'HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32';
@@ -46,8 +45,7 @@ Future<int> forgetLastVisitedFolder({
   // A suite must not rewrite the developer's own registry, and every test that
   // means to exercise this passes [run]. `FLUTTER_TEST` is set by the runner.
   if (run == null &&
-      (!Platform.isWindows ||
-          Platform.environment['FLUTTER_TEST'] == 'true')) {
+      (!Platform.isWindows || Platform.environment['FLUTTER_TEST'] == 'true')) {
     return 0;
   }
   final runner = run ?? _reg;
@@ -143,8 +141,7 @@ Future<int> forgetRemoteRecentFolders({
   @visibleForTesting RegistryRunner? run,
 }) async {
   if (run == null &&
-      (!Platform.isWindows ||
-          Platform.environment['FLUTTER_TEST'] == 'true')) {
+      (!Platform.isWindows || Platform.environment['FLUTTER_TEST'] == 'true')) {
     return 0;
   }
   final runner = run ?? _reg;
@@ -169,7 +166,9 @@ Future<int> forgetRemoteRecentFolders({
         ]);
         if (result.exitCode == 0) removed++;
       } on Object catch (error) {
-        _logger.debug('the recent-folder row $key/$value would not go ($error)');
+        _logger.debug(
+          'the recent-folder row $key/$value would not go ($error)',
+        );
       }
     }
   }

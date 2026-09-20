@@ -95,8 +95,7 @@ const _claudeCode = AgentDescriptor(
               id: 'plan',
               label: 'Plan mode',
               shortLabel: 'Plan',
-              description:
-                  'Research and propose changes without making them.',
+              description: 'Research and propose changes without making them.',
               arguments: ['--permission-mode', 'plan'],
               permits: PermissionRisk.readOnly,
               evidence:
@@ -132,8 +131,7 @@ const _claudeCode = AgentDescriptor(
               id: 'acceptEdits',
               label: 'Accept edits',
               shortLabel: 'Accept edits',
-              description:
-                  'Auto-approve file edits and common file commands.',
+              description: 'Auto-approve file edits and common file commands.',
               arguments: ['--permission-mode', 'acceptEdits'],
               permits: PermissionRisk.acceptEdits,
               evidence:
@@ -530,7 +528,9 @@ const _claudeCode = AgentDescriptor(
     // only it: `session_crons` is deliberately **not** consulted, because a
     // session with a `/loop` scheduled has genuinely finished its turn and is
     // waiting on a clock, not on work.
-    inFlightPath: {'Stop': ['background_tasks']},
+    inFlightPath: {
+      'Stop': ['background_tasks'],
+    },
     eventStatus: {
       'UserPromptSubmit': AgentActivityStatus.working,
       'PreToolUse': AgentActivityStatus.working,

@@ -197,4 +197,3 @@ String activityBlindSpotDetail(ActivityBlindSpot spot) => switch (spot) {
         'records which call is in flight, so it is named as unknown rather '
         'than shown as none.',
 };
-

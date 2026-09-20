@@ -228,14 +228,19 @@ void main() {
       expect(resultOf(response.body)['isError'], isFalse);
     });
 
-    test('an Mcp-Session-Id sent by a client is ignored, not rejected', () async {
-      final response = await call(
-        legacy('ping'),
-        headers: const {'Mcp-Session-Id': 'a-session-this-server-never-issued'},
-      );
-      expect(response.status, 200);
-      expect(response.sessionHeader, isNull);
-    });
+    test(
+      'an Mcp-Session-Id sent by a client is ignored, not rejected',
+      () async {
+        final response = await call(
+          legacy('ping'),
+          headers: const {
+            'Mcp-Session-Id': 'a-session-this-server-never-issued',
+          },
+        );
+        expect(response.status, 200);
+        expect(response.sessionHeader, isNull);
+      },
+    );
 
     test('GET is not a stream endpoint', () async {
       final response = await call(null, method: 'GET');
@@ -255,7 +260,10 @@ void main() {
       );
       final result = resultOf(response.body);
       expect(result['protocolVersion'], '2025-06-18');
-      expect(result['capabilities'], containsPair('tools', isA<Map<Object?, Object?>>()));
+      expect(
+        result['capabilities'],
+        containsPair('tools', isA<Map<Object?, Object?>>()),
+      );
       expect(
         (result['serverInfo']! as Map<String, Object?>)['name'],
         'karmashala',
@@ -266,15 +274,18 @@ void main() {
       expect(result.containsKey('resultType'), isFalse);
     });
 
-    test('initialize with a version we do not speak answers with one we do', () async {
-      final response = await call(
-        legacy('initialize', {'protocolVersion': '2019-01-01'}),
-      );
-      final result = resultOf(response.body);
-      expect(result['protocolVersion'], kMcpNewestLegacyVersion);
-      // Never the modern revision: it has no handshake for this client to use.
-      expect(result['protocolVersion'], isNot(kMcpModernVersion));
-    });
+    test(
+      'initialize with a version we do not speak answers with one we do',
+      () async {
+        final response = await call(
+          legacy('initialize', {'protocolVersion': '2019-01-01'}),
+        );
+        final result = resultOf(response.body);
+        expect(result['protocolVersion'], kMcpNewestLegacyVersion);
+        // Never the modern revision: it has no handshake for this client to use.
+        expect(result['protocolVersion'], isNot(kMcpModernVersion));
+      },
+    );
 
     test('notifications/initialized gets 202 and no body', () async {
       final response = await call(<String, Object?>{
@@ -316,7 +327,8 @@ void main() {
       expect(result['resultType'], 'complete');
       expect(result['supportedVersions'], kMcpAdvertisedVersions);
       expect(
-        ((result['_meta']! as Map<String, Object?>)['io.modelcontextprotocol/serverInfo']!
+        ((result['_meta']!
+                as Map<String, Object?>)['io.modelcontextprotocol/serverInfo']!
             as Map<String, Object?>)['name'],
         'karmashala',
       );
@@ -350,9 +362,12 @@ void main() {
       expect(resultOf(response.body)['tools'], isNotEmpty);
     });
 
-    test('the versions that are advertised are all versions we serve', () async {
-      expect(kMcpSupportedVersions, containsAll(kMcpAdvertisedVersions));
-    });
+    test(
+      'the versions that are advertised are all versions we serve',
+      () async {
+        expect(kMcpSupportedVersions, containsAll(kMcpAdvertisedVersions));
+      },
+    );
 
     test('a tool call carries resultType', () async {
       final request = modern('tools/call', {
@@ -412,47 +427,56 @@ void main() {
       expect(errorOf(response.body)['code'], McpErrorCode.headerMismatch);
     });
 
-    test('a header and body that disagree on the version are refused', () async {
-      final request = modern('tools/list');
-      final response = await call(
-        request.body,
-        headers: {...request.headers, 'MCP-Protocol-Version': '2025-11-25'},
-      );
-      expect(response.status, 400);
-      expect(errorOf(response.body)['code'], McpErrorCode.headerMismatch);
-    });
+    test(
+      'a header and body that disagree on the version are refused',
+      () async {
+        final request = modern('tools/list');
+        final response = await call(
+          request.body,
+          headers: {...request.headers, 'MCP-Protocol-Version': '2025-11-25'},
+        );
+        expect(response.status, 400);
+        expect(errorOf(response.body)['code'], McpErrorCode.headerMismatch);
+      },
+    );
   });
 
   group('version negotiation', () {
-    test('an unknown version is refused and the supported ones listed', () async {
-      final response = await call(
-        legacy('tools/list'),
-        headers: const {'MCP-Protocol-Version': '1999-01-01'},
-      );
-      expect(response.status, 400);
-      final error = errorOf(response.body);
-      expect(error['code'], McpErrorCode.unsupportedProtocolVersion);
-      final data = error['data']! as Map<String, Object?>;
-      expect(data['supported'], kMcpSupportedVersions);
-      expect(data['requested'], '1999-01-01');
-    });
+    test(
+      'an unknown version is refused and the supported ones listed',
+      () async {
+        final response = await call(
+          legacy('tools/list'),
+          headers: const {'MCP-Protocol-Version': '1999-01-01'},
+        );
+        expect(response.status, 400);
+        final error = errorOf(response.body);
+        expect(error['code'], McpErrorCode.unsupportedProtocolVersion);
+        final data = error['data']! as Map<String, Object?>;
+        expect(data['supported'], kMcpSupportedVersions);
+        expect(data['requested'], '1999-01-01');
+      },
+    );
   });
 
   group('errors', () {
-    test('a failing tool answers with isError, never an empty success', () async {
-      final response = await call(
-        legacy('tools/call', {
-          'name': 'open_session',
-          'arguments': <String, Object?>{'id': 'no-such-session'},
-        }),
-      );
-      expect(response.status, 200);
-      final result = resultOf(response.body);
-      expect(result['isError'], isTrue);
-      final content = (result['content']! as List<Object?>).first
-          as Map<String, Object?>;
-      expect(content['text'], contains('no-such-session'));
-    });
+    test(
+      'a failing tool answers with isError, never an empty success',
+      () async {
+        final response = await call(
+          legacy('tools/call', {
+            'name': 'open_session',
+            'arguments': <String, Object?>{'id': 'no-such-session'},
+          }),
+        );
+        expect(response.status, 200);
+        final result = resultOf(response.body);
+        expect(result['isError'], isTrue);
+        final content =
+            (result['content']! as List<Object?>).first as Map<String, Object?>;
+        expect(content['text'], contains('no-such-session'));
+      },
+    );
 
     test('an unknown tool is a protocol error, not a tool result', () async {
       final response = await call(
@@ -480,7 +504,10 @@ void main() {
       final response = await request.close();
       final body = jsonDecode(await response.transform(utf8.decoder).join());
       expect(response.statusCode, 400);
-      expect((body as Map<String, Object?>)['error'], isA<Map<Object?, Object?>>());
+      expect(
+        (body as Map<String, Object?>)['error'],
+        isA<Map<Object?, Object?>>(),
+      );
 
       // And the next request is unaffected, because there was nothing to break.
       expect((await call(legacy('ping'))).status, 200);
@@ -489,7 +516,9 @@ void main() {
 
   group('fail closed', () {
     test('no MCP credential is published when hardening fails', () async {
-      final other = Directory.systemTemp.createTempSync('karmashala_mcp_closed_');
+      final other = Directory.systemTemp.createTempSync(
+        'karmashala_mcp_closed_',
+      );
       addTearDown(() {
         if (other.existsSync()) other.deleteSync(recursive: true);
       });

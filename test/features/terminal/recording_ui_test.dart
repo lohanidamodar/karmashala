@@ -136,11 +136,7 @@ void main() {
 
   group('the dialog', () {
     /// Records [output], stops, and leaves the dialog on screen.
-    Future<void> open(
-      WidgetTester tester,
-      String paneId,
-      String output,
-    ) async {
+    Future<void> open(WidgetTester tester, String paneId, String output) async {
       recording().start(paneId);
       await tester.pump();
       pane(paneId).receive(output);
@@ -178,10 +174,7 @@ void main() {
       expect(find.text('Render GIF'), findsOneWidget);
       expect(find.textContaining('Plays anywhere as it is'), findsOneWidget);
       expect(find.text('Render MP4'), findsOneWidget);
-      expect(
-        find.textContaining('nothing to run afterwards'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('nothing to run afterwards'), findsOneWidget);
       // The frame sequence is gone where a real video can be written, and with
       // it the sentence about a tool we do not ship.
       expect(find.text('Render frames'), findsNothing);

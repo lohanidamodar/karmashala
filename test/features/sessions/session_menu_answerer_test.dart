@@ -68,7 +68,10 @@ void main() {
 
     expect(chosen, 'Yes, I trust this folder');
     expect(pane.confirmed, 'Yes, I trust this folder');
-    expect(pane.pressed, ['\x1b[B', '\r'], reason: 'the move, then Enter alone');
+    expect(pane.pressed, [
+      '\x1b[B',
+      '\r',
+    ], reason: 'the move, then Enter alone');
   });
 
   test('choosing what is highlighted is Enter alone', () async {
@@ -88,18 +91,18 @@ void main() {
       answerer.choose('s1', menuId: answerer.read('s1')!.id, option: 1),
       throwsA(isA<SessionPromptRefusal>()),
     );
-    expect(pane.confirmed, isNull, reason: 'Enter would have chosen "No, exit"');
+    expect(
+      pane.confirmed,
+      isNull,
+      reason: 'Enter would have chosen "No, exit"',
+    );
   });
 
   test('an answer for a menu that has since changed chooses nothing', () async {
     final pane = FakeMenuPane(trust);
     final answerer = answererFor(pane);
     final shown = answerer.read('s1')!;
-    pane.replacement = [
-      ' Do you want to proceed?',
-      ' ❯ 1. Yes',
-      '   2. No',
-    ];
+    pane.replacement = [' Do you want to proceed?', ' ❯ 1. Yes', '   2. No'];
 
     await expectLater(
       answerer.choose('s1', menuId: shown.id, option: 1),

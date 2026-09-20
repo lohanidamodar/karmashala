@@ -64,9 +64,8 @@ class BootstrapFailureApp extends StatelessWidget {
                     runSpacing: Insets.sm,
                     children: [
                       FilledButton(
-                        onPressed: () => Clipboard.setData(
-                          ClipboardData(text: details),
-                        ),
+                        onPressed: () =>
+                            Clipboard.setData(ClipboardData(text: details)),
                         child: const Text('Copy details'),
                       ),
                       OutlinedButton(

@@ -57,7 +57,12 @@ void main() {
     for (final id in sessionIds) {
       registry.open(
         id,
-        const PtySpawnRequest(argv: ['sh'], environment: {}, columns: 80, rows: 24),
+        const PtySpawnRequest(
+          argv: ['sh'],
+          environment: {},
+          columns: 80,
+          rows: 24,
+        ),
       );
     }
   }
@@ -87,7 +92,9 @@ void main() {
     AppDatabase db,
   ) {
     final container = fakeTerminalContainer(database: db);
-    final controller = container.read(terminalSessionsControllerProvider.notifier);
+    final controller = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
     String paneOf(String tabId) => container
         .read(terminalSessionsControllerProvider)
         .tabs
@@ -97,7 +104,9 @@ void main() {
         .single;
     final background = paneOf(controller.openTab(TerminalProfile.powerShell));
     final unhosted = paneOf(controller.openTab(TerminalProfile.powerShell));
-    final foreground = paneOf(controller.openTab(TerminalProfile.commandPrompt));
+    final foreground = paneOf(
+      controller.openTab(TerminalProfile.commandPrompt),
+    );
     controller.persistLayout();
     container.dispose();
     return (background: background, unhosted: unhosted, foreground: foreground);
@@ -113,7 +122,9 @@ void main() {
     addTearDown(next.dispose);
     // Restored first, synchronously, exactly as before: the host is asked after.
     expect(
-      next.read(terminalSessionsControllerProvider).livenessOf(panes.background),
+      next
+          .read(terminalSessionsControllerProvider)
+          .livenessOf(panes.background),
       PaneLiveness.restored,
     );
     await next
@@ -121,8 +132,11 @@ void main() {
         .hostSurvivorsReattached;
 
     final state = next.read(terminalSessionsControllerProvider);
-    expect(state.livenessOf(panes.background), PaneLiveness.live,
-        reason: 'its session never stopped, so it is not history');
+    expect(
+      state.livenessOf(panes.background),
+      PaneLiveness.live,
+      reason: 'its session never stopped, so it is not history',
+    );
     // A background pane with nothing running in the host keeps its Start:
     // reattaching is the exception, not a second way to restart everything.
     expect(state.livenessOf(panes.unhosted), PaneLiveness.restored);
@@ -144,7 +158,9 @@ void main() {
         .hostSurvivorsReattached;
 
     expect(
-      next.read(terminalSessionsControllerProvider).livenessOf(panes.background),
+      next
+          .read(terminalSessionsControllerProvider)
+          .livenessOf(panes.background),
       PaneLiveness.restored,
     );
     expect(starts, 0, reason: 'nothing survives in a host that is not running');
@@ -166,7 +182,9 @@ void main() {
     // Starting it would build a local pty, not attach: the setting decides
     // which process a pane belongs to.
     expect(
-      next.read(terminalSessionsControllerProvider).livenessOf(panes.background),
+      next
+          .read(terminalSessionsControllerProvider)
+          .livenessOf(panes.background),
       PaneLiveness.restored,
     );
   });

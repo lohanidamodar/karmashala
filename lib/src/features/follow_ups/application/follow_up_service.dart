@@ -98,17 +98,18 @@ class FollowUpService {
       // A notice that cannot be raised must never break the thing it was
       // describing. This runs off a status stream and a revision bump; throwing
       // out of either would take a working app down over a bookkeeping row.
-      _log.warning('Could not notice the end of session $sessionId.', error,
-          stack);
+      _log.warning(
+        'Could not notice the end of session $sessionId.',
+        error,
+        stack,
+      );
       return null;
     }
   }
 
   /// The user is done with this one.
-  void dismiss(FollowUp followUp) => _resolve(
-    followUp,
-    FollowUpResolution.dismissed,
-  );
+  void dismiss(FollowUp followUp) =>
+      _resolve(followUp, FollowUpResolution.dismissed);
 
   /// The user dismissed the follow-up stored at [rowId]. Resolving straight from
   /// the id keeps the read off the path that runs under the user's cursor.
@@ -130,10 +131,7 @@ class FollowUpService {
 
   /// Closes follow-ups whose session has since been handed on or deleted — the
   /// notice has to leave when the work does.
-  bool _retireWhatMovedOn(
-    List<Session> sessions,
-    Set<String> carriedForward,
-  ) {
+  bool _retireWhatMovedOn(List<Session> sessions, Set<String> carriedForward) {
     final open = _dao.open();
     if (open.isEmpty) return false;
     final present = {for (final session in sessions) session.id};
@@ -165,23 +163,24 @@ class FollowUpService {
 
   /// The source's **own words** for what was left, or null, which renders as
   /// "not recorded". The framing around a quote is ours; the sentence never is.
-  String? _wordsFor(String sessionId, FollowUpReason reason) =>
-      switch (reason) {
-        FollowUpReason.endedInFailure => _lastDecision(sessionId),
-        FollowUpReason.verificationNotPassed => _verificationWords(
-          sessionId,
-          wanted: (run) =>
-              run.verdict != null && run.verdict != VerificationVerdict.pass,
-        ),
-        FollowUpReason.verificationAbandoned => _verificationWords(
-          sessionId,
-          wanted: (run) => run.isOpen,
-        ),
-        // Neither is ever raised: one is the v25 migration's mark, the other a row
-        // from a build that knew more. Inventing words for either invents words.
-        FollowUpReason.predatesTheFeature ||
-        FollowUpReason.unrecognised => null,
-      };
+  String? _wordsFor(
+    String sessionId,
+    FollowUpReason reason,
+  ) => switch (reason) {
+    FollowUpReason.endedInFailure => _lastDecision(sessionId),
+    FollowUpReason.verificationNotPassed => _verificationWords(
+      sessionId,
+      wanted: (run) =>
+          run.verdict != null && run.verdict != VerificationVerdict.pass,
+    ),
+    FollowUpReason.verificationAbandoned => _verificationWords(
+      sessionId,
+      wanted: (run) => run.isOpen,
+    ),
+    // Neither is ever raised: one is the v25 migration's mark, the other a row
+    // from a build that knew more. Inventing words for either invents words.
+    FollowUpReason.predatesTheFeature || FollowUpReason.unrecognised => null,
+  };
 
   /// The last thing the session wrote down before it stopped. An empty record
   /// yields null: nobody wrote anything, which is not evidence about the session.

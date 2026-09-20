@@ -109,7 +109,9 @@ class EnvVault {
         logger: _logger,
       );
     } on Object catch (error) {
-      _logger?.warning('Environment vault directory could not be prepared: $error');
+      _logger?.warning(
+        'Environment vault directory could not be prepared: $error',
+      );
       return _data = EnvVaultData.unavailable(
         'Karmashala could not create a protected folder for environment '
         'variables, so none are being loaded.',

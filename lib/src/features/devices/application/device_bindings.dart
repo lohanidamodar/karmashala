@@ -24,7 +24,9 @@ final deviceBindings = [
   deviceVideoSupportProvider.overrideWith(
     (ref) => ref.watch(videoSupportProvider),
   ),
-  deviceSlimmingPreferencesProvider.overrideWith(SettingsSlimmingPreferences.new),
+  deviceSlimmingPreferencesProvider.overrideWith(
+    SettingsSlimmingPreferences.new,
+  ),
   deviceClaimsProvider.overrideWith(
     (ref) => DeviceClaims(
       clock: ref.watch(clockProvider),

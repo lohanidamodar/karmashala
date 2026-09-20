@@ -140,9 +140,7 @@ void main() {
 
   Widget host(ProviderContainer container) => UncontrolledProviderScope(
     container: container,
-    child: const MaterialApp(
-      home: Scaffold(body: UnresumableSessionsDialog()),
-    ),
+    child: const MaterialApp(home: Scaffold(body: UnresumableSessionsDialog())),
   );
 
   /// The reading is taken **before** the widget is pumped, and inside

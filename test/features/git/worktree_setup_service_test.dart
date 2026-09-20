@@ -128,9 +128,7 @@ void main() {
       );
       final report = await run(
         service(
-          setup: const WorktreeSetup(
-            copyPaths: ['.dart_tool', 'macos/Vendor'],
-          ),
+          setup: const WorktreeSetup(copyPaths: ['.dart_tool', 'macos/Vendor']),
         ),
       );
 
@@ -177,35 +175,35 @@ void main() {
       addTearDown(() => removeTempDirectory(root));
       final checkout = p.join(root.path, 'app');
       final made = p.join(root.path, 'app-s1');
-      Directory(p.join(checkout, 'macos', 'Vendor')).createSync(
-        recursive: true,
-      );
-      File(p.join(checkout, 'macos', 'Vendor', 'copy_wda.sh'))
-          .writeAsStringSync('#!/bin/sh\n');
+      Directory(
+        p.join(checkout, 'macos', 'Vendor'),
+      ).createSync(recursive: true);
+      File(
+        p.join(checkout, 'macos', 'Vendor', 'copy_wda.sh'),
+      ).writeAsStringSync('#!/bin/sh\n');
       Directory(p.join(made, 'macos')).createSync(recursive: true);
       world(ignored: {'macos/Vendor'});
 
-      final report = await WorktreeSetupService(
-        runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-        clock: _FixedClock(),
-        lookup: (_) => (
-          repositoryId: 'r1',
-          setup: const WorktreeSetup(copyPaths: ['macos/Vendor']),
-        ),
-        record: recorded.add,
-      ).run(
-        // The kind decides, never the platform — and the two local kinds are
-        // the ones `hostPathMapperFor` answers with the identity mapping.
-        environment: Platform.isWindows ? windowsEnv() : posixEnv(),
-        repo: EnvironmentPath(environmentId: 'windows', path: checkout),
-        worktree: EnvironmentPath(environmentId: 'windows', path: made),
-      );
+      final report =
+          await WorktreeSetupService(
+            runnerFactory: FakeCommandRunnerFactory(fallback: runner),
+            clock: _FixedClock(),
+            lookup: (_) => (
+              repositoryId: 'r1',
+              setup: const WorktreeSetup(copyPaths: ['macos/Vendor']),
+            ),
+            record: recorded.add,
+          ).run(
+            // The kind decides, never the platform — and the two local kinds are
+            // the ones `hostPathMapperFor` answers with the identity mapping.
+            environment: Platform.isWindows ? windowsEnv() : posixEnv(),
+            repo: EnvironmentPath(environmentId: 'windows', path: checkout),
+            worktree: EnvironmentPath(environmentId: 'windows', path: made),
+          );
 
       expect(report!.copies.single.result, WorktreeCopyResult.copied);
       expect(
-        File(
-          p.join(made, 'macos', 'Vendor', 'copy_wda.sh'),
-        ).readAsStringSync(),
+        File(p.join(made, 'macos', 'Vendor', 'copy_wda.sh')).readAsStringSync(),
         '#!/bin/sh\n',
         reason: 'PROFILE-2026-09-03: only worktrees that had this build',
       );
@@ -412,15 +410,18 @@ void main() {
     });
   });
 
-  test('the report carries the worktree, the environment and its age', () async {
-    world(ignored: {'.dart_tool'}, present: {'/home/me/app/.dart_tool'});
-    final report = await run(
-      service(setup: const WorktreeSetup(copyPaths: ['.dart_tool'])),
-    );
-    expect(report!.repositoryId, 'r1');
-    expect(report.worktreePath, worktree.path);
-    expect(report.environmentId, 'wsl:Ubuntu');
-    expect(report.ranAt, testTime);
-    expect(recorded.single.worktreePath, worktree.path);
-  });
+  test(
+    'the report carries the worktree, the environment and its age',
+    () async {
+      world(ignored: {'.dart_tool'}, present: {'/home/me/app/.dart_tool'});
+      final report = await run(
+        service(setup: const WorktreeSetup(copyPaths: ['.dart_tool'])),
+      );
+      expect(report!.repositoryId, 'r1');
+      expect(report.worktreePath, worktree.path);
+      expect(report.environmentId, 'wsl:Ubuntu');
+      expect(report.ranAt, testTime);
+      expect(recorded.single.worktreePath, worktree.path);
+    },
+  );
 }

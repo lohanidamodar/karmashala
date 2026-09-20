@@ -84,14 +84,14 @@ void main() {
                 'visible',
               ).split('visible', SplitAxis.horizontal, 'visible2', 's1'),
               regionBuilder: (group) =>
-              PaintCounter(counts: counts, name: group.activePaneId),
+                  PaintCounter(counts: counts, name: group.activePaneId),
             ),
             PaneLayoutView(
               layout: PaneLayout.single(
                 'hidden',
               ).split('hidden', SplitAxis.vertical, 'hidden2', 's2'),
               regionBuilder: (group) =>
-              PaintCounter(counts: counts, name: group.activePaneId),
+                  PaintCounter(counts: counts, name: group.activePaneId),
             ),
           ],
         ),
@@ -285,7 +285,8 @@ void main() {
       );
 
       final inner = find.byWidgetPredicate(
-        (widget) => widget is PaneDivider && widget.axis == SplitAxis.horizontal,
+        (widget) =>
+            widget is PaneDivider && widget.axis == SplitAxis.horizontal,
       );
       await tester.drag(inner.last, const Offset(40, 0));
       await tester.pump();

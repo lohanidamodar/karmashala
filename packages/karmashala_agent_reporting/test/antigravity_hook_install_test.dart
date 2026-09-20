@@ -28,17 +28,17 @@ void main() {
     home = Directory.systemTemp.createTempSync('karmashala_agyhook_');
     // The store the locator hands the installer, and the sibling directory the
     // CLI actually reads its customizations from.
-    Directory(p.join(home.path, '.gemini', 'antigravity-cli')).createSync(
-      recursive: true,
-    );
+    Directory(
+      p.join(home.path, '.gemini', 'antigravity-cli'),
+    ).createSync(recursive: true);
   });
   tearDown(() => removeTempDirectory(home));
 
   String storeHome() => p.join(home.path, '.gemini', 'antigravity-cli');
-  File hooksFile() => File(p.join(home.path, '.gemini', 'config', 'hooks.json'));
+  File hooksFile() =>
+      File(p.join(home.path, '.gemini', 'config', 'hooks.json'));
   File windowsScript() => File(p.join(storeHome(), '$agentHookMarker.cmd'));
-  File endpointFile() =>
-      File(p.join(storeHome(), '$agentHookMarker.endpoint'));
+  File endpointFile() => File(p.join(storeHome(), '$agentHookMarker.endpoint'));
 
   Map<String, Object?> ours() {
     final root = jsonDecode(hooksFile().readAsStringSync()) as Map;
@@ -93,26 +93,29 @@ void main() {
   });
 
   group('installing', () {
-    test('writes agy\'s own hooks.json, beside the store and not in it', () async {
-      // `~/.gemini/config/hooks.json` is the machine-local customization root;
-      // the store home is `~/.gemini/antigravity-cli`, its sibling. Writing
-      // inside the store home instead would put the file somewhere the CLI
-      // never looks, which is the same as not installing at all.
-      final installed = await installer.install(
-        descriptor: antigravity,
-        storeHome: storeHome(),
-        endpoint: endpoint,
-        environment: EnvironmentKind.windowsNative,
-      );
+    test(
+      'writes agy\'s own hooks.json, beside the store and not in it',
+      () async {
+        // `~/.gemini/config/hooks.json` is the machine-local customization root;
+        // the store home is `~/.gemini/antigravity-cli`, its sibling. Writing
+        // inside the store home instead would put the file somewhere the CLI
+        // never looks, which is the same as not installing at all.
+        final installed = await installer.install(
+          descriptor: antigravity,
+          storeHome: storeHome(),
+          endpoint: endpoint,
+          environment: EnvironmentKind.windowsNative,
+        );
 
-      expect(installed, isTrue);
-      expect(hooksFile().existsSync(), isTrue);
-      expect(
-        File(p.join(storeHome(), 'hooks.json')).existsSync(),
-        isFalse,
-        reason: 'agy reads ~/.gemini/config, never its own data directory',
-      );
-    });
+        expect(installed, isTrue);
+        expect(hooksFile().existsSync(), isTrue);
+        expect(
+          File(p.join(storeHome(), 'hooks.json')).existsSync(),
+          isFalse,
+          reason: 'agy reads ~/.gemini/config, never its own data directory',
+        );
+      },
+    );
 
     test('names each event a flat list of handlers, as agy requires', () async {
       await installer.install(

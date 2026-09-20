@@ -28,9 +28,10 @@ final openFollowUpsProvider = Provider<List<InboxItem>>((ref) {
   // a lookup for at most a couple of hundred follow-ups — the cost the user
   // paid was every session they had ever opened, on every rename.
   final sessions = {
-    for (final session in ref
-        .read(sessionDaoProvider)
-        .getByIds(open.map((followUp) => followUp.sessionId)))
+    for (final session
+        in ref
+            .read(sessionDaoProvider)
+            .getByIds(open.map((followUp) => followUp.sessionId)))
       session.id: session,
   };
   final agentIdByInstallation = {
@@ -84,7 +85,8 @@ int? followUpRowIdIn(String inboxId) {
 /// any. A follow-up with no words says so rather than being given some.
 String describeFollowUp(FollowUp followUp) {
   final summary = followUp.summary;
-  final head = '${followUp.reason.label} — the session ${followUp.ending.label}';
+  final head =
+      '${followUp.reason.label} — the session ${followUp.ending.label}';
   return summary == null || summary.trim().isEmpty
       ? '$head. Nothing else was recorded.'
       : '$head. ${summary.trim()}';

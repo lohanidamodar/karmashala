@@ -81,9 +81,7 @@ class FollowUpDao {
     final rows = _db.query(
       'SELECT DISTINCT session_id, ending FROM session_follow_ups;',
     );
-    return {
-      for (final row in rows) '${row['session_id']}/${row['ending']}',
-    };
+    return {for (final row in rows) '${row['session_id']}/${row['ending']}'};
   }
 
   FollowUp _fromRow(Map<String, Object?> row) => FollowUp(

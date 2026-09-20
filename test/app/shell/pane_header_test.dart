@@ -68,11 +68,14 @@ void main() {
 
   /// The header's own box: the first [Container] under the [PaneHeader], which
   /// is the coloured bar itself rather than anything an action brought with it.
-  Finder bar(Finder header) => find
-      .descendant(of: header, matching: find.byType(Container))
-      .first;
+  Finder bar(Finder header) =>
+      find.descendant(of: header, matching: find.byType(Container)).first;
 
-  void expectHouseHeader(WidgetTester tester, String surface, {Finder? header}) {
+  void expectHouseHeader(
+    WidgetTester tester,
+    String surface, {
+    Finder? header,
+  }) {
     final found = header ?? find.byType(PaneHeader);
     expect(found, findsOneWidget, reason: '$surface draws a PaneHeader');
     expect(
@@ -175,7 +178,9 @@ void main() {
           repositoryChangesProvider.overrideWith(
             (ref) async => const <FileChange>[],
           ),
-          recentCommitsProvider.overrideWith((ref) async => const <GitCommit>[]),
+          recentCommitsProvider.overrideWith(
+            (ref) async => const <GitCommit>[],
+          ),
           repositoryDeliveryProvider.overrideWith(
             (ref, _) async => SessionDelivery.unknown,
           ),
@@ -286,7 +291,8 @@ void main() {
     expect(
       style?.color,
       AppTheme.light().colorScheme.onSurfaceVariant,
-      reason: 'an empty state is muted — the GitHub one was not, and it was '
+      reason:
+          'an empty state is muted — the GitHub one was not, and it was '
           'the only full-contrast empty state in the app',
     );
   });
@@ -390,7 +396,8 @@ void main() {
           ),
         ),
       ),
-      because: 'the side panel is as narrow as 240px, and the header row is a '
+      because:
+          'the side panel is as narrow as 240px, and the header row is a '
           'fixed 30px that text scaling does not grow',
     );
   });
@@ -432,7 +439,8 @@ void main() {
           ),
         ),
       ),
-      because: 'the header row is a fixed 30px and the eyebrow inside it is '
+      because:
+          'the header row is a fixed 30px and the eyebrow inside it is '
           'not',
     );
   });
@@ -461,7 +469,9 @@ void main() {
           repositoryChangesProvider.overrideWith(
             (ref) async => const <FileChange>[],
           ),
-          recentCommitsProvider.overrideWith((ref) async => const <GitCommit>[]),
+          recentCommitsProvider.overrideWith(
+            (ref) async => const <GitCommit>[],
+          ),
           repositoryDeliveryProvider.overrideWith(
             (ref, _) async => SessionDelivery.unknown,
           ),

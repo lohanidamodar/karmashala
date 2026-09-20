@@ -46,9 +46,9 @@ void main() {
     // to use.
     expect(find.text('Let the agent choose'), findsWidgets);
     expect(
-      container.read(settingsControllerProvider).defaultModelFor(
-        AgentIds.claudeCode,
-      ),
+      container
+          .read(settingsControllerProvider)
+          .defaultModelFor(AgentIds.claudeCode),
       isNull,
     );
   });
@@ -64,9 +64,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      container.read(settingsControllerProvider).defaultModelFor(
-        AgentIds.claudeCode,
-      ),
+      container
+          .read(settingsControllerProvider)
+          .defaultModelFor(AgentIds.claudeCode),
       'opus',
     );
     expect(find.text('Opus'), findsOneWidget);
@@ -93,6 +93,9 @@ void main() {
       find.textContaining('have not chosen one of their own').first,
       findsOneWidget,
     );
-    expect(find.textContaining('even after this changes').first, findsOneWidget);
+    expect(
+      find.textContaining('even after this changes').first,
+      findsOneWidget,
+    );
   });
 }

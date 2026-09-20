@@ -67,9 +67,7 @@ class ReviewThreadHarness {
       overrides: [
         databaseProvider.overrideWithValue(db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
-        idGeneratorProvider.overrideWithValue(
-          SequentialIdGenerator('thread-'),
-        ),
+        idGeneratorProvider.overrideWithValue(SequentialIdGenerator('thread-')),
         changesServiceProvider.overrideWithValue(
           ChangesService(
             runnerFactory: FakeCommandRunnerFactory(fallback: runner),

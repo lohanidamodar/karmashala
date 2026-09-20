@@ -110,9 +110,11 @@ void main() {
       await browser.click(text: 'Save');
       await browser.capture('#panel');
       await browser.screenshot();
-      unawaited(tools.call('verification_note', const {
-        'text': 'The panel is teal after Save, as the change intended.',
-      }));
+      unawaited(
+        tools.call('verification_note', const {
+          'text': 'The panel is teal after Save, as the change intended.',
+        }),
+      );
 
       banner('now break it on purpose');
       // The button throws and fetches a URL that cannot resolve. Neither is
@@ -284,9 +286,11 @@ void main() {
         await Future<void>.delayed(const Duration(seconds: 2));
       }
       await adb.screenshot(device.serial);
-      unawaited(tools.call('verification_note', const {
-        'text': 'Settings came to the front and the search field opened.',
-      }));
+      unawaited(
+        tools.call('verification_note', const {
+          'text': 'Settings came to the front and the search field opened.',
+        }),
+      );
 
       banner('verification_finish');
       stdout.writeln(

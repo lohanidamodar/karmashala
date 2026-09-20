@@ -108,17 +108,19 @@ void main() {
   List<VerificationRun> recorded() =>
       container.read(verificationServiceProvider).list();
 
-  test('analyze runs the located SDK in the checkout, in a visible pane',
-      () async {
-    final outcome = await loop().gate(_project, FlutterCommandKind.analyze);
-    expect(outcome.preflight.isClear, isTrue);
-    final launch = paneOf(outcome.run!.paneId).agentLaunch!;
-    expect(launch.executable, '/home/me/flutter/bin/flutter');
-    expect(launch.arguments, ['analyze']);
-    expect(launch.workingDirectory, '/home/me/app');
-    expect(launch.wslDistribution, 'Ubuntu');
-    expect(launch.title, 'analyze · demo');
-  });
+  test(
+    'analyze runs the located SDK in the checkout, in a visible pane',
+    () async {
+      final outcome = await loop().gate(_project, FlutterCommandKind.analyze);
+      expect(outcome.preflight.isClear, isTrue);
+      final launch = paneOf(outcome.run!.paneId).agentLaunch!;
+      expect(launch.executable, '/home/me/flutter/bin/flutter');
+      expect(launch.arguments, ['analyze']);
+      expect(launch.workingDirectory, '/home/me/app');
+      expect(launch.wslDistribution, 'Ubuntu');
+      expect(launch.title, 'analyze · demo');
+    },
+  );
 
   test('extra arguments are the caller\'s, and go after the verb', () async {
     final outcome = await loop().gate(
@@ -202,25 +204,27 @@ void main() {
     expect(other.run, isNotNull);
   });
 
-  test('a gate whose verdict could not be written does not stop the next one',
-      () async {
-    // A *file* where the artifact root should be, so creating the run's
-    // directory under it throws. Deleting the directory would not do: the
-    // store creates it recursively and would simply put it back.
-    artifacts.deleteSync(recursive: true);
-    File(artifacts.path).writeAsStringSync('not a directory');
-    final broken = await loop().gate(_project, FlutterCommandKind.analyze);
-    paneOf(broken.run!.paneId).exitWith(1);
-    await settle();
-    expect(recorded(), isEmpty);
+  test(
+    'a gate whose verdict could not be written does not stop the next one',
+    () async {
+      // A *file* where the artifact root should be, so creating the run's
+      // directory under it throws. Deleting the directory would not do: the
+      // store creates it recursively and would simply put it back.
+      artifacts.deleteSync(recursive: true);
+      File(artifacts.path).writeAsStringSync('not a directory');
+      final broken = await loop().gate(_project, FlutterCommandKind.analyze);
+      paneOf(broken.run!.paneId).exitWith(1);
+      await settle();
+      expect(recorded(), isEmpty);
 
-    // An errored queue would swallow every exit after it, silently.
-    File(artifacts.path).deleteSync();
-    artifacts.createSync(recursive: true);
-    final next = await loop().gate(_project, FlutterCommandKind.test);
-    paneOf(next.run!.paneId).exitWith(0);
-    await settle();
-    expect(recorded(), hasLength(1));
-    expect(recorded().single.verdict, VerificationVerdict.pass);
-  });
+      // An errored queue would swallow every exit after it, silently.
+      File(artifacts.path).deleteSync();
+      artifacts.createSync(recursive: true);
+      final next = await loop().gate(_project, FlutterCommandKind.test);
+      paneOf(next.run!.paneId).exitWith(0);
+      await settle();
+      expect(recorded(), hasLength(1));
+      expect(recorded().single.verdict, VerificationVerdict.pass);
+    },
+  );
 }

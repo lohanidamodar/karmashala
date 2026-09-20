@@ -193,18 +193,20 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
     if (installation == null) {
       throw StateError('This session\'s agent installation is gone.');
     }
-    final launched = await ref.read(sessionLauncherProvider).launch(
-      SessionLaunchRequest(
-        repository: repository,
-        installation: installation,
-        title: row.title,
-        // A conversation that never existed is a new one, whatever the row's
-        // age says — so the *new session* permission mode.
-        purpose: SessionPurpose.newSession,
-        surface: row.surface,
-        restartSessionId: row.id,
-      ),
-    );
+    final launched = await ref
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository,
+            installation: installation,
+            title: row.title,
+            // A conversation that never existed is a new one, whatever the row's
+            // age says — so the *new session* permission mode.
+            purpose: SessionPurpose.newSession,
+            surface: row.surface,
+            restartSessionId: row.id,
+          ),
+        );
     // Off the list either way: it either started, or it threw before writing
     // anything and the next reading will find it again.
     state = UnresumableReview(

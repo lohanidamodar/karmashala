@@ -30,10 +30,7 @@ void main() {
       await tester.pump();
 
       expect(find.byType(ThinkingAccordion), findsOneWidget);
-      expect(
-        find.textContaining('<$tag>', findRichText: true),
-        findsNothing,
-      );
+      expect(find.textContaining('<$tag>', findRichText: true), findsNothing);
       expect(
         find.textContaining('The answer is 42.', findRichText: true),
         findsWidgets,

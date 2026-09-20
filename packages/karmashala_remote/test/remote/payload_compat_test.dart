@@ -245,8 +245,11 @@ void main() {
     test('old companion, new host: the greeting still decodes to a version '
         'range and a name', () {
       final decoded = Envelope.fromBytes(
-        Envelope.of(FrameType.hostStatus, seq: 1, payload: announced.toJson())
-            .toBytes(),
+        Envelope.of(
+          FrameType.hostStatus,
+          seq: 1,
+          payload: announced.toJson(),
+        ).toBytes(),
       );
 
       // Exactly the two keys a pre-Loop-83 build reads.
@@ -272,8 +275,11 @@ void main() {
 
     test('the whole announcement survives the envelope', () {
       final decoded = Envelope.fromBytes(
-        Envelope.of(FrameType.hostStatus, seq: 9, payload: announced.toJson())
-            .toBytes(),
+        Envelope.of(
+          FrameType.hostStatus,
+          seq: 9,
+          payload: announced.toJson(),
+        ).toBytes(),
       );
 
       final status = RemoteHostStatus.fromJson(decoded.payload);
@@ -300,7 +306,10 @@ void main() {
       );
       // An older host sends no `caps`, and the phone keeps what it paired with.
       expect(announced.toJson().containsKey('caps'), isFalse);
-      expect(RemoteHostStatus.fromJson(announced.toJson()).capabilities, isNull);
+      expect(
+        RemoteHostStatus.fromJson(announced.toJson()).capabilities,
+        isNull,
+      );
     });
   });
 
@@ -391,7 +400,10 @@ void main() {
       expect(decoded.payload['token'], 't0k');
       expect(decoded.payload['platform'], 'android');
       expect(decoded.payload['visibility'], 'background');
-      expect(CompanionPresence.fromRegister(decoded.payload).saysSameAs(rich), isTrue);
+      expect(
+        CompanionPresence.fromRegister(decoded.payload).saysSameAs(rich),
+        isTrue,
+      );
     });
 
     test('a word this build has never heard, and a wrong type, both read as '

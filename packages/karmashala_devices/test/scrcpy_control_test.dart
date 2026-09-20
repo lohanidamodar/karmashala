@@ -220,7 +220,10 @@ void _keyboardWire() {
       final chunks = splitForInjectText('é' * 200);
       expect(chunks.length, 2);
       for (final chunk in chunks) {
-        expect(utf8.encode(chunk).length, lessThanOrEqualTo(kScrcpyInjectTextMaxBytes));
+        expect(
+          utf8.encode(chunk).length,
+          lessThanOrEqualTo(kScrcpyInjectTextMaxBytes),
+        );
         expect(chunk.contains('�'), isFalse);
       }
       expect(chunks.join(), 'é' * 200);

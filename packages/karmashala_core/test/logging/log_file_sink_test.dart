@@ -82,28 +82,21 @@ void main() {
 
       final names = dir.listSync().map((e) => e.uri.pathSegments.last).toList()
         ..sort();
-      expect(names, [
-        'karmashala.1.log',
-        'karmashala.2.log',
-        'karmashala.log',
-      ]);
+      expect(names, ['karmashala.1.log', 'karmashala.2.log', 'karmashala.log']);
       // The live file holds the newest line; the oldest have been rolled off.
       expect(await sink.file.readAsString(), contains('line 39'));
       expect(await sink.files(), hasLength(3));
     });
 
-    test(
-      'a write that cannot succeed does not reach the caller',
-      () async {
-        blockTheLogFile();
-        final sink = LogFileSink(directory: dir);
-        expect(() => sink.add(entry('anything')), returnsNormally);
-        await sink.flush();
-        expect(sink.lastError, isNotNull);
-        // And logging carries on afterwards.
-        expect(() => sink.add(entry('still here')), returnsNormally);
-      },
-    );
+    test('a write that cannot succeed does not reach the caller', () async {
+      blockTheLogFile();
+      final sink = LogFileSink(directory: dir);
+      expect(() => sink.add(entry('anything')), returnsNormally);
+      await sink.flush();
+      expect(sink.lastError, isNotNull);
+      // And logging carries on afterwards.
+      expect(() => sink.add(entry('still here')), returnsNormally);
+    });
 
     test('the queue is bounded when the disk stops answering', () {
       blockTheLogFile();

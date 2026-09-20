@@ -9,7 +9,8 @@ import 'serve/client_command.dart';
 import 'serve/serve_command.dart';
 import 'store/store_probe.dart';
 
-const _usage = '''
+const _usage =
+    '''
 karmashala_host $kHostVersion — Karmashala's session host.
 
   karmashala_host serve         own sessions on this machine until told to stop

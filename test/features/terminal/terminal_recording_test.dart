@@ -66,7 +66,10 @@ void main() {
   test('records the output a pane produces while it is running', () async {
     final paneId = openPane();
     expect(recording.start(paneId), isTrue);
-    expect(container.read(terminalRecordingProvider).isRecording(paneId), isTrue);
+    expect(
+      container.read(terminalRecordingProvider).isRecording(paneId),
+      isTrue,
+    );
 
     pane(paneId).receive('PS> flutter test\r\n');
     pane(paneId).receive('All tests passed!\r\n');
@@ -76,8 +79,14 @@ void main() {
       saved.cast.events.map((e) => e.data).join(),
       contains('All tests passed!'),
     );
-    expect(saved.cast.events.every((e) => e.kind == CastEventKind.output), isTrue);
-    expect(container.read(terminalRecordingProvider).isRecording(paneId), isFalse);
+    expect(
+      saved.cast.events.every((e) => e.kind == CastEventKind.output),
+      isTrue,
+    );
+    expect(
+      container.read(terminalRecordingProvider).isRecording(paneId),
+      isFalse,
+    );
   });
 
   test('keeps recording a pane the user has switched away from', () async {
@@ -134,26 +143,29 @@ void main() {
     expect(container.read(terminalRecordingProvider).saved, same(saved));
   });
 
-  test('a pane closed mid-recording still hands over what it captured', () async {
-    final paneId = openPane();
-    recording.start(paneId);
-    pane(paneId).receive('the last thing it said\r\n');
+  test(
+    'a pane closed mid-recording still hands over what it captured',
+    () async {
+      final paneId = openPane();
+      recording.start(paneId);
+      pane(paneId).receive('the last thing it said\r\n');
 
-    sessions.closePane(paneId);
-    // The pane ended the recording from inside `dispose()`, which could not
-    // await the write — so wait on the save it started rather than on a clock.
-    await recording.pendingSave;
+      sessions.closePane(paneId);
+      // The pane ended the recording from inside `dispose()`, which could not
+      // await the write — so wait on the save it started rather than on a clock.
+      await recording.pendingSave;
 
-    final state = container.read(terminalRecordingProvider);
-    expect(state.isRecording(paneId), isFalse);
-    expect(state.saved, isNotNull);
-    expect(state.saved!.endedWithPane, isTrue);
-    expect(
-      state.saved!.cast.events.map((e) => e.data).join(),
-      contains('the last thing it said'),
-    );
-    expect(state.saved!.file.existsSync(), isTrue);
-  });
+      final state = container.read(terminalRecordingProvider);
+      expect(state.isRecording(paneId), isFalse);
+      expect(state.saved, isNotNull);
+      expect(state.saved!.endedWithPane, isTrue);
+      expect(
+        state.saved!.cast.events.map((e) => e.data).join(),
+        contains('the last thing it said'),
+      );
+      expect(state.saved!.file.existsSync(), isTrue);
+    },
+  );
 
   test('starting twice on one pane changes nothing', () async {
     final paneId = openPane();
@@ -216,7 +228,10 @@ void main() {
 
     test('squeezes a title a shell can call anything into a file name', () {
       expect(
-        recordingFileName(r'C:\Users\me — claude: build?', DateTime(2026, 1, 2)),
+        recordingFileName(
+          r'C:\Users\me — claude: build?',
+          DateTime(2026, 1, 2),
+        ),
         'C-Users-me-claude-build-20260102-000000.cast',
       );
       expect(

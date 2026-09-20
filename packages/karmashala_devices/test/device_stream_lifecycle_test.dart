@@ -80,27 +80,29 @@ void main() {
       }
     });
 
-    test('the count waits on the socket\'s own done, not on a moment',
-        () async {
-      // The seam the assertion above leans on: nothing can satisfy the wait
-      // except the closes themselves.
-      final device = await FakeScrcpyDevice.bind();
-      addTearDown(device.dispose);
-      final session = await fakeStreamService(device.runner()).start(_serial);
+    test(
+      'the count waits on the socket\'s own done, not on a moment',
+      () async {
+        // The seam the assertion above leans on: nothing can satisfy the wait
+        // except the closes themselves.
+        final device = await FakeScrcpyDevice.bind();
+        addTearDown(device.dispose);
+        final session = await fakeStreamService(device.runner()).start(_serial);
 
-      var settled = false;
-      unawaited(device.untilSocketsClosed(2).then((_) => settled = true));
-      await device.untilSocketsAccepted(2);
-      expect(
-        settled,
-        isFalse,
-        reason: 'both sockets are open; nothing has been closed yet',
-      );
+        var settled = false;
+        unawaited(device.untilSocketsClosed(2).then((_) => settled = true));
+        await device.untilSocketsAccepted(2);
+        expect(
+          settled,
+          isFalse,
+          reason: 'both sockets are open; nothing has been closed yet',
+        );
 
-      await session.stop();
-      await device.untilSocketsClosed(2);
-      expect(device.socketsClosedByHost, 2);
-    });
+        await session.stop();
+        await device.untilSocketsClosed(2);
+        expect(device.socketsClosedByHost, 2);
+      },
+    );
 
     test('a second stop is not a second teardown', () async {
       // The pane's dispose cannot await a stop, so stopping twice must not kill

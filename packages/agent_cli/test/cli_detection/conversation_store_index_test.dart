@@ -50,7 +50,8 @@ void main() {
     });
 
     test('returns absent for non-existent conversation id', () async {
-      final dir = Directory(p.join(tmp.path, 'conversations'))..createSync(recursive: true);
+      final dir = Directory(p.join(tmp.path, 'conversations'))
+        ..createSync(recursive: true);
       expect(await dir.exists(), isTrue);
 
       final presence = await index.presenceOf(
@@ -82,19 +83,22 @@ void main() {
       expect(ids, isNot(contains('ignore-me')));
     });
 
-    test('returns unknown or null when conversations directory does not exist', () async {
-      final presence = await index.presenceOf(
-        storeHome: tmp.path,
-        format: AgentStoreFormat.antigravityStore,
-        conversationId: 'some-id',
-      );
-      expect(presence, ConversationPresence.unknown);
+    test(
+      'returns unknown or null when conversations directory does not exist',
+      () async {
+        final presence = await index.presenceOf(
+          storeHome: tmp.path,
+          format: AgentStoreFormat.antigravityStore,
+          conversationId: 'some-id',
+        );
+        expect(presence, ConversationPresence.unknown);
 
-      final ids = await index.idsIn(
-        storeHome: tmp.path,
-        format: AgentStoreFormat.antigravityStore,
-      );
-      expect(ids, isNull);
-    });
+        final ids = await index.idsIn(
+          storeHome: tmp.path,
+          format: AgentStoreFormat.antigravityStore,
+        );
+        expect(ids, isNull);
+      },
+    );
   });
 }

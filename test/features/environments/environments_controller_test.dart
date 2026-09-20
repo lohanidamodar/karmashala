@@ -87,7 +87,9 @@ void _labelFallbackTests() {
       // in the list to match, and the settings and fan-out screens labelled a
       // Mac's Claude and Codex installs "windows".
       final container = ProviderContainer(
-        overrides: [environmentsControllerProvider.overrideWith(_NoEnvironments.new)],
+        overrides: [
+          environmentsControllerProvider.overrideWith(_NoEnvironments.new),
+        ],
       );
       addTearDown(container.dispose);
 
@@ -107,7 +109,9 @@ void _labelFallbackTests() {
     // Only the local host can be answered without the list; anything else is
     // better identified by its key than by an empty line.
     final container = ProviderContainer(
-      overrides: [environmentsControllerProvider.overrideWith(_NoEnvironments.new)],
+      overrides: [
+        environmentsControllerProvider.overrideWith(_NoEnvironments.new),
+      ],
     );
     addTearDown(container.dispose);
 

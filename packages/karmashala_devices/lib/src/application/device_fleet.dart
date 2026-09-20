@@ -307,8 +307,7 @@ class DeviceFleet {
     if (!driver.can(DeviceCapability.powerOff)) {
       throw DeviceRefusal(driver.missingReason(DeviceCapability.powerOff)!);
     }
-    if (driver.target is SimulatorTarget &&
-        simulatorIsBusy(driver.target.id)) {
+    if (driver.target is SimulatorTarget && simulatorIsBusy(driver.target.id)) {
       throw DeviceRefusal(
         '${driver.target.label} is already being started or stopped by this '
         'app. Wait for that to finish, then check list_devices.',

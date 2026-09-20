@@ -72,7 +72,8 @@ void main() {
   String conversationRecord(String id) {
     final dir = Directory(p.join(store.path, 'conversations'))
       ..createSync(recursive: true);
-    final file = File(p.join(dir.path, '$id.db'))..writeAsStringSync('protobuf');
+    final file = File(p.join(dir.path, '$id.db'))
+      ..writeAsStringSync('protobuf');
     return file.path;
   }
 
@@ -160,24 +161,27 @@ void main() {
   }
 
   group('Antigravity is read per session, because its two installs differ', () {
-    test('a Windows-shaped session has none, and says the file is absent', () async {
-      const id = 'conv-win';
-      final record = conversationRecord(id);
-      writeEmptyBrain(id);
-      final reading = await readingFor(
-        agentId: AgentIds.antigravity,
-        externalSessionId: id,
-        located: record,
-      );
-      expect(reading.hasChatView, isFalse);
-      expect(reading.evidence, ChatViewEvidence.transcriptAbsent);
-      // The *why*, and it is not "this agent's store is unreadable": the store
-      // is readable, and keeps nothing readable for this conversation.
-      expect(reading.reason, contains('No transcript file for this session'));
-      expect(reading.path, endsWith('transcript.jsonl'));
-      // Final rather than a race, so the companion sends `noChatView` for it.
-      expect(reading.keepsNoRecord, isTrue);
-    });
+    test(
+      'a Windows-shaped session has none, and says the file is absent',
+      () async {
+        const id = 'conv-win';
+        final record = conversationRecord(id);
+        writeEmptyBrain(id);
+        final reading = await readingFor(
+          agentId: AgentIds.antigravity,
+          externalSessionId: id,
+          located: record,
+        );
+        expect(reading.hasChatView, isFalse);
+        expect(reading.evidence, ChatViewEvidence.transcriptAbsent);
+        // The *why*, and it is not "this agent's store is unreadable": the store
+        // is readable, and keeps nothing readable for this conversation.
+        expect(reading.reason, contains('No transcript file for this session'));
+        expect(reading.path, endsWith('transcript.jsonl'));
+        // Final rather than a race, so the companion sends `noChatView` for it.
+        expect(reading.keepsNoRecord, isTrue);
+      },
+    );
 
     test('a WSL-shaped session with a transcript has one', () async {
       const id = 'conv-wsl';
@@ -206,8 +210,10 @@ void main() {
         located: record,
       );
       expect(reading.checkedAt, now);
-      expect(reading.ageAt(now.add(const Duration(minutes: 3))),
-          const Duration(minutes: 3));
+      expect(
+        reading.ageAt(now.add(const Duration(minutes: 3))),
+        const Duration(minutes: 3),
+      );
       expect(reading.isMeasured, isTrue);
     });
 
@@ -267,30 +273,33 @@ void main() {
       expect(made.locator.calls, 0);
     });
 
-    test('an agent whose store nothing here opens says so, and is final', () async {
-      // An agent that exists only as registry data — the "this agent's store is
-      // unreadable" sentence, answered from the registry for every session of
-      // it at once and never from a disk.
-      const rover = AgentDescriptor(
-        id: 'roverCli',
-        displayName: 'Rover',
-        binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
-        store: AgentStoreSpec(
-          homeDirectoryName: '.rover',
-          format: AgentStoreFormat.none,
-        ),
-      );
-      final made = containerFor(
-        agentId: rover.id,
-        registry: const AgentRegistry([rover]),
-      );
-      final reading = made.container.read(sessionChatViewProvider('s1'));
-      expect(reading.evidence, ChatViewEvidence.storeUnreadable);
-      expect(reading.hasChatView, isFalse);
-      expect(reading.keepsNoRecord, isTrue);
-      expect(reading.reason, contains('store is unreadable'));
-      expect(made.locator.calls, 0);
-    });
+    test(
+      'an agent whose store nothing here opens says so, and is final',
+      () async {
+        // An agent that exists only as registry data — the "this agent's store is
+        // unreadable" sentence, answered from the registry for every session of
+        // it at once and never from a disk.
+        const rover = AgentDescriptor(
+          id: 'roverCli',
+          displayName: 'Rover',
+          binaries: AgentBinaries(windows: ['rover'], posix: ['rover']),
+          store: AgentStoreSpec(
+            homeDirectoryName: '.rover',
+            format: AgentStoreFormat.none,
+          ),
+        );
+        final made = containerFor(
+          agentId: rover.id,
+          registry: const AgentRegistry([rover]),
+        );
+        final reading = made.container.read(sessionChatViewProvider('s1'));
+        expect(reading.evidence, ChatViewEvidence.storeUnreadable);
+        expect(reading.hasChatView, isFalse);
+        expect(reading.keepsNoRecord, isTrue);
+        expect(reading.reason, contains('store is unreadable'));
+        expect(made.locator.calls, 0);
+      },
+    );
   });
 
   group('a closed panel subscribes to nothing', () {
@@ -309,25 +318,28 @@ void main() {
       expect(made.locator.calls, 0);
     });
 
-    test('one open surface costs one scan, and closing it stops there', () async {
-      const id = 'conv-wsl';
-      final record = conversationRecord(id);
-      writeBrainTranscript(id);
-      final made = containerFor(
-        agentId: AgentIds.antigravity,
-        externalSessionId: id,
-        located: record,
-      );
-      final subscription = made.container.listen(
-        sessionChatViewProbeProvider('s1'),
-        (_, _) {},
-      );
-      await made.container.read(sessionChatViewProbeProvider('s1').future);
-      expect(made.locator.calls, 1);
-      subscription.close();
-      // Nothing re-arms: the probe runs when a surface asks and never again.
-      await Future<void>.delayed(Duration.zero);
-      expect(made.locator.calls, 1);
-    });
+    test(
+      'one open surface costs one scan, and closing it stops there',
+      () async {
+        const id = 'conv-wsl';
+        final record = conversationRecord(id);
+        writeBrainTranscript(id);
+        final made = containerFor(
+          agentId: AgentIds.antigravity,
+          externalSessionId: id,
+          located: record,
+        );
+        final subscription = made.container.listen(
+          sessionChatViewProbeProvider('s1'),
+          (_, _) {},
+        );
+        await made.container.read(sessionChatViewProbeProvider('s1').future);
+        expect(made.locator.calls, 1);
+        subscription.close();
+        // Nothing re-arms: the probe runs when a surface asks and never again.
+        await Future<void>.delayed(Duration.zero);
+        expect(made.locator.calls, 1);
+      },
+    );
   });
 }

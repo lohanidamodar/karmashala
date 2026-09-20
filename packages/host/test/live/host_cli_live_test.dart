@@ -30,9 +30,7 @@ void main() {
       OpenMessage(
         requestId: 10,
         sessionId: id,
-        argv: Platform.isWindows
-            ? ['cmd.exe']
-            : ['/bin/sh', '-c', 'sleep 120'],
+        argv: Platform.isWindows ? ['cmd.exe'] : ['/bin/sh', '-c', 'sleep 120'],
         environment: const {},
         columns: 80,
         rows: 24,

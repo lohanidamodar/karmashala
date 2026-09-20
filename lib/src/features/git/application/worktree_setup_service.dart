@@ -113,9 +113,7 @@ class WorktreeSetupService {
   WorktreeSetupReport? noteExit(String paneId, int? exitCode) {
     final pending = _pending.remove(paneId);
     if (pending == null) return null;
-    final corrected = pending.withCommand(
-      pending.command?.afterExit(exitCode),
-    );
+    final corrected = pending.withCommand(pending.command?.afterExit(exitCode));
     record(corrected);
     return corrected;
   }

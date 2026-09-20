@@ -11,11 +11,8 @@ DirectoryLister _disk(Map<String, List<BrowsedEntry>> tree) =>
     (path) async =>
         tree[path] ?? (throw PathNotFoundException(path, const OSError()));
 
-BrowsedEntry _dir(String parent, String name) => BrowsedEntry(
-  name: name,
-  path: '$parent\\$name',
-  isDirectory: true,
-);
+BrowsedEntry _dir(String parent, String name) =>
+    BrowsedEntry(name: name, path: '$parent\\$name', isDirectory: true);
 
 BrowsedEntry _file(String parent, String name, {bool hidden = false}) =>
     BrowsedEntry(
@@ -61,8 +58,9 @@ Future<String?> _show(
   return done ? answer : null;
 }
 
-IconButton _up(WidgetTester tester) =>
-    tester.widget<IconButton>(find.widgetWithIcon(IconButton, AppIcons.arrowUp));
+IconButton _up(WidgetTester tester) => tester.widget<IconButton>(
+  find.widgetWithIcon(IconButton, AppIcons.arrowUp),
+);
 
 void main() {
   const start = r'C:\start';
@@ -154,9 +152,7 @@ void main() {
               what: 'a folder',
               directories: true,
               startAt: start,
-              lister: _disk({
-                start: const [],
-              }),
+              lister: _disk({start: const []}),
               exists: (_) async => false,
               environment: const {'USERPROFILE': r'C:\Users\me'},
             ),
@@ -174,11 +170,7 @@ void main() {
   });
 
   testWidgets('an empty folder still says it can be chosen', (tester) async {
-    await _show(
-      tester,
-      directories: true,
-      lister: _disk({start: const []}),
-    );
+    await _show(tester, directories: true, lister: _disk({start: const []}));
     expect(
       find.textContaining('You can still choose this one'),
       findsOneWidget,
@@ -472,7 +464,11 @@ void main() {
 
     expect(find.text('.env'), findsOneWidget);
     expect(find.text('desktop.ini'), findsOneWidget);
-    expect(find.text('Hidden'), findsOneWidget, reason: 'nothing left to count');
+    expect(
+      find.text('Hidden'),
+      findsOneWidget,
+      reason: 'nothing left to count',
+    );
   });
 
   testWidgets('a folder of nothing but hidden files says why it looks empty', (

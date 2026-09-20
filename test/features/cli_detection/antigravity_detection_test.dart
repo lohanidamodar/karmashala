@@ -115,25 +115,28 @@ void main() {
   });
 
   group('CliDetectionService.readStores', () {
-    test('maps each conversation the store places to a DetectedSession', () async {
-      const id = 'df3c0708-1111-4222-8333-444455556666';
-      writeConversation(id, steps: 6);
-      writeLastConversations({'/home/me/proj': id});
-      writeAnnotation(id, 'test me now');
-      writeSummaries([(id, 'wHAT ?')]);
+    test(
+      'maps each conversation the store places to a DetectedSession',
+      () async {
+        const id = 'df3c0708-1111-4222-8333-444455556666';
+        writeConversation(id, steps: 6);
+        writeLastConversations({'/home/me/proj': id});
+        writeAnnotation(id, 'test me now');
+        writeSummaries([(id, 'wHAT ?')]);
 
-      final sessions = await CliDetectionService().readStores([store()]);
+        final sessions = await CliDetectionService().readStores([store()]);
 
-      expect(sessions.length, 1);
-      final session = sessions.single;
-      expect(session.cli, AgentIds.antigravity);
-      expect(session.sessionId, id);
-      expect(session.cwd.path, '/home/me/proj');
-      expect(session.cwd.environmentId, 'wsl:Ubuntu');
-      expect(session.title, 'test me now');
-      expect(session.preview, 'wHAT ?');
-      expect(session.storeHome, storeHome);
-    });
+        expect(sessions.length, 1);
+        final session = sessions.single;
+        expect(session.cli, AgentIds.antigravity);
+        expect(session.sessionId, id);
+        expect(session.cwd.path, '/home/me/proj');
+        expect(session.cwd.environmentId, 'wsl:Ubuntu');
+        expect(session.title, 'test me now');
+        expect(session.preview, 'wHAT ?');
+        expect(session.storeHome, storeHome);
+      },
+    );
 
     test('leaves out a conversation the store places nowhere', () async {
       // `cache/last_conversations.json` holds one entry per *directory*, so an

@@ -178,13 +178,17 @@ void main() {
       // bare `catch (_)`; it must not take the batch with it either.
       for (final i in [0, 1, 3, 4]) {
         expect(
-          File(p.join(claudeHome(), 'projects', '-demo', 'x$i.jsonl')).existsSync(),
+          File(
+            p.join(claudeHome(), 'projects', '-demo', 'x$i.jsonl'),
+          ).existsSync(),
           isFalse,
           reason: 'session $i should have been deleted',
         );
       }
       expect(
-        File(p.join(claudeHome(), 'projects', '-demo', 'x2.jsonl')).existsSync(),
+        File(
+          p.join(claudeHome(), 'projects', '-demo', 'x2.jsonl'),
+        ).existsSync(),
         isTrue,
       );
 
@@ -196,35 +200,37 @@ void main() {
       expect(shown.body, contains('CLI store'));
     });
 
-    test('the workspace is still coherent: the project and its rows are gone',
-        () async {
-      final db = seed(4);
-      addTearDown(db.close);
-      final presenter = _RecordingPresenter();
-      final container = mount(
-        db,
-        mutator: _RefusingMutator(const {'x0', 'x1', 'x2', 'x3'}),
-        presenter: presenter,
-      );
+    test(
+      'the workspace is still coherent: the project and its rows are gone',
+      () async {
+        final db = seed(4);
+        addTearDown(db.close);
+        final presenter = _RecordingPresenter();
+        final container = mount(
+          db,
+          mutator: _RefusingMutator(const {'x0', 'x1', 'x2', 'x3'}),
+          presenter: presenter,
+        );
 
-      await container
-          .read(projectsControllerProvider.notifier)
-          .deleteProject('p1', deleteCliSessions: true);
-      await container.read(cliStorePurgeRunnerProvider).settled;
+        await container
+            .read(projectsControllerProvider.notifier)
+            .deleteProject('p1', deleteCliSessions: true);
+        await container.read(cliStorePurgeRunnerProvider).settled;
 
-      // Not one transcript could be removed, and the workspace still lost the
-      // project cleanly — no half-deleted project, and nothing silent.
-      expect(ProjectDao(db).getById('p1'), isNull);
-      expect(RepositoryDao(db).getByProject('p1'), isEmpty);
-      expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
-      expect(container.read(projectsControllerProvider), isEmpty);
-      expect(transcriptsRemain(4), isTrue);
+        // Not one transcript could be removed, and the workspace still lost the
+        // project cleanly — no half-deleted project, and nothing silent.
+        expect(ProjectDao(db).getById('p1'), isNull);
+        expect(RepositoryDao(db).getByProject('p1'), isEmpty);
+        expect(ImportedSessionDao(db).getByRepository('r1'), isEmpty);
+        expect(container.read(projectsControllerProvider), isEmpty);
+        expect(transcriptsRemain(4), isTrue);
 
-      final shown = presenter.shown.single;
-      expect(shown.title, '4 session files were left behind');
-      // Three named, then a count — the app's existing coalescing wording.
-      expect(shown.body, contains('+1 more'));
-    });
+        final shown = presenter.shown.single;
+        expect(shown.title, '4 session files were left behind');
+        // Three named, then a count — the app's existing coalescing wording.
+        expect(shown.body, contains('+1 more'));
+      },
+    );
 
     test('a delete that loses nothing says nothing', () async {
       final db = seed(3);
@@ -331,54 +337,65 @@ void main() {
   });
 
   group('the batch keeps going after a real filesystem refusal', () {
-    test('one locked transcript, the rest deleted, the index still pruned',
-        () async {
-      final db = seed(4);
-      addTearDown(db.close);
-      final locked = File(p.join(claudeHome(), 'projects', '-demo', 'x1.jsonl'));
-      // Windows refuses to delete a file with an open handle; POSIX allows it.
-      // Either outcome proves the claim under test — the *other* three go, and
-      // the index is pruned in one pass regardless.
-      final handle = locked.openSync(mode: FileMode.append);
-      addTearDown(() {
-        handle.closeSync();
-        if (locked.existsSync()) locked.deleteSync();
-      });
-
-      final mutator = CliSessionMutator();
-      final sessions = ImportedSessionDao(db).getByRepository('r1');
-      final report = await mutator.deleteAll([
-        for (final s in sessions)
-          DetectedSession(
-            cli: s.cli,
-            sessionId: s.externalId,
-            cwd: repository().path,
-            filePath: s.filePath,
-            storeHome: s.storeHome,
-            title: s.title,
-          ),
-      ]);
-
-      for (final i in [0, 2, 3]) {
-        expect(
-          File(p.join(claudeHome(), 'projects', '-demo', 'x$i.jsonl')).existsSync(),
-          isFalse,
-          reason: 'session $i is not the locked one',
+    test(
+      'one locked transcript, the rest deleted, the index still pruned',
+      () async {
+        final db = seed(4);
+        addTearDown(db.close);
+        final locked = File(
+          p.join(claudeHome(), 'projects', '-demo', 'x1.jsonl'),
         );
-      }
-      expect(mutator.storeScans, 1, reason: 'one listing for the whole batch');
-      // The resume index lost every entry the batch actually removed.
-      final indexDir = Directory(p.join(claudeHome(), 'sessions'));
-      final remaining = indexDir.listSync().map((e) => p.basename(e.path));
-      expect(remaining, isNot(contains('x0.json')));
-      expect(remaining, isNot(contains('x3.json')));
-      // Whichever way the platform went, the report is honest about it.
-      expect(
-        report.deleted + report.failures.length,
-        4,
-        reason: 'every session is accounted for, as deleted or as left behind',
-      );
-    });
+        // Windows refuses to delete a file with an open handle; POSIX allows it.
+        // Either outcome proves the claim under test — the *other* three go, and
+        // the index is pruned in one pass regardless.
+        final handle = locked.openSync(mode: FileMode.append);
+        addTearDown(() {
+          handle.closeSync();
+          if (locked.existsSync()) locked.deleteSync();
+        });
+
+        final mutator = CliSessionMutator();
+        final sessions = ImportedSessionDao(db).getByRepository('r1');
+        final report = await mutator.deleteAll([
+          for (final s in sessions)
+            DetectedSession(
+              cli: s.cli,
+              sessionId: s.externalId,
+              cwd: repository().path,
+              filePath: s.filePath,
+              storeHome: s.storeHome,
+              title: s.title,
+            ),
+        ]);
+
+        for (final i in [0, 2, 3]) {
+          expect(
+            File(
+              p.join(claudeHome(), 'projects', '-demo', 'x$i.jsonl'),
+            ).existsSync(),
+            isFalse,
+            reason: 'session $i is not the locked one',
+          );
+        }
+        expect(
+          mutator.storeScans,
+          1,
+          reason: 'one listing for the whole batch',
+        );
+        // The resume index lost every entry the batch actually removed.
+        final indexDir = Directory(p.join(claudeHome(), 'sessions'));
+        final remaining = indexDir.listSync().map((e) => p.basename(e.path));
+        expect(remaining, isNot(contains('x0.json')));
+        expect(remaining, isNot(contains('x3.json')));
+        // Whichever way the platform went, the report is honest about it.
+        expect(
+          report.deleted + report.failures.length,
+          4,
+          reason:
+              'every session is accounted for, as deleted or as left behind',
+        );
+      },
+    );
   });
 }
 

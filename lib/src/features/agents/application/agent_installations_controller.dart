@@ -25,9 +25,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
 
   /// One reconciling sweep; [only] narrows it to `environmentId -> agentIds`.
   /// The startup repair and "Detect agents" are this code at two scopes.
-  Future<AgentDiscoveryReport> _sweep({
-    Map<String, Set<String>>? only,
-  }) async {
+  Future<AgentDiscoveryReport> _sweep({Map<String, Set<String>>? only}) async {
     final environments = ref.read(executionEnvironmentDaoProvider).getAll();
     final factory = ref.read(commandRunnerFactoryProvider);
     final dao = ref.read(agentInstallationDaoProvider);
@@ -42,21 +40,21 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     // time held the rescan spinner for the sum rather than the longest.
     final asked = [
       for (final environment in environments)
-        if (only == null ||
-            (only[environment.id]?.isNotEmpty ?? false))
+        if (only == null || (only[environment.id]?.isNotEmpty ?? false))
           (environment: environment, wanted: only?[environment.id]),
     ];
     final probes = await Future.wait([
-      for (final one in asked) _probe(
-        environment: one.environment,
-        wanted: one.wanted,
-        factory: factory,
-        ids: ids,
-        clock: clock,
-        registry: registry,
-        pathProbe: pathProbe,
-        hostEnvironment: hostEnvironment,
-      ),
+      for (final one in asked)
+        _probe(
+          environment: one.environment,
+          wanted: one.wanted,
+          factory: factory,
+          ids: ids,
+          clock: clock,
+          registry: registry,
+          pathProbe: pathProbe,
+          hostEnvironment: hostEnvironment,
+        ),
     ]);
 
     final reports = <EnvironmentScanReport>[];
@@ -232,10 +230,11 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
           );
         }
         present.add(
-          _asRead(moved, agent.version, clock).copyWith(
-            executable: agent.executable,
-            executableByUser: false,
-          ),
+          _asRead(
+            moved,
+            agent.version,
+            clock,
+          ).copyWith(executable: agent.executable, executableByUser: false),
         );
         continue;
       }
@@ -344,9 +343,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final registry = ref.read(agentRegistryProvider);
     final probe = ref.read(agentCliPathProbeProvider);
     final byId = <String, ExecutableReading>{};
-    for (final environment in ref
-        .read(executionEnvironmentDaoProvider)
-        .getAll()) {
+    for (final environment
+        in ref.read(executionEnvironmentDaoProvider).getAll()) {
       byId.addAll(_readingsFor(environment, dao, probe));
     }
     return [
@@ -355,8 +353,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
           installation: row,
           displayName: registry.displayNameFor(row.agentId),
           reading:
-              byId[row.id] ??
-              ExecutableReading.unchecked(row.executable.path),
+              byId[row.id] ?? ExecutableReading.unchecked(row.executable.path),
         ),
     ];
   }
@@ -384,8 +381,7 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     // Re-read rather than infer, and keyed by **installation id**: keying by
     // `(agent, environment)` would collapse two installations into one row.
     final after = {
-      for (final reading in readStoredPaths())
-        reading.installation.id: reading,
+      for (final reading in readStoredPaths()) reading.installation.id: reading,
     };
     final repaired = <AgentPathReading>[];
     final unresolved = <AgentPathReading>[];
@@ -418,9 +414,8 @@ class AgentInstallationsController extends Notifier<List<AgentInstallation>> {
     final now = clock.nowUtc();
 
     final changes = <AgentVersionChange>[];
-    for (final environment in ref
-        .read(executionEnvironmentDaoProvider)
-        .getAll()) {
+    for (final environment
+        in ref.read(executionEnvironmentDaoProvider).getAll()) {
       if (environment.kind == EnvironmentKind.ssh) continue;
 
       final candidates = [

@@ -63,4 +63,3 @@ Future<void> _fromDevice(
     read.hasText ? 'Copied to this computer — ${read.summary}.' : read.summary,
   );
 }
-

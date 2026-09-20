@@ -62,11 +62,18 @@ void main() {
 
   /// One link the way `_dialDirect` makes it: the record's own generation, one
   /// attempt. Answers the generation the phone will dial next.
-  Future<int> link(int generation, {Duration wait = const Duration(seconds: 5)}) async {
-    final client = CompanionClient(pairing: record(generation), store: phoneStore);
+  Future<int> link(
+    int generation, {
+    Duration wait = const Duration(seconds: 5),
+  }) async {
+    final client = CompanionClient(
+      pairing: record(generation),
+      store: phoneStore,
+    );
     try {
       await client.connect(
-        transport: LanTransport(host: '127.0.0.1', port: listener.port)..start(),
+        transport: LanTransport(host: '127.0.0.1', port: listener.port)
+          ..start(),
         generation: generation,
         helloTimeout: wait,
       );
@@ -87,12 +94,15 @@ void main() {
     expect(await link(3), 4);
   });
 
-  test('the row moves forward, so a host restart still finds the phone', () async {
-    await link(1);
-    await link(2);
+  test(
+    'the row moves forward, so a host restart still finds the phone',
+    () async {
+      await link(1);
+      await link(2);
 
-    expect(devices.getById('pixel-7')!.generation, 3);
-  });
+      expect(devices.getById('pixel-7')!.generation, 3);
+    },
+  );
 
   test('a generation already served is never answered again', () async {
     await link(1);
@@ -104,7 +114,11 @@ void main() {
       link(1, wait: const Duration(seconds: 2)),
       throwsA(anything),
     );
-    expect(devices.getById('pixel-7')!.generation, 3, reason: 'never walked back');
+    expect(
+      devices.getById('pixel-7')!.generation,
+      3,
+      reason: 'never walked back',
+    );
   });
 
   test('a phone that pairs again starts its count over', () async {
@@ -134,7 +148,10 @@ void main() {
   });
 
   test('a phone whose counter ran ahead is found inside the window', () async {
-    expect(await link(1 + kHostGenerationWindow - 1), 1 + kHostGenerationWindow);
+    expect(
+      await link(1 + kHostGenerationWindow - 1),
+      1 + kHostGenerationWindow,
+    );
   });
 
   test('and one beyond it is not', () async {

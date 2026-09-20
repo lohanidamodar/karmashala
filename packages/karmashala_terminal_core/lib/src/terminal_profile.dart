@@ -89,14 +89,8 @@ class TerminalProfile {
       other.sshHostId == sshHostId;
 
   @override
-  int get hashCode => Object.hash(
-    id,
-    label,
-    shell,
-    wslDistribution,
-    posixShellPath,
-    sshHostId,
-  );
+  int get hashCode =>
+      Object.hash(id, label, shell, wslDistribution, posixShellPath, sshHostId);
 }
 
 /// The terminal profiles available on this machine. [hostIsWindows] is passed
@@ -143,9 +137,7 @@ List<TerminalProfile> terminalProfilesFor(
     } else if (env.kind == EnvironmentKind.ssh) {
       final hostId = env.sshHostId;
       if (hostId == null || hostId.isEmpty) continue;
-      profiles.add(
-        TerminalProfile.ssh(hostId, hostName: env.name),
-      );
+      profiles.add(TerminalProfile.ssh(hostId, hostName: env.name));
     }
   }
   return profiles;

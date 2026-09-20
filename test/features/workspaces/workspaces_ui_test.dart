@@ -46,7 +46,9 @@ void main() {
           name: 'Project $i',
           root: EnvironmentPath(
             environmentId: 'windows',
-            path: r'C:\src\p' '$i',
+            path:
+                r'C:\src\p'
+                '$i',
           ),
           createdAt: testTime,
         ),
@@ -168,7 +170,9 @@ void main() {
       final games = container
           .read(workspacesControllerProvider.notifier)
           .create('Game dev');
-      container.read(workspacesControllerProvider.notifier).assign('p1', games.id);
+      container
+          .read(workspacesControllerProvider.notifier)
+          .assign('p1', games.id);
       await tester.pumpWidget(dialogApp());
       await tester.pumpAndSettle();
 

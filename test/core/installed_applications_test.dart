@@ -64,17 +64,24 @@ Icon=code
 
     test('a hidden entry is not offered', () {
       expect(
-        entry('[Desktop Entry]\nType=Application\nName=A\nExec=a\nNoDisplay=true\n'),
+        entry(
+          '[Desktop Entry]\nType=Application\nName=A\nExec=a\nNoDisplay=true\n',
+        ),
         isNull,
       );
       expect(
-        entry('[Desktop Entry]\nType=Application\nName=A\nExec=a\nHidden=true\n'),
+        entry(
+          '[Desktop Entry]\nType=Application\nName=A\nExec=a\nHidden=true\n',
+        ),
         isNull,
       );
     });
 
     test('a link or a directory entry is not an application', () {
-      expect(entry('[Desktop Entry]\nType=Link\nName=A\nURL=http://x\n'), isNull);
+      expect(
+        entry('[Desktop Entry]\nType=Link\nName=A\nURL=http://x\n'),
+        isNull,
+      );
     });
 
     test('only the Desktop Entry group is read', () {

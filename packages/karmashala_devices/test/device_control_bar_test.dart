@@ -15,7 +15,9 @@ import 'package:karmashala_devices/widgets.dart';
 /// swallowed and a double press would have run two processes at once.
 Future<void> _pump(WidgetTester tester, List<DeviceControl> controls) =>
     tester.pumpWidget(
-      MaterialApp(home: Scaffold(body: DeviceControlBar(controls: controls))),
+      MaterialApp(
+        home: Scaffold(body: DeviceControlBar(controls: controls)),
+      ),
     );
 
 void main() {

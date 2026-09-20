@@ -69,9 +69,9 @@ void main() {
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     ProjectDao(db).insert(project(name: 'Karmashala'));
     RepositoryDao(db).insert(repository(name: 'app'));
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
   });
   tearDown(() => db.close());
 
@@ -119,9 +119,7 @@ void main() {
         sessionId: conversation,
         cli: AgentIds.claudeCode,
         filePath: r'C:\store\$conversation.jsonl',
-        turns: [
-          ConversationTurn(ordinal: ordinal, role: 'user', text: text),
-        ],
+        turns: [ConversationTurn(ordinal: ordinal, role: 'user', text: text)],
         indexedAt: indexedAt,
       );
 

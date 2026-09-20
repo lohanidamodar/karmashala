@@ -170,31 +170,38 @@ void main() {
     );
   });
 
-  test('the preview is the server\'s, not the rollout\'s first message', () async {
-    final home = p.join(tmp.path, '.codex');
-    final file = writeRollout('u3', cwd: '/w');
-    final server = FakeCodexAppServer.withThreads([
-      row('u3', cwd: '/w', path: file),
-    ], codexHome: home);
-    final launch = CodexAppServerLaunch(
-      environment: windows,
-      executable: 'codex',
-    );
+  test(
+    'the preview is the server\'s, not the rollout\'s first message',
+    () async {
+      final home = p.join(tmp.path, '.codex');
+      final file = writeRollout('u3', cwd: '/w');
+      final server = FakeCodexAppServer.withThreads([
+        row('u3', cwd: '/w', path: file),
+      ], codexHome: home);
+      final launch = CodexAppServerLaunch(
+        environment: windows,
+        executable: 'codex',
+      );
 
-    final reader = _readerFor(server);
-    addTearDown(reader.close);
-    final overProtocol = await reader.read(home, 'windows', appServer: launch);
-    final overFiles = await CodexStoreReader(
-      cache: CodexRolloutCache(),
-    ).read(home, 'windows');
+      final reader = _readerFor(server);
+      addTearDown(reader.close);
+      final overProtocol = await reader.read(
+        home,
+        'windows',
+        appServer: launch,
+      );
+      final overFiles = await CodexStoreReader(
+        cache: CodexRolloutCache(),
+      ).read(home, 'windows');
 
-    expect(overProtocol.single.preview, 'the real question');
-    expect(
-      overFiles.single.preview,
-      startsWith('<recommended_plugins>'),
-      reason: 'this is the defect: the walk reads an injected preamble',
-    );
-  });
+      expect(overProtocol.single.preview, 'the real question');
+      expect(
+        overFiles.single.preview,
+        startsWith('<recommended_plugins>'),
+        reason: 'this is the defect: the walk reads an injected preamble',
+      );
+    },
+  );
 
   test('a long preview is trimmed the way the walk trims one', () async {
     final home = p.join(tmp.path, '.codex');
@@ -253,100 +260,105 @@ void main() {
   });
 
   group('one install failing does not take the other with it', () {
-    test('the healthy Codex keeps the protocol, the broken one walks', () async {
-      final home = p.join(tmp.path, '.codex');
-      final file = writeRollout('u7', cwd: '/w');
-      final healthy = FakeCodexAppServer.withThreads([
-        row('u7', cwd: '/w', path: file, name: 'from the server'),
-      ], codexHome: home);
-      final reader = CodexAppServerReader(
-        fallback: CodexStoreReader(cache: CodexRolloutCache()),
-        openClient: (launch, expectedCodexHome) => CodexAppServerClient(
-          connect: launch.environmentId == 'windows'
-              ? () async => healthy
-              : () async => throw const ProcessException('codex', []),
-          timeout: const Duration(seconds: 5),
-          expectedCodexHome: expectedCodexHome,
-        ),
-      );
-      addTearDown(reader.close);
+    test(
+      'the healthy Codex keeps the protocol, the broken one walks',
+      () async {
+        final home = p.join(tmp.path, '.codex');
+        final file = writeRollout('u7', cwd: '/w');
+        final healthy = FakeCodexAppServer.withThreads([
+          row('u7', cwd: '/w', path: file, name: 'from the server'),
+        ], codexHome: home);
+        final reader = CodexAppServerReader(
+          fallback: CodexStoreReader(cache: CodexRolloutCache()),
+          openClient: (launch, expectedCodexHome) => CodexAppServerClient(
+            connect: launch.environmentId == 'windows'
+                ? () async => healthy
+                : () async => throw const ProcessException('codex', []),
+            timeout: const Duration(seconds: 5),
+            expectedCodexHome: expectedCodexHome,
+          ),
+        );
+        addTearDown(reader.close);
 
-      final good = await reader.read(
-        home,
-        'windows',
-        appServer: CodexAppServerLaunch(
-          environment: windows,
-          executable: 'codex',
-        ),
-      );
-      final broken = await reader.read(
-        home,
-        'wsl:archlinux',
-        appServer: CodexAppServerLaunch(
-          environment: wsl,
-          executable: '/no/such/codex',
-        ),
-      );
+        final good = await reader.read(
+          home,
+          'windows',
+          appServer: CodexAppServerLaunch(
+            environment: windows,
+            executable: 'codex',
+          ),
+        );
+        final broken = await reader.read(
+          home,
+          'wsl:archlinux',
+          appServer: CodexAppServerLaunch(
+            environment: wsl,
+            executable: '/no/such/codex',
+          ),
+        );
 
-      expect(good.single.title, 'from the server');
-      expect(
-        broken.single.title,
-        isNull,
-        reason: 'the walk reads names from session_index.jsonl, and there is '
-            'none here — the point is that it still answered',
-      );
-      expect(broken.single.sessionId, 'u7');
-      expect(reader.fallbacksServed, 1);
-      expect(
-        reader.lastFailureByEnvironment.keys,
-        ['wsl:archlinux'],
-        reason: 'only the install that failed is recorded as having failed',
-      );
-      expect(
-        reader.lastFailureByEnvironment['wsl:archlinux']!.kind,
-        CodexAppServerFailureKind.unavailable,
-      );
-    });
+        expect(good.single.title, 'from the server');
+        expect(
+          broken.single.title,
+          isNull,
+          reason:
+              'the walk reads names from session_index.jsonl, and there is '
+              'none here — the point is that it still answered',
+        );
+        expect(broken.single.sessionId, 'u7');
+        expect(reader.fallbacksServed, 1);
+        expect(reader.lastFailureByEnvironment.keys, [
+          'wsl:archlinux',
+        ], reason: 'only the install that failed is recorded as having failed');
+        expect(
+          reader.lastFailureByEnvironment['wsl:archlinux']!.kind,
+          CodexAppServerFailureKind.unavailable,
+        );
+      },
+    );
 
-    test('a failed install sits out scans instead of respawning each one', () async {
-      final home = p.join(tmp.path, '.codex');
-      writeRollout('u8', cwd: '/w');
-      var attempts = 0;
-      final reader = CodexAppServerReader(
-        fallback: CodexStoreReader(cache: CodexRolloutCache()),
-        openClient: (launch, expectedCodexHome) => CodexAppServerClient(
-          connect: () async {
-            attempts++;
-            throw const ProcessException('codex', []);
-          },
-          timeout: const Duration(seconds: 5),
-        ),
-      );
-      addTearDown(reader.close);
+    test(
+      'a failed install sits out scans instead of respawning each one',
+      () async {
+        final home = p.join(tmp.path, '.codex');
+        writeRollout('u8', cwd: '/w');
+        var attempts = 0;
+        final reader = CodexAppServerReader(
+          fallback: CodexStoreReader(cache: CodexRolloutCache()),
+          openClient: (launch, expectedCodexHome) => CodexAppServerClient(
+            connect: () async {
+              attempts++;
+              throw const ProcessException('codex', []);
+            },
+            timeout: const Duration(seconds: 5),
+          ),
+        );
+        addTearDown(reader.close);
 
-      Future<List<DetectedSession>> scan() => reader.read(
-        home,
-        'windows',
-        appServer: CodexAppServerLaunch(
-          environment: windows,
-          executable: 'codex',
-        ),
-      );
+        Future<List<DetectedSession>> scan() => reader.read(
+          home,
+          'windows',
+          appServer: CodexAppServerLaunch(
+            environment: windows,
+            executable: 'codex',
+          ),
+        );
 
-      await scan(); // fails, and skips 1
-      expect(attempts, 1);
-      await scan();
-      expect(attempts, 1, reason: 'the skipped scan spawns nothing');
-      await scan(); // fails again, and skips 2
-      expect(attempts, 2);
-      await scan();
-      await scan();
-      expect(attempts, 2);
-      await scan();
-      expect(attempts, 3);
-      // Every one of them still produced the sessions, off the disk.
-      expect((await scan()).single.sessionId, 'u8');
-    });
+        await scan(); // fails, and skips 1
+        expect(attempts, 1);
+        await scan();
+        expect(attempts, 1, reason: 'the skipped scan spawns nothing');
+        await scan(); // fails again, and skips 2
+        expect(attempts, 2);
+        await scan();
+        await scan();
+        expect(attempts, 2);
+        await scan();
+        expect(attempts, 3);
+        // Every one of them still produced the sessions, off the disk.
+        expect((await scan()).single.sessionId, 'u8');
+      },
+    );
   });
 }
 

@@ -97,7 +97,11 @@ void main() {
     // bytes out; by the time the list sees it, it is an ordinary file.
     final extracted = writePng('pasted-0.png');
     await pumpList(tester, [
-      item(sequence: 1, origin: SessionMediaOrigin.pasted, path: extracted.path),
+      item(
+        sequence: 1,
+        origin: SessionMediaOrigin.pasted,
+        path: extracted.path,
+      ),
     ]);
 
     expect(find.byType(Image), findsOneWidget);

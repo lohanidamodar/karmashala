@@ -51,13 +51,23 @@ void main() {
     });
 
     test('trailing bytes are a version skew, not something to ignore', () {
-      final r = WireReader((WireWriter()..u8(1)..u8(2)).take());
+      final r = WireReader(
+        (WireWriter()
+              ..u8(1)
+              ..u8(2))
+            .take(),
+      );
       expect(r.u8(), 1);
       expect(r.expectEnd, throwsA(isA<WireFormatException>()));
     });
 
     test('an empty map and an empty list survive the round trip', () {
-      final r = WireReader((WireWriter()..map({})..strings([])).take());
+      final r = WireReader(
+        (WireWriter()
+              ..map({})
+              ..strings([]))
+            .take(),
+      );
       expect(r.map(), isEmpty);
       expect(r.strings(), isEmpty);
       r.expectEnd();

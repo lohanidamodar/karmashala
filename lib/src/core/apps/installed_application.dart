@@ -86,7 +86,10 @@ List<InstalledApplication> windowsApplicationsIn(String stdout) {
 
 /// One `.desktop` entry, or `null` when it is not something to offer — another
 /// group's file, a link, or one the desktop itself is told to hide.
-InstalledApplication? desktopEntryIn(String contents, {required String source}) {
+InstalledApplication? desktopEntryIn(
+  String contents, {
+  required String source,
+}) {
   var inEntry = false;
   String? name;
   String? exec;

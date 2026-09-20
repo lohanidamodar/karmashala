@@ -213,7 +213,6 @@ abstract interface class DeviceDriver {
   /// was left behind: an emulator loses what a simulator keeps.
   Future<String> powerOff();
 
-
   /// The places on this device a browser can start from — **not "the root"**: a
   /// real iPhone has none to return. Refuses rather than answering empty.
   Future<List<DeviceFileRoot>> fileRoots();

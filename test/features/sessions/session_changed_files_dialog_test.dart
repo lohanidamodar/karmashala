@@ -102,7 +102,10 @@ void main() {
     );
 
     expect(find.textContaining('Read 3m ago'), findsOneWidget);
-    expect(find.textContaining('Nothing here is re-read on its own'), findsOneWidget);
+    expect(
+      find.textContaining('Nothing here is re-read on its own'),
+      findsOneWidget,
+    );
   });
 
   // The three below are separate tests on purpose: `pumpWidget` updates the
@@ -119,7 +122,9 @@ void main() {
     );
 
     expect(
-      find.text('Codex CLI\u2019s record of this session names no changed file.'),
+      find.text(
+        'Codex CLI\u2019s record of this session names no changed file.',
+      ),
       findsOneWidget,
     );
   });
@@ -149,7 +154,9 @@ void main() {
     expect(find.textContaining('names no changed file'), findsNothing);
   });
 
-  testWidgets('an agent that keeps no record says that instead', (tester) async {
+  testWidgets('an agent that keeps no record says that instead', (
+    tester,
+  ) async {
     await open(
       tester,
       SessionChangedFilesReport(
@@ -183,9 +190,14 @@ void main() {
       ),
     );
 
-    expect(find.text('1 file, from this session’s checkpoints.'), findsOneWidget);
     expect(
-      find.textContaining('already uncommitted when this session’s first turn ended'),
+      find.text('1 file, from this session’s checkpoints.'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining(
+        'already uncommitted when this session’s first turn ended',
+      ),
       findsOneWidget,
     );
   });

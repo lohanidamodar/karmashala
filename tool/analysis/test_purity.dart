@@ -96,7 +96,11 @@ final _reachCache = <String, bool>{};
 /// [dropFlutterTest] is only ever true for the test file being classified: the
 /// migration rewrites *its* flutter_test import, but a shared helper's stays,
 /// so a helper that imports flutter_test really does block.
-bool reachesFlutter(String path, Set<String> stack, {bool dropFlutterTest = false}) {
+bool reachesFlutter(
+  String path,
+  Set<String> stack, {
+  bool dropFlutterTest = false,
+}) {
   final cached = _reachCache[path];
   if (cached != null) return cached;
   if (!stack.add(path)) return false; // cycle: no new information
@@ -137,13 +141,14 @@ void main(List<String> args) {
     ignored.add(a.substring('--ignore='.length));
   }
   final root = Directory('test');
-  final files = root
-      .listSync(recursive: true)
-      .whereType<File>()
-      .where((f) => f.path.endsWith('_test.dart'))
-      .map((f) => _norm(f.path))
-      .toList()
-    ..sort();
+  final files =
+      root
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('_test.dart'))
+          .map((f) => _norm(f.path))
+          .toList()
+        ..sort();
 
   if (args.contains('--rank')) {
     _rank(files);
@@ -171,11 +176,9 @@ void main(List<String> args) {
   }
 
   if (args.contains('--json')) {
-    stdout.writeln(jsonEncode({
-      'widget': widget,
-      'pure': pure,
-      'blocked': blocked,
-    }));
+    stdout.writeln(
+      jsonEncode({'widget': widget, 'pure': pure, 'blocked': blocked}),
+    );
     return;
   }
 

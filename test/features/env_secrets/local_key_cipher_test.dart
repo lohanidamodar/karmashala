@@ -79,20 +79,22 @@ void main() {
       expect(await second.unwrap(sealed), 'hello');
     });
 
-    test('is not written when it cannot be restricted to this account',
-        () async {
-      await expectLater(
-        cipher(fileOk: false),
-        throwsA(isA<EnvKeyUnavailable>()),
-      );
-      expect(
-        File(
-          p.join(keyDir.path, LocalKeyEnvValueCipher.keyFileName),
-        ).existsSync(),
-        isFalse,
-        reason: 'a half-made key must not be left for the next run to adopt',
-      );
-    });
+    test(
+      'is not written when it cannot be restricted to this account',
+      () async {
+        await expectLater(
+          cipher(fileOk: false),
+          throwsA(isA<EnvKeyUnavailable>()),
+        );
+        expect(
+          File(
+            p.join(keyDir.path, LocalKeyEnvValueCipher.keyFileName),
+          ).existsSync(),
+          isFalse,
+          reason: 'a half-made key must not be left for the next run to adopt',
+        );
+      },
+    );
 
     test('a truncated key file is refused rather than used', () async {
       await cipher();
@@ -107,8 +109,10 @@ void main() {
   group('sealing', () {
     test('a value round-trips', () async {
       final c = await cipher();
-      expect(await c.unwrap(await c.wrap('super-secret-value')),
-          'super-secret-value');
+      expect(
+        await c.unwrap(await c.wrap('super-secret-value')),
+        'super-secret-value',
+      );
     });
 
     test('the ciphertext does not contain the plaintext', () async {
@@ -121,11 +125,13 @@ void main() {
       );
     });
 
-    test('the same value seals differently each time (a fresh nonce)',
-        () async {
-      final c = await cipher();
-      expect(await c.wrap('same'), isNot(await c.wrap('same')));
-    });
+    test(
+      'the same value seals differently each time (a fresh nonce)',
+      () async {
+        final c = await cipher();
+        expect(await c.wrap('same'), isNot(await c.wrap('same')));
+      },
+    );
 
     test('a tampered ciphertext does not decrypt', () async {
       final c = await cipher();
@@ -166,49 +172,53 @@ void main() {
       expect(raw, contains('"enc": "local-key"'));
     });
 
-    test('a lost key is reported and the vault refuses to overwrite it',
-        () async {
-      final vault = await vaultWith(await cipher());
-      await vault.save(EnvVaultData(variables: [_variable()]));
-      final file = File(
-        p.join(vaultRoot.path, EnvVault.directoryName, EnvVault.fileName),
-      );
-      final before = await file.readAsString();
+    test(
+      'a lost key is reported and the vault refuses to overwrite it',
+      () async {
+        final vault = await vaultWith(await cipher());
+        await vault.save(EnvVaultData(variables: [_variable()]));
+        final file = File(
+          p.join(vaultRoot.path, EnvVault.directoryName, EnvVault.fileName),
+        );
+        final before = await file.readAsString();
 
-      // The cache directory was cleared; a fresh key is generated.
-      await File(
-        p.join(keyDir.path, LocalKeyEnvValueCipher.keyFileName),
-      ).delete();
-      final reopened = await vaultWith(await cipher());
+        // The cache directory was cleared; a fresh key is generated.
+        await File(
+          p.join(keyDir.path, LocalKeyEnvValueCipher.keyFileName),
+        ).delete();
+        final reopened = await vaultWith(await cipher());
 
-      expect(reopened.data.variables, isEmpty);
-      expect(reopened.data.problem, contains('could not be decrypted'));
-      expect(reopened.isReadOnly, isTrue);
+        expect(reopened.data.variables, isEmpty);
+        expect(reopened.data.problem, contains('could not be decrypted'));
+        expect(reopened.isReadOnly, isTrue);
 
-      await expectLater(
-        reopened.save(const EnvVaultData()),
-        throwsA(isA<EnvVaultRefusal>()),
-      );
-      expect(
-        await file.readAsString(),
-        before,
-        reason: 'unreadable values must survive, not be written over',
-      );
-    });
+        await expectLater(
+          reopened.save(const EnvVaultData()),
+          throwsA(isA<EnvVaultRefusal>()),
+        );
+        expect(
+          await file.readAsString(),
+          before,
+          reason: 'unreadable values must survive, not be written over',
+        );
+      },
+    );
 
-    test('a plaintext vault is not silently read as an encrypted one',
-        () async {
-      final plain = EnvVault(
-        directory: Directory(p.join(vaultRoot.path, EnvVault.directoryName)),
-        permissions: _FakePermissions(),
-      );
-      await plain.load();
-      await plain.save(EnvVaultData(variables: [_variable()]));
+    test(
+      'a plaintext vault is not silently read as an encrypted one',
+      () async {
+        final plain = EnvVault(
+          directory: Directory(p.join(vaultRoot.path, EnvVault.directoryName)),
+          permissions: _FakePermissions(),
+        );
+        await plain.load();
+        await plain.save(EnvVaultData(variables: [_variable()]));
 
-      final encrypted = await vaultWith(await cipher());
-      expect(encrypted.data.variables, isEmpty);
-      expect(encrypted.data.problem, contains('different version'));
-      expect(encrypted.isReadOnly, isTrue);
-    });
+        final encrypted = await vaultWith(await cipher());
+        expect(encrypted.data.variables, isEmpty);
+        expect(encrypted.data.problem, contains('different version'));
+        expect(encrypted.isReadOnly, isTrue);
+      },
+    );
   });
 }

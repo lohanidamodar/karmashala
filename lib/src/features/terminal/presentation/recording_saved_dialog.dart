@@ -93,7 +93,9 @@ class _RecordingSavedDialog extends ConsumerWidget {
       actions: [
         if (export?.isRunning ?? false)
           TextButton(
-            onPressed: ref.read(terminalRecordingProvider.notifier).cancelRender,
+            onPressed: ref
+                .read(terminalRecordingProvider.notifier)
+                .cancelRender,
             child: const Text('Stop rendering'),
           ),
         FilledButton(

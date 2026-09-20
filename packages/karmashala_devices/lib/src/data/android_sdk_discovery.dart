@@ -101,37 +101,37 @@ CommandRequest environmentRequest(
   List<String> names, {
   String? loginShell,
 }) => switch (kind) {
-      // `echo %VAR%` prints the literal `%VAR%` when unset; the caller treats
-      // that as empty. No space before `&`, or the value gains a trailing one.
-      EnvironmentKind.windowsNative => CommandRequest(
-        executable: 'cmd',
-        arguments: [
-          '/c',
-          [for (final n in names) 'echo $kEnvMarker$n=%$n%'].join('&'),
-        ],
-      ),
-      // The **owner's** shell on the local host, `bash` elsewhere. On a Mac
-      // that is zsh, and `bash -l` there reads `~/.bash_profile` and never
-      // `~/.zprofile`, so a hardcoded bash could not see an `ANDROID_HOME` the
-      // user's terminal shows them. Still a login shell rather than an
-      // interactive one: this runs on every device probe, and the miss it
-      // cannot cover — a variable set only in `~/.zshrc` — is covered by the
-      // `adb` lookup, which does take the interactive second look.
-      EnvironmentKind.localPosix => CommandRequest(
-        executable: loginShell ?? localLoginShell(),
-        arguments: [
-          '-lc',
-          [for (final n in names) 'echo "$kEnvMarker$n=\$$n"'].join('; '),
-        ],
-      ),
-      EnvironmentKind.wsl || EnvironmentKind.ssh => CommandRequest(
-        executable: 'bash',
-        arguments: [
-          '-lc',
-          [for (final n in names) 'echo "$kEnvMarker$n=\$$n"'].join('; '),
-        ],
-      ),
-    };
+  // `echo %VAR%` prints the literal `%VAR%` when unset; the caller treats
+  // that as empty. No space before `&`, or the value gains a trailing one.
+  EnvironmentKind.windowsNative => CommandRequest(
+    executable: 'cmd',
+    arguments: [
+      '/c',
+      [for (final n in names) 'echo $kEnvMarker$n=%$n%'].join('&'),
+    ],
+  ),
+  // The **owner's** shell on the local host, `bash` elsewhere. On a Mac
+  // that is zsh, and `bash -l` there reads `~/.bash_profile` and never
+  // `~/.zprofile`, so a hardcoded bash could not see an `ANDROID_HOME` the
+  // user's terminal shows them. Still a login shell rather than an
+  // interactive one: this runs on every device probe, and the miss it
+  // cannot cover — a variable set only in `~/.zshrc` — is covered by the
+  // `adb` lookup, which does take the interactive second look.
+  EnvironmentKind.localPosix => CommandRequest(
+    executable: loginShell ?? localLoginShell(),
+    arguments: [
+      '-lc',
+      [for (final n in names) 'echo "$kEnvMarker$n=\$$n"'].join('; '),
+    ],
+  ),
+  EnvironmentKind.wsl || EnvironmentKind.ssh => CommandRequest(
+    executable: 'bash',
+    arguments: [
+      '-lc',
+      [for (final n in names) 'echo "$kEnvMarker$n=\$$n"'].join('; '),
+    ],
+  ),
+};
 
 /// The values [environmentRequest] printed, by name. Unmarked lines are dropped,
 /// and so is a Windows value of the literal `%NAME%` — `cmd` for "unset".

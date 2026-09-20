@@ -36,13 +36,16 @@ void main() {
     await link.dispose();
   });
 
-  test('a daemon that closed the connection is unavailable, not a hang', () async {
-    final daemon = FakeDtd();
-    final link = await openOver(daemon);
-    await daemon.close();
-    await expectLater(link.apps(), throwsA(isA<DtdUnavailable>()));
-    await link.dispose();
-  });
+  test(
+    'a daemon that closed the connection is unavailable, not a hang',
+    () async {
+      final daemon = FakeDtd();
+      final link = await openOver(daemon);
+      await daemon.close();
+      await expectLater(link.apps(), throwsA(isA<DtdUnavailable>()));
+      await link.dispose();
+    },
+  );
 
   test('dispose closes the channel', () async {
     final daemon = FakeDtd();

@@ -64,9 +64,8 @@ Future<DeviceFileActionReport> pasteOnDevice({
   );
 }
 
-String _verbPast(DeviceFileClipboard clip) => clip.mode.isCut
-    ? 'Moved'
-    : 'Copied';
+String _verbPast(DeviceFileClipboard clip) =>
+    clip.mode.isCut ? 'Moved' : 'Copied';
 
 /// Copies [entries] onto **this computer's** file clipboard: that holds paths,
 /// so each is staged to disk first. A directory is refused, never walked.

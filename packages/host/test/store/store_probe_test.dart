@@ -23,10 +23,19 @@ void main() {
 
     test('one directory up from bin/, then into lib/', () {
       final library = bundledLibrary(
-        executable: ['', 'opt', 'karmashala', 'bin', 'karmashala_host'].join(sep),
+        executable: [
+          '',
+          'opt',
+          'karmashala',
+          'bin',
+          'karmashala_host',
+        ].join(sep),
       );
 
-      expect(library.path, ['', 'opt', 'karmashala', 'lib', bundledLibraryName].join(sep));
+      expect(
+        library.path,
+        ['', 'opt', 'karmashala', 'lib', bundledLibraryName].join(sep),
+      );
     });
 
     test('the name is this platform\'s, not one baked in', () {
@@ -64,7 +73,10 @@ void main() {
       await runStoreProbe(out: _Lines(), directory: where);
 
       expect(where.existsSync(), isTrue);
-      expect(where.listSync().map((e) => e.uri.pathSegments.last), contains('karmashala.sqlite'));
+      expect(
+        where.listSync().map((e) => e.uri.pathSegments.last),
+        contains('karmashala.sqlite'),
+      );
     });
   });
 
@@ -112,17 +124,22 @@ void main() {
         r'file: No such file or directory.';
 
     // The library really is there; the binary is asking for somewhere else.
-    final present = File('${Directory.systemTemp.createTempSync('lib').path}/l');
+    final present = File(
+      '${Directory.systemTemp.createTempSync('lib').path}/l',
+    );
     setUpAll(() => present.writeAsStringSync('a library'));
     tearDownAll(() => present.parent.deleteSync(recursive: true));
 
-    test('a path that is not the one we computed is the build, not the machine', () {
-      expect(
-        classifyOpenFailure(crossCompiled, wanted: present),
-        StoreVerdict.mislinked,
-        reason: 'the file is present, so this must not read as a refusal',
-      );
-    });
+    test(
+      'a path that is not the one we computed is the build, not the machine',
+      () {
+        expect(
+          classifyOpenFailure(crossCompiled, wanted: present),
+          StoreVerdict.mislinked,
+          reason: 'the file is present, so this must not read as a refusal',
+        );
+      },
+    );
 
     test('and it reads the same in the other direction', () {
       // A Windows bundle cross-built on Linux bakes the other separator. The
@@ -131,7 +148,10 @@ void main() {
           r"Invalid argument(s): Failed to load dynamic library "
           r"'../lib/sqlite3.dll' relative to 'C:\karmashala\bin\karmashala_host.exe'";
 
-      expect(classifyOpenFailure(builtOnLinuxForWindows, wanted: present), StoreVerdict.mislinked);
+      expect(
+        classifyOpenFailure(builtOnLinuxForWindows, wanted: present),
+        StoreVerdict.mislinked,
+      );
     });
 
     test('an absent library is another deploy', () {

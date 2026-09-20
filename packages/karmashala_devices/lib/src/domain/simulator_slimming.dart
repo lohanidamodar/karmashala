@@ -94,8 +94,7 @@ enum SlimmingCategory {
       'com.apple.contactsd':
           'The Contacts picker (`CNContactPickerViewController`) will not '
           'present, and Contacts reads return nothing.',
-      'com.apple.calaccessd':
-          'EventKit and the Calendar picker stop working.',
+      'com.apple.calaccessd': 'EventKit and the Calendar picker stop working.',
     },
   ),
 
@@ -117,8 +116,7 @@ enum SlimmingCategory {
   family(
     id: 'family',
     displayName: 'Family Sharing & Screen Time',
-    description:
-        'Family Sharing, ask-to-buy, Screen Time and usage tracking.',
+    description: 'Family Sharing, ask-to-buy, Screen Time and usage tracking.',
     approxSavingMb: 65,
     labels: _family,
   ),
@@ -135,8 +133,7 @@ enum SlimmingCategory {
       'com.apple.healthd':
           'HealthKit stops working. Keep this category if your app reads or '
           'writes health data.',
-      'com.apple.homed':
-          'HomeKit stops working.',
+      'com.apple.homed': 'HomeKit stops working.',
     },
   ),
 

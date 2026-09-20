@@ -129,51 +129,63 @@ void main() {
     expect(relay.rendezvousCount, 0);
   });
 
-  test('a relay pairing happens through the relay and is written on the row', () async {
-    final record = await pairThroughRelay();
+  test(
+    'a relay pairing happens through the relay and is written on the row',
+    () async {
+      final record = await pairThroughRelay();
 
-    expect(record.hostName, 'nat-box');
-    expect(devices.getActive().single.relayUrl, relayUrl.toString());
-    expect(devices.getActive().single.name, 'Pixel 7');
-    // The window's own link is gone, and the phone's listeners are up instead.
-    await settle(() => companion.relays.listenerCount == kHostGenerationWindow);
-    expect(dialled.toSet(), {relayUrl});
-  });
+      expect(record.hostName, 'nat-box');
+      expect(devices.getActive().single.relayUrl, relayUrl.toString());
+      expect(devices.getActive().single.name, 'Pixel 7');
+      // The window's own link is gone, and the phone's listeners are up instead.
+      await settle(
+        () => companion.relays.listenerCount == kHostGenerationWindow,
+      );
+      expect(dialled.toSet(), {relayUrl});
+    },
+  );
 
-  test('a relay-route phone reads this machine\'s sessions, and comes back', () async {
-    registry.open(
-      'karmashala_live',
-      const PtySpawnRequest(
-        argv: ['claude'],
-        workingDirectory: '/srv/app',
-        environment: {},
-        columns: 80,
-        rows: 24,
-      ),
-    );
-    final record = await pairThroughRelay();
-    await settle(() => companion.relays.listenerCount == kHostGenerationWindow);
+  test(
+    'a relay-route phone reads this machine\'s sessions, and comes back',
+    () async {
+      registry.open(
+        'karmashala_live',
+        const PtySpawnRequest(
+          argv: ['claude'],
+          workingDirectory: '/srv/app',
+          environment: {},
+          columns: 80,
+          rows: 24,
+        ),
+      );
+      final record = await pairThroughRelay();
+      await settle(
+        () => companion.relays.listenerCount == kHostGenerationWindow,
+      );
 
-    final first = await linkThroughRelay(record);
-    expect(first.sessions.single.sessionId, 'karmashala_live');
-    expect(first.record.generation, record.generation + 1);
+      final first = await linkThroughRelay(record);
+      expect(first.sessions.single.sessionId, 'karmashala_live');
+      expect(first.record.generation, record.generation + 1);
 
-    // Every dial after that is a different rendezvous, and past the third it is
-    // one that was not open when the phone paired: the window has to have
-    // moved, and the row with it.
-    var latest = first.record;
-    for (var i = 0; i < kHostGenerationWindow + 1; i++) {
-      final next = await linkThroughRelay(latest);
-      expect(next.sessions.single.sessionId, 'karmashala_live');
-      latest = next.record;
-    }
-    expect(devices.getActive().single.generation, latest.generation);
-    expect(latest.generation, record.generation + kHostGenerationWindow + 2);
+      // Every dial after that is a different rendezvous, and past the third it is
+      // one that was not open when the phone paired: the window has to have
+      // moved, and the row with it.
+      var latest = first.record;
+      for (var i = 0; i < kHostGenerationWindow + 1; i++) {
+        final next = await linkThroughRelay(latest);
+        expect(next.sessions.single.sessionId, 'karmashala_live');
+        latest = next.record;
+      }
+      expect(devices.getActive().single.generation, latest.generation);
+      expect(latest.generation, record.generation + kHostGenerationWindow + 2);
 
-    // A served generation is let go once its phone has left, so an idle box
-    // holds a window's worth of sockets and no more.
-    await settle(() => companion.relays.listenerCount == kHostGenerationWindow);
-  });
+      // A served generation is let go once its phone has left, so an idle box
+      // holds a window's worth of sockets and no more.
+      await settle(
+        () => companion.relays.listenerCount == kHostGenerationWindow,
+      );
+    },
+  );
 
   test('a revoked phone is not waited for', () async {
     await pairThroughRelay();
@@ -202,13 +214,16 @@ void main() {
     expect(await client.listSessions(), isEmpty);
   });
 
-  test('a relay this host cannot dial is refused, not paired the other way', () async {
-    await expectLater(
-      companion.openPairing(CapabilitySet.all.bits, 'ftp://relay.example'),
-      throwsFormatException,
-    );
-    expect(dialled, isEmpty);
-  });
+  test(
+    'a relay this host cannot dial is refused, not paired the other way',
+    () async {
+      await expectLater(
+        companion.openPairing(CapabilitySet.all.bits, 'ftp://relay.example'),
+        throwsFormatException,
+      );
+      expect(dialled, isEmpty);
+    },
+  );
 
   test('a second window closes the first one\'s relay link', () async {
     await companion.openPairing(CapabilitySet.all.bits, relayUrl.toString());
@@ -225,14 +240,15 @@ void main() {
       CapabilitySet.all.bits,
       relayUrl.toString(),
     );
-    final record = await CompanionPairingClient(
-      store: phoneStore,
-      deviceId: DeviceId.parse('c' * 32),
-    ).pairWithTypedCode(
-      codeSecret: secretOf(window.code),
-      relay: relayUrl,
-      timeout: const Duration(seconds: 10),
-    );
+    final record =
+        await CompanionPairingClient(
+          store: phoneStore,
+          deviceId: DeviceId.parse('c' * 32),
+        ).pairWithTypedCode(
+          codeSecret: secretOf(window.code),
+          relay: relayUrl,
+          timeout: const Duration(seconds: 10),
+        );
     await linkThroughRelay(record);
 
     final said = logs.join('\n');
@@ -245,6 +261,9 @@ void main() {
     expect(usableRelay(''), isNull);
     expect(usableRelay(kLocalRelayMarker), isNull);
     expect(usableRelay('ftp://relay.example'), isNull);
-    expect(usableRelay('wss://relay.example'), Uri.parse('wss://relay.example'));
+    expect(
+      usableRelay('wss://relay.example'),
+      Uri.parse('wss://relay.example'),
+    );
   });
 }

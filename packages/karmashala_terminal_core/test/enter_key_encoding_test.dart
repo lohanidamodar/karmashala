@@ -48,9 +48,12 @@ void main() {
       );
     });
 
-    test('Alt+Enter is ESC CR — the meta prefix, as it always should have been', () {
-      expect(bytesFor(TerminalKey.enter, alt: true), [0x1B, 0x0D]);
-    });
+    test(
+      'Alt+Enter is ESC CR — the meta prefix, as it always should have been',
+      () {
+        expect(bytesFor(TerminalKey.enter, alt: true), [0x1B, 0x0D]);
+      },
+    );
 
     test('Ctrl+Shift+Enter carries both modifiers in the CSI-u parameter', () {
       expect(
@@ -100,9 +103,7 @@ void main() {
     test('the numpad Enter is encoded identically', () {
       expect(bytesFor(TerminalKey.numpadEnter, shift: true), [0x1B, 0x0D]);
       expect(
-        String.fromCharCodes(
-          bytesFor(TerminalKey.numpadEnter, ctrl: true)!,
-        ),
+        String.fromCharCodes(bytesFor(TerminalKey.numpadEnter, ctrl: true)!),
         '\x1b[13;5u',
       );
     });
@@ -114,10 +115,7 @@ void main() {
     });
 
     test('a plain arrow key still gets its ordinary sequence', () {
-      expect(
-        String.fromCharCodes(bytesFor(TerminalKey.arrowUp)!),
-        '\x1b[A',
-      );
+      expect(String.fromCharCodes(bytesFor(TerminalKey.arrowUp)!), '\x1b[A');
     });
 
     test('Tab and Backspace are untouched', () {
@@ -172,10 +170,9 @@ void _oneSequencePerKeystroke() {
 
   test('Alt+Enter and Ctrl+Shift+Enter once each', () {
     expect(_keystroke(TerminalKey.enter, alt: true), [kEscapeEnter]);
-    expect(
-      _keystroke(TerminalKey.enter, ctrl: true, shift: true),
-      ['\x1b[13;6u'],
-    );
+    expect(_keystroke(TerminalKey.enter, ctrl: true, shift: true), [
+      '\x1b[13;6u',
+    ]);
   });
 
   test('the numpad Enter once too', () {
@@ -238,19 +235,17 @@ void _oneKeystrokeOnTheWire() {
   testWidgets('with the text-input client attached, as a pane runs', (
     tester,
   ) async {
-    expect(
-      await shiftEnter(tester, hardwareKeyboardOnly: false),
-      [kEscapeEnter],
-    );
+    expect(await shiftEnter(tester, hardwareKeyboardOnly: false), [
+      kEscapeEnter,
+    ]);
   });
 
   testWidgets('and with only the hardware keyboard, as it used to', (
     tester,
   ) async {
-    expect(
-      await shiftEnter(tester, hardwareKeyboardOnly: true),
-      [kEscapeEnter],
-    );
+    expect(await shiftEnter(tester, hardwareKeyboardOnly: true), [
+      kEscapeEnter,
+    ]);
   });
 }
 

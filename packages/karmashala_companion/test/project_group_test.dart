@@ -97,10 +97,14 @@ void main() {
     final groups = mergeProjectsAndSessions(
       const [
         RemoteWorkspaceProject(
-          projectId: 'empty', name: 'Empty project', path: r'C:\work\empty',
+          projectId: 'empty',
+          name: 'Empty project',
+          path: r'C:\work\empty',
         ),
         RemoteWorkspaceProject(
-          projectId: 'active', name: 'Active project', path: r'C:\work\active',
+          projectId: 'active',
+          name: 'Active project',
+          path: r'C:\work\active',
         ),
       ],
       [summary('s1', project: 'Active project', projectId: 'active')],
@@ -127,21 +131,18 @@ void main() {
     });
 
     test('falls back to non-local environmentName from project', () {
-      final groups = mergeProjectsAndSessions(
-        const [
-          RemoteWorkspaceProject(
-            projectId: 'p1',
-            name: 'SSH project',
-            environmentName: 'SSH · build-box',
-          ),
-          RemoteWorkspaceProject(
-            projectId: 'p2',
-            name: 'Local project',
-            environmentName: 'Windows',
-          ),
-        ],
-        [],
-      );
+      final groups = mergeProjectsAndSessions(const [
+        RemoteWorkspaceProject(
+          projectId: 'p1',
+          name: 'SSH project',
+          environmentName: 'SSH · build-box',
+        ),
+        RemoteWorkspaceProject(
+          projectId: 'p2',
+          name: 'Local project',
+          environmentName: 'Windows',
+        ),
+      ], []);
       expect(groups.first.environmentBadge, 'SSH · build-box');
       expect(groups.last.environmentBadge, isNull);
     });

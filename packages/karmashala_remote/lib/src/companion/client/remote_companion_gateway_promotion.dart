@@ -135,9 +135,7 @@ extension _GatewayPromotion on RemoteCompanionGateway {
   bool _holdingOffPromotion() {
     if (_promotionHoldOff <= 0) return false;
     _promotionHoldOff--;
-    onLog?.call(
-      'lan promotion: held off, $_promotionHoldOff beacon(s) to go',
-    );
+    onLog?.call('lan promotion: held off, $_promotionHoldOff beacon(s) to go');
     return true;
   }
 

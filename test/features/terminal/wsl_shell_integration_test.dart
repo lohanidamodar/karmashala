@@ -71,11 +71,13 @@ void main() {
       // shell with no user configuration.
       expect(bootstrap, contains(r'exec "$__s" -l'));
       expect(
-        RegExp(r'exec "\$__s" -l$', multiLine: true).allMatches(
-          bootstrap,
-        ).length,
+        RegExp(
+          r'exec "\$__s" -l$',
+          multiLine: true,
+        ).allMatches(bootstrap).length,
         2,
-        reason: 'one for an unusable temp dir, one for a shell we cannot '
+        reason:
+            'one for an unusable temp dir, one for a shell we cannot '
             'instrument or a write that failed',
       );
     });
@@ -182,10 +184,7 @@ void main() {
 
     test('emits no D before the first prompt', () {
       final body = rc.split('__k133_precmd() {')[1];
-      expect(
-        body.indexOf('__k133_seen'),
-        lessThan(body.indexOf('133;D;')),
-      );
+      expect(body.indexOf('__k133_seen'), lessThan(body.indexOf('133;D;')));
     });
 
     test('takes C from PS0, with no readline brackets', () {
@@ -262,26 +261,27 @@ void main() {
     test('integration off is byte-identical to what always shipped', () {
       final off = ptyLaunchFor(_wsl, workingDirectory: r'C:\repo');
       expect(off.executable, 'cmd.exe');
-      expect(off.arguments, [
-        '/c',
-        r'wsl.exe -d Ubuntu --cd C:\repo',
-      ]);
+      expect(off.arguments, ['/c', r'wsl.exe -d Ubuntu --cd C:\repo']);
     });
 
-    test('integration on keeps the command line shape and changes the payload', () {
-      final on = ptyLaunchFor(
-        _wsl,
-        workingDirectory: r'C:\repo',
-        shellIntegration: true,
-      );
-      expect(on.executable, 'cmd.exe');
-      expect(on.arguments.first, '/c');
-      expect(
-        on.arguments[1],
-        startsWith(r'wsl.exe -d Ubuntu --cd C:\repo -- eval '),
-        reason: 'the same cmd.exe /c wsl.exe … -- form every agent launch uses',
-      );
-    });
+    test(
+      'integration on keeps the command line shape and changes the payload',
+      () {
+        final on = ptyLaunchFor(
+          _wsl,
+          workingDirectory: r'C:\repo',
+          shellIntegration: true,
+        );
+        expect(on.executable, 'cmd.exe');
+        expect(on.arguments.first, '/c');
+        expect(
+          on.arguments[1],
+          startsWith(r'wsl.exe -d Ubuntu --cd C:\repo -- eval '),
+          reason:
+              'the same cmd.exe /c wsl.exe … -- form every agent launch uses',
+        );
+      },
+    );
 
     test('the payload is the bootstrap, run by sh', () {
       final on = ptyLaunchFor(_wsl, shellIntegration: true);
@@ -291,13 +291,16 @@ void main() {
       );
     });
 
-    test('nothing of the payload is on the command line for a parser to eat', () {
-      final on = ptyLaunchFor(_wsl, shellIntegration: true);
-      final line = on.arguments[1];
-      expect(line, isNot(contains('\n')));
-      expect(line, isNot(contains('%')));
-      expect(line, isNot(contains(r'$HOME')));
-    });
+    test(
+      'nothing of the payload is on the command line for a parser to eat',
+      () {
+        final on = ptyLaunchFor(_wsl, shellIntegration: true);
+        final line = on.arguments[1];
+        expect(line, isNot(contains('\n')));
+        expect(line, isNot(contains('%')));
+        expect(line, isNot(contains(r'$HOME')));
+      },
+    );
 
     test('a user variable still crosses, and is still named in WSLENV', () {
       final on = ptyLaunchFor(

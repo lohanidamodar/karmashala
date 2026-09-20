@@ -51,7 +51,9 @@ void main() {
     final games = container
         .read(workspacesControllerProvider.notifier)
         .create('Game dev');
-    container.read(projectDaoProvider).insert(
+    container
+        .read(projectDaoProvider)
+        .insert(
           Project(
             id: 'p-existing',
             name: 'Roguelike',
@@ -71,19 +73,14 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: const MaterialApp(
-          home: Scaffold(body: NewProjectDialog()),
-        ),
+        child: const MaterialApp(home: Scaffold(body: NewProjectDialog())),
       ),
     );
     await tester.pumpAndSettle();
   }
 
   Future<void> typeFolder(WidgetTester tester, String path) async {
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Folder path'),
-      path,
-    );
+    await tester.enterText(find.widgetWithText(TextField, 'Folder path'), path);
     await tester.pumpAndSettle();
   }
 
@@ -92,7 +89,9 @@ void main() {
     final field = find.byType(DropdownButtonFormField<String?>);
     expect(field, findsOneWidget);
     return tester
-        .widgetList<Text>(find.descendant(of: field, matching: find.byType(Text)))
+        .widgetList<Text>(
+          find.descendant(of: field, matching: find.byType(Text)),
+        )
         .map((t) => t.data)
         .whereType<String>()
         .firstWhere(
@@ -162,7 +161,9 @@ void main() {
     final games = seedGames();
     // A second, unassigned project sitting right beside the filed one — the
     // exact case an eager classifier would "helpfully" file.
-    container.read(projectDaoProvider).insert(
+    container
+        .read(projectDaoProvider)
+        .insert(
           Project(
             id: 'p-unfiled',
             name: 'Platformer',

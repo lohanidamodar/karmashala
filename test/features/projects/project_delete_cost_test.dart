@@ -206,7 +206,8 @@ void main() {
       expect(
         measured[33]!.indexEntriesRead,
         lessThan(measured[1]!.indexEntriesRead + 60),
-        reason: 'index entries are decoded once per delete, not once per '
+        reason:
+            'index entries are decoded once per delete, not once per '
             'session per delete',
       );
     });

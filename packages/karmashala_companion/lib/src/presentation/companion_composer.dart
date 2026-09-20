@@ -137,11 +137,11 @@ class _CompanionComposerState extends State<CompanionComposer> {
         : await _pickAttachment(groups);
     if (file == null) return;
     final name = file.name;
-    final suffix = name.contains('.')
-        ? name.split('.').last.toLowerCase()
-        : '';
+    final suffix = name.contains('.') ? name.split('.').last.toLowerCase() : '';
     final mediaType = _extensionsByType.entries
-        .where((e) => e.value == suffix || (e.value == 'jpg' && suffix == 'jpeg'))
+        .where(
+          (e) => e.value == suffix || (e.value == 'jpg' && suffix == 'jpeg'),
+        )
         .map((e) => e.key)
         .where(support.mediaTypes.contains)
         .firstOrNull;
@@ -373,11 +373,7 @@ class _CompanionComposerState extends State<CompanionComposer> {
 /// The one file waiting to go, above the box, with a way to take it back. A row
 /// and not a thumbnail: the picker already showed the user their own photo.
 class _AttachedRow extends StatelessWidget {
-  const _AttachedRow({
-    required this.name,
-    required this.detail,
-    this.onRemove,
-  });
+  const _AttachedRow({required this.name, required this.detail, this.onRemove});
 
   final String name;
   final String detail;

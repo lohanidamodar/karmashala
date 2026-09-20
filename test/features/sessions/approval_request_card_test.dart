@@ -85,9 +85,7 @@ import '../terminal/fake_instance.dart';
     app: UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
-        home: Scaffold(
-          body: ApprovalRequestCard(sessionId: 's1'),
-        ),
+        home: Scaffold(body: ApprovalRequestCard(sessionId: 's1')),
       ),
     ),
   );
@@ -438,9 +436,7 @@ void main() {
   });
 
   group('a question is answered with the options picked', () {
-    testWidgets('its options, no Approve, and the answer sent', (
-      tester,
-    ) async {
+    testWidgets('its options, no Approve, and the answer sent', (tester) async {
       final sent = <RemoteQuestionAnswerRequest>[];
       final h = harness(
         agentId: AgentIds.claudeCode,

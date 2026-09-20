@@ -56,11 +56,8 @@ void main() {
     logcat = FakeProcessHandle();
     runner = FakeCommandRunner(
       processFactory: (_) => logcat,
-      responder: (request) => const CommandResult(
-        exitCode: 0,
-        stdout: '',
-        stderr: '',
-      ),
+      responder: (request) =>
+          const CommandResult(exitCode: 0, stdout: '', stderr: ''),
     );
   });
 
@@ -180,10 +177,14 @@ void main() {
 
     // `logcat` without `-d`: the tool takes a snapshot because a call has to
     // answer and stop; a person wants the next line.
-    expect(
-      startedArgv(),
-      ['-s', _serial, 'shell', 'logcat', '-v', 'threadtime'],
-    );
+    expect(startedArgv(), [
+      '-s',
+      _serial,
+      'shell',
+      'logcat',
+      '-v',
+      'threadtime',
+    ]);
   });
 
   testWidgets('streaming shows pause, and paused shows play — nothing else', (

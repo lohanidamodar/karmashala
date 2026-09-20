@@ -118,7 +118,8 @@ void main() {
       expect(
         container.read(terminalSessionsControllerProvider),
         isNot(same(before)),
-        reason: 'a rename never touches a terminal, so this is what makes the '
+        reason:
+            'a rename never touches a terminal, so this is what makes the '
             'strip notice',
       );
     });
@@ -322,7 +323,10 @@ void main() {
           sessionId: 's1',
         ),
       );
-      controller.instanceFor(opened.paneId)!.terminal.write('\x1b]2;Claude\x07');
+      controller
+          .instanceFor(opened.paneId)!
+          .terminal
+          .write('\x1b]2;Claude\x07');
 
       expect(controller.titleForTab(opened.tabId), 'Work');
     });
@@ -342,7 +346,8 @@ void main() {
       expect(
         title,
         'src/karmashala | Command Prompt',
-        reason: 'the tab names both visible panes like VS Code, not the project directory',
+        reason:
+            'the tab names both visible panes like VS Code, not the project directory',
       );
     });
 
@@ -371,10 +376,7 @@ void main() {
         'New session',
         reason: 'the tab still names the active pane, not the directory',
       );
-      expect(
-        controller.titleForPane(pane),
-        'New session',
-      );
+      expect(controller.titleForPane(pane), 'New session');
     });
 
     test('and never the same name twice', () {
@@ -422,7 +424,11 @@ void main() {
       controller.movePaneIntoRegion(guestPane, first);
 
       expect(
-        container.read(terminalSessionsControllerProvider).tabs.single.layout
+        container
+            .read(terminalSessionsControllerProvider)
+            .tabs
+            .single
+            .layout
             .groups,
         hasLength(1),
         reason: 'one region, two panes stacked in it',

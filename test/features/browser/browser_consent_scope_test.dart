@@ -90,9 +90,10 @@ void main() {
         .read(browserConsentStoreProvider)
         .grant('p1', BrowserCapability.evaluate, grantedBy: 'settings');
     expect(
-      browserConsentFor(container, callerSessionId: 's1')
-          .check(BrowserCapability.evaluate)
-          .allowed,
+      browserConsentFor(
+        container,
+        callerSessionId: 's1',
+      ).check(BrowserCapability.evaluate).allowed,
       isTrue,
     );
   });
@@ -102,9 +103,10 @@ void main() {
         .read(browserConsentStoreProvider)
         .grant('p2', BrowserCapability.evaluate, grantedBy: 'settings');
     expect(
-      browserConsentFor(container, callerSessionId: 's1')
-          .check(BrowserCapability.evaluate)
-          .allowed,
+      browserConsentFor(
+        container,
+        callerSessionId: 's1',
+      ).check(BrowserCapability.evaluate).allowed,
       isFalse,
     );
   });

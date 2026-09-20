@@ -105,24 +105,29 @@ void main() {
     ]);
   });
 
-  test('a Task call with no subagent file renders exactly as it does today',
-      () async {
-    writeParent(taskCall('toolu_01'));
-    // A `subagents/` directory that exists but holds someone else's agent.
-    writeSubagent(
-      'a1',
-      meta: metaJson(toolUseId: 'toolu_other'),
-      turns: ['{"type":"user","message":{"role":"user","content":"hi"}}'],
-    );
+  test(
+    'a Task call with no subagent file renders exactly as it does today',
+    () async {
+      writeParent(taskCall('toolu_01'));
+      // A `subagents/` directory that exists but holds someone else's agent.
+      writeSubagent(
+        'a1',
+        meta: metaJson(toolUseId: 'toolu_other'),
+        turns: ['{"type":"user","message":{"role":"user","content":"hi"}}'],
+      );
 
-    final messages = await readCliTranscript(parentPath(), AgentIds.claudeCode);
+      final messages = await readCliTranscript(
+        parentPath(),
+        AgentIds.claudeCode,
+      );
 
-    expect(messages.map((m) => '${m.role}:${m.text}'), [
-      'user:delegate it',
-      'tool:Task(find the reader)',
-    ]);
-    expect(messages.last.subagent, isNull);
-  });
+      expect(messages.map((m) => '${m.role}:${m.text}'), [
+        'user:delegate it',
+        'tool:Task(find the reader)',
+      ]);
+      expect(messages.last.subagent, isNull);
+    },
+  );
 
   test('a missing subagents/ directory costs the transcript nothing', () async {
     writeParent(taskCall('toolu_01'));
@@ -134,37 +139,42 @@ void main() {
     expect(await readSubagentIndexFor(parentPath()), isEmpty);
   });
 
-  test('a malformed .meta.json is skipped, and its neighbours still join',
-      () async {
-    writeParent([
-      ...taskCall('toolu_01'),
-      '{"type":"assistant","message":{"content":[{"type":"tool_use",'
-          '"id":"toolu_02","name":"Task","input":{"description":"second"}}]}}',
-    ]);
-    // Three ways a meta goes wrong: not JSON at all, JSON that is not an
-    // object, and an object with no `toolUseId` to join on (seen on this
-    // machine: one meta carried `name` instead).
-    writeSubagent('bad1', meta: 'not json at all', turns: ['{}']);
-    writeSubagent('bad2', meta: '[1,2,3]', turns: ['{}']);
-    writeSubagent(
-      'bad3',
-      meta: '{"agentType":"Explore","description":"d","spawnDepth":1}',
-      turns: ['{}'],
-    );
-    writeSubagent(
-      'good',
-      meta: metaJson(toolUseId: 'toolu_02', description: 'second'),
-      turns: [
-        '{"type":"assistant","message":{"content":[{"type":"text",'
-            '"text":"done"}]}}',
-      ],
-    );
+  test(
+    'a malformed .meta.json is skipped, and its neighbours still join',
+    () async {
+      writeParent([
+        ...taskCall('toolu_01'),
+        '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+            '"id":"toolu_02","name":"Task","input":{"description":"second"}}]}}',
+      ]);
+      // Three ways a meta goes wrong: not JSON at all, JSON that is not an
+      // object, and an object with no `toolUseId` to join on (seen on this
+      // machine: one meta carried `name` instead).
+      writeSubagent('bad1', meta: 'not json at all', turns: ['{}']);
+      writeSubagent('bad2', meta: '[1,2,3]', turns: ['{}']);
+      writeSubagent(
+        'bad3',
+        meta: '{"agentType":"Explore","description":"d","spawnDepth":1}',
+        turns: ['{}'],
+      );
+      writeSubagent(
+        'good',
+        meta: metaJson(toolUseId: 'toolu_02', description: 'second'),
+        turns: [
+          '{"type":"assistant","message":{"content":[{"type":"text",'
+              '"text":"done"}]}}',
+        ],
+      );
 
-    final messages = await readCliTranscript(parentPath(), AgentIds.claudeCode);
+      final messages = await readCliTranscript(
+        parentPath(),
+        AgentIds.claudeCode,
+      );
 
-    expect(messages[1].subagent, isNull, reason: 'nothing claims toolu_01');
-    expect(messages[2].subagent?.description, 'second');
-  });
+      expect(messages[1].subagent, isNull, reason: 'nothing claims toolu_01');
+      expect(messages[2].subagent?.description, 'second');
+    },
+  );
 
   test('a meta whose .jsonl has not been written yet is not offered', () async {
     writeParent(taskCall('toolu_01'));
@@ -202,58 +212,60 @@ void main() {
     ]);
   });
 
-  test('a nested subagent joins inside its parent subagent transcript',
-      () async {
-    // spawnDepth > 1. Claude Code keeps every depth in the *same* directory —
-    // 99 at depth 1, 16 at depth 2 and 3 at depth 3 in one real session here —
-    // so a depth-2 meta joins a `Task` call inside a depth-1 transcript.
-    writeParent(taskCall('toolu_01'));
-    writeSubagent(
-      'a1',
-      meta: metaJson(toolUseId: 'toolu_01', description: 'the delegate'),
-      turns: [
-        '{"type":"assistant","message":{"content":[{"type":"tool_use",'
-            '"id":"toolu_deep","name":"Task",'
-            '"input":{"description":"deeper"}}]}}',
-      ],
-    );
-    writeSubagent(
-      'a2',
-      meta: metaJson(
-        toolUseId: 'toolu_deep',
-        description: 'deeper',
-        spawnDepth: 2,
-      ),
-      turns: [
-        '{"type":"assistant","message":{"content":[{"type":"text",'
-            '"text":"the bottom"}]}}',
-      ],
-    );
+  test(
+    'a nested subagent joins inside its parent subagent transcript',
+    () async {
+      // spawnDepth > 1. Claude Code keeps every depth in the *same* directory —
+      // 99 at depth 1, 16 at depth 2 and 3 at depth 3 in one real session here —
+      // so a depth-2 meta joins a `Task` call inside a depth-1 transcript.
+      writeParent(taskCall('toolu_01'));
+      writeSubagent(
+        'a1',
+        meta: metaJson(toolUseId: 'toolu_01', description: 'the delegate'),
+        turns: [
+          '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+              '"id":"toolu_deep","name":"Task",'
+              '"input":{"description":"deeper"}}]}}',
+        ],
+      );
+      writeSubagent(
+        'a2',
+        meta: metaJson(
+          toolUseId: 'toolu_deep',
+          description: 'deeper',
+          spawnDepth: 2,
+        ),
+        turns: [
+          '{"type":"assistant","message":{"content":[{"type":"text",'
+              '"text":"the bottom"}]}}',
+        ],
+      );
 
-    final outer = (await readCliTranscript(
-      parentPath(),
-      AgentIds.claudeCode,
-    )).last.subagent!;
-    expect(outer.spawnDepth, 1);
+      final outer = (await readCliTranscript(
+        parentPath(),
+        AgentIds.claudeCode,
+      )).last.subagent!;
+      expect(outer.spawnDepth, 1);
 
-    final middle = (await readSubagentTranscript(outer.filePath)).single;
-    final inner = middle.subagent;
-    expect(inner, isNotNull, reason: 'a delegate can delegate again');
-    expect(inner!.spawnDepth, 2);
-    expect(inner.description, 'deeper');
-    expect(
-      (await readSubagentTranscript(inner.filePath)).single.text,
-      'the bottom',
-    );
-  });
+      final middle = (await readSubagentTranscript(outer.filePath)).single;
+      final inner = middle.subagent;
+      expect(inner, isNotNull, reason: 'a delegate can delegate again');
+      expect(inner!.spawnDepth, 2);
+      expect(inner.description, 'deeper');
+      expect(
+        (await readSubagentTranscript(inner.filePath)).single.text,
+        'the bottom',
+      );
+    },
+  );
 
   test('Codex transcripts are left alone', () async {
     // The directory layout is Claude Code's. Codex keeps no such thing, and
     // deriving a path from a `rollout-…jsonl` would be a guess.
-    File(
-      '${root.path}/rollout.jsonl',
-    ).writeAsStringSync('{"payload":{"type":"message","role":"user",'
-        '"content":"hi"}}');
+    File('${root.path}/rollout.jsonl').writeAsStringSync(
+      '{"payload":{"type":"message","role":"user",'
+      '"content":"hi"}}',
+    );
 
     final messages = await readCliTranscript(
       '${root.path}/rollout.jsonl',

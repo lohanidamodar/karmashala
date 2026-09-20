@@ -49,9 +49,8 @@ class AttentionControlTools {
   /// `projectId: 'none'` means the unfiled ones and omitting it means all.
   Object? _notesList(String? sessionId, {String? projectId}) {
     final notes = <Note>[
-      for (final note in _container
-          .read(noteDaoProvider)
-          .list(sessionId: sessionId))
+      for (final note
+          in _container.read(noteDaoProvider).list(sessionId: sessionId))
         if (projectId == null ||
             (projectId == TodoControlTools.unfiled
                 ? note.projectId == null
@@ -364,9 +363,15 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
               'id': {'type': 'string'},
               'title': {'type': 'string'},
               'body': {'type': 'string'},
-              'projectId': {'type': ['string', 'null']},
-              'sourceSessionId': {'type': ['string', 'null']},
-              'sourceRepositoryId': {'type': ['string', 'null']},
+              'projectId': {
+                'type': ['string', 'null'],
+              },
+              'sourceSessionId': {
+                'type': ['string', 'null'],
+              },
+              'sourceRepositoryId': {
+                'type': ['string', 'null'],
+              },
               'createdAt': {'type': 'string'},
               'updatedAt': {'type': 'string'},
             },
@@ -414,8 +419,12 @@ const List<Map<String, dynamic>> attentionControlToolSchemas = [
       'properties': {
         'id': {'type': 'string'},
         'title': {'type': 'string'},
-        'projectId': {'type': ['string', 'null']},
-        'sourceSessionId': {'type': ['string', 'null']},
+        'projectId': {
+          'type': ['string', 'null'],
+        },
+        'sourceSessionId': {
+          'type': ['string', 'null'],
+        },
         'createdAt': {'type': 'string'},
       },
       'required': ['id', 'title'],

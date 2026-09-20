@@ -105,9 +105,9 @@ void main() {
   );
 
   void installAgent(String agentId, {String environmentId = 'windows'}) {
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: agentId, environmentId: environmentId),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: agentId, environmentId: environmentId));
   }
 
   void checkpoint(List<FileChange> files, {int sequence = 1}) {
@@ -159,7 +159,6 @@ void main() {
   }
 
   group('Codex answers out of its own turns', () {
-
     test('every changed path and kind, folded onto one row per file', () async {
       codexSession();
       codex = codexAnswering({
@@ -202,106 +201,128 @@ void main() {
       expect(report.checkedAt, testTime);
     });
 
-    test('a thread that changed nothing says so; it is not a failure', () async {
-      codexSession();
-      codex = codexAnswering({'data': <Object?>[], 'nextCursor': null});
-      final container = containerFor();
-      addTearDown(container.dispose);
+    test(
+      'a thread that changed nothing says so; it is not a failure',
+      () async {
+        codexSession();
+        codex = codexAnswering({'data': <Object?>[], 'nextCursor': null});
+        final container = containerFor();
+        addTearDown(container.dispose);
 
-      final report = await read(container);
+        final report = await read(container);
 
-      expect(
-        report.outcome,
-        SessionChangedFilesOutcome.agentRecordNamesNoFile,
-      );
-      expect(report.gap, SessionRecordGap.none);
-      expect(report.headline, 'Codex CLI’s record of this session names no changed file.');
-    });
+        expect(
+          report.outcome,
+          SessionChangedFilesOutcome.agentRecordNamesNoFile,
+        );
+        expect(report.gap, SessionRecordGap.none);
+        expect(
+          report.headline,
+          'Codex CLI’s record of this session names no changed file.',
+        );
+      },
+    );
 
-    test('a record that could not be read never reads as nothing changed', () async {
-      codexSession();
-      codex = FakeCodexAppServer(
-        reply: (_, id, method, params) => jsonEncode({
-          'error': {'code': -32600, 'message': 'thread not loaded: thread-1'},
-          'id': id,
-        }),
-      );
-      final container = containerFor();
-      addTearDown(container.dispose);
+    test(
+      'a record that could not be read never reads as nothing changed',
+      () async {
+        codexSession();
+        codex = FakeCodexAppServer(
+          reply: (_, id, method, params) => jsonEncode({
+            'error': {'code': -32600, 'message': 'thread not loaded: thread-1'},
+            'id': id,
+          }),
+        );
+        final container = containerFor();
+        addTearDown(container.dispose);
 
-      final report = await read(container);
+        final report = await read(container);
 
-      expect(report.outcome, SessionChangedFilesOutcome.nothingCanAnswer);
-      expect(report.gap, SessionRecordGap.recordUnreadable);
-      expect(report.detail, contains('thread not loaded'));
-      expect(report.headline, contains('could not be read'));
-      expect(report.headline, contains('no checkpoint to fall back on'));
-      expect(report.files, isEmpty);
-    });
+        expect(report.outcome, SessionChangedFilesOutcome.nothingCanAnswer);
+        expect(report.gap, SessionRecordGap.recordUnreadable);
+        expect(report.detail, contains('thread not loaded'));
+        expect(report.headline, contains('could not be read'));
+        expect(report.headline, contains('no checkpoint to fall back on'));
+        expect(report.files, isEmpty);
+      },
+    );
 
-    test('a session that has not named a thread yet says that, not nothing', () async {
-      codexSession();
-      SessionDao(db).updateExternalSessionId('s1', '');
-      final container = containerFor();
-      addTearDown(container.dispose);
+    test(
+      'a session that has not named a thread yet says that, not nothing',
+      () async {
+        codexSession();
+        SessionDao(db).updateExternalSessionId('s1', '');
+        final container = containerFor();
+        addTearDown(container.dispose);
 
-      final report = await read(container);
+        final report = await read(container);
 
-      expect(report.gap, SessionRecordGap.noConversationYet);
-      expect(report.headline, contains('has not named a Codex CLI conversation yet'));
-    });
+        expect(report.gap, SessionRecordGap.noConversationYet);
+        expect(
+          report.headline,
+          contains('has not named a Codex CLI conversation yet'),
+        );
+      },
+    );
 
-    test('a WSL session\u2019s POSIX paths reach the host through the one translator', () async {
-      codexSession(environmentId: 'wsl:Ubuntu');
-      codex = codexAnswering({
-        'data': [
-          turn([
-            {
-              'path': '/home/me/app/lib/a.dart',
-              'kind': {'type': 'update', 'move_path': null},
-            },
-          ]),
-        ],
-        'nextCursor': null,
-      });
-      final container = containerFor();
-      addTearDown(container.dispose);
+    test(
+      'a WSL session\u2019s POSIX paths reach the host through the one translator',
+      () async {
+        codexSession(environmentId: 'wsl:Ubuntu');
+        codex = codexAnswering({
+          'data': [
+            turn([
+              {
+                'path': '/home/me/app/lib/a.dart',
+                'kind': {'type': 'update', 'move_path': null},
+              },
+            ]),
+          ],
+          'nextCursor': null,
+        });
+        final container = containerFor();
+        addTearDown(container.dispose);
 
-      final report = await read(container);
+        final report = await read(container);
 
-      final file = report.files.single;
-      expect(file.path, '/home/me/app/lib/a.dart', reason: 'the record verbatim');
-      expect(file.hostPath, r'\\wsl.localhost\Ubuntu\home\me\app\lib\a.dart');
-      expect(file.display, file.hostPath);
-    });
+        final file = report.files.single;
+        expect(
+          file.path,
+          '/home/me/app/lib/a.dart',
+          reason: 'the record verbatim',
+        );
+        expect(file.hostPath, r'\\wsl.localhost\Ubuntu\home\me\app\lib\a.dart');
+        expect(file.display, file.hostPath);
+      },
+    );
 
-    test('the connection is the pool\u2019s, and a second read opens none', () async {
-      codexSession();
-      codex = codexAnswering({'data': <Object?>[], 'nextCursor': null});
-      final container = containerFor();
-      addTearDown(container.dispose);
-      final before = processSpawnsOnThisIsolate;
+    test(
+      'the connection is the pool\u2019s, and a second read opens none',
+      () async {
+        codexSession();
+        codex = codexAnswering({'data': <Object?>[], 'nextCursor': null});
+        final container = containerFor();
+        addTearDown(container.dispose);
+        final before = processSpawnsOnThisIsolate;
 
-      await read(container);
-      await read(container);
+        await read(container);
+        await read(container);
 
-      expect(
-        started.length,
-        1,
-        reason:
-            'one connection per environment, reused — the pool is what turns a '
-            '~1 s spawn into a one-off',
-      );
-      expect(
-        container.read(codexAppServersProvider).openConnections,
-        1,
-      );
-      expect(
-        processSpawnsOnThisIsolate,
-        before,
-        reason: 'nothing in this reading creates a process of its own',
-      );
-    });
+        expect(
+          started.length,
+          1,
+          reason:
+              'one connection per environment, reused — the pool is what turns a '
+              '~1 s spawn into a one-off',
+        );
+        expect(container.read(codexAppServersProvider).openConnections, 1);
+        expect(
+          processSpawnsOnThisIsolate,
+          before,
+          reason: 'nothing in this reading creates a process of its own',
+        );
+      },
+    );
   });
 
   group('Claude Code answers out of its own transcript', () {
@@ -350,11 +371,10 @@ void main() {
       final report = await read(container);
 
       expect(report.outcome, SessionChangedFilesOutcome.fromAgentRecord);
-      expect(
-        report.files.map((f) => f.display),
-        [r'C:\src\demo\app\lib\new.dart', r'C:\src\demo\app\lib\old.dart'],
-        reason: 'a read is not a change, and a command names no file',
-      );
+      expect(report.files.map((f) => f.display), [
+        r'C:\src\demo\app\lib\new.dart',
+        r'C:\src\demo\app\lib\old.dart',
+      ], reason: 'a read is not a change, and a command names no file');
     });
 
     test('a transcript we cannot find is unreadable, not empty', () async {
@@ -369,18 +389,24 @@ void main() {
       expect(report.outcome, SessionChangedFilesOutcome.nothingCanAnswer);
     });
 
-    test('a transcript with no write in it names no file, and says so', () async {
-      locator.path = transcript([
-        toolUse('Bash', {'command': 'ls'}),
-      ]);
-      final container = containerFor();
-      addTearDown(container.dispose);
+    test(
+      'a transcript with no write in it names no file, and says so',
+      () async {
+        locator.path = transcript([
+          toolUse('Bash', {'command': 'ls'}),
+        ]);
+        final container = containerFor();
+        addTearDown(container.dispose);
 
-      final report = await read(container);
+        final report = await read(container);
 
-      expect(report.outcome, SessionChangedFilesOutcome.agentRecordNamesNoFile);
-      expect(report.headline, contains('Claude Code’s record'));
-    });
+        expect(
+          report.outcome,
+          SessionChangedFilesOutcome.agentRecordNamesNoFile,
+        );
+        expect(report.headline, contains('Claude Code’s record'));
+      },
+    );
   });
 
   group('an agent that keeps no record falls back to git', () {
@@ -389,40 +415,46 @@ void main() {
       SessionDao(db).insert(session().copyWith(externalSessionId: 'ag-1'));
     });
 
-    test('the checkpoint chain answers, and the caveat says what it is', () async {
-      checkpoint(const [
-        FileChange(
-          path: 'lib/a.dart',
-          type: FileChangeType.modified,
-          staged: false,
-          unstaged: true,
-        ),
-        FileChange(
-          path: 'lib/new.dart',
-          type: FileChangeType.added,
-          staged: false,
-          unstaged: true,
-        ),
-      ]);
-      final container = containerFor();
-      addTearDown(container.dispose);
+    test(
+      'the checkpoint chain answers, and the caveat says what it is',
+      () async {
+        checkpoint(const [
+          FileChange(
+            path: 'lib/a.dart',
+            type: FileChangeType.modified,
+            staged: false,
+            unstaged: true,
+          ),
+          FileChange(
+            path: 'lib/new.dart',
+            type: FileChangeType.added,
+            staged: false,
+            unstaged: true,
+          ),
+        ]);
+        final container = containerFor();
+        addTearDown(container.dispose);
 
-      final report = await read(container);
+        final report = await read(container);
 
-      expect(report.outcome, SessionChangedFilesOutcome.fromCheckpoints);
-      expect(report.gap, SessionRecordGap.agentKeepsNoRecord);
-      expect(report.files.map((f) => f.display), ['lib/a.dart', 'lib/new.dart']);
-      expect(report.files.last.kind, FileEditKind.created);
-      expect(report.caveat, contains('Antigravity keeps no record'));
-      expect(
-        report.caveat,
-        contains('already uncommitted when this session’s first turn ended'),
-        reason:
-            'the first checkpoint is measured against HEAD, so it carries '
-            'whatever the tree was already dirty with',
-      );
-      expect(report.caveat, contains('not isolated in worktrees'));
-    });
+        expect(report.outcome, SessionChangedFilesOutcome.fromCheckpoints);
+        expect(report.gap, SessionRecordGap.agentKeepsNoRecord);
+        expect(report.files.map((f) => f.display), [
+          'lib/a.dart',
+          'lib/new.dart',
+        ]);
+        expect(report.files.last.kind, FileEditKind.created);
+        expect(report.caveat, contains('Antigravity keeps no record'));
+        expect(
+          report.caveat,
+          contains('already uncommitted when this session’s first turn ended'),
+          reason:
+              'the first checkpoint is measured against HEAD, so it carries '
+              'whatever the tree was already dirty with',
+        );
+        expect(report.caveat, contains('not isolated in worktrees'));
+      },
+    );
 
     test('no checkpoint means no baseline, and it is never invented', () async {
       final container = containerFor();
@@ -454,36 +486,39 @@ void main() {
       );
     });
 
-    test('a move arrives as its two halves, because git was asked that way', () async {
-      // `CheckpointService` diffs with `--no-renames`, and
-      // `session_checkpoint_files` has nowhere to keep an old name. So a moved
-      // file is a delete and an add here, and claiming a rename would be
-      // inventing a link the chain does not record.
-      checkpoint(const [
-        FileChange(
-          path: 'lib/old.dart',
-          type: FileChangeType.deleted,
-          staged: false,
-          unstaged: true,
-        ),
-        FileChange(
-          path: 'lib/new.dart',
-          type: FileChangeType.added,
-          staged: false,
-          unstaged: true,
-        ),
-      ]);
-      final container = containerFor();
-      addTearDown(container.dispose);
+    test(
+      'a move arrives as its two halves, because git was asked that way',
+      () async {
+        // `CheckpointService` diffs with `--no-renames`, and
+        // `session_checkpoint_files` has nowhere to keep an old name. So a moved
+        // file is a delete and an add here, and claiming a rename would be
+        // inventing a link the chain does not record.
+        checkpoint(const [
+          FileChange(
+            path: 'lib/old.dart',
+            type: FileChangeType.deleted,
+            staged: false,
+            unstaged: true,
+          ),
+          FileChange(
+            path: 'lib/new.dart',
+            type: FileChangeType.added,
+            staged: false,
+            unstaged: true,
+          ),
+        ]);
+        final container = containerFor();
+        addTearDown(container.dispose);
 
-      final report = await read(container);
+        final report = await read(container);
 
-      expect(report.files.map((f) => '${f.kind.name} ${f.path}'), [
-        'created lib/new.dart',
-        'deleted lib/old.dart',
-      ]);
-      expect(report.files.every((f) => f.movedTo == null), isTrue);
-    });
+        expect(report.files.map((f) => '${f.kind.name} ${f.path}'), [
+          'created lib/new.dart',
+          'deleted lib/old.dart',
+        ]);
+        expect(report.files.every((f) => f.movedTo == null), isTrue);
+      },
+    );
   });
 
   group('when the agent record fails, git still answers, and says why', () {

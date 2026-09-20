@@ -116,7 +116,9 @@ final androidSlimmingServiceProvider = Provider<AndroidSlimmingService?>((ref) {
   if (sdk == null) return null;
   final environment = ref.watch(deviceEnvironmentProvider);
   return AndroidSlimmingService(
-    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref
+        .watch(deviceCommandRunnerFactoryProvider)
+        .forEnvironment(environment),
     sdk: sdk,
   );
 });
@@ -132,7 +134,9 @@ final androidSlimmingStatusProvider = FutureProvider.autoDispose
 
 /// Whether starting an emulator slims it at all — the master switch.
 final androidSlimmingOnStartProvider = Provider<bool>(
-  (ref) => ref.watch(deviceSlimmingPreferencesProvider.select((s) => s.androidSlimming)),
+  (ref) => ref.watch(
+    deviceSlimmingPreferencesProvider.select((s) => s.androidSlimming),
+  ),
 );
 
 /// The categories to apply, or empty when slimming is off. Ids that no longer
@@ -142,7 +146,9 @@ final androidSlimmingCategoriesProvider =
       if (!ref.watch(androidSlimmingOnStartProvider)) return const {};
       return categoriesFromIds(
         ref.watch(
-          deviceSlimmingPreferencesProvider.select((s) => s.androidSlimmingEnabled),
+          deviceSlimmingPreferencesProvider.select(
+            (s) => s.androidSlimmingEnabled,
+          ),
         ),
       );
     });
@@ -150,7 +156,9 @@ final androidSlimmingCategoriesProvider =
 /// The renderer the emulator is started with.
 final androidEmulatorGpuProvider = Provider<AndroidGpuMode>(
   (ref) => AndroidGpuMode.byId(
-    ref.watch(deviceSlimmingPreferencesProvider.select((s) => s.androidEmulatorGpu)),
+    ref.watch(
+      deviceSlimmingPreferencesProvider.select((s) => s.androidEmulatorGpu),
+    ),
   ),
 );
 
@@ -213,8 +221,9 @@ class AndroidSlimming extends Notifier<Set<String>> {
   static final _log = AppLogger.named('android-slimming');
 }
 
-final androidSlimmingProvider =
-    NotifierProvider<AndroidSlimming, Set<String>>(AndroidSlimming.new);
+final androidSlimmingProvider = NotifierProvider<AndroidSlimming, Set<String>>(
+  AndroidSlimming.new,
+);
 
 /// Streaming service for the live view.
 final deviceStreamServiceProvider = Provider<DeviceStreamService?>((ref) {
@@ -223,7 +232,9 @@ final deviceStreamServiceProvider = Provider<DeviceStreamService?>((ref) {
   final environment = ref.watch(deviceEnvironmentProvider);
   return DeviceStreamService(
     adb: adb,
-    runner: ref.watch(deviceCommandRunnerFactoryProvider).forEnvironment(environment),
+    runner: ref
+        .watch(deviceCommandRunnerFactoryProvider)
+        .forEnvironment(environment),
     serverBytes: () async {
       final data = await rootBundle.load(kScrcpyServerAsset);
       return data.buffer.asUint8List();

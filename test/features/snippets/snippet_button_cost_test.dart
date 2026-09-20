@@ -133,7 +133,8 @@ void main() {
     expect(
       db.count,
       0,
-      reason: 'typing a character says nothing about any stored row: '
+      reason:
+          'typing a character says nothing about any stored row: '
           '${db.statements}',
     );
   });

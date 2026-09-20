@@ -378,7 +378,10 @@ void main() {
           'payload': _pickPayload,
         });
         await pending;
-        expect(container.read(browserPaneControllerProvider).capture, isNotNull);
+        expect(
+          container.read(browserPaneControllerProvider).capture,
+          isNotNull,
+        );
         expect(container.read(windowRaiseRequestProvider), 1);
       });
 

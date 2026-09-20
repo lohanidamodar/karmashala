@@ -41,23 +41,27 @@ class CliStorePurgeRunner {
   }) {
     if (sessions.isEmpty || _stopped) return;
     late final Future<void> task;
-    task = _run(projectName, sessions).whenComplete(() => _running.remove(task));
+    task = _run(
+      projectName,
+      sessions,
+    ).whenComplete(() => _running.remove(task));
     _running.add(task);
   }
 
-  Future<void> _run(
-    String projectName,
-    List<ImportedSession> sessions,
-  ) async {
+  Future<void> _run(String projectName, List<ImportedSession> sessions) async {
     CliDeleteReport report;
     try {
-      report = await _ref.read(sessionActionsProvider).purgeFromCliStore(
-        sessions,
-      );
+      report = await _ref
+          .read(sessionActionsProvider)
+          .purgeFromCliStore(sessions);
     } catch (error, stack) {
       // `deleteAll` reports rather than throws, so reaching here means the
       // store could not be addressed at all. Still the user's news.
-      _log.warning('Deleting "$projectName" session files failed', error, stack);
+      _log.warning(
+        'Deleting "$projectName" session files failed',
+        error,
+        stack,
+      );
       report = CliDeleteReport(
         deleted: 0,
         failures: [

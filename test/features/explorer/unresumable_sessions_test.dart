@@ -95,15 +95,14 @@ class _MovableClock implements Clock {
 
 /// Counts how many times the stores were located, which is once per sweep.
 class _CountingLocator extends CliStoreLocator {
-  _CountingLocator(this.stores) : super(runnerFor: ((_) => FakeCommandRunner()));
+  _CountingLocator(this.stores)
+    : super(runnerFor: ((_) => FakeCommandRunner()));
 
   final List<CliStore> stores;
   int calls = 0;
 
   @override
-  Future<List<CliStore>> locate(
-    List<ExecutionEnvironment> environments,
-  ) async {
+  Future<List<CliStore>> locate(List<ExecutionEnvironment> environments) async {
     calls++;
     return stores;
   }
@@ -188,14 +187,19 @@ void main() {
     String installationId = 'a1',
     String agentId = 'claudeish',
   }) async {
-    final launched = await container.read(sessionLauncherProvider).launch(
-      SessionLaunchRequest(
-        repository: repository(),
-        installation: agentInstallation(id: installationId, agentId: agentId),
-        title: 'New session',
-        purpose: SessionPurpose.newSession,
-      ),
-    );
+    final launched = await container
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository(),
+            installation: agentInstallation(
+              id: installationId,
+              agentId: agentId,
+            ),
+            title: 'New session',
+            purpose: SessionPurpose.newSession,
+          ),
+        );
     return launched.session.id;
   }
 
@@ -207,17 +211,19 @@ void main() {
     String title = 'Dead session',
     String installationId = 'a1',
   }) {
-    container.read(sessionDaoProvider).insert(
-      session(
-        id: id,
-        title: title,
-        agentInstallationId: installationId,
-      ).copyWith(
-        externalSessionId: id,
-        status: SessionStatus.running,
-        createdAt: testTime.subtract(const Duration(hours: 2)),
-      ),
-    );
+    container
+        .read(sessionDaoProvider)
+        .insert(
+          session(
+            id: id,
+            title: title,
+            agentInstallationId: installationId,
+          ).copyWith(
+            externalSessionId: id,
+            status: SessionStatus.running,
+            createdAt: testTime.subtract(const Duration(hours: 2)),
+          ),
+        );
     return id;
   }
 
@@ -274,21 +280,24 @@ void main() {
       expect(review.summary, contains('Nothing will be removed'));
     });
 
-    test('a store that is there but unreadable leaves the row uncertain', () async {
-      // Located, asked, and it had no `projects` directory to read.
-      final db = seededDatabase();
-      addTearDown(db.close);
-      Directory(storeHome()).createSync(recursive: true);
-      final container = containerOver(db);
-      seedDeadRow(container);
+    test(
+      'a store that is there but unreadable leaves the row uncertain',
+      () async {
+        // Located, asked, and it had no `projects` directory to read.
+        final db = seededDatabase();
+        addTearDown(db.close);
+        Directory(storeHome()).createSync(recursive: true);
+        final container = containerOver(db);
+        seedDeadRow(container);
 
-      await container.read(unresumableSessionsProvider.notifier).refresh();
-      final review = container.read(unresumableSessionsProvider);
+        await container.read(unresumableSessionsProvider.notifier).refresh();
+        final review = container.read(unresumableSessionsProvider);
 
-      expect(review.removable, isEmpty);
-      expect(review.uncertain, hasLength(1));
-      expect(review.storesUnreadable, greaterThan(0));
-    });
+        expect(review.removable, isEmpty);
+        expect(review.uncertain, hasLength(1));
+        expect(review.storesUnreadable, greaterThan(0));
+      },
+    );
 
     test('a session started a moment ago is not offered', () async {
       // The row and the store look exactly like a dead one — the transcript is
@@ -317,7 +326,8 @@ void main() {
       expect(
         container.read(sessionLauncherProvider).livePaneFor(id),
         isNotNull,
-        reason: 'the pane must still be live for this to be the case under test',
+        reason:
+            'the pane must still be live for this to be the case under test',
       );
 
       await container.read(unresumableSessionsProvider.notifier).refresh();
@@ -336,13 +346,15 @@ void main() {
         agents: const [_claudeish, _codexish],
       );
       // A Codex-shaped row: an external id the CLI chose, not one we promised.
-      container.read(sessionDaoProvider).insert(
-        session(id: 'codex-row', agentInstallationId: 'a2').copyWith(
-          externalSessionId: 'thread-99',
-          status: SessionStatus.running,
-          createdAt: testTime.subtract(const Duration(hours: 2)),
-        ),
-      );
+      container
+          .read(sessionDaoProvider)
+          .insert(
+            session(id: 'codex-row', agentInstallationId: 'a2').copyWith(
+              externalSessionId: 'thread-99',
+              status: SessionStatus.running,
+              createdAt: testTime.subtract(const Duration(hours: 2)),
+            ),
+          );
 
       await container.read(unresumableSessionsProvider.notifier).refresh();
       final review = container.read(unresumableSessionsProvider);
@@ -363,7 +375,8 @@ void main() {
       expect(
         locator.calls,
         0,
-        reason: 'screening is free; the sweep is only paid for when it can '
+        reason:
+            'screening is free; the sweep is only paid for when it can '
             'answer something',
       );
       expect(container.read(unresumableSessionsProvider).hasRun, isTrue);
@@ -380,7 +393,10 @@ void main() {
 
       await container.read(unresumableSessionsProvider.notifier).refresh();
 
-      expect(container.read(unresumableSessionsProvider).removable, hasLength(25));
+      expect(
+        container.read(unresumableSessionsProvider).removable,
+        hasLength(25),
+      );
       expect(locator.calls, 1);
     });
   });
@@ -395,22 +411,30 @@ void main() {
       emptyStore();
       final container = containerOver(db);
       final dead = seedDeadRow(container, id: 'dead-1');
-      container.read(sessionDaoProvider).insert(
-        session(id: 'elsewhere').copyWith(
-          externalSessionId: 'elsewhere',
-          status: SessionStatus.running,
-          createdAt: testTime.subtract(const Duration(hours: 2)),
-          workingDirectory: const EnvironmentPath(
-            environmentId: 'wsl:Ubuntu',
-            path: '/home/me/app',
-          ),
-        ),
-      );
+      container
+          .read(sessionDaoProvider)
+          .insert(
+            session(id: 'elsewhere').copyWith(
+              externalSessionId: 'elsewhere',
+              status: SessionStatus.running,
+              createdAt: testTime.subtract(const Duration(hours: 2)),
+              workingDirectory: const EnvironmentPath(
+                environmentId: 'wsl:Ubuntu',
+                path: '/home/me/app',
+              ),
+            ),
+          );
 
       final notifier = container.read(unresumableSessionsProvider.notifier);
       await notifier.refresh();
-      expect(container.read(unresumableSessionsProvider).removable, hasLength(1));
-      expect(container.read(unresumableSessionsProvider).uncertain, hasLength(1));
+      expect(
+        container.read(unresumableSessionsProvider).removable,
+        hasLength(1),
+      );
+      expect(
+        container.read(unresumableSessionsProvider).uncertain,
+        hasLength(1),
+      );
 
       // Both ids offered; only the judged one may go.
       notifier.remove(['dead-1', 'elsewhere']);
@@ -419,29 +443,35 @@ void main() {
       expect(dao.getById(dead), isNull);
       expect(dao.getById('elsewhere'), isNotNull);
       expect(container.read(unresumableSessionsProvider).removable, isEmpty);
-      expect(container.read(unresumableSessionsProvider).uncertain, hasLength(1));
-    });
-
-    test('an id the reading never judged cannot be removed through it', () async {
-      final db = seededDatabase();
-      addTearDown(db.close);
-      emptyStore();
-      final container = containerOver(db);
-      final live = await startSession(container);
-      seedDeadRow(container, id: 'dead-1');
-
-      final notifier = container.read(unresumableSessionsProvider.notifier);
-      await notifier.refresh();
-      notifier.remove([live, 'dead-1']);
-
-      final dao = SessionDao(db);
       expect(
-        dao.getById(live),
-        isNotNull,
-        reason: 'the running session was never in the reading',
+        container.read(unresumableSessionsProvider).uncertain,
+        hasLength(1),
       );
-      expect(dao.getById('dead-1'), isNull);
     });
+
+    test(
+      'an id the reading never judged cannot be removed through it',
+      () async {
+        final db = seededDatabase();
+        addTearDown(db.close);
+        emptyStore();
+        final container = containerOver(db);
+        final live = await startSession(container);
+        seedDeadRow(container, id: 'dead-1');
+
+        final notifier = container.read(unresumableSessionsProvider.notifier);
+        await notifier.refresh();
+        notifier.remove([live, 'dead-1']);
+
+        final dao = SessionDao(db);
+        expect(
+          dao.getById(live),
+          isNotNull,
+          reason: 'the running session was never in the reading',
+        );
+        expect(dao.getById('dead-1'), isNull);
+      },
+    );
 
     test('removing nothing removes nothing', () async {
       final db = seededDatabase();
@@ -486,28 +516,32 @@ void main() {
       expect(container.read(unresumableSessionsProvider).removable, isEmpty);
     });
 
-    test('is a create, not a resume — the CLI is never told to resume', () async {
-      final db = seededDatabase();
-      addTearDown(db.close);
-      emptyStore();
-      final container = containerOver(db);
-      final id = seedDeadRow(container);
+    test(
+      'is a create, not a resume — the CLI is never told to resume',
+      () async {
+        final db = seededDatabase();
+        addTearDown(db.close);
+        emptyStore();
+        final container = containerOver(db);
+        final id = seedDeadRow(container);
 
-      final notifier = container.read(unresumableSessionsProvider.notifier);
-      await notifier.refresh();
-      final started = await notifier.restart(id);
+        final notifier = container.read(unresumableSessionsProvider.notifier);
+        await notifier.refresh();
+        final started = await notifier.restart(id);
 
-      final launch = container
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(started.paneId!)!
-          .agentLaunch!;
-      expect(
-        launch.arguments,
-        isNot(contains('--resume')),
-        reason: 'there is no conversation to resume — that is the whole state',
-      );
-      expect(launch.arguments, containsAllInOrder(['--session-id', id]));
-    });
+        final launch = container
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(started.paneId!)!
+            .agentLaunch!;
+        expect(
+          launch.arguments,
+          isNot(contains('--resume')),
+          reason:
+              'there is no conversation to resume — that is the whole state',
+        );
+        expect(launch.arguments, containsAllInOrder(['--session-id', id]));
+      },
+    );
 
     test('a launch that both restarts and resumes is refused', () async {
       final db = seededDatabase();
@@ -517,76 +551,87 @@ void main() {
       final id = seedDeadRow(container);
 
       await expectLater(
-        container.read(sessionLauncherProvider).launch(
-          SessionLaunchRequest(
-            repository: repository(),
-            installation: agentInstallation(agentId: 'claudeish'),
-            title: 'Both',
-            purpose: SessionPurpose.newSession,
-            restartSessionId: id,
-            resumeExternalSessionId: id,
-          ),
-        ),
+        container
+            .read(sessionLauncherProvider)
+            .launch(
+              SessionLaunchRequest(
+                repository: repository(),
+                installation: agentInstallation(agentId: 'claudeish'),
+                title: 'Both',
+                purpose: SessionPurpose.newSession,
+                restartSessionId: id,
+                resumeExternalSessionId: id,
+              ),
+            ),
         throwsA(isA<ArgumentError>()),
       );
     });
 
-    test('refused on the shape of the request, before any store is read',
-        () async {
-      // The case the ordering matters for. With no readable store,
-      // `refuseIfConversationMissing` answers "we cannot tell" and returns
-      // normally — so if the guard ran after it, this launch would proceed and
-      // the reuse would silently prefer the resume, giving the user a resume of
-      // a conversation they asked to replace.
-      final db = seededDatabase();
-      addTearDown(db.close);
-      final container = containerOver(db, locatable: false);
-      final id = seedDeadRow(container);
+    test(
+      'refused on the shape of the request, before any store is read',
+      () async {
+        // The case the ordering matters for. With no readable store,
+        // `refuseIfConversationMissing` answers "we cannot tell" and returns
+        // normally — so if the guard ran after it, this launch would proceed and
+        // the reuse would silently prefer the resume, giving the user a resume of
+        // a conversation they asked to replace.
+        final db = seededDatabase();
+        addTearDown(db.close);
+        final container = containerOver(db, locatable: false);
+        final id = seedDeadRow(container);
 
-      await expectLater(
-        container.read(sessionLauncherProvider).launch(
-          SessionLaunchRequest(
-            repository: repository(),
-            installation: agentInstallation(agentId: 'claudeish'),
-            title: 'Both',
-            purpose: SessionPurpose.newSession,
-            restartSessionId: id,
-            resumeExternalSessionId: id,
-          ),
-        ),
-        throwsA(isA<ArgumentError>()),
-      );
-      expect(
-        locator.calls,
-        0,
-        reason: 'nothing may be read to turn down a request that makes no '
-            'sense',
-      );
-    });
+        await expectLater(
+          container
+              .read(sessionLauncherProvider)
+              .launch(
+                SessionLaunchRequest(
+                  repository: repository(),
+                  installation: agentInstallation(agentId: 'claudeish'),
+                  title: 'Both',
+                  purpose: SessionPurpose.newSession,
+                  restartSessionId: id,
+                  resumeExternalSessionId: id,
+                ),
+              ),
+          throwsA(isA<ArgumentError>()),
+        );
+        expect(
+          locator.calls,
+          0,
+          reason:
+              'nothing may be read to turn down a request that makes no '
+              'sense',
+        );
+      },
+    );
 
-    test('a restart naming a row a pane is running falls back to a new row',
-        () async {
-      // The guard against abandoning a live conversation: the row is busy, so
-      // reuse is refused and the launch is an ordinary create.
-      final db = seededDatabase();
-      addTearDown(db.close);
-      emptyStore();
-      final container = containerOver(db);
-      final live = await startSession(container);
+    test(
+      'a restart naming a row a pane is running falls back to a new row',
+      () async {
+        // The guard against abandoning a live conversation: the row is busy, so
+        // reuse is refused and the launch is an ordinary create.
+        final db = seededDatabase();
+        addTearDown(db.close);
+        emptyStore();
+        final container = containerOver(db);
+        final live = await startSession(container);
 
-      final launched = await container.read(sessionLauncherProvider).launch(
-        SessionLaunchRequest(
-          repository: repository(),
-          installation: agentInstallation(agentId: 'claudeish'),
-          title: 'Second',
-          purpose: SessionPurpose.newSession,
-          restartSessionId: live,
-        ),
-      );
+        final launched = await container
+            .read(sessionLauncherProvider)
+            .launch(
+              SessionLaunchRequest(
+                repository: repository(),
+                installation: agentInstallation(agentId: 'claudeish'),
+                title: 'Second',
+                purpose: SessionPurpose.newSession,
+                restartSessionId: live,
+              ),
+            );
 
-      expect(launched.session.id, isNot(live));
-      expect(SessionDao(db).getById(live), isNotNull);
-    });
+        expect(launched.session.id, isNot(live));
+        expect(SessionDao(db).getById(live), isNotNull);
+      },
+    );
 
     test('a row nothing could judge gets neither verb', () async {
       // The mirror of the removal guard, and it matters as much: an
@@ -598,7 +643,10 @@ void main() {
 
       final notifier = container.read(unresumableSessionsProvider.notifier);
       await notifier.refresh();
-      expect(container.read(unresumableSessionsProvider).uncertain, hasLength(1));
+      expect(
+        container.read(unresumableSessionsProvider).uncertain,
+        hasLength(1),
+      );
 
       await expectLater(notifier.restart(id), throwsA(isA<StateError>()));
       expect(SessionDao(db).getById(id)!.paneId, isNull);
@@ -610,15 +658,17 @@ void main() {
       emptyStore();
       final container = containerOver(db);
 
-      final launched = await container.read(sessionLauncherProvider).launch(
-        SessionLaunchRequest(
-          repository: repository(),
-          installation: agentInstallation(agentId: 'claudeish'),
-          title: 'Fresh',
-          purpose: SessionPurpose.newSession,
-          restartSessionId: 'no-such-row',
-        ),
-      );
+      final launched = await container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'claudeish'),
+              title: 'Fresh',
+              purpose: SessionPurpose.newSession,
+              restartSessionId: 'no-such-row',
+            ),
+          );
 
       expect(launched.session.title, 'Fresh');
       expect(launched.session.externalSessionId, launched.session.id);

@@ -42,9 +42,9 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.antigravity),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.antigravity));
     SessionDao(db).insert(
       Session(
         id: 's1',

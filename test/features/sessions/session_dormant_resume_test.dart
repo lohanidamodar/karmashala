@@ -84,28 +84,25 @@ ProviderContainer containerOver(
   TerminalLayoutDao? layoutDao,
   Future<void> Function()? frameYield,
 }) => ProviderContainer(
-      overrides: [
-        ...fakeTerminalOverrides(database: db),
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-        hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
-        commandRunnerFactoryProvider.overrideWithValue(
-          FakeCommandRunnerFactory(),
-        ),
-        idGeneratorProvider.overrideWithValue(SequentialIdGenerator(idPrefix)),
-        agentRegistryProvider.overrideWithValue(const AgentRegistry([_sharing])),
-        settingsControllerProvider.overrideWith(_StaticSettings.new),
-        // The whereabouts provider watches this for a "last seen" time; a real
-        // poll would leave an autoDispose stream mid-flight. Nothing here is
-        // about ageing evidence.
-        agentSessionStatusProvider.overrideWith(
-          (ref, id) => const Stream<AgentStatusReport>.empty(),
-        ),
-        if (layoutDao != null)
-          terminalLayoutDaoProvider.overrideWithValue(layoutDao),
-        if (frameYield != null)
-          frameYieldProvider.overrideWithValue(frameYield),
-      ],
-    );
+  overrides: [
+    ...fakeTerminalOverrides(database: db),
+    clockProvider.overrideWithValue(FixedClock(testTime)),
+    hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
+    commandRunnerFactoryProvider.overrideWithValue(FakeCommandRunnerFactory()),
+    idGeneratorProvider.overrideWithValue(SequentialIdGenerator(idPrefix)),
+    agentRegistryProvider.overrideWithValue(const AgentRegistry([_sharing])),
+    settingsControllerProvider.overrideWith(_StaticSettings.new),
+    // The whereabouts provider watches this for a "last seen" time; a real
+    // poll would leave an autoDispose stream mid-flight. Nothing here is
+    // about ageing evidence.
+    agentSessionStatusProvider.overrideWith(
+      (ref, id) => const Stream<AgentStatusReport>.empty(),
+    ),
+    if (layoutDao != null)
+      terminalLayoutDaoProvider.overrideWithValue(layoutDao),
+    if (frameYield != null) frameYieldProvider.overrideWithValue(frameYield),
+  ],
+);
 
 /// Starts a session in a pane and pins the CLI id a resume needs.
 Future<String> startSession(
@@ -232,13 +229,10 @@ void main() {
     // Ending the session takes its pane away; the row keeps the stale id, which
     // is the case `dormantPaneFor` must not answer with.
     final paneId = paneOf(container, sessionId);
-    container.read(terminalSessionsControllerProvider.notifier).endSession(
-      paneId,
-    );
-    expect(
-      container.read(terminalSessionsControllerProvider).tabs,
-      isEmpty,
-    );
+    container
+        .read(terminalSessionsControllerProvider.notifier)
+        .endSession(paneId);
+    expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
 
     final result = await container
         .read(explorerActionsProvider)
@@ -295,9 +289,7 @@ void main() {
         firstMessage: 'summarise yesterday',
       );
       final paneId = paneOf(first, sessionId);
-      final terminals = first.read(
-        terminalSessionsControllerProvider.notifier,
-      );
+      final terminals = first.read(terminalSessionsControllerProvider.notifier);
       expect(
         terminals.instanceFor(paneId)!.agentLaunch!.arguments,
         contains('summarise yesterday'),
@@ -324,10 +316,10 @@ void main() {
                   .read(terminalSessionsControllerProvider.notifier)
                   .instanceFor(paneId)!
               as FakeTerminalInstance;
-      expect(started.agentLaunch!.arguments, containsAllInOrder([
-        '--resume',
-        'ext-1',
-      ]));
+      expect(
+        started.agentLaunch!.arguments,
+        containsAllInOrder(['--resume', 'ext-1']),
+      );
       expect(
         started.agentLaunch!.arguments,
         isNot(contains('summarise yesterday')),

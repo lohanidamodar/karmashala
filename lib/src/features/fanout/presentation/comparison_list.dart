@@ -155,9 +155,7 @@ class _CandidateChip extends StatelessWidget {
         const SizedBox(width: Insets.xs),
         Text(
           candidate.agentId,
-          style: Theme.of(
-            context,
-          ).textTheme.labelSmall?.copyWith(
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
             fontFamily: kMonoFamily,
             fontFamilyFallback: kMonoFallback,
           ),

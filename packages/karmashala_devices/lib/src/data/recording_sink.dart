@@ -106,14 +106,13 @@ class Mp4RecordingWriter {
   void add(DeviceAccessUnit unit) {
     if (_done.isCompleted) return;
     try {
-      final remuxer =
-          _remuxer ??= _open(
-            path: path,
-            width: unit.width,
-            height: unit.height,
-            frameRate: kDeviceRecordingFrameRate,
-            sequenceHeader: unit.sequenceHeader,
-          );
+      final remuxer = _remuxer ??= _open(
+        path: path,
+        width: unit.width,
+        height: unit.height,
+        frameRate: kDeviceRecordingFrameRate,
+        sequenceHeader: unit.sequenceHeader,
+      );
       _size ??= (width: unit.width, height: unit.height);
       remuxer.add(
         EncodedVideoFrame(

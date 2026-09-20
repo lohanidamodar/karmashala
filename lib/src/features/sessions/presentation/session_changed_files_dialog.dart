@@ -45,9 +45,7 @@ class SessionChangedFilesDialog extends ConsumerWidget {
           AsyncValue(:final value?) => _Body(report: value),
           _ => const Padding(
             padding: EdgeInsets.symmetric(vertical: Insets.xl),
-            child: Center(
-              child: InlineSpinner(size: InlineSpinnerSize.large),
-            ),
+            child: Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
           ),
         },
       ),
@@ -121,10 +119,7 @@ class _FileTable extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Table(
-      columnWidths: const {
-        0: IntrinsicColumnWidth(),
-        1: FlexColumnWidth(),
-      },
+      columnWidths: const {0: IntrinsicColumnWidth(), 1: FlexColumnWidth()},
       children: [
         for (final file in files)
           TableRow(
@@ -140,13 +135,10 @@ class _FileTable extends StatelessWidget {
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2),
-                child: SelectableText(
-                  switch (file.movedTo) {
-                    null => file.display,
-                    final movedTo => '${file.display} → $movedTo',
-                  },
-                  style: theme.textTheme.bodySmall,
-                ),
+                child: SelectableText(switch (file.movedTo) {
+                  null => file.display,
+                  final movedTo => '${file.display} → $movedTo',
+                }, style: theme.textTheme.bodySmall),
               ),
             ],
           ),

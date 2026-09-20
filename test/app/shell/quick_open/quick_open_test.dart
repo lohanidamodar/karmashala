@@ -347,19 +347,22 @@ void main() {
     // before this it had no entry in quick open at all — and at a hundred open
     // tabs the strip is not a way to reach one by name.
     late String wanted;
-    final container = await open(tester, before: (container) {
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      wanted = terminals.openTab(
-        TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\dev-server',
-      );
-      terminals.openTab(
-        TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\something-else',
-      );
-    });
+    final container = await open(
+      tester,
+      before: (container) {
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        wanted = terminals.openTab(
+          TerminalProfile.powerShell,
+          workingDirectory: r'C:\src\dev-server',
+        );
+        terminals.openTab(
+          TerminalProfile.powerShell,
+          workingDirectory: r'C:\src\something-else',
+        );
+      },
+    );
 
     // Both tabs are called PowerShell; the directory is the only thing that
     // tells them apart, so it is what the query has to be able to reach.
@@ -403,20 +406,23 @@ void main() {
   ) async {
     // Picking the session already reattaches and focuses its pane, so a tab
     // entry beside it would be the same destination in the list twice.
-    await open(tester, before: (container) {
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      terminals.openTab(TerminalProfile.powerShell);
-      SessionDao(db).updatePaneId(
-        's1',
-        container
-            .read(terminalSessionsControllerProvider)
-            .tabs
-            .single
-            .focusedPaneId,
-      );
-    });
+    await open(
+      tester,
+      before: (container) {
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        terminals.openTab(TerminalProfile.powerShell);
+        SessionDao(db).updatePaneId(
+          's1',
+          container
+              .read(terminalSessionsControllerProvider)
+              .tabs
+              .single
+              .focusedPaneId,
+        );
+      },
+    );
 
     expect(find.text('SESSIONS'), findsOneWidget);
     expect(find.text('OPEN TABS'), findsNothing);
@@ -429,24 +435,27 @@ void main() {
     // but* tabs, and reaching one that way means already knowing its name.
     // This is the other question — "show me my tabs" — and it hands over to
     // the strip's own picker rather than growing a second one.
-    await open(tester, before: (container) {
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      terminals.openTab(TerminalProfile.powerShell);
-      SessionDao(db).updatePaneId(
-        's1',
-        container
-            .read(terminalSessionsControllerProvider)
-            .tabs
-            .single
-            .focusedPaneId,
-      );
-      terminals.openTab(
-        TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\dev-server',
-      );
-    });
+    await open(
+      tester,
+      before: (container) {
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        terminals.openTab(TerminalProfile.powerShell);
+        SessionDao(db).updatePaneId(
+          's1',
+          container
+              .read(terminalSessionsControllerProvider)
+              .tabs
+              .single
+              .focusedPaneId,
+        );
+        terminals.openTab(
+          TerminalProfile.powerShell,
+          workingDirectory: r'C:\src\dev-server',
+        );
+      },
+    );
 
     await type(tester, 'switch terminal tab');
     await tester.tap(find.text('Switch terminal tab…'));
@@ -466,18 +475,21 @@ void main() {
     // is a mouse gesture; this command is the same verb without one. A feature
     // reachable only by dragging is one some people cannot reach at all.
     late ProviderContainer scope;
-    await open(tester, before: (container) {
-      scope = container;
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      terminals.openTab(TerminalProfile.powerShell);
-      terminals.openTab(
-        TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\dev-server',
-      );
-      terminals.splitWorkspace(SplitAxis.horizontal);
-    });
+    await open(
+      tester,
+      before: (container) {
+        scope = container;
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        terminals.openTab(TerminalProfile.powerShell);
+        terminals.openTab(
+          TerminalProfile.powerShell,
+          workingDirectory: r'C:\src\dev-server',
+        );
+        terminals.splitWorkspace(SplitAxis.horizontal);
+      },
+    );
 
     await type(tester, 'move a tab into');
     await tester.tap(find.text('Move a tab into the empty group…'));
@@ -498,15 +510,21 @@ void main() {
     // A region holds panes; a group holds tabs. Two structures, two commands,
     // and the titles say which — see `WorkspaceLayout`.
     late ProviderContainer scope;
-    await open(tester, before: (container) {
-      scope = container;
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      terminals.openTab(TerminalProfile.powerShell);
-      terminals.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell);
-      terminals.splitPane(SplitAxis.vertical);
-    });
+    await open(
+      tester,
+      before: (container) {
+        scope = container;
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        terminals.openTab(TerminalProfile.powerShell);
+        terminals.splitPaneWith(
+          SplitAxis.horizontal,
+          TerminalProfile.powerShell,
+        );
+        terminals.splitPane(SplitAxis.vertical);
+      },
+    );
 
     await type(tester, 'move a pane into');
     await tester.tap(find.text('Move a pane into the empty region…'));
@@ -526,15 +544,21 @@ void main() {
     tester,
   ) async {
     late ProviderContainer scope;
-    await open(tester, before: (container) {
-      scope = container;
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      terminals.openTab(TerminalProfile.powerShell);
-      terminals.splitPaneWith(SplitAxis.horizontal, TerminalProfile.powerShell);
-      terminals.splitPaneWith(SplitAxis.vertical, TerminalProfile.powerShell);
-    });
+    await open(
+      tester,
+      before: (container) {
+        scope = container;
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        terminals.openTab(TerminalProfile.powerShell);
+        terminals.splitPaneWith(
+          SplitAxis.horizontal,
+          TerminalProfile.powerShell,
+        );
+        terminals.splitPaneWith(SplitAxis.vertical, TerminalProfile.powerShell);
+      },
+    );
 
     await type(tester, 'move this pane into');
     await tester.tap(find.text('Move this pane into another region…'));
@@ -551,17 +575,20 @@ void main() {
 
   testWidgets('and it offers the way back out of one', (tester) async {
     late ProviderContainer scope;
-    await open(tester, before: (container) {
-      scope = container;
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      terminals.openTab(TerminalProfile.powerShell);
-      terminals.splitPaneWith(
-        SplitAxis.horizontal,
-        TerminalProfile.powerShell,
-      );
-    });
+    await open(
+      tester,
+      before: (container) {
+        scope = container;
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        terminals.openTab(TerminalProfile.powerShell);
+        terminals.splitPaneWith(
+          SplitAxis.horizontal,
+          TerminalProfile.powerShell,
+        );
+      },
+    );
 
     await type(tester, 'move this pane');
     await tester.tap(find.text('Move this pane to a new tab'));
@@ -576,12 +603,15 @@ void main() {
 
   testWidgets('an empty group is offered the same two splits', (tester) async {
     late ProviderContainer scope;
-    await open(tester, before: (container) {
-      scope = container;
-      container.read(terminalSessionsControllerProvider.notifier)
-        ..openTab(TerminalProfile.powerShell)
-        ..splitWorkspace(SplitAxis.horizontal);
-    });
+    await open(
+      tester,
+      before: (container) {
+        scope = container;
+        container.read(terminalSessionsControllerProvider.notifier)
+          ..openTab(TerminalProfile.powerShell)
+          ..splitWorkspace(SplitAxis.horizontal);
+      },
+    );
 
     await type(tester, 'split the workspace');
     expect(find.text('Split the workspace right'), findsOneWidget);
@@ -596,14 +626,17 @@ void main() {
   testWidgets('a split the group has no room for is left off the list', (
     tester,
   ) async {
-    await open(tester, before: (container) {
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      )..openTab(TerminalProfile.powerShell);
-      for (var i = 0; i < 4; i++) {
-        terminals.splitWorkspace(SplitAxis.horizontal);
-      }
-    });
+    await open(
+      tester,
+      before: (container) {
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        )..openTab(TerminalProfile.powerShell);
+        for (var i = 0; i < 4; i++) {
+          terminals.splitWorkspace(SplitAxis.horizontal);
+        }
+      },
+    );
 
     await type(tester, 'split the workspace');
 
@@ -617,16 +650,19 @@ void main() {
     late ProviderContainer scope;
     late String first;
     late String second;
-    await open(tester, before: (container) {
-      scope = container;
-      final terminals = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      terminals.openTab(TerminalProfile.powerShell);
-      terminals.openTab(TerminalProfile.powerShell);
-      first = terminals.splitWorkspace(SplitAxis.horizontal)!;
-      second = terminals.splitWorkspace(SplitAxis.vertical)!;
-    });
+    await open(
+      tester,
+      before: (container) {
+        scope = container;
+        final terminals = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        terminals.openTab(TerminalProfile.powerShell);
+        terminals.openTab(TerminalProfile.powerShell);
+        first = terminals.splitWorkspace(SplitAxis.horizontal)!;
+        second = terminals.splitWorkspace(SplitAxis.vertical)!;
+      },
+    );
 
     await type(tester, 'move a tab into');
     await tester.tap(find.text('Move a tab into the empty group…'));
@@ -641,11 +677,14 @@ void main() {
   testWidgets('neither is listed while there is nothing to move', (
     tester,
   ) async {
-    await open(tester, before: (container) {
-      container
-          .read(terminalSessionsControllerProvider.notifier)
-          .openTab(TerminalProfile.powerShell);
-    });
+    await open(
+      tester,
+      before: (container) {
+        container
+            .read(terminalSessionsControllerProvider.notifier)
+            .openTab(TerminalProfile.powerShell);
+      },
+    );
 
     await type(tester, 'move');
 
@@ -715,10 +754,7 @@ void main() {
 
       await tester.tap(find.text('Cancel scheduled resume'));
       await tester.pumpAndSettle();
-      expect(
-        container.read(scheduledResumeDaoProvider).liveFor('s1'),
-        isNull,
-      );
+      expect(container.read(scheduledResumeDaoProvider).liveFor('s1'), isNull);
     });
   });
 }

@@ -68,8 +68,13 @@ void main() {
       db.execute(
         'INSERT INTO command_snippets '
         '(id, label, command, created_at, updated_at) VALUES (?, ?, ?, ?, ?);',
-        ['raw', 'Deploy', 'make deploy', '2026-01-01T00:00:00.000Z',
-          '2026-01-01T00:00:00.000Z'],
+        [
+          'raw',
+          'Deploy',
+          'make deploy',
+          '2026-01-01T00:00:00.000Z',
+          '2026-01-01T00:00:00.000Z',
+        ],
       );
 
       expect(dao.getById('raw')!.submit, isFalse);
@@ -165,15 +170,12 @@ void main() {
         wslEnv(distro: 'Ubuntu'),
       ]);
 
-      expect(
-        profiles.map((p) => p.shell).toSet(),
-        {
-          TerminalShell.powerShell,
-          TerminalShell.commandPrompt,
-          TerminalShell.wsl,
-          TerminalShell.ssh,
-        },
-      );
+      expect(profiles.map((p) => p.shell).toSet(), {
+        TerminalShell.powerShell,
+        TerminalShell.commandPrompt,
+        TerminalShell.wsl,
+        TerminalShell.ssh,
+      });
       expect(TerminalShell.values, hasLength(5));
       expect(shellTagLabel(TerminalShell.ssh.name), 'SSH');
     });

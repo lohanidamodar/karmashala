@@ -35,12 +35,11 @@ class ChartInk {
     final scheme = theme.colorScheme;
     return ChartInk(
       grid: scheme.outlineVariant.withValues(alpha: 0.6),
-      axisLabel: (theme.textTheme.labelSmall ?? const TextStyle())
-          .copyWith(
-            color: scheme.onSurfaceVariant,
-            letterSpacing: 0,
-            fontWeight: FontWeight.w400,
-          ),
+      axisLabel: (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+        color: scheme.onSurfaceVariant,
+        letterSpacing: 0,
+        fontWeight: FontWeight.w400,
+      ),
       track: scheme.surfaceContainerHighest,
       marker: scheme.onSurfaceVariant.withValues(alpha: 0.7),
       tooltipBackground: scheme.surfaceContainerHigh,

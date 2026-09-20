@@ -10,7 +10,9 @@ Future<List<Map<String, Object?>>?> readSqliteRows(
   Database? db;
   try {
     db = sqlite3.open(path, mode: OpenMode.readOnly);
-    return [for (final row in db.select(sql)) {...row}];
+    return [
+      for (final row in db.select(sql)) {...row},
+    ];
   } on Object {
     return null;
   } finally {

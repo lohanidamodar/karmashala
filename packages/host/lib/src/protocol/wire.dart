@@ -85,7 +85,8 @@ class WireFormatException implements Exception {
 }
 
 class WireReader {
-  WireReader(this._data) : _view = ByteData.view(_data.buffer, _data.offsetInBytes, _data.length);
+  WireReader(this._data)
+    : _view = ByteData.view(_data.buffer, _data.offsetInBytes, _data.length);
 
   final Uint8List _data;
   final ByteData _view;
@@ -95,7 +96,9 @@ class WireReader {
 
   void _need(int count) {
     if (remaining < count) {
-      throw WireFormatException('payload ended early: wanted $count, had $remaining');
+      throw WireFormatException(
+        'payload ended early: wanted $count, had $remaining',
+      );
     }
   }
 
@@ -165,7 +168,9 @@ class WireReader {
   /// is an error rather than something quietly ignored.
   void expectEnd() {
     if (remaining != 0) {
-      throw WireFormatException('$remaining unread bytes at the end of a payload');
+      throw WireFormatException(
+        '$remaining unread bytes at the end of a payload',
+      );
     }
   }
 }

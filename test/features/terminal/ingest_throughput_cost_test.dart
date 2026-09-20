@@ -62,7 +62,8 @@ void main() {
           expect(
             m.droppedBytes,
             0,
-            reason: 'a throughput measurement that dropped bytes is measuring '
+            reason:
+                'a throughput measurement that dropped bytes is measuring '
                 'the queue bound instead',
           );
           expect(
@@ -165,7 +166,11 @@ void main() {
       final alone = measured[1]!.hot;
       for (final n in _scale) {
         final hot = measured[n]!.hot;
-        expect(hot.writes, alone.writes, reason: '$n panes: same parse entries');
+        expect(
+          hot.writes,
+          alone.writes,
+          reason: '$n panes: same parse entries',
+        );
         expect(hot.chars, alone.chars, reason: '$n panes: same code points');
         expect(
           hot.linesAllocated,
@@ -648,7 +653,8 @@ _ScaleMeasured _ingestAtScale(int panes) {
   for (var i = 1; i < panes; i++) {
     if (i.isOdd) {
       warm.add(
-        _Pane(budget: budget, clock: () => now, tier: IngestTier.warm)..warmUp(),
+        _Pane(budget: budget, clock: () => now, tier: IngestTier.warm)
+          ..warmUp(),
       );
     } else {
       cold.add(_ColdPane(budget: budget, clock: () => now));

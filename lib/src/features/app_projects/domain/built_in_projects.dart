@@ -72,7 +72,6 @@ const _flutter = ProjectDescriptor(
   ],
 );
 
-
 /// Native Android: a Gradle build with a `com.android.application` module,
 /// measured against a throwaway project — every `android/` here is Flutter's.
 const _nativeAndroid = ProjectDescriptor(
@@ -124,8 +123,6 @@ const _nativeAndroid = ProjectDescriptor(
     // no iOS target, and a row saying "unchecked" would claim otherwise.
   ],
 );
-
-
 
 /// React Native and Expo: detected only, with no such project here to measure.
 /// Detection still runs before native Android, whose markers its `android/` has.

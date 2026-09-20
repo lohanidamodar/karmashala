@@ -96,10 +96,7 @@ final sessionChatViewProbeProvider = FutureProvider.autoDispose
           .agentId;
       final storePath = await ref
           .read(sessionTranscriptLocatorProvider)
-          .locate(
-            agentId: agentId,
-            externalSessionId: row.externalSessionId!,
-          );
+          .locate(agentId: agentId, externalSessionId: row.externalSessionId!);
       return readChatViewAt(
         storePath: storePath,
         agentId: agentId,

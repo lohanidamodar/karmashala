@@ -113,7 +113,10 @@ Future<int> runStoreProbe({IOSink? out, Directory? directory}) async {
     }
   } on Object catch (error) {
     step('write round-trip', false, '$error');
-    return fail(StoreVerdict.unwritable, '${where.path} cannot hold a database');
+    return fail(
+      StoreVerdict.unwritable,
+      '${where.path} cannot hold a database',
+    );
   } finally {
     if (owned) {
       try {
@@ -156,8 +159,10 @@ StoreVerdict classifyOpenFailure(String error, {required File wanted}) {
 String get _foreignSeparator => Platform.pathSeparator == '/' ? r'\' : '/';
 
 String _remedy(StoreVerdict verdict, File library) => switch (verdict) {
-  StoreVerdict.missing => 'deploy the host again — ${library.path} is part of the bundle',
-  StoreVerdict.unloadable => 'the machine refused ${library.path}; check its architecture and libc',
+  StoreVerdict.missing =>
+    'deploy the host again — ${library.path} is part of the bundle',
+  StoreVerdict.unloadable =>
+    'the machine refused ${library.path}; check its architecture and libc',
   StoreVerdict.mislinked =>
     'this bundle was built on another platform; build it on the one it runs on',
   // Neither is a load failure, so neither reaches `_remedy`. Spelled out rather

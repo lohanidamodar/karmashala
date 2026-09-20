@@ -38,9 +38,9 @@ void main() {
         p.join(home, 'projects', claudeStoreDirectoryName(cwd)),
       )..createSync(recursive: true);
       for (var i = 0; i < perProject; i++) {
-        File(p.join(dir.path, 'session-$i.jsonl')).writeAsStringSync(
-          '${jsonEncode({'cwd': cwd, 'type': 'user'})}\n',
-        );
+        File(
+          p.join(dir.path, 'session-$i.jsonl'),
+        ).writeAsStringSync('${jsonEncode({'cwd': cwd, 'type': 'user'})}\n');
       }
     }
     return home;
@@ -52,13 +52,14 @@ void main() {
       final dir = Directory(
         p.join(home, 'sessions', '2026', '09', '${(i % 28) + 1}'),
       )..createSync(recursive: true);
-      File(p.join(dir.path, 'rollout-2026-09-05T00-00-0$i-id$i.jsonl'))
-          .writeAsStringSync(
-            '${jsonEncode({
-              'type': 'session_meta',
-              'payload': {'cwd': r'C:\work', 'id': 'id$i'},
-            })}\n',
-          );
+      File(
+        p.join(dir.path, 'rollout-2026-09-05T00-00-0$i-id$i.jsonl'),
+      ).writeAsStringSync(
+        '${jsonEncode({
+          'type': 'session_meta',
+          'payload': {'cwd': r'C:\work', 'id': 'id$i'},
+        })}\n',
+      );
     }
     return home;
   }
@@ -67,22 +68,20 @@ void main() {
     test('a Claude store reads at most kStoreScanConcurrency directories at '
         'once, and reaches its full width without the bound', () async {
       final home = claudeStore([
-        for (var i = 0; i < 12; i++) r'C:\work\p' '$i',
+        for (var i = 0; i < 12; i++)
+          r'C:\work\p'
+              '$i',
       ]);
 
       final bounded = StoreScanSlots(concurrency: kStoreScanConcurrency);
-      await ClaudeStoreReader(cache: ClaudeStoreCache()).read(
-        home,
-        'windows',
-        slots: bounded,
-      );
+      await ClaudeStoreReader(
+        cache: ClaudeStoreCache(),
+      ).read(home, 'windows', slots: bounded);
 
       final unbounded = StoreScanSlots(concurrency: 12);
-      await ClaudeStoreReader(cache: ClaudeStoreCache()).read(
-        home,
-        'windows',
-        slots: unbounded,
-      );
+      await ClaudeStoreReader(
+        cache: ClaudeStoreCache(),
+      ).read(home, 'windows', slots: unbounded);
 
       // ignore: avoid_print
       print(
@@ -101,33 +100,37 @@ void main() {
       );
     });
 
-    test('a Codex store reads at most kStoreScanConcurrency rollouts at once', () async {
-      final home = codexStore(rollouts: 12);
-      final bounded = StoreScanSlots(concurrency: kStoreScanConcurrency);
-      final sessions = await CodexStoreReader(cache: CodexRolloutCache()).read(
-        home,
-        'windows',
-        slots: bounded,
-      );
+    test(
+      'a Codex store reads at most kStoreScanConcurrency rollouts at once',
+      () async {
+        final home = codexStore(rollouts: 12);
+        final bounded = StoreScanSlots(concurrency: kStoreScanConcurrency);
+        final sessions = await CodexStoreReader(
+          cache: CodexRolloutCache(),
+        ).read(home, 'windows', slots: bounded);
 
-      expect(sessions, hasLength(12));
-      expect(bounded.peakInFlight, lessThanOrEqualTo(kStoreScanConcurrency));
-    });
+        expect(sessions, hasLength(12));
+        expect(bounded.peakInFlight, lessThanOrEqualTo(kStoreScanConcurrency));
+      },
+    );
   });
 
   group('addressable', () {
-    test('a working directory encodes to the directory Claude writes it in', () {
-      // Verified against the owner's two stores on 2026-09-05.
-      expect(
-        claudeStoreDirectoryName('/mnt/c/Users/dlohani/projects/popupbits'),
-        '-mnt-c-Users-dlohani-projects-popupbits',
-      );
-      expect(claudeStoreDirectoryName(r'C:\'), 'C--');
-      expect(
-        claudeStoreDirectoryName('/tmp/claude-1000/-mnt-c-x/scratchpad'),
-        '-tmp-claude-1000--mnt-c-x-scratchpad',
-      );
-    });
+    test(
+      'a working directory encodes to the directory Claude writes it in',
+      () {
+        // Verified against the owner's two stores on 2026-09-05.
+        expect(
+          claudeStoreDirectoryName('/mnt/c/Users/dlohani/projects/popupbits'),
+          '-mnt-c-Users-dlohani-projects-popupbits',
+        );
+        expect(claudeStoreDirectoryName(r'C:\'), 'C--');
+        expect(
+          claudeStoreDirectoryName('/tmp/claude-1000/-mnt-c-x/scratchpad'),
+          '-tmp-claude-1000--mnt-c-x-scratchpad',
+        );
+      },
+    );
 
     test('narrowing reads the named directories and no others', () async {
       final home = claudeStore([r'C:\work\a', r'C:\work\b', r'C:\work\c']);
@@ -157,17 +160,20 @@ void main() {
       );
     });
 
-    test('the match is case-insensitive, because Claude preserves case', () async {
-      // Both `G--dev-…` and `g--dev-…` exist in the owner's Windows store.
-      final home = claudeStore([r'g:\dev\x']);
-      final reader = ClaudeStoreReader(cache: ClaudeStoreCache());
-      final found = await reader.read(
-        home,
-        'windows',
-        directories: {claudeStoreDirectoryName(r'G:\dev\x').toLowerCase()},
-      );
-      expect(found, hasLength(4));
-    });
+    test(
+      'the match is case-insensitive, because Claude preserves case',
+      () async {
+        // Both `G--dev-…` and `g--dev-…` exist in the owner's Windows store.
+        final home = claudeStore([r'g:\dev\x']);
+        final reader = ClaudeStoreReader(cache: ClaudeStoreCache());
+        final found = await reader.read(
+          home,
+          'windows',
+          directories: {claudeStoreDirectoryName(r'G:\dev\x').toLowerCase()},
+        );
+        expect(found, hasLength(4));
+      },
+    );
   });
 
   group('elsewhere', () {
@@ -224,11 +230,10 @@ void main() {
           )
           .toList();
 
-      expect(
-        chunks.map((c) => c.agentId).toList(),
-        [AgentIds.claudeCode, AgentIds.codex],
-        reason: 'Claude is addressable and cheap; Codex must open every file',
-      );
+      expect(chunks.map((c) => c.agentId).toList(), [
+        AgentIds.claudeCode,
+        AgentIds.codex,
+      ], reason: 'Claude is addressable and cheap; Codex must open every file');
       // Each job answers on its own, so Claude's rows are usable while Codex
       // is still walking.
       expect(chunks.every((c) => c.sessions.length == 1), isTrue);

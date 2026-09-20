@@ -52,366 +52,333 @@ class McpToolAnnotations {
 
 /// Every tool this app serves, and what it does. A tool missing from here is a
 /// bug: `mcp_tool_catalogue_test` asserts this map against the served schemas.
-const Map<String, McpToolAnnotations> kMcpToolAnnotations =
-    <String, McpToolAnnotations>{
-      'instructions': McpToolAnnotations.read,
+const Map<String, McpToolAnnotations>
+kMcpToolAnnotations = <String, McpToolAnnotations>{
+  'instructions': McpToolAnnotations.read,
 
-      // Checkpoints — a per-turn record of the working tree.
-      'checkpoint_list': McpToolAnnotations.read,
-      'checkpoint_diff': McpToolAnnotations.read,
-      'checkpoint_capture': McpToolAnnotations(movesAttention: false),
-      // The only tool here that can throw away work nobody recorded elsewhere.
-      'checkpoint_restore': McpToolAnnotations(
-        destructive: true,
-        movesAttention: false,
-      ),
+  // Checkpoints — a per-turn record of the working tree.
+  'checkpoint_list': McpToolAnnotations.read,
+  'checkpoint_diff': McpToolAnnotations.read,
+  'checkpoint_capture': McpToolAnnotations(movesAttention: false),
+  // The only tool here that can throw away work nobody recorded elsewhere.
+  'checkpoint_restore': McpToolAnnotations(
+    destructive: true,
+    movesAttention: false,
+  ),
 
-      // Workspace.
-      'list_projects': McpToolAnnotations.read,
-      'list_checkouts': McpToolAnnotations.read,
-      'delivery_status': McpToolAnnotations.read,
-      // Adds a project and discovers what is under it. Not idempotent: asked
-      // twice with the same folder it files the workspace with two of them.
-      'project_add': McpToolAnnotations(movesAttention: false),
-      // Rewrites one project row, and with a new root the checkout rows under
-      // it. Same arguments, same result — and nothing is deleted, so a move
-      // that surprises is corrected by moving it back.
-      'project_update': McpToolAnnotations(
-        idempotent: true,
-        movesAttention: false,
-      ),
-      // Running it twice over an unchanged directory changes nothing.
-      'project_rescan': McpToolAnnotations(
-        idempotent: true,
-        movesAttention: false,
-      ),
-      // Repoints the Explorer, the diff view and the side panel together.
-      'select_checkout': McpToolAnnotations(
-        idempotent: true,
-        movesAttention: true,
-      ),
-      // Not idempotent: the second call finds its own first in the way.
-      'worktree_create': McpToolAnnotations(movesAttention: false),
-      // The one tool here that can take a directory away.
-      'worktree_remove': McpToolAnnotations(
-        destructive: true,
-        movesAttention: false,
-      ),
+  // Workspace.
+  'list_projects': McpToolAnnotations.read,
+  'list_checkouts': McpToolAnnotations.read,
+  'delivery_status': McpToolAnnotations.read,
+  // Adds a project and discovers what is under it. Not idempotent: asked
+  // twice with the same folder it files the workspace with two of them.
+  'project_add': McpToolAnnotations(movesAttention: false),
+  // Rewrites one project row, and with a new root the checkout rows under
+  // it. Same arguments, same result — and nothing is deleted, so a move
+  // that surprises is corrected by moving it back.
+  'project_update': McpToolAnnotations(idempotent: true, movesAttention: false),
+  // Running it twice over an unchanged directory changes nothing.
+  'project_rescan': McpToolAnnotations(idempotent: true, movesAttention: false),
+  // Repoints the Explorer, the diff view and the side panel together.
+  'select_checkout': McpToolAnnotations(idempotent: true, movesAttention: true),
+  // Not idempotent: the second call finds its own first in the way.
+  'worktree_create': McpToolAnnotations(movesAttention: false),
+  // The one tool here that can take a directory away.
+  'worktree_remove': McpToolAnnotations(
+    destructive: true,
+    movesAttention: false,
+  ),
 
-      // Sessions.
-      'list_sessions': McpToolAnnotations.read,
-      'list_agents': McpToolAnnotations.read,
-      'get_usage': McpToolAnnotations.read,
-      // Lands in a pane, and `openAgentTab` makes that tab active and focused.
-      'open_new_session': McpToolAnnotations(movesAttention: true),
-      // Reveals or resumes; for an imported CLI session it opens an external
-      // window, one per call — a driver once opened one per `list_sessions` row.
-      'open_session': McpToolAnnotations(movesAttention: true),
-      'session_transcript': McpToolAnnotations.read,
-      // Idempotent in the sense this file means: calling again after a timeout
-      // is the intended response to one.
-      'session_wait': McpToolAnnotations.read,
-      // Text appears in the target's pane; no tab is switched, no pane focused.
-      'session_send': McpToolAnnotations(movesAttention: false),
-      // Approving grants permission for something that then happens, and
-      // nothing un-happens it.
-      'session_answer': McpToolAnnotations(
-        destructive: true,
-        movesAttention: false,
-      ),
-      'session_rename': McpToolAnnotations(
-        idempotent: true,
-        movesAttention: false,
-      ),
-      // The transcript survives; the turn in flight does not. Closing the last
-      // pane of a tab hands the active tab and the keyboard to another.
-      'session_end': McpToolAnnotations(
-        destructive: true,
-        movesAttention: true,
-      ),
-      // Both continue the work in a newly launched, focused tab. `preview:
-      // true` is a read on either, and the annotation describes the worst.
-      'session_handoff': McpToolAnnotations(movesAttention: true),
-      'session_fork': McpToolAnnotations(movesAttention: true),
-      // Spawns an external terminal window running the generated tmux script.
-      'open_sessions_in_tmux': McpToolAnnotations(movesAttention: true),
+  // Sessions.
+  'list_sessions': McpToolAnnotations.read,
+  'list_agents': McpToolAnnotations.read,
+  'get_usage': McpToolAnnotations.read,
+  // Lands in a pane, and `openAgentTab` makes that tab active and focused.
+  'open_new_session': McpToolAnnotations(movesAttention: true),
+  // Reveals or resumes; for an imported CLI session it opens an external
+  // window, one per call — a driver once opened one per `list_sessions` row.
+  'open_session': McpToolAnnotations(movesAttention: true),
+  'session_transcript': McpToolAnnotations.read,
+  // Idempotent in the sense this file means: calling again after a timeout
+  // is the intended response to one.
+  'session_wait': McpToolAnnotations.read,
+  // Text appears in the target's pane; no tab is switched, no pane focused.
+  'session_send': McpToolAnnotations(movesAttention: false),
+  // Approving grants permission for something that then happens, and
+  // nothing un-happens it.
+  'session_answer': McpToolAnnotations(
+    destructive: true,
+    movesAttention: false,
+  ),
+  'session_rename': McpToolAnnotations(idempotent: true, movesAttention: false),
+  // The transcript survives; the turn in flight does not. Closing the last
+  // pane of a tab hands the active tab and the keyboard to another.
+  'session_end': McpToolAnnotations(destructive: true, movesAttention: true),
+  // Both continue the work in a newly launched, focused tab. `preview:
+  // true` is a read on either, and the annotation describes the worst.
+  'session_handoff': McpToolAnnotations(movesAttention: true),
+  'session_fork': McpToolAnnotations(movesAttention: true),
+  // Spawns an external terminal window running the generated tmux script.
+  'open_sessions_in_tmux': McpToolAnnotations(movesAttention: true),
 
-      // Terminal.
-      'terminal_list': McpToolAnnotations.read,
-      'terminal_output': McpToolAnnotations.read,
-      // The new tab becomes active, its group activated, its pane focused.
-      'terminal_open': McpToolAnnotations(movesAttention: true),
-      // Whether the command is destructive is its business, not this tool's, and
-      // a tool that cannot tell must not claim it is safe.
-      'terminal_run': McpToolAnnotations(
-        destructive: true,
-        movesAttention: false,
-      ),
-      // Detaches by default and can be told to kill: the annotation describes
-      // the worst, since a client cannot see which argument was passed.
-      'terminal_close': McpToolAnnotations(
-        destructive: true,
-        movesAttention: true,
-      ),
+  // Terminal.
+  'terminal_list': McpToolAnnotations.read,
+  'terminal_output': McpToolAnnotations.read,
+  // The new tab becomes active, its group activated, its pane focused.
+  'terminal_open': McpToolAnnotations(movesAttention: true),
+  // Whether the command is destructive is its business, not this tool's, and
+  // a tool that cannot tell must not claim it is safe.
+  'terminal_run': McpToolAnnotations(destructive: true, movesAttention: false),
+  // Detaches by default and can be told to kill: the annotation describes
+  // the worst, since a client cannot see which argument was passed.
+  'terminal_close': McpToolAnnotations(destructive: true, movesAttention: true),
 
-      // Recording. Not destructive — it writes a new file — and not read-only
-      // either: it turns capture on, over whatever is on screen.
-      'terminal_record_start': McpToolAnnotations(movesAttention: false),
-      'terminal_record_stop': McpToolAnnotations(movesAttention: false),
-      // Reads a phone, writes this computer. It records the live view's own
-      // frames and refuses when there is none, so it cannot open that pane.
-      'device_record_start': McpToolAnnotations(
-        openWorld: true,
-        movesAttention: false,
-      ),
-      'device_record_stop': McpToolAnnotations(
-        openWorld: true,
-        movesAttention: false,
-      ),
+  // Recording. Not destructive — it writes a new file — and not read-only
+  // either: it turns capture on, over whatever is on screen.
+  'terminal_record_start': McpToolAnnotations(movesAttention: false),
+  'terminal_record_stop': McpToolAnnotations(movesAttention: false),
+  // Reads a phone, writes this computer. It records the live view's own
+  // frames and refuses when there is none, so it cannot open that pane.
+  'device_record_start': McpToolAnnotations(
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'device_record_stop': McpToolAnnotations(
+    openWorld: true,
+    movesAttention: false,
+  ),
 
-      // Saved command snippets.
-      'snippets_list': McpToolAnnotations.read,
-      // Appends a row to the user's own library: twice is two snippets.
-      'snippet_add': McpToolAnnotations(movesAttention: false),
-      // A snippet the user saved with submit=true runs on insertion, and a
-      // client cannot see which one this is.
-      'snippet_insert': McpToolAnnotations(
-        destructive: true,
-        movesAttention: false,
-      ),
-      // Todos: the one list a person and an agent both write to.
-      'todos_list': McpToolAnnotations.read,
-      'todo_add': McpToolAnnotations(movesAttention: false),
-      // Not destructive: the row is still there afterwards and `done: false`
-      // puts it back — the undo `destructiveHint` says does not exist.
-      'todo_done': McpToolAnnotations(idempotent: true, movesAttention: false),
-      'todo_delete': McpToolAnnotations(
-        destructive: true,
-        movesAttention: false,
-      ),
+  // Saved command snippets.
+  'snippets_list': McpToolAnnotations.read,
+  // Appends a row to the user's own library: twice is two snippets.
+  'snippet_add': McpToolAnnotations(movesAttention: false),
+  // A snippet the user saved with submit=true runs on insertion, and a
+  // client cannot see which one this is.
+  'snippet_insert': McpToolAnnotations(
+    destructive: true,
+    movesAttention: false,
+  ),
+  // Todos: the one list a person and an agent both write to.
+  'todos_list': McpToolAnnotations.read,
+  'todo_add': McpToolAnnotations(movesAttention: false),
+  // Not destructive: the row is still there afterwards and `done: false`
+  // puts it back — the undo `destructiveHint` says does not exist.
+  'todo_done': McpToolAnnotations(idempotent: true, movesAttention: false),
+  'todo_delete': McpToolAnnotations(destructive: true, movesAttention: false),
 
-      // Notes and the inbox.
-      'notes_list': McpToolAnnotations.read,
-      'inbox_list': McpToolAnnotations.read,
-      'note_add': McpToolAnnotations(movesAttention: false),
-      'note_delete': McpToolAnnotations(
-        destructive: true,
-        movesAttention: false,
-      ),
-      // Changes nothing but which session is on screen: `focusWatchedSession`
-      // rewrites the selected project, repository and session together.
-      'inbox_open': McpToolAnnotations(idempotent: true, movesAttention: true),
-      // An item for an event is gone for good; one for a condition is re-filed
-      // by the next poll, and the caller cannot know which it has.
-      'inbox_dismiss': McpToolAnnotations(
-        destructive: true,
-        idempotent: true,
-        movesAttention: false,
-      ),
+  // Notes and the inbox.
+  'notes_list': McpToolAnnotations.read,
+  'inbox_list': McpToolAnnotations.read,
+  'note_add': McpToolAnnotations(movesAttention: false),
+  'note_delete': McpToolAnnotations(destructive: true, movesAttention: false),
+  // Changes nothing but which session is on screen: `focusWatchedSession`
+  // rewrites the selected project, repository and session together.
+  'inbox_open': McpToolAnnotations(idempotent: true, movesAttention: true),
+  // An item for an event is gone for good; one for a condition is re-filed
+  // by the next poll, and the caller cannot know which it has.
+  'inbox_dismiss': McpToolAnnotations(
+    destructive: true,
+    idempotent: true,
+    movesAttention: false,
+  ),
 
-      // The decision record. Appends a row nothing can edit or remove, and a
-      // second identical call is a second decision.
-      'decision_record': McpToolAnnotations(movesAttention: false),
+  // The decision record. Appends a row nothing can edit or remove, and a
+  // second identical call is a second decision.
+  'decision_record': McpToolAnnotations(movesAttention: false),
 
-      // Review threads.
-      'review_thread_list': McpToolAnnotations.read,
-      'review_thread_get': McpToolAnnotations.read,
-      // Not idempotent: a second identical call is a second comment, and
-      // collapsing them would discard that it was raised twice.
-      'review_thread_add': McpToolAnnotations(movesAttention: false),
-      // Append-only: nothing already said can be edited or taken back.
-      'review_thread_reply': McpToolAnnotations(movesAttention: false),
-      // Not destructive: every comment and the anchor stay, and one more call
-      // puts the status back.
-      'review_thread_status': McpToolAnnotations(
-        idempotent: true,
-        movesAttention: false,
-      ),
+  // Review threads.
+  'review_thread_list': McpToolAnnotations.read,
+  'review_thread_get': McpToolAnnotations.read,
+  // Not idempotent: a second identical call is a second comment, and
+  // collapsing them would discard that it was raised twice.
+  'review_thread_add': McpToolAnnotations(movesAttention: false),
+  // Append-only: nothing already said can be edited or taken back.
+  'review_thread_reply': McpToolAnnotations(movesAttention: false),
+  // Not destructive: every comment and the anchor stay, and one more call
+  // puts the status back.
+  'review_thread_status': McpToolAnnotations(
+    idempotent: true,
+    movesAttention: false,
+  ),
 
-      // Fan-out.
-      'fanout_list': McpToolAnnotations.read,
-      'fanout_get': McpToolAnnotations.read,
+  // Fan-out.
+  'fanout_list': McpToolAnnotations.read,
+  'fanout_get': McpToolAnnotations.read,
 
-      // Devices. Everything here touches a phone, so all of it is open-world.
-      'list_devices': McpToolAnnotations.readOutside,
-      'device_screenshot': McpToolAnnotations.readOutside,
-      'device_logcat': McpToolAnnotations.readOutside,
-      'device_ui_dump': McpToolAnnotations.readOutside,
-      'device_find_elements': McpToolAnnotations.readOutside,
-      'device_files_list': McpToolAnnotations.readOutside,
-      // Reading the device, writing this computer — so not `readOnly`.
-      'device_file_pull': McpToolAnnotations(
-        openWorld: true,
-        movesAttention: false,
-      ),
-      // Not destructive: it refuses rather than replacing unless `overwrite`
-      // is asked for by name.
-      'device_file_push': McpToolAnnotations(
-        openWorld: true,
-        movesAttention: false,
-      ),
-      // A tap lands wherever it lands, and there is no undo on the other side
-      // of the wire.
-      'device_tap': McpToolAnnotations(
-        destructive: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      'device_tap_element': McpToolAnnotations(
-        destructive: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      'device_type': McpToolAnnotations(
-        destructive: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      'device_key': McpToolAnnotations(
-        destructive: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      'device_stop_emulator': McpToolAnnotations(
-        destructive: true,
-        idempotent: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      // Booting a device already up leaves it up; it also selects the simulator
-      // in the device pane and, unless headless, opens a window.
-      'device_boot': McpToolAnnotations(
-        idempotent: true,
-        openWorld: true,
-        movesAttention: true,
-      ),
-      // Overwrites whatever build was there, with no undo. Idempotent because
-      // installing the same artifact twice leaves the same device.
-      'device_install_app': McpToolAnnotations(
-        destructive: true,
-        idempotent: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      // Not idempotent: twice is two starts, and with relaunch two *cold*
-      // starts, which is a different device state from one.
-      'device_launch_app': McpToolAnnotations(
-        openWorld: true,
-        movesAttention: false,
-      ),
-      // Ends a running process, and anything it had not saved goes with it.
-      'device_terminate_app': McpToolAnnotations(
-        destructive: true,
-        idempotent: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
+  // Devices. Everything here touches a phone, so all of it is open-world.
+  'list_devices': McpToolAnnotations.readOutside,
+  'device_screenshot': McpToolAnnotations.readOutside,
+  'device_logcat': McpToolAnnotations.readOutside,
+  'device_ui_dump': McpToolAnnotations.readOutside,
+  'device_find_elements': McpToolAnnotations.readOutside,
+  'device_files_list': McpToolAnnotations.readOutside,
+  // Reading the device, writing this computer — so not `readOnly`.
+  'device_file_pull': McpToolAnnotations(
+    openWorld: true,
+    movesAttention: false,
+  ),
+  // Not destructive: it refuses rather than replacing unless `overwrite`
+  // is asked for by name.
+  'device_file_push': McpToolAnnotations(
+    openWorld: true,
+    movesAttention: false,
+  ),
+  // A tap lands wherever it lands, and there is no undo on the other side
+  // of the wire.
+  'device_tap': McpToolAnnotations(
+    destructive: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'device_tap_element': McpToolAnnotations(
+    destructive: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'device_type': McpToolAnnotations(
+    destructive: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'device_key': McpToolAnnotations(
+    destructive: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'device_stop_emulator': McpToolAnnotations(
+    destructive: true,
+    idempotent: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  // Booting a device already up leaves it up; it also selects the simulator
+  // in the device pane and, unless headless, opens a window.
+  'device_boot': McpToolAnnotations(
+    idempotent: true,
+    openWorld: true,
+    movesAttention: true,
+  ),
+  // Overwrites whatever build was there, with no undo. Idempotent because
+  // installing the same artifact twice leaves the same device.
+  'device_install_app': McpToolAnnotations(
+    destructive: true,
+    idempotent: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  // Not idempotent: twice is two starts, and with relaunch two *cold*
+  // starts, which is a different device state from one.
+  'device_launch_app': McpToolAnnotations(
+    openWorld: true,
+    movesAttention: false,
+  ),
+  // Ends a running process, and anything it had not saved goes with it.
+  'device_terminate_app': McpToolAnnotations(
+    destructive: true,
+    idempotent: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
 
-      // Browser. The page is someone's real logged-in session.
-      'browser_find': McpToolAnnotations.readOutside,
-      'browser_screenshot': McpToolAnnotations.readOutside,
-      'browser_capture': McpToolAnnotations.readOutside,
-      // Reads a click out of a person: it fronts their Chrome and blocks for
-      // up to two minutes — read-only and the most interrupting tool here.
-      'browser_pick': McpToolAnnotations(
-        readOnly: true,
-        idempotent: true,
-        openWorld: true,
-        movesAttention: true,
-      ),
-      // Attaches to a Chrome already listening, and **launches one** when none
-      // is. `browser_navigate` inherits that: it connects first when detached.
-      'browser_connect': McpToolAnnotations(
-        idempotent: true,
-        openWorld: true,
-        movesAttention: true,
-      ),
-      'browser_navigate': McpToolAnnotations(
-        idempotent: true,
-        openWorld: true,
-        movesAttention: true,
-      ),
-      // `open` puts a new tab in front in the person's own browser.
-      'browser_tabs': McpToolAnnotations(
-        openWorld: true,
-        movesAttention: true,
-      ),
-      'browser_fill': McpToolAnnotations(
-        idempotent: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      'browser_type': McpToolAnnotations(
-        openWorld: true,
-        movesAttention: false,
-      ),
-      'browser_click': McpToolAnnotations(
-        destructive: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      'browser_key': McpToolAnnotations(
-        destructive: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      'browser_evaluate': McpToolAnnotations(
-        destructive: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
+  // Browser. The page is someone's real logged-in session.
+  'browser_find': McpToolAnnotations.readOutside,
+  'browser_screenshot': McpToolAnnotations.readOutside,
+  'browser_capture': McpToolAnnotations.readOutside,
+  // Reads a click out of a person: it fronts their Chrome and blocks for
+  // up to two minutes — read-only and the most interrupting tool here.
+  'browser_pick': McpToolAnnotations(
+    readOnly: true,
+    idempotent: true,
+    openWorld: true,
+    movesAttention: true,
+  ),
+  // Attaches to a Chrome already listening, and **launches one** when none
+  // is. `browser_navigate` inherits that: it connects first when detached.
+  'browser_connect': McpToolAnnotations(
+    idempotent: true,
+    openWorld: true,
+    movesAttention: true,
+  ),
+  'browser_navigate': McpToolAnnotations(
+    idempotent: true,
+    openWorld: true,
+    movesAttention: true,
+  ),
+  // `open` puts a new tab in front in the person's own browser.
+  'browser_tabs': McpToolAnnotations(openWorld: true, movesAttention: true),
+  'browser_fill': McpToolAnnotations(
+    idempotent: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'browser_type': McpToolAnnotations(openWorld: true, movesAttention: false),
+  'browser_click': McpToolAnnotations(
+    destructive: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'browser_key': McpToolAnnotations(
+    destructive: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  'browser_evaluate': McpToolAnnotations(
+    destructive: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
 
-      // Open-world for the same reason the device tools are: the app is a
-      // process on a desktop, a phone or a simulator.
-      'flutter_apps': McpToolAnnotations.read,
-      'flutter_logs': McpToolAnnotations.readOutside,
-      // Puts the app into Flutter's widget-select mode and back; the developer's
-      // taps stop doing what taps do for up to ten minutes.
-      'flutter_pick_widget': McpToolAnnotations(
-        readOnly: true,
-        idempotent: true,
-        openWorld: true,
-        movesAttention: true,
-      ),
-      // Attaching twice to the same app is the same as attaching once.
-      'flutter_attach': McpToolAnnotations(
-        idempotent: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      // `fullRestart` re-runs main() and the app loses its state, with no
-      // undo; the annotation describes the worse of the two arguments.
-      'flutter_reload': McpToolAnnotations(
-        destructive: true,
-        openWorld: true,
-        movesAttention: false,
-      ),
-      // `stop` ends a running app and anything unsaved goes with it, and the
-      // annotation describes the worst action a caller can pass.
-      'flutter_run': McpToolAnnotations(
-        destructive: true,
-        openWorld: true,
-        movesAttention: true,
-      ),
-      // A build overwrites the artifact with no undo and resolves dependencies
-      // from the network; only "build" opens and focuses a tab.
-      'project_build': McpToolAnnotations(
-        destructive: true,
-        idempotent: true,
-        openWorld: true,
-        movesAttention: true,
-      ),
+  // Open-world for the same reason the device tools are: the app is a
+  // process on a desktop, a phone or a simulator.
+  'flutter_apps': McpToolAnnotations.read,
+  'flutter_logs': McpToolAnnotations.readOutside,
+  // Puts the app into Flutter's widget-select mode and back; the developer's
+  // taps stop doing what taps do for up to ten minutes.
+  'flutter_pick_widget': McpToolAnnotations(
+    readOnly: true,
+    idempotent: true,
+    openWorld: true,
+    movesAttention: true,
+  ),
+  // Attaching twice to the same app is the same as attaching once.
+  'flutter_attach': McpToolAnnotations(
+    idempotent: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  // `fullRestart` re-runs main() and the app loses its state, with no
+  // undo; the annotation describes the worse of the two arguments.
+  'flutter_reload': McpToolAnnotations(
+    destructive: true,
+    openWorld: true,
+    movesAttention: false,
+  ),
+  // `stop` ends a running app and anything unsaved goes with it, and the
+  // annotation describes the worst action a caller can pass.
+  'flutter_run': McpToolAnnotations(
+    destructive: true,
+    openWorld: true,
+    movesAttention: true,
+  ),
+  // A build overwrites the artifact with no undo and resolves dependencies
+  // from the network; only "build" opens and focuses a tab.
+  'project_build': McpToolAnnotations(
+    destructive: true,
+    idempotent: true,
+    openWorld: true,
+    movesAttention: true,
+  ),
 
-      // Verification runs.
-      'verification_list': McpToolAnnotations.read,
-      'verification_get': McpToolAnnotations.read,
-      // A `url` run connects a browser before it records anything, which lands
-      // on `browser_connect`'s launch path; a diff run touches neither.
-      'verification_start': McpToolAnnotations(movesAttention: true),
-      'verification_note': McpToolAnnotations(movesAttention: false),
-      // Writes the report and the evidence; it opens no pane to show them.
-      'verification_finish': McpToolAnnotations(movesAttention: false),
-    };
+  // Verification runs.
+  'verification_list': McpToolAnnotations.read,
+  'verification_get': McpToolAnnotations.read,
+  // A `url` run connects a browser before it records anything, which lands
+  // on `browser_connect`'s launch path; a diff run touches neither.
+  'verification_start': McpToolAnnotations(movesAttention: true),
+  'verification_note': McpToolAnnotations(movesAttention: false),
+  // Writes the report and the evidence; it opens no pane to show them.
+  'verification_finish': McpToolAnnotations(movesAttention: false),
+};
 
 /// The families the tools are shown in, in the order Settings draws them. A
 /// fixed set, not a name prefix: `list_devices` and `get_usage` defeat prefixes.
@@ -779,7 +746,7 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'device_install_app': McpToolListing(
     McpToolCategory.devices,
     'Install an .apk or simulator .app over any copy. One session drives at a '
-        'time.',
+    'time.',
   ),
   'device_launch_app': McpToolListing(
     McpToolCategory.devices,

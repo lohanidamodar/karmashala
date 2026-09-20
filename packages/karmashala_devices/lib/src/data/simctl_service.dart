@@ -128,7 +128,10 @@ class SimctlService {
   Future<void> showSimulatorWindow(String udid) async {
     try {
       await runner.start(
-        const CommandRequest(executable: 'open', arguments: ['-a', 'Simulator']),
+        const CommandRequest(
+          executable: 'open',
+          arguments: ['-a', 'Simulator'],
+        ),
       );
     } on Object {
       // Nothing here is worth failing a boot over.

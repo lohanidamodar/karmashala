@@ -104,10 +104,7 @@ Future<RemoteSessionStarted> startRemoteSession(
   // modes exist. Not `carryPermission` — nothing is being carried here.
   final support = descriptor?.launch.permission;
   if (support == null || !support.isKnown) {
-    throw RemoteApiRefusal(
-      ErrorCode.badRequest,
-      unknownAgentReason(agentName),
-    );
+    throw RemoteApiRefusal(ErrorCode.badRequest, unknownAgentReason(agentName));
   }
   final mode = support
       .selections()
@@ -165,26 +162,40 @@ Future<RemoteSessionStarted> resumeRemoteSession(
     }
     final external = native.externalSessionId;
     if (external == null || external.trim().isEmpty) {
-      throw const RemoteApiRefusal(ErrorCode.badRequest, 'this session has no conversation to resume');
+      throw const RemoteApiRefusal(
+        ErrorCode.badRequest,
+        'this session has no conversation to resume',
+      );
     }
-    final repository = ref.read(repositoryDaoProvider).getById(native.repositoryId);
-    final installation = ref.read(agentInstallationDaoProvider).getById(native.agentInstallationId);
+    final repository = ref
+        .read(repositoryDaoProvider)
+        .getById(native.repositoryId);
+    final installation = ref
+        .read(agentInstallationDaoProvider)
+        .getById(native.agentInstallationId);
     if (repository == null || installation == null) {
-      throw const RemoteApiRefusal(ErrorCode.notFound, 'the session workspace is no longer available');
+      throw const RemoteApiRefusal(
+        ErrorCode.notFound,
+        'the session workspace is no longer available',
+      );
     }
     try {
-      final launched = await ref.read(sessionLauncherProvider).launch(
-        SessionLaunchRequest(
-          repository: repository,
-          installation: installation,
-          title: native.title,
-          purpose: SessionPurpose.existingSession,
-          resumeExternalSessionId: external,
-          existingWorktree: native.worktree,
-          workingDirectory: native.workingDirectory,
-          permissionOverride: PermissionSelection.parse(native.permissionMode),
-        ),
-      );
+      final launched = await ref
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository,
+              installation: installation,
+              title: native.title,
+              purpose: SessionPurpose.existingSession,
+              resumeExternalSessionId: external,
+              existingWorktree: native.worktree,
+              workingDirectory: native.workingDirectory,
+              permissionOverride: PermissionSelection.parse(
+                native.permissionMode,
+              ),
+            ),
+          );
       return RemoteSessionStarted(
         sessionId: launched.session.id,
         title: launched.session.title,
@@ -196,7 +207,10 @@ Future<RemoteSessionStarted> resumeRemoteSession(
   }
   final imported = ref.read(importedSessionDaoProvider).getById(sessionId);
   if (imported == null) {
-    throw const RemoteApiRefusal(ErrorCode.notFound, 'this session no longer exists');
+    throw const RemoteApiRefusal(
+      ErrorCode.notFound,
+      'this session no longer exists',
+    );
   }
   try {
     final id = await ref.read(sessionActionsProvider).resumeImported(imported);

@@ -50,7 +50,11 @@ void main() {
       expect(report.status, AgentActivityStatus.awaitingApproval);
       expect(report.waiting, AgentWaitKind.question);
       expect(report.hasOpenQuestion, isTrue);
-      expect(report.hasOpenPrompt, isFalse, reason: 'no Approve for a question');
+      expect(
+        report.hasOpenPrompt,
+        isFalse,
+        reason: 'no Approve for a question',
+      );
       expect(report.evidence, ['Pick a fruit']);
     });
 
@@ -89,8 +93,7 @@ void main() {
       expect(report.evidence, ['Pick a fruit']);
     });
 
-    test('but a permission notice after the question was answered is one',
-        () {
+    test('but a permission notice after the question was answered is one', () {
       receiver.handle(
         agentId: 'claudeCode',
         event: 'PreToolUse',

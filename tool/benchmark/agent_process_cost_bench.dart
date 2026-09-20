@@ -188,11 +188,7 @@ class ProcessSample {
 
 /// Which pids may be sampled, or why none may be.
 class SamplingPlan {
-  const SamplingPlan({
-    required this.pids,
-    required this.names,
-    this.refusal,
-  });
+  const SamplingPlan({required this.pids, required this.names, this.refusal});
 
   final List<int> pids;
 
@@ -217,7 +213,9 @@ abstract class SystemProcessProbe {
   /// The probe for this host, or null on a platform this does not know.
   static Future<SystemProcessProbe?> forHost() async {
     if (Platform.isWindows) return const WindowsProcessProbe();
-    if (Platform.isLinux) return LinuxProcessProbe(clockTicks: await _clockTicks());
+    if (Platform.isLinux) {
+      return LinuxProcessProbe(clockTicks: await _clockTicks());
+    }
     return null;
   }
 
@@ -346,7 +344,10 @@ class LinuxProcessProbe implements SystemProcessProbe {
 /// row of `?` rather than vanish from the table: a silently shorter sample is
 /// a machine that looks cheaper than it was, which is the one direction a cost
 /// measurement must not be wrong in.
-List<ProcessReading> fillMissing(List<int> pids, List<ProcessReading> answered) {
+List<ProcessReading> fillMissing(
+  List<int> pids,
+  List<ProcessReading> answered,
+) {
   final byPid = {for (final reading in answered) reading.pid: reading};
   return [for (final pid in pids) byPid[pid] ?? ProcessReading(pid: pid)];
 }
@@ -384,10 +385,7 @@ ProcStatFields? splitProcStat(String line) {
       .split(RegExp(r'\s+'))
       .where((field) => field.isNotEmpty)
       .toList();
-  return ProcStatFields(
-    comm: line.substring(open + 1, close),
-    after: after,
-  );
+  return ProcStatFields(comm: line.substring(open + 1, close), after: after);
 }
 
 /// One `/proc/<pid>/stat` line as a reading, or null when it is not one.
@@ -465,7 +463,8 @@ List<Map<String, String>> _rows(String csv) {
   final header = splitCsvLine(lines.first);
   return [
     for (final line in lines.skip(1))
-      if (splitCsvLine(line) case final cells when cells.length == header.length)
+      if (splitCsvLine(line) case final cells
+          when cells.length == header.length)
         {for (var i = 0; i < header.length; i++) header[i]: cells[i]},
   ];
 }
@@ -669,9 +668,8 @@ String _percent(ProcessReading? before, ProcessReading now, Duration window) {
 String _mib(int? bytes) =>
     bytes == null ? '?' : '${(bytes / 1048576).toStringAsFixed(1)}M';
 
-String _pad(String value, int width) => value.length >= width
-    ? value.substring(0, width)
-    : value.padRight(width);
+String _pad(String value, int width) =>
+    value.length >= width ? value.substring(0, width) : value.padRight(width);
 
 String _ellipsis(String value, int width) =>
     value.length <= width ? value : '${value.substring(0, width - 1)}…';

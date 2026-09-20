@@ -116,10 +116,7 @@ class CodexAppServerReader implements StoreSessionReader {
         DetectedSession(
           cli: AgentIds.codex,
           sessionId: thread.id,
-          cwd: EnvironmentPath(
-            environmentId: environmentId,
-            path: thread.cwd,
-          ),
+          cwd: EnvironmentPath(environmentId: environmentId, path: thread.cwd),
           filePath: filePath,
           storeHome: storeHome,
           title: thread.name,

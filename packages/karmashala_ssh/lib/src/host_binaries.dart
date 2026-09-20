@@ -29,13 +29,19 @@ class DirectoryHostBinaries implements HostBinarySource {
 
   /// Beside the running executable first, then the repository's build output,
   /// so a debug run picks up what was just compiled.
-  factory DirectoryHostBinaries.standard({String? executableDirectory, String? repositoryRoot}) {
-    final beside = executableDirectory ?? File(Platform.resolvedExecutable).parent.path;
+  factory DirectoryHostBinaries.standard({
+    String? executableDirectory,
+    String? repositoryRoot,
+  }) {
+    final beside =
+        executableDirectory ?? File(Platform.resolvedExecutable).parent.path;
     return DirectoryHostBinaries([
       Directory(beside),
       // `packages/` since f94086f7 moved the host there; this said `host/build`
       // and had been naming a directory that cannot exist.
-      Directory('${repositoryRoot ?? Directory.current.path}/packages/host/build'),
+      Directory(
+        '${repositoryRoot ?? Directory.current.path}/packages/host/build',
+      ),
     ]);
   }
 
@@ -51,7 +57,9 @@ class DirectoryHostBinaries implements HostBinarySource {
       for (final entity in directory.listSync().whereType<File>()) {
         final match = _name.firstMatch(entity.uri.pathSegments.last);
         if (match == null) continue;
-        if ('${match.group(2)}-${match.group(3)}' != platform.targetKey) continue;
+        if ('${match.group(2)}-${match.group(3)}' != platform.targetKey) {
+          continue;
+        }
         candidates.add((match.group(1), match.group(4) != null, entity));
       }
       if (candidates.isEmpty) continue;
@@ -87,7 +95,9 @@ class DirectoryHostBinaries implements HostBinarySource {
   /// Compares two filename versions segment by segment, as numbers: a string
   /// sort puts `1.9.0` above `1.20.1`, which is the whole bug.
   static int compareFilenameVersions(String? a, String? b) {
-    if (a == null || b == null) return (a == null ? 0 : 1) - (b == null ? 0 : 1);
+    if (a == null || b == null) {
+      return (a == null ? 0 : 1) - (b == null ? 0 : 1);
+    }
     final left = a.split('.');
     final right = b.split('.');
     for (var i = 0; i < left.length || i < right.length; i++) {
@@ -95,7 +105,9 @@ class DirectoryHostBinaries implements HostBinarySource {
       final r = i < right.length ? right[i] : '0';
       final ln = int.tryParse(l);
       final rn = int.tryParse(r);
-      final order = ln != null && rn != null ? ln.compareTo(rn) : l.compareTo(r);
+      final order = ln != null && rn != null
+          ? ln.compareTo(rn)
+          : l.compareTo(r);
       if (order != 0) return order;
     }
     return 0;

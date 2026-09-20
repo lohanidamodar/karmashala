@@ -85,10 +85,7 @@ void main() {
         return null;
       };
 
-  Future<void> pump(
-    WidgetTester tester, {
-    required ShowFileDialog show,
-  }) async {
+  Future<void> pump(WidgetTester tester, {required ShowFileDialog show}) async {
     tester.view.physicalSize = const Size(900, 700);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -169,10 +166,7 @@ void main() {
   testWidgets('a typed path never quiets anything, because nothing opens', (
     tester,
   ) async {
-    await pump(
-      tester,
-      show: occupying(const Duration(milliseconds: 250)),
-    );
+    await pump(tester, show: occupying(const Duration(milliseconds: 250)));
 
     await tester.enterText(
       find.byKey(const Key('device-install-path')),

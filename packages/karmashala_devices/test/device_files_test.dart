@@ -38,16 +38,16 @@ AdbDeviceDriver _driver(AdbService adb, {bool emulator = true}) =>
 
 /// A runner that answers by looking at the adb argv, so a test can script one
 /// device's whole filesystem without caring what order the service asks in.
-FakeCommandRunner _runner(
-  CommandResult Function(List<String> argv) answer,
-) => FakeCommandRunner(responder: (request) => answer(request.arguments));
+FakeCommandRunner _runner(CommandResult Function(List<String> argv) answer) =>
+    FakeCommandRunner(responder: (request) => answer(request.arguments));
 
 CommandResult _out(String stdout) =>
     CommandResult(exitCode: 0, stdout: stdout, stderr: '');
 
 /// A listing as a real device sends it: base64, because the service pipes
 /// anything containing filenames through it. See `AdbService._readDeviceText`.
-CommandResult _lsOut(String listing) => _out(base64.encode(utf8.encode(listing)));
+CommandResult _lsOut(String listing) =>
+    _out(base64.encode(utf8.encode(listing)));
 
 CommandResult _err(String stderr, {int exitCode = 1}) =>
     CommandResult(exitCode: exitCode, stdout: '', stderr: stderr);
@@ -67,42 +67,52 @@ void main() {
           'drwxrwx--- 2 root everybody 4096 2024-12-11 18:44 Alarms\n',
         ),
       );
-      await AdbService(runner: runner, sdk: _sdk())
-          .listDirectory(_serial, '/sdcard');
+      await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).listDirectory(_serial, '/sdcard');
 
       expect(_shellCommand(runner, 0), "ls -la '/sdcard/' | base64");
     });
 
-    test('quotes a path with a space so the device shell keeps it whole',
-        () async {
-      final runner = _runner((_) => _lsOut(''));
-      await AdbService(runner: runner, sdk: _sdk())
-          .listDirectory(_serial, '/sdcard/karmashala test dir');
+    test(
+      'quotes a path with a space so the device shell keeps it whole',
+      () async {
+        final runner = _runner((_) => _lsOut(''));
+        await AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).listDirectory(_serial, '/sdcard/karmashala test dir');
 
-      expect(
-        _shellCommand(runner, 0),
-        "ls -la '/sdcard/karmashala test dir/' | base64",
-      );
-    });
+        expect(
+          _shellCommand(runner, 0),
+          "ls -la '/sdcard/karmashala test dir/' | base64",
+        );
+      },
+    );
 
-    test('reports the entries against the directory that was asked for',
-        () async {
-      final runner = _runner(
-        (_) => _lsOut(
-          'total 8\n'
-          'drwxrwx--- 2 root everybody 4096 2024-12-11 18:44 Camera\n'
-          '-rw-rw---- 1 root everybody 17 2026-09-03 18:52 shot.png\n',
-        ),
-      );
-      final listing = await AdbService(runner: runner, sdk: _sdk())
-          .listDirectory(_serial, '/sdcard/DCIM');
+    test(
+      'reports the entries against the directory that was asked for',
+      () async {
+        final runner = _runner(
+          (_) => _lsOut(
+            'total 8\n'
+            'drwxrwx--- 2 root everybody 4096 2024-12-11 18:44 Camera\n'
+            '-rw-rw---- 1 root everybody 17 2026-09-03 18:52 shot.png\n',
+          ),
+        );
+        final listing = await AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).listDirectory(_serial, '/sdcard/DCIM');
 
-      expect(listing.path, '/sdcard/DCIM');
-      expect(listing.entries.map((e) => e.path), [
-        '/sdcard/DCIM/Camera',
-        '/sdcard/DCIM/shot.png',
-      ]);
-    });
+        expect(listing.path, '/sdcard/DCIM');
+        expect(listing.entries.map((e) => e.path), [
+          '/sdcard/DCIM/Camera',
+          '/sdcard/DCIM/shot.png',
+        ]);
+      },
+    );
   });
 
   group('names that are not ASCII', () {
@@ -112,7 +122,8 @@ void main() {
       // as mojibake that cannot be clicked or pulled.
       const name = 'my file नेपाली.txt';
       final runner = _runner(
-        (_) => _lsOut('-rw-rw---- 1 u0_a1 media_rw 17 2026-09-03 18:52 $name\n'),
+        (_) =>
+            _lsOut('-rw-rw---- 1 u0_a1 media_rw 17 2026-09-03 18:52 $name\n'),
       );
 
       return expectLater(
@@ -123,69 +134,81 @@ void main() {
       );
     });
 
-    test('a device with no base64 still lists, and says the names may be wrong',
-        () async {
-      // Wrong-and-labelled beats a directory that refuses to open.
-      var calls = 0;
-      final runner = _runner((argv) {
-        calls++;
-        if (argv.last.endsWith('| base64')) {
-          return _err('/system/bin/sh: base64: inaccessible or not found',
-              exitCode: 127);
-        }
-        return _out('drwxrwx--- 2 root everybody 4096 2024-12-11 18:44 A\n');
-      });
+    test(
+      'a device with no base64 still lists, and says the names may be wrong',
+      () async {
+        // Wrong-and-labelled beats a directory that refuses to open.
+        var calls = 0;
+        final runner = _runner((argv) {
+          calls++;
+          if (argv.last.endsWith('| base64')) {
+            return _err(
+              '/system/bin/sh: base64: inaccessible or not found',
+              exitCode: 127,
+            );
+          }
+          return _out('drwxrwx--- 2 root everybody 4096 2024-12-11 18:44 A\n');
+        });
 
-      final listing = await AdbService(runner: runner, sdk: _sdk())
-          .listDirectory(_serial, '/sdcard');
+        final listing = await AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).listDirectory(_serial, '/sdcard');
 
-      expect(calls, 2, reason: 'it should have fallen back, once');
-      expect(listing.entries.single.name, 'A');
-      expect(listing.note, contains('base64'));
-      expect(listing.note, contains('may be spelled wrong'));
-    });
+        expect(calls, 2, reason: 'it should have fallen back, once');
+        expect(listing.entries.single.name, 'A');
+        expect(listing.note, contains('base64'));
+        expect(listing.note, contains('may be spelled wrong'));
+      },
+    );
   });
 
   group('a directory that cannot be read', () {
-    test('says not permitted, and never comes back as an empty folder',
-        () async {
-      // The failure this whole surface exists to prevent: an empty listing and
-      // a refusal are indistinguishable in a file browser.
-      final runner = _runner((_) => _err('ls: /data: Permission denied'));
-      final service = AdbService(runner: runner, sdk: _sdk());
+    test(
+      'says not permitted, and never comes back as an empty folder',
+      () async {
+        // The failure this whole surface exists to prevent: an empty listing and
+        // a refusal are indistinguishable in a file browser.
+        final runner = _runner((_) => _err('ls: /data: Permission denied'));
+        final service = AdbService(runner: runner, sdk: _sdk());
 
-      await expectLater(
-        service.listDirectory(_serial, '/data'),
-        throwsA(
-          isA<DeviceRefusal>().having(
-            (e) => e.message,
-            'message',
-            allOf(contains('/data'), contains('not readable')),
+        await expectLater(
+          service.listDirectory(_serial, '/data'),
+          throwsA(
+            isA<DeviceRefusal>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('/data'), contains('not readable')),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
-    test('an app\'s own directory is refused with what would reach it',
-        () async {
-      // Either support run-as and say when it is unavailable, or leave it out
-      // and say so. This build leaves it out, and this is the saying so.
-      final runner = _runner(
-        (_) => _err('ls: /data/data/com.example/: Permission denied'),
-      );
+    test(
+      'an app\'s own directory is refused with what would reach it',
+      () async {
+        // Either support run-as and say when it is unavailable, or leave it out
+        // and say so. This build leaves it out, and this is the saying so.
+        final runner = _runner(
+          (_) => _err('ls: /data/data/com.example/: Permission denied'),
+        );
 
-      await expectLater(
-        AdbService(runner: runner, sdk: _sdk())
-            .listDirectory(_serial, '/data/data/com.example'),
-        throwsA(
-          isA<DeviceRefusal>().having(
-            (e) => e.message,
-            'message',
-            allOf(contains('run-as'), contains('debuggable')),
+        await expectLater(
+          AdbService(
+            runner: runner,
+            sdk: _sdk(),
+          ).listDirectory(_serial, '/data/data/com.example'),
+          throwsA(
+            isA<DeviceRefusal>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('run-as'), contains('debuggable')),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
     test('a device that swallows the exit code is still believed', () async {
       // adb shell did not forward the remote exit code before Android 7, so
@@ -210,8 +233,10 @@ void main() {
       );
 
       await expectLater(
-        AdbService(runner: runner, sdk: _sdk())
-            .listDirectory(_serial, '/sdcard/nope'),
+        AdbService(
+          runner: runner,
+          sdk: _sdk(),
+        ).listDirectory(_serial, '/sdcard/nope'),
         throwsA(
           isA<DeviceRefusal>().having(
             (e) => e.message,
@@ -230,8 +255,10 @@ void main() {
           '-rw-rw---- 1 root everybody 17 2026-09-03 18:52 /sdcard/a.txt\n',
         ),
       );
-      final entry = await AdbService(runner: runner, sdk: _sdk())
-          .statPath(_serial, '/sdcard/a.txt');
+      final entry = await AdbService(
+        runner: runner,
+        sdk: _sdk(),
+      ).statPath(_serial, '/sdcard/a.txt');
 
       expect(_shellCommand(runner, 0), "ls -lad '/sdcard/a.txt' | base64");
       // The device echoes the argument as the name; only the last segment is
@@ -241,19 +268,23 @@ void main() {
       expect(entry.sizeBytes, 17);
     });
 
-    test('absent is null, which is a different answer from unreadable',
-        () async {
-      // Null makes a push safe; a throw makes it hopeless. Collapsing them
-      // would make one of the two decisions wrong.
-      final runner = _runner(
-        (_) => _err('ls: /sdcard/nope: No such file or directory'),
-      );
-      expect(
-        await AdbService(runner: runner, sdk: _sdk())
-            .statPath(_serial, '/sdcard/nope'),
-        isNull,
-      );
-    });
+    test(
+      'absent is null, which is a different answer from unreadable',
+      () async {
+        // Null makes a push safe; a throw makes it hopeless. Collapsing them
+        // would make one of the two decisions wrong.
+        final runner = _runner(
+          (_) => _err('ls: /sdcard/nope: No such file or directory'),
+        );
+        expect(
+          await AdbService(
+            runner: runner,
+            sdk: _sdk(),
+          ).statPath(_serial, '/sdcard/nope'),
+          isNull,
+        );
+      },
+    );
 
     test('unreadable throws', () async {
       final runner = _runner((_) => _err('ls: /data/x: Permission denied'));
@@ -272,7 +303,8 @@ void main() {
         (_) => const CommandResult(
           exitCode: 0,
           stdout: '',
-          stderr: '/sdcard/.dev: 1 file pulled, 0 skipped. 0.0 MB/s '
+          stderr:
+              '/sdcard/.dev: 1 file pulled, 0 skipped. 0.0 MB/s '
               '(16 bytes in 0.006s)',
         ),
       );
@@ -307,27 +339,28 @@ void main() {
       ]);
     });
 
-    test('a failure is a refusal quoting adb, not a silent empty file',
-        () async {
-      final runner = _runner(
-        (_) => _err("adb: error: remote object '/data/x' does not exist"),
-      );
+    test(
+      'a failure is a refusal quoting adb, not a silent empty file',
+      () async {
+        final runner = _runner(
+          (_) => _err("adb: error: remote object '/data/x' does not exist"),
+        );
 
-      await expectLater(
-        AdbService(runner: runner, sdk: _sdk()).pullFile(
-          _serial,
-          devicePath: '/data/x',
-          hostPath: r'C:\tmp\x',
-        ),
-        throwsA(
-          isA<DeviceRefusal>().having(
-            (e) => e.message,
-            'message',
-            contains('does not exist'),
+        await expectLater(
+          AdbService(
+            runner: runner,
+            sdk: _sdk(),
+          ).pullFile(_serial, devicePath: '/data/x', hostPath: r'C:\tmp\x'),
+          throwsA(
+            isA<DeviceRefusal>().having(
+              (e) => e.message,
+              'message',
+              contains('does not exist'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
     test('a failed pull takes its partial file away', () async {
       // adb writes the destination as it goes, so a refused pull would leave a
@@ -382,23 +415,26 @@ void main() {
       expect(removed, [r'C:\tmp\x']);
     });
 
-    test('is reported to whoever is recording what happens to devices',
-        () async {
-      final runner = _runner(
-        (_) => _err('1 file pulled, 0 skipped. (16 bytes in 0.0s)', exitCode: 0),
-      );
-      final actions = <DeviceAction>[];
-      final service = AdbService(runner: runner, sdk: _sdk())
-        ..actionSink = actions.add;
-      await service.pullFile(
-        _serial,
-        devicePath: '/sdcard/a',
-        hostPath: r'C:\a',
-      );
+    test(
+      'is reported to whoever is recording what happens to devices',
+      () async {
+        final runner = _runner(
+          (_) =>
+              _err('1 file pulled, 0 skipped. (16 bytes in 0.0s)', exitCode: 0),
+        );
+        final actions = <DeviceAction>[];
+        final service = AdbService(runner: runner, sdk: _sdk())
+          ..actionSink = actions.add;
+        await service.pullFile(
+          _serial,
+          devicePath: '/sdcard/a',
+          hostPath: r'C:\a',
+        );
 
-      expect(actions.single.verb, 'pullFile');
-      expect(actions.single.ok, isTrue);
-    });
+        expect(actions.single.verb, 'pullFile');
+        expect(actions.single.ok, isTrue);
+      },
+    );
   });
 
   group('pushing a file onto the device', () {
@@ -439,7 +475,10 @@ void main() {
             '-rw-rw---- 1 root everybody 17 2026-09-03 18:52 /sdcard/a.txt\n',
           );
         }
-        return _err('1 file pushed, 0 skipped. (17 bytes in 0.0s)', exitCode: 0);
+        return _err(
+          '1 file pushed, 0 skipped. (17 bytes in 0.0s)',
+          exitCode: 0,
+        );
       });
       final driver = _driver(AdbService(runner: runner, sdk: _sdk()));
 
@@ -521,8 +560,10 @@ void main() {
           ),
         ),
       );
-      expect(runner.requests.any((r) => r.arguments.last.startsWith('rm')),
-          isFalse);
+      expect(
+        runner.requests.any((r) => r.arguments.last.startsWith('rm')),
+        isFalse,
+      );
     });
 
     test('a path that is not there is an error, not a quiet success', () async {
@@ -588,50 +629,51 @@ void main() {
   group('what the Android driver says it can do', () {
     test('declares file access, on a handset as much as an emulator', () {
       final adb = AdbService(runner: FakeCommandRunner(), sdk: _sdk());
-      expect(
-        _driver(adb, emulator: false).can(DeviceCapability.files),
-        isTrue,
-      );
+      expect(_driver(adb, emulator: false).can(DeviceCapability.files), isTrue);
       expect(
         _driver(adb, emulator: false).missingReason(DeviceCapability.files),
         isNull,
       );
     });
 
-    test('offers roots rather than pretending there is one filesystem',
-        () async {
-      final adb = AdbService(runner: FakeCommandRunner(), sdk: _sdk());
-      final roots = await _driver(adb).fileRoots();
+    test(
+      'offers roots rather than pretending there is one filesystem',
+      () async {
+        final adb = AdbService(runner: FakeCommandRunner(), sdk: _sdk());
+        final roots = await _driver(adb).fileRoots();
 
-      expect(roots.map((r) => r.path), ['/sdcard', '/data/local/tmp', '/']);
-      // The read-only one is labelled read-only rather than failing later.
-      expect(roots.last.writable, isFalse);
-      expect(roots.first.writable, isTrue);
-      // Every root explains what will be refused there, because that is the
-      // part a person cannot see from the path.
-      expect(roots.every((r) => r.description.isNotEmpty), isTrue);
-    });
+        expect(roots.map((r) => r.path), ['/sdcard', '/data/local/tmp', '/']);
+        // The read-only one is labelled read-only rather than failing later.
+        expect(roots.last.writable, isFalse);
+        expect(roots.first.writable, isTrue);
+        // Every root explains what will be refused there, because that is the
+        // part a person cannot see from the path.
+        expect(roots.every((r) => r.description.isNotEmpty), isTrue);
+      },
+    );
 
-    test('a pull of a directory is refused by name, not silently expanded',
-        () async {
-      final runner = _runner(
-        (_) => _lsOut(
-          'drwxrwx--- 2 root everybody 4096 2024-12-11 18:44 /sdcard/DCIM\n',
-        ),
-      );
-      final driver = _driver(AdbService(runner: runner, sdk: _sdk()));
-
-      await expectLater(
-        driver.pullFile(devicePath: '/sdcard/DCIM', hostPath: r'C:\x'),
-        throwsA(
-          isA<DeviceRefusal>().having(
-            (e) => e.message,
-            'message',
-            contains('one file at a time'),
+    test(
+      'a pull of a directory is refused by name, not silently expanded',
+      () async {
+        final runner = _runner(
+          (_) => _lsOut(
+            'drwxrwx--- 2 root everybody 4096 2024-12-11 18:44 /sdcard/DCIM\n',
           ),
-        ),
-      );
-    });
+        );
+        final driver = _driver(AdbService(runner: runner, sdk: _sdk()));
+
+        await expectLater(
+          driver.pullFile(devicePath: '/sdcard/DCIM', hostPath: r'C:\x'),
+          throwsA(
+            isA<DeviceRefusal>().having(
+              (e) => e.message,
+              'message',
+              contains('one file at a time'),
+            ),
+          ),
+        );
+      },
+    );
   });
 
   group('what the iOS driver says it cannot do', () {

@@ -73,9 +73,11 @@ class ListMessage extends HostMessage {
   final int requestId;
 
   @override
-  Frame toFrame() => Frame(MessageType.list, 0, (WireWriter()..u32(requestId)).take());
+  Frame toFrame() =>
+      Frame(MessageType.list, 0, (WireWriter()..u32(requestId)).take());
 
-  static ListMessage decode(Frame frame) => ListMessage(WireReader(frame.payload).u32());
+  static ListMessage decode(Frame frame) =>
+      ListMessage(WireReader(frame.payload).u32());
 }
 
 class OpenMessage extends HostMessage {
@@ -176,7 +178,8 @@ class InputMessage extends HostMessage {
   @override
   Frame toFrame() => Frame(MessageType.input, sessionRef, bytes);
 
-  static InputMessage decode(Frame frame) => InputMessage(frame.sessionRef, frame.payload);
+  static InputMessage decode(Frame frame) =>
+      InputMessage(frame.sessionRef, frame.payload);
 }
 
 class ResizeMessage extends HostMessage {
@@ -186,8 +189,14 @@ class ResizeMessage extends HostMessage {
   final int rows;
 
   @override
-  Frame toFrame() =>
-      Frame(MessageType.resize, sessionRef, (WireWriter()..u16(columns)..u16(rows)).take());
+  Frame toFrame() => Frame(
+    MessageType.resize,
+    sessionRef,
+    (WireWriter()
+          ..u16(columns)
+          ..u16(rows))
+        .take(),
+  );
 
   static ResizeMessage decode(Frame frame) {
     final r = WireReader(frame.payload);
@@ -201,7 +210,11 @@ class ClaimMessage extends HostMessage {
   final int sessionRef;
 
   @override
-  Frame toFrame() => Frame(MessageType.claim, sessionRef, (WireWriter()..u32(requestId)).take());
+  Frame toFrame() => Frame(
+    MessageType.claim,
+    sessionRef,
+    (WireWriter()..u32(requestId)).take(),
+  );
 
   static ClaimMessage decode(Frame frame) =>
       ClaimMessage(WireReader(frame.payload).u32(), frame.sessionRef);
@@ -213,7 +226,11 @@ class ReleaseMessage extends HostMessage {
   final int sessionRef;
 
   @override
-  Frame toFrame() => Frame(MessageType.release, sessionRef, (WireWriter()..u32(requestId)).take());
+  Frame toFrame() => Frame(
+    MessageType.release,
+    sessionRef,
+    (WireWriter()..u32(requestId)).take(),
+  );
 
   static ReleaseMessage decode(Frame frame) =>
       ReleaseMessage(WireReader(frame.payload).u32(), frame.sessionRef);
@@ -345,8 +362,14 @@ class SessionsMessage extends HostMessage {
       final pid = r.u32();
       final columns = r.u16();
       final rowCount = r.u16();
-      final startedAt = DateTime.fromMicrosecondsSinceEpoch(r.u64(), isUtc: true);
-      final observedAt = DateTime.fromMicrosecondsSinceEpoch(r.u64(), isUtc: true);
+      final startedAt = DateTime.fromMicrosecondsSinceEpoch(
+        r.u64(),
+        isUtc: true,
+      );
+      final observedAt = DateTime.fromMicrosecondsSinceEpoch(
+        r.u64(),
+        isUtc: true,
+      );
       final total = r.u64();
       final first = r.u64();
       final holder = r.str();
@@ -455,8 +478,14 @@ class OutputMessage extends HostMessage {
   int get nextOffset => offset + bytes.length;
 
   @override
-  Frame toFrame() =>
-      Frame(MessageType.output, sessionRef, (WireWriter()..u64(offset)..rest(bytes)).take());
+  Frame toFrame() => Frame(
+    MessageType.output,
+    sessionRef,
+    (WireWriter()
+          ..u64(offset)
+          ..rest(bytes))
+        .take(),
+  );
 
   static OutputMessage decode(Frame frame) {
     final r = WireReader(frame.payload);
@@ -707,8 +736,14 @@ SessionLifecycle _readLifecycle(WireReader r) {
   final reason = r.str();
   return switch (tag) {
     0 => const SessionRunning(),
-    1 => SessionExited(code, DateTime.fromMillisecondsSinceEpoch(0, isUtc: true)),
-    _ => SessionEndedWithoutCode(DateTime.fromMillisecondsSinceEpoch(0, isUtc: true), reason),
+    1 => SessionExited(
+      code,
+      DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+    ),
+    _ => SessionEndedWithoutCode(
+      DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+      reason,
+    ),
   };
 }
 

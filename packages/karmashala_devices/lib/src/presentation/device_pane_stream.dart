@@ -80,8 +80,7 @@ Future<T> openOrRelease<T>({
   }
 }
 
-mixin _DeviceLiveStream
-    on ConsumerState<DevicePane>, WidgetsBindingObserver {
+mixin _DeviceLiveStream on ConsumerState<DevicePane>, WidgetsBindingObserver {
   Player? _player;
   VideoController? _video;
   DeviceStreamSession? _session;
@@ -396,14 +395,16 @@ mixin _DeviceLiveStream
       });
       // Offered on every start, not only when a recording is running: only
       // the recorder knows whether one is open and wants the frames.
-      ref.read(deviceRecordingProvider.notifier).offerLiveView(
-        LiveViewRecordingSource(
-          target: AndroidTarget(device),
-          openTransportStream: session.openTransportStream,
-          openAccessUnits: session.openAccessUnits,
-          geometryChanges: session.videoSizeChanges,
-        ),
-      );
+      ref
+          .read(deviceRecordingProvider.notifier)
+          .offerLiveView(
+            LiveViewRecordingSource(
+              target: AndroidTarget(device),
+              openTransportStream: session.openTransportStream,
+              openAccessUnits: session.openAccessUnits,
+              geometryChanges: session.videoSizeChanges,
+            ),
+          );
       // After the frame that shows the new picture, never before: disposing a
       // player whose texture is still on screen is how a live view flashes.
       WidgetsBinding.instance.addPostFrameCallback(
@@ -594,11 +595,7 @@ mixin _DeviceLiveStream
       setState(
         () => _keyboardSink = _observedKeys(
           session,
-          AdbKeyboardSink(
-            adb: adb,
-            serial: serial,
-            onError: _onAdbInputError,
-          ),
+          AdbKeyboardSink(adb: adb, serial: serial, onError: _onAdbInputError),
         ),
       );
     }

@@ -438,8 +438,7 @@ class FakeCompanionGateway implements CompanionGateway {
     );
     _pairing.value = paired;
     _connections.value = List.unmodifiable([
-      for (final c in _connections.value)
-        c.copyWith(active: false),
+      for (final c in _connections.value) c.copyWith(active: false),
       CompanionConnection(
         hostId: hostId,
         name: hostName,
@@ -819,12 +818,15 @@ class FakeCompanionGateway implements CompanionGateway {
   }
 
   /// Every [answerQuestion], in order.
-  final answeredQuestions = <({
-    String sessionId,
-    String approvalId,
-    List<RemoteQuestionAnswer> answers,
-    bool decline,
-  })>[];
+  final answeredQuestions =
+      <
+        ({
+          String sessionId,
+          String approvalId,
+          List<RemoteQuestionAnswer> answers,
+          bool decline,
+        })
+      >[];
 
   @override
   Future<void> answerMenu(
@@ -872,9 +874,7 @@ class FakeCompanionGateway implements CompanionGateway {
     final failure = usageFailure;
     if (failure != null) throw failure;
     if (!capabilities.has(Capability.viewUsage)) {
-      throw const GatewayException(
-        'this device was not granted view_usage',
-      );
+      throw const GatewayException('this device was not granted view_usage');
     }
     return usageSnapshot;
   }

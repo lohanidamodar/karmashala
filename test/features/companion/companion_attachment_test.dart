@@ -38,7 +38,10 @@ FakeCompanionGateway _gateway({
   transcripts: const {'s1': []},
 );
 
-Future<void> _openSession(WidgetTester tester, FakeCompanionGateway gateway) async {
+Future<void> _openSession(
+  WidgetTester tester,
+  FakeCompanionGateway gateway,
+) async {
   await tester.pumpWidget(
     buildPhoneApp(
       gateway: gateway,
@@ -50,8 +53,9 @@ Future<void> _openSession(WidgetTester tester, FakeCompanionGateway gateway) asy
 
 void main() {
   group('the button is only there when the host said what it would take', () {
-    testWidgets('offered for a session whose agent reads a picture',
-        (tester) async {
+    testWidgets('offered for a session whose agent reads a picture', (
+      tester,
+    ) async {
       await _openSession(tester, _gateway());
 
       expect(
@@ -63,7 +67,9 @@ void main() {
       );
     });
 
-    testWidgets('absent for an agent that cannot be handed one', (tester) async {
+    testWidgets('absent for an agent that cannot be handed one', (
+      tester,
+    ) async {
       await _openSession(
         tester,
         _gateway(
@@ -86,8 +92,9 @@ void main() {
       );
     });
 
-    testWidgets('absent for a pairing that was never granted the bit',
-        (tester) async {
+    testWidgets('absent for a pairing that was never granted the bit', (
+      tester,
+    ) async {
       await _openSession(
         tester,
         _gateway(
@@ -100,7 +107,8 @@ void main() {
       expect(
         find.byTooltip('Attach a file'),
         findsNothing,
-        reason: 'a phone paired before this existed is refused for ever, and '
+        reason:
+            'a phone paired before this existed is refused for ever, and '
             'should not be offered a picker it will be refused on',
       );
     });
@@ -112,9 +120,8 @@ void main() {
     Future<XFile?> Function(List<XTypeGroup>) picking(XFile? file) =>
         (_) async => file;
 
-    Future<
-      List<({String text, CompanionOutgoingAttachment? attachment})>
-    > pumpComposer(
+    Future<List<({String text, CompanionOutgoingAttachment? attachment})>>
+    pumpComposer(
       WidgetTester tester,
       XFile? chosen, {
       RemoteAttachmentSupport? support = _takesImages,
@@ -146,8 +153,9 @@ void main() {
       return sent;
     }
 
-    testWidgets('the chosen file is named above the box, with its size',
-        (tester) async {
+    testWidgets('the chosen file is named above the box, with its size', (
+      tester,
+    ) async {
       await pumpComposer(
         tester,
         // `path` as well as `name`: on io, XFile takes its name from the path.
@@ -166,8 +174,9 @@ void main() {
       expect(find.byTooltip('Remove'), findsOneWidget);
     });
 
-    testWidgets('a file with no words is still something to send',
-        (tester) async {
+    testWidgets('a file with no words is still something to send', (
+      tester,
+    ) async {
       final sent = await pumpComposer(
         tester,
         XFile.fromData(Uint8List(64), name: 'shot.png', path: 'shot.png'),
@@ -206,8 +215,9 @@ void main() {
       expect(sent, isEmpty, reason: 'nothing left to send');
     });
 
-    testWidgets('a type the desktop did not name is refused here, not sent',
-        (tester) async {
+    testWidgets('a type the desktop did not name is refused here, not sent', (
+      tester,
+    ) async {
       final sent = await pumpComposer(
         tester,
         XFile.fromData(Uint8List(64), name: 'note.m4a', path: 'note.m4a'),
@@ -225,8 +235,9 @@ void main() {
       expect(sent, isEmpty);
     });
 
-    testWidgets('a file over the desktop\'s cap never leaves the phone',
-        (tester) async {
+    testWidgets('a file over the desktop\'s cap never leaves the phone', (
+      tester,
+    ) async {
       final sent = await pumpComposer(
         tester,
         XFile.fromData(Uint8List(1024), name: 'huge.png', path: 'huge.png'),
@@ -258,37 +269,37 @@ void main() {
     });
   });
 
-  testWidgets('the phone is told a file was left in the desktop\'s box, not sent',
-      (tester) async {
-    final gateway = _gateway();
-    await _openSession(tester, gateway);
+  testWidgets(
+    'the phone is told a file was left in the desktop\'s box, not sent',
+    (tester) async {
+      final gateway = _gateway();
+      await _openSession(tester, gateway);
 
-    // Straight through the gateway, which is the seam the screen's snackbar
-    // hangs off: the fake answers `offered` for anything carrying a file.
-    final delivery = await gateway.sendPrompt(
-      's1',
-      'look at this',
-      attachment: CompanionOutgoingAttachment(
-        name: 'shot.png',
-        mediaType: 'image/png',
-        bytes: Uint8List(64),
-      ),
-    );
+      // Straight through the gateway, which is the seam the screen's snackbar
+      // hangs off: the fake answers `offered` for anything carrying a file.
+      final delivery = await gateway.sendPrompt(
+        's1',
+        'look at this',
+        attachment: CompanionOutgoingAttachment(
+          name: 'shot.png',
+          mediaType: 'image/png',
+          bytes: Uint8List(64),
+        ),
+      );
 
-    expect(delivery, RemotePromptDelivery.offered);
-    expect(
-      gateway.sentAttachments.single?.name,
-      'shot.png',
-    );
-    expect(
-      gateway.sentPrompts.single.text,
-      'look at this',
-      reason: 'the words go with the file, in one prompt',
-    );
-  });
+      expect(delivery, RemotePromptDelivery.offered);
+      expect(gateway.sentAttachments.single?.name, 'shot.png');
+      expect(
+        gateway.sentPrompts.single.text,
+        'look at this',
+        reason: 'the words go with the file, in one prompt',
+      );
+    },
+  );
 
-  testWidgets('progress is counted in slices the host acknowledged',
-      (tester) async {
+  testWidgets('progress is counted in slices the host acknowledged', (
+    tester,
+  ) async {
     final gateway = _gateway();
     final steps = <(int, int)>[];
 

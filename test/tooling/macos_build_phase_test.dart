@@ -55,7 +55,11 @@ void main() {
       );
       // Present locally is not enough: an ignored file is absent for everyone
       // else, which is exactly how this broke.
-      final tracked = Process.runSync('git', ['ls-files', '--error-unmatch', path]);
+      final tracked = Process.runSync('git', [
+        'ls-files',
+        '--error-unmatch',
+        path,
+      ]);
       expect(
         tracked.exitCode,
         0,

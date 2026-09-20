@@ -110,20 +110,23 @@ void main() {
       expect(ByteData.sublistView(bytes).getUint32(secondAt + 1), 100);
     });
 
-    test('a dead socket tells the caller instead of dropping the key', () async {
-      final wire = await _Wire.open();
-      var dropped = false;
-      final connection = ScrcpyControlConnection(wire.client);
-      final sink = ScrcpyKeyboardSink(
-        connection: connection,
-        onDropped: () => dropped = true,
-      );
-      await connection.close();
-      await wire.close();
+    test(
+      'a dead socket tells the caller instead of dropping the key',
+      () async {
+        final wire = await _Wire.open();
+        var dropped = false;
+        final connection = ScrcpyControlConnection(wire.client);
+        final sink = ScrcpyKeyboardSink(
+          connection: connection,
+          onDropped: () => dropped = true,
+        );
+        await connection.close();
+        await wire.close();
 
-      expect(sink.send(const DeviceTextIntent('x')), isFalse);
-      expect(dropped, isTrue);
-    });
+        expect(sink.send(const DeviceTextIntent('x')), isFalse);
+        expect(dropped, isTrue);
+      },
+    );
 
     test('reports itself as the continuous transport', () async {
       final wire = await _Wire.open();
@@ -147,45 +150,52 @@ void main() {
       expect(sink.send(const DeviceTextIntent('a b')), isTrue);
       await _settle();
 
-      expect(
-        runner.requests.single.arguments,
-        ['-s', 'emulator-5554', 'shell', 'input', 'text', 'a%sb'],
-      );
-    });
-
-    test('a key press goes through `input keyevent`, once, on the down', () async {
-      // `input keyevent` synthesises a whole press. Sending it again on the up
-      // would type the key twice.
-      final runner = FakeCommandRunner();
-      final sink = AdbKeyboardSink(
-        adb: AdbService(runner: runner, sdk: _sdk()),
-        serial: 'emulator-5554',
-      );
-
-      sink.send(
-        const DeviceKeycodeIntent(
-          action: AndroidKeyAction.down,
-          keyCode: AndroidKeyCode.del,
-        ),
-      );
-      sink.send(
-        const DeviceKeycodeIntent(
-          action: AndroidKeyAction.up,
-          keyCode: AndroidKeyCode.del,
-        ),
-      );
-      await _settle();
-
-      expect(runner.requests, hasLength(1));
       expect(runner.requests.single.arguments, [
         '-s',
         'emulator-5554',
         'shell',
         'input',
-        'keyevent',
-        '${AndroidKeyCode.del}',
+        'text',
+        'a%sb',
       ]);
     });
+
+    test(
+      'a key press goes through `input keyevent`, once, on the down',
+      () async {
+        // `input keyevent` synthesises a whole press. Sending it again on the up
+        // would type the key twice.
+        final runner = FakeCommandRunner();
+        final sink = AdbKeyboardSink(
+          adb: AdbService(runner: runner, sdk: _sdk()),
+          serial: 'emulator-5554',
+        );
+
+        sink.send(
+          const DeviceKeycodeIntent(
+            action: AndroidKeyAction.down,
+            keyCode: AndroidKeyCode.del,
+          ),
+        );
+        sink.send(
+          const DeviceKeycodeIntent(
+            action: AndroidKeyAction.up,
+            keyCode: AndroidKeyCode.del,
+          ),
+        );
+        await _settle();
+
+        expect(runner.requests, hasLength(1));
+        expect(runner.requests.single.arguments, [
+          '-s',
+          'emulator-5554',
+          'shell',
+          'input',
+          'keyevent',
+          '${AndroidKeyCode.del}',
+        ]);
+      },
+    );
 
     test('a modifier chord is refused out loud, not sent bare', () async {
       // `input keyevent` has no meta state at all. Sending KEYCODE_A alone for
@@ -214,27 +224,30 @@ void main() {
       expect(refused.single.keyCode, AndroidKeyCode.a);
     });
 
-    test('a shift chord still goes, because the character carries it', () async {
-      // Shift alone is expressible: the printable path already produced the
-      // shifted character, and a shifted navigation key is a selection.
-      final runner = FakeCommandRunner();
-      final sink = AdbKeyboardSink(
-        adb: AdbService(runner: runner, sdk: _sdk()),
-        serial: 'emulator-5554',
-      );
-      expect(
-        sink.send(
-          const DeviceKeycodeIntent(
-            action: AndroidKeyAction.down,
-            keyCode: AndroidKeyCode.dpadLeft,
-            metaState: AndroidMetaState.shiftOn,
+    test(
+      'a shift chord still goes, because the character carries it',
+      () async {
+        // Shift alone is expressible: the printable path already produced the
+        // shifted character, and a shifted navigation key is a selection.
+        final runner = FakeCommandRunner();
+        final sink = AdbKeyboardSink(
+          adb: AdbService(runner: runner, sdk: _sdk()),
+          serial: 'emulator-5554',
+        );
+        expect(
+          sink.send(
+            const DeviceKeycodeIntent(
+              action: AndroidKeyAction.down,
+              keyCode: AndroidKeyCode.dpadLeft,
+              metaState: AndroidMetaState.shiftOn,
+            ),
           ),
-        ),
-        isTrue,
-      );
-      await _settle();
-      expect(runner.requests, hasLength(1));
-    });
+          isTrue,
+        );
+        await _settle();
+        expect(runner.requests, hasLength(1));
+      },
+    );
 
     test('reports itself as the transport that cannot carry modifiers', () {
       final sink = AdbKeyboardSink(

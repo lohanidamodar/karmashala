@@ -195,9 +195,7 @@ void main() {
     final channel = tester.widget<DropdownButton<String?>>(
       find.byType(DropdownButton<String?>),
     );
-    final theme = Theme.of(
-      tester.element(find.byType(DropdownButton<Level>)),
-    );
+    final theme = Theme.of(tester.element(find.byType(DropdownButton<Level>)));
     expect(level.iconSize, Chrome.icon);
     expect(channel.iconSize, Chrome.icon);
     expect(level.style, theme.textTheme.labelSmall);

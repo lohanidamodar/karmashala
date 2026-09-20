@@ -55,7 +55,9 @@ void main() {
     });
 
     test('a junk port reads back as the default', () {
-      final restored = Settings.fromJson(const {'localRelayPort': 'yes please'});
+      final restored = Settings.fromJson(const {
+        'localRelayPort': 'yes please',
+      });
       expect(restored.localRelayPort, 8787);
     });
 

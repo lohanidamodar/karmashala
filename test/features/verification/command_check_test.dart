@@ -32,15 +32,17 @@ void main() {
     producedBySessionId: sessionId,
   );
 
-  test('exit 0 is a pass, and the run is closed the moment it is written',
-      () async {
-    final run = await record();
-    expect(run.verdict, VerificationVerdict.pass);
-    expect(run.isOpen, isFalse);
-    expect(run.startedAt, startedAt);
-    expect(run.finishedAt, isNotNull);
-    expect(run.reason, contains('passed'));
-  });
+  test(
+    'exit 0 is a pass, and the run is closed the moment it is written',
+    () async {
+      final run = await record();
+      expect(run.verdict, VerificationVerdict.pass);
+      expect(run.isOpen, isFalse);
+      expect(run.startedAt, startedAt);
+      expect(run.finishedAt, isNotNull);
+      expect(run.reason, contains('passed'));
+    },
+  );
 
   test('a non-zero exit is a fail, and the code is in the reason', () async {
     final run = await record(exitCode: 3);

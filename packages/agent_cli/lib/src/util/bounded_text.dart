@@ -35,7 +35,10 @@ const int kMaxTranscriptTextBytes = 64 * 1024;
 ///
 /// Returns the receiver itself when nothing needs taking, so the overwhelming
 /// majority of messages cost one length check and no copy.
-(String, bool) boundedText(String text, {int maxBytes = kMaxTranscriptTextBytes}) {
+(String, bool) boundedText(
+  String text, {
+  int maxBytes = kMaxTranscriptTextBytes,
+}) {
   // Cheap reject first: one UTF-8 byte per code unit is the floor, so any
   // string this short is under the bound whatever it contains.
   if (text.length <= maxBytes ~/ 4) return (text, false);

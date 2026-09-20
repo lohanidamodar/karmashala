@@ -36,7 +36,10 @@ class CodexAppServers {
 
   /// The app-server for [environmentId], or `null` when there is no Codex there.
   /// [storeHome] is checked against `initialize`, so a rename cannot go astray.
-  CodexAppServerClient? forEnvironment(String environmentId, {String? storeHome}) {
+  CodexAppServerClient? forEnvironment(
+    String environmentId, {
+    String? storeHome,
+  }) {
     final cached = _byEnvironment[environmentId];
     if (cached != null) return cached;
 

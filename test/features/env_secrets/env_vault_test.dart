@@ -81,15 +81,17 @@ void main() {
       expect(data.problem, isNull);
     });
 
-    test('the directory is created and hardened before anything is read',
-        () async {
-      final permissions = _FakePermissions();
-      await vaultIn(temp, permissions: permissions).load();
+    test(
+      'the directory is created and hardened before anything is read',
+      () async {
+        final permissions = _FakePermissions();
+        await vaultIn(temp, permissions: permissions).load();
 
-      final dir = Directory(p.join(temp.path, EnvVault.directoryName));
-      expect(dir.existsSync(), isTrue);
-      expect(permissions.restrictedDirectories, [dir.path]);
-    });
+        final dir = Directory(p.join(temp.path, EnvVault.directoryName));
+        expect(dir.existsSync(), isTrue);
+        expect(permissions.restrictedDirectories, [dir.path]);
+      },
+    );
 
     test('a round trip returns the same variables', () async {
       final vault = vaultIn(temp);
@@ -135,83 +137,89 @@ void main() {
       expect(data.problem, isNotNull);
     });
 
-    test('a vault written with an unknown cipher is refused, not guessed at',
-        () async {
-      final dir = Directory(p.join(temp.path, EnvVault.directoryName))
-        ..createSync(recursive: true);
-      await File(p.join(dir.path, EnvVault.fileName)).writeAsString(
-        jsonEncode({
-          'version': 1,
-          'enabled': true,
-          'enc': 'some-future-cipher',
-          'variables': [
-            {'id': 'v1', 'name': 'TOKEN', 'secret': true, 'value': 'zzzz'},
-          ],
-        }),
-      );
+    test(
+      'a vault written with an unknown cipher is refused, not guessed at',
+      () async {
+        final dir = Directory(p.join(temp.path, EnvVault.directoryName))
+          ..createSync(recursive: true);
+        await File(p.join(dir.path, EnvVault.fileName)).writeAsString(
+          jsonEncode({
+            'version': 1,
+            'enabled': true,
+            'enc': 'some-future-cipher',
+            'variables': [
+              {'id': 'v1', 'name': 'TOKEN', 'secret': true, 'value': 'zzzz'},
+            ],
+          }),
+        );
 
-      final data = await vaultIn(temp).load();
-      expect(data.variables, isEmpty);
-      expect(data.problem, contains('different version'));
-    });
+        final data = await vaultIn(temp).load();
+        expect(data.variables, isEmpty);
+        expect(data.problem, contains('different version'));
+      },
+    );
 
-    test('one malformed record does not take the rest of the vault down',
-        () async {
-      final dir = Directory(p.join(temp.path, EnvVault.directoryName))
-        ..createSync(recursive: true);
-      await File(p.join(dir.path, EnvVault.fileName)).writeAsString(
-        jsonEncode({
-          'version': 1,
-          'enabled': true,
-          'enc': 'none',
-          'variables': [
-            // Readable, but not a valid variable: the name starts with a
-            // digit. Deliberately *decryptable* — a record that will not
-            // decrypt is the lost-key case and has the opposite behaviour
-            // (see local_key_cipher_test.dart).
-            {
-              'id': 'bad',
-              'name': '9NOT VALID',
-              'value': base64.encode(utf8.encode('x')),
-            },
-            {
-              'id': 'good',
-              'name': 'KEEP_ME',
-              'secret': false,
-              'value': base64.encode(utf8.encode('kept')),
-            },
-          ],
-        }),
-      );
+    test(
+      'one malformed record does not take the rest of the vault down',
+      () async {
+        final dir = Directory(p.join(temp.path, EnvVault.directoryName))
+          ..createSync(recursive: true);
+        await File(p.join(dir.path, EnvVault.fileName)).writeAsString(
+          jsonEncode({
+            'version': 1,
+            'enabled': true,
+            'enc': 'none',
+            'variables': [
+              // Readable, but not a valid variable: the name starts with a
+              // digit. Deliberately *decryptable* — a record that will not
+              // decrypt is the lost-key case and has the opposite behaviour
+              // (see local_key_cipher_test.dart).
+              {
+                'id': 'bad',
+                'name': '9NOT VALID',
+                'value': base64.encode(utf8.encode('x')),
+              },
+              {
+                'id': 'good',
+                'name': 'KEEP_ME',
+                'secret': false,
+                'value': base64.encode(utf8.encode('kept')),
+              },
+            ],
+          }),
+        );
 
-      final data = await vaultIn(temp).load();
-      expect(data.variables.map((v) => v.name), ['KEEP_ME']);
-      expect(data.problem, isNull);
-    });
+        final data = await vaultIn(temp).load();
+        expect(data.variables.map((v) => v.name), ['KEEP_ME']);
+        expect(data.problem, isNull);
+      },
+    );
   });
 
   group('fail-closed', () {
-    test('a secret is refused when the directory ACL was not applied',
-        () async {
-      final vault = vaultIn(
-        temp,
-        permissions: _FakePermissions(directoryOk: false),
-      );
-      final data = await vault.load();
-      expect(data.canStoreSecrets, isFalse);
+    test(
+      'a secret is refused when the directory ACL was not applied',
+      () async {
+        final vault = vaultIn(
+          temp,
+          permissions: _FakePermissions(directoryOk: false),
+        );
+        final data = await vault.load();
+        expect(data.canStoreSecrets, isFalse);
 
-      await expectLater(
-        vault.save(EnvVaultData(variables: [_variable()])),
-        throwsA(isA<EnvVaultRefusal>()),
-      );
-      expect(
-        File(
-          p.join(temp.path, EnvVault.directoryName, EnvVault.fileName),
-        ).existsSync(),
-        isFalse,
-        reason: 'nothing may be written when the secret was refused',
-      );
-    });
+        await expectLater(
+          vault.save(EnvVaultData(variables: [_variable()])),
+          throwsA(isA<EnvVaultRefusal>()),
+        );
+        expect(
+          File(
+            p.join(temp.path, EnvVault.directoryName, EnvVault.fileName),
+          ).existsSync(),
+          isFalse,
+          reason: 'nothing may be written when the secret was refused',
+        );
+      },
+    );
 
     test('a plain variable still saves when the ACL was not applied', () async {
       final vault = vaultIn(
@@ -221,9 +229,7 @@ void main() {
       await vault.load();
       final saved = await vault.save(
         EnvVaultData(
-          variables: [
-            _variable(name: 'EDITOR', value: 'nvim', secret: false),
-          ],
+          variables: [_variable(name: 'EDITOR', value: 'nvim', secret: false)],
         ),
       );
 
@@ -266,27 +272,28 @@ void main() {
       await vault.save(EnvVaultData(variables: [_variable()]));
 
       final dir = Directory(p.join(temp.path, EnvVault.directoryName));
-      expect(
-        dir.listSync().map((e) => p.basename(e.path)),
-        [EnvVault.fileName],
-      );
+      expect(dir.listSync().map((e) => p.basename(e.path)), [
+        EnvVault.fileName,
+      ]);
     });
 
-    test('a removed variable is gone from the file, not just from memory',
-        () async {
-      final vault = vaultIn(temp);
-      await vault.load();
-      await vault.save(EnvVaultData(variables: [_variable()]));
-      await vault.save(const EnvVaultData());
+    test(
+      'a removed variable is gone from the file, not just from memory',
+      () async {
+        final vault = vaultIn(temp);
+        await vault.load();
+        await vault.save(EnvVaultData(variables: [_variable()]));
+        await vault.save(const EnvVaultData());
 
-      final raw = await File(
-        p.join(temp.path, EnvVault.directoryName, EnvVault.fileName),
-      ).readAsString();
-      expect(raw, isNot(contains('super-secret-value')));
-      expect(
-        raw,
-        isNot(contains(base64.encode(utf8.encode('super-secret-value')))),
-      );
-    });
+        final raw = await File(
+          p.join(temp.path, EnvVault.directoryName, EnvVault.fileName),
+        ).readAsString();
+        expect(raw, isNot(contains('super-secret-value')));
+        expect(
+          raw,
+          isNot(contains(base64.encode(utf8.encode('super-secret-value')))),
+        );
+      },
+    );
   });
 }

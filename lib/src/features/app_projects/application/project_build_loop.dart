@@ -69,7 +69,9 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
   Future<({ProjectReading? project, String? note})> scan(
     EnvironmentPath project,
   ) async {
-    final resolution = ref.read(environmentResolverProvider).resolveFor(project);
+    final resolution = ref
+        .read(environmentResolverProvider)
+        .resolveFor(project);
     final environment = resolution.environment;
     if (environment == null) {
       return (project: null, note: resolution.reason);
@@ -84,14 +86,16 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
     ProjectTarget target,
   ) async {
     const empty = <String>[];
-    final resolution = ref.read(environmentResolverProvider).resolveFor(project);
+    final resolution = ref
+        .read(environmentResolverProvider)
+        .resolveFor(project);
     final environment = resolution.environment;
     if (environment == null) {
       return (
         preflight: ProjectBuildPreflight.blocked(
           ProjectBuildProblem.environmentUnresolved,
           '${resolution.reason}. Pick the checkout in Karmashala, or record '
-              'the environment it belongs to, before building in it.',
+          'the environment it belongs to, before building in it.',
         ),
         environment: null,
         project: null,
@@ -127,8 +131,8 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
         preflight: ProjectBuildPreflight.blocked(
           ProjectBuildProblem.noDescriptor,
           'This is a ${reading.kind.label} project and Karmashala can only '
-              'spot it. There is no build command for that kind here, because '
-              'nobody has run its toolchain from this app.',
+          'spot it. There is no build command for that kind here, because '
+          'nobody has run its toolchain from this app.',
         ),
         environment: environment,
         project: reading,
@@ -143,8 +147,8 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
         preflight: ProjectBuildPreflight.blocked(
           ProjectBuildProblem.targetUnknown,
           'A ${reading.kind.label} project has no ${target.label} build in '
-              'this app. Its targets are '
-              '${descriptor.builds.map((b) => b.target.label).join(', ')}.',
+          'this app. Its targets are '
+          '${descriptor.builds.map((b) => b.target.label).join(', ')}.',
         ),
         environment: environment,
         project: reading,
@@ -193,11 +197,11 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
             preflight: ProjectBuildPreflight.blocked(
               ProjectBuildProblem.noWrapper,
               '${project.path} has no Gradle wrapper — no '
-                  '${usesWindowsPaths(environment.kind) ? 'gradlew.bat' : 'gradlew'} '
-                  'beside its settings script — so there is nothing in the '
-                  'project to build with. Karmashala will not fall back to a '
-                  'gradle on PATH: that would build with a different Gradle '
-                  'than the project pins. Run "gradle wrapper" in it once.',
+              '${usesWindowsPaths(environment.kind) ? 'gradlew.bat' : 'gradlew'} '
+              'beside its settings script — so there is nothing in the '
+              'project to build with. Karmashala will not fall back to a '
+              'gradle on PATH: that would build with a different Gradle '
+              'than the project pins. Run "gradle wrapper" in it once.',
             ),
             environment: environment,
             project: reading,
@@ -233,8 +237,8 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
         preflight: ProjectBuildPreflight.blocked(
           ProjectBuildProblem.noApplicationModule,
           '${project.path} includes no module applying '
-              'com.android.application, so there is no app to assemble. A '
-              'library-only build has nothing to install on a device.',
+          'com.android.application, so there is no app to assemble. A '
+          'library-only build has nothing to install on a device.',
         ),
         environment: environment,
         project: reading,
@@ -248,7 +252,10 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
       environment: environment,
       project: reading,
       spec: spec,
-      argv: <String>[executable, ...spec.commandFor(module: module)!],
+      argv: <String>[
+        executable,
+        ...spec.commandFor(module: module)!,
+      ],
     );
   }
 
@@ -269,9 +276,9 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
         preflight: ProjectBuildPreflight.blocked(
           ProjectBuildProblem.alreadyRunning,
           'A ${target.label} build for ${project.path} is already running in '
-              'pane ${live.paneId}. Wait for it rather than starting a second '
-              'one: two builds writing the same build/ directory is how a '
-              'half-written artifact gets installed.',
+          'pane ${live.paneId}. Wait for it rather than starting a second '
+          'one: two builds writing the same build/ directory is how a '
+          'half-written artifact gets installed.',
         ),
         run: null,
       );
@@ -308,8 +315,8 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
         preflight: ProjectBuildPreflight.blocked(
           ProjectBuildProblem.noPane,
           'There is no terminal in this window to run "${argv.join(' ')}" in, '
-              'so it was not run. Running a build out of sight is the failure '
-              'this feature exists to remove — see CLAUDE.md §17.',
+          'so it was not run. Running a build out of sight is the failure '
+          'this feature exists to remove — see CLAUDE.md §17.',
         ),
         run: null,
       );
@@ -377,7 +384,10 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
       );
     }
     return (
-      path: scanner.absolutePathOf(directory, '${run.artifactDirectory}/$fileName'),
+      path: scanner.absolutePathOf(
+        directory,
+        '${run.artifactDirectory}/$fileName',
+      ),
       applicationId: reading?.applicationId,
       note: reading == null
           ? 'Found by name. output-metadata.json is not beside it, so the '
@@ -459,10 +469,13 @@ class ProjectBuildController extends Notifier<List<ProjectBuildRun>> {
     return entries.contains('gradlew') ? './gradlew' : null;
   }
 
-  ProjectScanner _scannerFor(ExecutionEnvironment environment) => ProjectScanner(
-    runner: ref.read(commandRunnerFactoryProvider).forEnvironment(environment),
-    kind: environment.kind,
-  );
+  ProjectScanner _scannerFor(ExecutionEnvironment environment) =>
+      ProjectScanner(
+        runner: ref
+            .read(commandRunnerFactoryProvider)
+            .forEnvironment(environment),
+        kind: environment.kind,
+      );
 
   /// Two spellings of the same directory, compared as the filesystem would.
   static bool _sameDirectory(String a, String b) =>

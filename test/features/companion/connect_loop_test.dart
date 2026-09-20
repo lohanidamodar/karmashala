@@ -16,8 +16,7 @@ import 'dart:async';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala_remote/client.dart'
-    as stored;
+import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/pairing.dart' hide PairingException;
@@ -205,141 +204,152 @@ void main() {
 
   Future<RemoteCompanionGateway> pairedPhone({LanPathScout? scout}) async {
     final gateway = makeGateway(scout: scout);
-    final session = await service!.beginPairing(capabilities: CapabilitySet.all);
+    final session = await service!.beginPairing(
+      capabilities: CapabilitySet.all,
+    );
     await gateway.pairWithQr(session.payload.encode());
     await session.done;
     await awaitLink(gateway, CompanionLinkState.connected);
     return gateway;
   }
 
-  test('a link that dies while it is still coming up is re-dialled, not '
-      'parked on for ever', timeout: const Timeout(Duration(minutes: 3)),
-      () async {
-    await startService();
-    final gateway = await pairedPhone();
+  test(
+    'a link that dies while it is still coming up is re-dialled, not '
+    'parked on for ever',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
 
-    var arming = false;
-    var killed = false;
-    // Completes when the desktop is really gone, not merely on its way out:
-    // the restart below must not overwrite `service` from under the stop that
-    // is still running.
-    final killDone = Completer<void>();
-    // Every state the phone published, in order. The re-dial below is asserted
-    // against this rather than against a clock.
-    final seen = <CompanionLinkState>[];
-    int cameUp() => seen.where((s) => s == CompanionLinkState.connected).length;
-    final watch = gateway.linkStates.listen((state) {
-      seen.add(state);
-      if (state != CompanionLinkState.connected || !arming || killed) return;
-      killed = true;
-      // The window opens here and is HELD open. The loop has said `connected`
-      // and its next awaited work is writing the host's greeting down; with
-      // every write blocked it cannot get past that to the completer a death
-      // would land on, however long the kill below takes.
+      var arming = false;
+      var killed = false;
+      // Completes when the desktop is really gone, not merely on its way out:
+      // the restart below must not overwrite `service` from under the stop that
+      // is still running.
+      final killDone = Completer<void>();
+      // Every state the phone published, in order. The re-dial below is asserted
+      // against this rather than against a clock.
+      final seen = <CompanionLinkState>[];
+      int cameUp() =>
+          seen.where((s) => s == CompanionLinkState.connected).length;
+      final watch = gateway.linkStates.listen((state) {
+        seen.add(state);
+        if (state != CompanionLinkState.connected || !arming || killed) return;
+        killed = true;
+        // The window opens here and is HELD open. The loop has said `connected`
+        // and its next awaited work is writing the host's greeting down; with
+        // every write blocked it cannot get past that to the completer a death
+        // would land on, however long the kill below takes.
+        store.gate = Completer<void>();
+        // Inside the window: the desktop goes away and the socket bounces, so
+        // the phone's re-proof finds nobody and declares the link dead — with
+        // nothing yet in existence for that death to land on.
+        unawaited(() async {
+          await service?.stop();
+          service = null;
+          await phoneTransports.last.abort();
+          killDone.complete();
+        }());
+      });
+      addTearDown(watch.cancel);
+
+      // Force a fresh pass through that window.
+      await service!.stop();
+      service = null;
+      await awaitLink(gateway, CompanionLinkState.disconnected);
+      // A relay set the phone has not seen before, so the host's greeting
+      // really does have to be written down — which is the awaited keystore
+      // work the loop used to lose deaths behind.
+      arming = true;
+      await startService(localRelayUrl: Uri.parse('ws://127.0.0.1:1'));
+
+      // Three facts, each awaited: the phone got there, the desktop is down,
+      // and the loop is standing in the window rather than past it. The last is
+      // what a `writeCost` window could never assert — it hoped.
+      await until(() => killed, reason: 'the phone reaches connected again');
+      await killDone.future;
+      await until(
+        () => store.gated > 0,
+        reason: 'the loop is inside the write the death has to land under',
+      );
+
+      // How many times the link had come up when the death was handed over.
+      final cameUpAtDeath = cameUp();
+      store.gate!.complete();
+      store.gate = null;
+      await until(
+        () => gateway.link != CompanionLinkState.connected,
+        reason: 'the phone acts on the death it was handed mid-dial',
+      );
+
+      // The desktop comes back. Nobody touches the phone: it must re-dial on
+      // its own, exactly as it does after any other outage.
+      await startService(localRelayUrl: Uri.parse('ws://127.0.0.1:2'));
+      await awaitLink(gateway, CompanionLinkState.connected);
+      // The second coming-up, counted — not `awaitLink` alone, which seeds the
+      // state the phone is already in and would be answered by the link that
+      // died. Whether the loop re-dialled or the transport healed itself is the
+      // transport's business; that the phone got back up after a death nothing
+      // was waiting for is this test's.
+      expect(
+        cameUp(),
+        greaterThan(cameUpAtDeath),
+        reason: 'the link came up again; it did not park on a death it lost',
+      );
+      expect((await gateway.listSessions()).single.id, 's1');
+    },
+  );
+
+  test(
+    'a dial answered after its link was torn down is dropped, not adopted',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      // Pair, then let that gateway go: the record it leaves on the phone's
+      // disk is what the next one wakes up dialling, which is where the window
+      // this test stands in opens.
+      final first = await pairedPhone();
+      await first.close();
+
+      // Every keystore write now blocks. The first one a fresh gateway makes is
+      // the generation counter its dial persists AFTER the host has answered
+      // the hello — the one stretch of a dial that cannot be cancelled.
       store.gate = Completer<void>();
-      // Inside the window: the desktop goes away and the socket bounces, so
-      // the phone's re-proof finds nobody and declares the link dead — with
-      // nothing yet in existence for that death to land on.
-      unawaited(() async {
-        await service?.stop();
-        service = null;
-        await phoneTransports.last.abort();
-        killDone.complete();
-      }());
-    });
-    addTearDown(watch.cancel);
+      final gateway = makeGateway(pairingTimeout: const Duration(seconds: 2));
+      await until(
+        () => store.gated > 0,
+        reason: 'the dial reaches the keystore write inside connect()',
+      );
 
-    // Force a fresh pass through that window.
-    await service!.stop();
-    service = null;
-    await awaitLink(gateway, CompanionLinkState.disconnected);
-    // A relay set the phone has not seen before, so the host's greeting
-    // really does have to be written down — which is the awaited keystore
-    // work the loop used to lose deaths behind.
-    arming = true;
-    await startService(localRelayUrl: Uri.parse('ws://127.0.0.1:1'));
+      // A typed code nobody is serving. It decodes, so the gateway drops the
+      // link it is holding before it goes looking — and that teardown lands
+      // under the dial that is still in flight.
+      final pairing = expectLater(
+        gateway.pairWithCode(
+          PairingCode.encode(List<int>.generate(20, (i) => i)),
+        ),
+        throwsA(isA<PairingException>()),
+      );
+      await until(
+        () => gateway.link == CompanionLinkState.disconnected,
+        reason: 'the pairing attempt tears the old link down first',
+      );
 
-    // Three facts, each awaited: the phone got there, the desktop is down,
-    // and the loop is standing in the window rather than past it. The last is
-    // what a `writeCost` window could never assert — it hoped.
-    await until(() => killed, reason: 'the phone reaches connected again');
-    await killDone.future;
-    await until(
-      () => store.gated > 0,
-      reason: 'the loop is inside the write the death has to land under',
-    );
+      // Now let the dial finish. Nothing owns the client it answers with.
+      store.gate!.complete();
+      store.gate = null;
+      await pairing;
 
-    // How many times the link had come up when the death was handed over.
-    final cameUpAtDeath = cameUp();
-    store.gate!.complete();
-    store.gate = null;
-    await until(
-      () => gateway.link != CompanionLinkState.connected,
-      reason: 'the phone acts on the death it was handed mid-dial',
-    );
-
-    // The desktop comes back. Nobody touches the phone: it must re-dial on
-    // its own, exactly as it does after any other outage.
-    await startService(localRelayUrl: Uri.parse('ws://127.0.0.1:2'));
-    await awaitLink(gateway, CompanionLinkState.connected);
-    // The second coming-up, counted — not `awaitLink` alone, which seeds the
-    // state the phone is already in and would be answered by the link that
-    // died. Whether the loop re-dialled or the transport healed itself is the
-    // transport's business; that the phone got back up after a death nothing
-    // was waiting for is this test's.
-    expect(
-      cameUp(),
-      greaterThan(cameUpAtDeath),
-      reason: 'the link came up again; it did not park on a death it lost',
-    );
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
-
-  test('a dial answered after its link was torn down is dropped, not adopted',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    // Pair, then let that gateway go: the record it leaves on the phone's
-    // disk is what the next one wakes up dialling, which is where the window
-    // this test stands in opens.
-    final first = await pairedPhone();
-    await first.close();
-
-    // Every keystore write now blocks. The first one a fresh gateway makes is
-    // the generation counter its dial persists AFTER the host has answered
-    // the hello — the one stretch of a dial that cannot be cancelled.
-    store.gate = Completer<void>();
-    final gateway = makeGateway(pairingTimeout: const Duration(seconds: 2));
-    await until(
-      () => store.gated > 0,
-      reason: 'the dial reaches the keystore write inside connect()',
-    );
-
-    // A typed code nobody is serving. It decodes, so the gateway drops the
-    // link it is holding before it goes looking — and that teardown lands
-    // under the dial that is still in flight.
-    final pairing = expectLater(
-      gateway.pairWithCode(PairingCode.encode(List<int>.generate(20, (i) => i))),
-      throwsA(isA<PairingException>()),
-    );
-    await until(
-      () => gateway.link == CompanionLinkState.disconnected,
-      reason: 'the pairing attempt tears the old link down first',
-    );
-
-    // Now let the dial finish. Nothing owns the client it answers with.
-    store.gate!.complete();
-    store.gate = null;
-    await pairing;
-
-    // Whatever the loop does next, "connected" has to mean a desktop this
-    // phone can actually ask for something. Adopting the orphaned client
-    // parks the loop on a completer nothing can fire, with `connected` on
-    // screen and no client behind it.
-    await awaitLink(gateway, CompanionLinkState.connected);
-    expect(
-      (await gateway.listSessions()).single.id,
-      's1',
-      reason: 'a link that says connected must have a client behind it',
-    );
-  });
+      // Whatever the loop does next, "connected" has to mean a desktop this
+      // phone can actually ask for something. Adopting the orphaned client
+      // parks the loop on a completer nothing can fire, with `connected` on
+      // screen and no client behind it.
+      await awaitLink(gateway, CompanionLinkState.connected);
+      expect(
+        (await gateway.listSessions()).single.id,
+        's1',
+        reason: 'a link that says connected must have a client behind it',
+      );
+    },
+  );
 }

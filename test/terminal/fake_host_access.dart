@@ -87,7 +87,11 @@ class PaneAccess implements HostSessionAccess {
 }
 
 class ScriptedHostChannel implements RemoteChannel {
-  ScriptedHostChannel(this.liveSessions, {this.resumedTotalBytes = 0, this.attachRefusal});
+  ScriptedHostChannel(
+    this.liveSessions, {
+    this.resumedTotalBytes = 0,
+    this.attachRefusal,
+  });
 
   final ProtocolErrorCode? attachRefusal;
 
@@ -131,18 +135,33 @@ class ScriptedHostChannel implements RemoteChannel {
           );
         case AttachMessage(:final requestId, :final sessionId):
           if (attachRefusal != null) {
-            push(ErrorMessage(requestId, attachRefusal!, 'refused: ${attachRefusal!.name}'));
+            push(
+              ErrorMessage(
+                requestId,
+                attachRefusal!,
+                'refused: ${attachRefusal!.name}',
+              ),
+            );
             break;
           }
           if (!liveSessions.contains(sessionId)) {
             // The pane must fall through to `open` on its first run.
             push(
-              ErrorMessage(requestId, ProtocolErrorCode.unknownSession, 'no session "$sessionId"'),
+              ErrorMessage(
+                requestId,
+                ProtocolErrorCode.unknownSession,
+                'no session "$sessionId"',
+              ),
             );
             break;
           }
           push(_attached(requestId, sessionId));
-        case OpenMessage(:final requestId, :final sessionId, :final columns, :final rows):
+        case OpenMessage(
+          :final requestId,
+          :final sessionId,
+          :final columns,
+          :final rows,
+        ):
           liveSessions.add(sessionId);
           push(
             AttachedMessage(
@@ -199,7 +218,6 @@ class ScriptedHostChannel implements RemoteChannel {
   T only<T extends HostMessage>() => received.whereType<T>().single;
   Iterable<T> all<T extends HostMessage>() => received.whereType<T>();
 }
-
 
 /// The reading a machine with a working host gives.
 HostDeployment readyDeployment({bool restarted = false}) => HostDeployment(

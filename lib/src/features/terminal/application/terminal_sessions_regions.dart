@@ -154,7 +154,9 @@ extension TerminalPaneRegions on TerminalSessionsController {
 
   /// Whether [sourcePaneId] can be dropped onto [targetPaneId] to split it.
   bool canSplitPaneWithPane(String targetPaneId, String sourcePaneId) {
-    if (targetPaneId == sourcePaneId || _isEmptyRegion(sourcePaneId)) return false;
+    if (targetPaneId == sourcePaneId || _isEmptyRegion(sourcePaneId)) {
+      return false;
+    }
     final target = _tabContaining(targetPaneId);
     final source = _tabContaining(sourcePaneId);
     return target != null && source != null;
@@ -192,7 +194,8 @@ extension TerminalPaneRegions on TerminalSessionsController {
         _tabs.removeWhere((t) => t.id == sourceTab.id);
       } else {
         final sourceIndex = _tabIndex[sourceTab.id]!;
-        final newFocused = closedSource.visiblePanes.contains(sourceTab.focusedPaneId)
+        final newFocused =
+            closedSource.visiblePanes.contains(sourceTab.focusedPaneId)
             ? sourceTab.focusedPaneId
             : closedSource.visiblePanes.first;
         _tabs[sourceIndex] = sourceTab.copyWith(

@@ -54,8 +54,7 @@ class RelayPrefsController extends Notifier<RelayPrefs> {
   @override
   RelayPrefs build() {
     final stored = readFrom(ref.watch(databaseProvider));
-    return stored ??
-        const RelayPrefs(localEnabled: false, hostedEnabled: true);
+    return stored ?? const RelayPrefs(localEnabled: false, hostedEnabled: true);
   }
 
   /// The persisted prefs, or null when nothing was written yet, which means

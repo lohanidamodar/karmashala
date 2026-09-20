@@ -62,9 +62,8 @@ String subagentsDirectoryFor(String transcriptPath) =>
 
 /// The subagents of the session recorded at [transcriptPath], keyed by the
 /// parent `tool_use.id` each one answers.
-Future<Map<String, SubagentRef>> readSubagentIndexFor(
-  String transcriptPath,
-) => readSubagentIndexIn(subagentsDirectoryFor(transcriptPath));
+Future<Map<String, SubagentRef>> readSubagentIndexFor(String transcriptPath) =>
+    readSubagentIndexIn(subagentsDirectoryFor(transcriptPath));
 
 /// The same, for a directory already known — which is how a *nested* subagent
 /// is found: a delegate's transcript sits in the very directory that indexes

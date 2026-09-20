@@ -99,9 +99,7 @@ Future<void> _pump(
         androidSlimmingServiceProvider.overrideWithValue(slimming),
         devicesProvider.overrideWith((ref) async => devices),
       ],
-      child: const MaterialApp(
-        home: Scaffold(body: AndroidSlimmingDialog()),
-      ),
+      child: const MaterialApp(home: Scaffold(body: AndroidSlimmingDialog())),
     ),
   );
   await tester.pump();
@@ -235,7 +233,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(slimming.restored, [_slimmed]);
-      expect(_statusFor(tester, _slimmed), 'Nothing this app applied is on it.');
+      expect(
+        _statusFor(tester, _slimmed),
+        'Nothing this app applied is on it.',
+      );
       expect(
         _restoreFor(_slimmed),
         findsNothing,

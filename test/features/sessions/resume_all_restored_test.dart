@@ -60,7 +60,8 @@ void main() {
     }
     final before = bulkDao.saves;
 
-    final report = await bulk.read(explorerActionsProvider)
+    final report = await bulk
+        .read(explorerActionsProvider)
         .resumeAllRestoredPanes();
 
     expect(report.resumed, 4);
@@ -127,7 +128,8 @@ void main() {
     );
     addTearDown(next.dispose);
 
-    final report = await next.read(explorerActionsProvider)
+    final report = await next
+        .read(explorerActionsProvider)
         .resumeAllRestoredPanes();
 
     expect(report.resumed, 4);
@@ -150,7 +152,8 @@ void main() {
     // A live session, which is not what this acts on.
     await startSession(container);
 
-    final report = await container.read(explorerActionsProvider)
+    final report = await container
+        .read(explorerActionsProvider)
         .resumeAllRestoredPanes();
 
     expect(report.resumed, 0);
@@ -173,14 +176,11 @@ void main() {
     first.read(terminalSessionsControllerProvider.notifier).persistLayout();
     first.dispose();
 
-    final next = containerOver(
-      db,
-      idPrefix: 't-',
-      frameYield: () async {},
-    );
+    final next = containerOver(db, idPrefix: 't-', frameYield: () async {});
     addTearDown(next.dispose);
 
-    final report = await next.read(explorerActionsProvider)
+    final report = await next
+        .read(explorerActionsProvider)
         .resumeAllRestoredPanes();
 
     expect(report.resumed, 3);

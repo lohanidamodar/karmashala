@@ -77,7 +77,9 @@ void main() {
         ...fakeTerminalOverrides(database: db),
         // Everything that would otherwise reach the host or poll a file: a
         // spinner that never stops is a `pumpAndSettle` that never returns.
-        sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
+        sessionTranscriptProvider.overrideWith(
+          (ref, id) => Stream.value(const []),
+        ),
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
         ),
@@ -165,8 +167,10 @@ void main() {
     // normal case once the workspace is divided rather than an edge one.
     final container = await launch(tester, const Size(1000, 700));
 
-    expect(container.read(terminalSessionsControllerProvider).workspace!.groups,
-        hasLength(2));
+    expect(
+      container.read(terminalSessionsControllerProvider).workspace!.groups,
+      hasLength(2),
+    );
     // The bar has to have actually drawn its fullest content, or "no overflow"
     // is a statement about an empty box. `DeliveryStrip` offers a commit while
     // the tree is dirty, and it is the pill the narrow row keeps.

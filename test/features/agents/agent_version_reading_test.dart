@@ -51,32 +51,38 @@ void main() {
       expect(dao.getById('a1')!.versionReadAt, read);
     });
 
-    test('a probe that answered nothing erases neither the number nor its age', () {
-      // Discovery can locate a binary and fail to run `--version`. Writing
-      // that as "no version" turns an unknown into a reading of zero.
-      dao.insert(
-        agentInstallation(
-          version: '2.1.263',
-          versionReadAt: DateTime.utc(2026, 9, 1),
-        ),
-      );
+    test(
+      'a probe that answered nothing erases neither the number nor its age',
+      () {
+        // Discovery can locate a binary and fail to run `--version`. Writing
+        // that as "no version" turns an unknown into a reading of zero.
+        dao.insert(
+          agentInstallation(
+            version: '2.1.263',
+            versionReadAt: DateTime.utc(2026, 9, 1),
+          ),
+        );
 
-      dao.recordVersion('a1', null, readAt: read);
+        dao.recordVersion('a1', null, readAt: read);
 
-      final row = dao.getById('a1')!;
-      expect(row.version, '2.1.263');
-      expect(row.versionReadAt, DateTime.utc(2026, 9, 1));
-    });
+        final row = dao.getById('a1')!;
+        expect(row.version, '2.1.263');
+        expect(row.versionReadAt, DateTime.utc(2026, 9, 1));
+      },
+    );
 
-    test('a row written before the column has a number and no reading time', () {
-      // Never backfilled from `created_at`: that would invent an age for a
-      // reading nobody dated.
-      dao.insert(agentInstallation(version: '2.1.245'));
+    test(
+      'a row written before the column has a number and no reading time',
+      () {
+        // Never backfilled from `created_at`: that would invent an age for a
+        // reading nobody dated.
+        dao.insert(agentInstallation(version: '2.1.245'));
 
-      final row = dao.getById('a1')!;
-      expect(row.version, '2.1.245');
-      expect(row.versionReadAt, isNull);
-    });
+        final row = dao.getById('a1')!;
+        expect(row.version, '2.1.245');
+        expect(row.versionReadAt, isNull);
+      },
+    );
   });
 
   group('and says so when it is stale', () {
@@ -119,23 +125,26 @@ void main() {
       expect(describeVersionReading(row, now: read), isNull);
     });
 
-    test('the bound the refresh spends a process on is the bound the label uses', () {
-      // One number in one place. A looser refresh bound would call a version
-      // stale and decline to fix it; a tighter one would refresh a version it
-      // was still presenting as current.
-      final row = agentInstallation(version: '2.1.263', versionReadAt: read);
+    test(
+      'the bound the refresh spends a process on is the bound the label uses',
+      () {
+        // One number in one place. A looser refresh bound would call a version
+        // stale and decline to fix it; a tighter one would refresh a version it
+        // was still presenting as current.
+        final row = agentInstallation(version: '2.1.263', versionReadAt: read);
 
-      expect(
-        versionFreshness(row, now: read.add(kVersionReadingFreshFor)),
-        VersionFreshness.fresh,
-      );
-      expect(
-        versionFreshness(
-          row,
-          now: read.add(kVersionReadingFreshFor + const Duration(minutes: 1)),
-        ),
-        VersionFreshness.stale,
-      );
-    });
+        expect(
+          versionFreshness(row, now: read.add(kVersionReadingFreshFor)),
+          VersionFreshness.fresh,
+        );
+        expect(
+          versionFreshness(
+            row,
+            now: read.add(kVersionReadingFreshFor + const Duration(minutes: 1)),
+          ),
+          VersionFreshness.stale,
+        );
+      },
+    );
   });
 }

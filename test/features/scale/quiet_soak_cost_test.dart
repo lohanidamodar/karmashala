@@ -143,7 +143,8 @@ void main() {
         expect(
           layout.schedule.pending,
           armed,
-          reason: 'the app must end the hour holding the timers it started it '
+          reason:
+              'the app must end the hour holding the timers it started it '
               'with',
         );
       });
@@ -217,7 +218,11 @@ void main() {
 
     test('costs the same at a hundred panes as at one', () {
       expect(statements.keys, containsAll(scale));
-      expect(statements.values.toSet(), orderedEquals([0]), reason: '$statements');
+      expect(
+        statements.values.toSet(),
+        orderedEquals([0]),
+        reason: '$statements',
+      );
     });
   });
 
@@ -274,7 +279,10 @@ void main() {
       container.listen(projectSummaryProvider('p1'), (_, _) {});
       container.listen(openFollowUpsProvider, (_, _) {});
       container.listen(sessionsForSelectedRepositoryProvider, (_, _) {});
-      container.listen(importedSessionsForSelectedRepositoryProvider, (_, _) {});
+      container.listen(
+        importedSessionsForSelectedRepositoryProvider,
+        (_, _) {},
+      );
       // One per drawn row: the Explorer builds a card per session.
       for (var i = 0; i < count; i++) {
         container.listen(sessionWhereaboutsProvider('s$i'), (_, _) {});
@@ -337,7 +345,11 @@ void main() {
 
     test('so a hundred idle sessions cost what one does', () {
       expect(statements.keys, containsAll(scale));
-      expect(statements.values.toSet(), orderedEquals([0]), reason: '$statements');
+      expect(
+        statements.values.toSet(),
+        orderedEquals([0]),
+        reason: '$statements',
+      );
       expect(spawns.values.toSet(), orderedEquals([0]), reason: '$spawns');
     });
   });

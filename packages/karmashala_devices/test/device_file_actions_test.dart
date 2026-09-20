@@ -86,7 +86,8 @@ FakeCommandRunner _runner(
       );
     }
     for (final entry in stats.entries) {
-      if (command.contains("ls -lad '${entry.key}'")) return _lsOut(entry.value);
+      if (command.contains("ls -lad '${entry.key}'"))
+        {return _lsOut(entry.value);}
     }
     if (command.startsWith('ls -lad ')) {
       return _lsOut('ls: x: No such file or directory');
@@ -143,33 +144,33 @@ void main() {
       expect(report.message, startsWith('Moved a.txt'));
     });
 
-    test('the clipboard refusal is reported and nothing is attempted', () async {
-      final runner = _runner(const {});
-      final report = await pasteOnDevice(
-        driver: _driver(AdbService(runner: runner, sdk: _sdk())),
-        clip: DeviceFileClipboard(
-          serial: 'F6IZLV6LMFT4U4ZT',
-          entries: [_file('/sdcard/a.txt')],
-          mode: DeviceFileClipboardMode.copy,
-        ),
-        directory: '/sdcard/Download',
-      );
-      expect(report.message, contains('pull followed by a push'));
-      expect(report.deviceChanged, isFalse);
-      expect(runner.requests, isEmpty);
-    });
+    test(
+      'the clipboard refusal is reported and nothing is attempted',
+      () async {
+        final runner = _runner(const {});
+        final report = await pasteOnDevice(
+          driver: _driver(AdbService(runner: runner, sdk: _sdk())),
+          clip: DeviceFileClipboard(
+            serial: 'F6IZLV6LMFT4U4ZT',
+            entries: [_file('/sdcard/a.txt')],
+            mode: DeviceFileClipboardMode.copy,
+          ),
+          directory: '/sdcard/Download',
+        );
+        expect(report.message, contains('pull followed by a push'));
+        expect(report.deviceChanged, isFalse);
+        expect(runner.requests, isEmpty);
+      },
+    );
 
     test('a partial paste says what moved before it stopped', () async {
       // The failure this exists for: reporting only the last result makes six
       // files look moved when two were.
-      final runner = _runner(
-        {
-          '/sdcard/a.txt': _fileRow('a.txt'),
-          '/sdcard/b.txt': _fileRow('b.txt'),
-          '/sdcard/Download': _dirRow('Download'),
-        },
-        failPathContaining: 'b.txt',
-      );
+      final runner = _runner({
+        '/sdcard/a.txt': _fileRow('a.txt'),
+        '/sdcard/b.txt': _fileRow('b.txt'),
+        '/sdcard/Download': _dirRow('Download'),
+      }, failPathContaining: 'b.txt');
       final report = await pasteOnDevice(
         driver: _driver(AdbService(runner: runner, sdk: _sdk())),
         clip: DeviceFileClipboard(
@@ -187,37 +188,40 @@ void main() {
   });
 
   group('copyToHostClipboard', () {
-    test('stages under the fileSafeId and puts the paths on the clipboard', () async {
-      final host = FakeHostClipboard();
-      final made = <String>[];
-      final report = await copyToHostClipboard(
-        driver: _driver(
-          AdbService(
-            runner: _runner({'/sdcard/a.txt': _fileRow('a.txt')}),
-            sdk: _sdk(),
+    test(
+      'stages under the fileSafeId and puts the paths on the clipboard',
+      () async {
+        final host = FakeHostClipboard();
+        final made = <String>[];
+        final report = await copyToHostClipboard(
+          driver: _driver(
+            AdbService(
+              runner: _runner({'/sdcard/a.txt': _fileRow('a.txt')}),
+              sdk: _sdk(),
+            ),
+            serial: '192.168.1.24:37129',
           ),
-          serial: '192.168.1.24:37129',
-        ),
-        host: host,
-        temporaryDirectory: _temp,
-        entries: [_file('/sdcard/a.txt')],
-        makeDirectory: (path) async => made.add(path),
-      );
-      expect(report.message, contains('paste it anywhere'));
-      // The one assertion this whole path exists for: no colon in the host
-      // path, because on Windows a colon opens an alternate data stream and
-      // the pull then reports success having written nothing readable.
-      expect(made.single, endsWith('${p.separator}192.168.1.24-37129'));
-      expect(made.single.substring(_temp.length), isNot(contains(':')));
-      expect(
-        host.filesWritten.single.single,
-        endsWith('-37129${p.separator}a.txt'),
-      );
-      expect(
-        host.filesWritten.single.single.substring(_temp.length),
-        isNot(contains(':')),
-      );
-    });
+          host: host,
+          temporaryDirectory: _temp,
+          entries: [_file('/sdcard/a.txt')],
+          makeDirectory: (path) async => made.add(path),
+        );
+        expect(report.message, contains('paste it anywhere'));
+        // The one assertion this whole path exists for: no colon in the host
+        // path, because on Windows a colon opens an alternate data stream and
+        // the pull then reports success having written nothing readable.
+        expect(made.single, endsWith('${p.separator}192.168.1.24-37129'));
+        expect(made.single.substring(_temp.length), isNot(contains(':')));
+        expect(
+          host.filesWritten.single.single,
+          endsWith('-37129${p.separator}a.txt'),
+        );
+        expect(
+          host.filesWritten.single.single.substring(_temp.length),
+          isNot(contains(':')),
+        );
+      },
+    );
 
     test('a directory is refused rather than walked', () async {
       final host = FakeHostClipboard();
@@ -232,38 +236,40 @@ void main() {
       expect(host.filesWritten, isEmpty);
     });
 
-    test('a clipboard that refuses the files still says where they are', () async {
-      // The copy worked; only the clipboard did not. Reporting a failed copy
-      // would be false, and the files would be unfindable.
-      final host = FakeHostClipboard()..acceptsFiles = false;
-      final report = await copyToHostClipboard(
-        driver: _driver(
-          AdbService(
-            runner: _runner({'/sdcard/a.txt': _fileRow('a.txt')}),
-            sdk: _sdk(),
+    test(
+      'a clipboard that refuses the files still says where they are',
+      () async {
+        // The copy worked; only the clipboard did not. Reporting a failed copy
+        // would be false, and the files would be unfindable.
+        final host = FakeHostClipboard()..acceptsFiles = false;
+        final report = await copyToHostClipboard(
+          driver: _driver(
+            AdbService(
+              runner: _runner({'/sdcard/a.txt': _fileRow('a.txt')}),
+              sdk: _sdk(),
+            ),
           ),
-        ),
-        host: host,
-        temporaryDirectory: _temp,
-        entries: [_file('/sdcard/a.txt')],
-        makeDirectory: (_) async {},
-      );
-      expect(report.message, contains('would not take the files'));
-      expect(
-        report.message,
-        contains(p.join(_temp, 'karmashala-device-files')),
-      );
-    });
+          host: host,
+          temporaryDirectory: _temp,
+          entries: [_file('/sdcard/a.txt')],
+          makeDirectory: (_) async {},
+        );
+        expect(report.message, contains('would not take the files'));
+        expect(
+          report.message,
+          contains(p.join(_temp, 'karmashala-device-files')),
+        );
+      },
+    );
 
     test('a pull that fails is reported as itself', () async {
       final host = FakeHostClipboard();
       final report = await copyToHostClipboard(
         driver: _driver(
           AdbService(
-            runner: _runner(
-              {'/sdcard/a.txt': _fileRow('a.txt')},
-              failPathContaining: 'a.txt',
-            ),
+            runner: _runner({
+              '/sdcard/a.txt': _fileRow('a.txt'),
+            }, failPathContaining: 'a.txt'),
             sdk: _sdk(),
           ),
         ),
@@ -278,23 +284,26 @@ void main() {
   });
 
   group('pasteFromHostClipboard', () {
-    test('pushes every file on the clipboard into the open directory', () async {
-      final host = FakeHostClipboard(
-        files: [r'C:\Users\x\Desktop\one.png', r'C:\Users\x\Desktop\two.png'],
-      );
-      final report = await pasteFromHostClipboard(
-        driver: _driver(
-          AdbService(
-            runner: _runner({'/sdcard/Download': _dirRow('Download')}),
-            sdk: _sdk(),
+    test(
+      'pushes every file on the clipboard into the open directory',
+      () async {
+        final host = FakeHostClipboard(
+          files: [r'C:\Users\x\Desktop\one.png', r'C:\Users\x\Desktop\two.png'],
+        );
+        final report = await pasteFromHostClipboard(
+          driver: _driver(
+            AdbService(
+              runner: _runner({'/sdcard/Download': _dirRow('Download')}),
+              sdk: _sdk(),
+            ),
           ),
-        ),
-        host: host,
-        directory: '/sdcard/Download',
-      );
-      expect(report.message, 'Copied one.png, two.png to /sdcard/Download.');
-      expect(report.deviceChanged, isTrue);
-    });
+          host: host,
+          directory: '/sdcard/Download',
+        );
+        expect(report.message, 'Copied one.png, two.png to /sdcard/Download.');
+        expect(report.deviceChanged, isTrue);
+      },
+    );
 
     test('an empty file clipboard says so, and says why it might be', () async {
       // The usual reason is that what was copied was text, and "paste failed"
@@ -309,25 +318,28 @@ void main() {
       expect(report.deviceChanged, isFalse);
     });
 
-    test('an existing file is refused and the refusal is the push\'s own', () async {
-      final host = FakeHostClipboard(files: [r'C:\Users\x\Desktop\a.txt']);
-      final report = await pasteFromHostClipboard(
-        driver: _driver(
-          AdbService(
-            runner: _runner({
-              '/sdcard/Download': _dirRow('Download'),
-              '/sdcard/Download/a.txt': _fileRow('a.txt'),
-            }),
-            sdk: _sdk(),
+    test(
+      'an existing file is refused and the refusal is the push\'s own',
+      () async {
+        final host = FakeHostClipboard(files: [r'C:\Users\x\Desktop\a.txt']);
+        final report = await pasteFromHostClipboard(
+          driver: _driver(
+            AdbService(
+              runner: _runner({
+                '/sdcard/Download': _dirRow('Download'),
+                '/sdcard/Download/a.txt': _fileRow('a.txt'),
+              }),
+              sdk: _sdk(),
+            ),
           ),
-        ),
-        host: host,
-        directory: '/sdcard/Download',
-      );
-      expect(report.message, contains('already exists'));
-      expect(report.message, contains('no undo'));
-      expect(report.deviceChanged, isFalse);
-    });
+          host: host,
+          directory: '/sdcard/Download',
+        );
+        expect(report.message, contains('already exists'));
+        expect(report.message, contains('no undo'));
+        expect(report.deviceChanged, isFalse);
+      },
+    );
   });
 
   group('what each operation costs', () {

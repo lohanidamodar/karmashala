@@ -4,7 +4,8 @@ import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
 
 Uint8List bytes(List<int> values) => Uint8List.fromList(values);
-Uint8List filled(int count, int value) => Uint8List(count)..fillRange(0, count, value);
+Uint8List filled(int count, int value) =>
+    Uint8List(count)..fillRange(0, count, value);
 
 void main() {
   group('OutputBacklog', () {
@@ -52,16 +53,19 @@ void main() {
       expect(backlog.since(2).bytes, [3, 4, 5, 6, 7, 8, 9, 10]);
     });
 
-    test('an offset older than the ring is clamped and the shortfall reported', () {
-      final backlog = OutputBacklog(capacityBytes: 8);
-      backlog.add(filled(20, 7));
+    test(
+      'an offset older than the ring is clamped and the shortfall reported',
+      () {
+        final backlog = OutputBacklog(capacityBytes: 8);
+        backlog.add(filled(20, 7));
 
-      final slice = backlog.since(0);
-      expect(slice.droppedBytes, 12);
-      expect(slice.offset, 12);
-      expect(slice.bytes, hasLength(8));
-      expect(slice.nextOffset, 20);
-    });
+        final slice = backlog.since(0);
+        expect(slice.droppedBytes, 12);
+        expect(slice.offset, 12);
+        expect(slice.bytes, hasLength(8));
+        expect(slice.nextOffset, 20);
+      },
+    );
 
     test('a chunk larger than the ring keeps only its tail', () {
       final backlog = OutputBacklog(capacityBytes: 4);
@@ -73,15 +77,22 @@ void main() {
       expect(backlog.since(0).droppedBytes, 5);
     });
 
-    test('an offset ahead of what exists yields nothing rather than guessing', () {
-      final backlog = OutputBacklog(capacityBytes: 16);
-      backlog.add(bytes([1, 2, 3]));
+    test(
+      'an offset ahead of what exists yields nothing rather than guessing',
+      () {
+        final backlog = OutputBacklog(capacityBytes: 16);
+        backlog.add(bytes([1, 2, 3]));
 
-      final slice = backlog.since(99);
-      expect(slice.isEmpty, isTrue);
-      expect(slice.offset, 3, reason: 'the client is told where the host really is');
-      expect(slice.droppedBytes, 0);
-    });
+        final slice = backlog.since(99);
+        expect(slice.isEmpty, isTrue);
+        expect(
+          slice.offset,
+          3,
+          reason: 'the client is told where the host really is',
+        );
+        expect(slice.droppedBytes, 0);
+      },
+    );
 
     test('holds a realistic 4 MiB without growing past it', () {
       final backlog = OutputBacklog();
@@ -93,7 +104,10 @@ void main() {
       expect(backlog.totalBytes, 6 * 1024 * 1024);
       expect(backlog.heldBytes, OutputBacklog.defaultCapacityBytes);
       expect(backlog.firstAvailableOffset, 2 * 1024 * 1024);
-      expect(backlog.since(0).bytes, hasLength(OutputBacklog.defaultCapacityBytes));
+      expect(
+        backlog.since(0).bytes,
+        hasLength(OutputBacklog.defaultCapacityBytes),
+      );
     });
   });
 

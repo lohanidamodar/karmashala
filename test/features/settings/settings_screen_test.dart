@@ -176,10 +176,7 @@ void main() {
   testWidgets('the terminal font size row steps, resets and persists', (
     tester,
   ) async {
-    final container = await pump(
-      tester,
-      section: SettingsSectionId.terminal,
-    );
+    final container = await pump(tester, section: SettingsSectionId.terminal);
 
     await tester.tap(find.byTooltip('Larger terminal font'));
     await tester.pumpAndSettle();

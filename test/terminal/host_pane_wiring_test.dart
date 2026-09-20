@@ -45,7 +45,10 @@ void main() {
       );
 
   test('with the setting off, a local pane is what it has always been', () {
-    final container = containerWith(setting: false, access: LocalHostSessionAccess());
+    final container = containerWith(
+      setting: false,
+      access: LocalHostSessionAccess(),
+    );
     addTearDown(container.dispose);
     final pane = openLocalPane(container);
     addTearDown(pane.dispose);
@@ -53,7 +56,10 @@ void main() {
   });
 
   test('with the setting on, a local pane belongs to the session host', () {
-    final container = containerWith(setting: true, access: LocalHostSessionAccess());
+    final container = containerWith(
+      setting: true,
+      access: LocalHostSessionAccess(),
+    );
     addTearDown(container.dispose);
     final pane = openLocalPane(container);
     addTearDown(pane.dispose);
@@ -63,7 +69,9 @@ void main() {
     // Windows a Command Prompt profile opens the login shell, as it always has.
     expect(
       (pane as HostTerminalInstance).launch.executable,
-      Platform.isWindows ? 'cmd.exe' : Platform.environment['SHELL'] ?? '/bin/bash',
+      Platform.isWindows
+          ? 'cmd.exe'
+          : Platform.environment['SHELL'] ?? '/bin/bash',
     );
   });
 

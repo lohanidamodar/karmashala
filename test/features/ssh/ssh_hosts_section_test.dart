@@ -244,9 +244,9 @@ void main() {
       ),
     );
     environments.upsert(sshEnvFixture(name: 'do-box'));
-    ProjectDao(db).insert(
-      project(id: 'p-ssh', name: 'Test ssh', environmentId: 'ssh:h1'),
-    );
+    ProjectDao(
+      db,
+    ).insert(project(id: 'p-ssh', name: 'Test ssh', environmentId: 'ssh:h1'));
     await pump(tester);
 
     await tester.tap(find.widgetWithText(TextButton, 'Remove'));

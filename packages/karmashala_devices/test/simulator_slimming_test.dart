@@ -481,24 +481,27 @@ void main() {
       expect(status.plistPath, _plist);
     });
 
-    test('needs no simctl call, so it answers for a shut-down device', () async {
-      final runner = _simctl();
-      final files = _FakeFileStore({
-        _plist: encodeDisabledPlist(
-          applyDelta(_launchdEntries, desiredDisabled()),
-        ),
-      });
+    test(
+      'needs no simctl call, so it answers for a shut-down device',
+      () async {
+        final runner = _simctl();
+        final files = _FakeFileStore({
+          _plist: encodeDisabledPlist(
+            applyDelta(_launchdEntries, desiredDisabled()),
+          ),
+        });
 
-      final status = await _service(runner, files).status(_udid);
+        final status = await _service(runner, files).status(_udid);
 
-      expect(runner.requests, isEmpty);
-      expect(status.isSlimmed, isTrue);
-      expect(status.disabledManaged, hasLength(170));
-      expect(status.disabledUnmanaged, isEmpty);
-      expect(status.fullyDisabledCategories, SlimmingCategory.values.toSet());
-      expect(status.partlyDisabledCategories, isEmpty);
-      expect(status.featureLoss.keys, contains('com.apple.apsd'));
-    });
+        expect(runner.requests, isEmpty);
+        expect(status.isSlimmed, isTrue);
+        expect(status.disabledManaged, hasLength(170));
+        expect(status.disabledUnmanaged, isEmpty);
+        expect(status.fullyDisabledCategories, SlimmingCategory.values.toSet());
+        expect(status.partlyDisabledCategories, isEmpty);
+        expect(status.featureLoss.keys, contains('com.apple.apsd'));
+      },
+    );
 
     test('separates labels somebody else disabled from ours', () async {
       final files = _FakeFileStore({
@@ -527,21 +530,24 @@ void main() {
       expect(status.entries, isNull);
     });
 
-    test('uses the upper-case UDID CoreSimulator names the directory with', () async {
-      final files = _FakeFileStore({
-        _plist: encodeDisabledPlist({'com.apple.chronod': true}),
-      });
+    test(
+      'uses the upper-case UDID CoreSimulator names the directory with',
+      () async {
+        final files = _FakeFileStore({
+          _plist: encodeDisabledPlist({'com.apple.chronod': true}),
+        });
 
-      final status = await _service(
-        _simctl(),
-        files,
-      ).status(_udid.toLowerCase());
+        final status = await _service(
+          _simctl(),
+          files,
+        ).status(_udid.toLowerCase());
 
-      // `simctl` accepts a lower-case udid, so a caller can easily be holding
-      // one; reading the wrong path reports every device as un-slimmed.
-      expect(status.plistPath, _plist);
-      expect(status.isSlimmed, isTrue);
-    });
+        // `simctl` accepts a lower-case udid, so a caller can easily be holding
+        // one; reading the wrong path reports every device as un-slimmed.
+        expect(status.plistPath, _plist);
+        expect(status.isSlimmed, isTrue);
+      },
+    );
   });
 
   group('SimulatorSlimmingService.slim', () {
@@ -629,18 +635,21 @@ void main() {
       expect(written.keys, contains('com.apple.liveactivitiesd'));
     });
 
-    test('merges into launchd own entries rather than replacing them', () async {
-      final files = _FakeFileStore({
-        _plist: encodeDisabledPlist(_launchdEntries),
-      });
+    test(
+      'merges into launchd own entries rather than replacing them',
+      () async {
+        final files = _FakeFileStore({
+          _plist: encodeDisabledPlist(_launchdEntries),
+        });
 
-      await _service(_simctl(), files).slim(_udid);
+        await _service(_simctl(), files).slim(_udid);
 
-      final written = parseDisabledPlist(files.files[_plist]!)!;
-      for (final entry in _launchdEntries.entries) {
-        expect(written[entry.key], entry.value, reason: entry.key);
-      }
-    });
+        final written = parseDisabledPlist(files.files[_plist]!)!;
+        for (final entry in _launchdEntries.entries) {
+          expect(written[entry.key], entry.value, reason: entry.key);
+        }
+      },
+    );
 
     test('never writes a label outside the allowlist', () async {
       final files = _FakeFileStore();
@@ -686,29 +695,32 @@ void main() {
       );
     });
 
-    test('gives up rather than editing a device that will not shut down', () async {
-      // Writing while booted is the one thing that must not happen, so a
-      // shutdown that never lands has to stop the whole operation.
-      final runner = _simctl(state: 'Booted', pollsBeforeDown: 1 << 30);
-      final files = _FakeFileStore();
+    test(
+      'gives up rather than editing a device that will not shut down',
+      () async {
+        // Writing while booted is the one thing that must not happen, so a
+        // shutdown that never lands has to stop the whole operation.
+        final runner = _simctl(state: 'Booted', pollsBeforeDown: 1 << 30);
+        final files = _FakeFileStore();
 
-      await expectLater(
-        _service(
-          runner,
-          files,
-          timeout: const Duration(milliseconds: 30),
-        ).slim(_udid),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.message,
-            'message',
-            contains('Could not shut'),
+        await expectLater(
+          _service(
+            runner,
+            files,
+            timeout: const Duration(milliseconds: 30),
+          ).slim(_udid),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.message,
+              'message',
+              contains('Could not shut'),
+            ),
           ),
-        ),
-      );
-      expect(files.files, isEmpty);
-      expect(_simctlVerbs(runner), isNot(contains('boot')));
-    });
+        );
+        expect(files.files, isEmpty);
+        expect(_simctlVerbs(runner), isNot(contains('boot')));
+      },
+    );
 
     test('reports a boot that fails', () async {
       final runner = _simctl(bootFails: true);
@@ -771,26 +783,35 @@ void main() {
   });
 
   group('SimulatorSlimmingService.staleLabels', () {
-    test('reports nothing missing when every managed label is loaded', () async {
-      final runner = FakeCommandRunner(
-        environmentId: 'macos',
-        responder: (request) => CommandResult(
-          exitCode: 0,
-          stdout: _launchctlListOutput(allManagedLabels),
-          stderr: '',
-        ),
-      );
+    test(
+      'reports nothing missing when every managed label is loaded',
+      () async {
+        final runner = FakeCommandRunner(
+          environmentId: 'macos',
+          responder: (request) => CommandResult(
+            exitCode: 0,
+            stdout: _launchctlListOutput(allManagedLabels),
+            stderr: '',
+          ),
+        );
 
-      final stale = await _service(
-        runner,
-        _FakeFileStore(),
-      ).staleLabels(_udid);
+        final stale = await _service(
+          runner,
+          _FakeFileStore(),
+        ).staleLabels(_udid);
 
-      expect(stale, isEmpty);
-      final spawn = runner.requests.single;
-      expect(spawn.executable, 'xcrun');
-      expect(spawn.arguments, ['simctl', 'spawn', _udid, 'launchctl', 'list']);
-    });
+        expect(stale, isEmpty);
+        final spawn = runner.requests.single;
+        expect(spawn.executable, 'xcrun');
+        expect(spawn.arguments, [
+          'simctl',
+          'spawn',
+          _udid,
+          'launchctl',
+          'list',
+        ]);
+      },
+    );
 
     test('names the labels a booted device does not know about', () async {
       // Stands in for Apple renaming a label between iOS releases: disabling a
@@ -808,10 +829,7 @@ void main() {
         ),
       );
 
-      final stale = await _service(
-        runner,
-        _FakeFileStore(),
-      ).staleLabels(_udid);
+      final stale = await _service(runner, _FakeFileStore()).staleLabels(_udid);
 
       expect(stale, {'com.apple.chronod', 'com.apple.searchd'});
     });

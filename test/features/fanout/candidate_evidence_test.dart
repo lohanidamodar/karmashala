@@ -150,7 +150,10 @@ void main() {
 
     test('a run graded by another session arrives as independent', () {
       finished('r1', sessionId: 's1', producedBySessionId: 's2');
-      expect(lookup('s1')!.attributionFor('s1'), VerdictAttribution.independent);
+      expect(
+        lookup('s1')!.attributionFor('s1'),
+        VerdictAttribution.independent,
+      );
     });
 
     test('a run from before attribution arrives as not recorded', () {

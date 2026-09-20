@@ -77,7 +77,7 @@ class HostWorktreeCopier implements WorktreeCopier {
           WorktreeCopyResult.copied,
           'Copied ${counted.files} file${counted.files == 1 ? '' : 's'}'
           '${counted.links == 0 ? '' : ', and left ${counted.links} symbolic '
-              'link${counted.links == 1 ? '' : 's'} uncopied'}.',
+                    'link${counted.links == 1 ? '' : 's'} uncopied'}.',
         );
       }
       await Directory(p.dirname(destination)).create(recursive: true);
@@ -203,10 +203,7 @@ class ShellWorktreeCopier implements WorktreeCopier {
     }
     return copied.ok
         ? verdict(WorktreeCopyResult.copied, 'Copied with `cp -a`.')
-        : verdict(
-            WorktreeCopyResult.failed,
-            'Copy failed: ${_words(copied)}',
-          );
+        : verdict(WorktreeCopyResult.failed, 'Copy failed: ${_words(copied)}');
   }
 
   /// Whether [path] is there — `null` when the question could not be put.
@@ -258,8 +255,7 @@ class ShellWorktreeCopier implements WorktreeCopier {
     copier: const HostWorktreeCopier(),
     context: p.posix,
   ),
-  EnvironmentKind.wsl ||
-  EnvironmentKind.ssh => (
+  EnvironmentKind.wsl || EnvironmentKind.ssh => (
     copier: ShellWorktreeCopier(runner),
     context: p.posix,
   ),

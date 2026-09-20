@@ -34,7 +34,12 @@ void main() {
     ].join('\n');
   }
 
-  ({Terminal terminal, ScrollbackPark park, ColdScreen screen, void Function(Duration) advance})
+  ({
+    Terminal terminal,
+    ScrollbackPark park,
+    ColdScreen screen,
+    void Function(Duration) advance,
+  })
   coldPane({
     TerminalIngestBudget? budget,
     int rows = 10,
@@ -130,13 +135,8 @@ void main() {
 
   test('a hundred cold panes share one pool rather than each having one', () {
     var now = Duration.zero;
-    final budget = TerminalIngestBudget(
-      warmPoolBytes: 4096,
-      clock: () => now,
-    );
-    final panes = [
-      for (var i = 0; i < 100; i++) coldPane(budget: budget),
-    ];
+    final budget = TerminalIngestBudget(warmPoolBytes: 4096, clock: () => now);
+    final panes = [for (var i = 0; i < 100; i++) coldPane(budget: budget)];
 
     for (final pane in panes) {
       pane.screen.add(utf8Bytes('x' * 1000));
@@ -150,7 +150,9 @@ void main() {
           'hundred times one pane',
     );
     expect(
-      [for (final pane in panes) pane.screen.refreshes].fold(0, (a, b) => a + b),
+      [
+        for (final pane in panes) pane.screen.refreshes,
+      ].fold(0, (a, b) => a + b),
       lessThan(100),
       reason: 'the pool ran out, and the panes that missed it simply waited',
     );
@@ -276,7 +278,10 @@ void main() {
 
     test('a hundred of them still cost one pool, not a hundred', () {
       var now = Duration.zero;
-      final budget = TerminalIngestBudget(warmPoolBytes: 4096, clock: () => now);
+      final budget = TerminalIngestBudget(
+        warmPoolBytes: 4096,
+        clock: () => now,
+      );
       final panes = [
         for (var i = 0; i < 100; i++) coldPane(budget: budget, altBuffer: true),
       ];
@@ -293,7 +298,9 @@ void main() {
             'scale target, and refreshing them is one pool like any other',
       );
       expect(
-        [for (final pane in panes) pane.screen.refreshes].fold(0, (a, b) => a + b),
+        [
+          for (final pane in panes) pane.screen.refreshes,
+        ].fold(0, (a, b) => a + b),
         lessThan(100),
         reason: 'the pool ran out, and the panes that missed it simply waited',
       );

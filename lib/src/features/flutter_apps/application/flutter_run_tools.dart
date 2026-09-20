@@ -72,7 +72,10 @@ class FlutterRunTools {
     return _answer(outcome.preflight, outcome.run);
   }
 
-  Future<Object?> _start(Map<String, dynamic> args, FlutterCommandKind kind) async {
+  Future<Object?> _start(
+    Map<String, dynamic> args,
+    FlutterCommandKind kind,
+  ) async {
     final project = _project(args);
     final outcome = kind == FlutterCommandKind.pubGet
         ? await _loop.pubGet(project)
@@ -177,9 +180,8 @@ class FlutterRunTools {
     final failed = run.exitCode != null && run.exitCode != 0;
     final unknownEnd =
         liveness != FlutterRunLiveness.running && run.exitCode == null;
-    final worthReading = liveness == FlutterRunLiveness.running ||
-        failed ||
-        unknownEnd;
+    final worthReading =
+        liveness == FlutterRunLiveness.running || failed || unknownEnd;
     final log = includeLog && worthReading
         ? _loop.tailOf(run.paneId, lines: kFlutterRunLogRows)
         : const <String>[];
@@ -266,71 +268,70 @@ class FlutterRunTools {
 }
 
 /// The `flutter_run` schema, served alongside the rest.
-const List<Map<String, dynamic>> flutterRunToolSchemas =
-    <Map<String, dynamic>>[
-      {
-        'name': 'flutter_run',
-        'description':
-            'THE FLUTTER LOOP: resolve a checkout\'s dependencies, launch it '
-            'on a device, and run its gates — in visible panes, in that '
-            'checkout\'s own environment, with the right SDK. A launch ATTACHES '
-            'THE APP BY ITSELF, so flutter_apps, flutter_reload, flutter_logs '
-            'and flutter_pick_widget are live the moment it starts and you '
-            'never call flutter_attach. Actions: "pubGet" (a fresh worktree has '
-            'no .dart_tool and nothing else will work until it does), "run" '
-            '(needs deviceId), "status", "stop", "analyze", "test". Every '
-            'answer carries a PREFLIGHT line naming the problem and the fix — '
-            'no SDK in that environment, no .dart_tool, a device somebody else '
-            'is driving. THE LOG COMES BACK ONLY WHEN SOMETHING FAILED OR IS '
-            'STILL GOING; a gate that passed is a verdict, not a transcript. '
-            'One run per device, refused by name. analyze and test record a '
-            'verdict you can read back with verification_get.',
-        'inputSchema': {
-          'type': 'object',
-          'properties': {
-            'action': {
-              'type': 'string',
-              'enum': ['run', 'stop', 'status', 'pubGet', 'analyze', 'test'],
-              'description':
-                  'What to do. "status" with no paneId lists everything this '
-                  'app started.',
-            },
-            'checkoutId': {
-              'type': 'string',
-              'description':
-                  'From list_checkouts. Required for run, pubGet, analyze and '
-                  'test — it is what says which environment the commands run '
-                  'in, which a bare path cannot.',
-            },
-            'projectDirectory': {
-              'type': 'string',
-              'description':
-                  'A sub-project inside the checkout, relative — "app" or '
-                  '"packages/mobile". Omit for a checkout that is itself the '
-                  'Flutter project.',
-            },
-            'deviceId': {
-              'type': 'string',
-              'description':
-                  'Required for "run": the id "flutter devices" prints — an '
-                  'adb serial for a phone, or "windows", "macos", "chrome". '
-                  'list_devices has the attached ones.',
-            },
-            'paneId': {
-              'type': 'string',
-              'description':
-                  'Which run to ask about or stop. From a previous answer. '
-                  'Optional for "stop" when exactly one thing is running.',
-            },
-            'arguments': {
-              'type': 'array',
-              'items': {'type': 'string'},
-              'description':
-                  'Extra flags for the command, after the ones Karmashala '
-                  'spells — "--profile", "--exclude-tags=live-ssh,live-wsl".',
-            },
-          },
-          'required': ['action'],
+const List<Map<String, dynamic>> flutterRunToolSchemas = <Map<String, dynamic>>[
+  {
+    'name': 'flutter_run',
+    'description':
+        'THE FLUTTER LOOP: resolve a checkout\'s dependencies, launch it '
+        'on a device, and run its gates — in visible panes, in that '
+        'checkout\'s own environment, with the right SDK. A launch ATTACHES '
+        'THE APP BY ITSELF, so flutter_apps, flutter_reload, flutter_logs '
+        'and flutter_pick_widget are live the moment it starts and you '
+        'never call flutter_attach. Actions: "pubGet" (a fresh worktree has '
+        'no .dart_tool and nothing else will work until it does), "run" '
+        '(needs deviceId), "status", "stop", "analyze", "test". Every '
+        'answer carries a PREFLIGHT line naming the problem and the fix — '
+        'no SDK in that environment, no .dart_tool, a device somebody else '
+        'is driving. THE LOG COMES BACK ONLY WHEN SOMETHING FAILED OR IS '
+        'STILL GOING; a gate that passed is a verdict, not a transcript. '
+        'One run per device, refused by name. analyze and test record a '
+        'verdict you can read back with verification_get.',
+    'inputSchema': {
+      'type': 'object',
+      'properties': {
+        'action': {
+          'type': 'string',
+          'enum': ['run', 'stop', 'status', 'pubGet', 'analyze', 'test'],
+          'description':
+              'What to do. "status" with no paneId lists everything this '
+              'app started.',
+        },
+        'checkoutId': {
+          'type': 'string',
+          'description':
+              'From list_checkouts. Required for run, pubGet, analyze and '
+              'test — it is what says which environment the commands run '
+              'in, which a bare path cannot.',
+        },
+        'projectDirectory': {
+          'type': 'string',
+          'description':
+              'A sub-project inside the checkout, relative — "app" or '
+              '"packages/mobile". Omit for a checkout that is itself the '
+              'Flutter project.',
+        },
+        'deviceId': {
+          'type': 'string',
+          'description':
+              'Required for "run": the id "flutter devices" prints — an '
+              'adb serial for a phone, or "windows", "macos", "chrome". '
+              'list_devices has the attached ones.',
+        },
+        'paneId': {
+          'type': 'string',
+          'description':
+              'Which run to ask about or stop. From a previous answer. '
+              'Optional for "stop" when exactly one thing is running.',
+        },
+        'arguments': {
+          'type': 'array',
+          'items': {'type': 'string'},
+          'description':
+              'Extra flags for the command, after the ones Karmashala '
+              'spells — "--profile", "--exclude-tags=live-ssh,live-wsl".',
         },
       },
-    ];
+      'required': ['action'],
+    },
+  },
+];

@@ -45,7 +45,10 @@ void main() {
         isA<PathTarget>(),
         reason: 'a UrlTarget here would reach openInBrowser',
       );
-      expect(path(links.single).path, '/home/me/.claude/usage-data/report.html');
+      expect(
+        path(links.single).path,
+        '/home/me/.claude/usage-data/report.html',
+      );
     });
 
     test('percent escapes are decoded, because a path is not a URL', () {
@@ -67,7 +70,8 @@ void main() {
       expect(
         links,
         isEmpty,
-        reason: 'revealing a remote share from untrusted output leaks '
+        reason:
+            'revealing a remote share from untrusted output leaks '
             'credentials to whoever printed it',
       );
     });
@@ -87,10 +91,10 @@ void main() {
     test('several on one line', () {
       final links = linksIn(line('http://a.test and http://b.test'));
 
-      expect([for (final l in links) url(l).url], [
-        'http://a.test',
-        'http://b.test',
-      ]);
+      expect(
+        [for (final l in links) url(l).url],
+        ['http://a.test', 'http://b.test'],
+      );
     });
 
     test('a bare www. host, resolved to https', () {
@@ -228,10 +232,14 @@ void main() {
         path(linksIn(line('  modified:   lib/main.dart')).single).path,
         'lib/main.dart',
       );
-      expect(path(linksIn(line('see ./lib/main.dart')).single).path,
-          './lib/main.dart');
-      expect(path(linksIn(line('see ../sibling/x.txt')).single).path,
-          '../sibling/x.txt');
+      expect(
+        path(linksIn(line('see ./lib/main.dart')).single).path,
+        './lib/main.dart',
+      );
+      expect(
+        path(linksIn(line('see ../sibling/x.txt')).single).path,
+        '../sibling/x.txt',
+      );
     });
 
     test('a trailing separator survives, because a folder is a link too', () {
@@ -309,10 +317,10 @@ void main() {
       // candidate that resolves to nothing is never underlined.
       final links = linksIn(line(r'in C:\Program Files\app'));
 
-      expect([for (final l in links) path(l).path], [
-        r'C:\Program',
-        r'Files\app',
-      ]);
+      expect(
+        [for (final l in links) path(l).path],
+        [r'C:\Program', r'Files\app'],
+      );
     });
 
     test('a timestamp', () {
@@ -337,7 +345,8 @@ void main() {
     test('is one link across two rows', () {
       // 40 columns, so a long UNC path has to wrap. Without joining the rows it
       // would be two halves, each of which resolves to nothing.
-      const long = r'\\wsl.localhost\Ubuntu\home\me\projects\deep\lib\main.dart';
+      const long =
+          r'\\wsl.localhost\Ubuntu\home\me\projects\deep\lib\main.dart';
       final terminal = Terminal(maxLines: 1000)..resize(40, 24);
       terminal.write('see $long');
 
@@ -352,7 +361,8 @@ void main() {
     });
 
     test('is found from either of its rows', () {
-      const long = r'\\wsl.localhost\Ubuntu\home\me\projects\deep\lib\main.dart';
+      const long =
+          r'\\wsl.localhost\Ubuntu\home\me\projects\deep\lib\main.dart';
       final terminal = Terminal(maxLines: 1000)..resize(40, 24);
       terminal.write('see $long');
 
@@ -369,10 +379,9 @@ void main() {
     String osc8(String uri, String label) =>
         '\x1b]8;;$uri\x1b\\$label\x1b]8;;\x1b\\';
 
-    Terminal wrote(String text, {int width = 120}) =>
-        Terminal(maxLines: 1000)
-          ..resize(width, 24)
-          ..write(text);
+    Terminal wrote(String text, {int width = 120}) => Terminal(maxLines: 1000)
+      ..resize(width, 24)
+      ..write(text);
 
     test('a label that is not the URL is still the URL', () {
       // The case the text scan cannot reach: there is nothing link-shaped on

@@ -477,9 +477,7 @@ class CodexAppServerClient {
       _rememberStderr,
       onError: (Object _) {},
     );
-    unawaited(
-      handle.exitCode.then(_onExit).catchError((Object _) {}),
-    );
+    unawaited(handle.exitCode.then(_onExit).catchError((Object _) {}));
 
     final init = await _request(handle, 'initialize', {
       'clientInfo': {

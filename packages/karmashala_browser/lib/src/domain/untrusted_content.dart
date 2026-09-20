@@ -35,18 +35,16 @@ String newFenceNonce([Random? random]) {
 /// Wraps page-authored [body] in the untrusted-content fence. [origin] rides on
 /// the opening marker rather than in the body: it is itself page-influenced and
 /// so must not appear in our own prose. [nonce] is injectable only for tests.
-String wrapUntrustedPageContent(
-  String body, {
-  String? origin,
-  String? nonce,
-}) {
+String wrapUntrustedPageContent(String body, {String? origin, String? nonce}) {
   final id = nonce ?? newFenceNonce();
   // The origin sits in a quoted attribute, so a URL carrying a quote or a
   // newline could otherwise end it early and put page-chosen text where our
   // marker syntax goes.
   final safeOrigin = origin == null
       ? null
-      : scrubFence(origin).replaceAll('"', '%22').replaceAll(RegExp(r'\s+'), '');
+      : scrubFence(
+          origin,
+        ).replaceAll('"', '%22').replaceAll(RegExp(r'\s+'), '');
   final attributes = <String>[
     'id="$id"',
     if (safeOrigin != null && safeOrigin.isNotEmpty) 'origin="$safeOrigin"',

@@ -351,11 +351,7 @@ class SystemTerminalService {
         // working directory the same way, so it is set on the process.
         return ['-e', ...command];
       case SystemTerminalKind.gnomeTerminal:
-        return [
-          if (cwd != null) '--working-directory=$cwd',
-          '--',
-          ...command,
-        ];
+        return [if (cwd != null) '--working-directory=$cwd', '--', ...command];
       case SystemTerminalKind.macTerminal:
       case SystemTerminalKind.iterm2:
         // Handled by `_launchMacApp`, which is reached before this.

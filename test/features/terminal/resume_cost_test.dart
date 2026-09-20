@@ -83,7 +83,8 @@ void main() {
               Terminal? adoptTerminal,
             }) => _CountingInstance(
               id: id,
-              title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
+              title:
+                  agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
               profileId: agentLaunch?.profileId ?? profile.id,
               workingDirectory: workingDirectory,
               agentLaunch: agentLaunch,

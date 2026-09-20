@@ -217,7 +217,10 @@ class HeldPicture extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Stack(
     fit: StackFit.expand,
-    children: [child, StreamReconnectingOverlay(deviceLabel: deviceLabel)],
+    children: [
+      child,
+      StreamReconnectingOverlay(deviceLabel: deviceLabel),
+    ],
   );
 }
 

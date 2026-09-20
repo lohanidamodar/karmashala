@@ -21,7 +21,8 @@ sealed class SessionLifecycle {
   String describe() => switch (this) {
     SessionRunning() => 'running',
     SessionExited(:final code) => 'exited $code',
-    SessionEndedWithoutCode(:final reason) => 'ended, exit code unknown ($reason)',
+    SessionEndedWithoutCode(:final reason) =>
+      'ended, exit code unknown ($reason)',
   };
 }
 

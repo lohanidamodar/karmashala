@@ -4,15 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ui/picking.dart';
 
 /// `reg.exe` output for a key holding [rows] — value name to blob hex.
-String _query(Map<String, String> rows) =>
-    [
-      r'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer'
-          r'\ComDlg32\LastVisitedPidlMRU',
-      for (final row in rows.entries)
-        '    ${row.key}    REG_BINARY    ${row.value}',
-      '    MRUListEx    REG_BINARY    11000000FFFFFFFF',
-      '',
-    ].join('\r\n');
+String _query(Map<String, String> rows) => [
+  r'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer'
+      r'\ComDlg32\LastVisitedPidlMRU',
+  for (final row in rows.entries)
+    '    ${row.key}    REG_BINARY    ${row.value}',
+  '    MRUListEx    REG_BINARY    11000000FFFFFFFF',
+  '',
+].join('\r\n');
 
 /// A value blob: the executable's name in UTF-16, NUL-terminated, then bytes
 /// standing in for the ITEMIDLIST, which this code never reads.
@@ -150,14 +149,13 @@ void main() {
   });
   group('forgetRemoteRecentFolders', () {
     /// `reg.exe query` output for OpenSavePidlMRU\<ext>.
-    String recent(Map<String, String> rows) =>
-        [
-          r'HKEY_CURRENT_USER\...\ComDlg32\OpenSavePidlMRU',
-          for (final row in rows.entries)
-            '    ${row.key}    REG_BINARY    ${row.value}',
-          '    MRUListEx    REG_BINARY    11000000FFFFFFFF',
-          '',
-        ].join('\r\n');
+    String recent(Map<String, String> rows) => [
+      r'HKEY_CURRENT_USER\...\ComDlg32\OpenSavePidlMRU',
+      for (final row in rows.entries)
+        '    ${row.key}    REG_BINARY    ${row.value}',
+      '    MRUListEx    REG_BINARY    11000000FFFFFFFF',
+      '',
+    ].join('\r\n');
 
     /// A blob whose display names contain [text], the way a real PIDL's do.
     String blobNaming(String text) {
@@ -184,13 +182,18 @@ void main() {
               }),
             );
           }
-          deleted.add('${arguments[1]}|${arguments[arguments.indexOf('/v') + 1]}');
+          deleted.add(
+            '${arguments[1]}|${arguments[arguments.indexOf('/v') + 1]}',
+          );
           return _ok('');
         },
       );
 
       expect(removed, 2);
-      expect(deleted.every((d) => d.endsWith('|14') || d.endsWith('|17')), isTrue);
+      expect(
+        deleted.every((d) => d.endsWith('|14') || d.endsWith('|17')),
+        isTrue,
+      );
       expect(
         deleted.any((d) => d.endsWith('|3')),
         isFalse,
@@ -198,20 +201,22 @@ void main() {
       );
     });
 
-    test(r'always reads `*`, which is the key a stray extension falls back to',
-        () async {
-      final asked = <String>[];
-      await forgetRemoteRecentFolders(
-        extensions: const ['apk', 'app'],
-        run: (arguments) async {
-          if (arguments.first == 'query') asked.add(arguments[1]);
-          return _ok(recent({}));
-        },
-      );
-      expect(asked.any((k) => k.endsWith(r'\*')), isTrue);
-      expect(asked.any((k) => k.endsWith(r'\apk')), isTrue);
-      expect(asked.any((k) => k.endsWith(r'\app')), isTrue);
-    });
+    test(
+      r'always reads `*`, which is the key a stray extension falls back to',
+      () async {
+        final asked = <String>[];
+        await forgetRemoteRecentFolders(
+          extensions: const ['apk', 'app'],
+          run: (arguments) async {
+            if (arguments.first == 'query') asked.add(arguments[1]);
+            return _ok(recent({}));
+          },
+        );
+        expect(asked.any((k) => k.endsWith(r'\*')), isTrue);
+        expect(asked.any((k) => k.endsWith(r'\apk')), isTrue);
+        expect(asked.any((k) => k.endsWith(r'\app')), isTrue);
+      },
+    );
 
     test('a key that does not exist costs nothing', () async {
       final removed = await forgetRemoteRecentFolders(

@@ -93,10 +93,7 @@ void main() {
         launchFingerprint('open_new_session', base, 'caller-2'),
         isNot(key),
       );
-      expect(
-        launchFingerprint('session_fork', base, 'caller-1'),
-        isNot(key),
-      );
+      expect(launchFingerprint('session_fork', base, 'caller-1'), isNot(key));
       expect(
         launchFingerprint('open_new_session', {
           ...base,
@@ -199,7 +196,9 @@ void main() {
       Future<Object?> launch() async => {'sessionId': 's${++launches}'};
 
       expect(await open(launch), {'sessionId': 's1'});
-      clock.now = clock.now.add(launchDedupeWindow + const Duration(seconds: 1));
+      clock.now = clock.now.add(
+        launchDedupeWindow + const Duration(seconds: 1),
+      );
       expect(await open(launch), {'sessionId': 's2'});
       expect(launches, 2);
     });

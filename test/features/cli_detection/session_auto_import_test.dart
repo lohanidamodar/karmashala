@@ -119,23 +119,25 @@ void main() {
     );
   });
 
-  test('narrowing is refusable, for a store that encodes paths otherwise',
-      () async {
-    asked = [];
-    final service = SessionAutoImportService(
-      locator: FixedLocator(const []),
-      scan: (request) {
-        asked.add(request);
-        return const Stream.empty();
-      },
-      environmentDao: ExecutionEnvironmentDao(db),
-      importedSessionDao: ImportedSessionDao(db),
-      sessionDao: SessionDao(db),
-      ids: SequentialIdGenerator('i-'),
-      clock: FixedClock(testTime),
-      narrowClaudeStore: false,
-    );
-    await service.importForRepositories(repos());
-    expect(asked.single.claudeDirectories, isNull);
-  });
+  test(
+    'narrowing is refusable, for a store that encodes paths otherwise',
+    () async {
+      asked = [];
+      final service = SessionAutoImportService(
+        locator: FixedLocator(const []),
+        scan: (request) {
+          asked.add(request);
+          return const Stream.empty();
+        },
+        environmentDao: ExecutionEnvironmentDao(db),
+        importedSessionDao: ImportedSessionDao(db),
+        sessionDao: SessionDao(db),
+        ids: SequentialIdGenerator('i-'),
+        clock: FixedClock(testTime),
+        narrowClaudeStore: false,
+      );
+      await service.importForRepositories(repos());
+      expect(asked.single.claudeDirectories, isNull);
+    },
+  );
 }

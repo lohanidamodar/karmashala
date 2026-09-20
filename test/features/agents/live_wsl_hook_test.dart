@@ -122,8 +122,7 @@ void main() {
         jsonDecode(File(p.join(uncHome, 'settings.json')).readAsStringSync())
             as Map<String, Object?>;
     final command =
-        ((((config['hooks']! as Map)['Stop']! as List).single
-                        as Map)['hooks']!
+        ((((config['hooks']! as Map)['Stop']! as List).single as Map)['hooks']!
                     as List)
                 .single
             as Map;
@@ -217,11 +216,11 @@ void main() {
             as Map<String, Object?>;
     final hook =
         ((((((config['hooks']! as Map)['Stop']! as List).single
-                                as Map)['hooks']!
-                            as List)
-                        .single
-                    as Map)['command']!
-                as String);
+                            as Map)['hooks']!
+                        as List)
+                    .single
+                as Map)['command']!
+            as String);
     await _wsl([
       'sh',
       '-c',

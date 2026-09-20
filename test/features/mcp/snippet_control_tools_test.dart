@@ -208,7 +208,10 @@ void main() {
     });
 
     test('a blank command is refused', () async {
-      expect((await callTool('snippet_add', {'command': '  '})).isError, isTrue);
+      expect(
+        (await callTool('snippet_add', {'command': '  '})).isError,
+        isTrue,
+      );
     });
   });
 

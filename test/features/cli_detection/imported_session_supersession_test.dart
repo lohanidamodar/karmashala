@@ -92,9 +92,9 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
     dao = ImportedSessionDao(db);
     sessions = SessionDao(db);
   });
@@ -314,9 +314,9 @@ void main() {
       dao.insertIfAbsent(imported());
       final c = container();
 
-      final id = await c.read(sessionActionsProvider).resumeImported(
-        dao.getById('imp-1')!,
-      );
+      final id = await c
+          .read(sessionActionsProvider)
+          .resumeImported(dao.getById('imp-1')!);
 
       expect(dao.getAll(), isEmpty);
       final rows = sessions.getAll();

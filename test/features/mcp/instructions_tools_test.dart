@@ -56,10 +56,9 @@ void main() {
   });
 
   group('what the guides actually claim', () {
-    String guide(String topic) =>
-        textOf(const InstructionsTools().call('instructions', {
-          'topic': topic,
-        }));
+    String guide(String topic) => textOf(
+      const InstructionsTools().call('instructions', {'topic': topic}),
+    );
 
     test('session_send is described as delivery, not completion', () {
       final text = guide('sessions');
@@ -123,7 +122,10 @@ void main() {
         'topic': 'checkpoints',
       });
       expect(textOf(text), contains('checkpoint_restore  — destructive'));
-      expect(textOf(text), contains('checkpoint_list  — read-only, idempotent'));
+      expect(
+        textOf(text),
+        contains('checkpoint_list  — read-only, idempotent'),
+      );
     });
 
     test('a guide names no tool the catalogue does not have', () {
@@ -195,14 +197,23 @@ void main() {
         );
         // And each says which half it owns, so the rule is actionable rather
         // than a definition sitting on its own.
-        expect(text, contains('terminal_'), reason: '$topic names no terminal half');
-        expect(text, contains('session_'), reason: '$topic names no session half');
+        expect(
+          text,
+          contains('terminal_'),
+          reason: '$topic names no terminal half',
+        );
+        expect(
+          text,
+          contains('session_'),
+          reason: '$topic names no session half',
+        );
       }
     });
 
     test('the sessions guide teaches the two rules a wait turns on', () {
-      final sessions =
-          kMcpGuides.firstWhere((g) => g.topic == 'sessions').render();
+      final sessions = kMcpGuides
+          .firstWhere((g) => g.topic == 'sessions')
+          .render();
       // done vs idle: "finished something" must not read like "never started".
       expect(sessions, contains('never started'));
       // And a timeout is not proof that nothing was sent.

@@ -33,18 +33,21 @@ const _real = '''
 
 void main() {
   group('parseSimctlDevices', () {
-    test('reads every runtime, and keeps the runtime each device belongs to', () {
-      final devices = parseSimctlDevices(_real);
+    test(
+      'reads every runtime, and keeps the runtime each device belongs to',
+      () {
+        final devices = parseSimctlDevices(_real);
 
-      expect(devices, hasLength(2));
-      final booted = devices.first;
-      expect(booted.udid, '70592006-11CD-44A3-96BC-25EE8E72CA3D');
-      expect(booted.name, 'iPhone 17 Pro');
-      expect(booted.state, SimulatorState.booted);
-      expect(booted.runtime, 'com.apple.CoreSimulator.SimRuntime.iOS-26-4');
-      expect(booted.dataPathSize, 18337792);
-      expect(booted.isAvailable, isTrue);
-    });
+        expect(devices, hasLength(2));
+        final booted = devices.first;
+        expect(booted.udid, '70592006-11CD-44A3-96BC-25EE8E72CA3D');
+        expect(booted.name, 'iPhone 17 Pro');
+        expect(booted.state, SimulatorState.booted);
+        expect(booted.runtime, 'com.apple.CoreSimulator.SimRuntime.iOS-26-4');
+        expect(booted.dataPathSize, 18337792);
+        expect(booted.isAvailable, isTrue);
+      },
+    );
 
     test('an unavailable simulator is listed, and says so', () {
       // Still a row in the device set: hiding it loses the user's device, and
@@ -77,7 +80,10 @@ void main() {
     test('every state simctl writes', () {
       expect(SimulatorState.parse('Booted'), SimulatorState.booted);
       expect(SimulatorState.parse('Booting'), SimulatorState.booting);
-      expect(SimulatorState.parse('Shutting Down'), SimulatorState.shuttingDown);
+      expect(
+        SimulatorState.parse('Shutting Down'),
+        SimulatorState.shuttingDown,
+      );
       expect(SimulatorState.parse('Shutdown'), SimulatorState.shutdown);
       // Creating is not running and cannot be talked to; shutdown is the
       // honest reading, not a state of its own the UI must learn.

@@ -150,7 +150,8 @@ void main() {
     expect(
       find.text('Create note from selection'),
       findsNothing,
-      reason: 'a row that writes into a surface the user switched off is a '
+      reason:
+          'a row that writes into a surface the user switched off is a '
           'row that files work where nobody will look for it',
     );
   });

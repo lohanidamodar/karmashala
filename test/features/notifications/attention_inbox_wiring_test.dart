@@ -35,8 +35,9 @@ class _ForegroundPanes extends Notifier<List<String>> {
   void show(List<String> paneIds) => state = paneIds;
 }
 
-final _foregroundProvider =
-    NotifierProvider<_ForegroundPanes, List<String>>(_ForegroundPanes.new);
+final _foregroundProvider = NotifierProvider<_ForegroundPanes, List<String>>(
+  _ForegroundPanes.new,
+);
 
 void main() {
   late AppDatabase db;

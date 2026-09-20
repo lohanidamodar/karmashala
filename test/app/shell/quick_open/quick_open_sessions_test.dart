@@ -50,9 +50,9 @@ void main() {
     ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
     ProjectDao(db).insert(project(name: 'Karmashala'));
     RepositoryDao(db).insert(repository(name: 'app'));
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
   });
   tearDown(() => db.close());
 
@@ -68,18 +68,21 @@ void main() {
     );
   }
 
-  void session(String id, {required String title, Duration createdAgo = Duration.zero}) =>
-      SessionDao(db).insert(
-        Session(
-          id: id,
-          repositoryId: 'r1',
-          agentInstallationId: 'a1',
-          title: title,
-          useWorktree: false,
-          status: SessionStatus.running,
-          createdAt: now.subtract(createdAgo),
-        ),
-      );
+  void session(
+    String id, {
+    required String title,
+    Duration createdAgo = Duration.zero,
+  }) => SessionDao(db).insert(
+    Session(
+      id: id,
+      repositoryId: 'r1',
+      agentInstallationId: 'a1',
+      title: title,
+      useWorktree: false,
+      status: SessionStatus.running,
+      createdAt: now.subtract(createdAgo),
+    ),
+  );
 
   Future<ProviderContainer> open(WidgetTester tester) async {
     final container = ProviderContainer(
@@ -165,7 +168,11 @@ void main() {
     // Deliberately crossed: the session created most recently is the one that
     // has been silent, which is the report — "the sessions were supposed to be
     // ordered by last active time".
-    session('quiet', title: 'Match quiet', createdAgo: const Duration(hours: 1));
+    session(
+      'quiet',
+      title: 'Match quiet',
+      createdAgo: const Duration(hours: 1),
+    );
     session('busy', title: 'Match busy', createdAgo: const Duration(days: 30));
     active('quiet', const Duration(hours: 20));
     active('busy', const Duration(minutes: 1));
@@ -184,14 +191,21 @@ void main() {
   testWidgets('a session with no reading ranks below every one that has '
       'some', (tester) async {
     session('silent', title: 'Match silent', createdAgo: Duration.zero);
-    session('ancient', title: 'Match ancient', createdAgo: const Duration(days: 90));
+    session(
+      'ancient',
+      title: 'Match ancient',
+      createdAgo: const Duration(days: 90),
+    );
     active('ancient', const Duration(days: 60));
     await open(tester);
 
     await type(tester, 'Match');
 
     final rows = listed(tester);
-    expect(rows.indexOf('Match ancient'), lessThan(rows.indexOf('Match silent')));
+    expect(
+      rows.indexOf('Match ancient'),
+      lessThan(rows.indexOf('Match silent')),
+    );
   });
 
   testWidgets('imported history is dated by its own file', (tester) async {

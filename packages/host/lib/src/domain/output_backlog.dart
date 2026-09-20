@@ -94,7 +94,11 @@ class OutputBacklog {
     final dropped = offset < first ? first - offset : 0;
     final length = _total - start;
     if (length <= 0) {
-      return BacklogSlice(offset: _total, bytes: Uint8List(0), droppedBytes: dropped);
+      return BacklogSlice(
+        offset: _total,
+        bytes: Uint8List(0),
+        droppedBytes: dropped,
+      );
     }
     final out = Uint8List(length);
     final begin = (_writeIndex - (_total - start)) % capacityBytes;

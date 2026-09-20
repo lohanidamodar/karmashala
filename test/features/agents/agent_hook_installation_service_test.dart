@@ -393,9 +393,9 @@ void main() {
       expect(claude.installed, isTrue);
       expect(claude.skippedBecause, isNull);
       expect(
-      revealHookCommands(settings().readAsStringSync()),
-      contains(agentHookMarker),
-    );
+        revealHookCommands(settings().readAsStringSync()),
+        contains(agentHookMarker),
+      );
       final endpointText = endpointFile().readAsStringSync();
       expect(endpointText, contains('spool=$agentHookMarker.spool'));
       expect(endpointText, contains('agent=claudeCode'));
@@ -602,9 +602,9 @@ void main() {
       await service.uninstallAll();
 
       expect(
-      revealHookCommands(settings().readAsStringSync()),
-      isNot(contains(agentHookMarker)),
-    );
+        revealHookCommands(settings().readAsStringSync()),
+        isNot(contains(agentHookMarker)),
+      );
       expect(endpointFile().existsSync(), isFalse);
       expect(
         spoolDir().existsSync(),
@@ -650,7 +650,9 @@ void main() {
         final ours = [
           for (final matcher in entry.value as List)
             for (final hook in (matcher as Map)['hooks'] as List)
-              if (revealHookCommands((hook as Map)['command']).contains(agentHookMarker))
+              if (revealHookCommands(
+                (hook as Map)['command'],
+              ).contains(agentHookMarker))
                 hook['command'],
         ];
         expect(ours, hasLength(1), reason: '${entry.key}');

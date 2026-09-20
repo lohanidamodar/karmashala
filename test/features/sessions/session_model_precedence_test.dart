@@ -70,11 +70,9 @@ const _rover = AgentDescriptor(
 extension on ProviderContainer {
   SessionLauncher get launcher => read(sessionLauncherProvider);
 
-  void setDefaultModel(String? modelId) =>
-      read(settingsControllerProvider.notifier).setDefaultModel(
-        'roverCli',
-        modelId,
-      );
+  void setDefaultModel(String? modelId) => read(
+    settingsControllerProvider.notifier,
+  ).setDefaultModel('roverCli', modelId);
 
   /// The arguments the pane was actually started with — the only place a model
   /// is ever real.
@@ -85,10 +83,10 @@ extension on ProviderContainer {
 
 void seedStopped(AppDatabase db, {String? model}) {
   SessionDao(db).insert(
-    session(id: 'src', status: SessionStatus.completed).copyWith(
-      externalSessionId: 'cli-1',
-      modelId: model,
-    ),
+    session(
+      id: 'src',
+      status: SessionStatus.completed,
+    ).copyWith(externalSessionId: 'cli-1', modelId: model),
   );
 }
 
@@ -126,7 +124,10 @@ void main() {
 
     // "Let the agent choose" is the setting nobody has changed, and it is an
     // answer rather than a gap: no flag reaches the CLI at all.
-    expect(h.container.argumentsOf(launched.paneId!), isNot(contains('--model')));
+    expect(
+      h.container.argumentsOf(launched.paneId!),
+      isNot(contains('--model')),
+    );
     final effective = h.container.launcher.effectiveModelFor(
       launched.session.id,
     )!;
@@ -135,26 +136,29 @@ void main() {
     expect(effective.inherited, isTrue);
   });
 
-  test('the Settings default reaches the chip and the command line, once', () async {
-    final h = harness();
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    h.container.setDefaultModel('deep');
+  test(
+    'the Settings default reaches the chip and the command line, once',
+    () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      h.container.setDefaultModel('deep');
 
-    final launched = await startNew(h.container);
+      final launched = await startNew(h.container);
 
-    // One resolution, two readers: what the chip draws and what the pane was
-    // started with are the same call's answer, so they cannot disagree.
-    final effective = h.container.launcher.effectiveModelFor(
-      launched.session.id,
-    )!;
-    expect(effective.modelId, 'deep');
-    expect(effective.inherited, isTrue);
-    expect(h.container.argumentsOf(launched.paneId!), ['--model', 'deep']);
-    // And nothing was written on the row: following the default is the absence
-    // of a choice, not a copy of one.
-    expect(SessionDao(h.db).getById(launched.session.id)!.modelId, isNull);
-  });
+      // One resolution, two readers: what the chip draws and what the pane was
+      // started with are the same call's answer, so they cannot disagree.
+      final effective = h.container.launcher.effectiveModelFor(
+        launched.session.id,
+      )!;
+      expect(effective.modelId, 'deep');
+      expect(effective.inherited, isTrue);
+      expect(h.container.argumentsOf(launched.paneId!), ['--model', 'deep']);
+      // And nothing was written on the row: following the default is the absence
+      // of a choice, not a copy of one.
+      expect(SessionDao(h.db).getById(launched.session.id)!.modelId, isNull);
+    },
+  );
 
   test('a session\'s own model beats the Settings default at launch', () async {
     final h = harness();
@@ -173,26 +177,29 @@ void main() {
     expect(effective.defaultModelId, 'deep');
   });
 
-  test('changing the default moves the session that never chose, and only it', () {
-    final h = harness();
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    seedStopped(h.db);
-    SessionDao(h.db).insert(
-      session(id: 'own', status: SessionStatus.completed).copyWith(
-        externalSessionId: 'cli-2',
-        modelId: 'fast',
-      ),
-    );
+  test(
+    'changing the default moves the session that never chose, and only it',
+    () {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedStopped(h.db);
+      SessionDao(h.db).insert(
+        session(
+          id: 'own',
+          status: SessionStatus.completed,
+        ).copyWith(externalSessionId: 'cli-2', modelId: 'fast'),
+      );
 
-    h.container.setDefaultModel('deep');
+      h.container.setDefaultModel('deep');
 
-    expect(h.container.launcher.effectiveModelFor('src')!.modelId, 'deep');
-    expect(h.container.launcher.effectiveModelFor('own')!.modelId, 'fast');
+      expect(h.container.launcher.effectiveModelFor('src')!.modelId, 'deep');
+      expect(h.container.launcher.effectiveModelFor('own')!.modelId, 'fast');
 
-    h.container.setDefaultModel('fast');
-    expect(h.container.launcher.effectiveModelFor('src')!.modelId, 'fast');
-  });
+      h.container.setDefaultModel('fast');
+      expect(h.container.launcher.effectiveModelFor('src')!.modelId, 'fast');
+    },
+  );
 
   test('a resume runs on the default the setting names now', () async {
     final h = harness();

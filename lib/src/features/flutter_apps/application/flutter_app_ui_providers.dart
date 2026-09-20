@@ -12,9 +12,7 @@ class SelectedFlutterAppId extends Notifier<String?> {
 }
 
 final selectedFlutterAppIdProvider =
-    NotifierProvider<SelectedFlutterAppId, String?>(
-      SelectedFlutterAppId.new,
-    );
+    NotifierProvider<SelectedFlutterAppId, String?>(SelectedFlutterAppId.new);
 
 /// The app the pane is describing: the explicit choice, or the only attached
 /// one. Derived, so the pane and its actions cannot hold two opinions.

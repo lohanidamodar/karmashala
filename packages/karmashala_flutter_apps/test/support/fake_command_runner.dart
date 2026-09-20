@@ -3,7 +3,11 @@ import 'package:agent_cli/process.dart';
 /// A deterministic [CommandRunner] test double, field-for-field the app's own
 /// — minus [start], because nothing here runs a long-lived process.
 class FakeCommandRunner implements CommandRunner {
-  FakeCommandRunner({this.environmentId = 'windows', this.responder, this.throwError});
+  FakeCommandRunner({
+    this.environmentId = 'windows',
+    this.responder,
+    this.throwError,
+  });
 
   @override
   final String environmentId;
@@ -26,6 +30,7 @@ class FakeCommandRunner implements CommandRunner {
   }
 
   @override
-  Future<ProcessHandle> start(CommandRequest request) =>
-      throw UnsupportedError('nothing in karmashala_flutter_apps starts a process');
+  Future<ProcessHandle> start(CommandRequest request) => throw UnsupportedError(
+    'nothing in karmashala_flutter_apps starts a process',
+  );
 }

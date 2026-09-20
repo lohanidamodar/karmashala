@@ -379,8 +379,9 @@ class CompanionClient {
 
   // --- Typed requests --------------------------------------------------------
 
-  Future<List<RemoteSessionSnapshot>> listSessions() async =>
-      [for (final row in await listSessionRows()) row.snapshot];
+  Future<List<RemoteSessionSnapshot>> listSessions() async => [
+    for (final row in await listSessionRows()) row.snapshot,
+  ];
 
   /// [listSessions], keeping each row's raw JSON beside the parsed snapshot —
   /// for row fields a newer host sends that this build has no name for yet.
@@ -490,8 +491,9 @@ class CompanionClient {
   }
 
   /// `usage.get` — every agent account's usage limits.
-  Future<RemoteUsageSnapshot> usage() async =>
-      RemoteUsageSnapshot.fromJson(await _request(FrameType.usageGet, const {}));
+  Future<RemoteUsageSnapshot> usage() async => RemoteUsageSnapshot.fromJson(
+    await _request(FrameType.usageGet, const {}),
+  );
 
   /// `menu.answer` — chooses one option of the menu [request] names; answers
   /// with the option's words.

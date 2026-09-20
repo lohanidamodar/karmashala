@@ -122,10 +122,7 @@ void main() {
           ),
         ],
       );
-      expect(
-        custom.apply('pair with KARMA-4821'),
-        'pair with [redacted:code]',
-      );
+      expect(custom.apply('pair with KARMA-4821'), 'pair with [redacted:code]');
     });
   });
 }

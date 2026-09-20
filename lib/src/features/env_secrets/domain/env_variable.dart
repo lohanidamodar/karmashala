@@ -211,10 +211,12 @@ class EnvVaultData {
   static const EnvVaultData empty = EnvVaultData();
 
   /// A vault that could not be read or could not be hardened.
-  const EnvVaultData.unavailable(String this.problem, {this.canStoreSecrets = false})
-    : enabled = true,
-      variables = const [],
-      protection = EnvProtection.filePermissions;
+  const EnvVaultData.unavailable(
+    String this.problem, {
+    this.canStoreSecrets = false,
+  }) : enabled = true,
+       variables = const [],
+       protection = EnvProtection.filePermissions;
 
   /// The master switch. Off stops injection without deleting anything.
   final bool enabled;

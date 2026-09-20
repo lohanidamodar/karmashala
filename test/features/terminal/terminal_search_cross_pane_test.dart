@@ -143,9 +143,7 @@ void main() {
 
     layout.search.revealCurrent();
 
-    final sessions = layout.container.read(
-      terminalSessionsControllerProvider,
-    );
+    final sessions = layout.container.read(terminalSessionsControllerProvider);
     expect(sessions.activeTab!.id, layout.tabOf(pane(2)));
     expect(sessions.activeTab!.focusedPaneId, pane(2));
     expect(highlightsIn(2), 1);

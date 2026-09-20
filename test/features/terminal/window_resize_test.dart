@@ -357,7 +357,8 @@ void main() {
     for (var i = 1; i <= 6; i++) {
       await step(
         'a $i px nudge',
-        () => resizeWindow(tester, Size(1000 + i.toDouble(), 640 + i.toDouble())),
+        () =>
+            resizeWindow(tester, Size(1000 + i.toDouble(), 640 + i.toDouble())),
       );
     }
     await step(

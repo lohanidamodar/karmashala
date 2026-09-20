@@ -44,14 +44,31 @@ void main() {
 
     test('a garbled menu is dropped, not half-read', () {
       for (final garbled in const [
-        {'menuId': 'm', 'options': ['only one'], 'highlighted': 0},
-        {'menuId': 'm', 'options': ['a', 'b'], 'highlighted': 2},
-        {'menuId': 'm', 'options': ['a', 3], 'highlighted': 0},
-        {'options': ['a', 'b'], 'highlighted': 0},
+        {
+          'menuId': 'm',
+          'options': ['only one'],
+          'highlighted': 0,
+        },
+        {
+          'menuId': 'm',
+          'options': ['a', 'b'],
+          'highlighted': 2,
+        },
+        {
+          'menuId': 'm',
+          'options': ['a', 3],
+          'highlighted': 0,
+        },
+        {
+          'options': ['a', 'b'],
+          'highlighted': 0,
+        },
       ]) {
         expect(
-          RemoteApprovalRequest.fromJson({'sessionId': 's1', 'menu': garbled})
-              .menu,
+          RemoteApprovalRequest.fromJson({
+            'sessionId': 's1',
+            'menu': garbled,
+          }).menu,
           isNull,
           reason: '$garbled',
         );
@@ -95,64 +112,71 @@ void main() {
         if (frame.type == FrameType.approvalResolved) frame,
     ];
 
-    test('is handed to the desktop, and the phone is told it was answered',
-        () async {
-      final harness = await waiting();
-      await harness.request(
-        FrameType.menuAnswer,
-        payload: const RemoteMenuAnswerRequest(
-          sessionId: 's1',
-          menuId: 'a1b2c3d4',
-          option: 1,
-        ).toJson(),
-      );
+    test(
+      'is handed to the desktop, and the phone is told it was answered',
+      () async {
+        final harness = await waiting();
+        await harness.request(
+          FrameType.menuAnswer,
+          payload: const RemoteMenuAnswerRequest(
+            sessionId: 's1',
+            menuId: 'a1b2c3d4',
+            option: 1,
+          ).toJson(),
+        );
 
-      final given = harness.fake.menuAnswers.single;
-      expect(given.menuId, 'a1b2c3d4');
-      expect(given.option, 1);
-      expect(
-        RemoteApprovalResolved.fromJson(resolutions(harness).single.payload)
-            .outcome,
-        RemoteApprovalOutcome.answered,
-      );
-      expect(harness.last.type, FrameType.result);
-      expect(harness.last.payload['chosen'], 'option 1');
-    });
+        final given = harness.fake.menuAnswers.single;
+        expect(given.menuId, 'a1b2c3d4');
+        expect(given.option, 1);
+        expect(
+          RemoteApprovalResolved.fromJson(
+            resolutions(harness).single.payload,
+          ).outcome,
+          RemoteApprovalOutcome.answered,
+        );
+        expect(harness.last.type, FrameType.result);
+        expect(harness.last.payload['chosen'], 'option 1');
+      },
+    );
 
-    test('an answer to a prompt already settled is refused, not typed',
-        () async {
-      final harness = await waiting();
-      harness.fake.setAwaitingApproval('s1', waiting: false);
-      await harness.request(
-        FrameType.menuAnswer,
-        payload: const RemoteMenuAnswerRequest(
-          sessionId: 's1',
-          menuId: 'a1b2c3d4',
-          option: 1,
-        ).toJson(),
-      );
-      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
-      expect(harness.fake.menuAnswers, isEmpty);
-    });
+    test(
+      'an answer to a prompt already settled is refused, not typed',
+      () async {
+        final harness = await waiting();
+        harness.fake.setAwaitingApproval('s1', waiting: false);
+        await harness.request(
+          FrameType.menuAnswer,
+          payload: const RemoteMenuAnswerRequest(
+            sessionId: 's1',
+            menuId: 'a1b2c3d4',
+            option: 1,
+          ).toJson(),
+        );
+        expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+        expect(harness.fake.menuAnswers, isEmpty);
+      },
+    );
 
-    test('a refusal from the desktop reaches the phone and resolves nothing',
-        () async {
-      final harness = await waiting();
-      harness.fake.menuRefusal = const RemoteApiRefusal(
-        ErrorCode.badRequest,
-        'the prompt changed since it was shown, so nothing was chosen',
-      );
-      await harness.request(
-        FrameType.menuAnswer,
-        payload: const RemoteMenuAnswerRequest(
-          sessionId: 's1',
-          menuId: 'a1b2c3d4',
-          option: 1,
-        ).toJson(),
-      );
-      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
-      expect(resolutions(harness), isEmpty);
-    });
+    test(
+      'a refusal from the desktop reaches the phone and resolves nothing',
+      () async {
+        final harness = await waiting();
+        harness.fake.menuRefusal = const RemoteApiRefusal(
+          ErrorCode.badRequest,
+          'the prompt changed since it was shown, so nothing was chosen',
+        );
+        await harness.request(
+          FrameType.menuAnswer,
+          payload: const RemoteMenuAnswerRequest(
+            sessionId: 's1',
+            menuId: 'a1b2c3d4',
+            option: 1,
+          ).toJson(),
+        );
+        expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+        expect(resolutions(harness), isEmpty);
+      },
+    );
 
     // Found on the Oppo, 2026-09-19: folder trust answered from the phone, and
     // Claude Code went straight on to "Allow external CLAUDE.md imports?". The
@@ -162,7 +186,10 @@ void main() {
       const imports = RemoteMenu(
         menuId: 'e5f6a7b8',
         prompt: ['Allow external CLAUDE.md file imports?'],
-        options: ['No, disable external imports', 'Yes, allow external imports'],
+        options: [
+          'No, disable external imports',
+          'Yes, allow external imports',
+        ],
         highlighted: 0,
       );
 
@@ -201,9 +228,9 @@ void main() {
 
         expect(requests(harness).length, before + 1);
         expect(
-          RemoteApprovalRequest.fromJson(requests(harness).last.payload)
-              .menu!
-              .menuId,
+          RemoteApprovalRequest.fromJson(
+            requests(harness).last.payload,
+          ).menu!.menuId,
           'e5f6a7b8',
         );
       });
@@ -218,24 +245,26 @@ void main() {
         expect(requests(harness).length, before);
       });
 
-      test('replacing a menu that was never answered is announced too',
-          () async {
-        final harness = await waiting();
-        await harness.request(
-          FrameType.sessionSubscribe,
-          payload: const {'sessionId': 's1'},
-        );
-        harness.fake.approvals['s1'] = const RemoteApprovalRequest(
-          sessionId: 's1',
-          waiting: RemoteWaitKind.approval,
-          menu: imports,
-        );
-        final before = requests(harness).length;
+      test(
+        'replacing a menu that was never answered is announced too',
+        () async {
+          final harness = await waiting();
+          await harness.request(
+            FrameType.sessionSubscribe,
+            payload: const {'sessionId': 's1'},
+          );
+          harness.fake.approvals['s1'] = const RemoteApprovalRequest(
+            sessionId: 's1',
+            waiting: RemoteWaitKind.approval,
+            menu: imports,
+          );
+          final before = requests(harness).length;
 
-        await harness.api.recheckApproval('s1');
+          await harness.api.recheckApproval('s1');
 
-        expect(requests(harness).length, before + 1);
-      });
+          expect(requests(harness).length, before + 1);
+        },
+      );
 
       test('nothing is announced once the session stops waiting', () async {
         final harness = await answered();

@@ -194,9 +194,8 @@ class AgentContextReadings extends Notifier<Map<String, AgentContextReading>> {
     if (environment.kind != EnvironmentKind.wsl) return null;
     try {
       ExecutionEnvironment? windows;
-      for (final candidate in ref
-          .read(executionEnvironmentDaoProvider)
-          .getAll()) {
+      for (final candidate
+          in ref.read(executionEnvironmentDaoProvider).getAll()) {
         if (candidate.kind == EnvironmentKind.windowsNative) {
           windows = candidate;
           break;

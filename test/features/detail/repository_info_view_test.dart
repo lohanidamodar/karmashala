@@ -192,9 +192,7 @@ void main() {
       container: scope,
       child: const MaterialApp(
         // The panel's own width, which is what makes the list expensive.
-        home: Scaffold(
-          body: SizedBox(width: 240, child: RepositoryInfoView()),
-        ),
+        home: Scaffold(body: SizedBox(width: 240, child: RepositoryInfoView())),
       ),
     );
 
@@ -296,20 +294,13 @@ void main() {
       // The explicit verb: `CheckoutPicker`, the same call behind the panel's
       // picker and the `select_checkout` tool.
       RepositoryDao(db).insert(
-        repository(
-          id: 'r2',
-          name: 'agent-2',
-          path: r'C:\src\demo\wt\agent-2',
-        ),
+        repository(id: 'r2', name: 'agent-2', path: r'C:\src\demo\wt\agent-2'),
       );
       final scope = await pump(tester);
       await tester.tap(find.text('WORKTREES'));
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.text('agent-2'),
-        buttons: kSecondaryMouseButton,
-      );
+      await tester.tap(find.text('agent-2'), buttons: kSecondaryMouseButton);
       await tester.pumpAndSettle();
       await tester.tap(find.text("Select as the session's checkout"));
       await tester.pumpAndSettle();
@@ -324,10 +315,7 @@ void main() {
       await tester.tap(find.text('WORKTREES'));
       await tester.pumpAndSettle();
 
-      await tester.tap(
-        find.text('agent-2'),
-        buttons: kSecondaryMouseButton,
-      );
+      await tester.tap(find.text('agent-2'), buttons: kSecondaryMouseButton);
       await tester.pumpAndSettle();
       await tester.tap(find.text("Select as the session's checkout"));
       await tester.pumpAndSettle();

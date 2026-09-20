@@ -76,16 +76,16 @@ void main() {
       expect(events, hasLength(1));
       expect(events.first.type, SessionEventTypes.agentStatus);
       expect(events.first.data['state'], 'complete');
-      expect(events.first.data['sessionId'], 'df3c0708-a27f-4799-b761-57a657a84274');
+      expect(
+        events.first.data['sessionId'],
+        'df3c0708-a27f-4799-b761-57a657a84274',
+      );
     });
 
     test('parses stream-json result event with error', () {
       final line = jsonEncode({
         'event': 'result',
-        'result': {
-          'status': 'ERROR',
-          'error': 'Quota exceeded',
-        },
+        'result': {'status': 'ERROR', 'error': 'Quota exceeded'},
       });
 
       final events = parseAntigravityMessage(line);
@@ -95,17 +95,20 @@ void main() {
     });
 
     test('parses legacy json format', () {
-      final msgLine = jsonEncode({
-        'type': 'message',
-        'text': 'legacy message',
-      });
+      final msgLine = jsonEncode({'type': 'message', 'text': 'legacy message'});
       final errLine = jsonEncode({
         'type': 'error',
         'message': 'something failed',
       });
 
-      expect(parseAntigravityMessage(msgLine).single.type, SessionEventTypes.agentMessage);
-      expect(parseAntigravityMessage(errLine).single.type, SessionEventTypes.error);
+      expect(
+        parseAntigravityMessage(msgLine).single.type,
+        SessionEventTypes.agentMessage,
+      );
+      expect(
+        parseAntigravityMessage(errLine).single.type,
+        SessionEventTypes.error,
+      );
     });
 
     test('treats plain text as agent message', () {
@@ -122,9 +125,12 @@ void main() {
   });
 
   group('encodeAntigravityUserMessage', () {
-    test('passes plain text through, because the pane runs agy in TUI mode', () {
-      expect(encodeAntigravityUserMessage('Hello agy'), 'Hello agy');
-    });
+    test(
+      'passes plain text through, because the pane runs agy in TUI mode',
+      () {
+        expect(encodeAntigravityUserMessage('Hello agy'), 'Hello agy');
+      },
+    );
 
     test('does not wrap an already-encoded event either', () {
       const input = '{"event":"user","message":{"content":"hi"}}';
@@ -180,10 +186,7 @@ void main() {
     });
 
     test('parses assistant text from stream-json output line', () {
-      final invocation = oneShotInvocation(
-        AgentIds.antigravity,
-        'Hello',
-      );
+      final invocation = oneShotInvocation(AgentIds.antigravity, 'Hello');
 
       final line = jsonEncode({
         'event': 'step_update',

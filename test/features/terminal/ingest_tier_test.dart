@@ -110,7 +110,11 @@ void main() {
   group('the coalescer under a budget', () {
     /// A coalescer with fully driven schedulers, so a flush happens exactly
     /// when the test says so.
-    ({PtyOutputCoalescer coalescer, List<String> written, void Function() frame})
+    ({
+      PtyOutputCoalescer coalescer,
+      List<String> written,
+      void Function() frame,
+    })
     make({
       required TerminalIngestBudget budget,
       required IngestTier tier,
@@ -139,28 +143,31 @@ void main() {
       );
     }
 
-    test('a warm pane writes only what the pool allowed, and keeps the rest', () {
-      var now = Duration.zero;
-      final budget = TerminalIngestBudget(
-        warmPoolBytes: 100,
-        clock: () => now,
-      );
-      final pane = make(budget: budget, tier: IngestTier.warm);
+    test(
+      'a warm pane writes only what the pool allowed, and keeps the rest',
+      () {
+        var now = Duration.zero;
+        final budget = TerminalIngestBudget(
+          warmPoolBytes: 100,
+          clock: () => now,
+        );
+        final pane = make(budget: budget, tier: IngestTier.warm);
 
-      pane.coalescer.add(bytes(500));
-      pane.frame();
+        pane.coalescer.add(bytes(500));
+        pane.frame();
 
-      expect(pane.written.single.length, 100);
-      expect(
-        pane.coalescer.pendingBytes,
-        400,
-        reason: 'the rest is queued, not dropped',
-      );
+        expect(pane.written.single.length, 100);
+        expect(
+          pane.coalescer.pendingBytes,
+          400,
+          reason: 'the rest is queued, not dropped',
+        );
 
-      now += const Duration(milliseconds: 16);
-      pane.frame();
-      expect(pane.written.last.length, 100);
-    });
+        now += const Duration(milliseconds: 16);
+        pane.frame();
+        expect(pane.written.last.length, 100);
+      },
+    );
 
     test('a hot pane is unaffected by warm panes having drained the pool', () {
       var now = Duration.zero;
@@ -221,28 +228,34 @@ void main() {
       expect(pane.coalescer.droppedBytes, 400);
     });
 
-    test('becoming hot re-arms a pane that was waiting on the slow watchdog', () {
-      // Activation must not make the user wait out a hidden pane's cadence.
-      final delays = <Duration>[];
-      final coalescer = PtyOutputCoalescer(
-        onData: (_) {},
-        tier: IngestTier.warm,
-        scheduleFrameCallback: (_) {},
-        scheduleWatchdog: (delay, callback) {
-          delays.add(delay);
-          return Object();
-        },
-        cancelWatchdog: (_) {},
-        idleThreshold: const Duration(days: 1),
-      );
+    test(
+      'becoming hot re-arms a pane that was waiting on the slow watchdog',
+      () {
+        // Activation must not make the user wait out a hidden pane's cadence.
+        final delays = <Duration>[];
+        final coalescer = PtyOutputCoalescer(
+          onData: (_) {},
+          tier: IngestTier.warm,
+          scheduleFrameCallback: (_) {},
+          scheduleWatchdog: (delay, callback) {
+            delays.add(delay);
+            return Object();
+          },
+          cancelWatchdog: (_) {},
+          idleThreshold: const Duration(days: 1),
+        );
 
-      coalescer.add(bytes(1));
-      expect(delays, [kHiddenCoalescerWatchdog]);
+        coalescer.add(bytes(1));
+        expect(delays, [kHiddenCoalescerWatchdog]);
 
-      coalescer.tier = IngestTier.hot;
+        coalescer.tier = IngestTier.hot;
 
-      expect(delays, [kHiddenCoalescerWatchdog, const Duration(milliseconds: 16)]);
-    });
+        expect(delays, [
+          kHiddenCoalescerWatchdog,
+          const Duration(milliseconds: 16),
+        ]);
+      },
+    );
 
     test('a pane cycled between tiers keeps one watchdog, not a hundred', () {
       // Switching tabs re-arms the watchdog so an activated pane does not wait
@@ -280,10 +293,7 @@ void main() {
     });
 
     test('taking the queue leaves nothing behind to parse', () {
-      final pane = make(
-        budget: TerminalIngestBudget(),
-        tier: IngestTier.hot,
-      );
+      final pane = make(budget: TerminalIngestBudget(), tier: IngestTier.hot);
       pane.coalescer.add(bytes(200));
 
       final taken = pane.coalescer.takePending();
@@ -291,7 +301,11 @@ void main() {
       expect(taken.length, 200);
       expect(pane.coalescer.pendingBytes, 0);
       pane.frame();
-      expect(pane.written, isEmpty, reason: 'nothing was parsed on the way out');
+      expect(
+        pane.written,
+        isEmpty,
+        reason: 'nothing was parsed on the way out',
+      );
     });
   });
 

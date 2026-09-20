@@ -6,8 +6,9 @@ void main() {
     test('keeps the address --vmservice-out-file writes, verbatim', () {
       // Verbatim what `--vmservice-out-file` wrote, 2026-09-08.
       expect(
-        normaliseVmServiceUri('ws://127.0.0.1:53119/bt32nsO63q8=/ws')
-            .toString(),
+        normaliseVmServiceUri(
+          'ws://127.0.0.1:53119/bt32nsO63q8=/ws',
+        ).toString(),
         'ws://127.0.0.1:53119/bt32nsO63q8=/ws',
       );
     });
@@ -15,8 +16,9 @@ void main() {
     test('converts the address "flutter run" prints', () {
       // The printed form of the same address.
       expect(
-        normaliseVmServiceUri('http://127.0.0.1:53119/bt32nsO63q8=/')
-            .toString(),
+        normaliseVmServiceUri(
+          'http://127.0.0.1:53119/bt32nsO63q8=/',
+        ).toString(),
         'ws://127.0.0.1:53119/bt32nsO63q8=/ws',
       );
     });

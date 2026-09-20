@@ -244,9 +244,7 @@ void _sendMulticastFrom(RawDatagramSocket socket, InternetAddress address) {
   const level = 0;
   final option = Platform.isLinux ? 32 : 9;
   try {
-    socket.setRawOption(
-      RawSocketOption(level, option, address.rawAddress),
-    );
+    socket.setRawOption(RawSocketOption(level, option, address.rawAddress));
   } on OSError {
     // Left to the routing table, which is what it did before this existed.
   } on SocketException {

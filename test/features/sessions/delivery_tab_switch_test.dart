@@ -84,7 +84,13 @@ void main() {
     if (args.contains('status')) {
       return CommandResult(
         exitCode: 0,
-        stdout: porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0, modified: ['lib/a.dart']),
+        stdout: porcelainV2(
+          branch: 'work',
+          upstream: 'origin/work',
+          ahead: 2,
+          behind: 0,
+          modified: ['lib/a.dart'],
+        ),
         stderr: '',
       );
     }
@@ -174,7 +180,10 @@ void main() {
 
   /// Two terminal tabs, one session each, both already looked at once — so
   /// neither side of a measurement is the first-ever look at a session.
-  Future<List<String>> mount(WidgetTester tester, {required double width}) async {
+  Future<List<String>> mount(
+    WidgetTester tester, {
+    required double width,
+  }) async {
     tester.view.physicalSize = Size(width, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);

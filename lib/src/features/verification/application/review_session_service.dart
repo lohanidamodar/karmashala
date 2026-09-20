@@ -83,7 +83,8 @@ class ReviewSessionService {
     if (session == null) {
       return const ReviewOffer(
         targets: [],
-        refusal: 'This session no longer exists, so there is nothing to review.',
+        refusal:
+            'This session no longer exists, so there is nothing to review.',
       );
     }
     final repo = _ref.read(repositoryDaoProvider).getById(session.repositoryId);
@@ -155,7 +156,8 @@ class ReviewSessionService {
         targets: targets,
         refusal: [
           'No other installed agent can be handed a review brief.',
-          for (final target in targets) '${target.agentName}: ${target.refusal}',
+          for (final target in targets)
+            '${target.agentName}: ${target.refusal}',
         ].join(' '),
       );
     }

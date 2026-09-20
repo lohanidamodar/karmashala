@@ -169,9 +169,9 @@ void main() {
         reason: 'the pane was not released and rebuilt around a new process',
       );
       expect(
-        container.read(terminalSessionsControllerProvider).livenessOf(
-          opened.paneId,
-        ),
+        container
+            .read(terminalSessionsControllerProvider)
+            .livenessOf(opened.paneId),
         PaneLiveness.restored,
       );
       expect(find.byType(SnackBar), findsOneWidget);

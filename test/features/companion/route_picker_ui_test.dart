@@ -63,7 +63,9 @@ void main() {
     await tester.tap(find.text('Relay at 198.51.100.7:8787'));
     await tester.pumpAndSettle();
 
-    expect(gateway.routePinRequests, [(studio, CompanionRoutePin.relay(onBox))]);
+    expect(gateway.routePinRequests, [
+      (studio, CompanionRoutePin.relay(onBox)),
+    ]);
     expect(
       find.textContaining('Route: Relay at 198.51.100.7:8787 (pinned)'),
       findsOneWidget,
@@ -79,7 +81,10 @@ void main() {
     );
     await pumpPhone(tester, gateway: gateway, home: const ConnectionsSection());
 
-    expect(find.textContaining('no longer offered by the desktop'), findsOneWidget);
+    expect(
+      find.textContaining('no longer offered by the desktop'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.textContaining('Route: Relay at'));
     await tester.pumpAndSettle();

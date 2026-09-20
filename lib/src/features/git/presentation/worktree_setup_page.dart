@@ -98,39 +98,35 @@ class _AddButton extends ConsumerWidget {
   final Map<String, WorktreeSetup> settings;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      PopupMenuButton<String>(
-        tooltip: 'Add a setup',
-        onSelected: (id) => _edit(
-          context,
-          ref,
-          candidates.firstWhere((r) => r.id == id),
-          const WorktreeSetup(),
+  Widget build(BuildContext context, WidgetRef ref) => PopupMenuButton<String>(
+    tooltip: 'Add a setup',
+    onSelected: (id) => _edit(
+      context,
+      ref,
+      candidates.firstWhere((r) => r.id == id),
+      const WorktreeSetup(),
+    ),
+    itemBuilder: (_) => [
+      for (final repository in candidates)
+        DesktopMenuDetailItem(
+          value: repository.id,
+          label: repository.name,
+          detail: repository.path.path,
+          icon: AppIcons.folder,
         ),
-        itemBuilder: (_) => [
-          for (final repository in candidates)
-            DesktopMenuDetailItem(
-              value: repository.id,
-              label: repository.name,
-              detail: repository.path.path,
-              icon: AppIcons.folder,
-            ),
+    ],
+    child: const Padding(
+      padding: EdgeInsets.symmetric(horizontal: Insets.sm, vertical: Insets.xs),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(AppIcons.plus),
+          SizedBox(width: Insets.xs),
+          Text('Add a checkout'),
         ],
-        child: const Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: Insets.sm,
-            vertical: Insets.xs,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(AppIcons.plus),
-              SizedBox(width: Insets.xs),
-              Text('Add a checkout'),
-            ],
-          ),
-        ),
-      );
+      ),
+    ),
+  );
 }
 
 Future<void> _edit(
@@ -237,15 +233,14 @@ class _CheckoutCard extends ConsumerWidget {
   }
 }
 
-String _environmentLabel(EnvironmentKind? kind, String? name) =>
-    switch (kind) {
-      EnvironmentKind.wsl => 'WSL · ${name ?? 'distro'}',
-      EnvironmentKind.ssh => 'SSH · ${name ?? 'remote'}',
-      EnvironmentKind.windowsNative => 'Windows',
-      EnvironmentKind.localPosix => name ?? 'this machine',
-      // The row is there and its environment is not: said, never guessed.
-      null => 'environment not recorded',
-    };
+String _environmentLabel(EnvironmentKind? kind, String? name) => switch (kind) {
+  EnvironmentKind.wsl => 'WSL · ${name ?? 'distro'}',
+  EnvironmentKind.ssh => 'SSH · ${name ?? 'remote'}',
+  EnvironmentKind.windowsNative => 'Windows',
+  EnvironmentKind.localPosix => name ?? 'this machine',
+  // The row is there and its environment is not: said, never guessed.
+  null => 'environment not recorded',
+};
 
 class _Line extends StatelessWidget {
   const _Line({required this.label, required this.value});

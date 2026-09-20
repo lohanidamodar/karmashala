@@ -44,9 +44,9 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
   });
   tearDown(() {
     db.close();
@@ -112,7 +112,8 @@ void main() {
     dao: dao,
     indexer: indexer,
     clock: const _FixedClock(),
-    locateTranscripts: locate ??
+    locateTranscripts:
+        locate ??
         () async {
           walkLog?.add('walked');
           return const {};
@@ -201,8 +202,9 @@ void main() {
     nativeRow('s1', 'nowhere');
     importedRow('here', transcript('here.jsonl', 'the recorded decision'));
 
-    await backfill(locate: () => Future.error(const FileSystemException('x')))
-        .runOnce();
+    await backfill(
+      locate: () => Future.error(const FileSystemException('x')),
+    ).runOnce();
 
     expect(dao.search('recorded'), hasLength(1));
   });

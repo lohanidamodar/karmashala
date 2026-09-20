@@ -52,7 +52,9 @@ void main() {
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
-        sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
+        sessionTranscriptProvider.overrideWith(
+          (ref, id) => Stream.value(const []),
+        ),
         availableSystemTerminalsProvider.overrideWith(
           (ref) async => const <SystemTerminal>[],
         ),

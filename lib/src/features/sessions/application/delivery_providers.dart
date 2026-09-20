@@ -109,8 +109,9 @@ final checkoutDeliveryProvider = FutureProvider.autoDispose
       // Wrapped in [_orNull] at the watch, not the await: the line below may
       // return without awaiting it, and an errored future nobody awaits throws.
       final origin = _orNull(
-        () => ref
-            .watch(repositoryOriginProvider(checkout.forRepository()).future),
+        () => ref.watch(
+          repositoryOriginProvider(checkout.forRepository()).future,
+        ),
       );
 
       final status = await probe(() => changes.statusWithBranch(dir));
@@ -333,13 +334,15 @@ final sessionDeliveryProvider = FutureProvider.autoDispose
 
       // Filed from readings the row already paid for. Deferred, because
       // Riverpod forbids writing to another provider while one is building.
-      unawaited(Future<void>.microtask(() {
-        try {
-          ref
-              .read(deliveryAttentionProvider.notifier)
-              .observe(sessionId, delivery);
-        } catch (_) {}
-      }));
+      unawaited(
+        Future<void>.microtask(() {
+          try {
+            ref
+                .read(deliveryAttentionProvider.notifier)
+                .observe(sessionId, delivery);
+          } catch (_) {}
+        }),
+      );
       return delivery;
     });
 

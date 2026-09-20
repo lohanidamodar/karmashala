@@ -180,9 +180,7 @@ void main() {
     expect(find.text('Build · Accept edits'), findsOneWidget);
   });
 
-  testWidgets('and says it once where the CLI already says it', (
-    tester,
-  ) async {
+  testWidgets('and says it once where the CLI already says it', (tester) async {
     final h = harness(agentId: AgentIds.claudeCode, mode: 'mode=plan');
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
@@ -278,7 +276,10 @@ void main() {
     // A row written by a newer build. `resolveStored` substitutes the agent's
     // default, which is the only thing it can do — but the chip must not draw
     // the substitute as if the user had picked it.
-    final h = harness(agentId: AgentIds.claudeCode, mode: 'mode=somethingNewer');
+    final h = harness(
+      agentId: AgentIds.claudeCode,
+      mode: 'mode=somethingNewer',
+    );
     addTearDown(h.db.close);
     await tester.pumpWidget(h.app);
 
@@ -340,10 +341,7 @@ void main() {
     await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
 
-    expect(
-      SessionDao(h.db).getById('s1')!.permissionMode,
-      _acceptEdits,
-    );
+    expect(SessionDao(h.db).getById('s1')!.permissionMode, _acceptEdits);
     // Never claims the running agent changed: it was started with the old
     // flags and no CLI here can be re-governed mid-session.
     expect(find.textContaining('applies'), findsOneWidget);
@@ -523,10 +521,7 @@ void main() {
     await tester.tap(find.text('Restart in $_bypassLabel'));
     await tester.pumpAndSettle();
 
-    expect(
-      SessionDao(h.db).getById('s1')!.permissionMode,
-      _bypass,
-    );
+    expect(SessionDao(h.db).getById('s1')!.permissionMode, _bypass);
 
     // A second process, on the same conversation, carrying the flags the first
     // one could not be told about.
@@ -659,10 +654,7 @@ void main() {
       ).read(terminalSessionsControllerProvider.notifier).instanceFor(pane),
       isNotNull,
     );
-    expect(
-      SessionDao(h.db).getById('s1')!.permissionMode,
-      _acceptEdits,
-    );
+    expect(SessionDao(h.db).getById('s1')!.permissionMode, _acceptEdits);
     expect(find.textContaining('new conversation'), findsOneWidget);
     expect(find.textContaining('is saved'), findsOneWidget);
   });

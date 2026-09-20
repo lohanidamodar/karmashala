@@ -109,8 +109,10 @@ HostMessage? _greetAndAttach(HostMessage request) => switch (request) {
     observedAt: _welcome.observedAt,
   ),
   OpenMessage(:final requestId) => attachedWith(requestId: requestId),
-  AttachMessage(:final requestId, :final sinceOffset) =>
-    attachedWith(requestId: requestId, replayFrom: sinceOffset),
+  AttachMessage(:final requestId, :final sinceOffset) => attachedWith(
+    requestId: requestId,
+    replayFrom: sinceOffset,
+  ),
   _ => null,
 };
 
@@ -154,59 +156,83 @@ void main() {
       expect(channel.closed, isTrue);
     });
 
-    test('a host that never answers gives up with a reason, not a hang', () async {
-      final channel = ScriptedChannel()..answer = ((_) => null);
-      await expectLater(
-        HostPaneLink.open(
-          channel,
-          clientId: 'pane-p1',
-          bound: const Duration(milliseconds: 30),
-        ),
-        throwsA(
-          isA<HostLinkException>().having((e) => e.message, 'message', contains('did not answer')),
-        ),
-      );
-    });
+    test(
+      'a host that never answers gives up with a reason, not a hang',
+      () async {
+        final channel = ScriptedChannel()..answer = ((_) => null);
+        await expectLater(
+          HostPaneLink.open(
+            channel,
+            clientId: 'pane-p1',
+            bound: const Duration(milliseconds: 30),
+          ),
+          throwsA(
+            isA<HostLinkException>().having(
+              (e) => e.message,
+              'message',
+              contains('did not answer'),
+            ),
+          ),
+        );
+      },
+    );
   });
 
   group('refusals', () {
-    test('a refusal carries the host\'s code, so callers can tell them apart', () async {
-      final channel = ScriptedChannel()
-        ..answer = ((request) => switch (request) {
-          HelloMessage() => _welcome,
-          AttachMessage(:final requestId) =>
-            ErrorMessage(requestId, ProtocolErrorCode.unknownSession, 'no session'),
-          _ => null,
-        });
-      final link = await HostPaneLink.open(channel, clientId: 'pane-p1');
-      await expectLater(
-        link.attachSession(sessionId: 's1', sinceOffset: 0),
-        throwsA(
-          isA<HostLinkException>()
-              .having((e) => e.code, 'code', ProtocolErrorCode.unknownSession)
-              .having((e) => e.timedOut, 'timedOut', isFalse),
-        ),
-      );
-    });
+    test(
+      'a refusal carries the host\'s code, so callers can tell them apart',
+      () async {
+        final channel = ScriptedChannel()
+          ..answer = ((request) => switch (request) {
+            HelloMessage() => _welcome,
+            AttachMessage(:final requestId) => ErrorMessage(
+              requestId,
+              ProtocolErrorCode.unknownSession,
+              'no session',
+            ),
+            _ => null,
+          });
+        final link = await HostPaneLink.open(channel, clientId: 'pane-p1');
+        await expectLater(
+          link.attachSession(sessionId: 's1', sinceOffset: 0),
+          throwsA(
+            isA<HostLinkException>()
+                .having((e) => e.code, 'code', ProtocolErrorCode.unknownSession)
+                .having((e) => e.timedOut, 'timedOut', isFalse),
+          ),
+        );
+      },
+    );
   });
 
   group('unreadable messages', () {
-    test('a frame that cannot be decoded fails the link with words, not a stall', () async {
-      final channel = ScriptedChannel()
-        ..answer = ((request) => request is HelloMessage ? _welcome : null);
-      final link = await HostPaneLink.open(channel, clientId: 'pane-p1');
-      // In flight when the bad frame lands: it must be answered, not left to its bound.
-      final attaching = link.attachSession(sessionId: 's1', sinceOffset: 0);
-      channel.pushRaw(
-        Frame(MessageType.welcome, 0, Uint8List.fromList([0x7b, 0x01, 0x02])).encode(),
-      );
-      await expectLater(
-        attaching,
-        throwsA(
-          isA<HostLinkException>().having((e) => e.message, 'message', contains('unreadable')),
-        ),
-      );
-    });
+    test(
+      'a frame that cannot be decoded fails the link with words, not a stall',
+      () async {
+        final channel = ScriptedChannel()
+          ..answer = ((request) => request is HelloMessage ? _welcome : null);
+        final link = await HostPaneLink.open(channel, clientId: 'pane-p1');
+        // In flight when the bad frame lands: it must be answered, not left to its bound.
+        final attaching = link.attachSession(sessionId: 's1', sinceOffset: 0);
+        channel.pushRaw(
+          Frame(
+            MessageType.welcome,
+            0,
+            Uint8List.fromList([0x7b, 0x01, 0x02]),
+          ).encode(),
+        );
+        await expectLater(
+          attaching,
+          throwsA(
+            isA<HostLinkException>().having(
+              (e) => e.message,
+              'message',
+              contains('unreadable'),
+            ),
+          ),
+        );
+      },
+    );
   });
 
   group('output and offsets', () {
@@ -234,7 +260,12 @@ void main() {
     test('the offset is where the next attach asks from', () async {
       final channel = ScriptedChannel();
       final link = await connected(channel);
-      await link.openSession(sessionId: 's', argv: const ['/bin/sh'], columns: 80, rows: 24);
+      await link.openSession(
+        sessionId: 's',
+        argv: const ['/bin/sh'],
+        columns: 80,
+        rows: 24,
+      );
       link.output.listen((_) {});
 
       channel.push(OutputMessage(4, 0, ascii('abcde')));
@@ -247,7 +278,10 @@ void main() {
     test('a reattach asks from the offset it is given', () async {
       final channel = ScriptedChannel();
       final link = await connected(channel);
-      await link.attachSession(sessionId: 'karmashala_h1_p1', sinceOffset: 4096);
+      await link.attachSession(
+        sessionId: 'karmashala_h1_p1',
+        sinceOffset: 4096,
+      );
 
       expect(channel.only<AttachMessage>().sinceOffset, 4096);
       expect(channel.only<AttachMessage>().claimWrite, isTrue);
@@ -260,12 +294,20 @@ void main() {
       final channel = ScriptedChannel()
         ..answer = ((request) => request is HelloMessage
             ? _greetAndAttach(request)
-            : attachedWith(requestId: 2, replayFrom: 900, dropped: 900, total: 5000));
+            : attachedWith(
+                requestId: 2,
+                replayFrom: 900,
+                dropped: 900,
+                total: 5000,
+              ));
       final link = await connected(channel);
       final notices = <String>[];
       link.notices.listen(notices.add);
 
-      final attachment = await link.attachSession(sessionId: 's', sinceOffset: 0);
+      final attachment = await link.attachSession(
+        sessionId: 's',
+        sinceOffset: 0,
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(attachment.droppedBytes, 900);
@@ -282,63 +324,85 @@ void main() {
       final notices = <String>[];
       link.notices.listen(notices.add);
 
-      final attachment = await link.attachSession(sessionId: 's', sinceOffset: 0);
+      final attachment = await link.attachSession(
+        sessionId: 's',
+        sinceOffset: 0,
+      );
       await Future<void>.delayed(Duration.zero);
 
       expect(attachment.holdsWriteToken, isFalse);
       expect(notices.single, contains('pane-other is driving'));
     });
 
-    test('an unsolicited refusal becomes a notice, not a dropped frame', () async {
-      final channel = ScriptedChannel();
-      final link = await connected(channel);
-      await link.attachSession(sessionId: 's', sinceOffset: 0);
-      final notices = <String>[];
-      link.notices.listen(notices.add);
+    test(
+      'an unsolicited refusal becomes a notice, not a dropped frame',
+      () async {
+        final channel = ScriptedChannel();
+        final link = await connected(channel);
+        await link.attachSession(sessionId: 's', sinceOffset: 0);
+        final notices = <String>[];
+        link.notices.listen(notices.add);
 
-      channel.push(
-        const ErrorMessage(0, ProtocolErrorCode.writeRefused, 'write token held by pane-2'),
-      );
-      await Future<void>.delayed(Duration.zero);
+        channel.push(
+          const ErrorMessage(
+            0,
+            ProtocolErrorCode.writeRefused,
+            'write token held by pane-2',
+          ),
+        );
+        await Future<void>.delayed(Duration.zero);
 
-      expect(notices.single, 'write token held by pane-2');
-    });
+        expect(notices.single, 'write token held by pane-2');
+      },
+    );
   });
 
   group('driving the session', () {
-    test('input and resize carry the session ref the host handed out', () async {
-      final channel = ScriptedChannel();
-      final link = await connected(channel);
-      await link.attachSession(sessionId: 's', sinceOffset: 0);
+    test(
+      'input and resize carry the session ref the host handed out',
+      () async {
+        final channel = ScriptedChannel();
+        final link = await connected(channel);
+        await link.attachSession(sessionId: 's', sinceOffset: 0);
 
-      link.write(ascii('ls\n'));
-      link.resize(132, 43);
+        link.write(ascii('ls\n'));
+        link.resize(132, 43);
 
-      expect(channel.only<InputMessage>().sessionRef, 4);
-      expect(channel.only<InputMessage>().bytes, ascii('ls\n'));
-      expect(channel.only<ResizeMessage>().columns, 132);
-      expect(channel.only<ResizeMessage>().rows, 43);
-    });
+        expect(channel.only<InputMessage>().sessionRef, 4);
+        expect(channel.only<InputMessage>().bytes, ascii('ls\n'));
+        expect(channel.only<ResizeMessage>().columns, 132);
+        expect(channel.only<ResizeMessage>().rows, 43);
+      },
+    );
 
-    test('a resize before the host has named the session is not sent', () async {
-      // It could only carry ref 0, which the host answers with an error; the
-      // pane says its size once the attach has told it what the host holds.
-      final channel = ScriptedChannel();
-      final link = await connected(channel);
+    test(
+      'a resize before the host has named the session is not sent',
+      () async {
+        // It could only carry ref 0, which the host answers with an error; the
+        // pane says its size once the attach has told it what the host holds.
+        final channel = ScriptedChannel();
+        final link = await connected(channel);
 
-      link.resize(132, 43);
-      expect(channel.all<ResizeMessage>(), isEmpty);
+        link.resize(132, 43);
+        expect(channel.all<ResizeMessage>(), isEmpty);
 
-      final attachment = await link.attachSession(sessionId: 's', sinceOffset: 0);
-      link.matchGrid(attachment, 132, 43);
-      expect(channel.only<ResizeMessage>().sessionRef, 4);
-      expect(channel.only<ResizeMessage>().columns, 132);
-    });
+        final attachment = await link.attachSession(
+          sessionId: 's',
+          sinceOffset: 0,
+        );
+        link.matchGrid(attachment, 132, 43);
+        expect(channel.only<ResizeMessage>().sessionRef, 4);
+        expect(channel.only<ResizeMessage>().columns, 132);
+      },
+    );
 
     test('a session already at the size of the pane is left alone', () async {
       final channel = ScriptedChannel();
       final link = await connected(channel);
-      final attachment = await link.attachSession(sessionId: 's', sinceOffset: 0);
+      final attachment = await link.attachSession(
+        sessionId: 's',
+        sinceOffset: 0,
+      );
 
       link.matchGrid(attachment, attachment.columns, attachment.rows);
       expect(channel.all<ResizeMessage>(), isEmpty);
@@ -392,54 +456,67 @@ void main() {
       expect((await link.ended).exitCode, 7);
     });
 
-    test('an unknown exit code stays unknown all the way to the pane', () async {
-      final channel = ScriptedChannel();
-      final link = await connected(channel);
-      await link.attachSession(sessionId: 's', sinceOffset: 0);
+    test(
+      'an unknown exit code stays unknown all the way to the pane',
+      () async {
+        final channel = ScriptedChannel();
+        final link = await connected(channel);
+        await link.attachSession(sessionId: 's', sinceOffset: 0);
 
-      channel.push(
-        ExitedMessage(
-          sessionRef: 4,
-          sessionId: 's',
-          exitCode: null,
-          reason: 'ended, exit code unknown (the child could not be reaped)',
-          observedAt: DateTime.utc(2026),
-        ),
-      );
+        channel.push(
+          ExitedMessage(
+            sessionRef: 4,
+            sessionId: 's',
+            exitCode: null,
+            reason: 'ended, exit code unknown (the child could not be reaped)',
+            observedAt: DateTime.utc(2026),
+          ),
+        );
 
-      final end = await link.ended;
-      expect(end.exitCode, isNull);
-      expect(end.reason, contains('unknown'));
-    });
+        final end = await link.ended;
+        expect(end.exitCode, isNull);
+        expect(end.reason, contains('unknown'));
+      },
+    );
 
-    test('a dropped channel closes the output and keeps the last offset', () async {
-      final channel = ScriptedChannel();
-      final link = await connected(channel);
-      await link.attachSession(sessionId: 's', sinceOffset: 100);
-      final done = Completer<void>();
-      link.output.listen((_) {}, onDone: done.complete);
+    test(
+      'a dropped channel closes the output and keeps the last offset',
+      () async {
+        final channel = ScriptedChannel();
+        final link = await connected(channel);
+        await link.attachSession(sessionId: 's', sinceOffset: 100);
+        final done = Completer<void>();
+        link.output.listen((_) {}, onDone: done.complete);
 
-      channel.push(OutputMessage(4, 100, ascii('xyz')));
-      await Future<void>.delayed(Duration.zero);
-      await channel.drop();
-      await done.future;
+        channel.push(OutputMessage(4, 100, ascii('xyz')));
+        await Future<void>.delayed(Duration.zero);
+        await channel.drop();
+        await done.future;
 
-      expect(link.lastOffset, 103, reason: 'the pane resumes from exactly here');
-    });
+        expect(
+          link.lastOffset,
+          103,
+          reason: 'the pane resumes from exactly here',
+        );
+      },
+    );
 
-    test('closing the link is a disconnect: it closes the channel and nothing else', () async {
-      final channel = ScriptedChannel();
-      final link = await connected(channel);
-      await link.attachSession(sessionId: 's', sinceOffset: 0);
+    test(
+      'closing the link is a disconnect: it closes the channel and nothing else',
+      () async {
+        final channel = ScriptedChannel();
+        final link = await connected(channel);
+        await link.attachSession(sessionId: 's', sinceOffset: 0);
 
-      await link.close();
+        await link.close();
 
-      expect(channel.closed, isTrue);
-      expect(
-        channel.all<CloseMessage>(),
-        isEmpty,
-        reason: 'a pane going away must never end the session',
-      );
-    });
+        expect(channel.closed, isTrue);
+        expect(
+          channel.all<CloseMessage>(),
+          isEmpty,
+          reason: 'a pane going away must never end the session',
+        );
+      },
+    );
   });
 }

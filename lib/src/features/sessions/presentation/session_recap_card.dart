@@ -28,8 +28,9 @@ final sessionRecapRunsProvider =
 /// Whether [sessionId] is waiting on a recap. Its own provider so one running
 /// session does not rebuild every other session's row.
 final sessionRecapRunningProvider = Provider.family<bool, String>(
-  (ref, sessionId) =>
-      ref.watch(sessionRecapRunsProvider.select((all) => all.contains(sessionId))),
+  (ref, sessionId) => ref.watch(
+    sessionRecapRunsProvider.select((all) => all.contains(sessionId)),
+  ),
 );
 
 /// Asks [sessionId]'s own CLI for a recap. **The only door**, which is what

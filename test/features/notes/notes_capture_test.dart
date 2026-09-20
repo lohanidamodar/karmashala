@@ -194,8 +194,10 @@ void main() {
     container.read(composerDraftProvider.notifier).queue('s2', 'later');
     await tester.pumpAndSettle();
 
-    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
-        isEmpty);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      isEmpty,
+    );
     expect(container.read(composerDraftProvider), containsPair('s2', 'later'));
   });
 }

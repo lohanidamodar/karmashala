@@ -175,7 +175,12 @@ class HostSession {
     return null;
   }
 
-  ClaimRefusal? resize(String clientId, int newColumns, int newRows, DateTime now) {
+  ClaimRefusal? resize(
+    String clientId,
+    int newColumns,
+    int newRows,
+    DateTime now,
+  ) {
     final refusal = _requireToken(clientId, now);
     if (refusal != null) return refusal;
     columns = newColumns;
@@ -229,8 +234,9 @@ class HostSession {
     return end;
   }
 
-  Future<SessionLifecycle?> _reapedWithin(Duration bound) =>
-      ended.then<SessionLifecycle?>((end) => end).timeout(bound, onTimeout: () => null);
+  Future<SessionLifecycle?> _reapedWithin(Duration bound) => ended
+      .then<SessionLifecycle?>((end) => end)
+      .timeout(bound, onTimeout: () => null);
 }
 
 /// The absence of a process, so no reader of [HostSession] needs a nullable pty.

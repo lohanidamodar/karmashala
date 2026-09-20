@@ -29,7 +29,9 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
         : session.terminal.buffer.getText(selection);
     final capturable = selected != null && selected.trim().isNotEmpty;
     final notesEnabled = ref.read(notesEnabledProvider);
-    final recordingThis = ref.read(terminalRecordingProvider).isRecording(paneId);
+    final recordingThis = ref
+        .read(terminalRecordingProvider)
+        .isRecording(paneId);
     // What the recording will be able to become, said before it starts rather
     // than when the export dialog has to refuse.
     final canWriteMp4 = ref.read(videoSupportProvider).available;
@@ -68,7 +70,10 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
       case 'paste':
         // The same rule as the chord, from the same place: a Paste that
         // silently does nothing with a screenshot on the clipboard is the bug.
-        await pasteIntoTerminal(session.terminal, controller: session.controller);
+        await pasteIntoTerminal(
+          session.terminal,
+          controller: session.controller,
+        );
       case 'find':
         _actions.openSearch();
       case 'split-pane-right':

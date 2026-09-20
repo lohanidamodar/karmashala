@@ -270,6 +270,7 @@ enum FrameType {
     origin: FrameOrigin.companion,
     capability: Capability.startSession,
   ),
+
   /// **What one session is doing right now** — asked for by the phone, and
   /// stated by the host whenever the answer changes. [FrameOrigin.either], so
   /// one fact is one payload shape and one capability; an unsolicited frame
@@ -279,6 +280,7 @@ enum FrameType {
     origin: FrameOrigin.either,
     capability: Capability.viewActivity,
   ),
+
   /// **Ask to send a file**, before any of it has crossed the link, so a
   /// refusal costs one small frame rather than the megabytes of a photo. A
   /// re-check, because a session row can be minutes old.

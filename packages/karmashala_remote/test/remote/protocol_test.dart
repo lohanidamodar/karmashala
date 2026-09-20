@@ -218,14 +218,8 @@ void main() {
       expect(FrameType.sessionStart.capability, Capability.startSession);
       expect(FrameType.sessionResume.capability, Capability.startSession);
       expect(FrameType.sessionActivity.capability, Capability.viewActivity);
-      expect(
-        FrameType.attachmentBegin.capability,
-        Capability.sendAttachment,
-      );
-      expect(
-        FrameType.attachmentChunk.capability,
-        Capability.sendAttachment,
-      );
+      expect(FrameType.attachmentBegin.capability, Capability.sendAttachment);
+      expect(FrameType.attachmentChunk.capability, Capability.sendAttachment);
     });
 
     // Both are the phone's own verbs. `session.activity` needed
@@ -251,7 +245,9 @@ void main() {
       // And holding `send_prompt` grants none of it: a phone paired before
       // this existed can still send words, and is refused the file for ever.
       expect(
-        CapabilitySet.of([Capability.sendPrompt]).has(Capability.sendAttachment),
+        CapabilitySet.of([
+          Capability.sendPrompt,
+        ]).has(Capability.sendAttachment),
         isFalse,
       );
     });

@@ -52,7 +52,8 @@ class ProjectControlTools {
 
     // The name is the folder's own when the caller did not choose one, which is
     // what the dialog fills in for a person.
-    final name = _text(args['name']) ??
+    final name =
+        _text(args['name']) ??
         (path == null ? repoNameFromUrl(gitUrl!) : _leafOf(path));
 
     final result = await _container
@@ -80,7 +81,8 @@ class ProjectControlTools {
     if (projectId == null) {
       throw ArgumentError('projectId is required. list_projects has the ids.');
     }
-    final clearDefault = args['defaultRepositoryId'] == null &&
+    final clearDefault =
+        args['defaultRepositoryId'] == null &&
         args.containsKey('defaultRepositoryId');
 
     final result = await _container
@@ -200,7 +202,10 @@ const List<Map<String, dynamic>> projectControlToolSchemas = [
         'environmentId': {'type': 'string'},
         'path': {'type': 'string'},
         'count': {'type': 'number'},
-        'checkouts': {'type': 'array', 'items': {'type': 'object'}},
+        'checkouts': {
+          'type': 'array',
+          'items': {'type': 'object'},
+        },
       },
       'required': ['projectId', 'name', 'path', 'checkouts', 'count'],
     },
@@ -252,9 +257,18 @@ const List<Map<String, dynamic>> projectControlToolSchemas = [
         'name': {'type': 'string'},
         'environmentId': {'type': 'string'},
         'path': {'type': 'string'},
-        'rebased': {'type': 'array', 'items': {'type': 'object'}},
-        'leftBehind': {'type': 'array', 'items': {'type': 'object'}},
-        'discovered': {'type': 'array', 'items': {'type': 'object'}},
+        'rebased': {
+          'type': 'array',
+          'items': {'type': 'object'},
+        },
+        'leftBehind': {
+          'type': 'array',
+          'items': {'type': 'object'},
+        },
+        'discovered': {
+          'type': 'array',
+          'items': {'type': 'object'},
+        },
       },
       'required': ['projectId', 'name', 'path'],
     },

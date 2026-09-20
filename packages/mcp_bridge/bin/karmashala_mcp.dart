@@ -43,7 +43,9 @@ class _Bridge {
     final method = message['method'];
     // Checked, not cast: a throw here leaves main's `await for` and ends the bridge.
     if (method is! String) {
-      if (id != null) _error(id, -32600, 'Invalid request: method must be a string');
+      if (id != null) {
+        _error(id, -32600, 'Invalid request: method must be a string');
+      }
       return;
     }
     // Notifications (no id) never get a response.

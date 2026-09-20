@@ -32,7 +32,8 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
   /// mostly link chatter.
   bool _problemsOnly = true;
 
-  List<LogEntry> _read() => ref.read(companionDiagnosticsProvider).buffer.snapshot();
+  List<LogEntry> _read() =>
+      ref.read(companionDiagnosticsProvider).buffer.snapshot();
 
   List<LogEntry> get _visible => _problemsOnly
       ? [
@@ -88,10 +89,7 @@ class _CompanionLogScreenState extends ConsumerState<CompanionLogScreen> {
         child: RefreshIndicator(
           onRefresh: _refresh,
           child: ListView(
-            padding: companionListInsets(
-              context,
-              EdgeInsets.all(density.padX),
-            ),
+            padding: companionListInsets(context, EdgeInsets.all(density.padX)),
             children: [
               SelectableText(buildIdentity(), style: MonoStyles.label),
               if (dropped > 0)

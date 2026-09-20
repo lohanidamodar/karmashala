@@ -34,11 +34,7 @@ extension on Harness {
 
   Future<void> chunk(String uploadId, int seq, List<int> data) => request(
     FrameType.attachmentChunk,
-    payload: {
-      'uploadId': uploadId,
-      'seq': seq,
-      'data': base64Encode(data),
-    },
+    payload: {'uploadId': uploadId, 'seq': seq, 'data': base64Encode(data)},
   );
 
   Future<void> promptWith(String uploadId, {String text = 'look at this'}) =>
@@ -72,7 +68,8 @@ void main() {
       expect(
         sealed,
         lessThan(kMaxEnvelopeBytes),
-        reason: '$kAttachmentChunkBytes raw bytes seal to $sealed, which must '
+        reason:
+            '$kAttachmentChunkBytes raw bytes seal to $sealed, which must '
             'clear the $kMaxEnvelopeBytes envelope cap',
       );
       expect(sealed, lessThan(kMaxTransportFrameBytes));
@@ -148,7 +145,8 @@ void main() {
       expect(
         harness.last.payload['delivery'],
         RemotePromptDelivery.offered.wire,
-        reason: 'the phone must not be told "sent" when a person still has to '
+        reason:
+            'the phone must not be told "sent" when a person still has to '
             'press Enter on the desktop',
       );
       expect(harness.fake.committed, [uploadId]);
@@ -185,7 +183,8 @@ void main() {
       expect(
         harness.fake.committed,
         isEmpty,
-        reason: 'nothing an agent can be told to read comes out of a short '
+        reason:
+            'nothing an agent can be told to read comes out of a short '
             'upload',
       );
       expect(
@@ -227,52 +226,58 @@ void main() {
       expect(harness.fake.uploads, isEmpty);
     });
 
-    test('a chunk that is not base64 is refused before it reaches the store',
-        () async {
-      final harness = Harness();
-      final uploadId = await harness.begin(bytes: 4);
+    test(
+      'a chunk that is not base64 is refused before it reaches the store',
+      () async {
+        final harness = Harness();
+        final uploadId = await harness.begin(bytes: 4);
 
-      await harness.request(
-        FrameType.attachmentChunk,
-        payload: {'uploadId': uploadId, 'seq': 0, 'data': 'not base64 !!'},
-      );
+        await harness.request(
+          FrameType.attachmentChunk,
+          payload: {'uploadId': uploadId, 'seq': 0, 'data': 'not base64 !!'},
+        );
 
-      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
-      expect(harness.fake.uploads[uploadId], isEmpty);
-    });
+        expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+        expect(harness.fake.uploads[uploadId], isEmpty);
+      },
+    );
   });
 
   group('refused before a byte crosses', () {
-    test('an agent that cannot be handed a file, in the host\'s words',
-        () async {
-      final harness = Harness();
-      harness.fake.addSession(
-        's2',
-        attachments: const RemoteAttachmentSupport.refused(
-          'Codex only takes a picture on the command line that starts it.',
-        ),
-      );
+    test(
+      'an agent that cannot be handed a file, in the host\'s words',
+      () async {
+        final harness = Harness();
+        harness.fake.addSession(
+          's2',
+          attachments: const RemoteAttachmentSupport.refused(
+            'Codex only takes a picture on the command line that starts it.',
+          ),
+        );
 
-      await harness.begin(sessionId: 's2', bytes: 4);
+        await harness.begin(sessionId: 's2', bytes: 4);
 
-      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
-      expect(harness.last.payload['message'], contains('Codex'));
-      expect(
-        harness.fake.uploads,
-        isEmpty,
-        reason: 'this is the whole point of a separate begin frame',
-      );
-    });
+        expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+        expect(harness.last.payload['message'], contains('Codex'));
+        expect(
+          harness.fake.uploads,
+          isEmpty,
+          reason: 'this is the whole point of a separate begin frame',
+        );
+      },
+    );
 
-    test('a host that has never been asked says so rather than accepting',
-        () async {
-      final harness = Harness();
-      harness.fake.addSession('s3', attachments: null);
+    test(
+      'a host that has never been asked says so rather than accepting',
+      () async {
+        final harness = Harness();
+        harness.fake.addSession('s3', attachments: null);
 
-      await harness.begin(sessionId: 's3', bytes: 4);
+        await harness.begin(sessionId: 's3', bytes: 4);
 
-      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
-    });
+        expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+      },
+    );
 
     test('a media type this session does not take', () async {
       final harness = Harness();
@@ -306,9 +311,7 @@ void main() {
         CapabilitySet(CapabilitySet.all.bits & ~capability.bit);
 
     test('is refused in words when it asks to send a file', () async {
-      final harness = Harness(
-        capabilities: without(Capability.sendAttachment),
-      );
+      final harness = Harness(capabilities: without(Capability.sendAttachment));
 
       await harness.begin(bytes: 4);
 
@@ -320,9 +323,7 @@ void main() {
     });
 
     test('can still send words', () async {
-      final harness = Harness(
-        capabilities: without(Capability.sendAttachment),
-      );
+      final harness = Harness(capabilities: without(Capability.sendAttachment));
 
       await harness.request(
         FrameType.promptSend,
@@ -336,9 +337,7 @@ void main() {
     // The second door: `prompt.send` is a frame an old pairing *does* hold a
     // bit for, so the one that would spend an attachment is checked there too.
     test('is refused in the same words on a prompt that quotes one', () async {
-      final harness = Harness(
-        capabilities: without(Capability.sendAttachment),
-      );
+      final harness = Harness(capabilities: without(Capability.sendAttachment));
 
       await harness.promptWith('up1');
 

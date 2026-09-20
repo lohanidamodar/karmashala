@@ -228,8 +228,10 @@ void main() {
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
       await lifecycle.startSystemIntegration(
-endProcess: () {},
-registerOsQuit: (_) {}, adapters: natives.adapters);
+        endProcess: () {},
+        registerOsQuit: (_) {},
+        adapters: natives.adapters,
+      );
       lifecycle.adopt(
         hookInstallation: Future<void>.error(StateError('hook write failed')),
       );
@@ -288,50 +290,53 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       await pending;
     });
 
-    test('a shutdown that abandons the step still leaves nothing behind', () async {
-      final removals = <String>[];
-      final lifecycle = AppLifecycle(container);
-      final bridge = p.join(tmp.path, 'mcp_bridge.json');
-      final server = LauncherControlServer(
-        container,
-        unpublish: (path) {
-          removals.add(path);
-          final file = File(path);
-          if (file.existsSync()) file.deleteSync();
-        },
-      );
-      await server.start(
-        bridgeFilePath: bridge,
-        socketDirectory: p.join(tmp.path, 'ipc'),
-      );
-      // A hook step that never returns, so the budget is already under
-      // pressure when the control server's turn comes — the shape of the run
-      // that failed.
-      lifecycle.adopt(
-        controlServer: server,
-        hookInstallation: Completer<void>().future,
-      );
+    test(
+      'a shutdown that abandons the step still leaves nothing behind',
+      () async {
+        final removals = <String>[];
+        final lifecycle = AppLifecycle(container);
+        final bridge = p.join(tmp.path, 'mcp_bridge.json');
+        final server = LauncherControlServer(
+          container,
+          unpublish: (path) {
+            removals.add(path);
+            final file = File(path);
+            if (file.existsSync()) file.deleteSync();
+          },
+        );
+        await server.start(
+          bridgeFilePath: bridge,
+          socketDirectory: p.join(tmp.path, 'ipc'),
+        );
+        // A hook step that never returns, so the budget is already under
+        // pressure when the control server's turn comes — the shape of the run
+        // that failed.
+        lifecycle.adopt(
+          controlServer: server,
+          hookInstallation: Completer<void>().future,
+        );
 
-      await lifecycle.shutdown();
+        await lifecycle.shutdown();
 
-      final counted = removals.length;
-      expect(counted, 2, reason: 'the handshake and the socket node');
-      expect(File(bridge).existsSync(), isFalse);
+        final counted = removals.length;
+        expect(counted, 2, reason: 'the handshake and the socket node');
+        expect(File(bridge).existsSync(), isFalse);
 
-      // **The count, not the clock.** Every continuation the abandoned step
-      // left behind runs here; if any of them still removed something, this
-      // grows. A `pumpEventQueue` drains the microtask and event queues rather
-      // than waiting out a duration, so a slower machine cannot pass it by
-      // being slow.
-      await pumpEventQueue();
-      await pumpEventQueue();
+        // **The count, not the clock.** Every continuation the abandoned step
+        // left behind runs here; if any of them still removed something, this
+        // grows. A `pumpEventQueue` drains the microtask and event queues rather
+        // than waiting out a duration, so a slower machine cannot pass it by
+        // being slow.
+        await pumpEventQueue();
+        await pumpEventQueue();
 
-      expect(
-        removals.length,
-        counted,
-        reason: 'a filesystem removal outlived shutdown()',
-      );
-    });
+        expect(
+          removals.length,
+          counted,
+          reason: 'a filesystem removal outlived shutdown()',
+        );
+      },
+    );
   });
 
   group('the panes it reaps', () {
@@ -437,7 +442,9 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       terminals.openTab(TerminalProfile.powerShell);
       terminals.openTab(TerminalProfile.powerShell);
 
-      terminals.closeTab(container.read(terminalSessionsControllerProvider).tabs.first.id);
+      terminals.closeTab(
+        container.read(terminalSessionsControllerProvider).tabs.first.id,
+      );
 
       expect(panes.first.disposed, isTrue, reason: 'the pane was closed');
       expect(panes.first.keptPseudoConsole, isFalse);
@@ -513,7 +520,8 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       expect(
         kShutdownStepBudgets['terminal processes'],
         kProcessTreeKillBound,
-        reason: 'a kill still being waited on after its step was abandoned is '
+        reason:
+            'a kill still being waited on after its step was abandoned is '
             'work outliving the shutdown that owns it',
       );
       expect(kShutdownStepBudgets, hasLength(9));
@@ -528,8 +536,10 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       );
       final natives = FakeNatives();
       await lifecycle.startSystemIntegration(
-endProcess: () {},
-registerOsQuit: (_) {}, adapters: natives.adapters);
+        endProcess: () {},
+        registerOsQuit: (_) {},
+        adapters: natives.adapters,
+      );
       lifecycle.adopt(hookInstallation: Completer<void>().future);
 
       await lifecycle.shutdown();
@@ -555,8 +565,10 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
       await lifecycle.startSystemIntegration(
-endProcess: () {},
-registerOsQuit: (_) {}, adapters: natives.adapters);
+        endProcess: () {},
+        registerOsQuit: (_) {},
+        adapters: natives.adapters,
+      );
       final server = LauncherControlServer(container);
       final bridge = p.join(tmp.path, 'mcp_bridge.json');
       await server.start(
@@ -579,11 +591,9 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       // the control server step entirely would have passed it. The property is
       // that *this* step was cut off at its own cap and nothing after it was
       // starved, and that is two lists.
-      expect(
-        lifecycle.abandonedSteps,
-        ['agent hook installation'],
-        reason: 'only the step that hangs may be cut off',
-      );
+      expect(lifecycle.abandonedSteps, [
+        'agent hook installation',
+      ], reason: 'only the step that hangs may be cut off');
       expect(
         lifecycle.skippedSteps,
         isEmpty,
@@ -604,8 +614,10 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       );
       final natives = FakeNatives();
       await lifecycle.startSystemIntegration(
-endProcess: () {},
-registerOsQuit: (_) {}, adapters: natives.adapters);
+        endProcess: () {},
+        registerOsQuit: (_) {},
+        adapters: natives.adapters,
+      );
       lifecycle.adopt(hookInstallation: Completer<void>().future);
       natives.tray.destroyDelay = const Duration(seconds: 30);
 
@@ -626,44 +638,49 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       expect(isDisposed(container), isTrue);
     });
 
-    test('a clean shutdown is far inside Loop 55\'s envelope', () async {
-      final lifecycle = AppLifecycle(container);
-      final natives = FakeNatives();
-      await lifecycle.startSystemIntegration(
-endProcess: () {},
-registerOsQuit: (_) {}, adapters: natives.adapters);
-      final server = LauncherControlServer(container);
-      await server.start(
-        bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
-        socketDirectory: p.join(tmp.path, 'ipc'),
-      );
-      lifecycle.adopt(controlServer: server);
+    test(
+      'a clean shutdown is far inside Loop 55\'s envelope',
+      () async {
+        final lifecycle = AppLifecycle(container);
+        final natives = FakeNatives();
+        await lifecycle.startSystemIntegration(
+          endProcess: () {},
+          registerOsQuit: (_) {},
+          adapters: natives.adapters,
+        );
+        final server = LauncherControlServer(container);
+        await server.start(
+          bridgeFilePath: p.join(tmp.path, 'mcp_bridge.json'),
+          socketDirectory: p.join(tmp.path, 'ipc'),
+        );
+        lifecycle.adopt(controlServer: server);
 
-      await lifecycle.shutdown();
+        await lifecycle.shutdown();
 
-      // The literal is Loop 55's measured envelope (225–396 ms end to end), not
-      // the constant: a shutdown that got slower would still be "inside the
-      // budget" the moment someone widened the budget.
-      expect(
-        lifecycle.lastShutdownDuration,
-        lessThan(const Duration(milliseconds: 500)),
-      );
-    },
-        // **The one case here that is a wall-clock measurement, and it is
-        // opt-in for that reason.** Every bound in `AppLifecycle` is a real
-        // timeout, so a starved scheduler overshoots all of them at once: with
-        // six suites running this read 3.03 s and said nothing about the app.
-        // Every other case in this file was rewritten to count what ran; this
-        // one cannot be, because the number *is* the claim. So it runs
-        // deliberately, on a quiet machine, and skips itself with its reason
-        // the way §18's live tests do:
-        //
-        //     KARMASHALA_TIMING=1 flutter test test/core/lifecycle
-        tags: 'live-timing',
-        skip: Platform.environment['KARMASHALA_TIMING'] == null
-            ? 'a wall-clock envelope, and this gate runs beside other gates. '
-                  'Set KARMASHALA_TIMING=1 on a quiet machine to measure it.'
-            : false);
+        // The literal is Loop 55's measured envelope (225–396 ms end to end), not
+        // the constant: a shutdown that got slower would still be "inside the
+        // budget" the moment someone widened the budget.
+        expect(
+          lifecycle.lastShutdownDuration,
+          lessThan(const Duration(milliseconds: 500)),
+        );
+      },
+      // **The one case here that is a wall-clock measurement, and it is
+      // opt-in for that reason.** Every bound in `AppLifecycle` is a real
+      // timeout, so a starved scheduler overshoots all of them at once: with
+      // six suites running this read 3.03 s and said nothing about the app.
+      // Every other case in this file was rewritten to count what ran; this
+      // one cannot be, because the number *is* the claim. So it runs
+      // deliberately, on a quiet machine, and skips itself with its reason
+      // the way §18's live tests do:
+      //
+      //     KARMASHALA_TIMING=1 flutter test test/core/lifecycle
+      tags: 'live-timing',
+      skip: Platform.environment['KARMASHALA_TIMING'] == null
+          ? 'a wall-clock envelope, and this gate runs beside other gates. '
+                'Set KARMASHALA_TIMING=1 on a quiet machine to measure it.'
+          : false,
+    );
   });
 
   group('idempotence', () {
@@ -671,8 +688,10 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       final lifecycle = AppLifecycle(container);
       final natives = FakeNatives();
       await lifecycle.startSystemIntegration(
-endProcess: () {},
-registerOsQuit: (_) {}, adapters: natives.adapters);
+        endProcess: () {},
+        registerOsQuit: (_) {},
+        adapters: natives.adapters,
+      );
 
       await Future.wait([lifecycle.shutdown(), lifecycle.shutdown()]);
       await lifecycle.shutdown();
@@ -750,55 +769,64 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
   });
 
   group('agents nobody has ever looked for', () {
-    test('a workspace that has discovered before sweeps for new agents', () async {
-      db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      final runner = FakeCommandRunner(
-        responder: (req) => const CommandResult(
-          exitCode: 1,
-          stdout: '',
-          stderr: '',
-        ),
-      );
-      final scoped = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(fallback: runner),
-          ),
-        ],
-      );
-      addTearDown(scoped.dispose);
+    test(
+      'a workspace that has discovered before sweeps for new agents',
+      () async {
+        db.writeMetadata(
+          MetadataKeys.agentsDiscoveredAt,
+          '2026-07-28T00:00:00Z',
+        );
+        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        final runner = FakeCommandRunner(
+          responder: (req) =>
+              const CommandResult(exitCode: 1, stdout: '', stderr: ''),
+        );
+        final scoped = ProviderContainer(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            commandRunnerFactoryProvider.overrideWithValue(
+              FakeCommandRunnerFactory(fallback: runner),
+            ),
+          ],
+        );
+        addTearDown(scoped.dispose);
 
-      AppLifecycle(scoped).startAgentDiscovery();
-      await pumpEventQueue();
+        AppLifecycle(scoped).startAgentDiscovery();
+        await pumpEventQueue();
 
-      // Every shipped agent, asked about once, because this workspace has no
-      // record of ever having looked.
-      expect(runner.requests, isNotEmpty);
-      expect(AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'windows'), isTrue);
-    });
+        // Every shipped agent, asked about once, because this workspace has no
+        // record of ever having looked.
+        expect(runner.requests, isNotEmpty);
+        expect(
+          AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'windows'),
+          isTrue,
+        );
+      },
+    );
 
-    test('a workspace that has never discovered leaves it to the first run', () async {
-      ExecutionEnvironmentDao(db).upsert(windowsEnv());
-      final runner = FakeCommandRunner();
-      final scoped = ProviderContainer(
-        overrides: [
-          databaseProvider.overrideWithValue(db),
-          commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(fallback: runner),
-          ),
-        ],
-      );
-      addTearDown(scoped.dispose);
+    test(
+      'a workspace that has never discovered leaves it to the first run',
+      () async {
+        ExecutionEnvironmentDao(db).upsert(windowsEnv());
+        final runner = FakeCommandRunner();
+        final scoped = ProviderContainer(
+          overrides: [
+            databaseProvider.overrideWithValue(db),
+            commandRunnerFactoryProvider.overrideWithValue(
+              FakeCommandRunnerFactory(fallback: runner),
+            ),
+          ],
+        );
+        addTearDown(scoped.dispose);
 
-      AppLifecycle(scoped).startAgentDiscovery();
-      await pumpEventQueue();
+        AppLifecycle(scoped).startAgentDiscovery();
+        await pumpEventQueue();
 
-      // The one-time startup scan is already probing everything; two sweeps
-      // racing would spawn every probe twice.
-      expect(runner.requests, isEmpty);
-    });
+        // The one-time startup scan is already probing everything; two sweeps
+        // racing would spawn every probe twice.
+        expect(runner.requests, isEmpty);
+      },
+    );
   });
 
   group('the agents\' hooks are installed behind the first frame', () {
@@ -835,10 +863,7 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       expect(sweeps, isEmpty, reason: 'the window has not painted yet');
       // And the app says so rather than saying nothing. An empty report used
       // to be indistinguishable from a clean one.
-      expect(
-        scoped.read(agentHookInstallationReportProvider).swept,
-        isFalse,
-      );
+      expect(scoped.read(agentHookInstallationReportProvider).swept, isFalse);
 
       gate.complete();
       await pumpEventQueue();
@@ -888,10 +913,9 @@ registerOsQuit: (_) {}, adapters: natives.adapters);
       final server = serverFor(scoped);
       final gate = Completer<void>();
 
-      AppLifecycle(scoped).installAgentHooks(
-        server,
-        afterFirstFrame: () => gate.future,
-      );
+      AppLifecycle(
+        scoped,
+      ).installAgentHooks(server, afterFirstFrame: () => gate.future);
       server.onWslInterfaceBound!();
       await pumpEventQueue();
 

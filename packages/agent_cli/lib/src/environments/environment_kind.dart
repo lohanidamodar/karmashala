@@ -58,7 +58,6 @@ bool isLocalHost(EnvironmentKind kind) =>
 bool usesWindowsPaths(EnvironmentKind kind) =>
     kind == EnvironmentKind.windowsNative;
 
-
 /// Whether a CLI store in [kind] can be read and written from this machine.
 ///
 /// What `CliStoreLocator.locate` actually walks: the local host, and the WSL

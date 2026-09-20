@@ -102,15 +102,16 @@ List<Uri> orderRelayCandidates(
   // Sorted with the saved position as the tie-break, so the dial sequence is
   // identical on every reconnect: `List.sort` promises nothing about equal
   // elements, and a wobbling order would make a failure impossible to read.
-  final ranked = [...saved.indexed]..sort((a, b) {
-    final at = a.$2.lastSuccessAt;
-    final bt = b.$2.lastSuccessAt;
-    if (at == null && bt == null) return a.$1.compareTo(b.$1);
-    if (at == null) return 1;
-    if (bt == null) return -1;
-    final byRecency = bt.compareTo(at);
-    return byRecency != 0 ? byRecency : a.$1.compareTo(b.$1);
-  });
+  final ranked = [...saved.indexed]
+    ..sort((a, b) {
+      final at = a.$2.lastSuccessAt;
+      final bt = b.$2.lastSuccessAt;
+      if (at == null && bt == null) return a.$1.compareTo(b.$1);
+      if (at == null) return 1;
+      if (bt == null) return -1;
+      final byRecency = bt.compareTo(at);
+      return byRecency != 0 ? byRecency : a.$1.compareTo(b.$1);
+    });
   final ordered = <String, Uri>{};
   for (final (_, candidate) in ranked) {
     if (candidate.inCooldown(now, cooldown: cooldown)) continue;
@@ -231,4 +232,3 @@ bool isLocalRelay(Uri url) {
   if (host == '127.0.0.1' || host == 'localhost' || host == '::1') return null;
   return (host: host, port: port);
 }
-

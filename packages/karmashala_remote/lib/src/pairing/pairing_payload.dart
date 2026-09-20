@@ -134,8 +134,7 @@ class PairingPayload {
     'capabilities': capabilities.bits,
     // Only when there is something to add: a one-relay host's QR stays byte
     // for byte what it was before this loop.
-    if (relays.length > 1)
-      'relays': [for (final url in relays) url.toString()],
+    if (relays.length > 1) 'relays': [for (final url in relays) url.toString()],
   });
 
   /// Parses a scanned QR string. Throws [ProtocolException] on anything that

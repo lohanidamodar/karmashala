@@ -9,16 +9,19 @@ import 'package:karmashala/src/features/settings/presentation/settings_nav.dart'
 /// with it, or a search for "known hosts" lands nowhere.
 void main() {
   test('there is no separate SSH section any more', () {
-    expect(
-      SettingsSectionId.values.map((s) => s.name),
-      isNot(contains('ssh')),
-    );
+    expect(SettingsSectionId.values.map((s) => s.name), isNot(contains('ssh')));
   });
 
   test('environments answers to what the SSH page answered to', () {
     final keywords = SettingsSectionId.environments.keywords;
 
-    for (final term in ['ssh', 'hosts', 'known hosts', 'keys', 'remote build']) {
+    for (final term in [
+      'ssh',
+      'hosts',
+      'known hosts',
+      'keys',
+      'remote build',
+    ]) {
       expect(keywords, contains(term), reason: '"$term" found the SSH page');
     }
   });

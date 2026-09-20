@@ -118,7 +118,10 @@ class _FixedMcp implements SessionMcp {
     required bool withConfigFile,
   }) => SessionMcpAccess(
     url: 'http://127.0.0.1:7777/mcp/$sessionId',
-    configPath: withConfigFile ? r'C:\mcp\session-' '$sessionId.json' : null,
+    configPath: withConfigFile
+        ? r'C:\mcp\session-'
+              '$sessionId.json'
+        : null,
   );
 }
 
@@ -395,7 +398,8 @@ void main() {
       for (final env in environments) {
         for (final selection in support.selections()) {
           for (final resuming in [false, true]) {
-            final conversation = 'conv-$agentId-${env.id}-'
+            final conversation =
+                'conv-$agentId-${env.id}-'
                 '${selection.canonical}';
             final resumed = resuming
                 ? seedResumable(agentId, env, conversationId: conversation)
@@ -557,8 +561,7 @@ void main() {
                 firstMessage: 'do the sub-task',
               );
             case 'modelOverride':
-              final model =
-                  descriptor.launch.model.models.isEmpty
+              final model = descriptor.launch.model.models.isEmpty
                   ? 'some-model'
                   : descriptor.launch.model.models.first.id;
               request = SessionLaunchRequest(
@@ -681,30 +684,37 @@ void main() {
         ),
       );
     });
-    await refuses('a second process on a conversation the agent will not share', () async {
-      // Antigravity forbids it, so a live pane of ours holding the
-      // conversation is the blocking case rather than the supported one.
-      const conversation = 'held-by-us';
-      seedResumable(AgentIds.antigravity, windows, conversationId: conversation);
-      await launcher.launch(
-        SessionLaunchRequest(
-          repository: repositoryIn(windows),
-          installation: installationOf(AgentIds.antigravity, windows),
-          title: 'Held',
-          purpose: SessionPurpose.existingSession,
-          resumeExternalSessionId: conversation,
-        ),
-      );
-      return launcher.launch(
-        SessionLaunchRequest(
-          repository: repositoryIn(windows),
-          installation: installationOf(AgentIds.antigravity, windows),
-          title: 'Held again',
-          purpose: SessionPurpose.existingSession,
-          resumeExternalSessionId: conversation,
-        ),
-      );
-    });
+    await refuses(
+      'a second process on a conversation the agent will not share',
+      () async {
+        // Antigravity forbids it, so a live pane of ours holding the
+        // conversation is the blocking case rather than the supported one.
+        const conversation = 'held-by-us';
+        seedResumable(
+          AgentIds.antigravity,
+          windows,
+          conversationId: conversation,
+        );
+        await launcher.launch(
+          SessionLaunchRequest(
+            repository: repositoryIn(windows),
+            installation: installationOf(AgentIds.antigravity, windows),
+            title: 'Held',
+            purpose: SessionPurpose.existingSession,
+            resumeExternalSessionId: conversation,
+          ),
+        );
+        return launcher.launch(
+          SessionLaunchRequest(
+            repository: repositoryIn(windows),
+            installation: installationOf(AgentIds.antigravity, windows),
+            title: 'Held again',
+            purpose: SessionPurpose.existingSession,
+            resumeExternalSessionId: conversation,
+          ),
+        );
+      },
+    );
     await refuses('a conversation the store has never held', () async {
       // A row whose id *is* the conversation id: the promise Claude Code's
       // `--session-id` makes at launch, and the only shape the store is asked

@@ -262,8 +262,9 @@ class _RecordDecisionDialogState extends State<_RecordDecisionDialog> {
                 for (final kind in kHandWritableKinds)
                   DropdownMenuItem(value: kind, child: Text(kind.label)),
               ],
-              onChanged: (kind) =>
-                  setState(() => _kind = kind ?? DecisionKind.constraintAccepted),
+              onChanged: (kind) => setState(
+                () => _kind = kind ?? DecisionKind.constraintAccepted,
+              ),
             ),
             const SizedBox(height: Insets.md),
             TextField(

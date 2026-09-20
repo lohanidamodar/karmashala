@@ -62,9 +62,7 @@ void main() {
         ...fakeTerminalOverrides(database: db),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
-        agentRegistryProvider.overrideWithValue(
-          const AgentRegistry([_rover]),
-        ),
+        agentRegistryProvider.overrideWithValue(const AgentRegistry([_rover])),
         settingsControllerProvider.overrideWith(_StaticSettings.new),
         // The folder probe touches disk in production; this test is about the
         // listing, not about what exists on the machine running it.
@@ -166,30 +164,35 @@ void main() {
       expect(agent.permissionModes.last.dangerous, isTrue);
     });
 
-    test('an agent whose modes are unknown sends one row that says so',
-        () async {
-      // Installed, but nothing in the registry declares what it can be put
-      // into. The phone gets one unselectable row rather than an empty menu.
-      AgentInstallationDao(db).insert(
-        agentInstallation(id: 'a2', agentId: 'mysteryCli'),
-      );
+    test(
+      'an agent whose modes are unknown sends one row that says so',
+      () async {
+        // Installed, but nothing in the registry declares what it can be put
+        // into. The phone gets one unselectable row rather than an empty menu.
+        AgentInstallationDao(
+          db,
+        ).insert(agentInstallation(id: 'a2', agentId: 'mysteryCli'));
 
-      final agents = (await workspace()).single.checkouts.single.agents;
-      final mystery = agents.firstWhere((a) => a.installationId == 'a2');
+        final agents = (await workspace()).single.checkouts.single.agents;
+        final mystery = agents.firstWhere((a) => a.installationId == 'a2');
 
-      expect(mystery.permissionModes.single.selectable, isFalse);
-      expect(
-        mystery.permissionModes.single.summary,
-        contains('mysteryCli'),
-        reason: 'the agent is named, so the limit is not blamed on the app',
-      );
-    });
+        expect(mystery.permissionModes.single.selectable, isFalse);
+        expect(
+          mystery.permissionModes.single.summary,
+          contains('mysteryCli'),
+          reason: 'the agent is named, so the limit is not blamed on the app',
+        );
+      },
+    );
 
-    test('preselects the desktop own new-session mode, never one of its own', () async {
-      final agent = (await workspace()).single.checkouts.single.agents.single;
+    test(
+      'preselects the desktop own new-session mode, never one of its own',
+      () async {
+        final agent = (await workspace()).single.checkouts.single.agents.single;
 
-      expect(agent.defaultMode, askStored);
-    });
+        expect(agent.defaultMode, askStored);
+      },
+    );
 
     test('names the environment each checkout lives in', () async {
       // The reported case: one project, the same repository checked out under
@@ -205,11 +208,10 @@ void main() {
 
       final projects = await workspace();
 
-      expect(
-        projects.single.checkouts.map((c) => c.environmentName),
-        ['WSL · Ubuntu', 'Windows'],
-        reason: 'sorted by path, and each says where it lives',
-      );
+      expect(projects.single.checkouts.map((c) => c.environmentName), [
+        'WSL · Ubuntu',
+        'Windows',
+      ], reason: 'sorted by path, and each says where it lives');
       expect(projects.single.environmentName, 'Windows');
     });
 

@@ -21,11 +21,7 @@ void main() {
         body: Center(
           child: SizedBox(
             width: 600,
-            child: LinkableText(
-              text,
-              onTapText: onTapText,
-              maxLines: maxLines,
-            ),
+            child: LinkableText(text, onTapText: onTapText, maxLines: maxLines),
           ),
         ),
       ),
@@ -66,11 +62,10 @@ void main() {
     }
 
     walk(tester.widget<RichText>(find.byType(RichText).first).text);
-    expect([for (final l in leaves) l.text], [
-      'see ',
-      'https://example.com/a',
-      ' now',
-    ]);
+    expect(
+      [for (final l in leaves) l.text],
+      ['see ', 'https://example.com/a', ' now'],
+    );
     expect(leaves[1].style?.decoration, TextDecoration.underline);
     expect(leaves[0].style?.decoration, isNot(TextDecoration.underline));
   });
@@ -78,7 +73,11 @@ void main() {
   testWidgets('a tap beside the link still edits, so the surface keeps its '
       'gesture', (tester) async {
     var edits = 0;
-    await pump(tester, 'see https://example.com/a now', onTapText: () => edits++);
+    await pump(
+      tester,
+      'see https://example.com/a now',
+      onTapText: () => edits++,
+    );
 
     // The far right of a 600px box is past the end of this line's glyphs.
     final box = tester.getRect(find.byType(LinkableText));

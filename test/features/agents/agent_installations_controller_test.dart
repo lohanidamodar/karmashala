@@ -97,8 +97,7 @@ void main() {
     expect(installations.every((i) => i.version == '2.0.0'), isTrue);
   });
 
-  test('every environment is asked at once, and asked exactly as often',
-      () async {
+  test('every environment is asked at once, and asked exactly as often', () async {
     // The loop was sequential and the environments are independent — a WSL
     // distribution and a Mac over SSH have nothing to say to each other, and
     // each already parallelises its own agents — so the "rescan agents"

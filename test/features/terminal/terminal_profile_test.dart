@@ -16,10 +16,7 @@ void main() {
     test('offers the two host shells and every distribution', () {
       final profiles = terminalProfilesFor([_wsl('Ubuntu')]);
 
-      expect(
-        profiles.map((p) => p.id),
-        ['powershell', 'cmd', 'wsl:Ubuntu'],
-      );
+      expect(profiles.map((p) => p.id), ['powershell', 'cmd', 'wsl:Ubuntu']);
     });
   });
 
@@ -115,10 +112,7 @@ void main() {
     test('terminalProfilesFor includes SSH environments', () {
       final profiles = terminalProfilesFor([sshEnv]);
 
-      expect(
-        profiles.map((p) => p.id),
-        contains('ssh:server1'),
-      );
+      expect(profiles.map((p) => p.id), contains('ssh:server1'));
       final sshProfile = profiles.firstWhere((p) => p.id == 'ssh:server1');
       expect(sshProfile.shell, TerminalShell.ssh);
       expect(sshProfile.sshHostId, 'server1');

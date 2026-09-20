@@ -67,14 +67,15 @@ void main() {
         );
 
     test('copies a directory and counts what it wrote', () async {
-      Directory(p.join(source, '.dart_tool', 'nested')).createSync(
-        recursive: true,
-      );
-      File(p.join(source, '.dart_tool', 'package_config.json'))
-          .writeAsStringSync('{}');
-      File(p.join(source, '.dart_tool', 'nested', 'a.txt')).writeAsStringSync(
-        'a',
-      );
+      Directory(
+        p.join(source, '.dart_tool', 'nested'),
+      ).createSync(recursive: true);
+      File(
+        p.join(source, '.dart_tool', 'package_config.json'),
+      ).writeAsStringSync('{}');
+      File(
+        p.join(source, '.dart_tool', 'nested', 'a.txt'),
+      ).writeAsStringSync('a');
 
       final verdict = await copy('.dart_tool');
       expect(verdict.result, WorktreeCopyResult.copied);
@@ -218,14 +219,17 @@ void main() {
       expect(runner.requests.map((r) => r.executable), ['test', 'test']);
     });
 
-    test('a probe that could not answer is unknown, never "not there"', () async {
-      // 126/127 is the shell failing to run `test`, not `test` saying no.
-      runner.responder = (_) =>
-          const CommandResult(exitCode: 127, stdout: '', stderr: 'not found');
-      final verdict = await copy('.dart_tool');
-      expect(verdict.result, WorktreeCopyResult.unknown);
-      expect(verdict.reason, contains('could not be taken'));
-    });
+    test(
+      'a probe that could not answer is unknown, never "not there"',
+      () async {
+        // 126/127 is the shell failing to run `test`, not `test` saying no.
+        runner.responder = (_) =>
+            const CommandResult(exitCode: 127, stdout: '', stderr: 'not found');
+        final verdict = await copy('.dart_tool');
+        expect(verdict.result, WorktreeCopyResult.unknown);
+        expect(verdict.reason, contains('could not be taken'));
+      },
+    );
 
     test('an environment that will not run anything is unknown', () async {
       runner.throwError = CommandException('WSL is not running');

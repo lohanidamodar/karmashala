@@ -849,11 +849,7 @@ class AgentRejectedValueRules {
         if (one.trim().isNotEmpty) one.trim(),
     ];
     if (value.isEmpty || flag.isEmpty || alternatives.isEmpty) return null;
-    return RejectedValue(
-      value: value,
-      flag: flag,
-      alternatives: alternatives,
-    );
+    return RejectedValue(value: value, flag: flag, alternatives: alternatives);
   }
 }
 

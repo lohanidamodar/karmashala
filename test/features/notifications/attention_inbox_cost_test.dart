@@ -155,7 +155,9 @@ void main() {
     /// nobody has looked at. The filter behind `pending` therefore has real
     /// work to do — it has to walk the conditions to reject them.
     AttentionInbox busy(int count) {
-      final seen = AttentionInbox.empty.apply(waitingPoll(count), t0).markAllSeen();
+      final seen = AttentionInbox.empty
+          .apply(waitingPoll(count), t0)
+          .markAllSeen();
       return seen.apply(newsPoll(count, 1), t0.add(const Duration(minutes: 1)));
     }
 

@@ -166,7 +166,9 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
           .timeout(transferTimeout);
       if (!mounted) return;
       setState(() => _busy = null);
-      _say('Saved to ${moved.hostPath}${moved.note == null ? '' : ' · ${moved.note}'}');
+      _say(
+        'Saved to ${moved.hostPath}${moved.note == null ? '' : ' · ${moved.note}'}',
+      );
     } on Object catch (error) {
       if (!mounted) return;
       setState(() => _busy = null);
@@ -361,9 +363,9 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
 
   void _say(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.maybeOf(
+      context,
+    )?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   bool get _atRoot => _path == null || _path == _root?.path;
@@ -508,17 +510,18 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
         detail: listing.note ?? 'This directory is empty.',
       );
     }
-    final entries = [
-      for (final entry in listing.entries)
-        if (HiddenFilesPreference.shown || !entry.isHidden) entry,
-    ]..sort(
-      (a, b) => compareBrowsedRows(
-        aIsDirectory: a.isDirectory,
-        aName: a.name,
-        bIsDirectory: b.isDirectory,
-        bName: b.name,
-      ),
-    );
+    final entries =
+        [
+          for (final entry in listing.entries)
+            if (HiddenFilesPreference.shown || !entry.isHidden) entry,
+        ]..sort(
+          (a, b) => compareBrowsedRows(
+            aIsDirectory: a.isDirectory,
+            aName: a.name,
+            bIsDirectory: b.isDirectory,
+            bName: b.name,
+          ),
+        );
     return ListView.builder(
       itemCount: entries.length + (listing.skipped.isEmpty ? 0 : 1),
       itemBuilder: (context, index) {
@@ -632,7 +635,9 @@ class _DeviceFilesDialogState extends ConsumerState<DeviceFilesDialog> {
       skipped.length == 1
           ? '1 more line could not be read: ${skipped.single.reason}'
           : '${skipped.length} more lines could not be read',
-      style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: scheme.onSurfaceVariant,
+      ),
     ),
   );
 
@@ -869,4 +874,3 @@ class _DeviceFileTile extends StatelessWidget {
 /// The row menu's items. An enum so an action added without a handler is a
 /// compile error rather than a menu entry that does nothing.
 enum _RowAction { copy, cut, copyForHost }
-

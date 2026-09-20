@@ -566,7 +566,8 @@ void main() {
       expect(
         inbox.nextAfter('a')?.session.openId,
         'a',
-        reason: 'revealing it again confirms where you are; null would read '
+        reason:
+            'revealing it again confirms where you are; null would read '
             'as the chord being broken',
       );
     });

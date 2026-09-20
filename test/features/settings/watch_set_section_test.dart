@@ -53,9 +53,11 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
-          home: Scaffold(body: SingleChildScrollView(
-            child: SettingsPageBody(page: SettingsSectionId.diagnostics),
-          )),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: SettingsPageBody(page: SettingsSectionId.diagnostics),
+            ),
+          ),
         ),
       ),
     );

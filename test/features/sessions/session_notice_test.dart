@@ -175,10 +175,9 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(_twoBars());
-    _notices(tester).post(
-      'a',
-      const SessionNotice(message: 'Limit reached', sticky: true),
-    );
+    _notices(
+      tester,
+    ).post('a', const SessionNotice(message: 'Limit reached', sticky: true));
     await tester.pump();
     await tester.pump(sessionNoticeLifetime * 3);
     expect(find.text('Limit reached'), findsOneWidget);

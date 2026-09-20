@@ -13,19 +13,24 @@ import '../../support/fake_command_runner.dart';
 
 final DateTime _now = DateTime.utc(2026, 9, 8, 12);
 
-ExecutionEnvironment _environment(EnvironmentKind kind, {String name = 'Ubuntu'}) =>
-    ExecutionEnvironment(
-      id: 'env',
-      kind: kind,
-      name: name,
-      wslDistribution: kind == EnvironmentKind.wsl ? 'Ubuntu' : null,
-      createdAt: _now,
-    );
+ExecutionEnvironment _environment(
+  EnvironmentKind kind, {
+  String name = 'Ubuntu',
+}) => ExecutionEnvironment(
+  id: 'env',
+  kind: kind,
+  name: name,
+  wslDistribution: kind == EnvironmentKind.wsl ? 'Ubuntu' : null,
+  createdAt: _now,
+);
 
 void main() {
   group('flutterExecutableFor — CLAUDE.md §17 as code', () {
     test('Windows names the .bat and never the extensionless script', () {
-      expect(flutterExecutableFor(EnvironmentKind.windowsNative), 'flutter.bat');
+      expect(
+        flutterExecutableFor(EnvironmentKind.windowsNative),
+        'flutter.bat',
+      );
     });
 
     test('every POSIX kind names plain flutter', () {
@@ -52,15 +57,28 @@ void main() {
     });
 
     test('any drive letter, upper or lower', () {
-      expect(windowsInstallRefusal(EnvironmentKind.wsl, '/mnt/d/flutter/bin/flutter'),
-          isNotNull);
-      expect(windowsInstallRefusal(EnvironmentKind.wsl, '/mnt/C/flutter/bin/flutter'),
-          isNotNull);
+      expect(
+        windowsInstallRefusal(
+          EnvironmentKind.wsl,
+          '/mnt/d/flutter/bin/flutter',
+        ),
+        isNotNull,
+      );
+      expect(
+        windowsInstallRefusal(
+          EnvironmentKind.wsl,
+          '/mnt/C/flutter/bin/flutter',
+        ),
+        isNotNull,
+      );
     });
 
     test("the distribution's own flutter is not refused", () {
       expect(
-        windowsInstallRefusal(EnvironmentKind.wsl, '/home/me/flutter/bin/flutter'),
+        windowsInstallRefusal(
+          EnvironmentKind.wsl,
+          '/home/me/flutter/bin/flutter',
+        ),
         isNull,
       );
       expect(
@@ -75,7 +93,10 @@ void main() {
         EnvironmentKind.localPosix,
         EnvironmentKind.ssh,
       ]) {
-        expect(windowsInstallRefusal(kind, '/mnt/c/flutter/bin/flutter'), isNull);
+        expect(
+          windowsInstallRefusal(kind, '/mnt/c/flutter/bin/flutter'),
+          isNull,
+        );
       }
     });
   });
@@ -109,28 +130,36 @@ void main() {
 
     setUp(() => runner = FakeCommandRunner(environmentId: 'env'));
 
-    Future<FlutterSdkReading> read(EnvironmentKind kind, {String name = 'Ubuntu'}) =>
-        FlutterSdkService(
-          runner: runner,
-          environment: _environment(kind, name: name),
-        ).read(_now);
+    Future<FlutterSdkReading> read(
+      EnvironmentKind kind, {
+      String name = 'Ubuntu',
+    }) => FlutterSdkService(
+      runner: runner,
+      environment: _environment(kind, name: name),
+    ).read(_now);
 
     test('Windows: located with where flutter.bat, version parsed', () async {
       runner.responder = (request) {
         if (request.executable == 'where') {
           return const CommandResult(
             exitCode: 0,
-            stdout: r'C:\Users\dlohani\flutter\bin\flutter.bat' '\n',
+            stdout:
+                r'C:\Users\dlohani\flutter\bin\flutter.bat'
+                '\n',
             stderr: '',
           );
         }
         return const CommandResult(
           exitCode: 0,
-          stdout: 'Flutter 3.38.5 • channel stable • https://github.com/flutter/flutter.git\n',
+          stdout:
+              'Flutter 3.38.5 • channel stable • https://github.com/flutter/flutter.git\n',
           stderr: '',
         );
       };
-      final reading = await read(EnvironmentKind.windowsNative, name: 'Windows');
+      final reading = await read(
+        EnvironmentKind.windowsNative,
+        name: 'Windows',
+      );
       expect(reading.isUsable, isTrue);
       expect(reading.executable, r'C:\Users\dlohani\flutter\bin\flutter.bat');
       expect(reading.version, '3.38.5');
@@ -138,44 +167,57 @@ void main() {
       expect(runner.requests.first.arguments, ['flutter.bat']);
     });
 
-    test('the WSL trap: located under /mnt/c and NOTHING is spawned at it',
-        () async {
-      runner.responder = (request) {
-        if (request.arguments.contains('exit 0')) {
-          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-        }
-        return const CommandResult(
-          exitCode: 0,
-          stdout: '/mnt/c/Users/dlohani/flutter/bin/flutter\n',
-          stderr: '',
+    test(
+      'the WSL trap: located under /mnt/c and NOTHING is spawned at it',
+      () async {
+        runner.responder = (request) {
+          if (request.arguments.contains('exit 0')) {
+            return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+          }
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '/mnt/c/Users/dlohani/flutter/bin/flutter\n',
+            stderr: '',
+          );
+        };
+        final reading = await read(EnvironmentKind.wsl);
+        expect(reading.refusal, FlutterSdkRefusal.windowsInstallOnPosixPath);
+        expect(reading.isUsable, isFalse);
+        expect(reading.reason, contains('§17'));
+        // The reachability probe and the lookup, and no third call: the version
+        // probe would have been the run that does the damage.
+        expect(runner.requests, hasLength(2));
+        expect(
+          runner.requests.any(
+            (request) => request.executable.contains('/mnt/c/'),
+          ),
+          isFalse,
         );
-      };
-      final reading = await read(EnvironmentKind.wsl);
-      expect(reading.refusal, FlutterSdkRefusal.windowsInstallOnPosixPath);
-      expect(reading.isUsable, isFalse);
-      expect(reading.reason, contains('§17'));
-      // The reachability probe and the lookup, and no third call: the version
-      // probe would have been the run that does the damage.
-      expect(runner.requests, hasLength(2));
-      expect(
-        runner.requests.any(
-          (request) => request.executable.contains('/mnt/c/'),
-        ),
-        isFalse,
-      );
-    });
+      },
+    );
 
-    test('an unreachable distribution is unknown, never "no Flutter"', () async {
-      runner.responder = (request) => request.arguments.contains('exit 0')
-          ? const CommandResult(exitCode: 1, stdout: '', stderr: 'not running')
-          : const CommandResult(exitCode: 0, stdout: '/usr/bin/flutter', stderr: '');
-      final reading = await read(EnvironmentKind.wsl);
-      expect(reading.refusal, FlutterSdkRefusal.environmentUnreachable);
-      expect(reading.reason, contains('unknown rather than no'));
-      // It stopped at the reachability probe rather than concluding from a
-      // lookup that could not have answered.
-      expect(runner.requests, hasLength(1));
-    });
+    test(
+      'an unreachable distribution is unknown, never "no Flutter"',
+      () async {
+        runner.responder = (request) => request.arguments.contains('exit 0')
+            ? const CommandResult(
+                exitCode: 1,
+                stdout: '',
+                stderr: 'not running',
+              )
+            : const CommandResult(
+                exitCode: 0,
+                stdout: '/usr/bin/flutter',
+                stderr: '',
+              );
+        final reading = await read(EnvironmentKind.wsl);
+        expect(reading.refusal, FlutterSdkRefusal.environmentUnreachable);
+        expect(reading.reason, contains('unknown rather than no'));
+        // It stopped at the reachability probe rather than concluding from a
+        // lookup that could not have answered.
+        expect(runner.requests, hasLength(1));
+      },
+    );
 
     test('nothing on PATH names the fix', () async {
       runner.responder = (request) => request.arguments.contains('exit 0')
@@ -200,22 +242,24 @@ void main() {
       );
     });
 
-    test('a version that will not read leaves the path usable and the number null',
-        () async {
-      runner.responder = (request) {
-        if (request.executable.endsWith('flutter')) {
-          return const CommandResult(exitCode: 2, stdout: '', stderr: 'boom');
-        }
-        return const CommandResult(
-          exitCode: 0,
-          stdout: '/usr/local/bin/flutter\n',
-          stderr: '',
-        );
-      };
-      final reading = await read(EnvironmentKind.localPosix, name: 'macOS');
-      expect(reading.isUsable, isTrue);
-      expect(reading.version, isNull);
-    });
+    test(
+      'a version that will not read leaves the path usable and the number null',
+      () async {
+        runner.responder = (request) {
+          if (request.executable.endsWith('flutter')) {
+            return const CommandResult(exitCode: 2, stdout: '', stderr: 'boom');
+          }
+          return const CommandResult(
+            exitCode: 0,
+            stdout: '/usr/local/bin/flutter\n',
+            stderr: '',
+          );
+        };
+        final reading = await read(EnvironmentKind.localPosix, name: 'macOS');
+        expect(reading.isUsable, isTrue);
+        expect(reading.version, isNull);
+      },
+    );
 
     test('an environment that throws is unreachable, not empty', () async {
       runner.throwError = CommandException('no connection pool');
@@ -267,7 +311,10 @@ void main() {
     });
 
     test('a fresh reading is reused rather than re-measured', () async {
-      final environment = _environment(EnvironmentKind.localPosix, name: 'macOS');
+      final environment = _environment(
+        EnvironmentKind.localPosix,
+        name: 'macOS',
+      );
       await readings().readFor(environment);
       final calls = runner.requests.length;
       clock.now = _now.add(const Duration(hours: 11));
@@ -276,7 +323,10 @@ void main() {
     });
 
     test('a reading that has aged out is taken again', () async {
-      final environment = _environment(EnvironmentKind.localPosix, name: 'macOS');
+      final environment = _environment(
+        EnvironmentKind.localPosix,
+        name: 'macOS',
+      );
       await readings().readFor(environment);
       final calls = runner.requests.length;
       clock.now = _now.add(const Duration(hours: 13));
@@ -286,7 +336,10 @@ void main() {
     });
 
     test('force looks again however fresh the last answer was', () async {
-      final environment = _environment(EnvironmentKind.localPosix, name: 'macOS');
+      final environment = _environment(
+        EnvironmentKind.localPosix,
+        name: 'macOS',
+      );
       await readings().readFor(environment);
       final calls = runner.requests.length;
       await readings().readFor(environment, force: true);
@@ -294,7 +347,10 @@ void main() {
     });
 
     test('forget makes the next ask measure', () async {
-      final environment = _environment(EnvironmentKind.localPosix, name: 'macOS');
+      final environment = _environment(
+        EnvironmentKind.localPosix,
+        name: 'macOS',
+      );
       await readings().readFor(environment);
       expect(readings().cached('env'), isNotNull);
       readings().forget('env');

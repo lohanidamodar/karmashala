@@ -144,15 +144,18 @@ void main() {
     expect(subject.reasonFor('s1'), isNotNull);
   });
 
-  test('a conversation that started long after the launch is not ours', () async {
-    insert();
-    final subject = service([
-      codexSession(conversation, startOffset: const Duration(hours: 2)),
-    ]);
+  test(
+    'a conversation that started long after the launch is not ours',
+    () async {
+      insert();
+      final subject = service([
+        codexSession(conversation, startOffset: const Duration(hours: 2)),
+      ]);
 
-    expect(await subject.attribute(), 0);
-    expect(dao.getById('s1')!.externalSessionId, isNull);
-  });
+      expect(await subject.attribute(), 0);
+      expect(dao.getById('s1')!.externalSessionId, isNull);
+    },
+  );
 
   test('a conversation in another directory is not ours', () async {
     insert();
@@ -164,26 +167,32 @@ void main() {
     expect(dao.getById('s1')!.externalSessionId, isNull);
   });
 
-  test('a conversation another row already holds is never taken twice', () async {
-    insert(id: 's0', externalId: conversation);
-    insert(id: 's1');
-    final subject = service([codexSession(conversation)]);
+  test(
+    'a conversation another row already holds is never taken twice',
+    () async {
+      insert(id: 's0', externalId: conversation);
+      insert(id: 's1');
+      final subject = service([codexSession(conversation)]);
 
-    expect(await subject.attribute(), 0);
-    expect(dao.getById('s1')!.externalSessionId, isNull);
-  });
+      expect(await subject.attribute(), 0);
+      expect(dao.getById('s1')!.externalSessionId, isNull);
+    },
+  );
 
-  test('two conversations in the window is a refusal, not a coin toss', () async {
-    insert();
-    final subject = service([
-      codexSession(conversation),
-      codexSession(other, startOffset: const Duration(seconds: 20)),
-    ]);
+  test(
+    'two conversations in the window is a refusal, not a coin toss',
+    () async {
+      insert();
+      final subject = service([
+        codexSession(conversation),
+        codexSession(other, startOffset: const Duration(seconds: 20)),
+      ]);
 
-    expect(await subject.attribute(), 0);
-    expect(dao.getById('s1')!.externalSessionId, isNull);
-    expect(subject.reasonFor('s1'), contains('2'));
-  });
+      expect(await subject.attribute(), 0);
+      expect(dao.getById('s1')!.externalSessionId, isNull);
+      expect(subject.reasonFor('s1'), contains('2'));
+    },
+  );
 
   test('two sessions waiting in one directory refuse together', () async {
     // The store records a *directory* and a time, not a process. Two rows
@@ -204,22 +213,27 @@ void main() {
     // Claude Code was told its id at launch. A row of its with none is a fork
     // or a failure, and inferring one from a directory would be inventing it.
     insert(installation: 'a2');
-    final subject = service([codexSession(conversation, cli: AgentIds.claudeCode)]);
+    final subject = service([
+      codexSession(conversation, cli: AgentIds.claudeCode),
+    ]);
 
     expect(subject.wantsStoreSweep, isFalse);
     expect(await subject.attribute(), 0);
     expect(subject.scans, 0);
   });
 
-  test('a store that cannot say when a conversation began is not matched', () async {
-    // Antigravity's store yields identity without a start time, and this rule
-    // is nothing without one. Its own attributor owns those rows.
-    insert();
-    final subject = service([codexSession(conversation, dated: false)]);
+  test(
+    'a store that cannot say when a conversation began is not matched',
+    () async {
+      // Antigravity's store yields identity without a start time, and this rule
+      // is nothing without one. Its own attributor owns those rows.
+      insert();
+      final subject = service([codexSession(conversation, dated: false)]);
 
-    expect(await subject.attribute(), 0);
-    expect(dao.getById('s1')!.externalSessionId, isNull);
-  });
+      expect(await subject.attribute(), 0);
+      expect(dao.getById('s1')!.externalSessionId, isNull);
+    },
+  );
 
   test('a stopped session buys no scan', () async {
     insert(status: SessionStatus.completed);
@@ -254,15 +268,18 @@ void main() {
     expect(dao.getById('s1')!.externalSessionId, isNull);
   });
 
-  test('a row with no directory of its own falls back to its repository', () async {
-    // Every row written before schema v22 has a null working directory, and the
-    // repository root is where it would have run.
-    insert(directory: null);
-    final subject = service([codexSession(conversation)]);
+  test(
+    'a row with no directory of its own falls back to its repository',
+    () async {
+      // Every row written before schema v22 has a null working directory, and the
+      // repository root is where it would have run.
+      insert(directory: null);
+      final subject = service([codexSession(conversation)]);
 
-    expect(await subject.attribute(), 1);
-    expect(dao.getById('s1')!.externalSessionId, conversation);
-  });
+      expect(await subject.attribute(), 1);
+      expect(dao.getById('s1')!.externalSessionId, conversation);
+    },
+  );
 }
 
 /// A failure a store scan can throw, without depending on `dart:io` here.

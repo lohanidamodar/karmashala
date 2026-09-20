@@ -103,10 +103,11 @@ class NotesController extends Notifier<List<Note>> {
     final index = state.indexWhere((n) => n.id == id);
     if (index == -1) return;
     _dao.setProject(id, projectId);
-    state = [...state]..[index] = state[index].copyWith(
-      projectId: projectId,
-      clearProjectId: projectId == null,
-    );
+    state = [...state]
+      ..[index] = state[index].copyWith(
+        projectId: projectId,
+        clearProjectId: projectId == null,
+      );
   }
 
   void delete(String id) {

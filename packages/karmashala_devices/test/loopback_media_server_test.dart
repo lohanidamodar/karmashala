@@ -149,10 +149,8 @@ void main() {
   test('reports each chunk that reached the socket', () async {
     var written = 0;
     final server = await LoopbackMediaServer.serve(
-      openStream: () => Stream.fromIterable([
-        utf8.encode('a'),
-        utf8.encode('b'),
-      ]),
+      openStream: () =>
+          Stream.fromIterable([utf8.encode('a'), utf8.encode('b')]),
       onChunkWritten: () => written++,
     );
     addTearDown(server.close);

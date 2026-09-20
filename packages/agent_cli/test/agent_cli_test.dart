@@ -174,11 +174,22 @@ void main() {
       expect(parseClaudeMessage(''), isEmpty);
     });
 
-    test('an assistant message whose body is the wrong shape is skipped, not thrown', () {
-      expect(parseClaudeMessage('{"type":"assistant","message":"oops"}'), isEmpty);
-      expect(parseClaudeMessage('{"type":"assistant","message":{"content":"text"}}'), isEmpty);
-      expect(parseClaudeMessage('{"type":"assistant"}'), isEmpty);
-    });
+    test(
+      'an assistant message whose body is the wrong shape is skipped, not thrown',
+      () {
+        expect(
+          parseClaudeMessage('{"type":"assistant","message":"oops"}'),
+          isEmpty,
+        );
+        expect(
+          parseClaudeMessage(
+            '{"type":"assistant","message":{"content":"text"}}',
+          ),
+          isEmpty,
+        );
+        expect(parseClaudeMessage('{"type":"assistant"}'), isEmpty);
+      },
+    );
   });
 
   group('oneShotInvocation', () {
@@ -229,7 +240,11 @@ void main() {
         containsAllInOrder(['--model', 'sonnet']),
       );
       expect(
-        oneShotInvocation(AgentIds.codex, 'x', model: 'gpt-5.1-codex').arguments,
+        oneShotInvocation(
+          AgentIds.codex,
+          'x',
+          model: 'gpt-5.1-codex',
+        ).arguments,
         containsAllInOrder(['--model', 'gpt-5.1-codex']),
       );
     });
@@ -269,7 +284,10 @@ void main() {
       final agent = installed(AgentIds.claudeCode, 'wsl:Ubuntu');
       expect(agent.agentId, AgentIds.claudeCode);
       expect(agent.environmentId, 'wsl:Ubuntu');
-      expect(AgentRegistry.builtIn.displayNameFor(agent.agentId), 'Claude Code');
+      expect(
+        AgentRegistry.builtIn.displayNameFor(agent.agentId),
+        'Claude Code',
+      );
     });
 
     test('the same CLI in two environments is two installations', () {

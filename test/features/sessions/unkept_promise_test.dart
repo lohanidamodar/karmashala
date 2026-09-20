@@ -103,10 +103,7 @@ void main() {
 
     test('a session we can see running is never offered, at any age', () {
       // Certain knowledge, and it outranks everything: we own the process.
-      for (final age in const [
-        Duration(seconds: 1),
-        Duration(days: 30),
-      ]) {
+      for (final age in const [Duration(seconds: 1), Duration(days: 30)]) {
         expect(
           screenSessionPromise(
             promised(age: age),

@@ -90,13 +90,7 @@ void main() {
       '${jsonEncode({
         'timestamp': startedAt.add(const Duration(seconds: 30)).toIso8601String(),
         'type': 'session_meta',
-        'payload': {
-          'id': id,
-          'session_id': id,
-          'timestamp': startedAt.toIso8601String(),
-          'cwd': cwd,
-          'originator': 'codex-tui',
-        },
+        'payload': {'id': id, 'session_id': id, 'timestamp': startedAt.toIso8601String(), 'cwd': cwd, 'originator': 'codex-tui'},
       })}\n'
       '${jsonEncode({
         'timestamp': startedAt.toIso8601String(),
@@ -113,9 +107,7 @@ void main() {
     if (name == null) return;
     File(p.join(storeHome, 'session_index.jsonl'))
       ..createSync(recursive: true)
-      ..writeAsStringSync(
-        '${jsonEncode({'id': id, 'thread_name': name})}\n',
-      );
+      ..writeAsStringSync('${jsonEncode({'id': id, 'thread_name': name})}\n');
   }
 
   ProviderContainer container() => ProviderContainer(
@@ -204,9 +196,7 @@ void main() {
         title: 'New session',
       ),
     );
-    ref
-        .read(sessionDaoProvider)
-        .insert(launchedRow(paneId: opened.paneId));
+    ref.read(sessionDaoProvider).insert(launchedRow(paneId: opened.paneId));
     expect(controller.titleForTab(opened.tabId), 'New session');
 
     await ref.read(cliStoreSyncRunnerProvider)();
@@ -230,66 +220,71 @@ void main() {
     expect(ImportedSessionDao(db).getAll(), isEmpty);
   });
 
-  test('the inbox opens a session that has a live pane, and finds it active',
-      () async {
-    writeRollout();
-    importRecord();
-    final ref = container();
-    addTearDown(ref.dispose);
-    // A real pane, so liveness is a fact rather than a fixture.
-    final controller = ref.read(terminalSessionsControllerProvider.notifier);
-    final opened = controller.openAgentTab(
-      const AgentPaneLaunch(
-        agentId: AgentIds.codex,
-        executable: 'codex',
-        sessionId: 's1',
-      ),
-    );
-    ref.read(sessionDaoProvider).insert(launchedRow(paneId: opened.paneId));
+  test(
+    'the inbox opens a session that has a live pane, and finds it active',
+    () async {
+      writeRollout();
+      importRecord();
+      final ref = container();
+      addTearDown(ref.dispose);
+      // A real pane, so liveness is a fact rather than a fixture.
+      final controller = ref.read(terminalSessionsControllerProvider.notifier);
+      final opened = controller.openAgentTab(
+        const AgentPaneLaunch(
+          agentId: AgentIds.codex,
+          executable: 'codex',
+          sessionId: 's1',
+        ),
+      );
+      ref.read(sessionDaoProvider).insert(launchedRow(paneId: opened.paneId));
 
-    await ref.read(cliStoreSyncRunnerProvider)();
+      await ref.read(cliStoreSyncRunnerProvider)();
 
-    // What the inbox is offered: one watched session, and it is the row with
-    // the pane — not the read-only history the notification used to open.
-    final watched = WatchedSessionLoader(
-      sessionDao: SessionDao(db),
-      importedSessionDao: ImportedSessionDao(db),
-      installationDao: AgentInstallationDao(db),
-      hookReports: AgentHookReports(),
-      clock: FixedClock(testTime),
-    ).load();
-    expect(watched, hasLength(1));
-    expect(watched.single.imported, isFalse);
-    expect(watched.single.openId, 's1');
-    expect(watched.single.key.sessionId, conversation);
+      // What the inbox is offered: one watched session, and it is the row with
+      // the pane — not the read-only history the notification used to open.
+      final watched = WatchedSessionLoader(
+        sessionDao: SessionDao(db),
+        importedSessionDao: ImportedSessionDao(db),
+        installationDao: AgentInstallationDao(db),
+        hookReports: AgentHookReports(),
+        clock: FixedClock(testTime),
+      ).load();
+      expect(watched, hasLength(1));
+      expect(watched.single.imported, isFalse);
+      expect(watched.single.openId, 's1');
+      expect(watched.single.key.sessionId, conversation);
 
-    // And the question the "not active" message came from.
-    expect(
-      ref
-          .read(sessionLauncherProvider)
-          .hostedLive(sessionId: 's1', externalSessionId: conversation),
-      isTrue,
-    );
-  });
+      // And the question the "not active" message came from.
+      expect(
+        ref
+            .read(sessionLauncherProvider)
+            .hostedLive(sessionId: 's1', externalSessionId: conversation),
+        isTrue,
+      );
+    },
+  );
 
-  test('a selection sitting on the superseded history follows the row', () async {
-    // The other half of the inbox symptom. Opening the notification put the
-    // read-only transcript on screen, because that was the only record of the
-    // conversation at the time; the id landing a slot later hides that record
-    // from the tree but would leave the user looking at it, with no sign that
-    // the session they are reading is running in a pane behind them.
-    writeRollout();
-    importRecord();
-    SessionDao(db).insert(launchedRow());
-    final ref = container();
-    addTearDown(ref.dispose);
-    ref.read(selectedImportedSessionIdProvider.notifier).select('i1');
+  test(
+    'a selection sitting on the superseded history follows the row',
+    () async {
+      // The other half of the inbox symptom. Opening the notification put the
+      // read-only transcript on screen, because that was the only record of the
+      // conversation at the time; the id landing a slot later hides that record
+      // from the tree but would leave the user looking at it, with no sign that
+      // the session they are reading is running in a pane behind them.
+      writeRollout();
+      importRecord();
+      SessionDao(db).insert(launchedRow());
+      final ref = container();
+      addTearDown(ref.dispose);
+      ref.read(selectedImportedSessionIdProvider.notifier).select('i1');
 
-    await ref.read(cliStoreSyncRunnerProvider)();
+      await ref.read(cliStoreSyncRunnerProvider)();
 
-    expect(ref.read(selectedImportedSessionIdProvider), isNull);
-    expect(ref.read(selectedSessionIdProvider), 's1');
-  });
+      expect(ref.read(selectedImportedSessionIdProvider), isNull);
+      expect(ref.read(selectedSessionIdProvider), 's1');
+    },
+  );
 
   test('a selection on some other history is left where it is', () async {
     writeRollout();

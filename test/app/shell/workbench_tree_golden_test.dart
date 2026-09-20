@@ -304,7 +304,10 @@ Future<TestGesture> _dragFrom(
   Offset from,
   Offset to,
 ) async {
-  final gesture = await tester.startGesture(from, kind: PointerDeviceKind.mouse);
+  final gesture = await tester.startGesture(
+    from,
+    kind: PointerDeviceKind.mouse,
+  );
   await tester.pump();
   for (var step = 1; step <= 20; step++) {
     await gesture.moveTo(Offset.lerp(from, to, step / 20)!);

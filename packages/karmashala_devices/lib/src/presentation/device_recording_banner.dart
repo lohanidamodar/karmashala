@@ -123,10 +123,7 @@ class _Finished extends ConsumerWidget {
     final failure = await ref
         .read(devicePathRevealerProvider)
         .reveal(
-          EnvironmentPath(
-            environmentId: localHostEnvironmentId,
-            path: path,
-          ),
+          EnvironmentPath(environmentId: localHostEnvironmentId, path: path),
           select: true,
         );
     if (!context.mounted || failure == null) return;

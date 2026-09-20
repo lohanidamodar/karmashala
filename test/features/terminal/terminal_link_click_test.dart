@@ -444,7 +444,9 @@ void main() {
       );
     });
 
-    testWidgets('with Ctrl up it is inert like everything else', (tester) async {
+    testWidgets('with Ctrl up it is inert like everything else', (
+      tester,
+    ) async {
       await pumpWithOutput(
         tester,
         'see ${osc8('https://example.com/a', 'docs')} for more',

@@ -96,9 +96,9 @@ branch refs/heads/$worktreeBranch
     );
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    RepositoryDao(db).insert(
-      repository(id: 'r2', name: 'app-feature', path: worktreeRowPath),
-    );
+    RepositoryDao(
+      db,
+    ).insert(repository(id: 'r2', name: 'app-feature', path: worktreeRowPath));
     AgentInstallationDao(db).insert(agentInstallation());
     SessionDao(db).insert(
       session(
@@ -188,9 +188,7 @@ branch refs/heads/$worktreeBranch
     final client = HttpClient();
     try {
       final request = await client.postUrl(
-        Uri.parse(
-          'http://127.0.0.1:${json['port']}/mcp/${json['mcpToken']}',
-        ),
+        Uri.parse('http://127.0.0.1:${json['port']}/mcp/${json['mcpToken']}'),
       );
       request.headers.contentType = ContentType.json;
       request.write(
@@ -317,7 +315,8 @@ branch refs/heads/$worktreeBranch
       worktreeWrite = const CommandResult(
         exitCode: 128,
         stdout: '',
-        stderr: "fatal: 'C:/src/demo/.karmashala-worktrees/app-mcp' already "
+        stderr:
+            "fatal: 'C:/src/demo/.karmashala-worktrees/app-mcp' already "
             'exists',
       );
 
@@ -347,10 +346,10 @@ branch refs/heads/$worktreeBranch
       // report a repositoryId it does not have.
       final structured =
           (await callTool('worktree_create', {
-            'repositoryId': 'r1',
-            'name': 'mcp',
-            'branch': 'feat/mcp',
-          })).structured!
+                'repositoryId': 'r1',
+                'name': 'mcp',
+                'branch': 'feat/mcp',
+              })).structured!
               as Map<String, Object?>;
 
       expect(structured['repositoryId'], startsWith('not recorded'));
@@ -363,22 +362,13 @@ branch refs/heads/$worktreeBranch
 
       expect(result.isError, isFalse, reason: result.text);
       expect(worktreeWrites(), [
-        [
-          '-C',
-          r'C:\src\demo\app',
-          'worktree',
-          'remove',
-          worktreeRowPath,
-        ],
+        ['-C', r'C:\src\demo\app', 'worktree', 'remove', worktreeRowPath],
       ]);
       expect((result.structured! as Map<String, Object?>)['removed'], isTrue);
     });
 
     test('never passes --force, whatever it was asked', () async {
-      await callTool('worktree_remove', {
-        'repositoryId': 'r2',
-        'force': true,
-      });
+      await callTool('worktree_remove', {'repositoryId': 'r2', 'force': true});
       expect(worktreeWrites().single, isNot(contains('--force')));
     });
 
@@ -391,7 +381,13 @@ branch refs/heads/$worktreeBranch
     });
 
     test('refuses uncommitted changes', () async {
-      statusBody = porcelainV2(branch: 'feature/login', ahead: 0, behind: 0, modified: ['lib/a.dart'], untracked: ['lib/b.dart']);
+      statusBody = porcelainV2(
+        branch: 'feature/login',
+        ahead: 0,
+        behind: 0,
+        modified: ['lib/a.dart'],
+        untracked: ['lib/b.dart'],
+      );
 
       final result = await callTool('worktree_remove', {'repositoryId': 'r2'});
 

@@ -33,7 +33,10 @@ class DeviceControlTools {
     _container,
     callerSessionId: callerSessionId,
   );
-  late final _app = DeviceAppTools(_container, callerSessionId: callerSessionId);
+  late final _app = DeviceAppTools(
+    _container,
+    callerSessionId: callerSessionId,
+  );
   late final _file = DeviceFileTools(
     _container,
     callerSessionId: callerSessionId,

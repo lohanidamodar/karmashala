@@ -22,11 +22,7 @@ void main() {
     role: 'tool',
     text: name,
     thinking: thinking,
-    tool: ToolActivity(
-      name: name,
-      output: output,
-      isError: isError,
-    ),
+    tool: ToolActivity(name: name, output: output, isError: isError),
   );
 
   ChatMessage said(String text) => ChatMessage(role: 'agent', text: text);

@@ -28,7 +28,9 @@ class ConPtyLauncher implements PtyLauncher {
   @override
   PtyHandle start(PtySpawnRequest request) {
     if (!Platform.isWindows) {
-      throw const PtyException('a ConPTY needs a Windows host; this build is not one');
+      throw const PtyException(
+        'a ConPTY needs a Windows host; this build is not one',
+      );
     }
     final create = _k.createPseudoConsole;
     final closePc = _k.closePseudoConsole;
@@ -49,12 +51,18 @@ class ConPtyLauncher implements PtyLauncher {
     try {
       final a = arena<IntPtr>(), b = arena<IntPtr>();
       if (_k.createPipe(a, b, nullptr, 0) == 0) {
-        throw PtyException('CreatePipe (input) failed', errno: _k.getLastError());
+        throw PtyException(
+          'CreatePipe (input) failed',
+          errno: _k.getLastError(),
+        );
       }
       inRead = a.value;
       inWrite = b.value;
       if (_k.createPipe(a, b, nullptr, 0) == 0) {
-        throw PtyException('CreatePipe (output) failed', errno: _k.getLastError());
+        throw PtyException(
+          'CreatePipe (output) failed',
+          errno: _k.getLastError(),
+        );
       }
       outRead = a.value;
       outWrite = b.value;
@@ -86,7 +94,10 @@ class ConPtyLauncher implements PtyLauncher {
       }
       attributes = calloc<Uint8>(needed.value).cast<Void>();
       if (_k.initializeProcThreadAttributeList(attributes, 1, 0, needed) == 0) {
-        throw PtyException('InitializeProcThreadAttributeList failed', errno: _k.getLastError());
+        throw PtyException(
+          'InitializeProcThreadAttributeList failed',
+          errno: _k.getLastError(),
+        );
       }
       attributesInitialised = true;
       if (_k.updateProcThreadAttribute(
@@ -101,7 +112,10 @@ class ConPtyLauncher implements PtyLauncher {
             nullptr,
           ) ==
           0) {
-        throw PtyException('UpdateProcThreadAttribute failed', errno: _k.getLastError());
+        throw PtyException(
+          'UpdateProcThreadAttribute failed',
+          errno: _k.getLastError(),
+        );
       }
 
       final startup = arena<StartupInfoExW>();
@@ -116,7 +130,9 @@ class ConPtyLauncher implements PtyLauncher {
         ..lpAttributeList = attributes;
 
       final info = arena<ProcessInformation>();
-      final commandLine = windowsCommandLine(request.argv).toNativeUtf16(allocator: arena);
+      final commandLine = windowsCommandLine(
+        request.argv,
+      ).toNativeUtf16(allocator: arena);
       final cwd = request.workingDirectory;
       final ok = _k.createProcessW(
         nullptr,
@@ -126,7 +142,9 @@ class ConPtyLauncher implements PtyLauncher {
         0,
         kExtendedStartupInfoPresent | kCreateUnicodeEnvironment,
         _environmentBlock(arena, request.environment),
-        (cwd == null || cwd.isEmpty) ? nullptr : cwd.toNativeUtf16(allocator: arena),
+        (cwd == null || cwd.isEmpty)
+            ? nullptr
+            : cwd.toNativeUtf16(allocator: arena),
         startup,
         info,
       );
@@ -181,7 +199,8 @@ class ConPtyLauncher implements PtyLauncher {
         .cast<Uint8>()
         .asTypedList(kJobExtendedLimitBytes)
         .fillRange(0, kJobExtendedLimitBytes, 0);
-    (limits + kJobLimitFlagsOffset).cast<Uint32>().value = kJobObjectLimitKillOnJobClose;
+    (limits + kJobLimitFlagsOffset).cast<Uint32>().value =
+        kJobObjectLimitKillOnJobClose;
     if (_k.setInformationJobObject(
               job,
               kJobObjectExtendedLimitInformation,
@@ -243,14 +262,26 @@ class _ConPtyHandle implements PtyHandle {
        _pseudoConsole = pseudoConsole,
        _inputWrite = inputWrite,
        _job = job {
-    unawaited(_startReader(outputRead).catchError((Object e) => _watchLost('reader', e)));
-    unawaited(_startExitWatch(processHandle).catchError((Object e) => _watchLost('exit watch', e)));
+    unawaited(
+      _startReader(
+        outputRead,
+      ).catchError((Object e) => _watchLost('reader', e)),
+    );
+    unawaited(
+      _startExitWatch(
+        processHandle,
+      ).catchError((Object e) => _watchLost('exit watch', e)),
+    );
   }
 
   /// An isolate that could not start ends this session, with the reason,
   /// rather than the host: one session lost, not every one.
   void _watchLost(String which, Object error) {
-    if (!_output.isClosed) _output.addError(PtyException('the conpty $which could not start: $error'));
+    if (!_output.isClosed) {
+      _output.addError(
+        PtyException('the conpty $which could not start: $error'),
+      );
+    }
     _outputDone = true;
     _observedExitCode ??= -1;
     if (!_output.isClosed) _output.close();
@@ -301,14 +332,15 @@ class _ConPtyHandle implements PtyHandle {
           port.close();
           _settle();
         case 'error':
-          if (!_output.isClosed) _output.addError(PtyException(message[1] as String));
+          if (!_output.isClosed) {
+            _output.addError(PtyException(message[1] as String));
+          }
       }
     });
-    await Isolate.spawn(
-      _readerMain,
-      [port.sendPort, outputRead],
-      debugName: 'conpty-read-$pid',
-    );
+    await Isolate.spawn(_readerMain, [
+      port.sendPort,
+      outputRead,
+    ], debugName: 'conpty-read-$pid');
   }
 
   Future<void> _startExitWatch(int processHandle) async {
@@ -321,11 +353,10 @@ class _ConPtyHandle implements PtyHandle {
       _closePseudoConsole();
       _settle();
     });
-    await Isolate.spawn(
-      _exitWatchMain,
-      [port.sendPort, processHandle],
-      debugName: 'conpty-wait-$pid',
-    );
+    await Isolate.spawn(_exitWatchMain, [
+      port.sendPort,
+      processHandle,
+    ], debugName: 'conpty-wait-$pid');
   }
 
   void _closePseudoConsole() {
@@ -347,11 +378,10 @@ class _ConPtyHandle implements PtyHandle {
       // spawn an isolate and reach the pipe in whatever order those started.
       _writerReady ??= () async {
         final ready = ReceivePort();
-        _writer = await Isolate.spawn(
-          _writerMain,
-          [ready.sendPort, _inputWrite],
-          debugName: 'conpty-write-$pid',
-        );
+        _writer = await Isolate.spawn(_writerMain, [
+          ready.sendPort,
+          _inputWrite,
+        ], debugName: 'conpty-write-$pid');
         final port = await ready.first as SendPort;
         ready.close();
         return _writerPort = port;
@@ -361,7 +391,9 @@ class _ConPtyHandle implements PtyHandle {
   void write(Uint8List bytes) {
     if (_closed || bytes.isEmpty) return;
     // A blocking write on a full pipe must never stall the host.
-    unawaited(_ensureWriter().then((port) => port.send(bytes)).catchError((_) {}));
+    unawaited(
+      _ensureWriter().then((port) => port.send(bytes)).catchError((_) {}),
+    );
   }
 
   @override
@@ -410,12 +442,15 @@ void terminateProcessTree(Kernel32 k, int pid) {
     k.terminateProcess(_openForTerminate(k, pid), 1);
     return;
   }
-  final entry = calloc<ProcessEntry32W>()..ref.dwSize = sizeOf<ProcessEntry32W>();
+  final entry = calloc<ProcessEntry32W>()
+    ..ref.dwSize = sizeOf<ProcessEntry32W>();
   final children = <int, List<int>>{};
   try {
     var more = k.process32FirstW(snapshot, entry);
     while (more != 0) {
-      (children[entry.ref.th32ParentProcessID] ??= <int>[]).add(entry.ref.th32ProcessID);
+      (children[entry.ref.th32ParentProcessID] ??= <int>[]).add(
+        entry.ref.th32ProcessID,
+      );
       more = k.process32NextW(snapshot, entry);
     }
   } finally {
@@ -446,7 +481,8 @@ void terminateProcessTree(Kernel32 k, int pid) {
   }
 }
 
-int _openForTerminate(Kernel32 k, int pid) => k.openProcess(kProcessTerminate, 0, pid);
+int _openForTerminate(Kernel32 k, int pid) =>
+    k.openProcess(kProcessTerminate, 0, pid);
 
 /// Blocking `ReadFile` until the pseudoconsole's write end is gone — no poll.
 void _readerMain(List<Object> args) {

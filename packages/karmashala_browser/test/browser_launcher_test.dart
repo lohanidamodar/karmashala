@@ -234,29 +234,31 @@ void main() {
       expect(endpoint.wasClosed, isTrue);
     });
 
-    test('a browser that exits at once still has its profile removed',
-        () async {
-      final profile = Directory.systemTemp.createTempSync('cdp-profile-');
-      final handle = FakeBrowserProcess();
-      starter.processFactory = (_) => handle;
-      final endpoint = ScriptedEndpoint([
-        DevToolsEndpointState.notListening,
-      ], port: 9333);
-      scheduleMicrotask(() => handle.complete(21));
-      final launcher = BrowserLauncher(
-        startProcess: starter.call,
-        locateExecutable: () => r'C:\chrome.exe',
-        endpointFactory: (_) => endpoint,
-        createUserDataDir: () async => profile.path,
-        pollInterval: const Duration(milliseconds: 5),
-      );
+    test(
+      'a browser that exits at once still has its profile removed',
+      () async {
+        final profile = Directory.systemTemp.createTempSync('cdp-profile-');
+        final handle = FakeBrowserProcess();
+        starter.processFactory = (_) => handle;
+        final endpoint = ScriptedEndpoint([
+          DevToolsEndpointState.notListening,
+        ], port: 9333);
+        scheduleMicrotask(() => handle.complete(21));
+        final launcher = BrowserLauncher(
+          startProcess: starter.call,
+          locateExecutable: () => r'C:\chrome.exe',
+          endpointFactory: (_) => endpoint,
+          createUserDataDir: () async => profile.path,
+          pollInterval: const Duration(milliseconds: 5),
+        );
 
-      await expectLater(
-        launcher.connect(),
-        failsWith(BrowserFailure.startupFailed),
-      );
-      expect(profile.existsSync(), isFalse);
-    });
+        await expectLater(
+          launcher.connect(),
+          failsWith(BrowserFailure.startupFailed),
+        );
+        expect(profile.existsSync(), isFalse);
+      },
+    );
 
     test('shutDown kills a spawned browser and removes its profile', () async {
       final profile = Directory.systemTemp.createTempSync('cdp-profile-');

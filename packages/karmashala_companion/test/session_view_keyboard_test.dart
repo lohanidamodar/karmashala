@@ -13,7 +13,12 @@ void main() {
     id: 'a1',
     sessionId: 's1',
     agentName: 'Claude Code',
-    evidence: ['Bash(rm -rf build/)', 'Do you want to proceed?', '1. Yes', '2. No'],
+    evidence: [
+      'Bash(rm -rf build/)',
+      'Do you want to proceed?',
+      '1. Yes',
+      '2. No',
+    ],
     waiting: RemoteWaitKind.approval,
     approveLabel: 'Allow',
     denyLabel: 'Deny',

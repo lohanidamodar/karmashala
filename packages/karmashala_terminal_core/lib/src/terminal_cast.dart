@@ -136,7 +136,9 @@ num formatCastSeconds(Duration at) {
   if (micros % Duration.microsecondsPerSecond == 0) {
     return micros ~/ Duration.microsecondsPerSecond;
   }
-  return double.parse((micros / Duration.microsecondsPerSecond).toStringAsFixed(6));
+  return double.parse(
+    (micros / Duration.microsecondsPerSecond).toStringAsFixed(6),
+  );
 }
 
 /// Reads back what [encodeCast] wrote. Lines that are not events are skipped

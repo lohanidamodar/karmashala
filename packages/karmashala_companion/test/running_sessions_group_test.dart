@@ -44,7 +44,9 @@ class _SteppingClock implements Clock {
   }
 }
 
-List<Override> _at(Clock clock) => [companionClockProvider.overrideWithValue(clock)];
+List<Override> _at(Clock clock) => [
+  companionClockProvider.overrideWithValue(clock),
+];
 
 /// Two projects, two of whose four sessions the host says are working.
 FakeCompanionGateway _twoRunning() => FakeCompanionGateway.paired(
@@ -223,8 +225,9 @@ void main() {
       expect(find.byType(ProjectCard), findsOneWidget);
     });
 
-    testWidgets('a search that leaves nothing running takes the group with it',
-        (tester) async {
+    testWidgets('a search that leaves nothing running takes the group with it', (
+      tester,
+    ) async {
       await pumpPhone(
         tester,
         gateway: _twoRunning(),
@@ -299,16 +302,18 @@ void main() {
       expect(split.rest.map((s) => s.id), ['z', 'm']);
     });
 
-    test('a status the host could not name is not a claim that it is running',
-        () {
-      final split = partitionByRunning([
-        summary('u', status: CompanionSessionStatus.unknown),
-        summary('f', status: CompanionSessionStatus.failed),
-        summary('n', status: CompanionSessionStatus.needsYou),
-      ]);
+    test(
+      'a status the host could not name is not a claim that it is running',
+      () {
+        final split = partitionByRunning([
+          summary('u', status: CompanionSessionStatus.unknown),
+          summary('f', status: CompanionSessionStatus.failed),
+          summary('n', status: CompanionSessionStatus.needsYou),
+        ]);
 
-      expect(split.running, isEmpty);
-      expect(split.rest, hasLength(3));
-    });
+        expect(split.running, isEmpty);
+        expect(split.rest, hasLength(3));
+      },
+    );
   });
 }

@@ -78,7 +78,8 @@ class DeviceRecordingOutcome {
     required Duration length,
     int gaps = 0,
     int geometryChanges = 0,
-    DeviceRecordingContainer container = DeviceRecordingContainer.transportStream,
+    DeviceRecordingContainer container =
+        DeviceRecordingContainer.transportStream,
   }) {
     final sentences = <String>[
       'Recording saved to $path — ${formatBytes(bytes)} over '

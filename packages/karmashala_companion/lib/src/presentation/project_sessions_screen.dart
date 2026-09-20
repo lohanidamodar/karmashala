@@ -208,8 +208,9 @@ class _ProjectSessionsScreenState extends ConsumerState<ProjectSessionsScreen> {
                           onAction: () => Navigator.of(context).push(
                             companionRoute<void>(
                               context,
-                              (_) =>
-                                  StartSessionScreen(projectId: group.projectId),
+                              (_) => StartSessionScreen(
+                                projectId: group.projectId,
+                              ),
                             ),
                           ),
                         )
@@ -456,5 +457,4 @@ class _PathLine extends StatelessWidget {
       },
     );
   }
-
 }

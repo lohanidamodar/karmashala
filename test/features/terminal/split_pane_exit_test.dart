@@ -21,17 +21,11 @@ import 'fake_instance.dart';
 void main() {
   group('shouldCollapseOnExit', () {
     test('a plain pane that exited cleanly goes', () {
-      expect(
-        shouldCollapseOnExit(isAgentSession: false, exitCode: 0),
-        isTrue,
-      );
+      expect(shouldCollapseOnExit(isAgentSession: false, exitCode: 0), isTrue);
     });
 
     test('a failure stays, holding the error somebody opened it to read', () {
-      expect(
-        shouldCollapseOnExit(isAgentSession: false, exitCode: 1),
-        isFalse,
-      );
+      expect(shouldCollapseOnExit(isAgentSession: false, exitCode: 1), isFalse);
       expect(
         shouldCollapseOnExit(isAgentSession: false, exitCode: null),
         isFalse,
@@ -40,19 +34,13 @@ void main() {
     });
 
     test('an agent session stays — ending one may have cost real money', () {
-      expect(
-        shouldCollapseOnExit(isAgentSession: true, exitCode: 0),
-        isFalse,
-      );
+      expect(shouldCollapseOnExit(isAgentSession: true, exitCode: 0), isFalse);
     });
 
     test('the only pane in a tab goes too — the owner asked for the tab', () {
       // The rule no longer takes the layout into account at all, which is the
       // point: `exit` means the same thing wherever it is typed.
-      expect(
-        shouldCollapseOnExit(isAgentSession: false, exitCode: 0),
-        isTrue,
-      );
+      expect(shouldCollapseOnExit(isAgentSession: false, exitCode: 0), isTrue);
     });
   });
 
@@ -139,33 +127,35 @@ void main() {
       expect(state.tabs, isEmpty, reason: 'both shells were dismissed');
     });
 
-    test('takes the tab when the only thing beside it is an empty region',
-        () async {
-      // An empty region is not another pane, so nothing is left to read the
-      // output in and the tab goes — the same answer `closePane` already gives
-      // a layout whose remaining regions are all empty.
-      final container = fakeTerminalContainer();
-      addTearDown(container.dispose);
-      final controller = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
-      controller.openTab(TerminalProfile.powerShell);
-      final only = container
-          .read(terminalSessionsControllerProvider)
-          .activeTab!
-          .layout
-          .panes
-          .single;
-      controller.splitPane(SplitAxis.horizontal);
+    test(
+      'takes the tab when the only thing beside it is an empty region',
+      () async {
+        // An empty region is not another pane, so nothing is left to read the
+        // output in and the tab goes — the same answer `closePane` already gives
+        // a layout whose remaining regions are all empty.
+        final container = fakeTerminalContainer();
+        addTearDown(container.dispose);
+        final controller = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
+        controller.openTab(TerminalProfile.powerShell);
+        final only = container
+            .read(terminalSessionsControllerProvider)
+            .activeTab!
+            .layout
+            .panes
+            .single;
+        controller.splitPane(SplitAxis.horizontal);
 
-      (controller.instanceFor(only)! as FakeTerminalInstance).exitCleanly();
-      await Future<void>.delayed(Duration.zero);
+        (controller.instanceFor(only)! as FakeTerminalInstance).exitCleanly();
+        await Future<void>.delayed(Duration.zero);
 
-      expect(
-        container.read(terminalSessionsControllerProvider).tabs,
-        isEmpty,
-      );
-    });
+        expect(
+          container.read(terminalSessionsControllerProvider).tabs,
+          isEmpty,
+        );
+      },
+    );
 
     test('takes its tab when it is the only pane in it', () async {
       final container = fakeTerminalContainer();
@@ -187,7 +177,11 @@ void main() {
 
       final state = container.read(terminalSessionsControllerProvider);
       expect(state.tabs, isEmpty, reason: 'the owner asked for the tab to go');
-      expect(controller.instanceFor(only), isNull, reason: 'and the pane with it');
+      expect(
+        controller.instanceFor(only),
+        isNull,
+        reason: 'and the pane with it',
+      );
     });
 
     test('a failure keeps its tab, holding the error unread', () async {

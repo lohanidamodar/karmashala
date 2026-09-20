@@ -66,7 +66,8 @@ class SshHostSessionAccess implements HostSessionAccess {
   Stream<void> get reconnected => _reconnected.stream;
 
   @override
-  Future<RemoteChannel> exec(String command) => SshHostDeployTarget(_connection).exec(command);
+  Future<RemoteChannel> exec(String command) =>
+      SshHostDeployTarget(_connection).exec(command);
 
   /// Asked with the *same* predicate the tmux script uses, so it answers what
   /// matters: would the fallback attach to something already there?
@@ -76,18 +77,23 @@ class SshHostSessionAccess implements HostSessionAccess {
     final RemoteRun result;
     try {
       // Bounded: a login shell that hangs must not hold the pane forever.
-      result = await SshHostDeployTarget(_connection).run(
-        'if ! command -v tmux >/dev/null 2>&1; then echo karmashala-tmux-none; '
-        'elif tmux has-session -t $quoted 2>/dev/null; then echo karmashala-tmux-present; '
-        'else echo karmashala-tmux-absent; fi',
-      ).timeout(const Duration(seconds: 20));
+      result = await SshHostDeployTarget(_connection)
+          .run(
+            'if ! command -v tmux >/dev/null 2>&1; then echo karmashala-tmux-none; '
+            'elif tmux has-session -t $quoted 2>/dev/null; then echo karmashala-tmux-present; '
+            'else echo karmashala-tmux-absent; fi',
+          )
+          .timeout(const Duration(seconds: 20));
     } on Object catch (e) {
-      _logger.debug('${host.address} could not be asked about tmux session $name: $e');
+      _logger.debug(
+        '${host.address} could not be asked about tmux session $name: $e',
+      );
       return null;
     }
     final said = result.stdout;
     if (said.contains('karmashala-tmux-present')) return true;
-    if (said.contains('karmashala-tmux-absent') || said.contains('karmashala-tmux-none')) {
+    if (said.contains('karmashala-tmux-absent') ||
+        said.contains('karmashala-tmux-none')) {
       return false;
     }
     return null;
@@ -102,20 +108,26 @@ class SshHostSessionAccess implements HostSessionAccess {
   Future<HostDeployment> deployment() {
     final target = SshHostDeployTarget(_connection);
     final deployer =
-        deployerFactory?.call(target) ?? HostDeployer(target: target, binaries: binaries);
+        deployerFactory?.call(target) ??
+        HostDeployer(target: target, binaries: binaries);
     // Memoised on the future, not on the result: two panes opening at once must
     // share one deploy rather than racing two uploads onto the same path. A
     // failure is not memoised, or every later pane would inherit it.
-    return _reading ??= deployer.deploy().timeout(deployTimeout).then(
-      (reading) {
-        _logger.debug('${host.address}: ${reading.status.name} — ${reading.reason}');
-        return reading;
-      },
-      onError: (Object error, StackTrace stack) {
-        _reading = null;
-        Error.throwWithStackTrace(error, stack);
-      },
-    );
+    return _reading ??= deployer
+        .deploy()
+        .timeout(deployTimeout)
+        .then(
+          (reading) {
+            _logger.debug(
+              '${host.address}: ${reading.status.name} — ${reading.reason}',
+            );
+            return reading;
+          },
+          onError: (Object error, StackTrace stack) {
+            _reading = null;
+            Error.throwWithStackTrace(error, stack);
+          },
+        );
   }
 
   /// Drops the shared reading, so the next caller deploys — and reads — again.
@@ -181,7 +193,10 @@ class SshHostSessionAccess implements HostSessionAccess {
 /// One [HostSessionAccess] per saved host: the reading and the connection have
 /// the same lifetime, and a second instance would deploy a second time.
 class HostSessionAccessRegistry {
-  HostSessionAccessRegistry({required this.binaries, required this.connectionFor});
+  HostSessionAccessRegistry({
+    required this.binaries,
+    required this.connectionFor,
+  });
 
   final HostBinarySource binaries;
   final SshConnection Function(String hostId) connectionFor;

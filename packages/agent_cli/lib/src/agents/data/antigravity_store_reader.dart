@@ -107,9 +107,13 @@ class AntigravityStoreCache {
   static final AntigravityStoreCache shared = AntigravityStoreCache();
 
   final Map<String, _HistoryCacheEntry> _historyByStore = {};
-  final Map<String, _FileCacheEntry<Map<String, String>>> _lastConvsByStore = {};
-  final Map<String, _FileCacheEntry<Map<String, AntigravityConversationSummary>>>
-      _summariesByStore = {};
+  final Map<String, _FileCacheEntry<Map<String, String>>> _lastConvsByStore =
+      {};
+  final Map<
+    String,
+    _FileCacheEntry<Map<String, AntigravityConversationSummary>>
+  >
+  _summariesByStore = {};
   final Map<String, _TitleCacheEntry> _titlesByPath = {};
 
   void clear() {
@@ -145,10 +149,7 @@ class _FileCacheEntry<T> {
 }
 
 class _TitleCacheEntry {
-  const _TitleCacheEntry({
-    required this.modified,
-    required this.title,
-  });
+  const _TitleCacheEntry({required this.modified, required this.title});
 
   final DateTime modified;
   final String? title;
@@ -315,7 +316,10 @@ class AntigravityStoreReader {
           if (decoded is Map<String, dynamic>) {
             final cid = decoded['conversationId'];
             final ws = decoded['workspace'];
-            if (cid is String && ws is String && cid.isNotEmpty && ws.isNotEmpty) {
+            if (cid is String &&
+                ws is String &&
+                cid.isNotEmpty &&
+                ws.isNotEmpty) {
               byId[cid] = ws;
             }
           }
@@ -489,7 +493,7 @@ class AntigravityStoreReader {
     );
     if (rows == null) return const {};
     final result = {
-        for (final row in rows)
+      for (final row in rows)
         if (row['conversation_id'] is String)
           row['conversation_id'] as String: AntigravityConversationSummary(
             title: _text(row['title']),

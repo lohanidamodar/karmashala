@@ -293,7 +293,8 @@ void main() {
       expect(
         shown(container),
         ['Codex work'],
-        reason: 'and hidden like any other row when it is not the one asked for',
+        reason:
+            'and hidden like any other row when it is not the one asked for',
       );
     });
 
@@ -324,8 +325,9 @@ void main() {
 
   group('a section and the filter', () {
     List<String> idsIn(ProviderContainer container, String sectionId) => [
-      for (final facts
-          in container.read(explorerSectionMembersProvider(sectionId)))
+      for (final facts in container.read(
+        explorerSectionMembersProvider(sectionId),
+      ))
         facts.id,
     ];
 
@@ -354,32 +356,38 @@ void main() {
       );
     });
 
-    test('and a section the filter emptied folds away like any other', () async {
-      final db = seed(withAntigravity: false, failed: true);
-      addTearDown(db.close);
-      final container = mount(db);
-      await container.pump();
+    test(
+      'and a section the filter emptied folds away like any other',
+      () async {
+        final db = seed(withAntigravity: false, failed: true);
+        addTearDown(db.close);
+        final container = mount(db);
+        await container.pump();
 
-      expect(
-        container.read(explorerSectionLayoutProvider).shown.map((s) => s.name),
-        contains('Ended in failure'),
-      );
+        expect(
+          container
+              .read(explorerSectionLayoutProvider)
+              .shown
+              .map((s) => s.name),
+          contains('Ended in failure'),
+        );
 
-      narrowTo(container, {AgentIds.antigravity});
-      await container.pump();
-      final layout = container.read(explorerSectionLayoutProvider);
-      expect(
-        layout.shown.map((s) => s.name),
-        isNot(contains('Ended in failure')),
-      );
-      expect(
-        layout.hidden,
-        4,
-        reason:
-            'one funnel, one count: a section emptied by the agent filter is '
-            'held back by the same control and reported by the same number',
-      );
-    });
+        narrowTo(container, {AgentIds.antigravity});
+        await container.pump();
+        final layout = container.read(explorerSectionLayoutProvider);
+        expect(
+          layout.shown.map((s) => s.name),
+          isNot(contains('Ended in failure')),
+        );
+        expect(
+          layout.hidden,
+          4,
+          reason:
+              'one funnel, one count: a section emptied by the agent filter is '
+              'held back by the same control and reported by the same number',
+        );
+      },
+    );
   });
 
   group('the header', () {
@@ -425,11 +433,9 @@ void main() {
       // **The whole point of the row.** A shorter list and a filtered list look
       // identical, and this is the sentence that tells them apart.
       expect(find.text('3 more hidden by the agent filter.'), findsOneWidget);
-      expect(
-        container.read(settingsControllerProvider).explorerAgentFilter,
-        [AgentIds.codex],
-        reason: 'the choice is a setting, so it survives a restart',
-      );
+      expect(container.read(settingsControllerProvider).explorerAgentFilter, [
+        AgentIds.codex,
+      ], reason: 'the choice is a setting, so it survives a restart');
     });
 
     testWidgets('fills its glyph and names what is off the list', (
@@ -440,9 +446,9 @@ void main() {
       final container = await pump(tester, db);
       // Off, so the tooltip is about the agents alone — the two clauses are
       // asserted separately rather than as one brittle sentence.
-      container.read(settingsControllerProvider.notifier).setHideEmptySections(
-        false,
-      );
+      container
+          .read(settingsControllerProvider.notifier)
+          .setHideEmptySections(false);
       await tester.pumpAndSettle();
 
       expect(find.byIcon(AppIcons.funnelFill), findsNothing);

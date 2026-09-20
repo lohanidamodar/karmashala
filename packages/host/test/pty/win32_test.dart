@@ -21,10 +21,13 @@ void main() {
       expect(quoteWindowsArgument(r'C:\Users\dlohani'), r'"C:\Users\dlohani"');
     });
 
-    test('doubles a trailing backslash run, which would escape the close quote', () {
-      expect(quoteWindowsArgument(r'C:\dir\'), r'"C:\dir\\"');
-      expect(quoteWindowsArgument(r'C:\dir\\'), r'"C:\dir\\\\"');
-    });
+    test(
+      'doubles a trailing backslash run, which would escape the close quote',
+      () {
+        expect(quoteWindowsArgument(r'C:\dir\'), r'"C:\dir\\"');
+        expect(quoteWindowsArgument(r'C:\dir\\'), r'"C:\dir\\\\"');
+      },
+    );
 
     test('a command line is the arguments joined by one space', () {
       expect(

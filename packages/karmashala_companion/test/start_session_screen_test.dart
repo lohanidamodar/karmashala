@@ -18,16 +18,16 @@ import 'companion_test_support.dart';
 
 class _PendingStartGateway extends FakeCompanionGateway {
   _PendingStartGateway({super.connections = const []})
-      : super(
-          pairing: CompanionPairing(
-            capabilities: CapabilitySet.all,
-            hostName: 'Desktop',
-            hostId: DeviceId.parse(
-              connections.isEmpty ? fakeHostId(0) : connections.first.hostId,
-            ),
+    : super(
+        pairing: CompanionPairing(
+          capabilities: CapabilitySet.all,
+          hostName: 'Desktop',
+          hostId: DeviceId.parse(
+            connections.isEmpty ? fakeHostId(0) : connections.first.hostId,
           ),
-          link: CompanionLinkState.connected,
-        ) {
+        ),
+        link: CompanionLinkState.connected,
+      ) {
     workspace = [workspaceProject()];
   }
 
@@ -35,8 +35,9 @@ class _PendingStartGateway extends FakeCompanionGateway {
   var calls = 0;
 
   @override
-  Future<List<RemoteWorkspaceProject>> listWorkspace() async =>
-      [workspaceProject()];
+  Future<List<RemoteWorkspaceProject>> listWorkspace() async => [
+    workspaceProject(),
+  ];
 
   @override
   Future<RemoteSessionStarted> startSession({
@@ -142,8 +143,9 @@ RemoteWorkspaceProject checkedOutTwice() => RemoteWorkspaceProject(
 FakeCompanionGateway paired({
   List<RemoteWorkspaceProject>? workspace,
   CapabilitySet? capabilities,
-}) => FakeCompanionGateway.paired(capabilities: capabilities)
-  ..workspace = workspace ?? [workspaceProject()];
+}) =>
+    FakeCompanionGateway.paired(capabilities: capabilities)
+      ..workspace = workspace ?? [workspaceProject()];
 
 void main() {
   group('the form', () {
@@ -219,10 +221,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('takes no opening message'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('takes no opening message'), findsOneWidget);
       final field = tester.widget<TextField>(
         find.ancestor(
           of: find.text('First message'),
@@ -392,7 +391,8 @@ void main() {
       expect(
         find.descendant(of: sheet, matching: find.text('app')),
         findsNWidgets(2),
-        reason: 'both rows carry the same name — the ambiguity that was reported',
+        reason:
+            'both rows carry the same name — the ambiguity that was reported',
       );
       expect(
         find.descendant(of: sheet, matching: find.text('Windows')),
@@ -426,10 +426,7 @@ void main() {
         gateway: paired(
           workspace: [
             workspaceProject(environmentName: 'Windows'),
-            workspaceProject(
-              projectId: 'p2',
-              environmentName: 'WSL · Ubuntu',
-            ),
+            workspaceProject(projectId: 'p2', environmentName: 'WSL · Ubuntu'),
           ],
         ),
         home: const StartSessionScreen(),
@@ -541,10 +538,7 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(
-        find.ancestor(
-          of: find.text('Title'),
-          matching: find.byType(TextField),
-        ),
+        find.ancestor(of: find.text('Title'), matching: find.byType(TextField)),
         'From the phone',
       );
       await tester.tap(find.text('Ask every time'));
@@ -630,10 +624,7 @@ void main() {
       await tester.tap(find.text('Start session'));
       await tester.pumpAndSettle();
       await tester.enterText(
-        find.ancestor(
-          of: find.text('Title'),
-          matching: find.byType(TextField),
-        ),
+        find.ancestor(of: find.text('Title'), matching: find.byType(TextField)),
         'Something else entirely',
       );
       await tester.pumpAndSettle();
@@ -722,9 +713,7 @@ void main() {
       tester,
     ) async {
       final gateway = paired()
-        ..setSessions([
-          summary('s1', project: 'popupbits', projectId: 'p1'),
-        ]);
+        ..setSessions([summary('s1', project: 'popupbits', projectId: 'p1')]);
       await pumpPhone(
         tester,
         gateway: gateway,

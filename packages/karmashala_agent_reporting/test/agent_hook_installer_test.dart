@@ -416,39 +416,42 @@ void main() {
       );
     });
 
-    test('the spool branch writes whole payloads, and only whole ones', () async {
-      // Three properties of four lines of `sh` that a live run proves and a
-      // string cannot — but that a string can stop somebody undoing.
-      // `live_wsl_hook_test.dart` runs this against a real distribution.
-      await installer.install(
-        descriptor: claude,
-        storeHome: home.path,
-        endpoint: endpoint,
-        environment: EnvironmentKind.wsl,
-      );
-      final script = File(
-        p.join(home.path, '$agentHookMarker.sh'),
-      ).readAsStringSync();
+    test(
+      'the spool branch writes whole payloads, and only whole ones',
+      () async {
+        // Three properties of four lines of `sh` that a live run proves and a
+        // string cannot — but that a string can stop somebody undoing.
+        // `live_wsl_hook_test.dart` runs this against a real distribution.
+        await installer.install(
+          descriptor: claude,
+          storeHome: home.path,
+          endpoint: endpoint,
+          environment: EnvironmentKind.wsl,
+        );
+        final script = File(
+          p.join(home.path, '$agentHookMarker.sh'),
+        ).readAsStringSync();
 
-      // 1. The event is saved before the cap re-uses `$@`. Without this the
-      //    payload is stamped with a glob of the spool directory, which is how
-      //    the first draft of this failed.
-      expect(
-        script.indexOf('event="\$1"'),
-        lessThan(script.indexOf(r'set -- "$dir"/*.json')),
-      );
-      // 2. Written as `.part` and renamed, so a reader on the other side of a
-      //    9p share never sees half a payload — the rename is what makes a
-      //    `.json` mean "whole".
-      expect(script, contains(r'> "$dir/$$-$n.part"'));
-      expect(script, contains(r'mv -f "$dir/$$-$n.part" "$dir/$$-$n.json"'));
-      // 3. Bounded, so an app that died without deleting the directory cannot
-      //    have it grow without limit while it is gone.
-      expect(script, contains(r'[ "$#" -lt 2000 ] || exit 0'));
-      // And it exits zero on a directory that is not there: that is what
-      // retiring the spool on the way out costs the agent.
-      expect(script, contains(r'[ -d "$dir" ] || exit 0'));
-    });
+        // 1. The event is saved before the cap re-uses `$@`. Without this the
+        //    payload is stamped with a glob of the spool directory, which is how
+        //    the first draft of this failed.
+        expect(
+          script.indexOf('event="\$1"'),
+          lessThan(script.indexOf(r'set -- "$dir"/*.json')),
+        );
+        // 2. Written as `.part` and renamed, so a reader on the other side of a
+        //    9p share never sees half a payload — the rename is what makes a
+        //    `.json` mean "whole".
+        expect(script, contains(r'> "$dir/$$-$n.part"'));
+        expect(script, contains(r'mv -f "$dir/$$-$n.part" "$dir/$$-$n.json"'));
+        // 3. Bounded, so an app that died without deleting the directory cannot
+        //    have it grow without limit while it is gone.
+        expect(script, contains(r'[ "$#" -lt 2000 ] || exit 0'));
+        // And it exits zero on a directory that is not there: that is what
+        // retiring the spool on the way out costs the agent.
+        expect(script, contains(r'[ -d "$dir" ] || exit 0'));
+      },
+    );
 
     test('the command survives the distribution\'s shell verbatim', () {
       // It is written into the agent's config and run by whatever `sh` the
@@ -488,11 +491,7 @@ void main() {
 
       expect(
         home.listSync().map((e) => p.basename(e.path)).toSet(),
-        {
-          'settings.json',
-          '$agentHookMarker.cmd',
-          '$agentHookMarker.endpoint',
-        },
+        {'settings.json', '$agentHookMarker.cmd', '$agentHookMarker.endpoint'},
         reason: 'the two generated files, and no staged temporary beside them',
       );
     });
@@ -556,31 +555,33 @@ void main() {
       expect(configFile().readAsStringSync(), '{"model": "opus"}');
     }, skip: !Platform.isWindows);
 
-    test('where this platform cannot harden the store, it warns and writes',
-        () async {
-      // A localPosix store seen from Windows (or the reverse) has no ACL this
-      // machine can apply; refusing there would refuse every WSL-adjacent test
-      // and install for a reason that is not a leak.
-      configFile().writeAsStringSync('{"model": "opus"}');
-      final warnings = <String>[];
-      final foreign = AgentHookInstaller(
-        restrict: (_, _) async => false,
-        onWarning: warnings.add,
-      );
+    test(
+      'where this platform cannot harden the store, it warns and writes',
+      () async {
+        // A localPosix store seen from Windows (or the reverse) has no ACL this
+        // machine can apply; refusing there would refuse every WSL-adjacent test
+        // and install for a reason that is not a leak.
+        configFile().writeAsStringSync('{"model": "opus"}');
+        final warnings = <String>[];
+        final foreign = AgentHookInstaller(
+          restrict: (_, _) async => false,
+          onWarning: warnings.add,
+        );
 
-      final installed = await foreign.install(
-        descriptor: claude,
-        storeHome: home.path,
-        endpoint: endpoint,
-        environment: Platform.isWindows
-            ? EnvironmentKind.localPosix
-            : EnvironmentKind.windowsNative,
-      );
+        final installed = await foreign.install(
+          descriptor: claude,
+          storeHome: home.path,
+          endpoint: endpoint,
+          environment: Platform.isWindows
+              ? EnvironmentKind.localPosix
+              : EnvironmentKind.windowsNative,
+        );
 
-      expect(installed, isTrue);
-      expect(endpointFile().existsSync(), isTrue);
-      expect(warnings, hasLength(1));
-    });
+        expect(installed, isTrue);
+        expect(endpointFile().existsSync(), isTrue);
+        expect(warnings, hasLength(1));
+      },
+    );
   });
 
   group('a config the CLI saves mid-splice', () {
@@ -617,28 +618,30 @@ void main() {
       expect(warnings, hasLength(1));
     });
 
-    test('a config that keeps changing is given up on, not fought over',
-        () async {
-      configFile().writeAsStringSync('{"model": "opus"}');
-      var saves = 0;
-      final restless = AgentHookInstaller(
-        checkForConcurrentSaves: true,
-        beforeCommit: (config) async {
-          saves++;
-          config.writeAsStringSync('{"model": "opus", "n": $saves}');
-        },
-      );
+    test(
+      'a config that keeps changing is given up on, not fought over',
+      () async {
+        configFile().writeAsStringSync('{"model": "opus"}');
+        var saves = 0;
+        final restless = AgentHookInstaller(
+          checkForConcurrentSaves: true,
+          beforeCommit: (config) async {
+            saves++;
+            config.writeAsStringSync('{"model": "opus", "n": $saves}');
+          },
+        );
 
-      final installed = await restless.install(
-        descriptor: claude,
-        storeHome: home.path,
-        endpoint: endpoint,
-        environment: EnvironmentKind.windowsNative,
-      );
+        final installed = await restless.install(
+          descriptor: claude,
+          storeHome: home.path,
+          endpoint: endpoint,
+          environment: EnvironmentKind.windowsNative,
+        );
 
-      expect(installed, isFalse);
-      expect(saves, AgentHookInstaller.maxRewriteAttempts);
-    });
+        expect(installed, isFalse);
+        expect(saves, AgentHookInstaller.maxRewriteAttempts);
+      },
+    );
   });
 
   group('the reported result is read back off the disk', () {

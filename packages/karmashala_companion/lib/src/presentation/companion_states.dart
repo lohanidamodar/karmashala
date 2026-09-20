@@ -35,13 +35,13 @@ String companionErrorText(Object error) => error is GatewayException
 /// How old the snapshot a companion screen is drawing is. A reading whose time
 /// was never recorded says "age unknown" and never "just now" (§19).
 String companionSnapshotAge(DateTime? receivedAt, DateTime now) =>
-    receivedAt == null ? 'age unknown' : describeAge(now.difference(receivedAt));
+    receivedAt == null
+    ? 'age unknown'
+    : describeAge(now.difference(receivedAt));
 
 /// What a pairing let this phone do, in words: "send prompt, approve".
-String companionGrantsSentence(CapabilitySet capabilities) => capabilities
-    .granted
-    .map((c) => c.wire.replaceAll('_', ' '))
-    .join(', ');
+String companionGrantsSentence(CapabilitySet capabilities) =>
+    capabilities.granted.map((c) => c.wire.replaceAll('_', ' ')).join(', ');
 
 /// A block the size and shape of text that has not arrived yet: a title or
 /// muted line at the reader's text scale, so 200% text loads 200% bones.
@@ -256,10 +256,7 @@ class CompanionNotice extends StatelessWidget {
               ],
               if (tertiaryLabel != null) ...[
                 const SizedBox(height: Insets.sm),
-                TextButton(
-                  onPressed: onTertiary,
-                  child: Text(tertiaryLabel!),
-                ),
+                TextButton(onPressed: onTertiary, child: Text(tertiaryLabel!)),
               ],
             ],
           ),

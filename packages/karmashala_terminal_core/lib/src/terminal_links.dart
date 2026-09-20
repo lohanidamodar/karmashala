@@ -158,9 +158,7 @@ TerminalLinkLine linkLineAt(
   if (row < 0 || row >= lines.length) return TerminalLinkLine.empty;
 
   var first = row;
-  while (first > 0 &&
-      lines[first].isWrapped &&
-      row - (first - 1) <= maxRows) {
+  while (first > 0 && lines[first].isWrapped && row - (first - 1) <= maxRows) {
     first--;
   }
   var last = row;
@@ -302,9 +300,7 @@ List<TerminalLink> linksIn(TerminalLinkLine line) {
             null => null,
           };
     if (target == null) continue;
-    found.add(
-      _linkOf(line, target, match.start, match.start + trimmed.length),
-    );
+    found.add(_linkOf(line, target, match.start, match.start + trimmed.length));
   }
 
   for (final match in _tokenPattern.allMatches(line.text)) {
@@ -314,9 +310,7 @@ List<TerminalLink> linksIn(TerminalLinkLine line) {
     if (trimmed.isEmpty) continue;
     final target = _pathTargetOf(trimmed);
     if (target == null) continue;
-    found.add(
-      _linkOf(line, target, match.start, match.start + trimmed.length),
-    );
+    found.add(_linkOf(line, target, match.start, match.start + trimmed.length));
   }
 
   found.sort((a, b) {
@@ -380,9 +374,8 @@ bool _looksLikePath(String text) {
 
 /// The absolute http(s) URL [text] means, or null. A bare `www.…` means https;
 /// an `OSC 8` URI is not run through this, having written its own scheme.
-String? _resolveUrl(String text) => httpUrlOf(
-  text.toLowerCase().startsWith('www.') ? 'https://$text' : text,
-);
+String? _resolveUrl(String text) =>
+    httpUrlOf(text.toLowerCase().startsWith('www.') ? 'https://$text' : text);
 
 /// The path a `file://` URL names — a path, never a [UrlTarget]. **A host is
 /// refused**: revealing a UNC share an agent printed is an NTLM leak.

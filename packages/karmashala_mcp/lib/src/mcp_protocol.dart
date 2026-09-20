@@ -104,7 +104,11 @@ class McpServer {
     String? callerSessionId,
   }) async {
     if (message is! Map<String, Object?>) {
-      return _error(null, McpErrorCode.invalidRequest, 'Expected a JSON object.');
+      return _error(
+        null,
+        McpErrorCode.invalidRequest,
+        'Expected a JSON object.',
+      );
     }
     final id = message['id'];
     final method = message['method'];
@@ -193,7 +197,9 @@ class McpServer {
       }
       return _supported(fromBody);
     }
-    if (fromHeader != null && fromHeader.isNotEmpty) return _supported(fromHeader);
+    if (fromHeader != null && fromHeader.isNotEmpty) {
+      return _supported(fromHeader);
+    }
     // Nothing declared. A handshake is self-describing, so it is left to
     // negotiate; anything else falls back to the pre-header revision.
     return _Resolved(method == 'initialize' ? null : kMcpUndeclaredVersion);
@@ -318,11 +324,7 @@ class McpServer {
     if (!known) {
       // A protocol error, not an `isError` result: the spec puts "unknown tool"
       // in the class a model cannot fix by rewording its arguments.
-      return _error(
-        id,
-        McpErrorCode.invalidParams,
-        'Unknown tool: $toolName',
-      );
+      return _error(id, McpErrorCode.invalidParams, 'Unknown tool: $toolName');
     }
     final arguments = switch (params['arguments']) {
       final Map<Object?, Object?> map => map.cast<String, dynamic>(),
@@ -331,24 +333,16 @@ class McpServer {
 
     try {
       final result = await invoke(toolName, arguments, callerSessionId);
-      return _result(
-        id,
-        _toolResult(toolName, result),
-        modern: modern,
-      );
+      return _result(id, _toolResult(toolName, result), modern: modern);
     } on Object catch (error) {
       // Tool failures come back as results so the model can correct itself; an
       // empty success would read as "done" for something that did not happen.
-      return _result(
-        id,
-        <String, Object?>{
-          'content': <Object?>[
-            <String, Object?>{'type': 'text', 'text': 'Error: $error'},
-          ],
-          'isError': true,
-        },
-        modern: modern,
-      );
+      return _result(id, <String, Object?>{
+        'content': <Object?>[
+          <String, Object?>{'type': 'text', 'text': 'Error: $error'},
+        ],
+        'isError': true,
+      }, modern: modern);
     }
   }
 
@@ -374,7 +368,11 @@ class McpServer {
     };
   }
 
-  McpReply _result(Object? id, Map<String, Object?> result, {required bool modern}) {
+  McpReply _result(
+    Object? id,
+    Map<String, Object?> result, {
+    required bool modern,
+  }) {
     if (id == null) return const McpReply(202);
     return McpReply(200, <String, Object?>{
       'jsonrpc': '2.0',
@@ -399,11 +397,7 @@ class McpServer {
     // A protocol fault with no id still gets a body; the spec allows an error
     // response with a null id precisely for the requests that never parsed.
     'id': id,
-    'error': <String, Object?>{
-      'code': code,
-      'message': message,
-      'data': ?data,
-    },
+    'error': <String, Object?>{'code': code, 'message': message, 'data': ?data},
   });
 }
 

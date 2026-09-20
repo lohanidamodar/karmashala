@@ -94,10 +94,10 @@ void main() {
       await apps().look();
 
       expect(registry().attached, hasLength(2));
-      expect(
-        registry().apps.map((app) => app.label).toSet(),
-        {'windows', 'pixel'},
-      );
+      expect(registry().apps.map((app) => app.label).toSet(), {
+        'windows',
+        'pixel',
+      });
       expect(describeRegistry(registry()), '2 Flutter apps attached.');
     });
 
@@ -113,7 +113,10 @@ void main() {
         describeRegistry(registry()),
         '1 address is on record and nothing answers on it.',
       );
-      expect(File('${temp.path}${Platform.pathSeparator}stale.uri').existsSync(), isTrue);
+      expect(
+        File('${temp.path}${Platform.pathSeparator}stale.uri').existsSync(),
+        isTrue,
+      );
     });
 
     test('a file that is not an address is ignored, not reported', () async {
@@ -126,15 +129,18 @@ void main() {
       );
     });
 
-    test('an app already attached is not re-handshaked by a second look', () async {
-      const uri = 'ws://127.0.0.1:53119/tok=/ws';
-      final fake = serve(uri);
-      writeUriFile('windows.uri', uri);
-      await apps().look();
-      final handshakes = fake.methods.where((m) => m == 'getVM').length;
-      await apps().look();
-      expect(fake.methods.where((m) => m == 'getVM').length, handshakes);
-    });
+    test(
+      'an app already attached is not re-handshaked by a second look',
+      () async {
+        const uri = 'ws://127.0.0.1:53119/tok=/ws';
+        final fake = serve(uri);
+        writeUriFile('windows.uri', uri);
+        await apps().look();
+        final handshakes = fake.methods.where((m) => m == 'getVM').length;
+        await apps().look();
+        expect(fake.methods.where((m) => m == 'getVM').length, handshakes);
+      },
+    );
 
     test('a removed file drops its row', () async {
       const uri = 'ws://127.0.0.1:9/gone=/ws';
@@ -167,14 +173,17 @@ void main() {
       expect(app.discovery, AppDiscovery.byHand);
     });
 
-    test('is idempotent, so a retried call cannot open two connections', () async {
-      const uri = 'ws://127.0.0.1:53119/tok=/ws';
-      final fake = serve(uri);
-      await apps().attach(uri);
-      await apps().attach(uri);
-      expect(fake.methods.where((m) => m == 'getVM'), hasLength(1));
-      expect(registry().apps, hasLength(1));
-    });
+    test(
+      'is idempotent, so a retried call cannot open two connections',
+      () async {
+        const uri = 'ws://127.0.0.1:53119/tok=/ws';
+        final fake = serve(uri);
+        await apps().attach(uri);
+        await apps().attach(uri);
+        expect(fake.methods.where((m) => m == 'getVM'), hasLength(1));
+        expect(registry().apps, hasLength(1));
+      },
+    );
 
     test('refuses something that is not an address', () async {
       await expectLater(
@@ -234,8 +243,16 @@ void main() {
         () => apps().requireApp(null),
         throwsA(
           isA<FlutterAppException>()
-              .having((e) => e.failure, 'failure', FlutterAppFailure.noAppAttached)
-              .having((e) => e.message, 'message', contains('found on their own')),
+              .having(
+                (e) => e.failure,
+                'failure',
+                FlutterAppFailure.noAppAttached,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('found on their own'),
+              ),
         ),
       );
     });
@@ -285,41 +302,44 @@ void main() {
   });
 
   group('the widget picker', () {
-    test('arms select mode, waits for the tap and reads the selection', () async {
-      const uri = 'ws://127.0.0.1:1/a=/ws';
-      final fake = serve(
-        uri,
-        selectedWidget: const <String, Object?>{
-          'description': 'ElevatedButton',
-          'creationLocation': <String, Object?>{
-            'file': 'file:///C:/app/lib/main.dart',
-            'line': 118,
-            'column': 22,
+    test(
+      'arms select mode, waits for the tap and reads the selection',
+      () async {
+        const uri = 'ws://127.0.0.1:1/a=/ws';
+        final fake = serve(
+          uri,
+          selectedWidget: const <String, Object?>{
+            'description': 'ElevatedButton',
+            'creationLocation': <String, Object?>{
+              'file': 'file:///C:/app/lib/main.dart',
+              'line': 118,
+              'column': 22,
+            },
+            'createdByLocalProject': true,
           },
-          'createdByLocalProject': true,
-        },
-      );
-      final app = await apps().attach(uri);
+        );
+        final app = await apps().attach(uri);
 
-      final pick = apps().pickWidget(app.id);
-      await pumpEventQueue();
-      expect(
-        fake.paramsFor('ext.flutter.inspector.show')!['enabled'],
-        'true',
-      );
-      fake.emitNavigate(line: 118, column: 22);
-      final selection = await pick;
+        final pick = apps().pickWidget(app.id);
+        await pumpEventQueue();
+        expect(
+          fake.paramsFor('ext.flutter.inspector.show')!['enabled'],
+          'true',
+        );
+        fake.emitNavigate(line: 118, column: 22);
+        final selection = await pick;
 
-      expect(selection.description, 'ElevatedButton');
-      expect(selection.location!.line, 118);
-      // And it leaves the app as it found it.
-      final shows = <Object?>[
-        for (final request in fake.requests)
-          if (request.method == 'ext.flutter.inspector.show')
-            request.params['enabled'],
-      ];
-      expect(shows, ['true', 'false']);
-    });
+        expect(selection.description, 'ElevatedButton');
+        expect(selection.location!.line, 118);
+        // And it leaves the app as it found it.
+        final shows = <Object?>[
+          for (final request in fake.requests)
+            if (request.method == 'ext.flutter.inspector.show')
+              request.params['enabled'],
+        ];
+        expect(shows, ['true', 'false']);
+      },
+    );
 
     test('does no hit-testing of its own', () async {
       const uri = 'ws://127.0.0.1:1/a=/ws';
@@ -355,15 +375,18 @@ void main() {
   });
 
   group('the app going away', () {
-    test('is observed, and says so rather than reading as never-there', () async {
-      const uri = 'ws://127.0.0.1:1/a=/ws';
-      final fake = serve(uri);
-      final app = await apps().attach(uri);
-      await fake.close();
-      await pumpEventQueue();
-      expect(registry().byId(app.id)!.reachability, AppReachability.ended);
-      expect(registry().byId(app.id)!.canHotReload, isFalse);
-    });
+    test(
+      'is observed, and says so rather than reading as never-there',
+      () async {
+        const uri = 'ws://127.0.0.1:1/a=/ws';
+        final fake = serve(uri);
+        final app = await apps().attach(uri);
+        await fake.close();
+        await pumpEventQueue();
+        expect(registry().byId(app.id)!.reachability, AppReachability.ended);
+        expect(registry().byId(app.id)!.canHotReload, isFalse);
+      },
+    );
   });
 
   group('forgetting', () {
@@ -387,15 +410,21 @@ void main() {
   });
 
   group('the console', () {
-    test('is per app, and carries what the app said before we attached', () async {
-      const uri = 'ws://127.0.0.1:1/a=/ws';
-      final fake = serve(uri);
-      final app = await apps().attach(uri);
-      fake.emitStdout('flutter: hello\n', at: at.add(const Duration(seconds: 1)));
-      await pumpEventQueue();
-      final lines = apps().console(app.id).map((r) => r.message);
-      expect(lines, contains('flutter: hello'));
-    });
+    test(
+      'is per app, and carries what the app said before we attached',
+      () async {
+        const uri = 'ws://127.0.0.1:1/a=/ws';
+        final fake = serve(uri);
+        final app = await apps().attach(uri);
+        fake.emitStdout(
+          'flutter: hello\n',
+          at: at.add(const Duration(seconds: 1)),
+        );
+        await pumpEventQueue();
+        final lines = apps().console(app.id).map((r) => r.message);
+        expect(lines, contains('flutter: hello'));
+      },
+    );
   });
 }
 

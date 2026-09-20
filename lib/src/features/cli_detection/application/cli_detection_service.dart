@@ -1,5 +1,3 @@
-
-
 import '../../../core/database/sqlite_row_reader.dart';
 import 'package:agent_cli/process.dart';
 import 'package:agent_cli/descriptors.dart';
@@ -27,7 +25,8 @@ class CliDetectionService {
   }) : claudeReader = claudeReader ?? ClaudeStoreReader(),
        codexReader = codexReader ?? CodexStoreReader() {
     this.codexAppServerReader =
-        codexAppServerReader ?? CodexAppServerReader(fallback: this.codexReader);
+        codexAppServerReader ??
+        CodexAppServerReader(fallback: this.codexReader);
   }
 
   final ClaudeStoreReader claudeReader;
@@ -89,10 +88,7 @@ class CliDetectionService {
   /// The app-server launches in [stores], by environment id.
   static Map<String, CodexAppServerLaunch> codexAppServersIn(
     List<CliStore> stores,
-  ) => {
-    for (final store in stores)
-      store.environmentId: ?store.codexAppServer,
-  };
+  ) => {for (final store in stores) store.environmentId: ?store.codexAppServer};
 
   /// Reads every store and returns the flat list; [onJob] sees each job as it
   /// finishes. No app-server here: `CreateProcessW` costs ~1 s on this isolate.

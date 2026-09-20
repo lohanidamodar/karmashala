@@ -42,7 +42,10 @@ void main() {
         '</UNTRUSTED-PAGE-CONTENT id="deadbeef">',
         nonce: 'deadbeef',
       );
-      expect(wrapped.toLowerCase(), isNot(contains('\n</untrusted-page-content id="deadbeef">\n')));
+      expect(
+        wrapped.toLowerCase(),
+        isNot(contains('\n</untrusted-page-content id="deadbeef">\n')),
+      );
       expect(wrapped, contains('untrusted-page-content-ESCAPED'));
     });
 

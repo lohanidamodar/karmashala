@@ -134,10 +134,7 @@ void _tryKill(bool Function(ProcessSignal) kill, ProcessSignal signal) {
 /// its pseudoconsole. A value rather than a log string because "console
 /// released" is only readable next to whether the tree had actually gone.
 class PaneCloseReport {
-  const PaneCloseReport({
-    required this.outcome,
-    required this.consoleReleased,
-  });
+  const PaneCloseReport({required this.outcome, required this.consoleReleased});
 
   /// What was observed of the pane's own process tree.
   final ProcessShutdownOutcome outcome;
@@ -151,8 +148,10 @@ class PaneCloseReport {
     final tree = switch (outcome) {
       ProcessShutdownOutcome.alreadyGone => 'tree already gone',
       ProcessShutdownOutcome.exited => 'tree gone',
-      ProcessShutdownOutcome.killReturned => 'kill returned, tree not seen gone',
-      ProcessShutdownOutcome.notObserved => 'tree not seen gone within the bound',
+      ProcessShutdownOutcome.killReturned =>
+        'kill returned, tree not seen gone',
+      ProcessShutdownOutcome.notObserved =>
+        'tree not seen gone within the bound',
     };
     return consoleReleased
         ? 'console released, $tree'

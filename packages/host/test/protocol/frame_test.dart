@@ -3,7 +3,8 @@ import 'dart:typed_data';
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
 
-Uint8List body(int length, [int fill = 0x41]) => Uint8List(length)..fillRange(0, length, fill);
+Uint8List body(int length, [int fill = 0x41]) =>
+    Uint8List(length)..fillRange(0, length, fill);
 
 void main() {
   group('Frame', () {
@@ -21,7 +22,10 @@ void main() {
       expect(MessageType.hello.code, 0x01);
       expect(MessageType.output.code, 0x08);
       expect(MessageType.error.code, 0x11);
-      expect(MessageType.values.map((t) => t.code).toSet(), hasLength(MessageType.values.length));
+      expect(
+        MessageType.values.map((t) => t.code).toSet(),
+        hasLength(MessageType.values.length),
+      );
     });
   });
 
@@ -30,7 +34,11 @@ void main() {
       final source = Frame(MessageType.input, 7, body(20)).encode();
       for (var cut = 1; cut < source.length; cut++) {
         final parser = FrameParser();
-        expect(parser.add(source.sublist(0, cut)), isEmpty, reason: 'cut at $cut');
+        expect(
+          parser.add(source.sublist(0, cut)),
+          isEmpty,
+          reason: 'cut at $cut',
+        );
         final frames = parser.add(source.sublist(cut));
         expect(frames, hasLength(1), reason: 'cut at $cut');
         expect(frames.single.payload, hasLength(20));
@@ -44,7 +52,11 @@ void main() {
         ...Frame(MessageType.resize, 3, body(4, 3)).encode(),
       ];
       final frames = FrameParser().add(chunk);
-      expect(frames.map((f) => f.type), [MessageType.hello, MessageType.input, MessageType.resize]);
+      expect(frames.map((f) => f.type), [
+        MessageType.hello,
+        MessageType.input,
+        MessageType.resize,
+      ]);
       expect(frames[1].sessionRef, 2);
       expect(frames[2].payload, hasLength(4));
     });
@@ -59,25 +71,51 @@ void main() {
     });
 
     test('an empty payload is a legal frame', () {
-      final frames = FrameParser().add(Frame(MessageType.list, 0, Uint8List(0)).encode());
+      final frames = FrameParser().add(
+        Frame(MessageType.list, 0, Uint8List(0)).encode(),
+      );
       expect(frames.single.payload, isEmpty);
     });
 
-    test('an unknown type is refused rather than resynchronised onto garbage', () {
-      final bad = Uint8List.fromList([0x7f, 0, 0, 0, 0, 0, 0, 0]);
-      expect(() => FrameParser().add(bad), throwsA(isA<FrameFormatException>()));
-    });
+    test(
+      'an unknown type is refused rather than resynchronised onto garbage',
+      () {
+        final bad = Uint8List.fromList([0x7f, 0, 0, 0, 0, 0, 0, 0]);
+        expect(
+          () => FrameParser().add(bad),
+          throwsA(isA<FrameFormatException>()),
+        );
+      },
+    );
 
     test('an absurd length is refused before anything is allocated', () {
-      final bad = Uint8List.fromList([MessageType.output.code, 0, 0, 1, 0xff, 0xff, 0xff, 0xff]);
-      expect(() => FrameParser().add(bad), throwsA(isA<FrameFormatException>()));
+      final bad = Uint8List.fromList([
+        MessageType.output.code,
+        0,
+        0,
+        1,
+        0xff,
+        0xff,
+        0xff,
+        0xff,
+      ]);
+      expect(
+        () => FrameParser().add(bad),
+        throwsA(isA<FrameFormatException>()),
+      );
     });
 
     test('a frame at exactly the payload limit is still legal', () {
       final header = Uint8List(8);
       header[0] = MessageType.output.code;
-      ByteData.view(header.buffer).setUint32(4, Frame.maxPayloadBytes, Endian.big);
-      expect(FrameParser().add(header), isEmpty, reason: 'accepted, just not complete yet');
+      ByteData.view(
+        header.buffer,
+      ).setUint32(4, Frame.maxPayloadBytes, Endian.big);
+      expect(
+        FrameParser().add(header),
+        isEmpty,
+        reason: 'accepted, just not complete yet',
+      );
     });
 
     test('readFrames turns a byte stream into a frame stream', () async {

@@ -37,7 +37,10 @@ void main() {
             gateway: down(),
             home: const Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [LinkBanner(), Expanded(child: SizedBox())],
+              children: [
+                LinkBanner(),
+                Expanded(child: SizedBox()),
+              ],
             ),
           );
           await tester.pump();

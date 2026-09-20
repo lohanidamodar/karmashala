@@ -150,9 +150,7 @@ void main() {
       // …and git's own refusal reaches the same calm state the probe would
       // have, so a pane words the folder identically either way.
       expect(
-        gitTroubleOf(
-          container.read(repositoryChangesProvider).error!,
-        ),
+        gitTroubleOf(container.read(repositoryChangesProvider).error!),
         GitTrouble.notARepository,
       );
     });
@@ -196,10 +194,7 @@ void main() {
         stderr:
             r"fatal: Unable to create 'C:/src/app/.git/index.lock': File exists.",
       );
-      expect(
-        await gitCallsWhileWaiting(tester, unreadable),
-        greaterThan(1),
-      );
+      expect(await gitCallsWhileWaiting(tester, unreadable), greaterThan(1));
     });
   });
 
@@ -209,9 +204,9 @@ void main() {
       // The probe is a future; nothing is claimed until it answers (§19).
       expect(container.read(selectedCheckoutGitTroubleProvider), isNull);
 
-      await container.read(checkoutGitPresenceProvider(
-        repository(path: checkout).path,
-      ).future);
+      await container.read(
+        checkoutGitPresenceProvider(repository(path: checkout).path).future,
+      );
 
       expect(
         container.read(selectedCheckoutGitTroubleProvider)?.trouble,
@@ -220,18 +215,23 @@ void main() {
       expect(git.requests, isEmpty);
     });
 
-    test('a git that could not be reached is not a folder without git', () async {
-      git.throwError = CommandException('Failed to run "git" in WSL "Ubuntu"');
-      final container = containerWith(unreadable);
-      await expectLater(
-        container.read(repoWorktreesProvider.future),
-        throwsA(isA<CommandException>()),
-      );
+    test(
+      'a git that could not be reached is not a folder without git',
+      () async {
+        git.throwError = CommandException(
+          'Failed to run "git" in WSL "Ubuntu"',
+        );
+        final container = containerWith(unreadable);
+        await expectLater(
+          container.read(repoWorktreesProvider.future),
+          throwsA(isA<CommandException>()),
+        );
 
-      final report = container.read(selectedCheckoutGitTroubleProvider);
-      expect(report?.trouble, GitTrouble.unreachable);
-      expect(report?.message, gitUnreachableMessage);
-    });
+        final report = container.read(selectedCheckoutGitTroubleProvider);
+        expect(report?.trouble, GitTrouble.unreachable);
+        expect(report?.message, gitUnreachableMessage);
+      },
+    );
 
     testWidgets('a real failure keeps git\'s own words', (tester) async {
       git.responder = (_) => const CommandResult(

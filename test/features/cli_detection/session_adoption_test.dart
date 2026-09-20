@@ -233,26 +233,28 @@ void main() {
       expect(h.service.adoptions, 1);
     });
 
-    test('the store sweep names the conversation for an agent with no hooks',
-        () async {
-      final h = harness();
-      typeCommand(h, 'pane-1', 'cmd-0', 'codex');
-      h.store.add(
-        detected(
-          'codex-1',
-          cli: AgentIds.codex,
-          modifiedAt: testTime,
-          title: 'Port the reader',
-        ),
-      );
+    test(
+      'the store sweep names the conversation for an agent with no hooks',
+      () async {
+        final h = harness();
+        typeCommand(h, 'pane-1', 'cmd-0', 'codex');
+        h.store.add(
+          detected(
+            'codex-1',
+            cli: AgentIds.codex,
+            modifiedAt: testTime,
+            title: 'Port the reader',
+          ),
+        );
 
-      expect(await h.service.sweep(), 1);
+        expect(await h.service.sweep(), 1);
 
-      final row = h.sessions.getAll().single;
-      expect(row.externalSessionId, 'codex-1');
-      expect(row.title, 'Port the reader');
-      expect(row.agentInstallationId, 'a2');
-    });
+        final row = h.sessions.getAll().single;
+        expect(row.externalSessionId, 'codex-1');
+        expect(row.title, 'Port the reader');
+        expect(row.agentInstallationId, 'a2');
+      },
+    );
 
     test('two panes running one agent become two sessions, not one', () {
       final h = harness();
@@ -271,11 +273,10 @@ void main() {
 
       final rows = h.sessions.getAll();
       expect(rows, hasLength(2));
-      expect(
-        rows.map((r) => r.paneId).toSet(),
-        {'pane-1', 'pane-2'},
-        reason: 'a bound pane must stop being a candidate',
-      );
+      expect(rows.map((r) => r.paneId).toSet(), {
+        'pane-1',
+        'pane-2',
+      }, reason: 'a bound pane must stop being a candidate');
     });
   });
 
@@ -307,7 +308,12 @@ void main() {
     test('a pane the app itself launched an agent into', () {
       final h = harness();
       h.panes.add(
-        pane('pane-1', launched: true, commandId: 'cmd-0', commandLine: 'claude'),
+        pane(
+          'pane-1',
+          launched: true,
+          commandId: 'cmd-0',
+          commandLine: 'claude',
+        ),
       );
       h.service.observePanes();
 
@@ -350,24 +356,26 @@ void main() {
       expect(h.sessions.getAll(), isEmpty);
     });
 
-    test('a store session older than the pane, or in another directory',
-        () async {
-      final h = harness();
-      h.clock.now = testTime.add(const Duration(minutes: 5));
-      typeCommand(h, 'pane-1', 'cmd-0', 'claude');
-      h.store
-        ..add(detected('stale', modifiedAt: testTime))
-        ..add(
-          detected(
-            'other-folder',
-            path: r'C:\src\demo\other',
-            modifiedAt: h.clock.now,
-          ),
-        );
+    test(
+      'a store session older than the pane, or in another directory',
+      () async {
+        final h = harness();
+        h.clock.now = testTime.add(const Duration(minutes: 5));
+        typeCommand(h, 'pane-1', 'cmd-0', 'claude');
+        h.store
+          ..add(detected('stale', modifiedAt: testTime))
+          ..add(
+            detected(
+              'other-folder',
+              path: r'C:\src\demo\other',
+              modifiedAt: h.clock.now,
+            ),
+          );
 
-      expect(await h.service.sweep(), 0);
-      expect(h.sessions.getAll(), isEmpty);
-    });
+        expect(await h.service.sweep(), 0);
+        expect(h.sessions.getAll(), isEmpty);
+      },
+    );
 
     test('an agent that has exited leaves its pane free again', () {
       final h = harness();
@@ -385,8 +393,7 @@ void main() {
       expect(h.sessions.getAll(), isEmpty);
     });
 
-    test('a command that has finished disarms its pane before the next prompt',
-        () {
+    test('a command that has finished disarms its pane before the next prompt', () {
       final h = harness();
       typeCommand(h, 'pane-1', 'cmd-0', 'claude --help');
       expect(h.service.armedPaneIds, ['pane-1']);
@@ -474,19 +481,13 @@ void main() {
     test('a restart re-reads the row instead of minting a second', () {
       final first = harness();
       typeCommand(first, 'pane-1', 'cmd-0', 'claude');
-      first.service.onHook(
-        agentId: AgentIds.claudeCode,
-        sessionId: 'cli-abc',
-      );
+      first.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
       final adoptedId = first.sessions.getAll().single.id;
 
       // A new process: the same database, none of the in-memory signals.
       final second = harness(database: first.db);
       typeCommand(second, 'pane-9', 'cmd-0', 'claude');
-      second.service.onHook(
-        agentId: AgentIds.claudeCode,
-        sessionId: 'cli-abc',
-      );
+      second.service.onHook(agentId: AgentIds.claudeCode, sessionId: 'cli-abc');
 
       final rows = second.sessions.getAll();
       expect(rows, hasLength(1));
@@ -497,9 +498,10 @@ void main() {
     test('a row with no pane is rejoined and goes back to running', () {
       final h = harness();
       SessionDao(h.db).insert(
-        session(id: 'old', status: SessionStatus.completed).copyWith(
-          externalSessionId: 'cli-abc',
-        ),
+        session(
+          id: 'old',
+          status: SessionStatus.completed,
+        ).copyWith(externalSessionId: 'cli-abc'),
       );
       typeCommand(h, 'pane-1', 'cmd-0', 'claude');
 
@@ -514,10 +516,10 @@ void main() {
     test('a row already naming a pane is left where it is', () {
       final h = harness();
       SessionDao(h.db).insert(
-        session(id: 'live', status: SessionStatus.running).copyWith(
-          externalSessionId: 'cli-abc',
-          paneId: 'pane-elsewhere',
-        ),
+        session(
+          id: 'live',
+          status: SessionStatus.running,
+        ).copyWith(externalSessionId: 'cli-abc', paneId: 'pane-elsewhere'),
       );
       typeCommand(h, 'pane-1', 'cmd-0', 'claude');
 
@@ -575,19 +577,21 @@ void main() {
       expect(h.counters.paneReads, 1000);
     });
 
-    test('an idle workspace buys no store scan even on the store slot',
-        () async {
-      final h = harness();
-      h.panes.add(pane('pane-1', commandId: 'cmd-0', commandLine: 'ls'));
-      h.service.observePanes();
+    test(
+      'an idle workspace buys no store scan even on the store slot',
+      () async {
+        final h = harness();
+        h.panes.add(pane('pane-1', commandId: 'cmd-0', commandLine: 'ls'));
+        h.service.observePanes();
 
-      for (var i = 0; i < 50; i++) {
-        expect(await h.service.sweep(), 0);
-      }
+        for (var i = 0; i < 50; i++) {
+          expect(await h.service.sweep(), 0);
+        }
 
-      expect(h.counters.scans, 0);
-      expect(h.service.storeSweeps, 0);
-    });
+        expect(h.counters.scans, 0);
+        expect(h.service.storeSweeps, 0);
+      },
+    );
 
     test('one scan answers for a hundred armed panes', () async {
       final h = harness();
@@ -791,9 +795,10 @@ void main() {
       // one, so recording it replaces nothing.
       final h = harness();
       h.sessions.insert(
-        session(id: 's-old', title: 'Earlier').copyWith(
-          externalSessionId: 'cli-abc',
-        ),
+        session(
+          id: 's-old',
+          title: 'Earlier',
+        ).copyWith(externalSessionId: 'cli-abc'),
       );
 
       typeCommand(h, 'pane-1', 'cmd-0', 'claude', directory: subdirectory);
@@ -826,19 +831,23 @@ void main() {
       );
     });
 
-    test('adopts Antigravity session from hook payload with workspacePaths list', () {
-      final h = harness();
-      typeCommand(h, 'pane-1', 'cmd-0', 'agy', directory: _repoPath);
-      h.service.onHookPayload(
-        agentId: AgentIds.antigravity,
-        sessionId: 'agy-session-1',
-        body: '{"conversationId":"agy-session-1","workspacePaths":["$_repoPath"]}',
-      );
+    test(
+      'adopts Antigravity session from hook payload with workspacePaths list',
+      () {
+        final h = harness();
+        typeCommand(h, 'pane-1', 'cmd-0', 'agy', directory: _repoPath);
+        h.service.onHookPayload(
+          agentId: AgentIds.antigravity,
+          sessionId: 'agy-session-1',
+          body:
+              '{"conversationId":"agy-session-1","workspacePaths":["$_repoPath"]}',
+        );
 
-      final row = h.sessions.getAll().single;
-      expect(row.externalSessionId, 'agy-session-1');
-      expect(row.paneId, 'pane-1');
-      expect(row.workingDirectory?.path, _repoPath);
-    });
+        final row = h.sessions.getAll().single;
+        expect(row.externalSessionId, 'agy-session-1');
+        expect(row.paneId, 'pane-1');
+        expect(row.workingDirectory?.path, _repoPath);
+      },
+    );
   });
 }

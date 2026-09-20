@@ -18,7 +18,8 @@ enum RemoteUsagePace {
   final String wire;
 
   static RemoteUsagePace parse(Object? wire) =>
-      values.where((p) => p.wire == wire).firstOrNull ?? RemoteUsagePace.unknown;
+      values.where((p) => p.wire == wire).firstOrNull ??
+      RemoteUsagePace.unknown;
 }
 
 /// One point of a window's history.

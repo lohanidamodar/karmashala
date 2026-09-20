@@ -166,7 +166,8 @@ final sessionStatusRegistryProvider = Provider<SessionStatusRegistry>((ref) {
     },
     // One store scan for every session still missing a transcript path, on the
     // registry's own slow interval — not one per badge per tick.
-    resolveTranscripts: () => ref.read(sessionTranscriptLocatorProvider).index(),
+    resolveTranscripts: () =>
+        ref.read(sessionTranscriptLocatorProvider).index(),
     visibleSessionIds: () => visibleAgentSessionIds(ref.container),
     // Adoption rides this cycle rather than starting a ticker of its own; its
     // store scan shares the slow slot the transcript search already pays for.

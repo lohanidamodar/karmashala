@@ -27,7 +27,8 @@ class WorktreeSetupDialog extends ConsumerStatefulWidget {
   );
 
   @override
-  ConsumerState<WorktreeSetupDialog> createState() => _WorktreeSetupDialogState();
+  ConsumerState<WorktreeSetupDialog> createState() =>
+      _WorktreeSetupDialogState();
 }
 
 class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {

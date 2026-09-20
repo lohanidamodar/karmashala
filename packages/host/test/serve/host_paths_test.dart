@@ -23,18 +23,33 @@ void main() {
       expect(paths.socketPath, endsWith('host.sock'));
     });
 
-    test('a POSIX host prefers the runtime dir, and only when it exists', () {
-      // Skipped rather than faked: the branch reads the real filesystem.
-      final missing = HostPaths.resolve(
-        environment: {'XDG_RUNTIME_DIR': '/nonexistent-runtime-dir', 'HOME': '/home/x'},
-      );
-      expect(missing.directory.path, '/home/x/.karmashala');
+    test(
+      'a POSIX host prefers the runtime dir, and only when it exists',
+      () {
+        // Skipped rather than faked: the branch reads the real filesystem.
+        final missing = HostPaths.resolve(
+          environment: {
+            'XDG_RUNTIME_DIR': '/nonexistent-runtime-dir',
+            'HOME': '/home/x',
+          },
+        );
+        expect(missing.directory.path, '/home/x/.karmashala');
 
-      final present = HostPaths.resolve(
-        environment: {'XDG_RUNTIME_DIR': Directory.systemTemp.path, 'HOME': '/home/x'},
-      );
-      expect(present.directory.path, '${Directory.systemTemp.path}/karmashala');
-    }, skip: Platform.isWindows ? 'XDG_RUNTIME_DIR is not consulted on Windows' : null);
+        final present = HostPaths.resolve(
+          environment: {
+            'XDG_RUNTIME_DIR': Directory.systemTemp.path,
+            'HOME': '/home/x',
+          },
+        );
+        expect(
+          present.directory.path,
+          '${Directory.systemTemp.path}/karmashala',
+        );
+      },
+      skip: Platform.isWindows
+          ? 'XDG_RUNTIME_DIR is not consulted on Windows'
+          : null,
+    );
 
     test('nothing in the directory is named without the directory', () {
       final paths = HostPaths(Directory('/tmp/karmashala-test'));
@@ -50,12 +65,18 @@ void main() {
       final dir = Directory.systemTemp.createTempSync('karmashala-host-acl');
       addTearDown(() => dir.deleteSync(recursive: true));
       final refusal = await HostPaths(dir).restrictToCurrentUser();
-      expect(refusal, isNull, reason: 'the boundary is a prerequisite, not a best effort');
+      expect(
+        refusal,
+        isNull,
+        reason: 'the boundary is a prerequisite, not a best effort',
+      );
     });
 
     test('names the directory when it cannot be established', () async {
       final refusal = await HostPaths(
-        Directory('${Directory.systemTemp.path}/karmashala-host-absent-${DateTime.now().microsecondsSinceEpoch}'),
+        Directory(
+          '${Directory.systemTemp.path}/karmashala-host-absent-${DateTime.now().microsecondsSinceEpoch}',
+        ),
       ).restrictToCurrentUser();
       // A refusal, not a silent success, naming what a person must look at.
       expect(refusal, isNotNull);

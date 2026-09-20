@@ -218,10 +218,9 @@ void main() {
 
     RgbaFrame solid(int value) => RgbaFrame(
       rgba: Uint8List.fromList(
-        List.filled(8 * 8 * 4, 255)
-          ..setRange(0, 8 * 8 * 4, [
-            for (var i = 0; i < 8 * 8; i++) ...[value, value, value, 255],
-          ]),
+        List.filled(8 * 8 * 4, 255)..setRange(0, 8 * 8 * 4, [
+          for (var i = 0; i < 8 * 8; i++) ...[value, value, value, 255],
+        ]),
       ),
       width: 8,
       height: 8,
@@ -268,8 +267,12 @@ void main() {
       expect(result.frames, 2);
       expect(File(p.join(dir, 'frame_00000.png')).existsSync(), isTrue);
       expect(File(p.join(dir, 'frame_00001.png')).existsSync(), isTrue);
-      expect(img.decodePng(File(p.join(dir, 'frame_00000.png'))
-          .readAsBytesSync())!.width, 8);
+      expect(
+        img
+            .decodePng(File(p.join(dir, 'frame_00000.png')).readAsBytesSync())!
+            .width,
+        8,
+      );
 
       // The file the user cannot get without a tool this app does not bundle is
       // named as needing one, and the command is on disk beside the frames.

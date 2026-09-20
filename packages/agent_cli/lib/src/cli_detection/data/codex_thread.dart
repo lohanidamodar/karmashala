@@ -94,11 +94,7 @@ enum CodexFileChangeKind { add, update, delete, unknown }
 /// every hunk to draw a list of 58 paths is the cost this type exists to avoid.
 /// Anyone who wants the patch has the working tree and the Changes panel.
 class CodexFileChange {
-  const CodexFileChange({
-    required this.path,
-    required this.kind,
-    this.movedTo,
-  });
+  const CodexFileChange({required this.path, required this.kind, this.movedTo});
 
   /// The change, or `null` when it names no path to file it under.
   static CodexFileChange? fromJson(Object? row) {

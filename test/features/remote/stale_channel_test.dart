@@ -147,9 +147,11 @@ void main() {
     // is the contract every other test in this file rests on.
     final key = SecretKeyData(await keyFor(_phone));
     final hostWindow = [
-      for (var g = kFirstSessionGeneration;
-          g < kFirstSessionGeneration + kHostRelayListenWindow;
-          g++)
+      for (
+        var g = kFirstSessionGeneration;
+        g < kFirstSessionGeneration + kHostRelayListenWindow;
+        g++
+      )
         (await rendezvousFor(key, g)).value,
     ];
     final phoneWindow = [
@@ -171,100 +173,116 @@ void main() {
     );
   });
 
-  test('a phone that comes back on a generation it already used gets a link '
-      'that works, not one that answers nothing for ever',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    await startService();
+  test(
+    'a phone that comes back on a generation it already used gets a link '
+    'that works, not one that answers nothing for ever',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
 
-    // One ordinary session: the phone connects and its requests are answered,
-    // which is what fills the host channel's replay window.
-    final first = await phoneAt(kFirstSessionGeneration);
-    await first.connect(helloTimeout: const Duration(seconds: 5));
-    expect(await first.listSessions(), hasLength(1));
-    await first.close();
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+      // One ordinary session: the phone connects and its requests are answered,
+      // which is what fills the host channel's replay window.
+      final first = await phoneAt(kFirstSessionGeneration);
+      await first.connect(helloTimeout: const Duration(seconds: 5));
+      expect(await first.listSessions(), hasLength(1));
+      await first.close();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
 
-    // The counter bump never reached the phone's keystore — a write that timed
-    // out, or the app killed before it landed — so the phone comes back on the
-    // generation it has already used, with a brand new channel. The host
-    // greets it (the hello never goes through the channel) and then cannot
-    // admit a thing it sends.
-    final second = await phoneAt(kFirstSessionGeneration);
-    expect(
-      (await second.connect(helloTimeout: const Duration(seconds: 5))).hostName,
-      'TestHost',
-    );
-    await expectLater(second.listSessions(), throwsA(isA<RemoteApiException>()));
+      // The counter bump never reached the phone's keystore — a write that timed
+      // out, or the app killed before it landed — so the phone comes back on the
+      // generation it has already used, with a brand new channel. The host
+      // greets it (the hello never goes through the channel) and then cannot
+      // admit a thing it sends.
+      final second = await phoneAt(kFirstSessionGeneration);
+      expect(
+        (await second.connect(
+          helloTimeout: const Duration(seconds: 5),
+        )).hostName,
+        'TestHost',
+      );
+      await expectLater(
+        second.listSessions(),
+        throwsA(isA<RemoteApiException>()),
+      );
 
-    // That is where the owner's phone stayed, for ever. What has to be true
-    // now is that the desktop noticed, said so, and left the poisoned
-    // generation behind — because the next dial is the one that has to work.
-    expect(
-      hostLog.where((line) => line.startsWith('retiring generation')),
-      isNotEmpty,
-      reason: 'a desktop that refuses every frame has to say why: this cost a '
-          'forensic dig through a log that recorded nothing at all',
-    );
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+      // That is where the owner's phone stayed, for ever. What has to be true
+      // now is that the desktop noticed, said so, and left the poisoned
+      // generation behind — because the next dial is the one that has to work.
+      expect(
+        hostLog.where((line) => line.startsWith('retiring generation')),
+        isNotEmpty,
+        reason:
+            'a desktop that refuses every frame has to say why: this cost a '
+            'forensic dig through a log that recorded nothing at all',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 300));
 
-    // The phone dials its own bumped counter, which is exactly where the host
-    // now is. Nobody re-paired, nobody touched a setting.
-    final third = await phoneAt(second.pairing.generation);
-    await third.connect(helloTimeout: const Duration(seconds: 5));
-    expect(await third.listSessions(), hasLength(1));
-    await third.subscribeSession('s1');
-  });
+      // The phone dials its own bumped counter, which is exactly where the host
+      // now is. Nobody re-paired, nobody touched a setting.
+      final third = await phoneAt(second.pairing.generation);
+      await third.connect(helloTimeout: const Duration(seconds: 5));
+      expect(await third.listSessions(), hasLength(1));
+      await third.subscribeSession('s1');
+    },
+  );
 
-  test('the poisoned generation is left behind, not reset — nothing sent in '
-      'it can be replayed into the one that replaces it',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    await startService();
-    final first = await phoneAt(kFirstSessionGeneration);
-    await first.connect(helloTimeout: const Duration(seconds: 5));
-    await first.listSessions();
-    await first.close();
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+  test(
+    'the poisoned generation is left behind, not reset — nothing sent in '
+    'it can be replayed into the one that replaces it',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final first = await phoneAt(kFirstSessionGeneration);
+      await first.connect(helloTimeout: const Duration(seconds: 5));
+      await first.listSessions();
+      await first.close();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
 
-    final second = await phoneAt(kFirstSessionGeneration);
-    await second.connect(helloTimeout: const Duration(seconds: 5));
-    await second.listSessions().catchError(
-      (Object _) => <RemoteSessionSnapshot>[],
-    );
+      final second = await phoneAt(kFirstSessionGeneration);
+      await second.connect(helloTimeout: const Duration(seconds: 5));
+      await second.listSessions().catchError(
+        (Object _) => <RemoteSessionSnapshot>[],
+      );
 
-    expect(
-      hostGeneration(),
-      greaterThan(kFirstSessionGeneration),
-      reason: 'the replay window is the only thing stopping a captured frame '
-          'being played back into a generation, so the way out is a new '
-          'generation — never a reset window',
-    );
-  });
+      expect(
+        hostGeneration(),
+        greaterThan(kFirstSessionGeneration),
+        reason:
+            'the replay window is the only thing stopping a captured frame '
+            'being played back into a generation, so the way out is a new '
+            'generation — never a reset window',
+      );
+    },
+  );
 
-  test('a frame whose seal does not verify never costs the link',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    await startService();
-    final phone = await phoneAt(kFirstSessionGeneration);
-    await phone.connect(helloTimeout: const Duration(seconds: 5));
-    await phone.listSessions();
-    final generation = phone.generation;
-    await phone.close();
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+  test(
+    'a frame whose seal does not verify never costs the link',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final phone = await phoneAt(kFirstSessionGeneration);
+      await phone.connect(helloTimeout: const Duration(seconds: 5));
+      await phone.listSessions();
+      final generation = phone.generation;
+      await phone.close();
+      await Future<void>.delayed(const Duration(milliseconds: 300));
 
-    // A stranger at the rendezvous — or a relay playing games — can put bytes
-    // on the wire, and proves nothing by doing it. Letting that retire a
-    // generation would hand anyone who can reach the meeting place a way to
-    // rotate the link at will.
-    final key = SecretKeyData(await keyFor(_phone));
-    final intruder = dial(relayUri, await rendezvousFor(key, generation));
-    cleanups.add(intruder.close);
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    intruder.send(Uint8List.fromList(List<int>.filled(96, 0x7f)));
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+      // A stranger at the rendezvous — or a relay playing games — can put bytes
+      // on the wire, and proves nothing by doing it. Letting that retire a
+      // generation would hand anyone who can reach the meeting place a way to
+      // rotate the link at will.
+      final key = SecretKeyData(await keyFor(_phone));
+      final intruder = dial(relayUri, await rendezvousFor(key, generation));
+      cleanups.add(intruder.close);
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      intruder.send(Uint8List.fromList(List<int>.filled(96, 0x7f)));
+      await Future<void>.delayed(const Duration(milliseconds: 500));
 
-    expect(
-      hostGeneration(),
-      generation,
-      reason: 'junk that never opened says nothing about the paired phone',
-    );
-  });
+      expect(
+        hostGeneration(),
+        generation,
+        reason: 'junk that never opened says nothing about the paired phone',
+      );
+    },
+  );
 }

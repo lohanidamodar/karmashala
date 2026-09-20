@@ -217,8 +217,7 @@ void main() {
   test('a save encodes what it stores, not what it considered', () {
     // A pane full of per-cell 24-bit colour: ~4 KB of SGR per line, so the
     // 256 KB cap is met long before the 2 000-line window is.
-    final source = Terminal(maxLines: kLiveScrollbackMaxLines)
-      ..resize(200, 50);
+    final source = Terminal(maxLines: kLiveScrollbackMaxLines)..resize(200, 50);
     for (var row = 0; row < 400; row++) {
       final cells = StringBuffer();
       for (var x = 0; x < 200; x++) {
@@ -228,10 +227,7 @@ void main() {
     }
 
     final stats = encodeScrollbackWithStats(source);
-    expect(
-      stats.encoded.length,
-      lessThanOrEqualTo(kDurableScrollbackMaxBytes),
-    );
+    expect(stats.encoded.length, lessThanOrEqualTo(kDurableScrollbackMaxBytes));
     // The window offers 2 000 lines; the budget is spent after a few dozen.
     // Encoding all 2 000 and throwing 97% away is the bug this pins.
     expect(stats.linesEncoded, lessThan(200));

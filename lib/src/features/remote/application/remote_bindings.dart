@@ -207,5 +207,3 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
     resumeSession: (sessionId) => resumeRemoteSession(ref, sessionId),
   );
 });
-
-

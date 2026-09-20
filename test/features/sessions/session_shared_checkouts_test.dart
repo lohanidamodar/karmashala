@@ -251,23 +251,27 @@ void main() {
       for (var i = 1; i <= 4; i++) {
         worktreeSession(
           'cand-$i',
-          worktree: r'C:\src\.karmashala-worktrees\app-cand-' '$i',
+          worktree:
+              r'C:\src\.karmashala-worktrees\app-cand-'
+              '$i',
           alsoSpanning: const [],
         );
       }
     });
 
-    test('every candidate is isolated in the repository it was fanned out on',
-        () {
-      final worktrees = <String>{};
-      for (var i = 1; i <= 4; i++) {
-        final checkouts = service.checkoutsFor('cand-$i');
-        expect(checkouts, hasLength(1));
-        expect(checkouts.single.isolation, CheckoutIsolation.isolated);
-        worktrees.add(checkouts.single.directory.path);
-      }
-      expect(worktrees, hasLength(4));
-    });
+    test(
+      'every candidate is isolated in the repository it was fanned out on',
+      () {
+        final worktrees = <String>{};
+        for (var i = 1; i <= 4; i++) {
+          final checkouts = service.checkoutsFor('cand-$i');
+          expect(checkouts, hasLength(1));
+          expect(checkouts.single.isolation, CheckoutIsolation.isolated);
+          worktrees.add(checkouts.single.directory.path);
+        }
+        expect(worktrees, hasLength(4));
+      },
+    );
 
     test('and none of them is recorded in the project\'s other checkouts, so '
         'the shared ones read empty rather than crowded', () {
@@ -309,9 +313,9 @@ void main() {
       );
 
       final result =
-          await WorkspaceControlTools(container).call('list_checkouts', {
-                'projectId': 'p1',
-              })
+          await WorkspaceControlTools(
+                container,
+              ).call('list_checkouts', {'projectId': 'p1'})
               as Map<String, Object?>;
       final checkouts = (result['checkouts']! as List)
           .cast<Map<String, Object?>>();
@@ -345,9 +349,9 @@ void main() {
       final h = fanout.harness();
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
-      RepositoryDao(h.db).insert(
-        repository(id: 'r-api', name: 'api', path: r'C:\src\demo\api'),
-      );
+      RepositoryDao(
+        h.db,
+      ).insert(repository(id: 'r-api', name: 'api', path: r'C:\src\demo\api'));
 
       final launched = await h.container
           .read(fanOutServiceProvider)
@@ -431,9 +435,7 @@ void main() {
       final container = ProviderContainer(
         overrides: [
           databaseProvider.overrideWithValue(db),
-          selectedSessionIdProvider.overrideWith(
-            () => _FixedSelection('s1'),
-          ),
+          selectedSessionIdProvider.overrideWith(() => _FixedSelection('s1')),
         ],
       );
       addTearDown(container.dispose);

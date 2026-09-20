@@ -51,8 +51,9 @@ class CastRecorder {
   /// sequence split across two reads. flutter_pty reads 1 KB at a time, so that
   /// split is ordinary rather than theoretical.
   final StringBuffer _decoded = StringBuffer();
-  late final ByteConversionSink _sink = const Utf8Decoder(allowMalformed: true)
-      .startChunkedConversion(StringConversionSink.fromStringSink(_decoded));
+  late final ByteConversionSink _sink = const Utf8Decoder(
+    allowMalformed: true,
+  ).startChunkedConversion(StringConversionSink.fromStringSink(_decoded));
 
   int _bytes = 0;
   int _lastColumns = 0;

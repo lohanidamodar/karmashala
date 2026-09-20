@@ -77,11 +77,13 @@ void main() {
     expect(endpoint.port, greaterThan(0));
     expect(endpoint.token, isNotEmpty);
     expect(
-      endpoint.uriFor(
-        agentId: 'claudeCode',
-        event: 'Stop',
-        environment: EnvironmentKind.windowsNative,
-      )!.host,
+      endpoint
+          .uriFor(
+            agentId: 'claudeCode',
+            event: 'Stop',
+            environment: EnvironmentKind.windowsNative,
+          )!
+          .host,
       '127.0.0.1',
     );
   });

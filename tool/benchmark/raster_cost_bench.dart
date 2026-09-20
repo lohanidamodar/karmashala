@@ -21,19 +21,18 @@ void main() {
         final painter = makePainter();
         final width = (painter.cellSize.width * kPerfColumns).ceil();
         final height = (painter.cellSize.height * kPerfRows).ceil();
-        final bounds = Rect.fromLTWH(
-          0,
-          0,
-          width.toDouble(),
-          height.toDouble(),
-        );
+        final bounds = Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble());
 
         Future<int> raster({required bool perCell}) async {
           // Warm both the paragraph caches and the GPU/CPU raster path.
           for (var i = 0; i < 3; i++) {
             final r = PictureRecorder();
-            paintViewport(painter, Canvas(r, bounds), terminal,
-                perCell: perCell);
+            paintViewport(
+              painter,
+              Canvas(r, bounds),
+              terminal,
+              perCell: perCell,
+            );
             final p = r.endRecording();
             (await p.toImage(width, height)).dispose();
             p.dispose();
@@ -41,8 +40,12 @@ void main() {
           final samples = <int>[];
           for (var i = 0; i < 10; i++) {
             final r = PictureRecorder();
-            paintViewport(painter, Canvas(r, bounds), terminal,
-                perCell: perCell);
+            paintViewport(
+              painter,
+              Canvas(r, bounds),
+              terminal,
+              perCell: perCell,
+            );
             final p = r.endRecording();
             final sw = Stopwatch()..start();
             final image = await p.toImage(width, height);
@@ -58,9 +61,7 @@ void main() {
         final batched = await raster(perCell: false);
         final perCell = await raster(perCell: true);
         // ignore: avoid_print
-        print(
-          'raster $corpus: batched=${batched}us perCell=${perCell}us',
-        );
+        print('raster $corpus: batched=${batched}us perCell=${perCell}us');
       });
     }, timeout: const Timeout(Duration(minutes: 5)));
   }

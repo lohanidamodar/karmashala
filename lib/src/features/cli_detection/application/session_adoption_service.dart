@@ -576,15 +576,11 @@ class SessionAdoptionService {
   void _loadEnvironments() {
     _environments
       ..clear()
-      ..addEntries(
-        environmentDao.getAll().map((e) => MapEntry(e.id, e)),
-      );
+      ..addEntries(environmentDao.getAll().map((e) => MapEntry(e.id, e)));
   }
 
-  static String _flatten(String path) => path
-      .replaceAll(r'\', '/')
-      .replaceAll(RegExp(r'/+$'), '')
-      .toLowerCase();
+  static String _flatten(String path) =>
+      path.replaceAll(r'\', '/').replaceAll(RegExp(r'/+$'), '').toLowerCase();
 }
 
 /// A pane that looks like it is running an agent we have no row for.

@@ -97,13 +97,15 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
     void Function(int sent, int total)? onProgress,
     String? requestId,
   }) async {
-    final delivery = await ref.read(companionGatewayProvider).sendPrompt(
-      widget.sessionId,
-      text,
-      attachment: attachment,
-      onProgress: onProgress,
-      requestId: requestId,
-    );
+    final delivery = await ref
+        .read(companionGatewayProvider)
+        .sendPrompt(
+          widget.sessionId,
+          text,
+          attachment: attachment,
+          onProgress: onProgress,
+          requestId: requestId,
+        );
     if (delivery == RemotePromptDelivery.offered && mounted) {
       // The file lands in the desktop's message box, so this must not read as
       // though the agent already had it.
@@ -317,8 +319,11 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
       if (!mounted) return;
       final hostAfter = gateway.pairing?.hostId;
       if (hostBefore != hostAfter) {
-        setState(() => _resumeFailure = 'The active desktop changed while '
-            'this session was being resumed. Try again.');
+        setState(
+          () => _resumeFailure =
+              'The active desktop changed while '
+              'this session was being resumed. Try again.',
+        );
         return;
       }
       Navigator.of(context).pushReplacement(

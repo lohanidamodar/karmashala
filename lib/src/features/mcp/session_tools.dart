@@ -98,7 +98,9 @@ class SessionControlTools {
       throw ArgumentError('text is required and cannot be blank.');
     }
     final session = _session(sessionId);
-    if (_container.read(sessionStatusLookupProvider)(sessionId)?.hasOpenQuestion ??
+    if (_container
+            .read(sessionStatusLookupProvider)(sessionId)
+            ?.hasOpenQuestion ??
         false) {
       throw StateError(
         'That session is asking a multiple-choice question, so this would '
@@ -107,7 +109,9 @@ class SessionControlTools {
         'companion app, or wait for it to be answered and send then.',
       );
     }
-    if (_container.read(sessionStatusLookupProvider)(sessionId)?.hasOpenPrompt ??
+    if (_container
+            .read(sessionStatusLookupProvider)(sessionId)
+            ?.hasOpenPrompt ??
         false) {
       throw StateError(
         'That session has an approval prompt open, so this would press keys in '
@@ -141,10 +145,12 @@ class SessionControlTools {
         : _container.read(sessionLauncherProvider).attributionFor(caller);
     // Through SessionActions, which is what the message box uses: an agent must
     // not get a third answer to "typed into, or messaged through the engine".
-    await _container.read(sessionActionsProvider).continueSession(
-      sessionId,
-      attribution == null ? text : attribution.render(text),
-    );
+    await _container
+        .read(sessionActionsProvider)
+        .continueSession(
+          sessionId,
+          attribution == null ? text : attribution.render(text),
+        );
     final delivered = <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
@@ -152,17 +158,20 @@ class SessionControlTools {
       // The exact line the recipient sees above the message. Null is the honest
       // answer, never a claim that it went in as the user.
       'attribution': attribution?.line,
-      'live': _container.read(sessionLauncherProvider).livePaneFor(sessionId) !=
+      'live':
+          _container.read(sessionLauncherProvider).livePaneFor(sessionId) !=
           null,
     };
     if (!wait) return delivered;
     // `inputSent: true` is the fact a timeout has to carry: a caller that
     // retries because its bound ran out submits the same work twice.
-    final outcome = await _container.read(sessionWaitProvider).wait(
-      sessionId,
-      bound: SessionWaitService.boundFor(timeoutSeconds),
-      inputSent: true,
-    );
+    final outcome = await _container
+        .read(sessionWaitProvider)
+        .wait(
+          sessionId,
+          bound: SessionWaitService.boundFor(timeoutSeconds),
+          inputSent: true,
+        );
     return <String, Object?>{...delivered, ..._renderWait(outcome)};
   }
 
@@ -170,10 +179,9 @@ class SessionControlTools {
   /// twice is not merely safe but the intended answer to a timeout.
   Future<Object?> _wait(String sessionId, {num? timeoutSeconds}) async {
     final session = _session(sessionId);
-    final outcome = await _container.read(sessionWaitProvider).wait(
-      sessionId,
-      bound: SessionWaitService.boundFor(timeoutSeconds),
-    );
+    final outcome = await _container
+        .read(sessionWaitProvider)
+        .wait(sessionId, bound: SessionWaitService.boundFor(timeoutSeconds));
     return <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
@@ -212,35 +220,34 @@ class SessionControlTools {
 
   /// The sentence a model reads before deciding what to do next: `idle` is also
   /// the shape of a session that never started, `timeout` only this call's bound.
-  static String _noteFor(SessionWaitOutcome outcome) =>
-      switch (outcome.state) {
-        SessionWaitState.idle =>
-          'Ready for input, and nothing moved while this call watched. That is '
-              'not proof it did anything: a session that never started reads '
-              'exactly like one that finished before you asked. "done" is the '
-              'state that means it moved.',
-        SessionWaitState.done =>
-          'Ready for input, and its evidence moved while this call watched — it '
-              'finished something. What it finished is in session_transcript; '
-              'this says only that it stopped.',
-        SessionWaitState.blocked =>
-          'BLOCKED ON A PERSON. This session has stopped for an approval or a '
-              'question and will not move until somebody answers it — waiting '
-              'longer will not change that. Anything you send now lands in that '
-              'prompt as a keystroke rather than arriving as a message. Read '
-              'what is being asked with session_transcript and answer it with '
-              'session_answer, or leave it for the user.',
-        SessionWaitState.ended =>
-          'The pane behind this session is gone. session_transcript still reads '
-              'its record, and open_session will resume it. '
-              '${outcome.exitCodeKnown ? 'It exited with ${outcome.exitCode}.' : 'Its exit code is UNKNOWN — not 0; nothing told us what it exited with.'}',
-        SessionWaitState.timeout =>
-          'TIMEOUT — this is your bound, not a verdict about the session. It is '
-              'STILL RUNNING and may finish a moment from now. '
-              '${outcome.inputSent ?? false ? 'YOUR MESSAGE WAS ALREADY DELIVERED (inputSent: true): a timeout does not prove nothing was sent, so do not send it again' : 'This call sent nothing (inputSent is null)'}'
-              '. Read the session with session_transcript, or call session_wait '
-              'to go on waiting.',
-      };
+  static String _noteFor(SessionWaitOutcome outcome) => switch (outcome.state) {
+    SessionWaitState.idle =>
+      'Ready for input, and nothing moved while this call watched. That is '
+          'not proof it did anything: a session that never started reads '
+          'exactly like one that finished before you asked. "done" is the '
+          'state that means it moved.',
+    SessionWaitState.done =>
+      'Ready for input, and its evidence moved while this call watched — it '
+          'finished something. What it finished is in session_transcript; '
+          'this says only that it stopped.',
+    SessionWaitState.blocked =>
+      'BLOCKED ON A PERSON. This session has stopped for an approval or a '
+          'question and will not move until somebody answers it — waiting '
+          'longer will not change that. Anything you send now lands in that '
+          'prompt as a keystroke rather than arriving as a message. Read '
+          'what is being asked with session_transcript and answer it with '
+          'session_answer, or leave it for the user.',
+    SessionWaitState.ended =>
+      'The pane behind this session is gone. session_transcript still reads '
+          'its record, and open_session will resume it. '
+          '${outcome.exitCodeKnown ? 'It exited with ${outcome.exitCode}.' : 'Its exit code is UNKNOWN — not 0; nothing told us what it exited with.'}',
+    SessionWaitState.timeout =>
+      'TIMEOUT — this is your bound, not a verdict about the session. It is '
+          'STILL RUNNING and may finish a moment from now. '
+          '${outcome.inputSent ?? false ? 'YOUR MESSAGE WAS ALREADY DELIVERED (inputSent: true): a timeout does not prove nothing was sent, so do not send it again' : 'This call sent nothing (inputSent is null)'}'
+          '. Read the session with session_transcript, or call session_wait '
+          'to go on waiting.',
+  };
 
   /// Answers an approval prompt with the key the *agent* names for it. Nothing
   /// invents a binding; an agent that names none is reported as such.
@@ -266,17 +273,17 @@ class SessionControlTools {
     }
     // Named rather than left to default to "the user": the decision record this
     // write lands in is read by somebody who was not there.
-    if (!_container.read(sessionLauncherProvider).answerPrompt(
-      sessionId,
-      key.keys,
-      decidedBy: callerSessionId == null
-          ? 'an agent through the MCP bridge'
-          : 'an agent in session $callerSessionId',
-      decidedBySessionId: callerSessionId,
-    )) {
-      throw StateError(
-        'This session has no live terminal to answer in.',
-      );
+    if (!_container
+        .read(sessionLauncherProvider)
+        .answerPrompt(
+          sessionId,
+          key.keys,
+          decidedBy: callerSessionId == null
+              ? 'an agent through the MCP bridge'
+              : 'an agent in session $callerSessionId',
+          decidedBySessionId: callerSessionId,
+        )) {
+      throw StateError('This session has no live terminal to answer in.');
     }
     return <String, Object?>{
       'sessionId': sessionId,
@@ -372,9 +379,9 @@ class SessionControlTools {
   /// No live pane is reported as already stopped, never as a silent success.
   Object? _end(String sessionId) {
     final session = _session(sessionId);
-    final paneId = _container.read(sessionLauncherProvider).livePaneFor(
-      sessionId,
-    );
+    final paneId = _container
+        .read(sessionLauncherProvider)
+        .livePaneFor(sessionId);
     if (paneId == null) {
       throw StateError(
         'That session has no live pane; nothing is running to end.',
@@ -576,10 +583,14 @@ const List<Map<String, dynamic>> sessionControlToolSchemas = [
               'the state is blocked.',
           'properties': {
             'kind': {'type': 'string'},
-            'text': {'type': ['string', 'null']},
+            'text': {
+              'type': ['string', 'null'],
+            },
           },
         },
-        'exitCode': {'type': ['number', 'null']},
+        'exitCode': {
+          'type': ['number', 'null'],
+        },
         'exitCodeKnown': {
           'type': 'boolean',
           'description':
@@ -631,7 +642,10 @@ const List<Map<String, dynamic>> sessionControlToolSchemas = [
             'type': 'object',
             'properties': {
               'seq': {'type': 'number'},
-              'role': {'type': 'string', 'enum': ['user', 'agent']},
+              'role': {
+                'type': 'string',
+                'enum': ['user', 'agent'],
+              },
               'at': {'type': 'string'},
               'text': {'type': 'string'},
             },

@@ -54,11 +54,7 @@ void main() {
     File(p.join(tmp.path, '.codex/session_index.jsonl'))
       ..createSync(recursive: true)
       ..writeAsStringSync(
-        '${jsonEncode({
-          'id': 'u1',
-          'thread_name': 'old',
-          'updated_at': '2020-01-01T00:00:00.000Z',
-        })}\n',
+        '${jsonEncode({'id': 'u1', 'thread_name': 'old', 'updated_at': '2020-01-01T00:00:00.000Z'})}\n',
       );
     final rollout = File(p.join(tmp.path, '.codex/sessions/rollout-x-u1.jsonl'))
       ..createSync(recursive: true)
@@ -78,7 +74,8 @@ void main() {
       AgentInstallationDao(db).insert(
         agentInstallation(
           agentId: AgentIds.codex,
-          path: r'C:\Users\me\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe',
+          path:
+              r'C:\Users\me\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe',
         ),
       );
     }
@@ -179,7 +176,10 @@ void main() {
       final session = seedStore();
       server = FakeCodexAppServer(
         reply: (server, id, method, params) => jsonEncode({
-          'error': {'code': -32600, 'message': 'no rollout found for thread id'},
+          'error': {
+            'code': -32600,
+            'message': 'no rollout found for thread id',
+          },
           'id': id,
         }),
       );
@@ -230,7 +230,10 @@ void main() {
     // What `initialize` reports from inside the distribution — a POSIX path,
     // never the UNC form this host reaches the same directory by.
     server = FakeCodexAppServer(codexHome: '/home/me/.codex');
-    runner = FakeCommandRunner(environmentId: wsl.id, processFactory: (_) => server);
+    runner = FakeCommandRunner(
+      environmentId: wsl.id,
+      processFactory: (_) => server,
+    );
     final pool = CodexAppServers(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
       environments: ExecutionEnvironmentDao(db),

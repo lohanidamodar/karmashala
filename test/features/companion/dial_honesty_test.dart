@@ -64,7 +64,8 @@ void main() {
     expect(
       dials,
       1,
-      reason: 'probing a generation forward is pointless at a relay that is '
+      reason:
+          'probing a generation forward is pointless at a relay that is '
           'silent at every generation',
     );
   });
@@ -128,29 +129,31 @@ void main() {
     await expectLater(store.delete('k'), throwsA(isA<TimeoutException>()));
   });
 
-  test('a stalled write cannot wedge the connection-set chain for good',
-      () async {
-    // `CompanionConnections.mutate` serialises every read-modify-write on one
-    // static chain. Before the store had a deadline, ONE keystore call that
-    // never came back stopped every later one for the life of the process —
-    // and the connect loop persists its counter inside the dial.
-    final stalled = SecureCompanionStore.withBackend(
-      read: (_) => Completer<String?>().future,
-      write: (_, _) => Completer<void>().future,
-      delete: (_) => Completer<void>().future,
-      timeout: const Duration(milliseconds: 100),
-    );
-    await expectLater(
-      CompanionConnections.mutate(stalled, (all) => all),
-      throwsA(isA<TimeoutException>()),
-    );
+  test(
+    'a stalled write cannot wedge the connection-set chain for good',
+    () async {
+      // `CompanionConnections.mutate` serialises every read-modify-write on one
+      // static chain. Before the store had a deadline, ONE keystore call that
+      // never came back stopped every later one for the life of the process —
+      // and the connect loop persists its counter inside the dial.
+      final stalled = SecureCompanionStore.withBackend(
+        read: (_) => Completer<String?>().future,
+        write: (_, _) => Completer<void>().future,
+        delete: (_) => Completer<void>().future,
+        timeout: const Duration(milliseconds: 100),
+      );
+      await expectLater(
+        CompanionConnections.mutate(stalled, (all) => all),
+        throwsA(isA<TimeoutException>()),
+      );
 
-    // The next mutation, on a store that works, still runs.
-    final healthy = InMemoryCompanionStore();
-    final after = await CompanionConnections.mutate(
-      healthy,
-      (all) => all..upsert(_pairing(_deadRelay)),
-    ).timeout(const Duration(seconds: 5));
-    expect(after.records, hasLength(1));
-  });
+      // The next mutation, on a store that works, still runs.
+      final healthy = InMemoryCompanionStore();
+      final after = await CompanionConnections.mutate(
+        healthy,
+        (all) => all..upsert(_pairing(_deadRelay)),
+      ).timeout(const Duration(seconds: 5));
+      expect(after.records, hasLength(1));
+    },
+  );
 }

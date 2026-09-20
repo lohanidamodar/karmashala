@@ -97,9 +97,7 @@ void main() {
     testWidgets('many desktops list with their active badge and last use', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
-      );
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -148,9 +146,7 @@ void main() {
     });
 
     testWidgets('the active desktop is not a switch target', (tester) async {
-      final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
-      );
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -194,9 +190,7 @@ void main() {
     testWidgets('forgetting one desktop asks first, then removes only it', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
-      );
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -216,9 +210,7 @@ void main() {
     testWidgets('cancelling the forget dialog keeps the desktop', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
-      );
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -234,9 +226,7 @@ void main() {
     });
 
     testWidgets('"Add a desktop" opens the pairing flow', (tester) async {
-      final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
-      );
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
       await pumpPhone(
         tester,
         gateway: gateway,
@@ -262,11 +252,7 @@ void main() {
           CompanionConnection(hostId: studio, name: 'Studio', active: true),
         ],
       );
-      await pumpPhone(
-        tester,
-        gateway: gateway,
-        home: const HostSwitcherBar(),
-      );
+      await pumpPhone(tester, gateway: gateway, home: const HostSwitcherBar());
 
       expect(find.text('Studio'), findsOneWidget);
       expect(
@@ -283,14 +269,8 @@ void main() {
     testWidgets('two desktops name the active one and how many are saved', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
-      );
-      await pumpPhone(
-        tester,
-        gateway: gateway,
-        home: const HostSwitcherBar(),
-      );
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      await pumpPhone(tester, gateway: gateway, home: const HostSwitcherBar());
 
       expect(find.text('Studio'), findsOneWidget);
       expect(find.text('2 saved'), findsOneWidget);
@@ -303,11 +283,7 @@ void main() {
           laptop: [summary('s-laptop', title: 'Laptop work')],
         },
       );
-      await pumpPhone(
-        tester,
-        gateway: gateway,
-        home: const HostSwitcherBar(),
-      );
+      await pumpPhone(tester, gateway: gateway, home: const HostSwitcherBar());
 
       await tester.tap(find.text('Studio'));
       await tester.pumpAndSettle();
@@ -321,14 +297,8 @@ void main() {
     testWidgets('the sheet also offers the way to a new desktop', (
       tester,
     ) async {
-      final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
-      );
-      await pumpPhone(
-        tester,
-        gateway: gateway,
-        home: const HostSwitcherBar(),
-      );
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
+      await pumpPhone(tester, gateway: gateway, home: const HostSwitcherBar());
 
       await tester.tap(find.text('Studio'));
       await tester.pumpAndSettle();
@@ -368,9 +338,7 @@ void main() {
     });
 
     testWidgets('the settings tab lists the desktops', (tester) async {
-      final gateway = FakeCompanionGateway.paired(
-        connections: twoDesktops(),
-      );
+      final gateway = FakeCompanionGateway.paired(connections: twoDesktops());
       await pumpPhone(tester, gateway: gateway, home: const CompanionShell());
 
       await tester.tap(find.text('Settings'));
@@ -564,5 +532,4 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
-
 }

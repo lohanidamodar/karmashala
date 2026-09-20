@@ -53,10 +53,7 @@ MdnsScan parseMdnsServices(CommandResult result) {
       ),
     );
   }
-  return MdnsScan(
-    availability: MdnsAvailability.available,
-    services: services,
-  );
+  return MdnsScan(availability: MdnsAvailability.available, services: services);
 }
 
 /// Reads `adb pair HOST:PORT CODE`. Only the literal success line reads as

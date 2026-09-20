@@ -24,7 +24,11 @@ void main() {
     test('maps the corners exactly', () {
       const WidgetBox box = (width: 405, height: 900);
       expect(
-        widgetPointToDevice(local: (dx: 0.0, dy: 0.0), box: box, screen: _screen),
+        widgetPointToDevice(
+          local: (dx: 0.0, dy: 0.0),
+          box: box,
+          screen: _screen,
+        ),
         (x: 0, y: 0),
       );
       expect(
@@ -131,7 +135,10 @@ void main() {
     // same touch in different spaces: device pixels, and *video* pixels.
     test('the corners are 0 and 1 whatever the box size', () {
       const WidgetBox box = (width: 405, height: 900);
-      expect(widgetPointToFraction(local: (dx: 0.0, dy: 0.0), box: box), (x: 0, y: 0));
+      expect(widgetPointToFraction(local: (dx: 0.0, dy: 0.0), box: box), (
+        x: 0,
+        y: 0,
+      ));
       expect(widgetPointToFraction(local: (dx: 405, dy: 900), box: box), (
         x: 1.0,
         y: 1.0,
@@ -140,17 +147,17 @@ void main() {
 
     test('clamps a pointer dragged outside the picture', () {
       const WidgetBox box = (width: 405, height: 900);
-      final out = widgetPointToFraction(
-        local: (dx: -40, dy: 1400),
-        box: box,
-      );
+      final out = widgetPointToFraction(local: (dx: -40, dy: 1400), box: box);
       expect(out.x, 0.0);
       expect(out.y, 1.0);
     });
 
     test('is safe on a zero-sized box during the first layout', () {
       expect(
-        widgetPointToFraction(local: (dx: 10, dy: 10), box: (width: 0.0, height: 0.0)),
+        widgetPointToFraction(
+          local: (dx: 10, dy: 10),
+          box: (width: 0.0, height: 0.0),
+        ),
         (x: 0, y: 0),
       );
     });

@@ -191,9 +191,9 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
     if (state.active.containsKey(paneId)) {
       state = state.copyWith(active: {...state.active}..remove(paneId));
     }
-    if (ref.read(terminalSessionsControllerProvider.notifier).instanceFor(
-          paneId,
-        )
+    if (ref
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(paneId)
         case final RecordableTerminalInstance recordable) {
       recordable.stopRecording();
     }
@@ -208,7 +208,10 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
     final cast = recorder.stop();
     final directory = await destination;
     final file = File(
-      p.join(directory.path, recordingFileName(recorder.title, cast.recordedAt)),
+      p.join(
+        directory.path,
+        recordingFileName(recorder.title, cast.recordedAt),
+      ),
     );
     await file.writeAsString(encodeCast(cast));
 
@@ -265,20 +268,18 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
       hardwareTransforms: ref.read(hardwareTransformsProvider),
     );
     try {
-      final result = await CastFrameRenderer(
-        cast: saved.cast,
-        style: style,
-      ).renderTo(
-        sink,
-        onProgress: (rendered, total) {
-          final export = state.export;
-          if (export == null || !export.isRunning) return;
-          state = state.copyWith(
-            export: export.copyWith(rendered: rendered, total: total),
+      final result = await CastFrameRenderer(cast: saved.cast, style: style)
+          .renderTo(
+            sink,
+            onProgress: (rendered, total) {
+              final export = state.export;
+              if (export == null || !export.isRunning) return;
+              state = state.copyWith(
+                export: export.copyWith(rendered: rendered, total: total),
+              );
+            },
+            cancelled: () => state.export == null,
           );
-        },
-        cancelled: () => state.export == null,
-      );
       final export = state.export;
       if (export != null) {
         state = state.copyWith(export: export.copyWith(result: result));
@@ -298,8 +299,7 @@ class TerminalRecordingController extends Notifier<TerminalRecordingState> {
   void cancelRender() => state = state.copyWith(clearExport: true);
 
   /// Puts the finished recording away.
-  void dismiss() =>
-      state = state.copyWith(clearSaved: true, clearExport: true);
+  void dismiss() => state = state.copyWith(clearSaved: true, clearExport: true);
 }
 
 final terminalRecordingProvider =

@@ -28,9 +28,7 @@ void main() {
           'id_token': token({
             'email': 'owner@example.com',
             'exp': 1893456000,
-            'https://api.openai.com/auth': {
-              'chatgpt_plan_type': 'pro',
-            },
+            'https://api.openai.com/auth': {'chatgpt_plan_type': 'pro'},
           }),
         },
       }),
@@ -109,7 +107,8 @@ void main() {
 
     await service.switchTo(saved, auth.path);
 
-    final switched = jsonDecode(auth.readAsStringSync()) as Map<String, dynamic>;
+    final switched =
+        jsonDecode(auth.readAsStringSync()) as Map<String, dynamic>;
     expect(switched['OPENAI_API_KEY'], 'keep-me');
     expect(switched['last_refresh'], 'keep-this-too');
     expect((switched['tokens'] as Map)['account_id'], 'incoming');

@@ -30,30 +30,33 @@ void main() {
     expect(launcher.ptyLibrary, 'kernel32.dll');
   });
 
-  test('cmd.exe starts, echoes what it ran, and reports its exit code', () async {
-    final pty = launcher.start(
-      PtySpawnRequest(
-        argv: const ['cmd.exe'],
-        workingDirectory: Directory.systemTemp.path,
-        environment: const {'TERM': 'xterm-256color'},
-        columns: 80,
-        rows: 24,
-      ),
-    );
-    addTearDown(pty.close);
-    expect(pty.pid, greaterThan(0));
+  test(
+    'cmd.exe starts, echoes what it ran, and reports its exit code',
+    () async {
+      final pty = launcher.start(
+        PtySpawnRequest(
+          argv: const ['cmd.exe'],
+          workingDirectory: Directory.systemTemp.path,
+          environment: const {'TERM': 'xterm-256color'},
+          columns: 80,
+          rows: 24,
+        ),
+      );
+      addTearDown(pty.close);
+      expect(pty.pid, greaterThan(0));
 
-    final seen = _Transcript(pty.output);
-    // Two variables, so the echoed line does not contain the answer.
-    pty.write(_type('set A=karma'));
-    pty.write(_type('set B=shala'));
-    pty.write(_type('echo %A%%B%'));
-    expect(await seen.contains('karmashala'), isTrue, reason: seen.tail(400));
+      final seen = _Transcript(pty.output);
+      // Two variables, so the echoed line does not contain the answer.
+      pty.write(_type('set A=karma'));
+      pty.write(_type('set B=shala'));
+      pty.write(_type('echo %A%%B%'));
+      expect(await seen.contains('karmashala'), isTrue, reason: seen.tail(400));
 
-    pty.write(_type('exit 7'));
-    final code = await pty.exitCode.timeout(const Duration(seconds: 15));
-    expect(code, 7);
-  });
+      pty.write(_type('exit 7'));
+      final code = await pty.exitCode.timeout(const Duration(seconds: 15));
+      expect(code, 7);
+    },
+  );
 
   test('a resize reaches the process, not just the pseudoconsole', () async {
     final pty = launcher.start(
@@ -77,29 +80,32 @@ void main() {
     await pty.exitCode.timeout(const Duration(seconds: 15));
   });
 
-  test('the environment is layered over this process, not replacing it', () async {
-    final pty = launcher.start(
-      PtySpawnRequest(
-        argv: const ['cmd.exe'],
-        workingDirectory: Directory.systemTemp.path,
-        environment: const {'KARMASHALA_PROBE': 'layered'},
-        columns: 80,
-        rows: 24,
-      ),
-    );
-    addTearDown(pty.close);
-    final seen = _Transcript(pty.output);
+  test(
+    'the environment is layered over this process, not replacing it',
+    () async {
+      final pty = launcher.start(
+        PtySpawnRequest(
+          argv: const ['cmd.exe'],
+          workingDirectory: Directory.systemTemp.path,
+          environment: const {'KARMASHALA_PROBE': 'layered'},
+          columns: 80,
+          rows: 24,
+        ),
+      );
+      addTearDown(pty.close);
+      final seen = _Transcript(pty.output);
 
-    pty.write(_type('echo %KARMASHALA_PROBE%'));
-    expect(await seen.contains('layered'), isTrue, reason: seen.tail(400));
-    // SystemRoot is what a replaced block would have removed, and without it a
-    // Windows child cannot load a DLL at all.
-    pty.write(_type('if defined SystemRoot echo ROOT-KEPT'));
-    expect(await seen.contains('ROOT-KEPT'), isTrue, reason: seen.tail(400));
+      pty.write(_type('echo %KARMASHALA_PROBE%'));
+      expect(await seen.contains('layered'), isTrue, reason: seen.tail(400));
+      // SystemRoot is what a replaced block would have removed, and without it a
+      // Windows child cannot load a DLL at all.
+      pty.write(_type('if defined SystemRoot echo ROOT-KEPT'));
+      expect(await seen.contains('ROOT-KEPT'), isTrue, reason: seen.tail(400));
 
-    pty.write(_type('exit'));
-    await pty.exitCode.timeout(const Duration(seconds: 15));
-  });
+      pty.write(_type('exit'));
+      await pty.exitCode.timeout(const Duration(seconds: 15));
+    },
+  );
 
   test('kill ends the shell and the child it started', () async {
     final pty = launcher.start(
@@ -144,7 +150,10 @@ class _Transcript {
     return s.length <= n ? s : s.substring(s.length - n);
   }
 
-  Future<bool> contains(String needle, {Duration within = const Duration(seconds: 15)}) {
+  Future<bool> contains(
+    String needle, {
+    Duration within = const Duration(seconds: 15),
+  }) {
     if (_buffer.toString().contains(needle)) return Future.value(true);
     _wanted = needle;
     final completer = _waiting = Completer<bool>();

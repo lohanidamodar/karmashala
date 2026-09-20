@@ -61,36 +61,39 @@ void main() {
     expect(session.mark.frames, greaterThan(before));
   });
 
-  test('the silence a picker asked for is not a verdict about the stream', () async {
-    final device = await FakeScrcpyDevice.bind();
-    addTearDown(device.dispose);
-    // `stallTimeout` is 300 ms here and the watchdog ticks every 25 ms, so the
-    // window below is four stall timeouts wide.
-    final session = await fakeStreamService(device.runner()).start(_serial);
-    addTearDown(session.stop);
+  test(
+    'the silence a picker asked for is not a verdict about the stream',
+    () async {
+      final device = await FakeScrcpyDevice.bind();
+      addTearDown(device.dispose);
+      // `stallTimeout` is 300 ms here and the watchdog ticks every 25 ms, so the
+      // window below is four stall timeouts wide.
+      final session = await fakeStreamService(device.runner()).start(_serial);
+      addTearDown(session.stop);
 
-    final reports = <DeviceStreamHealth>[];
-    final health = session.health.listen(reports.add);
-    addTearDown(health.cancel);
+      final reports = <DeviceStreamHealth>[];
+      final health = session.health.listen(reports.add);
+      addTearDown(health.cancel);
 
-    await _until(() => session.mark.frames > 0);
-    await Future<void>.delayed(const Duration(milliseconds: 100));
-    reports.clear();
+      await _until(() => session.mark.frames > 0);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      reports.clear();
 
-    session.setQuiet(true);
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
-    session.setQuiet(false);
-    device.sendFrame(9000);
-    await Future<void>.delayed(const Duration(milliseconds: 200));
+      session.setQuiet(true);
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+      session.setQuiet(false);
+      device.sendFrame(9000);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
 
-    // Not merely "never stalled": nothing at all. An `idle` verdict is healthy
-    // and would still put "No screen changes for 1s" under the picture.
-    expect(
-      reports,
-      isEmpty,
-      reason: 'the watchdog judged a gap this app asked for: $reports',
-    );
-  });
+      // Not merely "never stalled": nothing at all. An `idle` verdict is healthy
+      // and would still put "No screen changes for 1s" under the picture.
+      expect(
+        reports,
+        isEmpty,
+        reason: 'the watchdog judged a gap this app asked for: $reports',
+      );
+    },
+  );
 
   test('quiet is idempotent, and a stopped session ignores it', () async {
     final device = await FakeScrcpyDevice.bind();

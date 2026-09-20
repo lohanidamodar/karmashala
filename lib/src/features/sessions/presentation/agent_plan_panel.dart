@@ -141,12 +141,7 @@ class _Note extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Insets.md,
-        0,
-        Insets.md,
-        Insets.sm,
-      ),
+      padding: const EdgeInsets.fromLTRB(Insets.md, 0, Insets.md, Insets.sm),
       child: Text(
         text,
         style: theme.textTheme.bodySmall?.copyWith(
@@ -237,11 +232,12 @@ class _Absence extends ConsumerWidget {
             : 'No record of this session we can read.\n\n${reading.refusal}',
       // The one that has a remedy: nothing here polls, so the transcript is
       // only re-read while a conversation is the surface in front.
-      AgentPlanAbsence.notRead || null => ref.watch(chatTranscriptPollingProvider)
-          ? 'Reading this session’s record…'
-          : 'Not read yet — the transcript is re-read only while a '
-                'conversation is on screen. Open this session’s chat view '
-                'to refresh it.',
+      AgentPlanAbsence.notRead || null =>
+        ref.watch(chatTranscriptPollingProvider)
+            ? 'Reading this session’s record…'
+            : 'Not read yet — the transcript is re-read only while a '
+                  'conversation is on screen. Open this session’s chat view '
+                  'to refresh it.',
     };
     return PanePlaceholder(
       message: message,

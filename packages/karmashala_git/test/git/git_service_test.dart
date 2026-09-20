@@ -399,11 +399,9 @@ bare
           );
         },
       );
-      final ignored = await GitService(runner).ignoredPaths(repo(r'C:\app'), [
-        '.dart_tool',
-        'macos/Vendor',
-        'lib',
-      ]);
+      final ignored = await GitService(
+        runner,
+      ).ignoredPaths(repo(r'C:\app'), ['.dart_tool', 'macos/Vendor', 'lib']);
       expect(captured.arguments, [
         '-C',
         r'C:\app',

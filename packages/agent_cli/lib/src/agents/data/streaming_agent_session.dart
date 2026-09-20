@@ -104,7 +104,9 @@ abstract class StreamingAgentSession implements AgentSession {
 
   void _fail(String message, [Map<String, Object?> more = const {}]) {
     if (_events.isClosed) return;
-    _events.add(AgentEvent(SessionEventTypes.error, {'message': message, ...more}));
+    _events.add(
+      AgentEvent(SessionEventTypes.error, {'message': message, ...more}),
+    );
   }
 
   Future<void> _close() async {

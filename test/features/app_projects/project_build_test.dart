@@ -140,96 +140,104 @@ void main() {
       container.read(projectBuildProvider.notifier);
 
   group('the preflight, before anything is spawned', () {
-    test("an environment nothing records is refused in the resolver's words",
-        () async {
-      final ready = await builds().readiness(
-        const EnvironmentPath(environmentId: 'gone', path: '/x'),
-        ProjectTarget.android,
-      );
-      expect(
-        ready.preflight.problem,
-        ProjectBuildProblem.environmentUnresolved,
-      );
-      expect(ready.preflight.reason, contains('Unknown environment: gone'));
-      // Nothing was run on the way to that answer.
-      expect(runner.requests, isEmpty);
-    });
+    test(
+      "an environment nothing records is refused in the resolver's words",
+      () async {
+        final ready = await builds().readiness(
+          const EnvironmentPath(environmentId: 'gone', path: '/x'),
+          ProjectTarget.android,
+        );
+        expect(
+          ready.preflight.problem,
+          ProjectBuildProblem.environmentUnresolved,
+        );
+        expect(ready.preflight.reason, contains('Unknown environment: gone'));
+        // Nothing was run on the way to that answer.
+        expect(runner.requests, isEmpty);
+      },
+    );
 
-    test('a Flutter host module is refused by name, not as "no project"',
-        () async {
-      make(
-        responder: (request) =>
-            request.executable == 'cat' &&
-                request.arguments.last.endsWith('settings.gradle.kts')
-            ? const CommandResult(
-                exitCode: 0,
-                stdout:
-                    'plugins { id("dev.flutter.flutter-plugin-loader") '
-                    'version "1.0.0" }\ninclude(":app")\n',
-                stderr: '',
-              )
-            : native(request),
-      );
-      final ready = await builds().readiness(_project, ProjectTarget.android);
-      expect(ready.preflight.problem, ProjectBuildProblem.notAProject);
-      expect(ready.preflight.reason, contains('Android half of a Flutter'));
-      expect(ready.preflight.reason, contains('one directory up'));
-    });
-
-    test('no wrapper in the project refuses rather than reaching for gradle',
-        () async {
-      make(
-        responder: (request) =>
-            request.executable == 'ls' &&
-                request.arguments.last == '/home/me/android'
-            ? const CommandResult(
-                exitCode: 0,
-                stdout: 'app\ngradle\nsettings.gradle.kts\n',
-                stderr: '',
-              )
-            : native(request),
-      );
-      final ready = await builds().readiness(_project, ProjectTarget.android);
-      expect(ready.preflight.problem, ProjectBuildProblem.noWrapper);
-      expect(ready.preflight.reason, contains('gradlew'));
-      expect(ready.preflight.reason, contains('will not fall back to a'));
-    });
-
-    test('a detected iOS project refuses to build, in the descriptor\'s words',
-        () async {
-      make(
-        responder: (request) => request.executable == 'ls'
-            ? switch (request.arguments.last) {
-                '/home/me/android' => const CommandResult(
+    test(
+      'a Flutter host module is refused by name, not as "no project"',
+      () async {
+        make(
+          responder: (request) =>
+              request.executable == 'cat' &&
+                  request.arguments.last.endsWith('settings.gradle.kts')
+              ? const CommandResult(
                   exitCode: 0,
-                  stdout: 'MyApp.xcodeproj\nMyApp.xcworkspace\nMyApp\n',
+                  stdout:
+                      'plugins { id("dev.flutter.flutter-plugin-loader") '
+                      'version "1.0.0" }\ninclude(":app")\n',
                   stderr: '',
-                ),
-                '/home/me/android/MyApp.xcodeproj/xcshareddata/xcschemes' =>
-                  const CommandResult(
+                )
+              : native(request),
+        );
+        final ready = await builds().readiness(_project, ProjectTarget.android);
+        expect(ready.preflight.problem, ProjectBuildProblem.notAProject);
+        expect(ready.preflight.reason, contains('Android half of a Flutter'));
+        expect(ready.preflight.reason, contains('one directory up'));
+      },
+    );
+
+    test(
+      'no wrapper in the project refuses rather than reaching for gradle',
+      () async {
+        make(
+          responder: (request) =>
+              request.executable == 'ls' &&
+                  request.arguments.last == '/home/me/android'
+              ? const CommandResult(
+                  exitCode: 0,
+                  stdout: 'app\ngradle\nsettings.gradle.kts\n',
+                  stderr: '',
+                )
+              : native(request),
+        );
+        final ready = await builds().readiness(_project, ProjectTarget.android);
+        expect(ready.preflight.problem, ProjectBuildProblem.noWrapper);
+        expect(ready.preflight.reason, contains('gradlew'));
+        expect(ready.preflight.reason, contains('will not fall back to a'));
+      },
+    );
+
+    test(
+      'a detected iOS project refuses to build, in the descriptor\'s words',
+      () async {
+        make(
+          responder: (request) => request.executable == 'ls'
+              ? switch (request.arguments.last) {
+                  '/home/me/android' => const CommandResult(
                     exitCode: 0,
-                    stdout: 'MyApp.xcscheme\n',
+                    stdout: 'MyApp.xcodeproj\nMyApp.xcworkspace\nMyApp\n',
                     stderr: '',
                   ),
-                _ => const CommandResult(exitCode: 1, stdout: '', stderr: ''),
-              }
-            : const CommandResult(exitCode: 1, stdout: '', stderr: ''),
-      );
-      final scanned = await builds().scan(_project);
-      expect(scanned.project!.kind, ProjectKind.nativeIos);
-      expect(scanned.project!.iosScheme, 'MyApp');
+                  '/home/me/android/MyApp.xcodeproj/xcshareddata/xcschemes' =>
+                    const CommandResult(
+                      exitCode: 0,
+                      stdout: 'MyApp.xcscheme\n',
+                      stderr: '',
+                    ),
+                  _ => const CommandResult(exitCode: 1, stdout: '', stderr: ''),
+                }
+              : const CommandResult(exitCode: 1, stdout: '', stderr: ''),
+        );
+        final scanned = await builds().scan(_project);
+        expect(scanned.project!.kind, ProjectKind.nativeIos);
+        expect(scanned.project!.iosScheme, 'MyApp');
 
-      final ready = await builds().readiness(_project, ProjectTarget.ios);
-      expect(ready.preflight.problem, ProjectBuildProblem.targetUnchecked);
-      expect(ready.preflight.reason, contains('needs a Mac'));
-      expect(
-        ready.preflight.reason,
-        contains('release-build.yml has no macOS job'),
-      );
-      expect(ready.argv, isEmpty);
-      // Detection worked; only the build refused.
-      expect(ready.project, isNotNull);
-    });
+        final ready = await builds().readiness(_project, ProjectTarget.ios);
+        expect(ready.preflight.problem, ProjectBuildProblem.targetUnchecked);
+        expect(ready.preflight.reason, contains('needs a Mac'));
+        expect(
+          ready.preflight.reason,
+          contains('release-build.yml has no macOS job'),
+        );
+        expect(ready.argv, isEmpty);
+        // Detection worked; only the build refused.
+        expect(ready.project, isNotNull);
+      },
+    );
 
     test('an Android project has no iOS target, and says so', () async {
       final ready = await builds().readiness(_project, ProjectTarget.ios);
@@ -260,14 +268,16 @@ void main() {
       expect(builds().livenessOf(run.paneId), ProjectBuildLiveness.running);
     });
 
-    test('a second build for the same target is refused, naming the pane',
-        () async {
-      final first = await builds().start(_project, ProjectTarget.android);
-      final second = await builds().start(_project, ProjectTarget.android);
-      expect(second.run, isNull);
-      expect(second.preflight.problem, ProjectBuildProblem.alreadyRunning);
-      expect(second.preflight.reason, contains(first.run!.paneId));
-    });
+    test(
+      'a second build for the same target is refused, naming the pane',
+      () async {
+        final first = await builds().start(_project, ProjectTarget.android);
+        final second = await builds().start(_project, ProjectTarget.android);
+        expect(second.run, isNull);
+        expect(second.preflight.problem, ProjectBuildProblem.alreadyRunning);
+        expect(second.preflight.reason, contains(first.run!.paneId));
+      },
+    );
 
     test('the artifact and the id come off the build\'s own record', () async {
       final run = (await builds().start(_project, ProjectTarget.android)).run!;
@@ -280,20 +290,25 @@ void main() {
       expect(artifact.note, contains('output-metadata.json'));
     });
 
-    test('nothing built yet is "not there", never a path that does not exist',
-        () async {
-      make(
-        responder: (request) =>
-            request.executable == 'ls' &&
-                request.arguments.last.contains('outputs')
-            ? const CommandResult(exitCode: 1, stdout: '', stderr: '')
-            : native(request),
-      );
-      final run = (await builds().start(_project, ProjectTarget.android)).run!;
-      final artifact = await builds().artifactOf(run);
-      expect(artifact.path, isNull);
-      expect(artifact.note, contains('not there'));
-    });
+    test(
+      'nothing built yet is "not there", never a path that does not exist',
+      () async {
+        make(
+          responder: (request) =>
+              request.executable == 'ls' &&
+                  request.arguments.last.contains('outputs')
+              ? const CommandResult(exitCode: 1, stdout: '', stderr: '')
+              : native(request),
+        );
+        final run = (await builds().start(
+          _project,
+          ProjectTarget.android,
+        )).run!;
+        final artifact = await builds().artifactOf(run);
+        expect(artifact.path, isNull);
+        expect(artifact.note, contains('not there'));
+      },
+    );
   });
 
   group('the tool', () {
@@ -311,79 +326,86 @@ void main() {
       expect(descriptor['kind'], 'nativeAndroid');
     });
 
-    test('status hands the caller the two device tools, and does neither',
-        () async {
-      await ProjectBuildTools(container).call('project_build', {
-        'action': 'build',
-        'checkoutId': 'android',
-      });
-      final answer =
-          await ProjectBuildTools(container).call('project_build', {
-                'action': 'status',
-                'checkoutId': 'android',
-              })
-              as Map<String, Object?>;
-      final runs = answer['runs']! as List<Object?>;
-      final first = runs.single as Map<String, Object?>;
-      final next = first['nextStep']! as String;
-      expect(next, contains('device_install_app'));
-      expect(next, contains('app-debug.apk'));
-      expect(next, contains('device_launch_app'));
-      expect(next, contains('com.popupbits.nativeprobe'));
-      // There is no install or launch in this tool at all.
-      expect(
-        projectBuildToolSchemas.single['inputSchema'].toString(),
-        isNot(contains('install')),
-      );
-    });
+    test(
+      'status hands the caller the two device tools, and does neither',
+      () async {
+        await ProjectBuildTools(
+          container,
+        ).call('project_build', {'action': 'build', 'checkoutId': 'android'});
+        final answer =
+            await ProjectBuildTools(container).call('project_build', {
+                  'action': 'status',
+                  'checkoutId': 'android',
+                })
+                as Map<String, Object?>;
+        final runs = answer['runs']! as List<Object?>;
+        final first = runs.single as Map<String, Object?>;
+        final next = first['nextStep']! as String;
+        expect(next, contains('device_install_app'));
+        expect(next, contains('app-debug.apk'));
+        expect(next, contains('device_launch_app'));
+        expect(next, contains('com.popupbits.nativeprobe'));
+        // There is no install or launch in this tool at all.
+        expect(
+          projectBuildToolSchemas.single['inputSchema'].toString(),
+          isNot(contains('install')),
+        );
+      },
+    );
   });
 
   group('the seam', () {
-    test('a Flutter checkout builds through the same tool and the Flutter SDK',
-        () async {
-      make(
-        responder: (request) {
-          if (request.arguments.contains('exit 0')) {
-            return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-          }
-          if (request.arguments.contains('command -v flutter')) {
-            return const CommandResult(
-              exitCode: 0,
-              stdout: '/home/me/flutter/bin/flutter\n',
-              stderr: '',
-            );
-          }
-          if (request.executable == '/home/me/flutter/bin/flutter') {
-            return const CommandResult(
-              exitCode: 0,
-              stdout: 'Flutter 3.47.2 • channel stable\n',
-              stderr: '',
-            );
-          }
-          if (request.executable == 'cat' &&
-              request.arguments.last == '/home/me/android/pubspec.yaml') {
-            return const CommandResult(
-              exitCode: 0,
-              stdout: _flutterPubspec,
-              stderr: '',
-            );
-          }
-          return native(request);
-        },
-      );
-      final outcome = await builds().start(_project, ProjectTarget.android);
-      expect(outcome.preflight.isClear, isTrue, reason: outcome.preflight.reason);
-      final run = outcome.run!;
-      expect(run.kind, ProjectKind.flutter);
-      // The same tool, a different descriptor — which is the whole point of
-      // the boundary. Nothing here knows the word "Flutter" or "Gradle".
-      expect(run.command, <String>[
-        '/home/me/flutter/bin/flutter',
-        'build',
-        'apk',
-        '--debug',
-      ]);
-      expect(run.artifactDirectory, 'build/app/outputs/flutter-apk');
-    });
+    test(
+      'a Flutter checkout builds through the same tool and the Flutter SDK',
+      () async {
+        make(
+          responder: (request) {
+            if (request.arguments.contains('exit 0')) {
+              return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+            }
+            if (request.arguments.contains('command -v flutter')) {
+              return const CommandResult(
+                exitCode: 0,
+                stdout: '/home/me/flutter/bin/flutter\n',
+                stderr: '',
+              );
+            }
+            if (request.executable == '/home/me/flutter/bin/flutter') {
+              return const CommandResult(
+                exitCode: 0,
+                stdout: 'Flutter 3.47.2 • channel stable\n',
+                stderr: '',
+              );
+            }
+            if (request.executable == 'cat' &&
+                request.arguments.last == '/home/me/android/pubspec.yaml') {
+              return const CommandResult(
+                exitCode: 0,
+                stdout: _flutterPubspec,
+                stderr: '',
+              );
+            }
+            return native(request);
+          },
+        );
+        final outcome = await builds().start(_project, ProjectTarget.android);
+        expect(
+          outcome.preflight.isClear,
+          isTrue,
+          reason: outcome.preflight.reason,
+        );
+        final run = outcome.run!;
+        expect(run.kind, ProjectKind.flutter);
+        // The same tool, a different descriptor — which is the whole point of
+        // the boundary. Nothing here knows the word "Flutter" or "Gradle".
+        expect(run.command, <String>[
+          '/home/me/flutter/bin/flutter',
+          'build',
+          'apk',
+          '--debug',
+        ]);
+        expect(run.artifactDirectory, 'build/app/outputs/flutter-apk');
+      },
+    );
   });
 }

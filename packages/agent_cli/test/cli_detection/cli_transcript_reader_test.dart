@@ -57,7 +57,10 @@ void main() {
       'git status --short',
       'git log -1',
     ]);
-    expect(messages.map((m) => m.text), isNot([messages.first.text, messages.first.text]));
+    expect(
+      messages.map((m) => m.text),
+      isNot([messages.first.text, messages.first.text]),
+    );
   });
 
   test('a file read keeps the file, and only an image keeps an image', () async {

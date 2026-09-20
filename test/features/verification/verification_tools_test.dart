@@ -301,9 +301,7 @@ void main() {
     setUp(() => called = VerificationTools(h.service, callerSessionId: 's-1'));
 
     test('a run started over MCP knows who started it', () async {
-      await called.call('verification_start', {
-        'url': 'https://example.com',
-      });
+      await called.call('verification_start', {'url': 'https://example.com'});
       final run = h.service.activeRun!;
       expect(run.producedBySessionId, 's-1');
       // With no explicit subject the caller is also the work under test, and

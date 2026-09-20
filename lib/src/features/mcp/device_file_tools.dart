@@ -141,7 +141,9 @@ class DeviceFileTools extends DeviceToolFamily {
       'device_file_push',
       DeviceCapability.files,
     );
-    if (hostPath == null || hostPath.isEmpty || devicePath == null ||
+    if (hostPath == null ||
+        hostPath.isEmpty ||
+        devicePath == null ||
         devicePath.isEmpty) {
       throw DeviceRefusal(
         'device_file_push: host_path and device_path are both required.',

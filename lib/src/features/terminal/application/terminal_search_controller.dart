@@ -428,9 +428,7 @@ class TerminalSearchController extends Notifier<TerminalSearchState> {
           : crossPaneFirstLine(lines.length, window: window),
       lineAt: (index) => lineTextOf(lines[index]),
       matchBudget: matchBudget,
-      onMatch: (match) => into.add(
-        PaneSearchMatch(paneId: paneId, at: match),
-      ),
+      onMatch: (match) => into.add(PaneSearchMatch(paneId: paneId, at: match)),
     );
   }
 

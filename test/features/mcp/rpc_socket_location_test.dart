@@ -39,42 +39,56 @@ void main() {
     }
   });
 
-  test('a socket directory too deep to bind in still publishes a socket that answers', () async {
-    final deep = p.join(tmp.path, 'd' * 60, 'e' * 40, 'ipc');
-    final limit = maxSocketPathBytes(Platform.operatingSystem);
-    expect(
-      utf8.encode(p.join(deep, 'rpc.sock')).length,
-      greaterThan(limit),
-      reason: 'the case this is about: where it was put cannot be bound',
-    );
+  test(
+    'a socket directory too deep to bind in still publishes a socket that answers',
+    () async {
+      final deep = p.join(tmp.path, 'd' * 60, 'e' * 40, 'ipc');
+      final limit = maxSocketPathBytes(Platform.operatingSystem);
+      expect(
+        utf8.encode(p.join(deep, 'rpc.sock')).length,
+        greaterThan(limit),
+        reason: 'the case this is about: where it was put cannot be bound',
+      );
 
-    final bridge = p.join(tmp.path, 'mcp_bridge.json');
-    final server = LauncherControlServer(container);
-    await server.start(bridgeFilePath: bridge, socketDirectory: deep);
-    addTearDown(server.stop);
+      final bridge = p.join(tmp.path, 'mcp_bridge.json');
+      final server = LauncherControlServer(container);
+      await server.start(bridgeFilePath: bridge, socketDirectory: deep);
+      addTearDown(server.stop);
 
-    final handshake =
-        jsonDecode(File(bridge).readAsStringSync()) as Map<String, dynamic>;
-    final socketPath = handshake['socketPath'] as String?;
-    expect(socketPath, isNotNull, reason: 'withheld is the failure this fixes');
-    expect(handshake['token'], isNotNull);
-    expect(utf8.encode(socketPath!).length, lessThanOrEqualTo(limit));
-    expect(p.isWithin(deep, socketPath), isFalse);
-
-    // Called the way the MCP bridge calls it: path and token from the handshake.
-    final answer = jsonDecode(
-      await LocalRpcClient.call(
+      final handshake =
+          jsonDecode(File(bridge).readAsStringSync()) as Map<String, dynamic>;
+      final socketPath = handshake['socketPath'] as String?;
+      expect(
         socketPath,
-        jsonEncode({
-          'token': handshake['token'],
-          'tool': 'list_projects',
-          'arguments': const <String, dynamic>{},
-        }),
-      ),
-    ) as Map<String, dynamic>;
-    expect(answer['ok'], isTrue, reason: '${answer['error']}');
+        isNotNull,
+        reason: 'withheld is the failure this fixes',
+      );
+      expect(handshake['token'], isNotNull);
+      expect(utf8.encode(socketPath!).length, lessThanOrEqualTo(limit));
+      expect(p.isWithin(deep, socketPath), isFalse);
 
-    await server.stop();
-    expect(File(socketPath).existsSync(), isFalse, reason: 'a stopped server leaves no node');
-  }, testOn: 'mac-os || linux');
+      // Called the way the MCP bridge calls it: path and token from the handshake.
+      final answer =
+          jsonDecode(
+                await LocalRpcClient.call(
+                  socketPath,
+                  jsonEncode({
+                    'token': handshake['token'],
+                    'tool': 'list_projects',
+                    'arguments': const <String, dynamic>{},
+                  }),
+                ),
+              )
+              as Map<String, dynamic>;
+      expect(answer['ok'], isTrue, reason: '${answer['error']}');
+
+      await server.stop();
+      expect(
+        File(socketPath).existsSync(),
+        isFalse,
+        reason: 'a stopped server leaves no node',
+      );
+    },
+    testOn: 'mac-os || linux',
+  );
 }

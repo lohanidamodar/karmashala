@@ -30,6 +30,7 @@ class LinkableText extends StatelessWidget {
   final VoidCallback? onTapText;
 
   final int? maxLines;
+
   /// Passed through untouched — a caller that wants no truncation leaves it
   /// null rather than being given a default it did not ask for.
   final TextOverflow? overflow;
@@ -99,8 +100,9 @@ class LinkableText extends StatelessWidget {
             }
             // Refused by returning false rather than by throwing, which is why
             // this is not a bare await — see `repository_info_view.dart`.
-            unawaited(launchUrl(Uri.parse(url),
-                mode: LaunchMode.externalApplication));
+            unawaited(
+              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+            );
           },
           onLongPress: onTapText,
           child: SizedBox(

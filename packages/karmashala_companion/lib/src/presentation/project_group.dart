@@ -53,14 +53,12 @@ class CompanionProjectGroup {
       'Project';
 
   /// The host's own id for this project, when it sent one.
-  String? get projectId => project?.projectId ?? sessions.firstOrNull?.projectId;
+  String? get projectId =>
+      project?.projectId ?? sessions.firstOrNull?.projectId;
 
   /// The folder on the host, or '' when the host is too old to send one.
   String get path =>
-      project?.path ??
-      sessions.firstOrNull?.projectPath ??
-      fallbackPath ??
-      '';
+      project?.path ?? sessions.firstOrNull?.projectPath ?? fallbackPath ?? '';
 
   /// Which execution environment this project lives in, formatted for a badge
   /// ("WSL · Ubuntu", "SSH · build-box"). Null for the local host.
@@ -79,9 +77,8 @@ class CompanionProjectGroup {
   int get attentionCount => sessions.where((s) => s.attention != null).length;
 
   /// Sessions mid-turn.
-  int get runningCount => sessions
-      .where((s) => s.status == CompanionSessionStatus.working)
-      .length;
+  int get runningCount =>
+      sessions.where((s) => s.status == CompanionSessionStatus.working).length;
 
   /// True when the host says any of this project's sessions has lost its
   /// folder.

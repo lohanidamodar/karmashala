@@ -92,7 +92,8 @@ void main() {
     expect(
       find.byType(PaneGroupStrip),
       findsNothing,
-      reason: 'split regions do not draw redundant inner headers (no headers in two places)',
+      reason:
+          'split regions do not draw redundant inner headers (no headers in two places)',
     );
   });
 
@@ -149,11 +150,9 @@ void main() {
     final state = container.read(terminalSessionsControllerProvider);
     expect(state.tabs, hasLength(2), reason: 'it is a tab again');
     expect(state.activeTab!.layout.panes, [right]);
-    expect(
-      state.tabs.firstWhere((t) => t.layout.contains(left)).layout.panes,
-      [left],
-      reason: 'the region it left goes with it',
-    );
+    expect(state.tabs.firstWhere((t) => t.layout.contains(left)).layout.panes, [
+      left,
+    ], reason: 'the region it left goes with it');
   });
 
   testWidgets('a pane can be moved from one region into another', (
@@ -236,38 +235,41 @@ void main() {
     );
   });
 
-  testWidgets('a region header for stacked panes does not look like the workbench strip', (
-    tester,
-  ) async {
-    final container = workbenchContainer();
-    final controller = controllerOf(container);
-    final host = controller.openTab(TerminalProfile.powerShell);
-    final left = activeTab(container).layout.panes.single;
-    controller.openTab(TerminalProfile.commandPrompt);
-    final guestPane = activeTab(container).layout.panes.single;
-    controller.activateTab(host);
-    controller.movePaneIntoRegion(guestPane, left);
+  testWidgets(
+    'a region header for stacked panes does not look like the workbench strip',
+    (tester) async {
+      final container = workbenchContainer();
+      final controller = controllerOf(container);
+      final host = controller.openTab(TerminalProfile.powerShell);
+      final left = activeTab(container).layout.panes.single;
+      controller.openTab(TerminalProfile.commandPrompt);
+      final guestPane = activeTab(container).layout.panes.single;
+      controller.activateTab(host);
+      controller.movePaneIntoRegion(guestPane, left);
 
-    await pumpWorkbench(tester, container);
+      await pumpWorkbench(tester, container);
 
-    final header = find.byType(PaneGroupStrip).first;
-    expect(tester.getSize(header).height, Chrome.paneStrip);
-    expect(
-      Chrome.paneStrip,
-      lessThan(Chrome.tabStrip),
-      reason: 'the row that belongs to a pane is shorter than the row that '
-          'belongs to the window',
-    );
-    expect(
-      find.descendant(
-        of: header,
-        matching: find.byIcon(AppIcons.squareSplitHorizontal),
-      ),
-      findsOneWidget,
-      reason: 'the same glyph an empty region wears, so both rows of a split '
-          'read as region chrome rather than as tabs',
-    );
-  });
+      final header = find.byType(PaneGroupStrip).first;
+      expect(tester.getSize(header).height, Chrome.paneStrip);
+      expect(
+        Chrome.paneStrip,
+        lessThan(Chrome.tabStrip),
+        reason:
+            'the row that belongs to a pane is shorter than the row that '
+            'belongs to the window',
+      );
+      expect(
+        find.descendant(
+          of: header,
+          matching: find.byIcon(AppIcons.squareSplitHorizontal),
+        ),
+        findsOneWidget,
+        reason:
+            'the same glyph an empty region wears, so both rows of a split '
+            'read as region chrome rather than as tabs',
+      );
+    },
+  );
 
   testWidgets('and the stacked header keeps its shape in the minimum window', (
     tester,

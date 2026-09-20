@@ -97,11 +97,7 @@ void main() {
           );
         }
         if (args.contains('cat')) {
-          return const CommandResult(
-            exitCode: 0,
-            stdout: _dumpXml,
-            stderr: '',
-          );
+          return const CommandResult(exitCode: 0, stdout: _dumpXml, stderr: '');
         }
         return const CommandResult(exitCode: 0, stdout: '', stderr: '');
       },

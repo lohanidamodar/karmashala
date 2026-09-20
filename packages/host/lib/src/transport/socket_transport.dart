@@ -59,7 +59,9 @@ class UnixSocketHostListener implements HostListener {
   @override
   Stream<HostConnection> get connections {
     var next = 0;
-    return _server.map((socket) => SocketHostConnection(socket, 'client-${next++}'));
+    return _server.map(
+      (socket) => SocketHostConnection(socket, 'client-${next++}'),
+    );
   }
 
   @override
@@ -73,9 +75,12 @@ class UnixSocketHostListener implements HostListener {
 /// stdin/stdout as one connection. This is what `karmashala_host attach`
 /// bridges to, and what a test drives over a pipe.
 class StdioHostConnection implements HostConnection {
-  StdioHostConnection({Stream<List<int>>? input, IOSink? output, this.description = 'stdio'})
-    : _input = input ?? stdin,
-      _output = output ?? stdout;
+  StdioHostConnection({
+    Stream<List<int>>? input,
+    IOSink? output,
+    this.description = 'stdio',
+  }) : _input = input ?? stdin,
+       _output = output ?? stdout;
 
   final Stream<List<int>> _input;
   final IOSink _output;
@@ -84,8 +89,9 @@ class StdioHostConnection implements HostConnection {
   final String description;
 
   @override
-  Stream<Uint8List> get incoming =>
-      _input.map((chunk) => chunk is Uint8List ? chunk : Uint8List.fromList(chunk));
+  Stream<Uint8List> get incoming => _input.map(
+    (chunk) => chunk is Uint8List ? chunk : Uint8List.fromList(chunk),
+  );
 
   @override
   void add(Uint8List bytes) => _output.add(bytes);

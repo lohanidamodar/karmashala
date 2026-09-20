@@ -82,7 +82,9 @@ class CliSessionMutator {
   Future<CliDeleteReport> deleteAll(Iterable<DetectedSession> sessions) async {
     final groups = <(String, String), List<DetectedSession>>{};
     for (final session in sessions) {
-      groups.putIfAbsent((session.cli, session.storeHome), () => []).add(session);
+      groups
+          .putIfAbsent((session.cli, session.storeHome), () => [])
+          .add(session);
     }
     var deleted = 0;
     final failures = <CliDeleteFailure>[];
@@ -149,13 +151,11 @@ class CliSessionMutator {
   }
 
   /// Drops the resume-index entries naming any of [sessionIds], in one listing.
-  Future<void> _pruneClaudeIndex(
-    String claudeHome,
-    Set<String> sessionIds,
-  ) => _removeClaudeIndexEntries(
-    claudeHome,
-    (entry) => sessionIds.contains(entry['sessionId']),
-  );
+  Future<void> _pruneClaudeIndex(String claudeHome, Set<String> sessionIds) =>
+      _removeClaudeIndexEntries(
+        claudeHome,
+        (entry) => sessionIds.contains(entry['sessionId']),
+      );
 
   Future<void> _removeClaudeIndexEntries(
     String claudeHome,
@@ -225,7 +225,10 @@ class CliSessionMutator {
   }
 
   /// Drops the index entries naming any of [sessionIds] — one read, one write.
-  Future<void> _pruneCodexIndex(String codexHome, Set<String> sessionIds) async {
+  Future<void> _pruneCodexIndex(
+    String codexHome,
+    Set<String> sessionIds,
+  ) async {
     final index = File(p.join(codexHome, 'session_index.jsonl'));
     if (!await index.exists()) return;
     storeScans++;
@@ -263,12 +266,17 @@ class CliSessionMutator {
     if (!await annotationsDir.exists()) {
       await annotationsDir.create(recursive: true);
     }
-    final file = File(p.join(annotationsDir.path, '${session.sessionId}.pbtxt'));
+    final file = File(
+      p.join(annotationsDir.path, '${session.sessionId}.pbtxt'),
+    );
     final escaped = _escapeProtobufString(title);
     await file.writeAsString('title:"$escaped"\n');
     indexWrites++;
 
-    final summariesPath = p.join(session.storeHome, 'conversation_summaries.db');
+    final summariesPath = p.join(
+      session.storeHome,
+      'conversation_summaries.db',
+    );
     if (await File(summariesPath).exists()) {
       Database? db;
       try {

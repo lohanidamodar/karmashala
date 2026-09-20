@@ -308,9 +308,7 @@ class FileRowTile extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Container(
-        color: selected
-            ? StateLayers.selected(theme.colorScheme)
-            : null,
+        color: selected ? StateLayers.selected(theme.colorScheme) : null,
         padding: EdgeInsets.only(
           left: _indentFor(depth),
           top: _rowPadY,

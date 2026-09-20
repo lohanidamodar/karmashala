@@ -230,36 +230,38 @@ void main() {
       await expectLater(session.done, throwsA(isA<PairingException>()));
     });
 
-    test('a store that refuses the device fails the session out loud',
-        () async {
-      // A throw from persist used to poison the frame chain and leave the
-      // dialog waiting for a device that would never be reported.
-      final shown = payload();
-      final (session, client, persisted) = await fixture(
-        shown,
-        persist: (_) async => throw StateError('disk full'),
-      );
-
-      await expectLater(
-        client.pair(
+    test(
+      'a store that refuses the device fails the session out loud',
+      () async {
+        // A throw from persist used to poison the frame chain and leave the
+        // dialog waiting for a device that would never be reported.
+        final shown = payload();
+        final (session, client, persisted) = await fixture(
           shown,
-          transport: phoneTransport,
-          timeout: const Duration(milliseconds: 800),
-        ),
-        throwsA(isA<CompanionPairingException>()),
-      );
-      await expectLater(
-        session.done,
-        throwsA(
-          isA<PairingException>().having(
-            (e) => e.message,
-            'message',
-            contains('disk full'),
+          persist: (_) async => throw StateError('disk full'),
+        );
+
+        await expectLater(
+          client.pair(
+            shown,
+            transport: phoneTransport,
+            timeout: const Duration(milliseconds: 800),
           ),
-        ),
-      );
-      expect(persisted, isEmpty);
-    });
+          throwsA(isA<CompanionPairingException>()),
+        );
+        await expectLater(
+          session.done,
+          throwsA(
+            isA<PairingException>().having(
+              (e) => e.message,
+              'message',
+              contains('disk full'),
+            ),
+          ),
+        );
+        expect(persisted, isEmpty);
+      },
+    );
 
     test('a wrong secret cannot complete the round-trip', () async {
       final shown = payload();

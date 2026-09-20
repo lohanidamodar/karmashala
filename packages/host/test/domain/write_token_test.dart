@@ -52,7 +52,11 @@ void main() {
 
     test('a hand-over from someone who does not hold it is refused', () {
       final token = WriteToken()..claim('pane-1', t0);
-      final refusal = token.handOver('pane-3', 'pane-2', t0.add(const Duration(hours: 3)));
+      final refusal = token.handOver(
+        'pane-3',
+        'pane-2',
+        t0.add(const Duration(hours: 3)),
+      );
       expect(refusal!.message, 'write token held by pane-1 (claimed 3h ago)');
       expect(token.isHeldBy('pane-1'), isTrue);
     });

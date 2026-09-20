@@ -35,7 +35,9 @@ import '../../support/fixtures.dart';
 void main() {
   late Directory tmp;
 
-  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_failclosed_'));
+  setUp(
+    () => tmp = Directory.systemTemp.createTempSync('karmashala_failclosed_'),
+  );
   tearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
@@ -150,10 +152,10 @@ void main() {
       addTearDown(() => client.close(force: true));
       final request = await client.postUrl(
         endpoint.uriFor(
-        agentId: 'claudeCode',
-        event: 'Stop',
-        environment: EnvironmentKind.windowsNative,
-      )!,
+          agentId: 'claudeCode',
+          event: 'Stop',
+          environment: EnvironmentKind.windowsNative,
+        )!,
       );
       request.headers.set(
         HttpHeaders.authorizationHeader,

@@ -161,6 +161,5 @@ class SessionChangedFilesReport {
     SessionRecordGap.none => '',
   };
 
-  String _count() =>
-      '${files.length} file${files.length == 1 ? '' : 's'}';
+  String _count() => '${files.length} file${files.length == 1 ? '' : 's'}';
 }

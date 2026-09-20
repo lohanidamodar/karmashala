@@ -158,9 +158,7 @@ class WorkspaceControlTools {
     final delivery = await _container.read(
       sessionDeliveryProvider(sessionId).future,
     );
-    final actions = _container.read(
-      sessionDeliveryActionsProvider(sessionId),
-    );
+    final actions = _container.read(sessionDeliveryActionsProvider(sessionId));
     final pr = delivery.pullRequest;
     return <String, Object?>{
       'sessionId': sessionId,
@@ -245,7 +243,9 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
               'environmentId': {'type': 'string'},
               'selected': {'type': 'boolean'},
               'branch': {'type': 'string'},
-              'isWorktree': {'type': ['boolean', 'null']},
+              'isWorktree': {
+                'type': ['boolean', 'null'],
+              },
               'sessionsWorkingHere': {
                 'type': 'array',
                 'items': {
@@ -294,7 +294,10 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
       'properties': {
         'projectId': {'type': 'string'},
         'count': {'type': 'number'},
-        'checkouts': {'type': 'array', 'items': {'type': 'object'}},
+        'checkouts': {
+          'type': 'array',
+          'items': {'type': 'object'},
+        },
       },
       'required': ['projectId', 'checkouts', 'count'],
     },
@@ -357,12 +360,24 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
         'upstream': {'type': 'string'},
         'hasWorktree': {'type': 'boolean'},
         'archived': {'type': 'boolean'},
-        'dirtyFiles': {'type': ['number', 'string']},
-        'aheadOfBase': {'type': ['number', 'string']},
-        'behindBase': {'type': ['number', 'string']},
-        'unpushed': {'type': ['number', 'string']},
-        'agentRunning': {'type': ['boolean', 'string']},
-        'pullRequest': {'type': ['object', 'string']},
+        'dirtyFiles': {
+          'type': ['number', 'string'],
+        },
+        'aheadOfBase': {
+          'type': ['number', 'string'],
+        },
+        'behindBase': {
+          'type': ['number', 'string'],
+        },
+        'unpushed': {
+          'type': ['number', 'string'],
+        },
+        'agentRunning': {
+          'type': ['boolean', 'string'],
+        },
+        'pullRequest': {
+          'type': ['object', 'string'],
+        },
         'actions': {
           'type': 'array',
           'items': {
@@ -372,7 +387,9 @@ const List<Map<String, dynamic>> workspaceControlToolSchemas = [
               'label': {'type': 'string'},
               'primary': {'type': 'boolean'},
               'available': {'type': 'boolean'},
-              'unavailableBecause': {'type': ['string', 'null']},
+              'unavailableBecause': {
+                'type': ['string', 'null'],
+              },
             },
             'required': ['action', 'label', 'available'],
           },

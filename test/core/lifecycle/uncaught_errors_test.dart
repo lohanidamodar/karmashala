@@ -46,13 +46,19 @@ void main() {
 
   test('the same error past the bound is counted, not written', () {
     for (var i = 0; i < 10; i++) {
-      PlatformDispatcher.instance.onError!(StateError('same'), StackTrace.empty);
+      PlatformDispatcher.instance.onError!(
+        StateError('same'),
+        StackTrace.empty,
+      );
     }
     expect(records, hasLength(3));
     expect(records.last.message, contains('further repeats withheld'));
     expect(handlers.suppressed, 7);
 
-    PlatformDispatcher.instance.onError!(StateError('different'), StackTrace.empty);
+    PlatformDispatcher.instance.onError!(
+      StateError('different'),
+      StackTrace.empty,
+    );
     expect(records, hasLength(4));
   });
 

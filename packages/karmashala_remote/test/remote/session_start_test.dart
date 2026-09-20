@@ -26,7 +26,8 @@ class StartHarness {
   late final FakeRemoteBindings fake;
   late HostSessionApi api;
   final List<Frame> sent = [];
-  final SessionStartLedger<RemoteSessionStarted> ledger = SessionStartLedger<RemoteSessionStarted>();
+  final SessionStartLedger<RemoteSessionStarted> ledger =
+      SessionStartLedger<RemoteSessionStarted>();
   int _seq = 0;
 
   HostSessionApi _newApi() => HostSessionApi(
@@ -95,12 +96,15 @@ void main() {
           ),
         );
 
-        await harness.request(type, payload: {
-          'requestId': 'k1',
-          'repositoryId': 'r1',
-          'installationId': 'i1',
-          'permissionMode': 'ask',
-        });
+        await harness.request(
+          type,
+          payload: {
+            'requestId': 'k1',
+            'repositoryId': 'r1',
+            'installationId': 'i1',
+            'permissionMode': 'ask',
+          },
+        );
 
         expect(harness.lastErrorCode(), ErrorCode.notPermitted.wire);
         expect(harness.lastErrorMessage(), contains('start_session'));
@@ -140,11 +144,10 @@ void main() {
       expect(agent.installationId, 'i1');
       expect(agent.defaultMode, 'ask');
       expect(agent.acceptsOpeningMessage, isTrue);
-      expect(
-        agent.permissionModes.map((m) => m.mode),
-        ['ask', 'bypass'],
-        reason: 'the phone offers the modes the desktop says exist',
-      );
+      expect(agent.permissionModes.map((m) => m.mode), [
+        'ask',
+        'bypass',
+      ], reason: 'the phone offers the modes the desktop says exist');
     });
 
     test('an empty workspace is an empty list, never an error', () async {
@@ -195,11 +198,14 @@ void main() {
     test('a request with no idempotency key is refused', () async {
       final harness = StartHarness();
 
-      await harness.request(FrameType.sessionStart, payload: const {
-        'repositoryId': 'r1',
-        'installationId': 'i1',
-        'permissionMode': 'ask',
-      });
+      await harness.request(
+        FrameType.sessionStart,
+        payload: const {
+          'repositoryId': 'r1',
+          'installationId': 'i1',
+          'permissionMode': 'ask',
+        },
+      );
 
       expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
       expect(harness.lastErrorMessage(), contains('requestId'));
@@ -215,7 +221,11 @@ void main() {
       expect(harness.fake.starts, isEmpty);
     });
 
-    for (final missing in const ['repositoryId', 'installationId', 'permissionMode']) {
+    for (final missing in const [
+      'repositoryId',
+      'installationId',
+      'permissionMode',
+    ]) {
       test('a request with no $missing is refused', () async {
         final harness = StartHarness();
         final payload = <String, Object?>{

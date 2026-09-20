@@ -70,8 +70,7 @@ List<Session> sessionsWorkingIn(
 }) => [
   for (final candidate in among)
     if (candidate.id != excluding && !candidate.isArchived)
-      if (candidate.workingDirectory ?? candidate.worktree
-          case final recorded?)
+      if (candidate.workingDirectory ?? candidate.worktree case final recorded?)
         if (recorded.environmentId == directory.environmentId &&
             pathsMatch(recorded.path, directory.path))
           candidate,

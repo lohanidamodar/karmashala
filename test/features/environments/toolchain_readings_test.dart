@@ -69,9 +69,7 @@ void main() {
     final runner = FakeCommandRunner();
     final container = containerWith(runner);
 
-    await container
-        .read(toolchainReadingsProvider.notifier)
-        .readAll(wslEnv());
+    await container.read(toolchainReadingsProvider.notifier).readAll(wslEnv());
 
     final located = runner.requests.map((r) => r.arguments.join(' ')).join(' ');
     expect(located, contains('flutter'));
@@ -104,7 +102,8 @@ void main() {
         responder: (request) => CommandResult(
           exitCode: 0,
           stdout: request.executable == 'where'
-              ? r'C:\tools\node.exe' '\n'
+              ? r'C:\tools\node.exe'
+                    '\n'
               : request.executable == 'node'
               ? 'v22.11.0\n'
               : 'something\n',
@@ -129,7 +128,9 @@ void main() {
         responder: (request) => request.executable == 'where'
             ? const CommandResult(
                 exitCode: 0,
-                stdout: r'C:\jdk\bin\java.exe' '\n',
+                stdout:
+                    r'C:\jdk\bin\java.exe'
+                    '\n',
                 stderr: '',
               )
             : const CommandResult(
@@ -148,35 +149,39 @@ void main() {
     expect(found[Toolchain.jdk]!.version, contains('21.0.4'));
   });
 
-  test('a non-zero exit is missing; a machine that cannot be asked is not', () async {
-    final refused = containerWith(
-      FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 9009,
-          stdout: '',
-          stderr: "'flutter' is not recognized",
+  test(
+    'a non-zero exit is missing; a machine that cannot be asked is not',
+    () async {
+      final refused = containerWith(
+        FakeCommandRunner(
+          responder: (_) => const CommandResult(
+            exitCode: 9009,
+            stdout: '',
+            stderr: "'flutter' is not recognized",
+          ),
         ),
-      ),
-    );
-    final unreachable = containerWith(
-      FakeCommandRunner(throwError: CommandException('no shell there')),
-    );
+      );
+      final unreachable = containerWith(
+        FakeCommandRunner(throwError: CommandException('no shell there')),
+      );
 
-    final answered = await refused
-        .read(toolchainReadingsProvider.notifier)
-        .readAll(windowsEnv());
-    final silent = await unreachable
-        .read(toolchainReadingsProvider.notifier)
-        .readAll(windowsEnv());
+      final answered = await refused
+          .read(toolchainReadingsProvider.notifier)
+          .readAll(windowsEnv());
+      final silent = await unreachable
+          .read(toolchainReadingsProvider.notifier)
+          .readAll(windowsEnv());
 
-    expect(answered[Toolchain.flutterSdk]!.status, ToolchainStatus.missing);
-    expect(
-      silent[Toolchain.flutterSdk]!.status,
-      ToolchainStatus.unknown,
-      reason: 'a machine that could not be asked has not said the tool is '
-          'absent, and reporting that would be a claim nobody measured',
-    );
-  });
+      expect(answered[Toolchain.flutterSdk]!.status, ToolchainStatus.missing);
+      expect(
+        silent[Toolchain.flutterSdk]!.status,
+        ToolchainStatus.unknown,
+        reason:
+            'a machine that could not be asked has not said the tool is '
+            'absent, and reporting that would be a claim nobody measured',
+      );
+    },
+  );
 
   test('Xcode on Windows is ruled out without spawning anything', () async {
     final runner = FakeCommandRunner();

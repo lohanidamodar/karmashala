@@ -209,15 +209,16 @@ void main() {
     // so the row records no choice and the session goes on following the
     // setting. Stamping the resolved default here is what froze every session
     // at whatever Settings said the day it started.
-    expect(SessionDao(h.db).getById(defaulted.session.id)!.permissionMode, isNull);
+    expect(
+      SessionDao(h.db).getById(defaulted.session.id)!.permissionMode,
+      isNull,
+    );
     expect(
       launcher.effectivePermissionFor(defaulted.session.id)!.inherited,
       isTrue,
     );
 
-    final chosen = await launcher.launch(
-      request(override: bypassSelection),
-    );
+    final chosen = await launcher.launch(request(override: bypassSelection));
     // A caller that resolved a mode for this session *is* a choice, and it is
     // recorded so the next resume runs under it.
     expect(
@@ -529,15 +530,17 @@ void main() {
     addTearDown(h.db.close);
 
     await expectLater(
-      h.container.read(sessionLauncherProvider).launch(
-        SessionLaunchRequest(
-          repository: repository(),
-          installation: agentInstallation(agentId: 'roverCli'),
-          title: 'Rover run',
-          purpose: SessionPurpose.newSession,
-          firstMessage: 'compare these two approaches',
-        ),
-      ),
+      h.container
+          .read(sessionLauncherProvider)
+          .launch(
+            SessionLaunchRequest(
+              repository: repository(),
+              installation: agentInstallation(agentId: 'roverCli'),
+              title: 'Rover run',
+              purpose: SessionPurpose.newSession,
+              firstMessage: 'compare these two approaches',
+            ),
+          ),
       throwsA(isA<SessionLaunchRefused>()),
     );
     expect(
@@ -552,15 +555,17 @@ void main() {
     addTearDown(h.container.dispose);
     addTearDown(h.db.close);
 
-    final result = await h.container.read(sessionLauncherProvider).launch(
-      SessionLaunchRequest(
-        repository: repository(),
-        installation: agentInstallation(agentId: 'roverCli'),
-        title: 'Rover run',
-        purpose: SessionPurpose.newSession,
-        firstMessage: 'compare these two approaches',
-      ),
-    );
+    final result = await h.container
+        .read(sessionLauncherProvider)
+        .launch(
+          SessionLaunchRequest(
+            repository: repository(),
+            installation: agentInstallation(agentId: 'roverCli'),
+            title: 'Rover run',
+            purpose: SessionPurpose.newSession,
+            firstMessage: 'compare these two approaches',
+          ),
+        );
 
     expect(SessionDao(h.db).getById(result.session.id), isNotNull);
   });
@@ -672,8 +677,10 @@ void main() {
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       SessionDao(h.db).insert(
-        session(id: 'old-1', title: 'Before v22')
-            .copyWith(externalSessionId: 'cli-old'),
+        session(
+          id: 'old-1',
+          title: 'Before v22',
+        ).copyWith(externalSessionId: 'cli-old'),
       );
 
       final resumed = await h.container
@@ -708,9 +715,12 @@ void main() {
         path: r'C:\src\demo\.karmashala-worktrees\app-old',
       );
       SessionDao(h.db).insert(
-        session(id: 'wt-1', title: 'In a worktree', useWorktree: true,
-                worktree: worktree)
-            .copyWith(externalSessionId: 'cli-wt'),
+        session(
+          id: 'wt-1',
+          title: 'In a worktree',
+          useWorktree: true,
+          worktree: worktree,
+        ).copyWith(externalSessionId: 'cli-wt'),
       );
 
       final resumed = await h.container
@@ -753,8 +763,10 @@ void main() {
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(launched.paneId!)!;
       expect(instance.agentLaunch!.workingDirectory, subdirectory);
-      expect(SessionDao(h.db).getById(launched.session.id)!.workingDirectory,
-          elsewhere);
+      expect(
+        SessionDao(h.db).getById(launched.session.id)!.workingDirectory,
+        elsewhere,
+      );
     });
 
     test('a directory that has gone away falls back and says so', () async {
@@ -783,10 +795,7 @@ void main() {
       // And it says so, naming both directories, rather than resuming
       // somewhere else in silence.
       expect(resumed.workingDirectoryNotice, contains(subdirectory));
-      expect(
-        resumed.workingDirectoryNotice,
-        contains(repository().path.path),
-      );
+      expect(resumed.workingDirectoryNotice, contains(repository().path.path));
 
       // The record is kept. A missing folder is often temporary — an unmounted
       // drive, a WSL distro that is not running — and overwriting it would turn
@@ -1004,15 +1013,17 @@ void main() {
       addTearDown(h.container.dispose);
 
       await expectLater(
-        h.container.read(sessionLauncherProvider).launch(
-          SessionLaunchRequest(
-            repository: repository(),
-            workingDirectory: gone,
-            installation: agentInstallation(agentId: 'roverCli'),
-            title: 'Rover run',
-            purpose: SessionPurpose.newSession,
-          ),
-        ),
+        h.container
+            .read(sessionLauncherProvider)
+            .launch(
+              SessionLaunchRequest(
+                repository: repository(),
+                workingDirectory: gone,
+                installation: agentInstallation(agentId: 'roverCli'),
+                title: 'Rover run',
+                purpose: SessionPurpose.newSession,
+              ),
+            ),
         saysSoAndNamesTheId(),
       );
     });
@@ -1023,16 +1034,18 @@ void main() {
       addTearDown(h.container.dispose);
 
       await expectLater(
-        h.container.read(sessionLauncherProvider).launch(
-          SessionLaunchRequest(
-            repository: repository(),
-            workingDirectory: gone,
-            installation: agentInstallation(agentId: 'roverCli'),
-            title: 'Rover run',
-            purpose: SessionPurpose.newSession,
-            surface: SessionSurface.external,
-          ),
-        ),
+        h.container
+            .read(sessionLauncherProvider)
+            .launch(
+              SessionLaunchRequest(
+                repository: repository(),
+                workingDirectory: gone,
+                installation: agentInstallation(agentId: 'roverCli'),
+                title: 'Rover run',
+                purpose: SessionPurpose.newSession,
+                surface: SessionSurface.external,
+              ),
+            ),
         saysSoAndNamesTheId(),
       );
     });

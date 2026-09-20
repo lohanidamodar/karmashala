@@ -41,16 +41,20 @@ enum SessionVerdictState {
           'verification_start around the work, verification_finish with a '
           'verdict; a build or a test suite run in a terminal reports to '
           'nothing on its own.',
-    inProgress => 'A run is open and this session is still live, so it is '
-        'being recorded now.',
-    unfinished => 'A run was started and nothing ever finished it. The '
-        'session that owned it has ended, so nothing will.',
-    verdictNotRecorded => 'The run finished carrying a verdict this build '
-        'cannot read.',
+    inProgress =>
+      'A run is open and this session is still live, so it is '
+          'being recorded now.',
+    unfinished =>
+      'A run was started and nothing ever finished it. The '
+          'session that owned it has ended, so nothing will.',
+    verdictNotRecorded =>
+      'The run finished carrying a verdict this build '
+          'cannot read.',
     pass => 'The run concluded that it works.',
     fail => 'The run concluded that it does not work.',
-    inconclusive => 'The run could not tell — which is an answer, not a '
-        'missing one.',
+    inconclusive =>
+      'The run could not tell — which is an answer, not a '
+          'missing one.',
   };
 }
 

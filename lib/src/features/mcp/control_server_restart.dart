@@ -69,7 +69,8 @@ Future<ControlServerRestart> restartControlServer(
   if (server == null) {
     return const ControlServerRestart(
       ok: false,
-      message: 'This run never started a control server, so there is none to '
+      message:
+          'This run never started a control server, so there is none to '
           'restart. Reopening the app is what starts one.',
     );
   }
@@ -84,7 +85,8 @@ Future<ControlServerRestart> restartControlServer(
     if (endpoint == null) {
       return ControlServerRestart(
         ok: false,
-        message: 'The server came back without a hook endpoint, so no agent '
+        message:
+            'The server came back without a hook endpoint, so no agent '
             'was rewritten. ${status.message}',
       );
     }

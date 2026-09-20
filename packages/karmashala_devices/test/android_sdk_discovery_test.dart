@@ -101,11 +101,11 @@ void main() {
 
   group('reading the environment', () {
     test('asks one shell for every variable, not one shell each', () {
-      final request = environmentRequest(
-        EnvironmentKind.localPosix,
-        const ['ANDROID_HOME', 'ANDROID_SDK_ROOT', 'HOME'],
-        loginShell: '/bin/zsh',
-      );
+      final request = environmentRequest(EnvironmentKind.localPosix, const [
+        'ANDROID_HOME',
+        'ANDROID_SDK_ROOT',
+        'HOME',
+      ], loginShell: '/bin/zsh');
 
       // A login shell is 63ms on the owner's Mac and three of them were 190ms
       // of the device pane's first open, for three values one shell can print.
@@ -255,48 +255,52 @@ void main() {
       },
     );
 
-    test('finds adb the way the owner\'s terminal does, not just a login shell', () async {
-      // The bug this is written for, measured on the owner's Mac 2026-09-16:
-      // `bash -lc 'command -v adb'` exits 1 under launchd's PATH, while the
-      // interactive probe answers
-      // `~/Library/Android/sdk/platform-tools/adb`. The SDK's platform-tools
-      // is added in `~/.zshrc`, which a login shell never reads, so an app
-      // launched from Finder found no Android SDK at all while `adb` worked
-      // perfectly in the terminal beside it.
-      var interactiveProbes = 0;
-      final runner = FakeCommandRunner(
-        responder: (request) {
-          final joined = '${request.executable} ${request.arguments.join(' ')}';
-          if (joined.contains(kEnvMarker)) return _env(const {});
-          if (request.arguments.contains('-ilc')) {
-            interactiveProbes++;
-            return const CommandResult(
-              exitCode: 0,
-              stdout:
-                  '$kAgentPathMarker/Users/d/Library/Android/sdk/'
-                  'platform-tools/adb\n',
-              stderr: '',
-            );
-          }
-          // Everything a login shell is asked — and every well-known path —
-          // comes back empty, exactly as it does from a Finder launch.
-          return const CommandResult(exitCode: 1, stdout: '', stderr: '');
-        },
-      );
+    test(
+      'finds adb the way the owner\'s terminal does, not just a login shell',
+      () async {
+        // The bug this is written for, measured on the owner's Mac 2026-09-16:
+        // `bash -lc 'command -v adb'` exits 1 under launchd's PATH, while the
+        // interactive probe answers
+        // `~/Library/Android/sdk/platform-tools/adb`. The SDK's platform-tools
+        // is added in `~/.zshrc`, which a login shell never reads, so an app
+        // launched from Finder found no Android SDK at all while `adb` worked
+        // perfectly in the terminal beside it.
+        var interactiveProbes = 0;
+        final runner = FakeCommandRunner(
+          responder: (request) {
+            final joined =
+                '${request.executable} ${request.arguments.join(' ')}';
+            if (joined.contains(kEnvMarker)) return _env(const {});
+            if (request.arguments.contains('-ilc')) {
+              interactiveProbes++;
+              return const CommandResult(
+                exitCode: 0,
+                stdout:
+                    '$kAgentPathMarker/Users/d/Library/Android/sdk/'
+                    'platform-tools/adb\n',
+                stderr: '',
+              );
+            }
+            // Everything a login shell is asked — and every well-known path —
+            // comes back empty, exactly as it does from a Finder launch.
+            return const CommandResult(exitCode: 1, stdout: '', stderr: '');
+          },
+        );
 
-      final sdk = await AndroidSdkDiscoveryService(
-        runner: runner,
-        environment: _posix(),
-      ).discover();
+        final sdk = await AndroidSdkDiscoveryService(
+          runner: runner,
+          environment: _posix(),
+        ).discover();
 
-      expect(sdk, isNotNull, reason: 'the interactive probe found adb');
-      expect(
-        sdk!.adb.path,
-        '/Users/d/Library/Android/sdk/platform-tools/adb',
-      );
-      expect(sdk.root.path, '/Users/d/Library/Android/sdk');
-      expect(interactiveProbes, greaterThan(0));
-    });
+        expect(sdk, isNotNull, reason: 'the interactive probe found adb');
+        expect(
+          sdk!.adb.path,
+          '/Users/d/Library/Android/sdk/platform-tools/adb',
+        );
+        expect(sdk.root.path, '/Users/d/Library/Android/sdk');
+        expect(interactiveProbes, greaterThan(0));
+      },
+    );
 
     test('returns null when there is no SDK anywhere', () async {
       final runner = FakeCommandRunner(

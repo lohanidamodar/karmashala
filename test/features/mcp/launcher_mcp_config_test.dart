@@ -143,8 +143,9 @@ void main() {
     // Comments are stripped, as `ui_token_debt_test` does: a name quoted in
     // prose is the record of why it went, not a reference to it.
     final sources = <String, String>{
-      for (final file
-          in Directory('lib').listSync(recursive: true).whereType<File>())
+      for (final file in Directory(
+        'lib',
+      ).listSync(recursive: true).whereType<File>())
         if (file.path.endsWith('.dart'))
           file.path.replaceAll(r'\', '/'): file
               .readAsStringSync()

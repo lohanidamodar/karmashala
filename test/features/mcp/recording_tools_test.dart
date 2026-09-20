@@ -61,9 +61,7 @@ void main() {
   }
 
   setUp(
-    () => build(
-      support: const VideoSupport.available('this host writes MP4.'),
-    ),
+    () => build(support: const VideoSupport.available('this host writes MP4.')),
   );
 
   tearDown(retire);
@@ -165,7 +163,8 @@ void main() {
     test('renders a GIF and reports it as a video', () async {
       final paneId = openPane();
       await tools().call('terminal_record_start', {'paneId': paneId});
-      (container.read(terminalSessionsControllerProvider.notifier)
+      (container
+                  .read(terminalSessionsControllerProvider.notifier)
                   .instanceFor(paneId)!
               as FakeTerminalInstance)
           .receive('hello from the agent\r\n');
@@ -196,7 +195,8 @@ void main() {
           await tools().call('terminal_record_start', {'paneId': paneId})
               as Map<String, Object?>;
       expect(started['formats'], contains('mp4'));
-      (container.read(terminalSessionsControllerProvider.notifier)
+      (container
+                  .read(terminalSessionsControllerProvider.notifier)
                   .instanceFor(paneId)!
               as FakeTerminalInstance)
           .receive('an agent recorded this\r\n');
@@ -284,9 +284,7 @@ void main() {
 
     test('MP4 where it cannot be written is refused with the reason', () async {
       await retire();
-      build(
-        support: const VideoSupport.unavailable('no encoder here.'),
-      );
+      build(support: const VideoSupport.unavailable('no encoder here.'));
       expect(
         () => tools().call('device_record_start', {'format': 'mp4'}),
         throwsA(

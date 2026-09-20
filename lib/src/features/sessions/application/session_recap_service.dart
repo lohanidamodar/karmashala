@@ -65,16 +65,12 @@ class SessionRecapService {
       sessionChatViewProbeProvider(sessionId).future,
     );
     if (!reading.hasChatView) {
-      throw SessionRecapRefusal(
-        'There is nothing to recap. ${reading.reason}',
-      );
+      throw SessionRecapRefusal('There is nothing to recap. ${reading.reason}');
     }
 
     final turns = await _turnsOf(session.id, installation.agentId);
     if (turns.isEmpty) {
-      throw SessionRecapRefusal(
-        'There is nothing to recap. ${reading.reason}',
-      );
+      throw SessionRecapRefusal('There is nothing to recap. ${reading.reason}');
     }
     final blob = _blob(turns);
 
@@ -114,8 +110,10 @@ class SessionRecapService {
           .forEnvironment(environment)
           .run(request);
     } on CommandException catch (error) {
-      throw SessionRecapRefusal('${descriptor.displayName} could not be run: '
-          '${error.message}');
+      throw SessionRecapRefusal(
+        '${descriptor.displayName} could not be run: '
+        '${error.message}',
+      );
     }
     if (!result.ok) {
       final said = result.stderr.trim().isEmpty

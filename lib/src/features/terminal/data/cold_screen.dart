@@ -221,7 +221,9 @@ class ColdIngest {
     if (dropped > 0) {
       // Bytes below a kibibyte rather than a rounded-down "0 KiB", which reads
       // as a bug in the notice rather than as a small gap in the output.
-      final lost = dropped >= 1024 ? '${dropped ~/ 1024} KiB' : '$dropped bytes';
+      final lost = dropped >= 1024
+          ? '${dropped ~/ 1024} KiB'
+          : '$dropped bytes';
       terminal.write(
         '\r\n\x1b[90m[… $lost of output while detached was '
         'dropped]\x1b[0m\r\n',

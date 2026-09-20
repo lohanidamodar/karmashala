@@ -45,14 +45,16 @@ final panesByEnvironmentProvider =
       void file(String environmentId, String paneId) {
         final instance = controller.instanceFor(paneId);
         if (instance == null) return;
-        byEnvironment.putIfAbsent(environmentId, () => []).add(
-          EnvironmentTerminal(
-            id: paneId,
-            label: instance.title,
-            running: instance.liveness.value.isLive,
-            paneId: paneId,
-          ),
-        );
+        byEnvironment
+            .putIfAbsent(environmentId, () => [])
+            .add(
+              EnvironmentTerminal(
+                id: paneId,
+                label: instance.title,
+                running: instance.liveness.value.isLive,
+                paneId: paneId,
+              ),
+            );
       }
 
       for (final paneId in paneIds) {
@@ -76,9 +78,8 @@ final panesByEnvironmentProvider =
           for (final repository in ref.read(repositoryDaoProvider).getAll())
             repository.id: repository.path.environmentId,
         };
-        for (final session in ref
-            .read(sessionDaoProvider)
-            .getByPaneIds(unresolved)) {
+        for (final session
+            in ref.read(sessionDaoProvider).getByPaneIds(unresolved)) {
           final environmentId = repositories[session.repositoryId];
           final paneId = session.paneId;
           if (environmentId == null || paneId == null) continue;

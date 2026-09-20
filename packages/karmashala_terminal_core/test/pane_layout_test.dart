@@ -272,9 +272,9 @@ void main() {
   /// region — for one pane, or for the whole pane tree of the tab being moved in.
   group('replaceRegion', () {
     test('swaps one region for another, keeping its place and its share', () {
-      final layout = PaneLayout.single('a')
-          .split('a', SplitAxis.horizontal, 'slot', 's1')
-          .resize('s1', 0, 0.2);
+      final layout = PaneLayout.single(
+        'a',
+      ).split('a', SplitAxis.horizontal, 'slot', 's1').resize('s1', 0, 0.2);
       final filled = layout.replaceRegion('slot', PaneGroup.of('b'));
 
       expect(filled.panes, ['a', 'b']);

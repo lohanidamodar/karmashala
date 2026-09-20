@@ -62,16 +62,19 @@ void main() {
       expect(
         runner.requests.length,
         candidates.length,
-        reason: 'one probe per candidate — and $reads reads, not $reads times '
+        reason:
+            'one probe per candidate — and $reads reads, not $reads times '
             'that: the provider is not auto-dispose, so the catalogue is '
             'settled once per session',
       );
+      expect(runner.requests.map((r) => r.executable).toSet(), {
+        'where.exe',
+      }, reason: 'the Windows probe is unchanged by the refactor');
       expect(
-        runner.requests.map((r) => r.executable).toSet(),
-        {'where.exe'},
-        reason: 'the Windows probe is unchanged by the refactor',
+        runner.startRequests,
+        isEmpty,
+        reason: 'detection launches nothing',
       );
-      expect(runner.startRequests, isEmpty, reason: 'detection launches nothing');
     });
 
     test('is the same five candidates it was, and stats no bundle', () {

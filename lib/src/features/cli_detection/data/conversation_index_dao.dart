@@ -292,10 +292,7 @@ class ConversationIndexDao {
         "WHERE s.external_session_id IS NOT NULL "
         "AND s.external_session_id <> '';",
       ))
-        (
-          sessionId: row['session_id'] as String,
-          cli: row['cli'] as String,
-        ),
+        (sessionId: row['session_id'] as String, cli: row['cli'] as String),
     ];
   }
 

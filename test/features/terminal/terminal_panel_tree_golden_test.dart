@@ -221,11 +221,7 @@ void main() {
     tester,
   ) async {
     final scope = container();
-    await pump(
-      tester,
-      scope,
-      const TerminalPaneStack(autoOpenDone: false),
-    );
+    await pump(tester, scope, const TerminalPaneStack(autoOpenDone: false));
     capture(tester, 'opening', stack);
   });
 
@@ -245,11 +241,7 @@ void main() {
   testWidgets('a group nobody is typing into', (tester) async {
     final scope = container();
     sessionsOf(scope).openTab(TerminalProfile.powerShell);
-    await pump(
-      tester,
-      scope,
-      const TerminalPaneStack(groupFocused: false),
-    );
+    await pump(tester, scope, const TerminalPaneStack(groupFocused: false));
     capture(tester, 'a group nobody is typing into', stack);
   });
 
@@ -390,14 +382,14 @@ void main() {
     final scope = container();
     sessionsOf(scope).openTab(TerminalProfile.powerShell);
     await pump(tester, scope, const TerminalPaneStack());
-    scope
-        .read(terminalRecordingProvider.notifier)
-        .start(focusedPaneOf(scope));
+    scope.read(terminalRecordingProvider.notifier).start(focusedPaneOf(scope));
     await tester.pumpAndSettle();
     capture(tester, 'a pane being recorded', stack);
     // Released before the container is, so the cast is written from a pane
     // that still has a place to write to.
-    unawaited(scope.read(terminalRecordingProvider.notifier).stop(focusedPaneOf(scope)));
+    unawaited(
+      scope.read(terminalRecordingProvider.notifier).stop(focusedPaneOf(scope)),
+    );
   });
 
   testWidgets('a pane dragged over the pane beside it', (tester) async {
@@ -434,7 +426,11 @@ void main() {
   testWidgets('the toolbar, with no tab to act on', (tester) async {
     final scope = container();
     await pump(tester, scope, const TerminalToolbar());
-    capture(tester, 'the toolbar, with no tab to act on', find.byType(TerminalToolbar));
+    capture(
+      tester,
+      'the toolbar, with no tab to act on',
+      find.byType(TerminalToolbar),
+    );
   });
 
   testWidgets('the toolbar, over a live pane', (tester) async {

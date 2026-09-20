@@ -384,45 +384,49 @@ void main() {
       expect(push.presence.focusedSessionId, isNull);
     });
 
-    test('notifications.register carries the presence beside the token',
-        () async {
-      final harness = Harness();
+    test(
+      'notifications.register carries the presence beside the token',
+      () async {
+        final harness = Harness();
 
-      await harness.request(
-        FrameType.notificationsRegister,
-        payload: const {
-          'token': 't0k',
-          'platform': 'android',
-          'deviceKind': 'phone',
-          'visibility': 'background',
-          'focusedSessionId': 's1',
-        },
-      );
+        await harness.request(
+          FrameType.notificationsRegister,
+          payload: const {
+            'token': 't0k',
+            'platform': 'android',
+            'deviceKind': 'phone',
+            'visibility': 'background',
+            'focusedSessionId': 's1',
+          },
+        );
 
-      final presence = harness.fake.pushes.single.presence;
-      expect(presence.deviceKind, CompanionDeviceKind.phone);
-      expect(presence.visibility, CompanionVisibility.background);
-      expect(presence.focusedSessionId, 's1');
-    });
+        final presence = harness.fake.pushes.single.presence;
+        expect(presence.deviceKind, CompanionDeviceKind.phone);
+        expect(presence.visibility, CompanionVisibility.background);
+        expect(presence.focusedSessionId, 's1');
+      },
+    );
 
-    test('a presence word this build has never heard reads as unknown',
-        () async {
-      final harness = Harness();
+    test(
+      'a presence word this build has never heard reads as unknown',
+      () async {
+        final harness = Harness();
 
-      await harness.request(
-        FrameType.notificationsRegister,
-        payload: const {
-          'token': 't0k',
-          'platform': 'android',
-          'visibility': 'hibernating',
-          'deviceKind': 7,
-        },
-      );
+        await harness.request(
+          FrameType.notificationsRegister,
+          payload: const {
+            'token': 't0k',
+            'platform': 'android',
+            'visibility': 'hibernating',
+            'deviceKind': 7,
+          },
+        );
 
-      final presence = harness.fake.pushes.single.presence;
-      expect(presence.visibility, CompanionVisibility.unknown);
-      expect(presence.deviceKind, CompanionDeviceKind.unknown);
-    });
+        final presence = harness.fake.pushes.single.presence;
+        expect(presence.visibility, CompanionVisibility.unknown);
+        expect(presence.deviceKind, CompanionDeviceKind.unknown);
+      },
+    );
 
     test('transcript.get slices by the after cursor', () async {
       final harness = Harness();
@@ -509,19 +513,21 @@ void main() {
       );
     });
 
-    test('a session is not announced to a phone without view_sessions',
-        () async {
-      final harness = Harness(
-        capabilities: CapabilitySet.of(const [Capability.startSession]),
-      );
-      await harness.request(FrameType.sessionsList);
-      harness.fake.addSession('s2');
-      final before = harness.sent.length;
+    test(
+      'a session is not announced to a phone without view_sessions',
+      () async {
+        final harness = Harness(
+          capabilities: CapabilitySet.of(const [Capability.startSession]),
+        );
+        await harness.request(FrameType.sessionsList);
+        harness.fake.addSession('s2');
+        final before = harness.sent.length;
 
-      await harness.api.pushNewSessions();
+        await harness.api.pushNewSessions();
 
-      expect(harness.sent.length, before);
-    });
+        expect(harness.sent.length, before);
+      },
+    );
 
     test('an announcement the link dropped is tried again', () async {
       final harness = Harness();
@@ -624,7 +630,8 @@ void main() {
         expect(
           activity.observedAt.difference(activity.calls.single.startedAt),
           const Duration(minutes: 76),
-          reason: 'both instants are the host clock, so the phone need not '
+          reason:
+              'both instants are the host clock, so the phone need not '
               'subtract one machine from another',
         );
       });
@@ -852,25 +859,27 @@ void main() {
         0,
         reason: 'a subscribe is bookkeeping; the phone asks for history itself',
       );
-      expect(
-        harness.sent.any((f) => f.type == FrameType.result),
-        isTrue,
-      );
-    });
-
-    test('and answers even while a transcript read would never finish', () async {
-      final harness = Harness();
-      // A read that never completes is the limit of one merely far too slow.
-      harness.fake.transcriptGate = Completer<void>();
-      addTearDown(() => harness.fake.transcriptGate!.complete());
-
-      await harness.request(
-        FrameType.sessionSubscribe,
-        payload: const {'sessionId': 's1'},
-      ).timeout(const Duration(seconds: 5));
-
       expect(harness.sent.any((f) => f.type == FrameType.result), isTrue);
     });
+
+    test(
+      'and answers even while a transcript read would never finish',
+      () async {
+        final harness = Harness();
+        // A read that never completes is the limit of one merely far too slow.
+        harness.fake.transcriptGate = Completer<void>();
+        addTearDown(() => harness.fake.transcriptGate!.complete());
+
+        await harness
+            .request(
+              FrameType.sessionSubscribe,
+              payload: const {'sessionId': 's1'},
+            )
+            .timeout(const Duration(seconds: 5));
+
+        expect(harness.sent.any((f) => f.type == FrameType.result), isTrue);
+      },
+    );
 
     test('a subscribed session nobody is reading is never polled', () async {
       // The phone subscribes to *every* session it lists, so polling on
@@ -947,7 +956,9 @@ void main() {
 
     test('a long one is cut to the end, and says how much', () async {
       final harness = Harness();
-      harness.fake.transcripts['s1'] = conversation(kRemoteTranscriptPageMax * 3);
+      harness.fake.transcripts['s1'] = conversation(
+        kRemoteTranscriptPageMax * 3,
+      );
 
       await harness.request(
         FrameType.transcriptGet,
@@ -978,24 +989,28 @@ void main() {
       expect(page.omitted, 5);
     });
 
-    test('and the delta after a cut page is still only the new messages',
-        () async {
-      // The cursor is the whole count, not the page length, so growth after a
-      // truncated read must not resend the tail it already sent.
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = conversation(kRemoteTranscriptPageMax * 2);
-      await harness.watch('s1');
-      harness.sent.clear();
+    test(
+      'and the delta after a cut page is still only the new messages',
+      () async {
+        // The cursor is the whole count, not the page length, so growth after a
+        // truncated read must not resend the tail it already sent.
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = conversation(
+          kRemoteTranscriptPageMax * 2,
+        );
+        await harness.watch('s1');
+        harness.sent.clear();
 
-      harness.fake.transcripts['s1']!.add(
-        const RemoteTranscriptMessage(role: 'agent', text: 'brand new'),
-      );
-      await harness.api.pollTranscript('s1');
+        harness.fake.transcripts['s1']!.add(
+          const RemoteTranscriptMessage(role: 'agent', text: 'brand new'),
+        );
+        await harness.api.pollTranscript('s1');
 
-      final appended = RemoteTranscriptPage.fromJson(harness.last.payload);
-      expect(appended.messages, hasLength(1));
-      expect(appended.messages.single.text, 'brand new');
-    });
+        final appended = RemoteTranscriptPage.fromJson(harness.last.payload);
+        expect(appended.messages, hasLength(1));
+        expect(appended.messages.single.text, 'brand new');
+      },
+    );
   });
 
   group('an expensive transcript is polled less often', () {
@@ -1014,8 +1029,7 @@ void main() {
       expect(harness.fake.transcriptReads - before, 3);
     });
 
-    test('but one that takes real time is not read again immediately',
-        () async {
+    test('but one that takes real time is not read again immediately', () async {
       // The device case: a 53 MB transcript read on every two-second sweep, on
       // the one chain the phone's own requests queue behind.
       final harness = Harness();
@@ -1038,28 +1052,30 @@ void main() {
       );
     });
 
-    test('and unsubscribing forgets the backoff with everything else',
-        () async {
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = const [
-        RemoteTranscriptMessage(role: 'user', text: 'hello'),
-      ];
-      await harness.watch('s1');
-      harness.fake.transcriptCost = const Duration(milliseconds: 40);
-      await harness.api.pollTranscript('s1');
+    test(
+      'and unsubscribing forgets the backoff with everything else',
+      () async {
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = const [
+          RemoteTranscriptMessage(role: 'user', text: 'hello'),
+        ];
+        await harness.watch('s1');
+        harness.fake.transcriptCost = const Duration(milliseconds: 40);
+        await harness.api.pollTranscript('s1');
 
-      await harness.request(
-        FrameType.sessionUnsubscribe,
-        payload: const {'sessionId': 's1'},
-      );
-      harness.fake.transcriptCost = Duration.zero;
-      await harness.watch('s1');
-      final before = harness.fake.transcriptReads;
+        await harness.request(
+          FrameType.sessionUnsubscribe,
+          payload: const {'sessionId': 's1'},
+        );
+        harness.fake.transcriptCost = Duration.zero;
+        await harness.watch('s1');
+        final before = harness.fake.transcriptReads;
 
-      await harness.api.pollTranscript('s1');
+        await harness.api.pollTranscript('s1');
 
-      expect(harness.fake.transcriptReads - before, 1);
-    });
+        expect(harness.fake.transcriptReads - before, 1);
+      },
+    );
   });
 
   group('a task-notification envelope is folded down before it crosses', () {
@@ -1080,7 +1096,9 @@ void main() {
         '<tool_uses>165</tool_uses><duration_ms>2614397</duration_ms></usage>\n'
         '</task-notification>';
 
-    Future<RemoteTranscriptPage> pageOf(List<RemoteTranscriptMessage> stored) async {
+    Future<RemoteTranscriptPage> pageOf(
+      List<RemoteTranscriptMessage> stored,
+    ) async {
       final harness = Harness();
       harness.fake.transcripts['s1'] = stored;
       await harness.request(
@@ -1095,7 +1113,9 @@ void main() {
         const RemoteTranscriptMessage(role: 'user', text: 'go on then'),
         RemoteTranscriptMessage(
           role: 'user',
-          text: envelope(summary: 'Agent "Mobile chat scroll to latest" finished'),
+          text: envelope(
+            summary: 'Agent "Mobile chat scroll to latest" finished',
+          ),
         ),
       ]);
 
@@ -1163,7 +1183,10 @@ void main() {
 
     test('an envelope that names no summary claims no outcome', () async {
       final page = await pageOf([
-        RemoteTranscriptMessage(role: 'user', text: envelope(status: 'failed')),
+        RemoteTranscriptMessage(
+          role: 'user',
+          text: envelope(status: 'failed'),
+        ),
       ]);
 
       expect(
@@ -1221,8 +1244,14 @@ void main() {
     test('one turn in, one turn out, so the cursor still lines up', () async {
       final harness = Harness();
       harness.fake.transcripts['s1'] = [
-        RemoteTranscriptMessage(role: 'user', text: envelope(summary: 'one')),
-        RemoteTranscriptMessage(role: 'user', text: envelope(summary: 'two')),
+        RemoteTranscriptMessage(
+          role: 'user',
+          text: envelope(summary: 'one'),
+        ),
+        RemoteTranscriptMessage(
+          role: 'user',
+          text: envelope(summary: 'two'),
+        ),
         const RemoteTranscriptMessage(role: 'agent', text: 'and on we go'),
       ];
       await harness.watch('s1');
@@ -1278,26 +1307,28 @@ void main() {
         if (frame.type == FrameType.approvalResolved) frame,
     ];
 
-    test('answered on the desktop, the phone is told on the next sweep',
-        () async {
-      final harness = await waiting();
-      await harness.request(
-        FrameType.sessionSubscribe,
-        payload: const {'sessionId': 's1'},
-      );
-      expect(resolutions(harness), isEmpty, reason: 'still waiting');
+    test(
+      'answered on the desktop, the phone is told on the next sweep',
+      () async {
+        final harness = await waiting();
+        await harness.request(
+          FrameType.sessionSubscribe,
+          payload: const {'sessionId': 's1'},
+        );
+        expect(resolutions(harness), isEmpty, reason: 'still waiting');
 
-      // The desktop's own card was pressed: the session stops asking. That is
-      // the whole signal — the host cannot see which button, and does not say.
-      harness.fake.setAwaitingApproval('s1', waiting: false);
-      await harness.api.pushSessionsChanged();
+        // The desktop's own card was pressed: the session stops asking. That is
+        // the whole signal — the host cannot see which button, and does not say.
+        harness.fake.setAwaitingApproval('s1', waiting: false);
+        await harness.api.pushSessionsChanged();
 
-      final resolved = RemoteApprovalResolved.fromJson(
-        resolutions(harness).single.payload,
-      );
-      expect(resolved.sessionId, 's1');
-      expect(resolved.outcome, RemoteApprovalOutcome.elsewhere);
-    });
+        final resolved = RemoteApprovalResolved.fromJson(
+          resolutions(harness).single.payload,
+        );
+        expect(resolved.sessionId, 's1');
+        expect(resolved.outcome, RemoteApprovalOutcome.elsewhere);
+      },
+    );
 
     test('and said once, not on every sweep after it', () async {
       final harness = await waiting();
@@ -1368,25 +1399,27 @@ void main() {
       expect(harness.last.type, FrameType.result);
     });
 
-    test('a second answer to a settled approval is refused, not applied',
-        () async {
-      final harness = await waiting();
-      harness.fake.setAwaitingApproval('s1', waiting: false);
+    test(
+      'a second answer to a settled approval is refused, not applied',
+      () async {
+        final harness = await waiting();
+        harness.fake.setAwaitingApproval('s1', waiting: false);
 
-      await harness.request(
-        FrameType.approvalAnswer,
-        payload: const {'sessionId': 's1', 'decision': 'approve'},
-      );
+        await harness.request(
+          FrameType.approvalAnswer,
+          payload: const {'sessionId': 's1', 'decision': 'approve'},
+        );
 
-      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
-      expect(
-        harness.last.payload['message'],
-        'this approval has already been answered',
-      );
-      // The point of refusing: nothing was typed into whatever prompt is
-      // there now.
-      expect(harness.fake.approvalAnswers, isEmpty);
-    });
+        expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+        expect(
+          harness.last.payload['message'],
+          'this approval has already been answered',
+        );
+        // The point of refusing: nothing was typed into whatever prompt is
+        // there now.
+        expect(harness.fake.approvalAnswers, isEmpty);
+      },
+    );
 
     test('a device that cannot approve hears neither half', () async {
       final viewer = Harness(

@@ -49,12 +49,12 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.antigravity),
-    );
-    AgentInstallationDao(db).insert(
-      agentInstallation(id: 'a2', agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.antigravity));
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(id: 'a2', agentId: AgentIds.claudeCode));
     dao = SessionDao(db);
   });
   tearDown(() {
@@ -158,17 +158,20 @@ void main() {
   });
 
   group('what it refuses, and why the reason differs', () {
-    test('a directory the store has never recorded a conversation for', () async {
-      // The session was launched and never prompted: `agy` writes the entry on
-      // the first message, so there is nothing to find.
-      writeLastConversations({r'C:\elsewhere': other});
-      insert();
+    test(
+      'a directory the store has never recorded a conversation for',
+      () async {
+        // The session was launched and never prompted: `agy` writes the entry on
+        // the first message, so there is nothing to find.
+        writeLastConversations({r'C:\elsewhere': other});
+        insert();
 
-      final attribution = service();
-      expect(await attribution.attribute(), 0);
-      expect(dao.getById('s1')!.externalSessionId, isNull);
-      expect(attribution.reasonFor('s1'), contains('no conversation'));
-    });
+        final attribution = service();
+        expect(await attribution.attribute(), 0);
+        expect(dao.getById('s1')!.externalSessionId, isNull);
+        expect(attribution.reasonFor('s1'), contains('no conversation'));
+      },
+    );
 
     test('a conversation written before this session started', () async {
       writeConversation(conversation, age: const Duration(minutes: -5));
@@ -243,15 +246,18 @@ void main() {
       expect(await service().attribute(), 0);
     });
 
-    test('falls back to the repository when no directory was recorded', () async {
-      // Rows written before schema v22 record no working directory; the
-      // repository root is where the session would have been launched.
-      writeConversation(conversation, age: const Duration(seconds: 5));
-      writeLastConversations({repoPath: conversation});
-      insert(directory: null);
+    test(
+      'falls back to the repository when no directory was recorded',
+      () async {
+        // Rows written before schema v22 record no working directory; the
+        // repository root is where the session would have been launched.
+        writeConversation(conversation, age: const Duration(seconds: 5));
+        writeLastConversations({repoPath: conversation});
+        insert(directory: null);
 
-      expect(await service().attribute(), 1);
-      expect(dao.getById('s1')!.externalSessionId, conversation);
-    });
+        expect(await service().attribute(), 1);
+        expect(dao.getById('s1')!.externalSessionId, conversation);
+      },
+    );
   });
 }

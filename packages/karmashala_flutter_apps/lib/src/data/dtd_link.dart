@@ -35,7 +35,10 @@ class DtdLink {
   Stream<DtdApp> get registered => _registered.stream;
 
   /// Connects and subscribes to the daemon's app events.
-  static Future<DtdLink> open(Uri wsUri, {required DtdChannelOpener open}) async {
+  static Future<DtdLink> open(
+    Uri wsUri, {
+    required DtdChannelOpener open,
+  }) async {
     final link = DtdLink._(await open(wsUri));
     link._messages = link._channel.messages.listen(
       link._onMessage,
@@ -170,8 +173,9 @@ class _SocketChannel implements DtdChannel {
   final WebSocket _socket;
 
   @override
-  Stream<String> get messages =>
-      _socket.map((event) => event is String ? event : utf8.decode(event as List<int>));
+  Stream<String> get messages => _socket.map(
+    (event) => event is String ? event : utf8.decode(event as List<int>),
+  );
 
   @override
   void send(String message) => _socket.add(message);

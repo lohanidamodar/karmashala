@@ -120,7 +120,9 @@ void main() {
 
   Future<RemoteCompanionGateway> pairedPhone() async {
     final gateway = makeGateway();
-    final session = await service!.beginPairing(capabilities: CapabilitySet.all);
+    final session = await service!.beginPairing(
+      capabilities: CapabilitySet.all,
+    );
     await gateway.pairWithQr(session.payload.encode());
     await session.done;
     await awaitLink(gateway, CompanionLinkState.connected);
@@ -142,93 +144,103 @@ void main() {
     }
   }
 
-  test('a desktop that went away is never reported as connected, however '
-      'healthy the socket looks', timeout: const Timeout(Duration(minutes: 2)),
-      () async {
-    await startService();
-    final gateway = await pairedPhone();
+  test(
+    'a desktop that went away is never reported as connected, however '
+    'healthy the socket looks',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
 
-    // Everything from here is what the phone claims AFTER the desktop is gone.
-    final claimed = <CompanionLinkState>[];
-    final stamps = <DateTime?>[];
-    final watching = gateway.linkStates.listen(claimed.add);
-    final stamping = gateway.linkSinceStates.listen(stamps.add);
-    addTearDown(watching.cancel);
-    addTearDown(stamping.cancel);
-    await service!.stop();
-    service = null;
+      // Everything from here is what the phone claims AFTER the desktop is gone.
+      final claimed = <CompanionLinkState>[];
+      final stamps = <DateTime?>[];
+      final watching = gateway.linkStates.listen(claimed.add);
+      final stamping = gateway.linkSinceStates.listen(stamps.add);
+      addTearDown(watching.cancel);
+      addTearDown(stamping.cancel);
+      await service!.stop();
+      service = null;
 
-    // The relay kicks the lonely socket, the transport redials it, and the
-    // relay takes it again — the exact moment the old code said "connected".
-    await settle(const Duration(seconds: 4));
-    // Both at once: an await between them would let one more report land on
-    // the survivor and make the counts below disagree for nothing.
-    await Future.wait([watching.cancel(), stamping.cancel()]);
+      // The relay kicks the lonely socket, the transport redials it, and the
+      // relay takes it again — the exact moment the old code said "connected".
+      await settle(const Duration(seconds: 4));
+      // Both at once: an await between them would let one more report land on
+      // the survivor and make the counts below disagree for nothing.
+      await Future.wait([watching.cancel(), stamping.cancel()]);
 
-    // The first entry is the connected state it was in when we subscribed.
-    expect(claimed.first, CompanionLinkState.connected);
-    expect(
-      claimed.skip(1),
-      isNot(contains(CompanionLinkState.connected)),
-      reason: 'a rendezvous with nobody at it is not a connection',
-    );
-    expect(gateway.link, isNot(CompanionLinkState.connected));
-    // And it says something true about why, rather than blaming the network.
-    expect(gateway.linkTrouble, contains('relay'));
+      // The first entry is the connected state it was in when we subscribed.
+      expect(claimed.first, CompanionLinkState.connected);
+      expect(
+        claimed.skip(1),
+        isNot(contains(CompanionLinkState.connected)),
+        reason: 'a rendezvous with nobody at it is not a connection',
+      );
+      expect(gateway.link, isNot(CompanionLinkState.connected));
+      // And it says something true about why, rather than blaming the network.
+      expect(gateway.linkTrouble, contains('relay'));
 
-    // The link's age is stamped per CHANGE, not per report: the redial above
-    // reports a state the phone is already in, and a stamp that followed every
-    // report would read "just now" for an outage of any age (CLAUDE.md §19).
-    // The first frame is the stamp already held when we subscribed.
-    var changes = 0;
-    for (var i = 1; i < claimed.length; i++) {
-      if (claimed[i] != claimed[i - 1]) changes++;
-    }
-    expect(
-      stamps.length - 1,
-      changes,
-      reason: '${claimed.length} reports carried $changes changes',
-    );
-    expect(gateway.linkSince, isNotNull);
-  });
+      // The link's age is stamped per CHANGE, not per report: the redial above
+      // reports a state the phone is already in, and a stamp that followed every
+      // report would read "just now" for an outage of any age (CLAUDE.md §19).
+      // The first frame is the stamp already held when we subscribed.
+      var changes = 0;
+      for (var i = 1; i < claimed.length; i++) {
+        if (claimed[i] != claimed[i - 1]) changes++;
+      }
+      expect(
+        stamps.length - 1,
+        changes,
+        reason: '${claimed.length} reports carried $changes changes',
+      );
+      expect(gateway.linkSince, isNotNull);
+    },
+  );
 
-  test('when the desktop comes back the phone reconnects on its own, and the '
-      'link works', timeout: const Timeout(Duration(minutes: 2)), () async {
-    await startService();
-    final gateway = await pairedPhone();
-    await service!.stop();
-    service = null;
-    await awaitLink(gateway, CompanionLinkState.disconnected);
+  test(
+    'when the desktop comes back the phone reconnects on its own, and the '
+    'link works',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      await service!.stop();
+      service = null;
+      await awaitLink(gateway, CompanionLinkState.disconnected);
 
-    // Nobody touches the phone: the desktop simply comes back.
-    await startService();
+      // Nobody touches the phone: the desktop simply comes back.
+      await startService();
 
-    await awaitLink(gateway, CompanionLinkState.connected);
-    expect((await gateway.listSessions()).single.id, 's1');
-    expect(gateway.linkTrouble, isNull, reason: 'the trouble is over');
-  });
+      await awaitLink(gateway, CompanionLinkState.connected);
+      expect((await gateway.listSessions()).single.id, 's1');
+      expect(gateway.linkTrouble, isNull, reason: 'the trouble is over');
+    },
+  );
 
-  test('an IDLE phone notices the desktop is gone — nobody has to tap '
-      'anything to find out', timeout: const Timeout(Duration(minutes: 2)),
-      () async {
-    await startService();
-    final gateway = await pairedPhone();
-    // Not a single request from here on: the only thing that can discover the
-    // desktop's absence is the link proving itself.
-    await service!.stop();
-    service = null;
+  test(
+    'an IDLE phone notices the desktop is gone — nobody has to tap '
+    'anything to find out',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      // Not a single request from here on: the only thing that can discover the
+      // desktop's absence is the link proving itself.
+      await service!.stop();
+      service = null;
 
-    await awaitLink(gateway, CompanionLinkState.disconnected);
-    await eventually(
-      () async => gateway.linkTrouble != null,
-      reason: 'the phone says why, once it has actually tried',
-    );
+      await awaitLink(gateway, CompanionLinkState.disconnected);
+      await eventually(
+        () async => gateway.linkTrouble != null,
+        reason: 'the phone says why, once it has actually tried',
+      );
 
-    expect(
-      gateway.linkTrouble,
-      allOf(contains('not answering'), contains('relay')),
-      reason: 'the phone knows the desktop is absent, not that wifi broke',
-    );
-    expect(gateway.link, isNot(CompanionLinkState.connected));
-  });
+      expect(
+        gateway.linkTrouble,
+        allOf(contains('not answering'), contains('relay')),
+        reason: 'the phone knows the desktop is absent, not that wifi broke',
+      );
+      expect(gateway.link, isNot(CompanionLinkState.connected));
+    },
+  );
 }

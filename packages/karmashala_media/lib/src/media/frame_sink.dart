@@ -156,29 +156,34 @@ class IsolateFrameSink implements FrameSink {
       onError: errors.sendPort,
       onExit: exit.sendPort,
     );
-    receive.listen((message) {
-      switch (message) {
-        case SendPort():
-          _commands = message;
-          if (!_ready.isCompleted) _ready.complete();
-        case _EncodeFrameDone():
-          _inFlight--;
-          _releaseWaiters(all: false);
-        case FrameSinkResult():
-          if (!_done.isCompleted) _done.complete(message);
-          receive.close();
-        case _EncodeAborted():
-          if (!_aborted.isCompleted) _aborted.complete();
-          receive.close();
-        case _EncodeFailure():
-          _fail(StateError(message.message));
-          receive.close();
-      }
-    }, onDone: () {
-      if (!_aborted.isCompleted) _aborted.complete();
-    });
+    receive.listen(
+      (message) {
+        switch (message) {
+          case SendPort():
+            _commands = message;
+            if (!_ready.isCompleted) _ready.complete();
+          case _EncodeFrameDone():
+            _inFlight--;
+            _releaseWaiters(all: false);
+          case FrameSinkResult():
+            if (!_done.isCompleted) _done.complete(message);
+            receive.close();
+          case _EncodeAborted():
+            if (!_aborted.isCompleted) _aborted.complete();
+            receive.close();
+          case _EncodeFailure():
+            _fail(StateError(message.message));
+            receive.close();
+        }
+      },
+      onDone: () {
+        if (!_aborted.isCompleted) _aborted.complete();
+      },
+    );
     errors.listen((message) {
-      final detail = message is List && message.isNotEmpty ? message.first : message;
+      final detail = message is List && message.isNotEmpty
+          ? message.first
+          : message;
       _fail(StateError('frame encoder crashed: $detail'));
     });
     exit.listen((_) {
@@ -532,7 +537,10 @@ class FrameEncoder {
 /// The command that turns a rendered frame sequence into a Full HD MP4, also
 /// written beside the frames so nobody has to retype it. `yuv420p` and the
 /// even-dimension scale are what make it play outside VLC.
-String ffmpegCommandFor(String frameDirectory, {int frameRate = kRecordingFrameRate}) =>
+String ffmpegCommandFor(
+  String frameDirectory, {
+  int frameRate = kRecordingFrameRate,
+}) =>
     'ffmpeg -framerate $frameRate '
     '-i "${p.join(frameDirectory, 'frame_%05d.png')}" '
     '-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" '

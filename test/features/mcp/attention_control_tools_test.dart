@@ -143,7 +143,8 @@ void main() {
       final structured =
           (await callTool('inbox_list')).structured! as Map<String, Object?>;
       final item =
-          (structured['items']! as List<Object?>).single as Map<String, Object?>;
+          (structured['items']! as List<Object?>).single
+              as Map<String, Object?>;
 
       expect(structured['unseen'], 1);
       expect(item['kind'], 'needsApproval');
@@ -162,7 +163,8 @@ void main() {
       final structured =
           (await callTool('inbox_list')).structured! as Map<String, Object?>;
       final item =
-          (structured['items']! as List<Object?>).single as Map<String, Object?>;
+          (structured['items']! as List<Object?>).single
+              as Map<String, Object?>;
 
       expect(item['kind'], 'finished');
       expect(item['stillTrue'], isFalse);
@@ -176,7 +178,8 @@ void main() {
       final structured =
           (await callTool('inbox_list')).structured! as Map<String, Object?>;
       final item =
-          (structured['items']! as List<Object?>).single as Map<String, Object?>;
+          (structured['items']! as List<Object?>).single
+              as Map<String, Object?>;
 
       expect(item['detail'], 'Overwrite lib/main.dart? (y/n)');
     });
@@ -188,7 +191,8 @@ void main() {
       final structured =
           (await callTool('inbox_list')).structured! as Map<String, Object?>;
       final item =
-          (structured['items']! as List<Object?>).single as Map<String, Object?>;
+          (structured['items']! as List<Object?>).single
+              as Map<String, Object?>;
 
       expect(item.containsKey('detail'), isTrue);
       expect(item['detail'], isNull);
@@ -295,8 +299,9 @@ void main() {
     test('a note is written and comes back verbatim', () async {
       const body = 'The isolate pool deadlocked on Windows.\n  Do not retry.';
 
-      final added = (await callTool('note_add', {'body': body})).structured!
-          as Map<String, Object?>;
+      final added =
+          (await callTool('note_add', {'body': body})).structured!
+              as Map<String, Object?>;
       final listed =
           (await callTool('notes_list')).structured! as Map<String, Object?>;
       final note =
@@ -343,8 +348,9 @@ void main() {
     });
 
     test('note_delete removes it', () async {
-      final added = (await callTool('note_add', {'body': 'temporary'}))
-          .structured! as Map<String, Object?>;
+      final added =
+          (await callTool('note_add', {'body': 'temporary'})).structured!
+              as Map<String, Object?>;
 
       final result = await callTool('note_delete', {'id': added['id']});
 

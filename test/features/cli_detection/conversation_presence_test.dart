@@ -40,7 +40,9 @@ const _storeless = AgentDescriptor(
 
 void main() {
   late Directory tmp;
-  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_presence_'));
+  setUp(
+    () => tmp = Directory.systemTemp.createTempSync('karmashala_presence_'),
+  );
   tearDown(() => removeTempDirectory(tmp));
 
   String home(String name) => p.join(tmp.path, name);

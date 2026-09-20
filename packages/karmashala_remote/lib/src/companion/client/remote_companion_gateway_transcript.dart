@@ -41,7 +41,8 @@ extension _GatewayTranscript on RemoteCompanionGateway {
       if (page.omitted > 0)
         CompanionChatMessage(
           role: kCompanionNoticeRole,
-          text: '${page.omitted} earlier messages are not loaded — this is '
+          text:
+              '${page.omitted} earlier messages are not loaded — this is '
               'the top of what the phone has. The desktop holds the whole '
               'conversation.',
         ),

@@ -181,9 +181,7 @@ void main() {
     return UncontrolledProviderScope(
       container: container,
       child: const MaterialApp(
-        home: Scaffold(
-          body: SizedBox(width: 380, child: AttentionInboxView()),
-        ),
+        home: Scaffold(body: SizedBox(width: 380, child: AttentionInboxView())),
       ),
     );
   }
@@ -201,20 +199,15 @@ void main() {
     await tester.pump();
   }
 
-  void insertCrashedSession() => SessionDao(db).insert(
-    session(id: 's1', title: 'Fix login', status: SessionStatus.failed),
-  );
+  void insertCrashedSession() => SessionDao(
+    db,
+  ).insert(session(id: 's1', title: 'Fix login', status: SessionStatus.failed));
 
   /// The offer, found by its glyph rather than its words, so the wording can
   /// change without the test pretending the control has gone.
-  final offer = find.widgetWithIcon(
-    IconButton,
-    AppIcons.arrowBendDownRight,
-  );
+  final offer = find.widgetWithIcon(IconButton, AppIcons.arrowBendDownRight);
 
-  testWidgets('the row offers somewhere to take the follow-up', (
-    tester,
-  ) async {
+  testWidgets('the row offers somewhere to take the follow-up', (tester) async {
     insertCrashedSession();
     await pump(tester);
 
@@ -261,9 +254,7 @@ void main() {
     await tester.tap(find.text('Hand off'));
     await tester.pumpAndSettle();
 
-    expect(service!.handoffs, [
-      (sessionId: 's1', targetInstallationId: 'a1'),
-    ]);
+    expect(service!.handoffs, [(sessionId: 's1', targetInstallationId: 'a1')]);
     expect(find.byType(ContinueWithDialog), findsNothing);
   });
 
@@ -311,21 +302,23 @@ void main() {
       session(id: 's1', title: 'Ship the parser', status: SessionStatus.idle),
     );
     await pump(tester);
-    container.read(attentionInboxProvider.notifier).apply(
-      InboxUpdate(
-        news: [
-          (
-            session: const WatchedSession(
-              key: AgentSessionKey('prompting', 'cli-1'),
-              label: 'Ship the parser',
-              openId: 's1',
-              imported: false,
-            ),
-            reason: NotificationReason.finished,
+    container
+        .read(attentionInboxProvider.notifier)
+        .apply(
+          InboxUpdate(
+            news: [
+              (
+                session: const WatchedSession(
+                  key: AgentSessionKey('prompting', 'cli-1'),
+                  label: 'Ship the parser',
+                  openId: 's1',
+                  imported: false,
+                ),
+                reason: NotificationReason.finished,
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+        );
     await tester.pump();
 
     expect(find.text('Ship the parser'), findsOneWidget);

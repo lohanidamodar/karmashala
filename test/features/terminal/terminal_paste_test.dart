@@ -59,11 +59,12 @@ void main() {
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (call) async => switch (call.method) {
-        'Clipboard.getData' => clipboardThrows
-            ? throw PlatformException(code: 'Clipboard error')
-            : clipboardText == null
-            ? null
-            : <String, Object?>{'text': clipboardText},
+        'Clipboard.getData' =>
+          clipboardThrows
+              ? throw PlatformException(code: 'Clipboard error')
+              : clipboardText == null
+              ? null
+              : <String, Object?>{'text': clipboardText},
         _ => null,
       },
     );
@@ -195,7 +196,8 @@ void main() {
     expect(
       toShell,
       ['\x16'],
-      reason: 'the menu is the other way to paste, and an image is still an '
+      reason:
+          'the menu is the other way to paste, and an image is still an '
           'image when you reach it from a menu',
     );
   });

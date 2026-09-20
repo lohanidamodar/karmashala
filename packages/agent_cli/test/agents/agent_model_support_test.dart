@@ -13,8 +13,7 @@ import 'package:test/test.dart';
 /// "is this Codex".
 void main() {
   const registry = AgentRegistry.builtIn;
-  AgentModelSupport supportOf(String id) =>
-      registry.byId(id)!.launch.model;
+  AgentModelSupport supportOf(String id) => registry.byId(id)!.launch.model;
 
   /// The agents whose model lists were read off a real binary.
   ///
@@ -60,15 +59,18 @@ void main() {
     );
   });
 
-  test('the in-session command is the command plus the id, and nothing else', () {
-    expect(supportOf(AgentIds.claudeCode).commandFor('opus'), '/model opus');
-    // Codex has no such command, so there is nothing to send — which is what
-    // stops a picker being opened in the user's live session.
-    expect(supportOf(AgentIds.codex).commandFor('gpt-5.5'), isNull);
-    // Nothing to switch to is not a command either.
-    expect(supportOf(AgentIds.claudeCode).commandFor(null), isNull);
-    expect(supportOf(AgentIds.claudeCode).commandFor(''), isNull);
-  });
+  test(
+    'the in-session command is the command plus the id, and nothing else',
+    () {
+      expect(supportOf(AgentIds.claudeCode).commandFor('opus'), '/model opus');
+      // Codex has no such command, so there is nothing to send — which is what
+      // stops a picker being opened in the user's live session.
+      expect(supportOf(AgentIds.codex).commandFor('gpt-5.5'), isNull);
+      // Nothing to switch to is not a command either.
+      expect(supportOf(AgentIds.claudeCode).commandFor(null), isNull);
+      expect(supportOf(AgentIds.claudeCode).commandFor(''), isNull);
+    },
+  );
 
   test('an id the curated list has never heard of still reaches the CLI', () {
     // The asymmetry is deliberate: the menu offers only what is declared, but
@@ -124,10 +126,7 @@ void main() {
       expect(options, hasLength(1));
       expect(options.single.isSelectable, isFalse);
       expect(options.single.fitLabel, 'not settable');
-      expect(
-        options.single.summary,
-        contains('takes no model flag'),
-      );
+      expect(options.single.summary, contains('takes no model flag'));
       expect(options.single.summary, contains('Listed-only CLI'));
     });
 

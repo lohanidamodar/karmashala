@@ -121,7 +121,10 @@ void main() {
       // so a Codex turn that died fires no hook at all. There is no event to
       // declare, and the row keeps what it had.
       final codex = AgentRegistry.builtIn.byId(AgentIds.codex)!.hooks!;
-      expect(codex.eventEnding.values, isNot(contains(AgentSessionEnding.failed)));
+      expect(
+        codex.eventEnding.values,
+        isNot(contains(AgentSessionEnding.failed)),
+      );
     });
 
     test('Antigravity: Stop fails only where terminationReason says so', () {
@@ -169,10 +172,7 @@ void main() {
       // No `SessionEnd` is installed for Antigravity at all, so its clean
       // finish is simply not reported — and the row says so rather than
       // claiming one.
-      expect(
-        endingOf(AgentIds.antigravity, 'PostInvocation'),
-        isNull,
-      );
+      expect(endingOf(AgentIds.antigravity, 'PostInvocation'), isNull);
     });
   });
 
@@ -315,10 +315,7 @@ void main() {
 
   group('the word a live-looking row is drawn with', () {
     test('a pane of ours we can see keeps the plain word', () {
-      expect(
-        SessionStatus.running.labelWhen(hostedLive: true),
-        'running',
-      );
+      expect(SessionStatus.running.labelWhen(hostedLive: true), 'running');
     });
 
     test('a live claim with nothing behind it admits what it is', () {

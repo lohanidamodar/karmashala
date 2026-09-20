@@ -49,7 +49,8 @@ void main() {
     WidgetTester tester, {
     TerminalProfile profile = TerminalProfile.powerShell,
     List<({String label, String command, String? shell, bool submit})>
-    snippets = const [],
+        snippets =
+        const [],
   }) async {
     final container = ProviderContainer(
       overrides: [
@@ -143,11 +144,9 @@ void main() {
     await tester.tap(find.text('Run the tests'));
     await tester.pumpAndSettle();
 
-    expect(
-      opened.written,
-      ['flutter test --exclude-tags=live-ssh'],
-      reason: 'no carriage return: the user presses Enter',
-    );
+    expect(opened.written, [
+      'flutter test --exclude-tags=live-ssh',
+    ], reason: 'no carriage return: the user presses Enter');
     // And the palette got out of the way, so the command is visible.
     expect(find.byType(QuickOpen), findsNothing);
   });
@@ -308,7 +307,8 @@ void main() {
         // something in it that cannot be shown in one line.
         id: 'sn-long',
         label: 'Run the tests on this machine only, excluding the live ones',
-        command: 'flutter test --exclude-tags=live-ssh,live-wsl --concurrency=4',
+        command:
+            'flutter test --exclude-tags=live-ssh,live-wsl --concurrency=4',
         createdAt: testTime,
         updatedAt: testTime,
       ),

@@ -18,11 +18,7 @@ import 'session_status.dart';
 /// The header one region of a split draws for the panes stacked in it.
 /// **Deliberately not the tab strip**: it differs by shape and never by colour.
 class PaneGroupStrip extends ConsumerWidget {
-  const PaneGroupStrip({
-    required this.group,
-    required this.focused,
-    super.key,
-  });
+  const PaneGroupStrip({required this.group, required this.focused, super.key});
 
   final PaneGroup group;
 
@@ -187,8 +183,10 @@ bool _accepts(
   // Panes only: a **tab** belongs in a workspace group's strip, where it keeps
   // the status bar it owns.
   TabDrag() => false,
-  PaneDrag(:final paneId) =>
-    sessions.canMovePaneIntoRegion(paneId, anchorPaneId),
+  PaneDrag(:final paneId) => sessions.canMovePaneIntoRegion(
+    paneId,
+    anchorPaneId,
+  ),
 };
 
 void _drop(
@@ -197,8 +195,7 @@ void _drop(
   String anchorPaneId,
 ) => switch (drag) {
   TabDrag() => false,
-  PaneDrag(:final paneId) =>
-    sessions.movePaneIntoRegion(paneId, anchorPaneId),
+  PaneDrag(:final paneId) => sessions.movePaneIntoRegion(paneId, anchorPaneId),
 };
 
 /// One pane's tab in a region header. Drags as a [PaneDrag], so the same chip

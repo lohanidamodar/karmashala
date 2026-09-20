@@ -311,10 +311,10 @@ void main() {
             },
           },
         }, AgentIds.codex);
-      expect(
-        collector.edits.map((e) => e.path),
-        ['/repo/one.md', '/repo/two.md'],
-      );
+      expect(collector.edits.map((e) => e.path), [
+        '/repo/one.md',
+        '/repo/two.md',
+      ]);
     });
   });
 
@@ -481,24 +481,27 @@ void main() {
       expect(diff.status, FileEditDiffStatus.empty);
     });
 
-    test('a rewrite bigger than the alignment budget still shows both sides', () {
-      // Beyond the budget the diff degrades to "all of the old, all of the
-      // new" — a coarse answer, never a missing one, and never an O(n*m) hang.
-      final oldText = List.generate(1200, (i) => 'old $i').join('\n');
-      final newText = List.generate(1200, (i) => 'new $i').join('\n');
-      final diff = buildFileEditDiff(
-        FileEditRecord(
-          path: '/repo/rewritten.txt',
-          kind: FileEditKind.modified,
-          oldText: oldText,
-          newText: newText,
-        ),
-      );
+    test(
+      'a rewrite bigger than the alignment budget still shows both sides',
+      () {
+        // Beyond the budget the diff degrades to "all of the old, all of the
+        // new" — a coarse answer, never a missing one, and never an O(n*m) hang.
+        final oldText = List.generate(1200, (i) => 'old $i').join('\n');
+        final newText = List.generate(1200, (i) => 'new $i').join('\n');
+        final diff = buildFileEditDiff(
+          FileEditRecord(
+            path: '/repo/rewritten.txt',
+            kind: FileEditKind.modified,
+            oldText: oldText,
+            newText: newText,
+          ),
+        );
 
-      expect(diff.status, FileEditDiffStatus.ok);
-      expect(diff.added, 1200);
-      expect(diff.removed, 1200);
-    });
+        expect(diff.status, FileEditDiffStatus.ok);
+        expect(diff.added, 1200);
+        expect(diff.removed, 1200);
+      },
+    );
 
     test('the same record is not diffed twice', () {
       const record = FileEditRecord(

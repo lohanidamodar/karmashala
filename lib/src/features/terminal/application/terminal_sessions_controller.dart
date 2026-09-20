@@ -332,7 +332,8 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
   /// cannot see which tab is in front, and from [_publish] so no path skips it.
   void _applyIngestTiers() {
     final owner = _paneOwner;
-    final onScreen = _activeTab?.layout.visiblePanes.toSet() ?? const <String>{};
+    final onScreen =
+        _activeTab?.layout.visiblePanes.toSet() ?? const <String>{};
     for (final entry in _instances.entries) {
       if (entry.value case final TieredTerminalInstance tiered) {
         final tabId = owner[entry.key];
@@ -434,5 +435,4 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       return null;
     }
   }
-
 }

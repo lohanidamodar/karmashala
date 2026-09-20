@@ -282,29 +282,34 @@ void main() {
       expect(await _get('/v1/$_rendezvous'), startsWith('429'));
     });
 
-    test('a client-supplied x-forwarded-for does not pick its own bucket',
-        () async {
-      await _start(options: const RelayOptions(connectionsPerMinute: 2));
+    test(
+      'a client-supplied x-forwarded-for does not pick its own bucket',
+      () async {
+        await _start(options: const RelayOptions(connectionsPerMinute: 2));
 
-      expect(
-        await _getWith('/v1/$_rendezvous', {'x-forwarded-for': '10.0.0.1'}),
-        startsWith('404'),
-      );
-      expect(
-        await _getWith('/v1/$_rendezvous', {'x-forwarded-for': '10.0.0.2'}),
-        startsWith('404'),
-      );
-      // Third request from the same connection address: limited, whatever the
-      // header claims.
-      expect(
-        await _getWith('/v1/$_rendezvous', {'x-forwarded-for': '10.0.0.3'}),
-        startsWith('429'),
-      );
-    });
+        expect(
+          await _getWith('/v1/$_rendezvous', {'x-forwarded-for': '10.0.0.1'}),
+          startsWith('404'),
+        );
+        expect(
+          await _getWith('/v1/$_rendezvous', {'x-forwarded-for': '10.0.0.2'}),
+          startsWith('404'),
+        );
+        // Third request from the same connection address: limited, whatever the
+        // header claims.
+        expect(
+          await _getWith('/v1/$_rendezvous', {'x-forwarded-for': '10.0.0.3'}),
+          startsWith('429'),
+        );
+      },
+    );
 
     test('behind a trusted proxy the right-most hop is the client', () async {
       await _start(
-        options: const RelayOptions(connectionsPerMinute: 1, trustedProxy: true),
+        options: const RelayOptions(
+          connectionsPerMinute: 1,
+          trustedProxy: true,
+        ),
       );
 
       // The left-most value is the client's own claim; the proxy appended the

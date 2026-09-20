@@ -108,42 +108,48 @@ void main() {
     );
   });
 
-  test('a start() still creates its process here — a Process cannot cross', () async {
-    final runner = LocalCommandRunner(spawner: spawner);
-    final before = processSpawnsOnThisIsolate;
+  test(
+    'a start() still creates its process here — a Process cannot cross',
+    () async {
+      final runner = LocalCommandRunner(spawner: spawner);
+      final before = processSpawnsOnThisIsolate;
 
-    final handle = await runner.start(_exitWith(0));
+      final handle = await runner.start(_exitWith(0));
 
-    expect(await handle.exitCode, 0);
-    expect(
-      processSpawnsOnThisIsolate,
-      before + 1,
-      reason:
-          'deliberate: a live Process is three pipes and a wait, none of which '
-          'copies across an isolate boundary. Recorded here so the decision is '
-          'visible rather than an oversight — these call sites are one per '
-          'agent session and one per terminal, not thirty inside a frame',
-    );
-  });
+      expect(await handle.exitCode, 0);
+      expect(
+        processSpawnsOnThisIsolate,
+        before + 1,
+        reason:
+            'deliberate: a live Process is three pipes and a wait, none of which '
+            'copies across an isolate boundary. Recorded here so the decision is '
+            'visible rather than an oversight — these call sites are one per '
+            'agent session and one per terminal, not thirty inside a frame',
+      );
+    },
+  );
 
-  test('a failed creation still reaches the caller as a CommandException', () async {
-    final runner = LocalCommandRunner(spawner: spawner);
+  test(
+    'a failed creation still reaches the caller as a CommandException',
+    () async {
+      final runner = LocalCommandRunner(spawner: spawner);
 
-    await expectLater(
-      runner.run(
-        const CommandRequest(executable: 'karmashala-no-such-executable'),
-      ),
-      throwsA(
-        isA<CommandException>()
-            .having(
-              (e) => e.message,
-              'message',
-              contains('karmashala-no-such-executable'),
-            )
-            .having((e) => e.cause, 'cause', isA<ProcessException>()),
-      ),
-    );
-  });
+      await expectLater(
+        runner.run(
+          const CommandRequest(executable: 'karmashala-no-such-executable'),
+        ),
+        throwsA(
+          isA<CommandException>()
+              .having(
+                (e) => e.message,
+                'message',
+                contains('karmashala-no-such-executable'),
+              )
+              .having((e) => e.cause, 'cause', isA<ProcessException>()),
+        ),
+      );
+    },
+  );
 
   test('eight commands in flight each get their own answer back', () async {
     final runner = LocalCommandRunner(spawner: spawner);
@@ -220,9 +226,7 @@ String get _shell => Platform.isWindows ? 'cmd.exe' : 'sh';
 
 CommandRequest _exitWith(int code) => CommandRequest(
   executable: _shell,
-  arguments: Platform.isWindows
-      ? ['/c', 'exit $code']
-      : ['-c', 'exit $code'],
+  arguments: Platform.isWindows ? ['/c', 'exit $code'] : ['-c', 'exit $code'],
 );
 
 CommandRequest _echo(String token) => CommandRequest(

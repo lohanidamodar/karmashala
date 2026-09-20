@@ -68,12 +68,8 @@ class AgentHookEndpoint {
       switch (environment) {
         // Both local kinds dial this very process's loopback listener: the
         // agent is a child process on this machine, whatever OS it is.
-        EnvironmentKind.windowsNative ||
-        EnvironmentKind.localPosix => AgentHookHttpTransport(
-          host: '127.0.0.1',
-          port: port,
-          token: token,
-        ),
+        EnvironmentKind.windowsNative || EnvironmentKind.localPosix =>
+          AgentHookHttpTransport(host: '127.0.0.1', port: port, token: token),
         // A separate VM. It shares a filesystem with us and not a loopback, so
         // the file is the channel.
         EnvironmentKind.wsl => const AgentHookSpoolTransport(),

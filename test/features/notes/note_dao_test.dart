@@ -56,10 +56,7 @@ void main() {
   test('lists newest first, and can be narrowed to one session', () {
     dao.insert(noteFixture(id: 'old', createdAt: testTime));
     dao.insert(
-      noteFixture(
-        id: 'new',
-        createdAt: testTime.add(const Duration(hours: 1)),
-      ),
+      noteFixture(id: 'new', createdAt: testTime.add(const Duration(hours: 1))),
     );
     dao.insert(noteFixture(id: 'other', sessionId: 's2', ordinal: null));
 
@@ -67,37 +64,40 @@ void main() {
     expect(dao.list(sessionId: 's1').map((n) => n.id), ['new', 'old']);
   });
 
-  test('an edit rewrites the text, the filing and the stamp, not the origin', () {
-    dao.insert(noteFixture());
-    final later = testTime.add(const Duration(days: 2));
+  test(
+    'an edit rewrites the text, the filing and the stamp, not the origin',
+    () {
+      dao.insert(noteFixture());
+      final later = testTime.add(const Duration(days: 2));
 
-    dao.update(
-      'n1',
-      body: 'Compact mode, but only for the tab strip',
-      title: 'Tab strip density',
-      projectId: 'p1',
-      updatedAt: later,
-    );
+      dao.update(
+        'n1',
+        body: 'Compact mode, but only for the tab strip',
+        title: 'Tab strip density',
+        projectId: 'p1',
+        updatedAt: later,
+      );
 
-    final stored = dao.getById('n1')!;
-    expect(stored.body, 'Compact mode, but only for the tab strip');
-    expect(stored.title, 'Tab strip density');
-    // Filing is the user's, so an edit can change it — and can clear it.
-    expect(stored.projectId, 'p1');
-    dao.update(
-      'n1',
-      body: stored.body,
-      title: stored.title,
-      projectId: null,
-      updatedAt: later,
-    );
-    expect(dao.getById('n1')!.projectId, isNull);
-    expect(stored.updatedAt, later);
-    expect(stored.createdAt, testTime, reason: 'when it was kept is a fact');
-    // Where it came from is a fact about the past and is not editable.
-    expect(stored.sourceSessionId, 's1');
-    expect(stored.sourceMessageOrdinal, 4);
-  });
+      final stored = dao.getById('n1')!;
+      expect(stored.body, 'Compact mode, but only for the tab strip');
+      expect(stored.title, 'Tab strip density');
+      // Filing is the user's, so an edit can change it — and can clear it.
+      expect(stored.projectId, 'p1');
+      dao.update(
+        'n1',
+        body: stored.body,
+        title: stored.title,
+        projectId: null,
+        updatedAt: later,
+      );
+      expect(dao.getById('n1')!.projectId, isNull);
+      expect(stored.updatedAt, later);
+      expect(stored.createdAt, testTime, reason: 'when it was kept is a fact');
+      // Where it came from is a fact about the past and is not editable.
+      expect(stored.sourceSessionId, 's1');
+      expect(stored.sourceMessageOrdinal, 4);
+    },
+  );
 
   test('a deleted note is gone and the rest are not', () {
     dao.insert(noteFixture(id: 'a'));
@@ -121,12 +121,15 @@ void main() {
     expect(noteFixture(body: '   ').displayTitle, 'Untitled note');
   });
 
-  test('a very long first line is elided rather than laid across the panel', () {
-    final long = 'x' * 300;
-    final title = noteFixture(body: long).displayTitle;
-    expect(title.length, 80);
-    expect(title.endsWith('…'), isTrue);
-    // Elision is for the *list*; the note itself is untouched.
-    expect(noteFixture(body: long).body, long);
-  });
+  test(
+    'a very long first line is elided rather than laid across the panel',
+    () {
+      final long = 'x' * 300;
+      final title = noteFixture(body: long).displayTitle;
+      expect(title.length, 80);
+      expect(title.endsWith('…'), isTrue);
+      // Elision is for the *list*; the note itself is untouched.
+      expect(noteFixture(body: long).body, long);
+    },
+  );
 }

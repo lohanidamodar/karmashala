@@ -11,34 +11,40 @@ import '../support/temp_directory.dart';
 void main() {
   const runner = LocalCommandRunner();
 
-  test('a write in flight when the child dies is not an uncaught error', () async {
-    final handle = await runner.start(_exitAfterAMoment());
-    // Far more than a pipe holds, to a child that never reads: the write is
-    // still in flight when the child exits. Unheard, the failure would reach
-    // the zone and fail this test on its own.
-    final big = 'x' * (1024 * 1024);
-    for (var i = 0; i < 8; i++) {
-      handle.writeLine(big);
-    }
-    await handle.exitCode;
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+  test(
+    'a write in flight when the child dies is not an uncaught error',
+    () async {
+      final handle = await runner.start(_exitAfterAMoment());
+      // Far more than a pipe holds, to a child that never reads: the write is
+      // still in flight when the child exits. Unheard, the failure would reach
+      // the zone and fail this test on its own.
+      final big = 'x' * (1024 * 1024);
+      for (var i = 0; i < 8; i++) {
+        handle.writeLine(big);
+      }
+      await handle.exitCode;
+      await Future<void>.delayed(const Duration(milliseconds: 500));
 
-    expect(() => handle.writeLine('still there?'), throwsStateError);
-  });
+      expect(() => handle.writeLine('still there?'), throwsStateError);
+    },
+  );
 
-  test('a byte that is not UTF-8 is one wrong character, not a lost line', () async {
-    final dir = Directory.systemTemp.createTempSync('karmashala_bytes');
-    addTearDown(() => removeTempDirectory(dir));
-    // The native separator: `type` reads a forward slash as a switch.
-    final file = File('${dir.path}${Platform.pathSeparator}out.bin')
-      ..writeAsBytesSync([0x68, 0xff, 0x69, 0x0a]);
+  test(
+    'a byte that is not UTF-8 is one wrong character, not a lost line',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('karmashala_bytes');
+      addTearDown(() => removeTempDirectory(dir));
+      // The native separator: `type` reads a forward slash as a switch.
+      final file = File('${dir.path}${Platform.pathSeparator}out.bin')
+        ..writeAsBytesSync([0x68, 0xff, 0x69, 0x0a]);
 
-    final handle = await runner.start(_print(file.path));
-    final lines = await handle.stdoutLines.toList();
+      final handle = await runner.start(_print(file.path));
+      final lines = await handle.stdoutLines.toList();
 
-    expect(lines, ['h\u{FFFD}i']);
-    expect(await handle.exitCode, 0);
-  });
+      expect(lines, ['h\u{FFFD}i']);
+      expect(await handle.exitCode, 0);
+    },
+  );
 }
 
 String get _shell => Platform.isWindows ? 'cmd.exe' : 'sh';

@@ -124,10 +124,7 @@ class RemoteFileBrowser {
     _requireOwnEnvironment(from);
     _requireOwnEnvironment(to);
     final sftp = await _client();
-    await _run(
-      'rename ${from.path}',
-      () => sftp.rename(from.path, to.path),
-    );
+    await _run('rename ${from.path}', () => sftp.rename(from.path, to.path));
   }
 
   /// Removes [path]. A directory needs [recursive], and its contents are
@@ -194,9 +191,7 @@ class RemoteFileBrowser {
       try {
         var moved = 0;
         await for (final chunk in chunks) {
-          final bytes = chunk is Uint8List
-              ? chunk
-              : Uint8List.fromList(chunk);
+          final bytes = chunk is Uint8List ? chunk : Uint8List.fromList(chunk);
           await file.writeBytes(bytes, offset: moved);
           moved += bytes.length;
           onProgress?.call(moved);

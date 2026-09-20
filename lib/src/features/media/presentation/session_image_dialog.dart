@@ -97,7 +97,6 @@ class SessionImageDialog extends StatelessWidget {
                             ? resolveHostPath
                             : null,
                       ),
-
               ),
             ),
           ),

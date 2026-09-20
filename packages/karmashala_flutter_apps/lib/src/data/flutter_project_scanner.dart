@@ -54,7 +54,11 @@ class FlutterProjectScanner {
   /// not be established**, which is not false (§19). The `package_config.json`
   /// rather than `.dart_tool/`: other things create the directory.
   Future<bool?> hasPackageConfig(EnvironmentPath directory) async {
-    final path = _context.join(directory.path, '.dart_tool', 'package_config.json');
+    final path = _context.join(
+      directory.path,
+      '.dart_tool',
+      'package_config.json',
+    );
     if (isLocalHost(kind)) return File(path).existsSync();
     try {
       final result = await runner.run(
@@ -76,17 +80,24 @@ class FlutterProjectScanner {
         final pubspec = File(_context.join(directory, 'pubspec.yaml'));
         if (pubspec.existsSync()) {
           try {
-            found.add((path: pubspec.path, contents: pubspec.readAsStringSync()));
+            found.add((
+              path: pubspec.path,
+              contents: pubspec.readAsStringSync(),
+            ));
           } on FileSystemException {
             // Unreadable is not a project we can offer, nor a failed scan.
           }
         }
         if (depth == maxDepth) continue;
         try {
-          for (final entry in Directory(directory).listSync(followLinks: false)) {
+          for (final entry in Directory(
+            directory,
+          ).listSync(followLinks: false)) {
             if (entry is! Directory) continue;
             final name = _context.basename(entry.path);
-            if (name.startsWith('.') || kFlutterScanSkips.contains(name)) continue;
+            if (name.startsWith('.') || kFlutterScanSkips.contains(name)) {
+              continue;
+            }
             next.add(entry.path);
           }
         } on FileSystemException {
@@ -115,11 +126,17 @@ class FlutterProjectScanner {
           executable: 'find',
           arguments: <String>[
             root.path,
-            '-maxdepth', '${maxDepth + 1}',
-            '-name', 'pubspec.yaml',
-            '-not', '-path', '*/.*',
+            '-maxdepth',
+            '${maxDepth + 1}',
+            '-name',
+            'pubspec.yaml',
+            '-not',
+            '-path',
+            '*/.*',
             for (final skip in kFlutterScanSkips) ...<String>[
-              '-not', '-path', '*/$skip/*',
+              '-not',
+              '-path',
+              '*/$skip/*',
             ],
           ],
         ),

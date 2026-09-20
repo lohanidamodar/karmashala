@@ -31,7 +31,9 @@ void main() {
         await pumpPhone(
           tester,
           gateway: fake,
-          home: const Column(children: [CompanionActivityStrip(sessionId: 's1')]),
+          home: const Column(
+            children: [CompanionActivityStrip(sessionId: 's1')],
+          ),
         );
         fake.setActivity('s1', running());
         await tester.pump();

@@ -50,8 +50,8 @@ enum InboxItemKind {
   /// Who is entitled to take an item of this kind off the list.
   InboxRetirement get retirement => switch (this) {
     // State the watcher can see stop: it is looking at exactly this every poll.
-    InboxItemKind.needsApproval || InboxItemKind.failed =>
-      InboxRetirement.agentWatcher,
+    InboxItemKind.needsApproval ||
+    InboxItemKind.failed => InboxRetirement.agentWatcher,
     // Events. A turn that ended stays ended and a build that went red went red,
     // so looking at the source is what finishes them.
     InboxItemKind.finished ||

@@ -13,7 +13,10 @@ const int kMaxTranscriptTextBytes = 64 * 1024;
 /// encoded bytes and walked back to a code-point boundary: `substring` counts
 /// UTF-16 units and can split a surrogate pair into a lone half no UTF-8
 /// encoder can represent. Returns the receiver itself when nothing is taken.
-(String, bool) boundedText(String text, {int maxBytes = kMaxTranscriptTextBytes}) {
+(String, bool) boundedText(
+  String text, {
+  int maxBytes = kMaxTranscriptTextBytes,
+}) {
   // One UTF-8 byte per code unit is the floor, so a string this short is under
   // the bound whatever it contains.
   if (text.length <= maxBytes ~/ 4) return (text, false);

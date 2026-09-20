@@ -127,26 +127,53 @@ void main() {
       );
     }
 
-    test("the host's own order is what the phone lists — not a re-sort", () async {
-      // Deliberately interleaved projects and non-alphabetical titles: any
-      // re-sort on the phone would change this sequence.
-      addRow('z', title: 'Zebra', repositoryId: 'r1', repositoryName: 'alpha');
-      addRow('a', title: 'Apple', repositoryId: 'r2', repositoryName: 'beta');
-      addRow('m', title: 'Mango', repositoryId: 'r1', repositoryName: 'alpha');
-      final gateway = await pairedGateway();
+    test(
+      "the host's own order is what the phone lists — not a re-sort",
+      () async {
+        // Deliberately interleaved projects and non-alphabetical titles: any
+        // re-sort on the phone would change this sequence.
+        addRow(
+          'z',
+          title: 'Zebra',
+          repositoryId: 'r1',
+          repositoryName: 'alpha',
+        );
+        addRow('a', title: 'Apple', repositoryId: 'r2', repositoryName: 'beta');
+        addRow(
+          'm',
+          title: 'Mango',
+          repositoryId: 'r1',
+          repositoryName: 'alpha',
+        );
+        final gateway = await pairedGateway();
 
-      final list = await gateway.listSessions();
+        final list = await gateway.listSessions();
 
-      expect([for (final s in list) s.id], ['z', 'a', 'm']);
-    });
+        expect([for (final s in list) s.id], ['z', 'a', 'm']);
+      },
+    );
 
     test('two repositories in one project make one header, not two', () async {
       // The Explorer groups by project; the phone must agree, or a project
       // holding several checkouts splits into a header per checkout.
-      addRow('a', title: 'A', repositoryId: 'r1', repositoryName: 'api',
-          projectId: 'p1', projectName: 'Shop', projectPath: '/w/shop');
-      addRow('b', title: 'B', repositoryId: 'r2', repositoryName: 'web',
-          projectId: 'p1', projectName: 'Shop', projectPath: '/w/shop');
+      addRow(
+        'a',
+        title: 'A',
+        repositoryId: 'r1',
+        repositoryName: 'api',
+        projectId: 'p1',
+        projectName: 'Shop',
+        projectPath: '/w/shop',
+      );
+      addRow(
+        'b',
+        title: 'B',
+        repositoryId: 'r2',
+        repositoryName: 'web',
+        projectId: 'p1',
+        projectName: 'Shop',
+        projectPath: '/w/shop',
+      );
       final gateway = await pairedGateway();
 
       final list = await gateway.listSessions();
@@ -168,8 +195,13 @@ void main() {
     });
 
     test('a missing folder is marked, not silently normal', () async {
-      addRow('a', title: 'A', projectId: 'p1', projectName: 'Gone',
-          folderMissing: true);
+      addRow(
+        'a',
+        title: 'A',
+        projectId: 'p1',
+        projectName: 'Gone',
+        folderMissing: true,
+      );
       final gateway = await pairedGateway();
 
       expect((await gateway.listSessions()).single.folderMissing, isTrue);
@@ -177,8 +209,12 @@ void main() {
 
     test('archived sessions are listed and flagged, not dropped', () async {
       addRow('live', title: 'Live one', repositoryName: 'alpha');
-      addRow('old', title: 'Archived one', repositoryName: 'alpha',
-          archived: true);
+      addRow(
+        'old',
+        title: 'Archived one',
+        repositoryName: 'alpha',
+        archived: true,
+      );
       final gateway = await pairedGateway();
 
       final list = await gateway.listSessions();
@@ -188,21 +224,23 @@ void main() {
       expect(list.singleWhere((s) => s.id == 'live').archived, isFalse);
     });
 
-    test('the repository id travels, so same-named folders stay apart',
-        () async {
-      addRow('one', title: 'One', repositoryId: 'r1', repositoryName: 'app');
-      addRow('two', title: 'Two', repositoryId: 'r2', repositoryName: 'app');
-      final gateway = await pairedGateway();
+    test(
+      'the repository id travels, so same-named folders stay apart',
+      () async {
+        addRow('one', title: 'One', repositoryId: 'r1', repositoryName: 'app');
+        addRow('two', title: 'Two', repositoryId: 'r2', repositoryName: 'app');
+        final gateway = await pairedGateway();
 
-      final list = await gateway.listSessions();
+        final list = await gateway.listSessions();
 
-      expect(list.map((s) => s.projectId), ['r1', 'r2']);
-      expect(
-        list.map((s) => s.projectKey).toSet(),
-        hasLength(2),
-        reason: 'two checkouts named "app" are two projects',
-      );
-    });
+        expect(list.map((s) => s.projectId), ['r1', 'r2']);
+        expect(
+          list.map((s) => s.projectKey).toSet(),
+          hasLength(2),
+          reason: 'two checkouts named "app" are two projects',
+        );
+      },
+    );
 
     test('a host that sends no repository id still groups by name', () async {
       addRow('one', title: 'One', repositoryName: 'app');
@@ -219,50 +257,73 @@ void main() {
       );
     });
 
-    test('a session that arrives late is never shown on the end of the list '
-        'and then shuffled — it lands beside its own project at once',
-        () async {
-      addRow('a1', title: 'A one', repositoryId: 'r1', repositoryName: 'alpha');
-      addRow('b1', title: 'B one', repositoryId: 'r2', repositoryName: 'beta');
-      final gateway = await pairedGateway();
-      await gateway.listSessions();
-
-      // Every list the phone renders from here on.
-      final seen = <List<String>>[];
-      final sub = gateway
-          .watchSessions()
-          .listen((list) => seen.add([for (final s in list) s.id]));
-      addTearDown(sub.cancel);
-
-      // A new session appears on the FIRST project while the phone watches.
-      // The desktop groups its own list, so its order is a1, a2, b1.
-      final rows = {...fake.sessions};
-      fake.sessions.clear();
-      fake.sessions['a1'] = rows['a1']!;
-      addRow('a2', title: 'A two', repositoryId: 'r1', repositoryName: 'alpha');
-      fake.sessions['b1'] = rows['b1']!;
-      // Opening it subscribes the phone, which is what makes the host push
-      // this session's `session.changed` — a row the cached list never held.
-      await gateway.transcript('a2').first.timeout(const Duration(seconds: 5));
-      await service!.notifySessionsChanged();
-
-      final deadline = DateTime.now().add(const Duration(seconds: 10));
-      while (seen.isEmpty || seen.last.length != 3) {
-        if (DateTime.now().isAfter(deadline)) fail('the newcomer never landed');
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-      }
-
-      expect(seen.last, ['a1', 'a2', 'b1'], reason: "the host's own order");
-      for (final list in seen) {
-        if (!list.contains('a2')) continue;
-        expect(
-          list,
-          ['a1', 'a2', 'b1'],
-          reason: 'no frame ever put the arrival after another project — that '
-              'is the jump the user reported',
+    test(
+      'a session that arrives late is never shown on the end of the list '
+      'and then shuffled — it lands beside its own project at once',
+      () async {
+        addRow(
+          'a1',
+          title: 'A one',
+          repositoryId: 'r1',
+          repositoryName: 'alpha',
         );
-      }
-    });
+        addRow(
+          'b1',
+          title: 'B one',
+          repositoryId: 'r2',
+          repositoryName: 'beta',
+        );
+        final gateway = await pairedGateway();
+        await gateway.listSessions();
+
+        // Every list the phone renders from here on.
+        final seen = <List<String>>[];
+        final sub = gateway.watchSessions().listen(
+          (list) => seen.add([for (final s in list) s.id]),
+        );
+        addTearDown(sub.cancel);
+
+        // A new session appears on the FIRST project while the phone watches.
+        // The desktop groups its own list, so its order is a1, a2, b1.
+        final rows = {...fake.sessions};
+        fake.sessions.clear();
+        fake.sessions['a1'] = rows['a1']!;
+        addRow(
+          'a2',
+          title: 'A two',
+          repositoryId: 'r1',
+          repositoryName: 'alpha',
+        );
+        fake.sessions['b1'] = rows['b1']!;
+        // Opening it subscribes the phone, which is what makes the host push
+        // this session's `session.changed` — a row the cached list never held.
+        await gateway
+            .transcript('a2')
+            .first
+            .timeout(const Duration(seconds: 5));
+        await service!.notifySessionsChanged();
+
+        final deadline = DateTime.now().add(const Duration(seconds: 10));
+        while (seen.isEmpty || seen.last.length != 3) {
+          if (DateTime.now().isAfter(deadline)) {
+            fail('the newcomer never landed');
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+
+        expect(seen.last, ['a1', 'a2', 'b1'], reason: "the host's own order");
+        for (final list in seen) {
+          if (!list.contains('a2')) continue;
+          expect(
+            list,
+            ['a1', 'a2', 'b1'],
+            reason:
+                'no frame ever put the arrival after another project — that '
+                'is the jump the user reported',
+          );
+        }
+      },
+    );
   });
 
   group('on screen', () {
@@ -397,10 +458,7 @@ void main() {
         home: const SessionListScreen(),
       );
 
-      expect(
-        find.text('folder missing  ·  last seen 2h ago'),
-        findsOneWidget,
-      );
+      expect(find.text('folder missing  ·  last seen 2h ago'), findsOneWidget);
     });
 
     testWidgets('branch and sub-path render on the card when the host sends '

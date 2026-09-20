@@ -117,9 +117,7 @@ class RemoteHostBindings {
   /// dialog uses. Everything the launcher decides stays the launcher's; this
   /// resolves the two ids, hands the user's mode over as the override, and
   /// turns whatever comes back into a [RemoteApiRefusal] the phone can read.
-  final Future<RemoteSessionStarted> Function(
-    RemoteSessionStartRequest request,
-  )
+  final Future<RemoteSessionStarted> Function(RemoteSessionStartRequest request)
   startSession;
 
   final Future<RemoteWorkspaceProject> Function(String name, String path)

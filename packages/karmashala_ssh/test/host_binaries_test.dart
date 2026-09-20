@@ -37,7 +37,9 @@ void main() {
     test('it is matched, and says it needs unpacking', () async {
       give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 30);
 
-      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+      final binary = await DirectoryHostBinaries([
+        release,
+      ]).binaryFor(machine('linux-x64'));
 
       expect(binary, isNotNull);
       expect(binary!.version, '1.21.0');
@@ -48,19 +50,31 @@ void main() {
     test('the suffix is not mistaken for part of the architecture', () async {
       give(release, 'karmashala_host-1.21.0-linux-arm64.tar.gz');
 
-      expect(await DirectoryHostBinaries([release]).binaryFor(machine('linux-arm64')), isNotNull);
-      expect(await DirectoryHostBinaries([release]).availableTargets(), ['linux-arm64']);
+      expect(
+        await DirectoryHostBinaries([
+          release,
+        ]).binaryFor(machine('linux-arm64')),
+        isNotNull,
+      );
+      expect(await DirectoryHostBinaries([release]).availableTargets(), [
+        'linux-arm64',
+      ]);
     });
 
-    test('at one version the bundle beats the bare file, which has no sqlite', () async {
-      give(release, 'karmashala_host-1.21.0-linux-x64', bytes: 10);
-      give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 20);
+    test(
+      'at one version the bundle beats the bare file, which has no sqlite',
+      () async {
+        give(release, 'karmashala_host-1.21.0-linux-x64', bytes: 10);
+        give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 20);
 
-      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+        final binary = await DirectoryHostBinaries([
+          release,
+        ]).binaryFor(machine('linux-x64'));
 
-      expect(binary!.isBundleArchive, isTrue);
-      expect(binary.length, 20);
-    });
+        expect(binary!.isBundleArchive, isTrue);
+        expect(binary.length, 20);
+      },
+    );
 
     test('an older bundle beats a newer bare file, which has no sqlite', () async {
       // Shape before version, and this upgrade is why: the installer deletes
@@ -70,7 +84,9 @@ void main() {
       give(release, 'karmashala_host-1.20.0-linux-x64.tar.gz', bytes: 20);
       give(release, 'karmashala_host-1.21.0-linux-x64', bytes: 10);
 
-      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+      final binary = await DirectoryHostBinaries([
+        release,
+      ]).binaryFor(machine('linux-x64'));
 
       expect(binary!.isBundleArchive, isTrue);
       expect(binary.version, '1.20.0');
@@ -80,7 +96,9 @@ void main() {
       give(release, 'karmashala_host-1.20.0-linux-x64.tar.gz', bytes: 10);
       give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 20);
 
-      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+      final binary = await DirectoryHostBinaries([
+        release,
+      ]).binaryFor(machine('linux-x64'));
 
       expect(binary!.version, '1.21.0');
     });
@@ -88,7 +106,9 @@ void main() {
     test('the bytes are read only when asked for', () async {
       give(release, 'karmashala_host-1.21.0-linux-x64.tar.gz', bytes: 30);
 
-      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+      final binary = await DirectoryHostBinaries([
+        release,
+      ]).binaryFor(machine('linux-x64'));
 
       expect(binary!.length, 30, reason: 'the size comes from a stat');
       expect(await binary.readBytes(), hasLength(30));
@@ -96,20 +116,25 @@ void main() {
   });
 
   group('picking a binary', () {
-    test('the newer of two versions is taken, and the older is left where it is', () async {
-      give(release, 'karmashala_host-1.20.0-linux-x64', bytes: 10);
-      give(release, 'karmashala_host-1.20.1-linux-x64', bytes: 20);
+    test(
+      'the newer of two versions is taken, and the older is left where it is',
+      () async {
+        give(release, 'karmashala_host-1.20.0-linux-x64', bytes: 10);
+        give(release, 'karmashala_host-1.20.1-linux-x64', bytes: 20);
 
-      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+        final binary = await DirectoryHostBinaries([
+          release,
+        ]).binaryFor(machine('linux-x64'));
 
-      expect(binary!.version, '1.20.1');
-      expect(binary.source, endsWith('karmashala_host-1.20.1-linux-x64'));
-      expect(binary.length, 20);
-      expect(binary.candidates, 2);
-      // The installer copies the Release directory wholesale; nothing here is
-      // entitled to prune it.
-      expect(release.listSync(), hasLength(2));
-    });
+        expect(binary!.version, '1.20.1');
+        expect(binary.source, endsWith('karmashala_host-1.20.1-linux-x64'));
+        expect(binary.length, 20);
+        expect(binary.candidates, 2);
+        // The installer copies the Release directory wholesale; nothing here is
+        // entitled to prune it.
+        expect(release.listSync(), hasLength(2));
+      },
+    );
 
     test('versions are compared as numbers, not as text', () async {
       // The bug in one line: sorted as strings, 1.9.0 comes last of these.
@@ -117,7 +142,9 @@ void main() {
       give(release, 'karmashala_host-1.10.0-linux-x64');
       give(release, 'karmashala_host-1.20.1-linux-x64');
 
-      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+      final binary = await DirectoryHostBinaries([
+        release,
+      ]).binaryFor(machine('linux-x64'));
 
       expect(binary!.version, '1.20.1');
       expect(binary.candidates, 3);
@@ -127,50 +154,73 @@ void main() {
       give(release, 'karmashala_host-linux-x64');
       give(release, 'karmashala_host-0.1.0-linux-x64');
 
-      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+      final binary = await DirectoryHostBinaries([
+        release,
+      ]).binaryFor(machine('linux-x64'));
 
       expect(binary!.version, '0.1.0');
       expect(binary.candidates, 2);
     });
 
-    test('an unversioned file on its own is still a binary, and says so', () async {
-      give(release, 'karmashala_host-linux-x64');
+    test(
+      'an unversioned file on its own is still a binary, and says so',
+      () async {
+        give(release, 'karmashala_host-linux-x64');
 
-      final binary = await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64'));
+        final binary = await DirectoryHostBinaries([
+          release,
+        ]).binaryFor(machine('linux-x64'));
 
-      expect(binary!.version, 'unversioned');
-      expect(binary.candidates, 1);
-    });
+        expect(binary!.version, 'unversioned');
+        expect(binary.candidates, 1);
+      },
+    );
 
-    test('another os or arch is never picked, however high its version', () async {
-      give(release, 'karmashala_host-9.9.9-linux-arm64');
-      give(release, 'karmashala_host-9.9.9-darwin-arm64');
-      give(release, 'karmashala_host-1.0.0-linux-x64');
+    test(
+      'another os or arch is never picked, however high its version',
+      () async {
+        give(release, 'karmashala_host-9.9.9-linux-arm64');
+        give(release, 'karmashala_host-9.9.9-darwin-arm64');
+        give(release, 'karmashala_host-1.0.0-linux-x64');
 
-      final binaries = DirectoryHostBinaries([release]);
-      final binary = await binaries.binaryFor(machine('linux-x64'));
+        final binaries = DirectoryHostBinaries([release]);
+        final binary = await binaries.binaryFor(machine('linux-x64'));
 
-      expect(binary!.version, '1.0.0');
-      expect(binary.source, endsWith('karmashala_host-1.0.0-linux-x64'));
-      expect(binary.candidates, 1);
-      expect(await binaries.availableTargets(), ['darwin-arm64', 'linux-arm64', 'linux-x64']);
-    });
+        expect(binary!.version, '1.0.0');
+        expect(binary.source, endsWith('karmashala_host-1.0.0-linux-x64'));
+        expect(binary.candidates, 1);
+        expect(await binaries.availableTargets(), [
+          'darwin-arm64',
+          'linux-arm64',
+          'linux-x64',
+        ]);
+      },
+    );
 
-    test('the first directory holding a match wins, and the newest within it', () async {
-      give(release, 'karmashala_host-1.19.0-linux-x64');
-      give(release, 'karmashala_host-1.20.1-linux-x64');
-      give(build, 'karmashala_host-2.0.0-linux-x64');
+    test(
+      'the first directory holding a match wins, and the newest within it',
+      () async {
+        give(release, 'karmashala_host-1.19.0-linux-x64');
+        give(release, 'karmashala_host-1.20.1-linux-x64');
+        give(build, 'karmashala_host-2.0.0-linux-x64');
 
-      final binary = await DirectoryHostBinaries([release, build]).binaryFor(machine('linux-x64'));
+        final binary = await DirectoryHostBinaries([
+          release,
+          build,
+        ]).binaryFor(machine('linux-x64'));
 
-      expect(binary!.version, '1.20.1');
-    });
+        expect(binary!.version, '1.20.1');
+      },
+    );
 
     test('a directory with nothing for this target has no binary', () async {
       give(release, 'karmashala_host-1.20.1-linux-arm64');
       give(release, 'karmashala_host.exe');
 
-      expect(await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64')), isNull);
+      expect(
+        await DirectoryHostBinaries([release]).binaryFor(machine('linux-x64')),
+        isNull,
+      );
       // A directory that is not there is not a failure either.
       expect(
         await DirectoryHostBinaries([
@@ -181,19 +231,22 @@ void main() {
     });
   });
 
-  test('a machine with no binary in this build still answers noBinary', () async {
-    give(release, 'karmashala_host-1.20.1-linux-arm64');
+  test(
+    'a machine with no binary in this build still answers noBinary',
+    () async {
+      give(release, 'karmashala_host-1.20.1-linux-arm64');
 
-    final deployment = await HostDeployer(
-      target: _StubTarget(),
-      binaries: DirectoryHostBinaries([release]),
-      clock: () => DateTime.utc(2026, 9, 10),
-    ).deploy();
+      final deployment = await HostDeployer(
+        target: _StubTarget(),
+        binaries: DirectoryHostBinaries([release]),
+        clock: () => DateTime.utc(2026, 9, 10),
+      ).deploy();
 
-    expect(deployment.status, HostDeploymentStatus.noBinary);
-    expect(deployment.reason, contains('linux-x64'));
-    expect(deployment.reason, contains('linux-arm64'));
-  });
+      expect(deployment.status, HostDeploymentStatus.noBinary);
+      expect(deployment.reason, contains('linux-x64'));
+      expect(deployment.reason, contains('linux-arm64'));
+    },
+  );
 }
 
 /// Answers `uname` and nothing else: a deploy that gets past the binary check

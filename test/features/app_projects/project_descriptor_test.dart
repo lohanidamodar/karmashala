@@ -39,19 +39,22 @@ void main() {
       expect(field.refusal, isEmpty);
     });
 
-    test('absent and unchecked are different answers, and neither is a value', () {
-      const absent = Established<String>.absent('Android has none');
-      const unchecked = Established<String>.unchecked('needs a Mac');
-      expect(absent.state, EstablishedState.absent);
-      expect(unchecked.state, EstablishedState.unchecked);
-      expect(absent.value, isNull);
-      expect(unchecked.value, isNull);
-      expect(absent.isMeasured, isFalse);
-      expect(unchecked.isMeasured, isFalse);
-      // The difference is the point: a known absence is not a blind spot.
-      expect(absent.state, isNot(unchecked.state));
-      expect(unchecked.refusal, 'needs a Mac');
-    });
+    test(
+      'absent and unchecked are different answers, and neither is a value',
+      () {
+        const absent = Established<String>.absent('Android has none');
+        const unchecked = Established<String>.unchecked('needs a Mac');
+        expect(absent.state, EstablishedState.absent);
+        expect(unchecked.state, EstablishedState.unchecked);
+        expect(absent.value, isNull);
+        expect(unchecked.value, isNull);
+        expect(absent.isMeasured, isFalse);
+        expect(unchecked.isMeasured, isFalse);
+        // The difference is the point: a known absence is not a blind spot.
+        expect(absent.state, isNot(unchecked.state));
+        expect(unchecked.refusal, 'needs a Mac');
+      },
+    );
 
     test('the state travels in the json, so a reader cannot mistake one', () {
       const unchecked = Established<String>.unchecked('needs a Mac');
@@ -65,10 +68,9 @@ void main() {
       const spec = ProjectBuildSpec(
         target: ProjectTarget.android,
         tool: ProjectBuildTool.gradleWrapper,
-        command: Established<List<String>>.measured(
-          <String>['<module>:assembleDebug'],
-          evidence: 'ran it',
-        ),
+        command: Established<List<String>>.measured(<String>[
+          '<module>:assembleDebug',
+        ], evidence: 'ran it'),
         artifact: Established<ProjectArtifact>.measured(
           ProjectArtifact(
             directory: '<module>/build/outputs/apk/debug',
@@ -81,7 +83,9 @@ void main() {
           evidence: 'read it',
         ),
       );
-      expect(spec.commandFor(module: 'mobile'), <String>['mobile:assembleDebug']);
+      expect(spec.commandFor(module: 'mobile'), <String>[
+        'mobile:assembleDebug',
+      ]);
       expect(
         spec.artifactFor(module: 'mobile')!.path,
         'mobile/build/outputs/apk/debug/app-debug.apk',
@@ -96,7 +100,9 @@ void main() {
         tool: ProjectBuildTool.xcodebuild,
         command: Established<List<String>>.unchecked('needs a Mac'),
         artifact: Established<ProjectArtifact>.unchecked('needs a Mac'),
-        applicationId: Established<ApplicationIdSource>.unchecked('needs a Mac'),
+        applicationId: Established<ApplicationIdSource>.unchecked(
+          'needs a Mac',
+        ),
       );
       expect(spec.isRunnable, isFalse);
       expect(spec.refusal, 'needs a Mac');
@@ -140,7 +146,9 @@ void main() {
     });
 
     test('it can build for Android and not for iOS', () {
-      expect(descriptor.runnableTargets, <ProjectTarget>[ProjectTarget.android]);
+      expect(descriptor.runnableTargets, <ProjectTarget>[
+        ProjectTarget.android,
+      ]);
       expect(descriptor.canBuild, isTrue);
     });
   });

@@ -66,8 +66,10 @@ void main() {
       const setup = WorktreeSetup(copyPaths: ['.dart_tool']);
       expect(setup.copyPathsJson, '[".dart_tool"]');
       expect(
-        WorktreeSetup.fromJson(null, '[{"path":".dart_tool","mode":"link"}]')
-            .copyPaths,
+        WorktreeSetup.fromJson(
+          null,
+          '[{"path":".dart_tool","mode":"link"}]',
+        ).copyPaths,
         isEmpty,
         reason: 'a path that is not a plain string is not a path we copy',
       );

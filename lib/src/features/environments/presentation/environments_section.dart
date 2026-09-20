@@ -128,9 +128,7 @@ class _EnvironmentCard extends ConsumerWidget {
           const SizedBox(height: Insets.sm),
           if (installations.isEmpty)
             Text(
-              scan.found == null
-                  ? 'Not scanned yet.'
-                  : 'No agents found here.',
+              scan.found == null ? 'Not scanned yet.' : 'No agents found here.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -202,8 +200,8 @@ class _EnvironmentCard extends ConsumerWidget {
   }
 
   static IconData _iconFor(EnvironmentKind kind) => switch (kind) {
-    EnvironmentKind.windowsNative || EnvironmentKind.localPosix =>
-      AppIcons.target,
+    EnvironmentKind.windowsNative ||
+    EnvironmentKind.localPosix => AppIcons.target,
     EnvironmentKind.wsl => AppIcons.terminal,
     EnvironmentKind.ssh => AppIcons.globe,
   };

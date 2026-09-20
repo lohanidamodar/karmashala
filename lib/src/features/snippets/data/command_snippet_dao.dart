@@ -36,7 +36,14 @@ class CommandSnippetDao {
     _db.execute(
       'UPDATE command_snippets SET label = ?, command = ?, shell = ?, '
       'submit = ?, updated_at = ? WHERE id = ?;',
-      [label, command, shellId, intFromBool(submit), isoFromDate(updatedAt), id],
+      [
+        label,
+        command,
+        shellId,
+        intFromBool(submit),
+        isoFromDate(updatedAt),
+        id,
+      ],
     );
   }
 

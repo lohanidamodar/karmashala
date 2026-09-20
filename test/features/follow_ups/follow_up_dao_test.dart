@@ -45,8 +45,10 @@ void main() {
     // notice per bump — which is how a work queue becomes a log.
     final first = dao.raise(pending())!;
     expect(dao.raise(pending()), isNull);
-    expect(dao.raise(pending(reason: FollowUpReason.verificationAbandoned)),
-        isNull);
+    expect(
+      dao.raise(pending(reason: FollowUpReason.verificationAbandoned)),
+      isNull,
+    );
     expect(dao.open(), [first]);
   });
 
@@ -79,13 +81,13 @@ void main() {
   test('open() is newest first and bounded', () {
     for (var i = 0; i < 5; i++) {
       dao.raise(
-        pending(sessionId: 's$i', at: t0.add(Duration(minutes: i))),
+        pending(
+          sessionId: 's$i',
+          at: t0.add(Duration(minutes: i)),
+        ),
       );
     }
-    expect(
-      dao.open().map((f) => f.sessionId),
-      ['s4', 's3', 's2', 's1', 's0'],
-    );
+    expect(dao.open().map((f) => f.sessionId), ['s4', 's3', 's2', 's1', 's0']);
     expect(dao.open(limit: 2).map((f) => f.sessionId), ['s4', 's3']);
   });
 
@@ -101,16 +103,19 @@ void main() {
     expect(reopened.single.isOpen, isTrue);
   });
 
-  test('an unknown reason or ending reads as unrecognised, never as a guess', () {
-    db.execute(
-      'INSERT INTO session_follow_ups '
-      '(session_id, reason, ending, raised_at) VALUES (?, ?, ?, ?);',
-      ['s9', 'somethingNewer', 'alsoNewer', '2026-09-01T10:00:00.000Z'],
-    );
-    final row = dao.open().single;
-    expect(row.reason, FollowUpReason.unrecognised);
-    expect(row.ending, SessionEnding.unrecognised);
-  });
+  test(
+    'an unknown reason or ending reads as unrecognised, never as a guess',
+    () {
+      db.execute(
+        'INSERT INTO session_follow_ups '
+        '(session_id, reason, ending, raised_at) VALUES (?, ?, ?, ?);',
+        ['s9', 'somethingNewer', 'alsoNewer', '2026-09-01T10:00:00.000Z'],
+      );
+      final row = dao.open().single;
+      expect(row.reason, FollowUpReason.unrecognised);
+      expect(row.ending, SessionEnding.unrecognised);
+    },
+  );
 
   test('resolving twice is refused rather than silently rewriting', () {
     final one = dao.raise(pending())!;

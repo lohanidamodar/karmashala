@@ -50,10 +50,7 @@ class AntigravityStoreSessions implements StoreSessionReader {
           DetectedSession(
             cli: AgentIds.antigravity,
             sessionId: conversation.id,
-            cwd: EnvironmentPath(
-              environmentId: environmentId,
-              path: workspace,
-            ),
+            cwd: EnvironmentPath(environmentId: environmentId, path: workspace),
             // The conversation's own file. Named because it is what identity
             // is read from and what a delete would remove — **not** because it
             // can be shown: its message columns are protobuf in an unpublished

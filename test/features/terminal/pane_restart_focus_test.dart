@@ -95,7 +95,8 @@ void main() {
     expect(
       identical(restarted, died),
       isFalse,
-      reason: 'starting a pane replaces its instance; that is the whole problem',
+      reason:
+          'starting a pane replaces its instance; that is the whole problem',
     );
     expect(
       restarted.focusNode.hasFocus,

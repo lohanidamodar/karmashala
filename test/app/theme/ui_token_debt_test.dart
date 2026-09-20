@@ -144,7 +144,8 @@ void main() {
     expect(
       hits(pattern).where((h) => themeLayer.contains(h.split(':').first)),
       isNotEmpty,
-      reason: 'the fontSize sweep found nothing anywhere — it has stopped '
+      reason:
+          'the fontSize sweep found nothing anywhere — it has stopped '
           'guarding rather than been satisfied',
     );
     final remaining = hits(pattern).map((h) => h.split(':').first).toSet();
@@ -152,7 +153,8 @@ void main() {
       expect(
         remaining.contains(path),
         isTrue,
-        reason: '$path no longer has a raw fontSize — strike it off the '
+        reason:
+            '$path no longer has a raw fontSize — strike it off the '
             'debt list so it cannot regress',
       );
     }
@@ -178,7 +180,8 @@ void main() {
         skip: (path) => path.startsWith('packages/karmashala_companion/'),
       ),
       isEmpty,
-      reason: 'the theme already draws this glyph at Chrome.icon — drop the '
+      reason:
+          'the theme already draws this glyph at Chrome.icon — drop the '
           'override rather than restating it',
     );
   });

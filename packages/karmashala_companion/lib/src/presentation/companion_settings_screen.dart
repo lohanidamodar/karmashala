@@ -49,10 +49,7 @@ class CompanionSettingsScreen extends ConsumerWidget {
       // Only reachable in the moment after an unpair, which is exactly when a
       // relay may need changing before the next code is typed.
       return ListView(
-        padding: companionListInsets(
-          context,
-          EdgeInsets.all(density.padX),
-        ),
+        padding: companionListInsets(context, EdgeInsets.all(density.padX)),
         children: [
           Text('Not paired.', style: density.muted(theme)),
           const SizedBox(height: Insets.lg),
@@ -232,7 +229,6 @@ class _ThisConnectionCard extends StatelessWidget {
     );
   }
 }
-
 
 /// The relay a typed pairing code dials — the code itself carries only the
 /// secret, so the relay must be this phone's own setting (default: the same

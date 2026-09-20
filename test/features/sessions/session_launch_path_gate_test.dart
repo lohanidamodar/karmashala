@@ -165,7 +165,10 @@ void main() {
       expect(h.runner.requests, isEmpty);
       expect(h.runner.startRequests, isEmpty);
       // And the row was left exactly as it was found.
-      expect(AgentInstallationDao(h.db).getById(row.id)!.executable.path, _claude);
+      expect(
+        AgentInstallationDao(h.db).getById(row.id)!.executable.path,
+        _claude,
+      );
     });
 
     test('a WSL installation is neither stat-ed nor spawned at', () async {
@@ -213,7 +216,10 @@ void main() {
 
       // The row moved and kept its id, and the pane runs the binary that is
       // actually there rather than the spelling the request carried.
-      expect(AgentInstallationDao(h.db).getById('codex-row')!.executable.path, _real);
+      expect(
+        AgentInstallationDao(h.db).getById('codex-row')!.executable.path,
+        _real,
+      );
       final instance = h.container
           .read(terminalSessionsControllerProvider.notifier)
           .instanceFor(result.paneId!)!;
@@ -221,7 +227,10 @@ void main() {
 
       // Written once: a repair must not leave a second session behind it.
       expect(SessionDao(h.db).getAll(), hasLength(1));
-      expect(SessionDao(h.db).getById(result.session.id)!.status, SessionStatus.running);
+      expect(
+        SessionDao(h.db).getById(result.session.id)!.status,
+        SessionStatus.running,
+      );
 
       // Said once, in the log, and not to the user: the launch succeeded.
       final repaired = records
@@ -296,36 +305,39 @@ void main() {
       expect(AgentInstallationDao(h.db).getById('codex-row'), isNotNull);
     });
 
-    test('a refused resume leaves the existing row exactly as it was', () async {
-      final row = agentInstallation(path: _claude);
-      final h = harness(
-        probe: FakePathProbe(),
-        installations: [row],
-        responder: (_) => _notOnPath,
-      );
-      final dao = SessionDao(h.db)
-        ..insert(
-          session(id: 'conv-1', status: SessionStatus.completed).copyWith(
-            externalSessionId: 'conv-1',
-            permissionMode: 'mode=ask',
-            workingDirectory: repository().path,
-          ),
+    test(
+      'a refused resume leaves the existing row exactly as it was',
+      () async {
+        final row = agentInstallation(path: _claude);
+        final h = harness(
+          probe: FakePathProbe(),
+          installations: [row],
+          responder: (_) => _notOnPath,
         );
-      final before = dao.getById('conv-1')!;
+        final dao = SessionDao(h.db)
+          ..insert(
+            session(id: 'conv-1', status: SessionStatus.completed).copyWith(
+              externalSessionId: 'conv-1',
+              permissionMode: 'mode=ask',
+              workingDirectory: repository().path,
+            ),
+          );
+        final before = dao.getById('conv-1')!;
 
-      await expectLater(
-        _launch(h, row, resume: 'conv-1'),
-        throwsA(isA<SessionLaunchRefused>()),
-      );
+        await expectLater(
+          _launch(h, row, resume: 'conv-1'),
+          throwsA(isA<SessionLaunchRefused>()),
+        );
 
-      final after = dao.getById('conv-1')!;
-      expect(dao.getAll(), hasLength(1));
-      expect(after.status, before.status);
-      expect(after.paneId, before.paneId);
-      expect(after.permissionMode, before.permissionMode);
-      expect(after.workingDirectory, before.workingDirectory);
-      expect(after.externalSessionId, before.externalSessionId);
-    });
+        final after = dao.getById('conv-1')!;
+        expect(dao.getAll(), hasLength(1));
+        expect(after.status, before.status);
+        expect(after.paneId, before.paneId);
+        expect(after.permissionMode, before.permissionMode);
+        expect(after.workingDirectory, before.workingDirectory);
+        expect(after.externalSessionId, before.externalSessionId);
+      },
+    );
   });
 
   group('a restart', () {
@@ -345,7 +357,9 @@ void main() {
       probe.files.remove(_claude);
 
       await expectLater(
-        h.container.read(sessionLauncherProvider).restartSession(started.session.id),
+        h.container
+            .read(sessionLauncherProvider)
+            .restartSession(started.session.id),
         throwsA(isA<SessionLaunchRefused>()),
       );
 

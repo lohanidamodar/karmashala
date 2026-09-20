@@ -103,26 +103,33 @@ void main() {
       expect(account.oauthAccount!['organizationName'], 'Org A');
     });
 
-    test('a credentials file that is not JSON is named, not read as signed out', () async {
-      File(paths.credentialsFile).writeAsStringSync('{"claudeAiOauth": ');
-      writeConfig(jsonEncode({'oauthAccount': {'emailAddress': 'a@x.com'}}));
+    test(
+      'a credentials file that is not JSON is named, not read as signed out',
+      () async {
+        File(paths.credentialsFile).writeAsStringSync('{"claudeAiOauth": ');
+        writeConfig(
+          jsonEncode({
+            'oauthAccount': {'emailAddress': 'a@x.com'},
+          }),
+        );
 
-      final snapshot = await service.readSnapshot(paths);
-      expect(snapshot.isSignedIn, isFalse);
-      expect(snapshot.readFailure, contains('is not valid JSON'));
-      expect(snapshot.readFailure, contains('.credentials.json'));
+        final snapshot = await service.readSnapshot(paths);
+        expect(snapshot.isSignedIn, isFalse);
+        expect(snapshot.readFailure, contains('is not valid JSON'));
+        expect(snapshot.readFailure, contains('.credentials.json'));
 
-      await expectLater(
-        service.capture(paths),
-        throwsA(
-          isA<ClaudeAuthException>().having(
-            (e) => e.message,
-            'message',
-            contains('is not valid JSON'),
+        await expectLater(
+          service.capture(paths),
+          throwsA(
+            isA<ClaudeAuthException>().having(
+              (e) => e.message,
+              'message',
+              contains('is not valid JSON'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
     test('an absent credentials file is still simply signed out', () async {
       writeConfig(jsonEncode({'projects': {}}));
@@ -233,11 +240,12 @@ void main() {
 void _macOsCredentialsTests() {
   final now = DateTime.utc(2026, 9, 2, 12);
 
-  ClaudeAuthService serviceReading(ClaudeKeychainRead read) => ClaudeAuthService(
-    ids: SequentialIdGenerator(),
-    clock: FixedClock(now),
-    readKeychain: () async => read,
-  );
+  ClaudeAuthService serviceReading(ClaudeKeychainRead read) =>
+      ClaudeAuthService(
+        ids: SequentialIdGenerator(),
+        clock: FixedClock(now),
+        readKeychain: () async => read,
+      );
 
   ClaudeAuthService serviceHolding(String? secret) => serviceReading(
     secret == null
@@ -266,7 +274,10 @@ void _macOsCredentialsTests() {
     );
     final service = serviceHolding(
       jsonEncode({
-        'claudeAiOauth': {'subscriptionType': 'max', 'expiresAt': 1785221891296},
+        'claudeAiOauth': {
+          'subscriptionType': 'max',
+          'expiresAt': 1785221891296,
+        },
       }),
     );
 

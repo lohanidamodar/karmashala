@@ -73,7 +73,9 @@ class CompanionListener {
     );
     _server = server;
     _links = server.connections.listen(_accept);
-    onLog?.call('companion listener on ${server.address.address}:${server.port}');
+    onLog?.call(
+      'companion listener on ${server.address.address}:${server.port}',
+    );
   }
 
   /// Opens the door for one phone. The caller shows the code; this routes the
@@ -112,46 +114,49 @@ class CompanionListener {
       refuse('a link said nothing for ${helloDeadline.inSeconds}s');
     });
 
-    frames = link.frames.listen((frame) {
-      final decided = route;
-      if (decided != null) {
-        decided(frame);
-        return;
-      }
-      if (resolving) {
-        waiting.add(frame);
-        return;
-      }
-      final hello = LinkHello.tryDecode(frame);
-      if (hello == null) {
-        // Not even a hello. Nothing is owed to a dialer that opened with
-        // something else, and holding the socket is what it would cost us.
-        deadline.cancel();
-        refuse('a link opened with something other than a hello');
-        return;
-      }
-      resolving = true;
-      _routeHello(link, hello).then((routed) {
-        deadline.cancel();
-        if (routed == null) {
-          refuse('a link asked for a rendezvous nobody here answers');
+    frames = link.frames.listen(
+      (frame) {
+        final decided = route;
+        if (decided != null) {
+          decided(frame);
           return;
         }
-        final forward = routed.deliver;
-        owned = true;
-        route = forward;
-        onGone = routed.gone;
-        for (final held in waiting) {
-          forward(held);
+        if (resolving) {
+          waiting.add(frame);
+          return;
         }
-        waiting.clear();
-      });
-    }, onDone: () {
-      deadline.cancel();
-      // The socket closing is the only news a served link gets that the phone
-      // has gone, and without it the server behind it waits for ever.
-      onGone?.call();
-    });
+        final hello = LinkHello.tryDecode(frame);
+        if (hello == null) {
+          // Not even a hello. Nothing is owed to a dialer that opened with
+          // something else, and holding the socket is what it would cost us.
+          deadline.cancel();
+          refuse('a link opened with something other than a hello');
+          return;
+        }
+        resolving = true;
+        _routeHello(link, hello).then((routed) {
+          deadline.cancel();
+          if (routed == null) {
+            refuse('a link asked for a rendezvous nobody here answers');
+            return;
+          }
+          final forward = routed.deliver;
+          owned = true;
+          route = forward;
+          onGone = routed.gone;
+          for (final held in waiting) {
+            forward(held);
+          }
+          waiting.clear();
+        });
+      },
+      onDone: () {
+        deadline.cancel();
+        // The socket closing is the only news a served link gets that the phone
+        // has gone, and without it the server behind it waits for ever.
+        onGone?.call();
+      },
+    );
   }
 
   /// Who this rendezvous belongs to, or null for nobody. The hello itself is

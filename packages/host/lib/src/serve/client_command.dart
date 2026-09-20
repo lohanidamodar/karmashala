@@ -66,7 +66,9 @@ class HostClient {
       },
       onDone: () {
         if (!answer.isCompleted) {
-          answer.completeError(const HostClientRefusal('the host closed first'));
+          answer.completeError(
+            const HostClientRefusal('the host closed first'),
+          );
         }
       },
       onError: (Object e) {
@@ -126,7 +128,12 @@ Future<int> runList({IOSink? out, IOSink? err, HostPaths? paths}) async {
 }
 
 /// `karmashala_host end <id>`.
-Future<int> runEnd(List<String> args, {IOSink? out, IOSink? err, HostPaths? paths}) async {
+Future<int> runEnd(
+  List<String> args, {
+  IOSink? out,
+  IOSink? err,
+  HostPaths? paths,
+}) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
   if (args.isEmpty) {

@@ -554,8 +554,7 @@ class LauncherControlServer implements SessionMcp {
   /// socket carries no permissions, so the directory ACL is the whole boundary.
   Future<LocalRpcServer> _bindLocalSocket(String? overrideDirectory) async {
     final dirPath =
-        overrideDirectory ??
-        p.join((await appSupportDirectory()).path, 'ipc');
+        overrideDirectory ?? p.join((await appSupportDirectory()).path, 'ipc');
     final dir = Directory(dirPath);
     await dir.create(recursive: true);
     if (!await _permissions.restrictDirectory(dir, logger: _logger)) {

@@ -31,9 +31,9 @@ void main() {
 
     schemaMigrations[20]!(db);
 
-    final row = db
-        .select('SELECT * FROM verification_runs WHERE id = ?;', ['run-old'])
-        .first;
+    final row = db.select('SELECT * FROM verification_runs WHERE id = ?;', [
+      'run-old',
+    ]).first;
     // Everything the row said before still says it.
     expect(row['verdict'], 'pass');
     expect(row['reason'], 'It worked');
@@ -65,9 +65,9 @@ void main() {
 
     schemaMigrations[20]!(db);
 
-    final row = db
-        .select('SELECT * FROM fanout_candidates WHERE id = ?;', ['cand-1'])
-        .first;
+    final row = db.select('SELECT * FROM fanout_candidates WHERE id = ?;', [
+      'cand-1',
+    ]).first;
     expect(row['verdict'], 'passed');
     expect(row['verdict_label'], '8 tests');
     expect(row['session_id'], 's-1');

@@ -80,10 +80,7 @@ void main() {
     tearDown(() => removeTempDirectory(dir));
 
     Future<List<SessionMediaItem>> scan(File transcript) async =>
-        (await store.refresh(
-          transcript.path,
-          AgentIds.claudeCode,
-        )).items;
+        (await store.refresh(transcript.path, AgentIds.claudeCode)).items;
 
     test('a paste carries the id the CLI printed, not its position', () async {
       // The proof that position is the wrong key. This transcript has two
@@ -163,21 +160,24 @@ void main() {
       expect(items.map((item) => item.pasteId), [null, null]);
     });
 
-    test('ids that do not answer the pictures one for one are refused', () async {
-      // Guessing a pairing is how the wrong picture gets opened. If the record
-      // does not line up, nothing is keyed.
-      final transcript = writeTranscript(dir, 'a.jsonl', [
-        multiPastedImageLine(
-          at: '2026-09-01T10:00:00.000Z',
-          text: '[Image #4] and one more',
-          pasteIds: [4],
-        ),
-      ]);
+    test(
+      'ids that do not answer the pictures one for one are refused',
+      () async {
+        // Guessing a pairing is how the wrong picture gets opened. If the record
+        // does not line up, nothing is keyed.
+        final transcript = writeTranscript(dir, 'a.jsonl', [
+          multiPastedImageLine(
+            at: '2026-09-01T10:00:00.000Z',
+            text: '[Image #4] and one more',
+            pasteIds: [4],
+          ),
+        ]);
 
-      final items = await scan(transcript);
+        final items = await scan(transcript);
 
-      expect(items.map((item) => item.pasteId), [null, null]);
-    });
+        expect(items.map((item) => item.pasteId), [null, null]);
+      },
+    );
 
     test('the id survives a reload from the manifest', () async {
       final transcript = writeTranscript(dir, 'a.jsonl', [
@@ -190,9 +190,7 @@ void main() {
       await scan(transcript);
 
       // A second store, so the answer can only have come off the manifest.
-      final reopened = SessionMediaStore(
-        Directory('${dir.path}/cache'),
-      );
+      final reopened = SessionMediaStore(Directory('${dir.path}/cache'));
       final again = await reopened.refresh(
         transcript.path,
         AgentIds.claudeCode,

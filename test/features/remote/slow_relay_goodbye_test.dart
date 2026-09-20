@@ -96,62 +96,65 @@ void main() {
     db.close();
   });
 
-  test('a relay that never finishes closing does not hold the service', () async {
-    final localUri = Uri.parse('http://127.0.0.1:${localRelay.port}');
-    final hostedUri = Uri.parse('http://127.0.0.1:${hostedRelay.port}');
+  test(
+    'a relay that never finishes closing does not hold the service',
+    () async {
+      final localUri = Uri.parse('http://127.0.0.1:${localRelay.port}');
+      final hostedUri = Uri.parse('http://127.0.0.1:${hostedRelay.port}');
 
-    dao.insert(
-      PairedDevice(
-        id: _phone.value,
-        name: 'phone',
-        deviceKey: Uint8List.fromList(
-          (await deriveDeviceKey(
-            pairingSecret: _secret,
-            hostId: _hostId,
-            deviceId: _phone,
-          )).bytes,
-        ),
-        capabilities: CapabilitySet.all,
-        generation: kFirstSessionGeneration,
-        createdAt: DateTime.utc(2026, 9, 16),
-        relayUrl: hostedUri.toString(),
-      ),
-    );
-
-    service = RemoteHostService(
-      devices: dao,
-      hostId: _hostId,
-      bindings: fake.bindings,
-      relay: hostedUri,
-      localRelayUrl: localUri,
-      lanPort: 0,
-      advertise: false,
-      transcriptPollInterval: Duration.zero,
-      relayFactory: (relay, rendezvous) => _SlowGoodbye(
-        RelayTransport(
-          endpoint: RelayTransport.endpointFor(relay, rendezvous),
-          backoff: fastBackoff(),
-          heartbeat: const Duration(milliseconds: 500),
-        )..start(),
-      ),
-    );
-    await service.start();
-
-    // Switching the local relay off retires every listener that was open on
-    // it — the same retirement a phone's hello performs for the generations
-    // below the one it arrives at.
-    await service
-        .updateRelays(localRelayUrl: null, hostedEnabled: true)
-        .timeout(
-          const Duration(seconds: 10),
-          onTimeout: () => fail(
-            'retiring a listener waited for the relay to say goodbye; a '
-            "phone's hello does this and has eight seconds for all of it",
+      dao.insert(
+        PairedDevice(
+          id: _phone.value,
+          name: 'phone',
+          deviceKey: Uint8List.fromList(
+            (await deriveDeviceKey(
+              pairingSecret: _secret,
+              hostId: _hostId,
+              deviceId: _phone,
+            )).bytes,
           ),
-        );
+          capabilities: CapabilitySet.all,
+          generation: kFirstSessionGeneration,
+          createdAt: DateTime.utc(2026, 9, 16),
+          relayUrl: hostedUri.toString(),
+        ),
+      );
 
-    // The goodbye was genuinely attempted — the listener is not merely
-    // dropped on the floor — it simply was not waited for.
-    expect(_SlowGoodbye.closesStarted, greaterThan(0));
-  });
+      service = RemoteHostService(
+        devices: dao,
+        hostId: _hostId,
+        bindings: fake.bindings,
+        relay: hostedUri,
+        localRelayUrl: localUri,
+        lanPort: 0,
+        advertise: false,
+        transcriptPollInterval: Duration.zero,
+        relayFactory: (relay, rendezvous) => _SlowGoodbye(
+          RelayTransport(
+            endpoint: RelayTransport.endpointFor(relay, rendezvous),
+            backoff: fastBackoff(),
+            heartbeat: const Duration(milliseconds: 500),
+          )..start(),
+        ),
+      );
+      await service.start();
+
+      // Switching the local relay off retires every listener that was open on
+      // it — the same retirement a phone's hello performs for the generations
+      // below the one it arrives at.
+      await service
+          .updateRelays(localRelayUrl: null, hostedEnabled: true)
+          .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () => fail(
+              'retiring a listener waited for the relay to say goodbye; a '
+              "phone's hello does this and has eight seconds for all of it",
+            ),
+          );
+
+      // The goodbye was genuinely attempted — the listener is not merely
+      // dropped on the floor — it simply was not waited for.
+      expect(_SlowGoodbye.closesStarted, greaterThan(0));
+    },
+  );
 }

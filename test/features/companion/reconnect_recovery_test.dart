@@ -16,8 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala_remote/client.dart'
-    as stored;
+import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
@@ -45,8 +44,8 @@ void main() {
     relay = await RelayServer.bind(address: '127.0.0.1', port: 0);
     relayUri = Uri.parse('ws://127.0.0.1:${relay.port}');
     store = stored.InMemoryCompanionStore();
-    store.values[RemoteCompanionGateway.kPairingRelayStoreKey] =
-        relayUri.toString();
+    store.values[RemoteCompanionGateway.kPairingRelayStoreKey] = relayUri
+        .toString();
   });
 
   tearDown(() async {
@@ -131,87 +130,91 @@ void main() {
     ]);
   }
 
-  test('a reconnect after N missed turns yields exactly N, in order, once',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    // Deliberately more than one page, because one page is where the old
-    // answer stopped being right.
-    const missed = kRemoteTranscriptPageMax * 2 + 11;
+  test(
+    'a reconnect after N missed turns yields exactly N, in order, once',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      // Deliberately more than one page, because one page is where the old
+      // answer stopped being right.
+      const missed = kRemoteTranscriptPageMax * 2 + 11;
 
-    await startService();
-    final gateway = await pairedPhone();
+      await startService();
+      final gateway = await pairedPhone();
 
-    say(4, from: 0);
-    final seen = <List<CompanionChatMessage>>[];
-    final watch = gateway.transcript('s1').listen(seen.add);
-    addTearDown(watch.cancel);
-    await until(
-      () => seen.isNotEmpty && seen.last.length == 4,
-      reason: 'the opening read arrives',
-    );
+      say(4, from: 0);
+      final seen = <List<CompanionChatMessage>>[];
+      final watch = gateway.transcript('s1').listen(seen.add);
+      addTearDown(watch.cancel);
+      await until(
+        () => seen.isNotEmpty && seen.last.length == 4,
+        reason: 'the opening read arrives',
+      );
 
-    await service!.stop();
-    service = null;
-    await gateway.linkStates
-        .firstWhere((s) => s != CompanionLinkState.connected)
-        .timeout(const Duration(seconds: 30));
+      await service!.stop();
+      service = null;
+      await gateway.linkStates
+          .firstWhere((s) => s != CompanionLinkState.connected)
+          .timeout(const Duration(seconds: 30));
 
-    // Everything the phone was away for.
-    say(missed, from: 4);
+      // Everything the phone was away for.
+      say(missed, from: 4);
 
-    await startService();
-    await gateway.linkStates
-        .firstWhere((s) => s == CompanionLinkState.connected)
-        .timeout(const Duration(seconds: 30));
-    await until(
-      () => seen.last.length >= 4 + missed,
-      reason: 'the recovery walk finishes',
-    );
+      await startService();
+      await gateway.linkStates
+          .firstWhere((s) => s == CompanionLinkState.connected)
+          .timeout(const Duration(seconds: 30));
+      await until(
+        () => seen.last.length >= 4 + missed,
+        reason: 'the recovery walk finishes',
+      );
 
-    final held = seen.last;
-    expect(held, hasLength(4 + missed), reason: 'exactly N, and once');
-    expect(
-      held.map((m) => m.text).toList(),
-      [for (var i = 0; i < 4 + missed; i++) 'm$i'],
-      reason: 'in order, with nothing dropped from the middle',
-    );
-    // The tail re-read is what put this on screen, and it was a notice about
-    // turns the reader had already been shown.
-    expect(
-      held.where((m) => m.text.contains('are not loaded')),
-      isEmpty,
-      reason: 'nothing was omitted, so nothing may claim it was',
-    );
-  });
+      final held = seen.last;
+      expect(held, hasLength(4 + missed), reason: 'exactly N, and once');
+      expect(held.map((m) => m.text).toList(), [
+        for (var i = 0; i < 4 + missed; i++) 'm$i',
+      ], reason: 'in order, with nothing dropped from the middle');
+      // The tail re-read is what put this on screen, and it was a notice about
+      // turns the reader had already been shown.
+      expect(
+        held.where((m) => m.text.contains('are not loaded')),
+        isEmpty,
+        reason: 'nothing was omitted, so nothing may claim it was',
+      );
+    },
+  );
 
-  test('a reconnect with nothing missed adds nothing and repeats nothing',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    final gateway = await pairedPhone();
+  test(
+    'a reconnect with nothing missed adds nothing and repeats nothing',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
 
-    say(6, from: 0);
-    final seen = <List<CompanionChatMessage>>[];
-    final watch = gateway.transcript('s1').listen(seen.add);
-    addTearDown(watch.cancel);
-    await until(
-      () => seen.isNotEmpty && seen.last.length == 6,
-      reason: 'the opening read arrives',
-    );
+      say(6, from: 0);
+      final seen = <List<CompanionChatMessage>>[];
+      final watch = gateway.transcript('s1').listen(seen.add);
+      addTearDown(watch.cancel);
+      await until(
+        () => seen.isNotEmpty && seen.last.length == 6,
+        reason: 'the opening read arrives',
+      );
 
-    await service!.stop();
-    service = null;
-    await gateway.linkStates
-        .firstWhere((s) => s != CompanionLinkState.connected)
-        .timeout(const Duration(seconds: 30));
-    await startService();
-    await gateway.linkStates
-        .firstWhere((s) => s == CompanionLinkState.connected)
-        .timeout(const Duration(seconds: 30));
+      await service!.stop();
+      service = null;
+      await gateway.linkStates
+          .firstWhere((s) => s != CompanionLinkState.connected)
+          .timeout(const Duration(seconds: 30));
+      await startService();
+      await gateway.linkStates
+          .firstWhere((s) => s == CompanionLinkState.connected)
+          .timeout(const Duration(seconds: 30));
 
-    // Long enough for a recovery that was going to say something to say it.
-    await Future<void>.delayed(const Duration(seconds: 2));
+      // Long enough for a recovery that was going to say something to say it.
+      await Future<void>.delayed(const Duration(seconds: 2));
 
-    expect(seen.last.map((m) => m.text).toList(), [
-      for (var i = 0; i < 6; i++) 'm$i',
-    ]);
-  });
+      expect(seen.last.map((m) => m.text).toList(), [
+        for (var i = 0; i < 6; i++) 'm$i',
+      ]);
+    },
+  );
 }

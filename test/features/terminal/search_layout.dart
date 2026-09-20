@@ -80,7 +80,9 @@ class SearchLayout {
         ),
       ],
     );
-    final sessions = container.read(terminalSessionsControllerProvider.notifier);
+    final sessions = container.read(
+      terminalSessionsControllerProvider.notifier,
+    );
     final ids = <String>[];
     for (var pane = 0; pane < panes; pane++) {
       sessions.openTab(TerminalProfile.powerShell);
@@ -93,12 +95,15 @@ class SearchLayout {
       ids.add(id);
       // One write per pane, not one per line: the parser is the slow part of
       // building the fixture and this is not what is being measured.
-      sessions.instanceFor(id)!.terminal.write(
-        [
-          for (var line = 0; line < linesPerPane; line++)
-            text?.call(pane, line) ?? 'pane $pane line $line',
-        ].join('\r\n'),
-      );
+      sessions
+          .instanceFor(id)!
+          .terminal
+          .write(
+            [
+              for (var line = 0; line < linesPerPane; line++)
+                text?.call(pane, line) ?? 'pane $pane line $line',
+            ].join('\r\n'),
+          );
     }
     return SearchLayout._(container, sessions, ids, schedule);
   }

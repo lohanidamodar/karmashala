@@ -9,7 +9,6 @@ library;
 
 import 'package:agent_cli/descriptors.dart';
 
-
 /// Where one entry was read, which is also what the user would edit to change
 /// it. Ordered most specific first, which is the order the panel draws.
 enum AgentContextOrigin {
@@ -149,9 +148,10 @@ String describeProvenance(AgentContextEntry entry) {
     AgentContextStanding.refused => ' · you turned it off here',
   };
   return switch (entry.origin) {
-        AgentContextOrigin.karmashala => entry.source.isEmpty
-            ? 'added by Karmashala at launch'
-            : 'installed by Karmashala · ${entry.source}',
+        AgentContextOrigin.karmashala =>
+          entry.source.isEmpty
+              ? 'added by Karmashala at launch'
+              : 'installed by Karmashala · ${entry.source}',
         AgentContextOrigin.project => '${entry.source} · in this checkout',
         AgentContextOrigin.directory => '${entry.source} · this directory only',
         AgentContextOrigin.user => entry.source,
@@ -229,8 +229,10 @@ List<AgentContextEntry> mcpServersFrom(
     );
   }
 
-  for (final server
-      in _serversAt(directoryEntry, spec.perProjectServersPath).entries) {
+  for (final server in _serversAt(
+    directoryEntry,
+    spec.perProjectServersPath,
+  ).entries) {
     entries.add(
       AgentContextEntry(
         name: server.key,

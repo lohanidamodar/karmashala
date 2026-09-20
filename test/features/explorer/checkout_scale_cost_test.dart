@@ -321,9 +321,7 @@ void main() {
       // The three cases above ran first and filled the map.
       expect(gitByScale.keys.toSet(), scale.toSet());
       // ignore: avoid_print
-      print(
-        'CHECKOUT-COST collapsed curve=$gitByScale reads=$readsByScale',
-      );
+      print('CHECKOUT-COST collapsed curve=$gitByScale reads=$readsByScale');
       // The invariant: a header the user has not opened draws nothing, so it
       // must ask git nothing — at any number of recorded checkouts.
       expect(
@@ -590,10 +588,7 @@ void main() {
   /// *when* and *how many at a time* — would only add pumping to it. The
   /// groups above own both of those.
   group('worktrees of one repository', () {
-    const repoPath = EnvironmentPath(
-      environmentId: 'windows',
-      path: r'C:\hub',
-    );
+    const repoPath = EnvironmentPath(environmentId: 'windows', path: r'C:\hub');
     const worktrees = 5;
 
     EnvironmentPath worktreeAt(int i) => EnvironmentPath(
@@ -606,7 +601,9 @@ void main() {
     /// One clone, [worktrees] worktrees of it, and a session in each — the
     /// shape a fan-out over one repository leaves behind.
     void seedWorktrees() {
-      RepositoryDao(db).insert(repository(id: 'r0', name: 'hub', path: r'C:\hub'));
+      RepositoryDao(
+        db,
+      ).insert(repository(id: 'r0', name: 'hub', path: r'C:\hub'));
       for (var i = 0; i < worktrees; i++) {
         SessionDao(db).insert(
           Session(
@@ -872,7 +869,13 @@ CommandResult _git(CommandRequest request) {
   if (joined.startsWith('status')) {
     return CommandResult(
       exitCode: 0,
-      stdout: porcelainV2(branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0, modified: ['lib/a.dart']),
+      stdout: porcelainV2(
+        branch: 'main',
+        upstream: 'origin/main',
+        ahead: 0,
+        behind: 0,
+        modified: ['lib/a.dart'],
+      ),
       stderr: '',
     );
   }

@@ -158,25 +158,27 @@ void main() {
     expect(await fromPhone.next, [5]);
   });
 
-  test('the queue is bounded in BYTES too, and says so when it drops',
-      () async {
-    // A count is not a size: at the frame cap, 256 frames is a quarter of a
-    // gigabyte held for one phone that walked out of range.
-    final log = <String>[];
-    final phone = dial(maxQueuedBytes: 2500, start: false, onLog: log.add);
+  test(
+    'the queue is bounded in BYTES too, and says so when it drops',
+    () async {
+      // A count is not a size: at the frame cap, 256 frames is a quarter of a
+      // gigabyte held for one phone that walked out of range.
+      final log = <String>[];
+      final phone = dial(maxQueuedBytes: 2500, start: false, onLog: log.add);
 
-    for (var i = 0; i < 5; i++) {
-      phone.send(List<int>.filled(1000, i));
-    }
+      for (var i = 0; i < 5; i++) {
+        phone.send(List<int>.filled(1000, i));
+      }
 
-    expect(phone.queuedBytes, lessThanOrEqualTo(2500));
-    expect(phone.droppedFrames, 3);
-    expect(
-      log.where((line) => line.startsWith('outbound queue full')),
-      isNotEmpty,
-      reason: 'a slow reader that is silently paid for is the failure itself',
-    );
-  });
+      expect(phone.queuedBytes, lessThanOrEqualTo(2500));
+      expect(phone.droppedFrames, 3);
+      expect(
+        log.where((line) => line.startsWith('outbound queue full')),
+        isNotEmpty,
+        reason: 'a slow reader that is silently paid for is the failure itself',
+      );
+    },
+  );
 
   test('the newest frame is never the one dropped', () async {
     // The only frame whose news the peer has had no chance at. A queue that

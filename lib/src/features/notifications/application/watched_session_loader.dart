@@ -145,9 +145,7 @@ class WatchedSessionLoader {
   Future<void> _sampleAll(List<String> paths, DateTime now) async {
     final queue = Queue<String>.of(paths);
     final workers = math.min(_sampleConcurrency, paths.length);
-    await Future.wait([
-      for (var i = 0; i < workers; i++) _drain(queue, now),
-    ]);
+    await Future.wait([for (var i = 0; i < workers; i++) _drain(queue, now)]);
   }
 
   Future<void> _drain(Queue<String> queue, DateTime now) async {

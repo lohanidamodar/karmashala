@@ -180,7 +180,10 @@ void main() {
       terminalSessionsControllerProvider.notifier,
     );
     controller.openTab(TerminalProfile.powerShell);
-    controller.splitPaneWith(SplitAxis.horizontal, TerminalProfile.commandPrompt);
+    controller.splitPaneWith(
+      SplitAxis.horizontal,
+      TerminalProfile.commandPrompt,
+    );
 
     await pumpPanel(tester, container);
 

@@ -89,7 +89,9 @@ void main() {
       hasLength(1),
       reason: 'the snippet the user just wrote is nowhere: the add threw',
     );
-    expect(container.read(commandSnippetsProvider).single.command,
-        'flutter test');
+    expect(
+      container.read(commandSnippetsProvider).single.command,
+      'flutter test',
+    );
   });
 }

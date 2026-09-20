@@ -43,31 +43,35 @@ void main() {
     ],
   };
 
-  test('it asks for the full item view, or it would see no change at all', () async {
-    final server = FakeCodexAppServer(
-      reply: (_, id, method, params) => jsonEncode({
-        'id': id,
-        'result': {'data': <Object?>[], 'nextCursor': null},
-      }),
-    );
-    final client = _clientFor(server);
-    addTearDown(client.close);
+  test(
+    'it asks for the full item view, or it would see no change at all',
+    () async {
+      final server = FakeCodexAppServer(
+        reply: (_, id, method, params) => jsonEncode({
+          'id': id,
+          'result': {'data': <Object?>[], 'nextCursor': null},
+        }),
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
 
-    await client.listFileChanges('t1');
+      await client.listFileChanges('t1');
 
-    expect(server.methods, contains('thread/turns/list'));
-    final params = server.requests
-        .firstWhere((r) => r['method'] == 'thread/turns/list')['params']!;
-    expect(
-      (params as Map)['itemsView'],
-      'full',
-      reason:
-          'the default is "summary", whose turns carry only user and agent '
-          'messages — a reader that omits this reports every thread as having '
-          'changed nothing',
-    );
-    expect(params['threadId'], 't1');
-  });
+      expect(server.methods, contains('thread/turns/list'));
+      final params = server.requests.firstWhere(
+        (r) => r['method'] == 'thread/turns/list',
+      )['params']!;
+      expect(
+        (params as Map)['itemsView'],
+        'full',
+        reason:
+            'the default is "summary", whose turns carry only user and agent '
+            'messages — a reader that omits this reports every thread as having '
+            'changed nothing',
+      );
+      expect(params['threadId'], 't1');
+    },
+  );
 
   test('it reads the path and the kind of every change', () async {
     final server = FakeCodexAppServer(
@@ -93,7 +97,10 @@ void main() {
               },
               {
                 'path': '/home/me/app/lib/old.dart',
-                'kind': {'type': 'update', 'move_path': '/home/me/app/lib/new.dart'},
+                'kind': {
+                  'type': 'update',
+                  'move_path': '/home/me/app/lib/new.dart',
+                },
                 'diff': '',
               },
             ]),
@@ -109,83 +116,90 @@ void main() {
 
     expect(result.ok, isTrue);
     expect(result.turnsRead, 1);
-    expect(
-      result.changes.map((c) => '${c.kind.name} ${c.path}'),
-      [
-        'update /home/me/app/lib/main.dart',
-        'add /home/me/app/lib/added.dart',
-        'delete /home/me/app/lib/gone.dart',
-        'update /home/me/app/lib/old.dart',
-      ],
-    );
+    expect(result.changes.map((c) => '${c.kind.name} ${c.path}'), [
+      'update /home/me/app/lib/main.dart',
+      'add /home/me/app/lib/added.dart',
+      'delete /home/me/app/lib/gone.dart',
+      'update /home/me/app/lib/old.dart',
+    ]);
     expect(result.changes.last.movedTo, '/home/me/app/lib/new.dart');
     expect(result.changes.first.movedTo, isNull);
   });
 
-  test('a kind this build does not know is unknown, never a modification', () async {
-    final server = FakeCodexAppServer(
-      reply: (_, id, method, params) => jsonEncode({
-        'id': id,
-        'result': {
+  test(
+    'a kind this build does not know is unknown, never a modification',
+    () async {
+      final server = FakeCodexAppServer(
+        reply: (_, id, method, params) => jsonEncode({
+          'id': id,
+          'result': {
+            'data': [
+              turn([
+                {
+                  'path': '/home/me/app/x.dart',
+                  'kind': {'type': 'chmod'},
+                  'diff': '',
+                },
+              ]),
+            ],
+            'nextCursor': null,
+          },
+        }),
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
+
+      final result = await client.listFileChanges('t1');
+
+      expect(result.changes.single.kind, CodexFileChangeKind.unknown);
+    },
+  );
+
+  test(
+    'it pages on the cursor object the server hands back, verbatim',
+    () async {
+      final pages = [
+        {
           'data': [
-            turn([
-              {
-                'path': '/home/me/app/x.dart',
-                'kind': {'type': 'chmod'},
-                'diff': '',
-              },
-            ]),
+            turn([_change('/a.dart')]),
+          ],
+          'nextCursor': {'rolloutOrdinal': 4320, 'includeAnchor': false},
+        },
+        {
+          'data': [
+            turn([_change('/b.dart')]),
           ],
           'nextCursor': null,
         },
-      }),
-    );
-    final client = _clientFor(server);
-    addTearDown(client.close);
+      ];
+      var page = 0;
+      final server = FakeCodexAppServer(
+        reply: (_, id, method, params) =>
+            jsonEncode({'id': id, 'result': pages[page++]}),
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
 
-    final result = await client.listFileChanges('t1');
+      final result = await client.listFileChanges('t1', pageSize: 4);
 
-    expect(result.changes.single.kind, CodexFileChangeKind.unknown);
-  });
-
-  test('it pages on the cursor object the server hands back, verbatim', () async {
-    final pages = [
-      {
-        'data': [turn([_change('/a.dart')])],
-        'nextCursor': {'rolloutOrdinal': 4320, 'includeAnchor': false},
-      },
-      {
-        'data': [turn([_change('/b.dart')])],
-        'nextCursor': null,
-      },
-    ];
-    var page = 0;
-    final server = FakeCodexAppServer(
-      reply: (_, id, method, params) =>
-          jsonEncode({'id': id, 'result': pages[page++]}),
-    );
-    final client = _clientFor(server);
-    addTearDown(client.close);
-
-    final result = await client.listFileChanges('t1', pageSize: 4);
-
-    expect(result.changes.map((c) => c.path), ['/a.dart', '/b.dart']);
-    expect(result.turnsRead, 2);
-    final calls = server.requests
-        .where((r) => r['method'] == 'thread/turns/list')
-        .map((r) => (r['params']! as Map).cast<String, Object?>())
-        .toList();
-    expect(calls.length, 2);
-    expect(calls.first.containsKey('cursor'), isFalse);
-    expect(calls.first['limit'], 4);
-    expect(
-      calls.last['cursor'],
-      {'rolloutOrdinal': 4320, 'includeAnchor': false},
-      reason:
-          'the cursor is an opaque object; a client that reduced it to a '
-          'string got "invalid cursor" from the real server',
-    );
-  });
+      expect(result.changes.map((c) => c.path), ['/a.dart', '/b.dart']);
+      expect(result.turnsRead, 2);
+      final calls = server.requests
+          .where((r) => r['method'] == 'thread/turns/list')
+          .map((r) => (r['params']! as Map).cast<String, Object?>())
+          .toList();
+      expect(calls.length, 2);
+      expect(calls.first.containsKey('cursor'), isFalse);
+      expect(calls.first['limit'], 4);
+      expect(
+        calls.last['cursor'],
+        {'rolloutOrdinal': 4320, 'includeAnchor': false},
+        reason:
+            'the cursor is an opaque object; a client that reduced it to a '
+            'string got "invalid cursor" from the real server',
+      );
+    },
+  );
 
   test('a repeated cursor ends the walk rather than spinning', () async {
     var calls = 0;
@@ -195,7 +209,9 @@ void main() {
         return jsonEncode({
           'id': id,
           'result': {
-            'data': [turn([_change('/a.dart')])],
+            'data': [
+              turn([_change('/a.dart')]),
+            ],
             'nextCursor': {'rolloutOrdinal': 1},
           },
         });
@@ -210,23 +226,26 @@ void main() {
     expect(calls, 2, reason: 'the second page repeated the first cursor');
   });
 
-  test('a thread this store does not hold fails; it does not read as empty', () async {
-    final server = FakeCodexAppServer(
-      reply: (_, id, method, params) => jsonEncode({
-        'error': {'code': -32600, 'message': 'thread not loaded: t9'},
-        'id': id,
-      }),
-    );
-    final client = _clientFor(server);
-    addTearDown(client.close);
+  test(
+    'a thread this store does not hold fails; it does not read as empty',
+    () async {
+      final server = FakeCodexAppServer(
+        reply: (_, id, method, params) => jsonEncode({
+          'error': {'code': -32600, 'message': 'thread not loaded: t9'},
+          'id': id,
+        }),
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
 
-    final result = await client.listFileChanges('t9');
+      final result = await client.listFileChanges('t9');
 
-    expect(result.ok, isFalse);
-    expect(result.failure!.kind, CodexAppServerFailureKind.rpcError);
-    expect(result.failure!.message, contains('thread not loaded'));
-    expect(result.changes, isEmpty);
-  });
+      expect(result.ok, isFalse);
+      expect(result.failure!.kind, CodexAppServerFailureKind.rpcError);
+      expect(result.failure!.message, contains('thread not loaded'));
+      expect(result.changes, isEmpty);
+    },
+  );
 
   test('a reply without a data array is malformed, not empty', () async {
     final server = FakeCodexAppServer(
@@ -242,34 +261,37 @@ void main() {
     expect(result.failure!.kind, CodexAppServerFailureKind.malformed);
   });
 
-  test('a thread that changed nothing answers an empty list, and succeeds', () async {
-    final server = FakeCodexAppServer(
-      reply: (_, id, method, params) => jsonEncode({
-        'id': id,
-        'result': {
-          'data': [
-            {
-              'id': 'turn-1',
-              'itemsView': 'full',
-              'status': 'completed',
-              'items': [
-                {'type': 'agentMessage', 'id': 'm1'},
-              ],
-            },
-          ],
-          'nextCursor': null,
-        },
-      }),
-    );
-    final client = _clientFor(server);
-    addTearDown(client.close);
+  test(
+    'a thread that changed nothing answers an empty list, and succeeds',
+    () async {
+      final server = FakeCodexAppServer(
+        reply: (_, id, method, params) => jsonEncode({
+          'id': id,
+          'result': {
+            'data': [
+              {
+                'id': 'turn-1',
+                'itemsView': 'full',
+                'status': 'completed',
+                'items': [
+                  {'type': 'agentMessage', 'id': 'm1'},
+                ],
+              },
+            ],
+            'nextCursor': null,
+          },
+        }),
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
 
-    final result = await client.listFileChanges('t1');
+      final result = await client.listFileChanges('t1');
 
-    expect(result.ok, isTrue);
-    expect(result.changes, isEmpty);
-    expect(result.turnsRead, 1);
-  });
+      expect(result.ok, isTrue);
+      expect(result.changes, isEmpty);
+      expect(result.turnsRead, 1);
+    },
+  );
 }
 
 Map<String, Object?> _change(String path) => {

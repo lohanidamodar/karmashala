@@ -130,7 +130,10 @@ void main() {
     test('is the app’s own wording, and null when there is none', () {
       expect(
         companionLastActiveLabel(
-          summary('a', lastActivityAt: _now.subtract(const Duration(seconds: 20))),
+          summary(
+            'a',
+            lastActivityAt: _now.subtract(const Duration(seconds: 20)),
+          ),
           _now,
         ),
         'active just now',

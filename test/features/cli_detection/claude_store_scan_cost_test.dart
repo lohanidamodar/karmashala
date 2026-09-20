@@ -33,12 +33,14 @@ void main() {
 
   /// A session with a title and enough bulk that re-reading it is measurable.
   void write(String id, {required String title, int filler = 400}) {
-    sessionFile(id).writeAsStringSync([
-      line({'type': 'user', 'cwd': '/repo', 'message': 'start'}),
-      for (var i = 0; i < filler; i++)
-        line({'type': 'assistant', 'message': 'padding line $i ' * 8}),
-      line({'type': 'custom-title', 'customTitle': title}),
-    ].join());
+    sessionFile(id).writeAsStringSync(
+      [
+        line({'type': 'user', 'cwd': '/repo', 'message': 'start'}),
+        for (var i = 0; i < filler; i++)
+          line({'type': 'assistant', 'message': 'padding line $i ' * 8}),
+        line({'type': 'custom-title', 'customTitle': title}),
+      ].join(),
+    );
   }
 
   test('a second scan of an unchanged store reads nothing again', () async {
@@ -102,17 +104,15 @@ void main() {
 
     // A half-written line: no newline yet, which is what a live CLI leaves
     // between flushes.
-    sessionFile('s1').writeAsStringSync(
-      '{"type":"custom-tit',
-      mode: FileMode.append,
-    );
+    sessionFile(
+      's1',
+    ).writeAsStringSync('{"type":"custom-tit', mode: FileMode.append);
     expect((await reader.read(home, 'windows')).single.title, 'before');
 
     // Completed on the next flush, and now it counts.
-    sessionFile('s1').writeAsStringSync(
-      'le","customTitle":"after"}\n',
-      mode: FileMode.append,
-    );
+    sessionFile(
+      's1',
+    ).writeAsStringSync('le","customTitle":"after"}\n', mode: FileMode.append);
     expect((await reader.read(home, 'windows')).single.title, 'after');
   });
 

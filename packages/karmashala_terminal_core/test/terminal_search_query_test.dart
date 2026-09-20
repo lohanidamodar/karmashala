@@ -74,7 +74,10 @@ void main() {
 
     test('case sensitivity composes with the pattern', () {
       const pattern = r'^err';
-      expect(_run(TerminalSearchQuery.parse(pattern, regex: true), ['ERR x']).length, 1);
+      expect(
+        _run(TerminalSearchQuery.parse(pattern, regex: true), ['ERR x']).length,
+        1,
+      );
       expect(
         _run(
           TerminalSearchQuery.parse(pattern, regex: true, caseSensitive: true),

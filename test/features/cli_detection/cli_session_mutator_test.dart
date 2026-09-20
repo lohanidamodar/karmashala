@@ -65,8 +65,9 @@ void main() {
   });
 
   test('Antigravity rename writes annotation file', () async {
-    final conv = File(p.join(tmp.path, '.gemini/antigravity-cli/conversations/conv-1.db'))
-      ..createSync(recursive: true);
+    final conv = File(
+      p.join(tmp.path, '.gemini/antigravity-cli/conversations/conv-1.db'),
+    )..createSync(recursive: true);
     final session = DetectedSession(
       cli: AgentIds.antigravity,
       sessionId: 'conv-1',
@@ -151,7 +152,11 @@ void main() {
       // The claim the whole batch exists for: the Claude resume index is listed
       // once and the Codex index rewritten once, not once per session.
       expect(mutator.storeScans, 2);
-      expect(mutator.indexWrites, 4, reason: '3 Claude entries + 1 Codex write');
+      expect(
+        mutator.indexWrites,
+        4,
+        reason: '3 Claude entries + 1 Codex write',
+      );
       expect(
         Directory(p.join(tmp.path, '.claude/sessions')).listSync(),
         isEmpty,
@@ -198,28 +203,31 @@ void main() {
       expect(File(claude('a').filePath).existsSync(), isTrue);
     });
 
-    test('deleteAll removes antigravity conversation, annotations, and presence', () async {
-      final store = p.join(tmp.path, '.gemini/antigravity-cli');
-      final conv = File(p.join(store, 'conversations/conv-1.db'))
-        ..createSync(recursive: true);
-      final annot = File(p.join(store, 'annotations/conv-1.pbtxt'))
-        ..createSync(recursive: true)
-        ..writeAsStringSync('title:"test"\n');
-      final pres = File(p.join(store, 'presence/conv-1.lock'))
-        ..createSync(recursive: true);
-      final session = DetectedSession(
-        cli: AgentIds.antigravity,
-        sessionId: 'conv-1',
-        cwd: const EnvironmentPath(environmentId: 'windows', path: '/x'),
-        filePath: conv.path,
-        storeHome: store,
-      );
+    test(
+      'deleteAll removes antigravity conversation, annotations, and presence',
+      () async {
+        final store = p.join(tmp.path, '.gemini/antigravity-cli');
+        final conv = File(p.join(store, 'conversations/conv-1.db'))
+          ..createSync(recursive: true);
+        final annot = File(p.join(store, 'annotations/conv-1.pbtxt'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('title:"test"\n');
+        final pres = File(p.join(store, 'presence/conv-1.lock'))
+          ..createSync(recursive: true);
+        final session = DetectedSession(
+          cli: AgentIds.antigravity,
+          sessionId: 'conv-1',
+          cwd: const EnvironmentPath(environmentId: 'windows', path: '/x'),
+          filePath: conv.path,
+          storeHome: store,
+        );
 
-      final report = await mutator.deleteAll([session]);
-      expect(report.isComplete, isTrue);
-      expect(conv.existsSync(), isFalse);
-      expect(annot.existsSync(), isFalse);
-      expect(pres.existsSync(), isFalse);
-    });
+        final report = await mutator.deleteAll([session]);
+        expect(report.isComplete, isTrue);
+        expect(conv.existsSync(), isFalse);
+        expect(annot.existsSync(), isFalse);
+        expect(pres.existsSync(), isFalse);
+      },
+    );
   });
 }

@@ -147,7 +147,9 @@ const List<Map<String, dynamic>> decisionControlToolSchemas =
             },
             'kind': {'type': 'string'},
             'summary': {'type': 'string'},
-            'decidedBy': {'type': ['string', 'null']},
+            'decidedBy': {
+              'type': ['string', 'null'],
+            },
             'recordedAt': {'type': 'string'},
           },
           'required': ['sessionId', 'sequence', 'kind', 'summary'],

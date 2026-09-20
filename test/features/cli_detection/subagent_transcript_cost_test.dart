@@ -37,17 +37,15 @@ void main() {
   ///
   /// [turnBytes] pads each subagent transcript, so a run can prove the cost is
   /// independent of how much the delegates actually said.
-  void seed({
-    required int tasks,
-    required int subagents,
-    int turnBytes = 0,
-  }) {
-    File(parentPath()).writeAsStringSync([
-      '{"type":"user","message":{"role":"user","content":"go"}}',
-      for (var i = 0; i < tasks; i++)
-        '{"type":"assistant","message":{"content":[{"type":"tool_use",'
-            '"id":"toolu_$i","name":"Task","input":{"description":"job $i"}}]}}',
-    ].join('\n'));
+  void seed({required int tasks, required int subagents, int turnBytes = 0}) {
+    File(parentPath()).writeAsStringSync(
+      [
+        '{"type":"user","message":{"role":"user","content":"go"}}',
+        for (var i = 0; i < tasks; i++)
+          '{"type":"assistant","message":{"content":[{"type":"tool_use",'
+              '"id":"toolu_$i","name":"Task","input":{"description":"job $i"}}]}}',
+      ].join('\n'),
+    );
     if (subagents == 0) return;
     final dir = Directory('${root.path}/s1/subagents')
       ..createSync(recursive: true);
@@ -63,45 +61,53 @@ void main() {
     }
   }
 
-  test('a session that never delegated opens nothing but its own file',
-      () async {
-    // No `Task` call means no join to make, so the directory is never even
-    // stat-ed. This is the case almost every session is in.
-    seed(tasks: 0, subagents: 0);
-
-    final opened = await _filesOpenedBy(
-      () => readCliTranscript(parentPath(), AgentIds.claudeCode),
-    );
-
-    expect(opened, [parentPath()]);
-  });
-
-  test('an unexpanded session reads every meta and no subagent transcript',
-      () async {
-    // The curve is read at three points. `subagents` doubles and the meta
-    // reads double with it; nothing else moves, and no `agent-N.jsonl` is
-    // opened at any scale.
-    for (final count in [1, 10, 50]) {
-      root.listSync().forEach((e) => e.deleteSync(recursive: true));
-      seed(tasks: count, subagents: count);
+  test(
+    'a session that never delegated opens nothing but its own file',
+    () async {
+      // No `Task` call means no join to make, so the directory is never even
+      // stat-ed. This is the case almost every session is in.
+      seed(tasks: 0, subagents: 0);
 
       final opened = await _filesOpenedBy(
         () => readCliTranscript(parentPath(), AgentIds.claudeCode),
       );
 
-      expect(
-        opened.where((p) => p.endsWith('.meta.json')),
-        hasLength(count),
-        reason: 'one meta per subagent — that is the join',
-      );
-      expect(
-        opened.where((p) => RegExp(r'agent-\d+\.jsonl$').hasMatch(p)),
-        isEmpty,
-        reason: 'a subagent transcript is read only when its row is expanded',
-      );
-      expect(opened, hasLength(count + 1), reason: 'the metas and the parent');
-    }
-  });
+      expect(opened, [parentPath()]);
+    },
+  );
+
+  test(
+    'an unexpanded session reads every meta and no subagent transcript',
+    () async {
+      // The curve is read at three points. `subagents` doubles and the meta
+      // reads double with it; nothing else moves, and no `agent-N.jsonl` is
+      // opened at any scale.
+      for (final count in [1, 10, 50]) {
+        root.listSync().forEach((e) => e.deleteSync(recursive: true));
+        seed(tasks: count, subagents: count);
+
+        final opened = await _filesOpenedBy(
+          () => readCliTranscript(parentPath(), AgentIds.claudeCode),
+        );
+
+        expect(
+          opened.where((p) => p.endsWith('.meta.json')),
+          hasLength(count),
+          reason: 'one meta per subagent — that is the join',
+        );
+        expect(
+          opened.where((p) => RegExp(r'agent-\d+\.jsonl$').hasMatch(p)),
+          isEmpty,
+          reason: 'a subagent transcript is read only when its row is expanded',
+        );
+        expect(
+          opened,
+          hasLength(count + 1),
+          reason: 'the metas and the parent',
+        );
+      }
+    },
+  );
 
   test('the cost does not move with how much the subagents said', () async {
     seed(tasks: 4, subagents: 4, turnBytes: 200000);
@@ -189,34 +195,36 @@ void main() {
     }
   }
 
-  test('knowing which background subagents are running opens no extra file',
-      () async {
-    // **The promise this whole ledger is built to keep.** Whether a background
-    // subagent is running is answered entirely from records the CLI wrote into
-    // the *parent* transcript — the `async_launched` result, the compaction's
-    // re-enumeration, the notification envelope — which is the one file the
-    // chat view is reading anyway. Nothing here stats a delegate, reads one, or
-    // opens anything the join did not already open.
-    for (final count in [1, 10, 50]) {
-      root.listSync().forEach((e) => e.deleteSync(recursive: true));
-      seedBackground(count: count, reported: count ~/ 2);
+  test(
+    'knowing which background subagents are running opens no extra file',
+    () async {
+      // **The promise this whole ledger is built to keep.** Whether a background
+      // subagent is running is answered entirely from records the CLI wrote into
+      // the *parent* transcript — the `async_launched` result, the compaction's
+      // re-enumeration, the notification envelope — which is the one file the
+      // chat view is reading anyway. Nothing here stats a delegate, reads one, or
+      // opens anything the join did not already open.
+      for (final count in [1, 10, 50]) {
+        root.listSync().forEach((e) => e.deleteSync(recursive: true));
+        seedBackground(count: count, reported: count ~/ 2);
 
-      final opened = await _filesOpenedBy(
-        () => readCliTranscript(parentPath(), AgentIds.claudeCode),
-      );
+        final opened = await _filesOpenedBy(
+          () => readCliTranscript(parentPath(), AgentIds.claudeCode),
+        );
 
-      expect(
-        opened,
-        hasLength(count + 1),
-        reason: 'the metas and the parent — the same count as before',
-      );
-      expect(
-        opened.where((p) => RegExp(r'agent-\d+\.jsonl$').hasMatch(p)),
-        isEmpty,
-        reason: 'a running subagent is still not a transcript we read',
-      );
-    }
-  });
+        expect(
+          opened,
+          hasLength(count + 1),
+          reason: 'the metas and the parent — the same count as before',
+        );
+        expect(
+          opened.where((p) => RegExp(r'agent-\d+\.jsonl$').hasMatch(p)),
+          isEmpty,
+          reason: 'a running subagent is still not a transcript we read',
+        );
+      }
+    },
+  );
 
   test('and the ledger it built is the one the strip draws', () async {
     // Counted, not timed: how many rows carry a live agent id, and which.

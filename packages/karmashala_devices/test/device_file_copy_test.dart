@@ -59,8 +59,10 @@ FakeCommandRunner _runner(Map<String, String> stats, {String? failWith}) =>
         if (command.startsWith('ls -lad ')) {
           // Nothing there. `classifyLsFailure` reads this as `missing`, and
           // `statPath` turns it into null rather than a refusal.
-          return _lsOut('ls: ${request.arguments.last}: No such file or '
-              'directory');
+          return _lsOut(
+            'ls: ${request.arguments.last}: No such file or '
+            'directory',
+          );
         }
         if (failWith != null &&
             (command.startsWith('cp ') || command.startsWith('mv '))) {
@@ -96,9 +98,9 @@ void main() {
       expect(moved.hostPath, isEmpty);
       // No pull and no push: the whole point.
       expect(
-        runner.requests.map((r) => r.arguments).any(
-          (argv) => argv.contains('pull') || argv.contains('push'),
-        ),
+        runner.requests
+            .map((r) => r.arguments)
+            .any((argv) => argv.contains('pull') || argv.contains('push')),
         isFalse,
       );
     });
@@ -138,19 +140,20 @@ void main() {
       );
     });
 
-    test('a path with a space is quoted, not split into two arguments', () async {
-      final runner = _runner({'/sdcard/my file.txt': _file('my file.txt')});
-      await _driver(
-        AdbService(runner: runner, sdk: _sdk()),
-      ).copyWithinDevice(
-        from: '/sdcard/my file.txt',
-        to: '/sdcard/my copy.txt',
-      );
-      expect(
-        _writes(runner).single,
-        "cp -p '/sdcard/my file.txt' '/sdcard/my copy.txt'",
-      );
-    });
+    test(
+      'a path with a space is quoted, not split into two arguments',
+      () async {
+        final runner = _runner({'/sdcard/my file.txt': _file('my file.txt')});
+        await _driver(AdbService(runner: runner, sdk: _sdk())).copyWithinDevice(
+          from: '/sdcard/my file.txt',
+          to: '/sdcard/my copy.txt',
+        );
+        expect(
+          _writes(runner).single,
+          "cp -p '/sdcard/my file.txt' '/sdcard/my copy.txt'",
+        );
+      },
+    );
   });
 
   group('move within the device', () {
@@ -159,20 +162,16 @@ void main() {
       // copied and then failed to delete would leave two files, reporting
       // success.
       final runner = _runner({'/sdcard/a.txt': _file('a.txt')});
-      await _driver(
-        AdbService(runner: runner, sdk: _sdk()),
-      ).copyWithinDevice(
+      await _driver(AdbService(runner: runner, sdk: _sdk())).copyWithinDevice(
         from: '/sdcard/a.txt',
         to: '/sdcard/Download/a.txt',
         move: true,
       );
-      expect(_writes(runner), [
-        "mv '/sdcard/a.txt' '/sdcard/Download/a.txt'",
-      ]);
+      expect(_writes(runner), ["mv '/sdcard/a.txt' '/sdcard/Download/a.txt'"]);
       expect(
-        runner.requests.map((r) => r.arguments.last).any(
-          (command) => command.startsWith('rm '),
-        ),
+        runner.requests
+            .map((r) => r.arguments.last)
+            .any((command) => command.startsWith('rm ')),
         isFalse,
       );
     });
@@ -181,11 +180,7 @@ void main() {
       final runner = _runner({'/sdcard/pics': _dir('pics')});
       await _driver(
         AdbService(runner: runner, sdk: _sdk()),
-      ).copyWithinDevice(
-        from: '/sdcard/pics',
-        to: '/sdcard/pics2',
-        move: true,
-      );
+      ).copyWithinDevice(from: '/sdcard/pics', to: '/sdcard/pics2', move: true);
       expect(_writes(runner).single, "mv '/sdcard/pics' '/sdcard/pics2'");
     });
   });
@@ -216,9 +211,7 @@ void main() {
         '/sdcard/a.txt': _file('a.txt'),
         '/sdcard/b.txt': _file('b.txt'),
       });
-      await _driver(
-        AdbService(runner: runner, sdk: _sdk()),
-      ).copyWithinDevice(
+      await _driver(AdbService(runner: runner, sdk: _sdk())).copyWithinDevice(
         from: '/sdcard/a.txt',
         to: '/sdcard/b.txt',
         overwrite: true,
@@ -251,9 +244,7 @@ void main() {
         '/sdcard': _dir('sdcard'),
       });
       await expectLater(
-        _driver(
-          AdbService(runner: runner, sdk: _sdk()),
-        ).copyWithinDevice(
+        _driver(AdbService(runner: runner, sdk: _sdk())).copyWithinDevice(
           from: '/sdcard/a.txt',
           to: '/sdcard',
           move: true,
@@ -278,9 +269,7 @@ void main() {
         '/sdcard/pics/inner': _dir('inner'),
       });
       await expectLater(
-        _driver(
-          AdbService(runner: runner, sdk: _sdk()),
-        ).copyWithinDevice(
+        _driver(AdbService(runner: runner, sdk: _sdk())).copyWithinDevice(
           from: '/sdcard/pics',
           to: '/sdcard/pics/inner',
           overwrite: true,
@@ -299,55 +288,60 @@ void main() {
       expect(_writes(runner), isEmpty);
     });
 
-    test('a device that complains is a failure, whatever the exit code', () async {
-      // `cp` says nothing when it works, and `adb shell` forwarded no remote
-      // exit code before Android 7 — so any output at all is the failure.
-      final runner = _runner(
-        {'/sdcard/a.txt': _file('a.txt')},
-        failWith: "cp: '/sdcard/b.txt': Permission denied",
-      );
-      await expectLater(
-        _driver(
-          AdbService(runner: runner, sdk: _sdk()),
-        ).copyWithinDevice(from: '/sdcard/a.txt', to: '/sdcard/b.txt'),
-        throwsA(
-          isA<DeviceRefusal>().having(
-            (refusal) => refusal.message,
-            'message',
-            contains('Permission denied'),
+    test(
+      'a device that complains is a failure, whatever the exit code',
+      () async {
+        // `cp` says nothing when it works, and `adb shell` forwarded no remote
+        // exit code before Android 7 — so any output at all is the failure.
+        final runner = _runner({
+          '/sdcard/a.txt': _file('a.txt'),
+        }, failWith: "cp: '/sdcard/b.txt': Permission denied");
+        await expectLater(
+          _driver(
+            AdbService(runner: runner, sdk: _sdk()),
+          ).copyWithinDevice(from: '/sdcard/a.txt', to: '/sdcard/b.txt'),
+          throwsA(
+            isA<DeviceRefusal>().having(
+              (refusal) => refusal.message,
+              'message',
+              contains('Permission denied'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 
   group('a device with no file access at all', () {
-    test('an iOS driver refuses with the reason, not an empty result', () async {
-      final driver = SimulatorDeviceDriver(
-        simctl: SimctlService(runner: FakeCommandRunner()),
-        backend: null,
-        target: const SimulatorTarget(
-          IosSimulator(
-            udid: 'UDID-1',
-            name: 'iPhone 17',
-            state: SimulatorState.booted,
-            runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-26-4',
-            deviceTypeIdentifier:
-                'com.apple.CoreSimulator.SimDeviceType.iPhone',
-            isAvailable: true,
+    test(
+      'an iOS driver refuses with the reason, not an empty result',
+      () async {
+        final driver = SimulatorDeviceDriver(
+          simctl: SimctlService(runner: FakeCommandRunner()),
+          backend: null,
+          target: const SimulatorTarget(
+            IosSimulator(
+              udid: 'UDID-1',
+              name: 'iPhone 17',
+              state: SimulatorState.booted,
+              runtime: 'com.apple.CoreSimulator.SimRuntime.iOS-26-4',
+              deviceTypeIdentifier:
+                  'com.apple.CoreSimulator.SimDeviceType.iPhone',
+              isAvailable: true,
+            ),
           ),
-        ),
-      );
-      await expectLater(
-        driver.copyWithinDevice(from: '/a', to: '/b'),
-        throwsA(
-          isA<DeviceRefusal>().having(
-            (refusal) => refusal.message,
-            'message',
-            contains('cannot browse an iOS device'),
+        );
+        await expectLater(
+          driver.copyWithinDevice(from: '/a', to: '/b'),
+          throwsA(
+            isA<DeviceRefusal>().having(
+              (refusal) => refusal.message,
+              'message',
+              contains('cannot browse an iOS device'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 }

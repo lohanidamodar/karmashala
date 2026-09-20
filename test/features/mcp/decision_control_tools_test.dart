@@ -151,7 +151,10 @@ void main() {
       expect(decision.kind, DecisionKind.approachRejected);
       // Stored exactly as given. A gist would be a claim nobody made.
       expect(decision.summary, 'The isolate pool deadlocked on Windows.');
-      expect(decision.detail, 'Two workers, both waiting on the same send port.');
+      expect(
+        decision.detail,
+        'Two workers, both waiting on the same send port.',
+      );
       expect(decision.origin, DecisionOrigin.decisionTool);
       expect(decision.recordedBySessionId, 's1');
       // Attributed by name, because the packet's reader cannot resolve an id.
@@ -256,18 +259,21 @@ void main() {
       expect(recordOf('s1').single.kind, DecisionKind.approachRejected);
     });
 
-    test('session_answer names the agent that answered, not the user', () async {
-      attachPane('s1');
-      final result = await callTool('session_answer', {
-        'sessionId': 's1',
-        'decision': 'approve',
-      }, 's2');
+    test(
+      'session_answer names the agent that answered, not the user',
+      () async {
+        attachPane('s1');
+        final result = await callTool('session_answer', {
+          'sessionId': 's1',
+          'decision': 'approve',
+        }, 's2');
 
-      expect(result.isError, isFalse);
-      final decision = recordOf('s1').single;
-      expect(decision.decidedBy, contains('s2'));
-      expect(decision.recordedBySessionId, 's2');
-    });
+        expect(result.isError, isFalse);
+        final decision = recordOf('s1').single;
+        expect(decision.decidedBy, contains('s2'));
+        expect(decision.recordedBySessionId, 's2');
+      },
+    );
 
     test('a keystroke the agent never named records nothing', () {
       attachPane('s1');

@@ -86,37 +86,40 @@ void main() {
     });
   }
 
-  test('threads spread over many files cost one process, not one each', () async {
-    final db = _CountingDatabase();
-    final harness = ReviewThreadHarness(
-      database: db,
-      shas: {for (var i = 0; i < 20; i++) 'lib/f$i.dart': 'sha-$i'},
-    );
-    addTearDown(harness.dispose);
+  test(
+    'threads spread over many files cost one process, not one each',
+    () async {
+      final db = _CountingDatabase();
+      final harness = ReviewThreadHarness(
+        database: db,
+        shas: {for (var i = 0; i < 20; i++) 'lib/f$i.dart': 'sha-$i'},
+      );
+      addTearDown(harness.dispose);
 
-    for (var i = 0; i < 20; i++) {
-      for (var n = 0; n < 5; n++) {
-        await harness.service.open(
-          repositoryId: 'r1',
-          path: 'lib/f$i.dart',
-          body: 'comment $i/$n',
-          author: 'the user',
-          authorKind: ReviewAuthorKind.user,
-          startLine: n + 1,
-        );
+      for (var i = 0; i < 20; i++) {
+        for (var n = 0; n < 5; n++) {
+          await harness.service.open(
+            repositoryId: 'r1',
+            path: 'lib/f$i.dart',
+            body: 'comment $i/$n',
+            author: 'the user',
+            authorKind: ReviewAuthorKind.user,
+            startLine: n + 1,
+          );
+        }
       }
-    }
 
-    db.queries = 0;
-    harness.hashObjectCalls = 0;
-    final index = await harness.service.indexFor('r1');
+      db.queries = 0;
+      harness.hashObjectCalls = 0;
+      final index = await harness.service.indexFor('r1');
 
-    expect(index.all, hasLength(100));
-    expect(db.queries, _readsPerIndex);
-    // The batch covers all twenty files in one invocation — the anchors are
-    // per file, so the cost is per file and not per comment.
-    expect(harness.hashObjectCalls, 1);
-  });
+      expect(index.all, hasLength(100));
+      expect(db.queries, _readsPerIndex);
+      // The batch covers all twenty files in one invocation — the anchors are
+      // per file, so the cost is per file and not per comment.
+      expect(harness.hashObjectCalls, 1);
+    },
+  );
 }
 
 class _CountingDatabase extends AppDatabase {

@@ -126,7 +126,10 @@ RejectedValue? paneRejectedValue(Ref ref, String paneId) {
   if (instance == null || agentId == null) return null;
   if (instance.liveness.value.isLive) return null;
   if (instance.liveness.value == PaneLiveness.restored) return null;
-  final rules = ref.read(agentRegistryProvider).byId(agentId)?.launch
+  final rules = ref
+      .read(agentRegistryProvider)
+      .byId(agentId)
+      ?.launch
       .rejectedValue;
   if (rules == null || rules.isEmpty) return null;
   return rules.matchedBy(

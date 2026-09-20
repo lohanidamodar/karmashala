@@ -31,7 +31,10 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.dark(), home: Scaffold(body: child)),
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(body: child),
+      ),
     );
     await tester.pumpAndSettle();
   }
@@ -287,12 +290,7 @@ void main() {
         find.byType(SingleChildScrollView),
       );
       expect(scroll.controller?.position.maxScrollExtent ?? 0.0, 0.0);
-      expect(
-        tester
-            .getSize(find.byType(ChatTranscriptView))
-            .height,
-        260.0,
-      );
+      expect(tester.getSize(find.byType(ChatTranscriptView)).height, 260.0);
     });
   });
 }

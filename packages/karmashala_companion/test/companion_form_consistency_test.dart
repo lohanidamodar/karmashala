@@ -94,7 +94,9 @@ void main() {
         gateway: _SlowGateway(),
         home: const AddProjectScreen(),
       );
-      for (final field in tester.widgetList<TextField>(find.byType(TextField))) {
+      for (final field in tester.widgetList<TextField>(
+        find.byType(TextField),
+      )) {
         expect(field.decoration?.border, isA<OutlineInputBorder>());
       }
     });
@@ -115,7 +117,9 @@ void main() {
       await tester.pump();
 
       expect(find.byType(CompanionInlineError), findsOneWidget);
-      for (final field in tester.widgetList<TextField>(find.byType(TextField))) {
+      for (final field in tester.widgetList<TextField>(
+        find.byType(TextField),
+      )) {
         expect(field.decoration?.border, isA<OutlineInputBorder>());
       }
     });

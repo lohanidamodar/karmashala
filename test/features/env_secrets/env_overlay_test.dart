@@ -25,9 +25,7 @@ EnvVariable _variable({
 void main() {
   group('resolveEnvOverlay', () {
     test('an enabled all-scope variable is injected', () {
-      final overlay = resolveEnvOverlay(
-        EnvVaultData(variables: [_variable()]),
-      );
+      final overlay = resolveEnvOverlay(EnvVaultData(variables: [_variable()]));
       expect(overlay, {'TOKEN': 'value-one'});
     });
 
@@ -58,10 +56,9 @@ void main() {
       );
 
       expect(resolveEnvOverlay(vault), isEmpty);
-      expect(
-        resolveEnvOverlay(vault, environmentId: 'wsl:ubuntu'),
-        {'ONLY_WSL': 'value-one'},
-      );
+      expect(resolveEnvOverlay(vault, environmentId: 'wsl:ubuntu'), {
+        'ONLY_WSL': 'value-one',
+      });
       expect(resolveEnvOverlay(vault, environmentId: 'windows'), isEmpty);
     });
 

@@ -74,7 +74,9 @@ extension SessionSurfaceStarters on SessionLauncher {
         ? (tabId: resumedTab, paneId: dormant!)
         : slotted ?? terminals.openAgentTab(launch);
     _ref.read(sessionDaoProvider).updatePaneId(session.id, opened.paneId);
-    _ref.read(terminalSessionsControllerProvider.notifier).showTerminalForPane(opened.paneId);
+    _ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .showTerminalForPane(opened.paneId);
     // After the pane is claimed, so it reports what happened. `resumed` false
     // on a restored pane means the user is about to have two terminals.
     _log.info(
@@ -164,7 +166,9 @@ extension SessionSurfaceStarters on SessionLauncher {
         );
     // Launched into a window this app cannot see: `running` would be a claim
     // nothing observes. The agent's own hooks move the row from here.
-    _ref.read(sessionDaoProvider).updateStatus(session.id, SessionStatus.unknown);
+    _ref
+        .read(sessionDaoProvider)
+        .updateStatus(session.id, SessionStatus.unknown);
     return SessionLaunchResult(
       session: session.copyWith(status: SessionStatus.unknown),
       workingDirectoryNotice: workingDirectoryNotice,

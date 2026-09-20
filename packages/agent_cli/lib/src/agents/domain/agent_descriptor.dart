@@ -241,9 +241,8 @@ class AgentMcpSupport {
       switch (style) {
         AgentMcpStyle.configFile =>
           configPath == null ? const [] : ['$flag=$configPath'],
-        AgentMcpStyle.inlineUrl => url == null || url.isEmpty
-            ? const []
-            : [flag, '$urlKey=$url'],
+        AgentMcpStyle.inlineUrl =>
+          url == null || url.isEmpty ? const [] : [flag, '$urlKey=$url'],
         AgentMcpStyle.unsupported => const [],
       };
 
@@ -666,9 +665,7 @@ class AgentSystemPromptFileSupport {
 
   /// The arguments that hand this agent the file at [path], or nothing.
   List<String> argumentsFor(String? path) =>
-      isSupported && path != null && path.isNotEmpty
-      ? [token, path]
-      : const [];
+      isSupported && path != null && path.isNotEmpty ? [token, path] : const [];
 }
 
 /// Executable base names to probe, per execution-environment kind. Each list is
@@ -938,7 +935,6 @@ class AgentLaunchSpec {
   /// for the refusal gates that only ever asked that. They read the same answer
   /// they always did; what widened underneath them is the *how*.
   bool get acceptsPromptArgument => prompt.isSupported;
-
 }
 
 /// **How an agent updates itself, and how to stop it doing so in a
@@ -1174,10 +1170,8 @@ class AgentAttachmentSupport {
   /// This agent reads [mediaTypes] from a path in its prompt. [evidence] is
   /// where that was read off, so a future CLI version can be re-checked rather
   /// than trusted because it is written down.
-  const AgentAttachmentSupport.byPath(
-    this.mediaTypes, {
-    required this.evidence,
-  }) : refusal = '';
+  const AgentAttachmentSupport.byPath(this.mediaTypes, {required this.evidence})
+    : refusal = '';
 
   final List<String> mediaTypes;
 

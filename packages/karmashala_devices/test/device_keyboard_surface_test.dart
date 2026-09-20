@@ -357,9 +357,7 @@ void main() {
 
       expect(find.text(reason), findsOneWidget);
       expect(
-        find.textContaining(
-          DeviceKeyboardTransport.webDriverAgent.limitation!,
-        ),
+        find.textContaining(DeviceKeyboardTransport.webDriverAgent.limitation!),
         findsNothing,
       );
     });
@@ -367,9 +365,7 @@ void main() {
     testWidgets('the adb fallback says what it cannot do', (tester) async {
       await pump(
         tester,
-        keyboard: _RecordingSink(
-          transport: DeviceKeyboardTransport.adbInput,
-        ),
+        keyboard: _RecordingSink(transport: DeviceKeyboardTransport.adbInput),
       );
       await focusSurface(tester);
       expect(

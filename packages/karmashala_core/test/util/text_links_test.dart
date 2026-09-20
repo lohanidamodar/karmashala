@@ -16,8 +16,10 @@ void main() {
     });
 
     test('a bare www. is https', () {
-      expect(linksInText('go to www.example.com').single.url,
-          'https://www.example.com');
+      expect(
+        linksInText('go to www.example.com').single.url,
+        'https://www.example.com',
+      );
     });
 
     test('a full stop ends the sentence, not the URL', () {

@@ -32,7 +32,10 @@ void main() {
       find.textContaining('have not chosen a mode of their own').first,
       findsOneWidget,
     );
-    expect(find.textContaining('even after this changes').first, findsOneWidget);
+    expect(
+      find.textContaining('even after this changes').first,
+      findsOneWidget,
+    );
   });
 
   testWidgets('each row names its rung beside the CLI own word', (

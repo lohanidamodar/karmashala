@@ -69,7 +69,12 @@ void main() {
   ) {
     final container = mount(db);
     final workspaces = [
-      for (final name in const ['Personal', 'PopupBits', 'Appwrite', 'Game dev'])
+      for (final name in const [
+        'Personal',
+        'PopupBits',
+        'Appwrite',
+        'Game dev',
+      ])
         container.read(workspacesControllerProvider.notifier).create(name).id,
     ];
     final projects = container.read(projectDaoProvider);
@@ -81,7 +86,9 @@ void main() {
           name: 'Project $i',
           root: EnvironmentPath(
             environmentId: 'windows',
-            path: r'C:\src\p' '$i',
+            path:
+                r'C:\src\p'
+                '$i',
           ),
           createdAt: testTime,
           // Every fourth project is left unassigned on purpose: unassigned is
@@ -96,7 +103,10 @@ void main() {
           name: 'app',
           path: EnvironmentPath(
             environmentId: 'windows',
-            path: r'C:\src\p' '$i' r'\app',
+            path:
+                r'C:\src\p'
+                '$i'
+                r'\app',
           ),
           createdAt: testTime,
         ),
@@ -156,8 +166,11 @@ void main() {
     }
 
     test('a switch reads nothing and writes its one setting, at any scale', () {
-      expect(measured.keys.toSet(), scale.toSet(),
-          reason: 'every case above must have run');
+      expect(
+        measured.keys.toSet(),
+        scale.toSet(),
+        reason: 'every case above must have run',
+      );
       // ignore: avoid_print
       print('workspace filter cost: $measured');
 
@@ -165,14 +178,16 @@ void main() {
         expect(
           measured[count]!.statements,
           4,
-          reason: 'at $count projects: four switches, four settings writes — '
+          reason:
+              'at $count projects: four switches, four settings writes — '
               'the list is already in memory, and nothing is asked per '
               'project',
         );
         expect(
           measured[count]!.reads,
           0,
-          reason: 'at $count projects: nothing re-derives the selected '
+          reason:
+              'at $count projects: nothing re-derives the selected '
               "project's repositories, which is a query when it happens",
         );
       }

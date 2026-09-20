@@ -37,9 +37,7 @@ void main() {
   });
 
   test('each state reads differently to a human', () {
-    final labels = {
-      for (final a in VerdictAttribution.values) a.label,
-    };
+    final labels = {for (final a in VerdictAttribution.values) a.label};
     expect(labels, hasLength(VerdictAttribution.values.length));
     expect(VerdictAttribution.notRecorded.label, contains('not recorded'));
   });

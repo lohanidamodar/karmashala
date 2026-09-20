@@ -61,9 +61,8 @@ final checkoutsInProjectProvider = Provider.family<List<Repository>, String>((
       labels?[repository.id]?.isWorktree != true;
 
   final byId = {
-    for (final repository in ref.read(repositoryDaoProvider).getByProject(
-      projectId,
-    ))
+    for (final repository
+        in ref.read(repositoryDaoProvider).getByProject(projectId))
       repository.id: repository,
   };
 

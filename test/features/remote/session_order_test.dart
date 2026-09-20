@@ -301,7 +301,11 @@ void main() {
     seedEnvironment();
     seedProject('p', r'C:\work\p');
     seedRepository('r', 'p', r'C:\work\p\repo');
-    seedSession('fresh-row', repositoryId: 'r', createdAt: DateTime.utc(2026, 6));
+    seedSession(
+      'fresh-row',
+      repositoryId: 'r',
+      createdAt: DateTime.utc(2026, 6),
+    );
     seedSession('old-row', repositoryId: 'r', createdAt: DateTime.utc(2026, 1));
     activeAt['old-row'] = DateTime.utc(2026, 8, 31, 9);
 
@@ -329,7 +333,10 @@ void main() {
     seedSession('s1', repositoryId: 'r', createdAt: DateTime.utc(2026, 1));
     activeAt['s1'] = DateTime.utc(2026, 8, 31, 9);
 
-    final row = container.read(remoteHostBindingsProvider).listSessions().single;
+    final row = container
+        .read(remoteHostBindingsProvider)
+        .listSessions()
+        .single;
 
     // `lastActivityAt` is what the phone draws its age from, and it is the same
     // value the walk sorted by — a phone can never be handed a list ordered by
@@ -344,7 +351,10 @@ void main() {
     seedRepository('r', 'p', r'C:\work\p\repo');
     seedSession('s1', repositoryId: 'r', createdAt: DateTime.utc(2026, 1, 2));
 
-    final row = container.read(remoteHostBindingsProvider).listSessions().single;
+    final row = container
+        .read(remoteHostBindingsProvider)
+        .listSessions()
+        .single;
 
     expect(row.lastActivityAt, '2026-01-02T00:00:00.000Z');
     expect(row.createdAt, '2026-01-02T00:00:00.000Z');
@@ -369,7 +379,10 @@ void main() {
       ),
     );
 
-    final row = container.read(remoteHostBindingsProvider).listSessions().single;
+    final row = container
+        .read(remoteHostBindingsProvider)
+        .listSessions()
+        .single;
 
     // §19: a file we could not date is sent as nothing, never as its import
     // time dressed up as activity.

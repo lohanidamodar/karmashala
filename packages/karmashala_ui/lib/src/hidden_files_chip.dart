@@ -11,7 +11,11 @@ import 'hidden_files.dart';
 /// how many rows are being kept off screen, said out loud so a folder that
 /// looks empty is never a mystery.
 class HiddenFilesChip extends StatelessWidget {
-  const HiddenFilesChip({required this.onChanged, this.hiddenCount = 0, super.key});
+  const HiddenFilesChip({
+    required this.onChanged,
+    this.hiddenCount = 0,
+    super.key,
+  });
 
   final ValueChanged<bool> onChanged;
   final int hiddenCount;

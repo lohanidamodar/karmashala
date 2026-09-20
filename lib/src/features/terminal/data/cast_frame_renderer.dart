@@ -268,7 +268,11 @@ class _WindowLayout {
   final Size cell;
 
   /// The ground, the window, its title bar and its title.
-  void paintChrome(Canvas canvas, CastFrameStyle style, TerminalPainter painter) {
+  void paintChrome(
+    Canvas canvas,
+    CastFrameStyle style,
+    TerminalPainter painter,
+  ) {
     final theme = style.theme;
     // A ground a shade off the terminal's own, so the window has an edge
     // without a border being drawn round it.

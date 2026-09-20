@@ -21,7 +21,8 @@ import '../../support/fixtures.dart';
 const _stored = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe';
 const _storedDir = r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin';
 const _release = r'C:\Users\d\.codex\packages\standalone\releases\0.153.4';
-const _real = r'C:\Users\d\.codex\packages\standalone\releases\0.153.4\codex.exe';
+const _real =
+    r'C:\Users\d\.codex\packages\standalone\releases\0.153.4\codex.exe';
 
 void main() {
   late AppDatabase db;
@@ -65,9 +66,9 @@ void main() {
       // hook install and the CLI import, which the launch already sequences
       // this way.
       db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
-      AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _stored),
-      );
+      AgentInstallationDao(
+        db,
+      ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
       final probe = FakePathProbe(
         files: const {_real},
         links: const {_storedDir: _release},
@@ -77,9 +78,9 @@ void main() {
       final gate = Completer<void>();
 
       unawaited(
-        AppLifecycle(container).repairAgentPaths(
-          afterFirstFrame: () => gate.future,
-        ),
+        AppLifecycle(
+          container,
+        ).repairAgentPaths(afterFirstFrame: () => gate.future),
       );
       await pumpEventQueue();
 
@@ -95,10 +96,7 @@ void main() {
 
       expect(probe.queries, isNotEmpty);
       expect(container.read(agentPathRepairProvider).hasChecked, isTrue);
-      expect(
-        AgentInstallationDao(db).getAll().single.executable.path,
-        _real,
-      );
+      expect(AgentInstallationDao(db).getAll().single.executable.path, _real);
     });
 
     test('a gate that throws still gets the paths checked', () async {
@@ -106,9 +104,9 @@ void main() {
       // the tray may never paint a frame, and it must not be a launch whose
       // agents stay unlaunchable.
       db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
-      AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _stored),
-      );
+      AgentInstallationDao(
+        db,
+      ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
       final probe = FakePathProbe(
         files: const {_real},
         links: const {_storedDir: _release},
@@ -123,28 +121,31 @@ void main() {
       expect(AgentInstallationDao(db).getAll().single.executable.path, _real);
     });
 
-    test('a workspace that has never discovered leaves it to the first run', () async {
-      // That launch's own first-run scan is writing the rows this would be
-      // checking; racing it would probe everything twice.
-      AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _stored),
-      );
-      final probe = FakePathProbe();
-      final runner = FakeCommandRunner();
-      final container = scoped(probe: probe, runner: runner);
+    test(
+      'a workspace that has never discovered leaves it to the first run',
+      () async {
+        // That launch's own first-run scan is writing the rows this would be
+        // checking; racing it would probe everything twice.
+        AgentInstallationDao(
+          db,
+        ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
+        final probe = FakePathProbe();
+        final runner = FakeCommandRunner();
+        final container = scoped(probe: probe, runner: runner);
 
-      await AppLifecycle(container).repairAgentPaths();
+        await AppLifecycle(container).repairAgentPaths();
 
-      expect(probe.queries, isEmpty);
-      expect(runner.requests, isEmpty);
-      expect(container.read(agentPathRepairProvider).hasChecked, isFalse);
-    });
+        expect(probe.queries, isEmpty);
+        expect(runner.requests, isEmpty);
+        expect(container.read(agentPathRepairProvider).hasChecked, isFalse);
+      },
+    );
 
     test('runs once per launch however many callers ask', () async {
       db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
-      AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _real),
-      );
+      AgentInstallationDao(
+        db,
+      ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
       final probe = FakePathProbe(files: const {_real});
       final container = scoped(
         probe: probe,
@@ -172,9 +173,9 @@ void main() {
       // re-read by that sweep, and a row whose executable is gone must not be
       // spawned at.
       db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
-      AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _real),
-      );
+      AgentInstallationDao(
+        db,
+      ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
       final probe = FakePathProbe(files: const {_real});
       final runner = FakeCommandRunner(
         responder: (_) =>
@@ -184,9 +185,9 @@ void main() {
       final gate = Completer<void>();
 
       unawaited(
-        AppLifecycle(container).refreshAgentVersions(
-          afterFirstFrame: () => gate.future,
-        ),
+        AppLifecycle(
+          container,
+        ).refreshAgentVersions(afterFirstFrame: () => gate.future),
       );
       await pumpEventQueue();
 
@@ -203,9 +204,9 @@ void main() {
 
     test('runs once per launch however many callers ask', () async {
       db.writeMetadata(MetadataKeys.agentsDiscoveredAt, '2026-07-28T00:00:00Z');
-      AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _real),
-      );
+      AgentInstallationDao(
+        db,
+      ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
       final runner = FakeCommandRunner(
         responder: (_) =>
             const CommandResult(exitCode: 0, stdout: '0.153.4', stderr: ''),
@@ -226,21 +227,24 @@ void main() {
       expect(runner.requests, hasLength(1));
     });
 
-    test('a workspace that has never discovered leaves it to the first run', () async {
-      AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _real),
-      );
-      final runner = FakeCommandRunner(
-        responder: (_) => fail('the first-run scan is writing these rows'),
-      );
-      final container = scoped(
-        probe: FakePathProbe(files: const {_real}),
-        runner: runner,
-      );
+    test(
+      'a workspace that has never discovered leaves it to the first run',
+      () async {
+        AgentInstallationDao(
+          db,
+        ).insert(agentInstallation(agentId: AgentIds.codex, path: _real));
+        final runner = FakeCommandRunner(
+          responder: (_) => fail('the first-run scan is writing these rows'),
+        );
+        final container = scoped(
+          probe: FakePathProbe(files: const {_real}),
+          runner: runner,
+        );
 
-      await AppLifecycle(container).refreshAgentVersions();
+        await AppLifecycle(container).refreshAgentVersions();
 
-      expect(runner.requests, isEmpty);
-    });
+        expect(runner.requests, isEmpty);
+      },
+    );
   });
 }

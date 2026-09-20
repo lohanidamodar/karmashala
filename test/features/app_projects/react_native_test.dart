@@ -73,8 +73,13 @@ void main() {
       expect(descriptor.canBuild, isFalse);
       final android = descriptor.buildFor(ProjectTarget.android)!;
       expect(android.command.state, EstablishedState.unchecked);
-      expect(android.refusal, contains('no React Native or Expo project on '
-          'this machine'));
+      expect(
+        android.refusal,
+        contains(
+          'no React Native or Expo project on '
+          'this machine',
+        ),
+      );
       expect(android.refusal, contains('six package.json files'));
       expect(android.command.sketch, contains('expo run:android'));
     });

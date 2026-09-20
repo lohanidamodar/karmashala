@@ -199,8 +199,7 @@ void main() {
         BackgroundSessionsDialog(
           sessions: sessions,
           // Alternating, so the row renders both of its states in one pass.
-          livenessOf: (paneId) =>
-              paneId.endsWith('0') || paneId.endsWith('4')
+          livenessOf: (paneId) => paneId.endsWith('0') || paneId.endsWith('4')
               ? PaneLiveness.exited
               : PaneLiveness.live,
           onAttach: (_) {},
@@ -224,10 +223,7 @@ void main() {
     final sessions = SessionDao(db);
     for (var i = 0; i < 6; i++) {
       sessions.insert(
-        session(
-          id: 's$i',
-          title: 'refactor the terminal ingest path, part $i',
-        ),
+        session(id: 's$i', title: 'refactor the terminal ingest path, part $i'),
       );
     }
 
@@ -268,9 +264,9 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
-    container.read(settingsControllerProvider.notifier).setLauncherHotkeyEnabled(
-      true,
-    );
+    container
+        .read(settingsControllerProvider.notifier)
+        .setLauncherHotkeyEnabled(true);
 
     await expectSurvivesWindowMatrix(
       tester,

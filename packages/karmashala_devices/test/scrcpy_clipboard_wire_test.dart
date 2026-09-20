@@ -67,10 +67,7 @@ void main() {
     test('the length counts UTF-8 bytes, not characters', () {
       // The device's own filenames and text are UTF-8; a length in characters
       // makes the server readFully fewer bytes than were sent.
-      const message = ScrcpySetClipboardMessage(
-        sequence: 1,
-        text: 'नेपाली',
-      );
+      const message = ScrcpySetClipboardMessage(sequence: 1, text: 'नेपाली');
       final bytes = message.encode();
       expect(_u32(bytes, 10), utf8.encode('नेपाली').length);
       expect(_u32(bytes, 10), greaterThan('नेपाली'.length));
@@ -78,7 +75,13 @@ void main() {
     });
 
     test('paste is off by default and is a real byte when asked for', () {
-      expect(_u8(const ScrcpySetClipboardMessage(sequence: 1, text: 'a').encode(), 9), 0);
+      expect(
+        _u8(
+          const ScrcpySetClipboardMessage(sequence: 1, text: 'a').encode(),
+          9,
+        ),
+        0,
+      );
       expect(
         _u8(
           const ScrcpySetClipboardMessage(

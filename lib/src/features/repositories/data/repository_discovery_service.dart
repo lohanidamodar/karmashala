@@ -153,7 +153,8 @@ class EnvironmentAwareRepositoryDiscoveryService
         .map((name) => '-name ${_posixQuote(name)}')
         .join(' -o ');
     final prune = r'\( -type d \( ' + skipped + r' \) -prune \) -o';
-    final script = '''
+    final script =
+        '''
 ROOT=$escaped
 if [ ! -d "\$ROOT" ]; then
   echo "Repository root does not exist: \$ROOT" >&2
@@ -162,17 +163,12 @@ fi
 find "\$ROOT" -maxdepth $findDepth $prune -name .git -print
 ''';
     final result = await runner.run(
-      CommandRequest(
-        executable: 'sh',
-        arguments: ['-c', script],
-      ),
+      CommandRequest(executable: 'sh', arguments: ['-c', script]),
     );
     if (!result.ok) {
       final detail = result.stderr.trim();
       throw RepositoryDiscoveryException(
-        detail.isEmpty
-            ? 'Could not scan ${root.path} in ${env.name}.'
-            : detail,
+        detail.isEmpty ? 'Could not scan ${root.path} in ${env.name}.' : detail,
       );
     }
 
@@ -205,6 +201,7 @@ find "\$ROOT" -maxdepth $findDepth $prune -name .git -print
     found.sort((a, b) => a.path.path.compareTo(b.path.path));
     return found;
   }
+
   static String _posixQuote(String value) =>
       "'${value.replaceAll("'", r"'\''")}'";
 }

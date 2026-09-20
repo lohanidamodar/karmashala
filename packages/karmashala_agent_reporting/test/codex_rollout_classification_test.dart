@@ -195,10 +195,7 @@ void main() {
       // Eight records, from measurement: 48 of the owner's 52 rollouts need no
       // walk at all and the rest need three or four. A file buried under more
       // noise than that reads `unknown`, which is a first-class answer.
-      final path = write([
-        taskComplete,
-        ...List.filled(12, stateHeader),
-      ]);
+      final path = write([taskComplete, ...List.filled(12, stateHeader)]);
 
       expect(
         (await source.read(codex, path, stale(path)))!.status,
@@ -242,24 +239,27 @@ void main() {
       write([customToolCallOutput, turnContext, tokenCount]),
     ];
 
-    test('39 unknown / 13 idle / 0 working becomes 49 idle / 2 working', () async {
-      final paths = census();
-      expect(paths, hasLength(52));
+    test(
+      '39 unknown / 13 idle / 0 working becomes 49 idle / 2 working',
+      () async {
+        final paths = census();
+        expect(paths, hasLength(52));
 
-      final counts = <AgentActivityStatus, int>{};
-      for (final path in paths) {
-        // Fresh, so a `working` record reads as working rather than aging out:
-        // the point of the figure is what the rules can classify, and the
-        // staleness rule is tested on its own above.
-        final report = (await source.read(codex, path, fresh(path)))!;
-        counts.update(report.status, (n) => n + 1, ifAbsent: () => 1);
-      }
+        final counts = <AgentActivityStatus, int>{};
+        for (final path in paths) {
+          // Fresh, so a `working` record reads as working rather than aging out:
+          // the point of the figure is what the rules can classify, and the
+          // staleness rule is tested on its own above.
+          final report = (await source.read(codex, path, fresh(path)))!;
+          counts.update(report.status, (n) => n + 1, ifAbsent: () => 1);
+        }
 
-      expect(counts[AgentActivityStatus.idle], 49);
-      expect(counts[AgentActivityStatus.working], 2);
-      expect(counts[AgentActivityStatus.unknown], 1);
-      expect(counts[AgentActivityStatus.failed], isNull);
-      expect(counts[AgentActivityStatus.awaitingApproval], isNull);
-    });
+        expect(counts[AgentActivityStatus.idle], 49);
+        expect(counts[AgentActivityStatus.working], 2);
+        expect(counts[AgentActivityStatus.unknown], 1);
+        expect(counts[AgentActivityStatus.failed], isNull);
+        expect(counts[AgentActivityStatus.awaitingApproval], isNull);
+      },
+    );
   });
 }

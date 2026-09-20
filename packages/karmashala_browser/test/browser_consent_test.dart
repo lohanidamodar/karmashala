@@ -65,8 +65,9 @@ void main() {
         journal,
       ).grant('p1', BrowserCapability.evaluate, grantedBy: 'settings');
       expect(
-        BrowserConsentStore(journal).isGranted('p1',
-            BrowserCapability.evaluate),
+        BrowserConsentStore(
+          journal,
+        ).isGranted('p1', BrowserCapability.evaluate),
         isTrue,
       );
     });
@@ -84,7 +85,7 @@ void main() {
         ..write(
           BrowserConsentStore.storageKey,
           '{"grants":[{"scope":"p1","capability":"read_all_the_cookies",'
-              '"grantedAt":"2026-01-01T00:00:00Z","grantedBy":"x"}]}',
+          '"grantedAt":"2026-01-01T00:00:00Z","grantedBy":"x"}]}',
         );
       expect(BrowserConsentStore(journal).all(), isEmpty);
     });
@@ -94,7 +95,7 @@ void main() {
         ..write(
           BrowserConsentStore.storageKey,
           '{"grants":[{"scope":"p1","capability":"evaluate",'
-              '"grantedAt":"whenever","grantedBy":"x"}]}',
+          '"grantedAt":"whenever","grantedBy":"x"}]}',
         );
       expect(BrowserConsentStore(journal).all(), isEmpty);
     });

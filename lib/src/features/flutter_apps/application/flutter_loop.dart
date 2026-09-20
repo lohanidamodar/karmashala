@@ -34,7 +34,10 @@ typedef FlutterReadiness = ({
 });
 
 /// What a start attempt did: the run it opened, or the line saying why not.
-typedef FlutterLoopOutcome = ({FlutterPreflight preflight, FlutterCommandRun? run});
+typedef FlutterLoopOutcome = ({
+  FlutterPreflight preflight,
+  FlutterCommandRun? run,
+});
 
 /// One owned lifecycle for a Flutter project: every `flutter` line goes through
 /// the resolver and a visible pane (§17), and nothing polls.
@@ -95,14 +98,16 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
     EnvironmentPath project, {
     required FlutterCommandKind kind,
   }) async {
-    final resolution = ref.read(environmentResolverProvider).resolveFor(project);
+    final resolution = ref
+        .read(environmentResolverProvider)
+        .resolveFor(project);
     final environment = resolution.environment;
     if (environment == null) {
       return (
         preflight: FlutterPreflight.blocked(
           FlutterPreflightProblem.environmentUnresolved,
           '${resolution.reason}. Pick the checkout in Karmashala, or record '
-              'the environment it belongs to, before running Flutter in it.',
+          'the environment it belongs to, before running Flutter in it.',
         ),
         environment: null,
         sdk: null,
@@ -132,8 +137,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
         preflight: FlutterPreflight.blocked(
           FlutterPreflightProblem.notAFlutterProject,
           '${project.path} has no pubspec.yaml with a flutter: key, so there '
-              'is no Flutter project there to ${kind.label}. list_checkouts '
-              'names the checkouts this workspace knows.',
+          'is no Flutter project there to ${kind.label}. list_checkouts '
+          'names the checkouts this workspace knows.',
         ),
         environment: environment,
         sdk: sdk,
@@ -146,9 +151,9 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
         preflight: FlutterPreflight.blocked(
           FlutterPreflightProblem.notRunnable,
           '${found.name} depends on the Flutter SDK but has no top-level '
-              'flutter: section, so it is a package or a plugin rather than an '
-              'app: there is no entrypoint for flutter run. Run its example, '
-              'or the app that depends on it.',
+          'flutter: section, so it is a package or a plugin rather than an '
+          'app: there is no entrypoint for flutter run. Run its example, '
+          'or the app that depends on it.',
         ),
         environment: environment,
         sdk: sdk,
@@ -165,8 +170,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
           preflight: FlutterPreflight.blocked(
             FlutterPreflightProblem.noPackages,
             '${found.name} has no .dart_tool/package_config.json, so nothing '
-                'has resolved its dependencies yet. Run flutter_run with '
-                'action "pubGet" first; a fresh worktree always needs it.',
+            'has resolved its dependencies yet. Run flutter_run with '
+            'action "pubGet" first; a fresh worktree always needs it.',
           ),
           environment: environment,
           sdk: sdk,
@@ -198,9 +203,9 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
         preflight: FlutterPreflight.blocked(
           FlutterPreflightProblem.alreadyRunning,
           'A pub get for ${project.path} is already running in pane '
-              '${live.paneId}. Wait for it rather than starting a second one: '
-              'two writing the same .dart_tool is how a package cache is '
-              'corrupted.',
+          '${live.paneId}. Wait for it rather than starting a second one: '
+          'two writing the same .dart_tool is how a package cache is '
+          'corrupted.',
         ),
         run: null,
       );
@@ -233,19 +238,17 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
         preflight: FlutterPreflight.blocked(
           FlutterPreflightProblem.alreadyRunning,
           'A flutter run for ${existing.projectDirectory} is already on '
-              '$deviceId, in pane ${existing.paneId}. Stop that one first — a '
-              'device runs one app at a time, and a second launch would '
-              'replace it without saying so.',
+          '$deviceId, in pane ${existing.paneId}. Stop that one first — a '
+          'device runs one app at a time, and a second launch would '
+          'replace it without saying so.',
         ),
         run: null,
       );
     }
     try {
-      ref.read(deviceClaimsProvider).claim(
-        deviceId: deviceId,
-        sessionId: sessionId,
-        verb: 'flutter run',
-      );
+      ref
+          .read(deviceClaimsProvider)
+          .claim(deviceId: deviceId, sessionId: sessionId, verb: 'flutter run');
     } on DeviceBusy catch (busy) {
       return (
         preflight: FlutterPreflight.blocked(
@@ -300,7 +303,7 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
         preflight: FlutterPreflight.blocked(
           FlutterPreflightProblem.alreadyRunning,
           'flutter ${kind.label} for ${project.path} is already running in '
-              'pane ${live.paneId}. Its verdict is recorded when it stops.',
+          'pane ${live.paneId}. Its verdict is recorded when it stops.',
         ),
         run: null,
       );
@@ -465,8 +468,7 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
     }
 
     instance.terminal.addListener(onPainted);
-    _watchers[run.paneId] = () =>
-        instance.terminal.removeListener(onPainted);
+    _watchers[run.paneId] = () => instance.terminal.removeListener(onPainted);
   }
 
   void _detachWatcher(String paneId) => _watchers.remove(paneId)?.call();
@@ -520,8 +522,8 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
         preflight: FlutterPreflight.blocked(
           FlutterPreflightProblem.noPane,
           'There is no terminal in this window to run "${argv.join(' ')}" in, '
-              'so it was not run. Running it out of sight is the failure this '
-              'feature exists to remove — see CLAUDE.md §17.',
+          'so it was not run. Running it out of sight is the failure this '
+          'feature exists to remove — see CLAUDE.md §17.',
         ),
         run: null,
       );

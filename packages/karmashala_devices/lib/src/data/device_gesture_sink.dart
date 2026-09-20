@@ -242,7 +242,6 @@ class AdbGestureSink implements DeviceGestureSink {
   }
 }
 
-
 /// Replays a gesture into a simulator through [SimulatorBackend] on release:
 /// WebDriverAgent takes a whole action sequence in one POST, so there is nothing
 /// to send mid-gesture. [screen] is in **points**, not the three-times-larger

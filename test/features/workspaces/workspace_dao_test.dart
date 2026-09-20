@@ -48,14 +48,17 @@ void main() {
     ]);
   });
 
-  test('updateDetails changes the name and the description, and nothing else', () {
-    dao.insert(workspace(description: 'The shipped apps'));
-    dao.updateDetails('w1', name: 'PopupBits Ltd', description: 'Ships');
-    final loaded = dao.getById('w1')!;
-    expect(loaded.name, 'PopupBits Ltd');
-    expect(loaded.description, 'Ships');
-    expect(loaded.createdAt, testTime);
-  });
+  test(
+    'updateDetails changes the name and the description, and nothing else',
+    () {
+      dao.insert(workspace(description: 'The shipped apps'));
+      dao.updateDetails('w1', name: 'PopupBits Ltd', description: 'Ships');
+      final loaded = dao.getById('w1')!;
+      expect(loaded.name, 'PopupBits Ltd');
+      expect(loaded.description, 'Ships');
+      expect(loaded.createdAt, testTime);
+    },
+  );
 
   test('a description round-trips, and a null one stays null', () {
     dao.insert(workspace(description: 'Everything I run for myself'));

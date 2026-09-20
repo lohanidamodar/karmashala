@@ -51,7 +51,9 @@ void main() {
     final row = tester.getSize(find.byType(CompanionTouchRow));
     expect(row.height, greaterThanOrEqualTo(Touch.target));
     expect(
-      tester.getSize(find.text('a trailing label far wider than the row')).width,
+      tester
+          .getSize(find.text('a trailing label far wider than the row'))
+          .width,
       lessThanOrEqualTo(320 / 2),
     );
     await tester.tap(find.text('A title'));
@@ -127,9 +129,7 @@ void main() {
     await pumpPhone(
       tester,
       gateway: FakeCompanionGateway.paired(),
-      home: const Column(
-        children: [HostSwitcherBar(), ConnectionsSection()],
-      ),
+      home: const Column(children: [HostSwitcherBar(), ConnectionsSection()]),
     );
 
     expect(

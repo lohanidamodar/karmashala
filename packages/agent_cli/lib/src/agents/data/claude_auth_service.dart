@@ -168,11 +168,16 @@ class ClaudeAuthService {
     final failure = credentialsRead?.failure ?? configRead.failure;
     if (failure != null) {
       _logger.warning(failure);
-      return ClaudeAuthSnapshot.signedOut(paths.environmentId, readFailure: failure);
+      return ClaudeAuthSnapshot.signedOut(
+        paths.environmentId,
+        readFailure: failure,
+      );
     }
     return parseClaudeSnapshot(
       environmentId: paths.environmentId,
-      credentials: read != null ? _decodeKeychain(read.secret) : credentialsRead!.object,
+      credentials: read != null
+          ? _decodeKeychain(read.secret)
+          : credentialsRead!.object,
       config: configRead.object,
     );
   }
@@ -215,8 +220,12 @@ class ClaudeAuthService {
       throw ClaudeAuthException(failure);
     }
     final configRead = await readJsonObjectFile(paths.configFile);
-    if (configRead.failure case final failure?) throw ClaudeAuthException(failure);
-    final credentials = read != null ? _decodeKeychain(read.secret) : credentialsRead!.object;
+    if (configRead.failure case final failure?) {
+      throw ClaudeAuthException(failure);
+    }
+    final credentials = read != null
+        ? _decodeKeychain(read.secret)
+        : credentialsRead!.object;
     final config = configRead.object;
 
     final oauth = credentials?['claudeAiOauth'];
@@ -401,12 +410,8 @@ class ClaudeKeychainRead {
   /// rather than pretending to be a fresh reading.
   final DateTime? readAt;
 
-  ClaudeKeychainRead stampedAt(DateTime at) => ClaudeKeychainRead(
-    outcome,
-    secret: secret,
-    detail: detail,
-    readAt: at,
-  );
+  ClaudeKeychainRead stampedAt(DateTime at) =>
+      ClaudeKeychainRead(outcome, secret: secret, detail: detail, readAt: at);
 }
 
 /// What a refusal says, in one place, because more than one surface shows it:

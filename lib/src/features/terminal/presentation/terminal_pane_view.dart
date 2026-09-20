@@ -313,7 +313,11 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     );
     if (!mounted) return;
     switch (found) {
-      case SessionImageFound(:final item, :final matches, :final resolveHostPath):
+      case SessionImageFound(
+        :final item,
+        :final matches,
+        :final resolveHostPath,
+      ):
         await showDialog<void>(
           context: context,
           builder: (_) => SessionImageDialog(
@@ -367,7 +371,12 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
   }
 
   /// The underline itself, shared by both kinds of target.
-  void _highlightSpan(int startRow, int startColumn, int endRow, int endColumn) {
+  void _highlightSpan(
+    int startRow,
+    int startColumn,
+    int endRow,
+    int endColumn,
+  ) {
     _dropUnderline();
     final buffer = widget.instance.terminal.buffer;
     // A rule under the text, not a wash over it — the link stays readable.
@@ -517,34 +526,34 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
         ),
       },
       child: TerminalView(
-      widget.instance.terminal,
-      key: _viewKey,
-      controller: widget.instance.controller,
-      focusNode: widget.instance.focusNode,
-      scrollController: widget.instance.scrollController,
-      theme: widget.terminalTheme,
-      textStyle: TerminalStyle(
-        fontSize: widget.fontSize,
-        fontFamily: kMonoFamily,
-      ),
-      // The grid's size is its own setting; the app-wide UI text scale must
-      // not compound onto it.
-      textScaler: TextScaler.noScaling,
-      padding: const EdgeInsets.all(Insets.sm),
-      autofocus: widget.focused,
-      // `true` swaps in `CustomKeyboardListener`, which never calls
-      // `TextInput.attach` — dictation and IMEs then silently cannot type into a
-      // pane. It was `true` to dodge a "view ID is null" bug xterm2 has fixed.
-      hardwareKeyboardOnly: false,
-      onKeyEvent: _onKeyEvent,
-      // xterm's Windows defaults quietly took Ctrl+A and Ctrl+V from the shell;
-      // the overrides declare them so Settings can switch them back.
-      shortcuts: terminalPaneShortcutsFor(widget.chordOverrides),
-      // Over a link the pointer says so; everywhere else the grid is text.
-      mouseCursor: _link == null && _imageRef == null
-          ? SystemMouseCursors.text
-          : SystemMouseCursors.click,
-      // Right-click → copy selection / paste / end the session.
+        widget.instance.terminal,
+        key: _viewKey,
+        controller: widget.instance.controller,
+        focusNode: widget.instance.focusNode,
+        scrollController: widget.instance.scrollController,
+        theme: widget.terminalTheme,
+        textStyle: TerminalStyle(
+          fontSize: widget.fontSize,
+          fontFamily: kMonoFamily,
+        ),
+        // The grid's size is its own setting; the app-wide UI text scale must
+        // not compound onto it.
+        textScaler: TextScaler.noScaling,
+        padding: const EdgeInsets.all(Insets.sm),
+        autofocus: widget.focused,
+        // `true` swaps in `CustomKeyboardListener`, which never calls
+        // `TextInput.attach` — dictation and IMEs then silently cannot type into a
+        // pane. It was `true` to dodge a "view ID is null" bug xterm2 has fixed.
+        hardwareKeyboardOnly: false,
+        onKeyEvent: _onKeyEvent,
+        // xterm's Windows defaults quietly took Ctrl+A and Ctrl+V from the shell;
+        // the overrides declare them so Settings can switch them back.
+        shortcuts: terminalPaneShortcutsFor(widget.chordOverrides),
+        // Over a link the pointer says so; everywhere else the grid is text.
+        mouseCursor: _link == null && _imageRef == null
+            ? SystemMouseCursors.text
+            : SystemMouseCursors.click,
+        // Right-click → copy selection / paste / end the session.
         onSecondaryTapDown: (details, _) =>
             widget.onSecondaryTapDown(details.globalPosition),
       ),

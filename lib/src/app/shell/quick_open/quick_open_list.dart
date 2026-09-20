@@ -250,9 +250,7 @@ class QuickOpenRow extends StatelessWidget {
           // Selection is a wash plus a rule, not a filled bar: the row has to
           // stay readable and the accent is the only colour in the palette.
           decoration: BoxDecoration(
-            color: selected
-                ? StateLayers.selected(scheme)
-                : Colors.transparent,
+            color: selected ? StateLayers.selected(scheme) : Colors.transparent,
             border: Border(
               left: BorderSide(
                 color: selected ? scheme.primary : Colors.transparent,

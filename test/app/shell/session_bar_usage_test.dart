@@ -248,11 +248,10 @@ void main() {
         .activateTab(tabs.first.id);
     await tester.pumpAndSettle();
 
-    expect(
-      service.calls.map((i) => i.agentId).toList(),
-      [AgentIds.codex, AgentIds.claudeCode],
-      reason: 'switching pane switches account, and asks that account',
-    );
+    expect(service.calls.map((i) => i.agentId).toList(), [
+      AgentIds.codex,
+      AgentIds.claudeCode,
+    ], reason: 'switching pane switches account, and asks that account');
     await quiesce(tester);
   });
 

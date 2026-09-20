@@ -144,21 +144,23 @@ void main() {
   FlutterLoopController loop() => container.read(flutterLoopProvider.notifier);
 
   group('the preflight, before anything is spawned', () {
-    test('an environment nothing records is refused in the resolver\'s words',
-        () async {
-      final ready = await loop().readiness(
-        const EnvironmentPath(environmentId: 'gone', path: '/x'),
-        kind: FlutterCommandKind.pubGet,
-      );
-      expect(
-        ready.preflight.problem,
-        FlutterPreflightProblem.environmentUnresolved,
-      );
-      expect(ready.preflight.reason, contains('Unknown environment: gone'));
-      expect(ready.preflight.reason, contains('Pick the checkout'));
-      // Nothing was run on the way to that answer.
-      expect(runner.requests, isEmpty);
-    });
+    test(
+      'an environment nothing records is refused in the resolver\'s words',
+      () async {
+        final ready = await loop().readiness(
+          const EnvironmentPath(environmentId: 'gone', path: '/x'),
+          kind: FlutterCommandKind.pubGet,
+        );
+        expect(
+          ready.preflight.problem,
+          FlutterPreflightProblem.environmentUnresolved,
+        );
+        expect(ready.preflight.reason, contains('Unknown environment: gone'));
+        expect(ready.preflight.reason, contains('Pick the checkout'));
+        // Nothing was run on the way to that answer.
+        expect(runner.requests, isEmpty);
+      },
+    );
 
     test('the §17 refusal reaches the preflight whole', () async {
       build(
@@ -179,23 +181,25 @@ void main() {
       expect(ready.sdk!.isUsable, isFalse);
     });
 
-    test('a directory with no Flutter pubspec names what would fix it',
-        () async {
-      build(
-        responder: (request) => request.executable == 'find'
-            ? const CommandResult(exitCode: 0, stdout: '', stderr: '')
-            : healthy(request),
-      );
-      final ready = await loop().readiness(
-        _wslProject,
-        kind: FlutterCommandKind.pubGet,
-      );
-      expect(
-        ready.preflight.problem,
-        FlutterPreflightProblem.notAFlutterProject,
-      );
-      expect(ready.preflight.reason, contains('list_checkouts'));
-    });
+    test(
+      'a directory with no Flutter pubspec names what would fix it',
+      () async {
+        build(
+          responder: (request) => request.executable == 'find'
+              ? const CommandResult(exitCode: 0, stdout: '', stderr: '')
+              : healthy(request),
+        );
+        final ready = await loop().readiness(
+          _wslProject,
+          kind: FlutterCommandKind.pubGet,
+        );
+        expect(
+          ready.preflight.problem,
+          FlutterPreflightProblem.notAFlutterProject,
+        );
+        expect(ready.preflight.reason, contains('list_checkouts'));
+      },
+    );
 
     test('a package is real Flutter and still refused for run', () async {
       build(
@@ -242,72 +246,76 @@ void main() {
       expect(forPubGet.preflight.isClear, isTrue);
     });
 
-    test('a package check that could not be taken does not block the run',
-        () async {
-      build(
-        responder: (request) {
-          if (request.executable == 'test') {
-            throw CommandException('the distribution went away mid-check');
-          }
-          return healthy(request);
-        },
-      );
-      final ready = await loop().readiness(
-        _wslProject,
-        kind: FlutterCommandKind.run,
-      );
-      // §19: our own blind spot is not evidence of an absence.
-      expect(ready.preflight.isClear, isTrue);
-    });
+    test(
+      'a package check that could not be taken does not block the run',
+      () async {
+        build(
+          responder: (request) {
+            if (request.executable == 'test') {
+              throw CommandException('the distribution went away mid-check');
+            }
+            return healthy(request);
+          },
+        );
+        final ready = await loop().readiness(
+          _wslProject,
+          kind: FlutterCommandKind.run,
+        );
+        // §19: our own blind spot is not evidence of an absence.
+        expect(ready.preflight.isClear, isTrue);
+      },
+    );
   });
 
   group('pub get, in a visible pane, in the checkout\'s own environment', () {
-    test('the pane carries the located SDK, the argv and the distribution',
-        () async {
-      final outcome = await loop().pubGet(_wslProject);
-      expect(outcome.preflight.isClear, isTrue);
-      expect(outcome.run, isNotNull);
+    test(
+      'the pane carries the located SDK, the argv and the distribution',
+      () async {
+        final outcome = await loop().pubGet(_wslProject);
+        expect(outcome.preflight.isClear, isTrue);
+        expect(outcome.run, isNotNull);
 
-      final instance = container
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(outcome.run!.paneId)!;
-      final launch = instance.agentLaunch!;
-      expect(launch.executable, '/home/me/flutter/bin/flutter');
-      expect(launch.arguments, ['pub', 'get']);
-      expect(launch.workingDirectory, '/home/me/app');
-      expect(launch.wslDistribution, 'Ubuntu');
-      expect(launch.sshHostId, isNull);
-      expect(launch.agentId, 'karmashala:flutter');
-      expect(launch.title, 'pub get · demo');
-    });
+        final instance = container
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(outcome.run!.paneId)!;
+        final launch = instance.agentLaunch!;
+        expect(launch.executable, '/home/me/flutter/bin/flutter');
+        expect(launch.arguments, ['pub', 'get']);
+        expect(launch.workingDirectory, '/home/me/app');
+        expect(launch.wslDistribution, 'Ubuntu');
+        expect(launch.sshHostId, isNull);
+        expect(launch.agentId, 'karmashala:flutter');
+        expect(launch.title, 'pub get · demo');
+      },
+    );
 
-    test('the run is recorded with its command and the pane it lives in',
-        () async {
-      final outcome = await loop().pubGet(_wslProject);
-      final run = container.read(flutterLoopProvider).single;
-      expect(run.paneId, outcome.run!.paneId);
-      expect(run.kind, FlutterCommandKind.pubGet);
-      expect(run.environmentId, 'wsl:Ubuntu');
-      expect(run.command, [
-        '/home/me/flutter/bin/flutter',
-        'pub',
-        'get',
-      ]);
-      expect(
-        loop().livenessOf(run.paneId),
-        FlutterRunLiveness.running,
-      );
-    });
+    test(
+      'the run is recorded with its command and the pane it lives in',
+      () async {
+        final outcome = await loop().pubGet(_wslProject);
+        final run = container.read(flutterLoopProvider).single;
+        expect(run.paneId, outcome.run!.paneId);
+        expect(run.kind, FlutterCommandKind.pubGet);
+        expect(run.environmentId, 'wsl:Ubuntu');
+        expect(run.command, ['/home/me/flutter/bin/flutter', 'pub', 'get']);
+        expect(loop().livenessOf(run.paneId), FlutterRunLiveness.running);
+      },
+    );
 
-    test('a second pub get while one is live is refused, naming the pane',
-        () async {
-      final first = await loop().pubGet(_wslProject);
-      final second = await loop().pubGet(_wslProject);
-      expect(second.run, isNull);
-      expect(second.preflight.problem, FlutterPreflightProblem.alreadyRunning);
-      expect(second.preflight.reason, contains(first.run!.paneId));
-      expect(container.read(flutterLoopProvider), hasLength(1));
-    });
+    test(
+      'a second pub get while one is live is refused, naming the pane',
+      () async {
+        final first = await loop().pubGet(_wslProject);
+        final second = await loop().pubGet(_wslProject);
+        expect(second.run, isNull);
+        expect(
+          second.preflight.problem,
+          FlutterPreflightProblem.alreadyRunning,
+        );
+        expect(second.preflight.reason, contains(first.run!.paneId));
+        expect(container.read(flutterLoopProvider), hasLength(1));
+      },
+    );
 
     test('a refused preflight opens no pane at all', () async {
       final outcome = await loop().pubGet(
@@ -317,10 +325,12 @@ void main() {
       expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
     });
 
-    test('a pane the terminal no longer knows reads unknown, never finished',
-        () {
-      expect(loop().livenessOf('never-opened'), FlutterRunLiveness.unknown);
-    });
+    test(
+      'a pane the terminal no longer knows reads unknown, never finished',
+      () {
+        expect(loop().livenessOf('never-opened'), FlutterRunLiveness.unknown);
+      },
+    );
   });
 
   group('flutter run, and the auto-attach', () {
@@ -329,39 +339,41 @@ void main() {
 
     void serve() => reachable[wsAddress] = FakeVmService();
 
-    test('the pane carries -d, the device, and the out-file for its kind',
-        () async {
-      final outcome = await loop().run(
-        project: _wslProject,
-        deviceId: 'emulator-5554',
-      );
-      expect(outcome.preflight.isClear, isTrue);
-      final run = outcome.run!;
-      final expectedOutFile = vmServiceOutFileFor(
-        kind: EnvironmentKind.wsl,
-        directory: vmDirectory.path,
-        name: vmServiceOutFileName('demo', 'id-0'),
-      );
-      expect(run.vmServiceOutFile, expectedOutFile);
-      expect(run.deviceId, 'emulator-5554');
+    test(
+      'the pane carries -d, the device, and the out-file for its kind',
+      () async {
+        final outcome = await loop().run(
+          project: _wslProject,
+          deviceId: 'emulator-5554',
+        );
+        expect(outcome.preflight.isClear, isTrue);
+        final run = outcome.run!;
+        final expectedOutFile = vmServiceOutFileFor(
+          kind: EnvironmentKind.wsl,
+          directory: vmDirectory.path,
+          name: vmServiceOutFileName('demo', 'id-0'),
+        );
+        expect(run.vmServiceOutFile, expectedOutFile);
+        expect(run.deviceId, 'emulator-5554');
 
-      final launch = container
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(run.paneId)!
-          .agentLaunch!;
-      expect(launch.arguments.take(3), ['run', '-d', 'emulator-5554']);
-      if (expectedOutFile != null) {
-        expect(
-          launch.arguments,
-          contains('--vmservice-out-file=$expectedOutFile'),
-        );
-      } else {
-        expect(
-          launch.arguments.any((a) => a.startsWith('--vmservice-out-file')),
-          isFalse,
-        );
-      }
-    });
+        final launch = container
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(run.paneId)!
+            .agentLaunch!;
+        expect(launch.arguments.take(3), ['run', '-d', 'emulator-5554']);
+        if (expectedOutFile != null) {
+          expect(
+            launch.arguments,
+            contains('--vmservice-out-file=$expectedOutFile'),
+          );
+        } else {
+          expect(
+            launch.arguments.any((a) => a.startsWith('--vmservice-out-file')),
+            isFalse,
+          );
+        }
+      },
+    );
 
     test('extra arguments land after the ones this app spells', () async {
       final outcome = await loop().run(
@@ -424,89 +436,100 @@ void main() {
       expect(loop().byPane(outcome.run!.paneId)!.vmServiceUri, isNull);
     });
 
-    test('refresh reads the file flutter run wrote, when there is one',
-        () async {
-      serve();
-      final outcome = await loop().run(
-        project: _wslProject,
-        deviceId: 'emulator-5554',
-      );
-      final run = outcome.run!;
-      // No file on this host — a WSL run cannot spell a posix temp directory —
-      // so the pane is the route. `?? ''` used to hide that: an empty path is
-      // not null, and the write below then threw on `File('')`.
-      final outFile = run.vmServiceOutFile;
-      if (outFile == null) return;
-      final path = hostSpellingOfOutFile(outFile);
-      if (path == null) return;
-      File(path).writeAsStringSync(wsAddress);
+    test(
+      'refresh reads the file flutter run wrote, when there is one',
+      () async {
+        serve();
+        final outcome = await loop().run(
+          project: _wslProject,
+          deviceId: 'emulator-5554',
+        );
+        final run = outcome.run!;
+        // No file on this host — a WSL run cannot spell a posix temp directory —
+        // so the pane is the route. `?? ''` used to hide that: an empty path is
+        // not null, and the write below then threw on `File('')`.
+        final outFile = run.vmServiceOutFile;
+        if (outFile == null) return;
+        final path = hostSpellingOfOutFile(outFile);
+        if (path == null) return;
+        File(path).writeAsStringSync(wsAddress);
 
-      final refreshed = await loop().refresh(run.paneId);
-      expect(refreshed!.vmServiceUri, wsAddress);
-      expect(refreshed.isAttached, isTrue);
-    });
+        final refreshed = await loop().refresh(run.paneId);
+        expect(refreshed!.vmServiceUri, wsAddress);
+        expect(refreshed.isAttached, isTrue);
+      },
+    );
 
-    test('an address nothing answers on keeps the address and reports it',
-        () async {
-      final outcome = await loop().run(
-        project: _wslProject,
-        deviceId: 'emulator-5554',
-      );
-      final instance = container
-          .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(outcome.run!.paneId)!;
-      instance.terminal.write(
-        'A Dart VM Service on X is available at: $address\r\n',
-      );
-      await Future<void>.delayed(Duration.zero);
-      final run = loop().byPane(outcome.run!.paneId)!;
-      expect(run.vmServiceUri, wsAddress);
-      expect(
-        container.read(attachedAppsProvider).byId(run.appId!)!.reachability,
-        AppReachability.unreachable,
-      );
-    });
+    test(
+      'an address nothing answers on keeps the address and reports it',
+      () async {
+        final outcome = await loop().run(
+          project: _wslProject,
+          deviceId: 'emulator-5554',
+        );
+        final instance = container
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(outcome.run!.paneId)!;
+        instance.terminal.write(
+          'A Dart VM Service on X is available at: $address\r\n',
+        );
+        await Future<void>.delayed(Duration.zero);
+        final run = loop().byPane(outcome.run!.paneId)!;
+        expect(run.vmServiceUri, wsAddress);
+        expect(
+          container.read(attachedAppsProvider).byId(run.appId!)!.reachability,
+          AppReachability.unreachable,
+        );
+      },
+    );
 
-    test('one run per device: the second is refused naming the first pane',
-        () async {
-      final first = await loop().run(
-        project: _wslProject,
-        deviceId: 'emulator-5554',
-      );
-      final second = await loop().run(
-        project: const EnvironmentPath(
-          environmentId: 'wsl:Ubuntu',
-          path: '/home/me/other',
-        ),
-        deviceId: 'emulator-5554',
-      );
-      expect(second.run, isNull);
-      expect(second.preflight.problem, FlutterPreflightProblem.alreadyRunning);
-      expect(second.preflight.reason, contains(first.run!.paneId));
-    });
+    test(
+      'one run per device: the second is refused naming the first pane',
+      () async {
+        final first = await loop().run(
+          project: _wslProject,
+          deviceId: 'emulator-5554',
+        );
+        final second = await loop().run(
+          project: const EnvironmentPath(
+            environmentId: 'wsl:Ubuntu',
+            path: '/home/me/other',
+          ),
+          deviceId: 'emulator-5554',
+        );
+        expect(second.run, isNull);
+        expect(
+          second.preflight.problem,
+          FlutterPreflightProblem.alreadyRunning,
+        );
+        expect(second.preflight.reason, contains(first.run!.paneId));
+      },
+    );
 
-    test("another session's claim refuses the launch in the claim's words",
-        () async {
-      SessionDao(db).insert(session(id: 's1', title: 'Fixing the list'));
-      SessionDao(db).insert(session(id: 's2', title: 'Something else'));
-      final held = await loop().run(
-        project: _wslProject,
-        deviceId: 'emulator-5554',
-        sessionId: 's1',
-      );
-      expect(held.run, isNotNull);
-      await loop().stop(held.run!.paneId);
+    test(
+      "another session's claim refuses the launch in the claim's words",
+      () async {
+        SessionDao(db).insert(session(id: 's1', title: 'Fixing the list'));
+        SessionDao(db).insert(session(id: 's2', title: 'Something else'));
+        final held = await loop().run(
+          project: _wslProject,
+          deviceId: 'emulator-5554',
+          sessionId: 's1',
+        );
+        expect(held.run, isNotNull);
+        await loop().stop(held.run!.paneId);
 
-      final blocked = await loop().run(
-        project: _wslProject,
-        deviceId: 'emulator-5554',
-        sessionId: 's2',
-      );
-      expect(blocked.run, isNull);
-      expect(blocked.preflight.problem, FlutterPreflightProblem.deviceBusy);
-      expect(blocked.preflight.reason, contains('Fixing the list'));
-      expect(blocked.preflight.reason, contains('device_screenshot'));
-    });
+        final blocked = await loop().run(
+          project: _wslProject,
+          deviceId: 'emulator-5554',
+          sessionId: 's2',
+        );
+        expect(blocked.run, isNull);
+        expect(blocked.preflight.problem, FlutterPreflightProblem.deviceBusy);
+        expect(blocked.preflight.reason, contains('Fixing the list'));
+        expect(blocked.preflight.reason, contains('device_screenshot'));
+      },
+    );
 
     test('stop ends the process rather than detaching it', () async {
       final outcome = await loop().run(
@@ -522,9 +545,12 @@ void main() {
       );
     });
 
-    test('stopping a pane this app never opened is null, not a throw', () async {
-      expect(await loop().stop('someone-elses-pane'), isNull);
-    });
+    test(
+      'stopping a pane this app never opened is null, not a throw',
+      () async {
+        expect(await loop().stop('someone-elses-pane'), isNull);
+      },
+    );
   });
 }
 

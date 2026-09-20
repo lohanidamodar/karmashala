@@ -129,10 +129,10 @@ extension on ProviderContainer {
 /// reuses rather than duplicating.
 void seedStopped(AppDatabase db, {PermissionSelection? mode}) {
   SessionDao(db).insert(
-    session(id: 'src', status: SessionStatus.completed).copyWith(
-      externalSessionId: 'cli-1',
-      permissionMode: mode?.canonical,
-    ),
+    session(
+      id: 'src',
+      status: SessionStatus.completed,
+    ).copyWith(externalSessionId: 'cli-1', permissionMode: mode?.canonical),
   );
 }
 
@@ -262,27 +262,32 @@ void main() {
 
     h.container.setDefaults(forExisting: _trust);
     expect(
-      h.container.launcher.effectivePermissionFor(launched.session.id)!.selection,
+      h.container.launcher
+          .effectivePermissionFor(launched.session.id)!
+          .selection,
       _trust,
     );
   });
 
-  test('a resumed session that never chose follows the current default', () async {
-    final h = harness();
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    seedStopped(h.db);
-    h.container.setDefaults(forExisting: _edits);
+  test(
+    'a resumed session that never chose follows the current default',
+    () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      seedStopped(h.db);
+      h.container.setDefaults(forExisting: _edits);
 
-    final launched = await resume(h.container);
+      final launched = await resume(h.container);
 
-    expect(h.container.argumentsOf(launched.paneId!), [
-      '--edits',
-      '--continue',
-      'cli-1',
-    ]);
-    expect(SessionDao(h.db).getById('src')!.permissionMode, isNull);
-  });
+      expect(h.container.argumentsOf(launched.paneId!), [
+        '--edits',
+        '--continue',
+        'cli-1',
+      ]);
+      expect(SessionDao(h.db).getById('src')!.permissionMode, isNull);
+    },
+  );
 
   test('the choice survives a restart', () async {
     final first = harness();

@@ -83,9 +83,7 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
   Future<void> _end(SessionSummary session) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref
-          .read(hostSessionsServiceProvider)
-          .end(widget.host, session.id);
+      await ref.read(hostSessionsServiceProvider).end(widget.host, session.id);
     } on Object catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(describeSshFailure(e))));
     }
@@ -110,7 +108,8 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
       title: DesktopDialogTitle(
         icon: AppIcons.terminal,
         title: 'Sessions on ${widget.host.name}',
-        subtitle: 'The host keeps these running whether this app is open or not.',
+        subtitle:
+            'The host keeps these running whether this app is open or not.',
       ),
       content: SizedBox(
         width: DialogWidth.wide,
@@ -132,13 +131,14 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
             padding: const EdgeInsets.all(Insets.md),
             child: Text(message, style: theme.textTheme.bodyMedium),
           ),
-          (_, _, final List<SessionSummary> found) when found.isEmpty => Padding(
-            padding: const EdgeInsets.all(Insets.md),
-            child: Text(
-              'This host is holding nothing.',
-              style: theme.textTheme.bodyMedium,
+          (_, _, final List<SessionSummary> found) when found.isEmpty =>
+            Padding(
+              padding: const EdgeInsets.all(Insets.md),
+              child: Text(
+                'This host is holding nothing.',
+                style: theme.textTheme.bodyMedium,
+              ),
             ),
-          ),
           (_, _, final List<SessionSummary> found) => ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: _listMaxHeight),
             // Its own traversal group: without one, Tab left the list for the

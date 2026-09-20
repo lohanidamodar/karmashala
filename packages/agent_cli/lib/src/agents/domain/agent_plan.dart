@@ -53,9 +53,8 @@ class AgentPlan {
 
   int get total => items.length;
 
-  int get doneCount => items
-      .where((item) => item.state == AgentPlanItemState.completed)
-      .length;
+  int get doneCount =>
+      items.where((item) => item.state == AgentPlanItemState.completed).length;
 
   /// The item the agent says it is on, or null when it says it is on none.
   ///
@@ -243,10 +242,7 @@ class AgentPlanSupport {
     }
     if (items.isEmpty) return null;
     final note = noteKey.isEmpty ? null : map[noteKey];
-    return AgentPlan(
-      items: items,
-      note: note is String ? note.trim() : '',
-    );
+    return AgentPlan(items: items, note: note is String ? note.trim() : '');
   }
 
   /// [payload] as a map, decoding it first when it arrived as JSON text.

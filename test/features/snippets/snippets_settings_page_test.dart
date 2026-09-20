@@ -105,7 +105,8 @@ void main() {
     expect(
       tester.element(find.byType(SnippetsSettingsPage)),
       same(before),
-      reason: 'the same element rebuilt — the page watched rather than being '
+      reason:
+          'the same element rebuilt — the page watched rather than being '
           'replaced',
     );
   });
@@ -264,10 +265,7 @@ void main() {
     await pumpPage(tester);
 
     expect(find.text('From a later build'), findsOneWidget);
-    expect(
-      find.textContaining('offered in no terminal'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('offered in no terminal'), findsOneWidget);
   });
 
   testWidgets('Settings has a Snippets section, found by looking for it', (
@@ -323,7 +321,8 @@ void main() {
         id: 'sn-long',
         // Long on purpose: a fixed row would find its overflow here first.
         label: 'Run the tests on this machine only, excluding the live ones',
-        command: 'flutter test --exclude-tags=live-ssh,live-wsl --concurrency=4',
+        command:
+            'flutter test --exclude-tags=live-ssh,live-wsl --concurrency=4',
         shellId: 'powerShell',
         submit: true,
         createdAt: testTime,

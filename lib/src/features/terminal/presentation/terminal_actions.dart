@@ -304,7 +304,9 @@ class TerminalActions {
           event,
           // Whose chord this is, is the user's call: the skip-list is a default
           // and Settings can flip any of it.
-          overrides: ref.read(settingsControllerProvider).terminalChordOverrides,
+          overrides: ref
+              .read(settingsControllerProvider)
+              .terminalChordOverrides,
         )
         ? KeyEventResult.handled
         : KeyEventResult.ignored;

@@ -12,25 +12,58 @@ import 'package:karmashala_remote/remote.dart';
 void main() {
   test('machines come back local first, then WSL, then SSH', () {
     final found = companionEnvironments([
-      summary('a', environmentId: 'ssh:h1', environmentBadge: 'do-box',
-          environmentKind: 'ssh', projectId: 'p1'),
-      summary('b', environmentId: 'wsl:arch', environmentBadge: 'archlinux',
-          environmentKind: 'wsl', projectId: 'p2'),
-      summary('c', environmentId: 'windows', environmentBadge: 'Windows',
-          environmentKind: 'windowsNative', projectId: 'p3'),
+      summary(
+        'a',
+        environmentId: 'ssh:h1',
+        environmentBadge: 'do-box',
+        environmentKind: 'ssh',
+        projectId: 'p1',
+      ),
+      summary(
+        'b',
+        environmentId: 'wsl:arch',
+        environmentBadge: 'archlinux',
+        environmentKind: 'wsl',
+        projectId: 'p2',
+      ),
+      summary(
+        'c',
+        environmentId: 'windows',
+        environmentBadge: 'Windows',
+        environmentKind: 'windowsNative',
+        projectId: 'p3',
+      ),
     ]);
 
-    expect([for (final e in found) e.label], ['Windows', 'archlinux', 'do-box']);
+    expect(
+      [for (final e in found) e.label],
+      ['Windows', 'archlinux', 'do-box'],
+    );
   });
 
   test('a machine counts its projects once and its sessions each', () {
     final found = companionEnvironments([
-      summary('a', environmentId: 'windows', environmentKind: 'windowsNative',
-          environmentBadge: 'Windows', projectId: 'p1'),
-      summary('b', environmentId: 'windows', environmentKind: 'windowsNative',
-          environmentBadge: 'Windows', projectId: 'p1'),
-      summary('c', environmentId: 'windows', environmentKind: 'windowsNative',
-          environmentBadge: 'Windows', projectId: 'p2'),
+      summary(
+        'a',
+        environmentId: 'windows',
+        environmentKind: 'windowsNative',
+        environmentBadge: 'Windows',
+        projectId: 'p1',
+      ),
+      summary(
+        'b',
+        environmentId: 'windows',
+        environmentKind: 'windowsNative',
+        environmentBadge: 'Windows',
+        projectId: 'p1',
+      ),
+      summary(
+        'c',
+        environmentId: 'windows',
+        environmentKind: 'windowsNative',
+        environmentBadge: 'Windows',
+        projectId: 'p2',
+      ),
     ]);
 
     expect(found.single.projects, 2);
@@ -48,10 +81,20 @@ void main() {
     // is the literal `windows` on every platform. A Mac listed itself as
     // "windows", next to a row reading "do-box".
     final found = companionEnvironments([
-      summary('a', environmentId: 'windows', environmentName: 'macOS',
-          environmentKind: 'localPosix', projectId: 'p1'),
-      summary('b', environmentId: 'ssh:h1', environmentBadge: 'do-box',
-          environmentKind: 'ssh', projectId: 'p2'),
+      summary(
+        'a',
+        environmentId: 'windows',
+        environmentName: 'macOS',
+        environmentKind: 'localPosix',
+        projectId: 'p1',
+      ),
+      summary(
+        'b',
+        environmentId: 'ssh:h1',
+        environmentBadge: 'do-box',
+        environmentKind: 'ssh',
+        projectId: 'p2',
+      ),
     ]);
 
     expect([for (final e in found) e.label], ['macOS', 'do-box']);
@@ -66,29 +109,42 @@ void main() {
     // The timing case: sessions arrive before the workspace snapshot, so the
     // project branch — which has always had a name to fall back on — has
     // nothing to tally yet and the session branch names every machine.
-    final found = companionEnvironments(
-      [
-        summary('a', environmentId: 'windows', environmentName: 'macOS',
-            environmentKind: 'localPosix', projectId: 'p1'),
-      ],
-      projects: const [],
-    );
+    final found = companionEnvironments([
+      summary(
+        'a',
+        environmentId: 'windows',
+        environmentName: 'macOS',
+        environmentKind: 'localPosix',
+        projectId: 'p1',
+      ),
+    ], projects: const []);
 
     expect(found.single.label, 'macOS');
   });
 
   test('two machines sharing a name stay two machines', () {
     final found = companionEnvironments([
-      summary('a', environmentId: 'ssh:one', environmentBadge: 'build-box',
-          environmentKind: 'ssh', projectId: 'p1'),
-      summary('b', environmentId: 'ssh:two', environmentBadge: 'build-box',
-          environmentKind: 'ssh', projectId: 'p2'),
+      summary(
+        'a',
+        environmentId: 'ssh:one',
+        environmentBadge: 'build-box',
+        environmentKind: 'ssh',
+        projectId: 'p1',
+      ),
+      summary(
+        'b',
+        environmentId: 'ssh:two',
+        environmentBadge: 'build-box',
+        environmentKind: 'ssh',
+        projectId: 'p2',
+      ),
     ]);
 
     expect(
       found.length,
       2,
-      reason: 'the id is what identifies a machine; the badge is what it is '
+      reason:
+          'the id is what identifies a machine; the badge is what it is '
           'called, and two of them can be called the same thing',
     );
   });
@@ -104,13 +160,15 @@ void main() {
     expect(
       found.single.kind,
       isNull,
-      reason: 'a glyph guessed from a badge string would be a claim the '
+      reason:
+          'a glyph guessed from a badge string would be a claim the '
           'desktop never made',
     );
     expect(
       found.single.key,
       'WSL · Ubuntu',
-      reason: 'and the key is the badge itself rather than an invented id, '
+      reason:
+          'and the key is the badge itself rather than an invented id, '
           'which would mean nothing on any other desktop',
     );
   });
@@ -118,15 +176,21 @@ void main() {
   test('a session the desktop said nothing about belongs to no machine', () {
     final found = companionEnvironments([
       summary('a', projectId: 'p1'),
-      summary('b', environmentId: 'windows', environmentBadge: 'Windows',
-          environmentKind: 'windowsNative', projectId: 'p2'),
+      summary(
+        'b',
+        environmentId: 'windows',
+        environmentBadge: 'Windows',
+        environmentKind: 'windowsNative',
+        projectId: 'p2',
+      ),
     ]);
 
     expect([for (final e in found) e.label], ['Windows']);
     expect(
       found.single.sessions,
       1,
-      reason: 'counting the unplaced one here would be a guess about where '
+      reason:
+          'counting the unplaced one here would be a guess about where '
           'it runs',
     );
   });
@@ -155,7 +219,8 @@ void main() {
     expect(
       found.single.sessions,
       0,
-      reason: 'nothing is running there, which is different from it not '
+      reason:
+          'nothing is running there, which is different from it not '
           'being somewhere you can go',
     );
   });
@@ -163,8 +228,13 @@ void main() {
   test('a project with no sessions still counts toward its machine', () {
     final found = companionEnvironments(
       [
-        summary('a', environmentId: 'windows', environmentBadge: 'Windows',
-            environmentKind: 'windowsNative', projectId: 'p1'),
+        summary(
+          'a',
+          environmentId: 'windows',
+          environmentBadge: 'Windows',
+          environmentKind: 'windowsNative',
+          projectId: 'p1',
+        ),
       ],
       projects: [
         const RemoteWorkspaceProject(

@@ -40,12 +40,13 @@ void main() {
   });
   tearDown(() => db.close());
 
-  ProviderContainer containerWith(HostSessionAccess? access) => ProviderContainer(
-    overrides: [
-      databaseProvider.overrideWithValue(db),
-      hostSessionAccessLookupProvider.overrideWithValue((_) => access),
-    ],
-  );
+  ProviderContainer containerWith(HostSessionAccess? access) =>
+      ProviderContainer(
+        overrides: [
+          databaseProvider.overrideWithValue(db),
+          hostSessionAccessLookupProvider.overrideWithValue((_) => access),
+        ],
+      );
 
   SshTerminalInstance openSshPane(ProviderContainer container) {
     final instance = container.read(terminalInstanceFactoryProvider)(
@@ -71,12 +72,22 @@ void main() {
     final pane = openSshPane(container);
     await settle();
 
-    expect(pane.hostAccess, same(access), reason: 'the factory wired it through');
+    expect(
+      pane.hostAccess,
+      same(access),
+      reason: 'the factory wired it through',
+    );
     expect(access.deploymentAsks, 1);
-    expect(access.execs.single, contains('karmashala_host-0.1.0-linux-x64 attach'));
+    expect(
+      access.execs.single,
+      contains('karmashala_host-0.1.0-linux-x64 attach'),
+    );
     // It really spoke the protocol, rather than merely holding the object.
     expect(access.channels.single.only<HelloMessage>().clientId, 'pane-p1');
-    expect(access.channels.single.only<OpenMessage>().sessionId, 'karmashala_h1_p1');
+    expect(
+      access.channels.single.only<OpenMessage>().sessionId,
+      'karmashala_h1_p1',
+    );
     expect(screenText(pane.terminal), contains('session host 0.1.0'));
     pane.dispose();
   });
@@ -101,22 +112,29 @@ void main() {
     expect(text, contains('runs musl libc'));
     expect(text, contains('glibc-linked ELF'));
     expect(text, contains('Falling back to tmux'));
-    expect(access.execs, isEmpty, reason: 'the tmux path, not a half-started host one');
+    expect(
+      access.execs,
+      isEmpty,
+      reason: 'the tmux path, not a half-started host one',
+    );
     pane.dispose();
   });
 
-  test('a composition that cannot reach SSH leaves the pane silent about hosts', () async {
-    final container = containerWith(null);
-    addTearDown(container.dispose);
+  test(
+    'a composition that cannot reach SSH leaves the pane silent about hosts',
+    () async {
+      final container = containerWith(null);
+      addTearDown(container.dispose);
 
-    final pane = openSshPane(container);
-    await settle();
+      final pane = openSshPane(container);
+      await settle();
 
-    expect(pane.hostAccess, isNull);
-    // Unknown is not a negative answer: nothing is claimed either way.
-    expect(screenText(pane.terminal), isNot(contains('session host')));
-    pane.dispose();
-  });
+      expect(pane.hostAccess, isNull);
+      // Unknown is not a negative answer: nothing is claimed either way.
+      expect(screenText(pane.terminal), isNot(contains('session host')));
+      pane.dispose();
+    },
+  );
 
   test('two panes on one host share a single reading', () async {
     final access = PaneAccess(readyDeployment());

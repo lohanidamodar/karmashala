@@ -41,28 +41,31 @@ class TerminalToolbar extends ConsumerWidget {
         // Deliberately **unconditional**: it never asks how many snippets there
         // are, so the strip takes out no subscription a write to the library
         // could wake. The picker answers the empty case.
-        if (!compact) IconButton(
-          tooltip:
-              'Command snippets'
-              '${_chord(_snippetChord())}',
-          icon: const Icon(AppIcons.bookBookmark, size: Chrome.icon),
-          onPressed: hasTabs
-              ? () => QuickOpen.show(context, initialQuery: r'$')
-              : null,
-        ),
-        if (!compact) IconButton(
-          tooltip:
-              'Find in scrollback'
-              '${_chord(shellChordLabel<FindInScrollbackIntent>())}',
-          icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
-          onPressed: hasTabs ? actions.openSearch : null,
-        ),
+        if (!compact)
+          IconButton(
+            tooltip:
+                'Command snippets'
+                '${_chord(_snippetChord())}',
+            icon: const Icon(AppIcons.bookBookmark, size: Chrome.icon),
+            onPressed: hasTabs
+                ? () => QuickOpen.show(context, initialQuery: r'$')
+                : null,
+          ),
+        if (!compact)
+          IconButton(
+            tooltip:
+                'Find in scrollback'
+                '${_chord(shellChordLabel<FindInScrollbackIntent>())}',
+            icon: const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
+            onPressed: hasTabs ? actions.openSearch : null,
+          ),
         if (!compact) _SplitButton(SplitAxis.horizontal),
         if (!compact) _SplitButton(SplitAxis.vertical),
         // Two controls, the way VS Code splits them: one button that could only
         // open a menu made the common case cost a choice.
         IconButton(
-          tooltip: 'New terminal${_chord(shellChordLabel<NewTerminalTabIntent>())}',
+          tooltip:
+              'New terminal${_chord(shellChordLabel<NewTerminalTabIntent>())}',
           icon: const Icon(AppIcons.plus, size: Chrome.icon),
           onPressed: () => actions.open(actions.defaultProfile()),
         ),

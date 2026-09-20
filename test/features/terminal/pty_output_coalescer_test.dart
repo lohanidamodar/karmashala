@@ -164,11 +164,9 @@ void main() {
     final harness = _Harness()..now = const Duration(seconds: 4);
     harness.coalescer.add(utf8.encode('a'));
 
-    expect(
-      harness.writes,
-      ['a'],
-      reason: 'the echo must not wait for a frame that nobody scheduled',
-    );
+    expect(harness.writes, [
+      'a',
+    ], reason: 'the echo must not wait for a frame that nobody scheduled');
     expect(harness.watchdogs, isEmpty, reason: 'no timer left armed');
   });
 

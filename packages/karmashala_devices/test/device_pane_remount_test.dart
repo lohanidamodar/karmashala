@@ -129,7 +129,10 @@ void main() {
   group('the Android live view survives the pane being switched away', () {
     testWidgets('it comes back, on the same device', (tester) async {
       final service = _RecordingStreamService();
-      final container = _container(service: service, devices: () => [_device()]);
+      final container = _container(
+        service: service,
+        devices: () => [_device()],
+      );
       addTearDown(container.dispose);
       final showDevice = ValueNotifier(true);
       addTearDown(showDevice.dispose);
@@ -160,7 +163,10 @@ void main() {
       // contention this app has been bitten by before. The resume goes through
       // the same `_starting` and same-serial guards a device switch does.
       final service = _RecordingStreamService();
-      final container = _container(service: service, devices: () => [_device()]);
+      final container = _container(
+        service: service,
+        devices: () => [_device()],
+      );
       addTearDown(container.dispose);
       final showDevice = ValueNotifier(true);
       addTearDown(showDevice.dispose);

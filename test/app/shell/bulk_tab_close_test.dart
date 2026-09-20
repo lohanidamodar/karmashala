@@ -43,7 +43,9 @@ void main() {
     for (var i = 0; i < count; i++)
       terminals().openTab(
         TerminalProfile.powerShell,
-        workingDirectory: r'C:\src\p' '$i',
+        workingDirectory:
+            r'C:\src\p'
+            '$i',
       ),
   ];
 
@@ -368,7 +370,8 @@ void main() {
         await tester.tap(find.text(TabCloseScope.others.label));
         await tester.pumpAndSettle();
       },
-      because: 'the tab menu and the question it asks are reached at every size',
+      because:
+          'the tab menu and the question it asks are reached at every size',
     );
   });
 

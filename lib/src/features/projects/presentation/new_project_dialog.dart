@@ -29,13 +29,11 @@ class NewProjectDialog extends ConsumerStatefulWidget {
   static Future<bool?> show(
     BuildContext context, {
     String? initialEnvironmentId,
-  }) =>
-      showDialog<bool>(
-        context: context,
-        builder: (_) => NewProjectDialog(
-          initialEnvironmentId: initialEnvironmentId,
-        ),
-      );
+  }) => showDialog<bool>(
+    context: context,
+    builder: (_) =>
+        NewProjectDialog(initialEnvironmentId: initialEnvironmentId),
+  );
 
   @override
   ConsumerState<NewProjectDialog> createState() => _NewProjectDialogState();
@@ -232,7 +230,9 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
         gitUrl.isNotEmpty &&
         !isSsh &&
         target?.kind != EnvironmentKind.wsl) {
-      setState(() => _error = 'Choose a local destination folder to clone into.');
+      setState(
+        () => _error = 'Choose a local destination folder to clone into.',
+      );
       return;
     }
 
@@ -248,7 +248,9 @@ class _NewProjectDialogState extends ConsumerState<NewProjectDialog> {
       // already spelled for its own machine must not go through it.
       final nativeToTarget = isSsh || _isPosixAbsolute(folder);
       if (gitUrl.isNotEmpty || nativeToTarget) {
-        result = await ref.read(projectsControllerProvider.notifier).createProject(
+        result = await ref
+            .read(projectsControllerProvider.notifier)
+            .createProject(
               name: name,
               targetEnvironmentId: _targetId,
               folderPath: folder,

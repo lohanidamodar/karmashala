@@ -53,9 +53,8 @@ class Established<T extends Object> {
 
   Map<String, Object?> toJson() => <String, Object?>{
     'state': state.name,
-    if (value != null) 'value': value is List || value is String
-        ? value
-        : '$value',
+    if (value != null)
+      'value': value is List || value is String ? value : '$value',
     if (evidence.isNotEmpty) 'evidence': evidence,
     if (reason.isNotEmpty) 'reason': reason,
     if (sketch.isNotEmpty) 'wouldBe': sketch,

@@ -11,9 +11,15 @@ import 'package:karmashala_ssh/host.dart';
 void main() {
   final now = DateTime.utc(2026, 9, 9, 12, 0);
 
-  test('nothing checked is said as nothing checked, never as "not running"', () {
-    expect(sessionHostStatusText(null, now: now), 'Nothing has been checked yet.');
-  });
+  test(
+    'nothing checked is said as nothing checked, never as "not running"',
+    () {
+      expect(
+        sessionHostStatusText(null, now: now),
+        'Nothing has been checked yet.',
+      );
+    },
+  );
 
   test('a running host names its version, who started it, and the age', () {
     final line = sessionHostStatusText(
@@ -31,19 +37,22 @@ void main() {
     expect(line, contains('checked 2m ago'));
   });
 
-  test('a host we did not start says so, which is the whole supervisor story', () {
-    final line = sessionHostStatusText(
-      HostDeployment(
-        status: HostDeploymentStatus.ready,
-        observedAt: now,
-        reason: 'answering',
-        hostVersion: '0.1.0',
-      ),
-      now: now,
-    );
-    expect(line, contains('not started by this app'));
-    expect(line, contains('checked just now'));
-  });
+  test(
+    'a host we did not start says so, which is the whole supervisor story',
+    () {
+      final line = sessionHostStatusText(
+        HostDeployment(
+          status: HostDeploymentStatus.ready,
+          observedAt: now,
+          reason: 'answering',
+          hostVersion: '0.1.0',
+        ),
+        now: now,
+      );
+      expect(line, contains('not started by this app'));
+      expect(line, contains('checked just now'));
+    },
+  );
 
   test('nothing listening is "no host is running", with its age', () {
     final line = sessionHostStatusText(

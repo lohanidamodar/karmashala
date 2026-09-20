@@ -62,7 +62,8 @@ class FakeTarget implements HostDeployTarget {
 
   /// The executable the running `serve` was started from. Null is a machine
   /// that would not say; the default is the build this deploy installs.
-  String? runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.1.0-linux-x64';
+  String? runningServe =
+      '/home/fake/.karmashala/bin/karmashala_host-0.1.0-linux-x64';
 
   @override
   Future<RemoteRun> run(String command) async {
@@ -76,9 +77,15 @@ class FakeTarget implements HostDeployTarget {
     }
     if (command.contains('host.lock')) return RemoteRun(0, stopOutput, '');
     if (command.startsWith('uname')) return RemoteRun(0, uname, '');
-    if (command.contains(r'echo "$HOME"')) return RemoteRun(0, '${home ?? ''}\n', '');
+    if (command.contains(r'echo "$HOME"')) {
+      return RemoteRun(0, '${home ?? ''}\n', '');
+    }
     if (command.contains('wc -c <')) {
-      return RemoteRun(0, existingSize < 0 ? 'missing\n' : '$existingSize\n', '');
+      return RemoteRun(
+        0,
+        existingSize < 0 ? 'missing\n' : '$existingSize\n',
+        '',
+      );
     }
     // Only the "is what is already here runnable" question — `chmod …; test -x`
     // — never the `chmod … && test -x` that verifies a fresh install. The two
@@ -97,7 +104,10 @@ class FakeTarget implements HostDeployTarget {
     // the server answers SSH_FX_NO_SUCH_FILE — the failure the owner's droplet
     // took silently for a day.
     if (remotePath.contains(r'$') || remotePath.contains('~')) {
-      throw SftpStatusError(SftpStatusCode.noSuchFile, 'No such file: $remotePath');
+      throw SftpStatusError(
+        SftpStatusCode.noSuchFile,
+        'No such file: $remotePath',
+      );
     }
     final failure = uploadError;
     if (failure != null) throw failure;
@@ -182,7 +192,10 @@ class FakeChannel implements RemoteChannel {
 }
 
 class FakeBinaries implements HostBinarySource {
-  FakeBinaries({this.targets = const {'linux-x64': 1024}, this.isBundleArchive = false});
+  FakeBinaries({
+    this.targets = const {'linux-x64': 1024},
+    this.isBundleArchive = false,
+  });
 
   final Map<String, int> targets;
 
@@ -212,10 +225,14 @@ class FakeBinaries implements HostBinarySource {
   }
 
   @override
-  Future<List<String>> availableTargets() async => targets.keys.toList()..sort();
+  Future<List<String>> availableTargets() async =>
+      targets.keys.toList()..sort();
 }
 
-HostDeployer deployerFor(FakeTarget target, {HostBinarySource? binaries}) => HostDeployer(
+HostDeployer deployerFor(
+  FakeTarget target, {
+  HostBinarySource? binaries,
+}) => HostDeployer(
   target: target,
   binaries: binaries ?? FakeBinaries(),
   clock: () => DateTime.utc(2026, 9, 8, 14, 0),
@@ -259,10 +276,15 @@ void main() {
       expect(deployment.reason, contains('did not answer'));
     });
 
-    test('a libc it could not read is unknown rather than assumed glibc', () async {
-      final platform = await deployerFor(FakeTarget(uname: 'Linux\nx86_64\n')).measurePlatform();
-      expect(platform!.libc, HostLibc.unknown);
-    });
+    test(
+      'a libc it could not read is unknown rather than assumed glibc',
+      () async {
+        final platform = await deployerFor(
+          FakeTarget(uname: 'Linux\nx86_64\n'),
+        ).measurePlatform();
+        expect(platform!.libc, HostLibc.unknown);
+      },
+    );
   });
 
   group('platforms with nothing to send', () {
@@ -277,24 +299,32 @@ void main() {
       expect(target.uploads, isEmpty);
     });
 
-    test('macOS is refused, and the message says no bundle is built for it', () async {
-      final target = FakeTarget(uname: 'Darwin\narm64\n');
-      final deployment = await deployerFor(target).deploy();
+    test(
+      'macOS is refused, and the message says no bundle is built for it',
+      () async {
+        final target = FakeTarget(uname: 'Darwin\narm64\n');
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.unsupportedPlatform);
-      expect(deployment.reason, contains('macOS'));
-      expect(deployment.platform!.operatingSystem, 'darwin');
-      expect(target.uploads, isEmpty);
-    });
+        expect(deployment.status, HostDeploymentStatus.unsupportedPlatform);
+        expect(deployment.reason, contains('macOS'));
+        expect(deployment.platform!.operatingSystem, 'darwin');
+        expect(target.uploads, isEmpty);
+      },
+    );
 
-    test('a Linux arch this build has no binary for names what it does have', () async {
-      final target = FakeTarget(uname: 'Linux\nriscv64\nldd (GNU libc) 2.40\n');
-      final deployment = await deployerFor(target).deploy();
+    test(
+      'a Linux arch this build has no binary for names what it does have',
+      () async {
+        final target = FakeTarget(
+          uname: 'Linux\nriscv64\nldd (GNU libc) 2.40\n',
+        );
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.noBinary);
-      expect(deployment.reason, contains('linux-riscv64'));
-      expect(deployment.reason, contains('linux-x64'));
-    });
+        expect(deployment.status, HostDeploymentStatus.noBinary);
+        expect(deployment.reason, contains('linux-riscv64'));
+        expect(deployment.reason, contains('linux-x64'));
+      },
+    );
   });
 
   group('where the files go', () {
@@ -322,101 +352,145 @@ void main() {
       expect(target.commands.any((c) => c.contains('~')), isFalse);
     });
 
-    test('the home is resolved once, and every path is built from it', () async {
-      final target = FakeTarget()
-        ..home = '/srv/agents/dlohani'
-        ..greet = ((_) => null);
-      await deployerFor(target).deploy();
+    test(
+      'the home is resolved once, and every path is built from it',
+      () async {
+        final target = FakeTarget()
+          ..home = '/srv/agents/dlohani'
+          ..greet = ((_) => null);
+        await deployerFor(target).deploy();
 
-      expect(target.commands.where((c) => c.contains(r'echo "$HOME"')), hasLength(1));
-      expect(
-        target.commands.firstWhere((c) => c.contains('mkdir -p')),
-        contains("'/srv/agents/dlohani/.karmashala/bin'"),
-      );
-      final start = target.commands.firstWhere((c) => c.contains('setsid nohup'));
-      expect(start, contains("'/srv/agents/dlohani/.karmashala'"));
-      expect(start, contains("'/srv/agents/dlohani/.karmashala/host.log'"));
-    }, timeout: const Timeout(Duration(seconds: 60)));
+        expect(
+          target.commands.where((c) => c.contains(r'echo "$HOME"')),
+          hasLength(1),
+        );
+        expect(
+          target.commands.firstWhere((c) => c.contains('mkdir -p')),
+          contains("'/srv/agents/dlohani/.karmashala/bin'"),
+        );
+        final start = target.commands.firstWhere(
+          (c) => c.contains('setsid nohup'),
+        );
+        expect(start, contains("'/srv/agents/dlohani/.karmashala'"));
+        expect(start, contains("'/srv/agents/dlohani/.karmashala/host.log'"));
+      },
+      timeout: const Timeout(Duration(seconds: 60)),
+    );
 
-    test('a machine that will not say where its home is uploads nothing', () async {
-      final target = FakeTarget()..home = null;
-      final deployment = await deployerFor(target).deploy();
+    test(
+      'a machine that will not say where its home is uploads nothing',
+      () async {
+        final target = FakeTarget()..home = null;
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.unknown);
-      expect(deployment.reason, contains(r'echo "$HOME"'));
-      expect(deployment.fallsBackToTmux, isTrue);
-      expect(target.uploads, isEmpty);
-    });
+        expect(deployment.status, HostDeploymentStatus.unknown);
+        expect(deployment.reason, contains(r'echo "$HOME"'));
+        expect(deployment.fallsBackToTmux, isTrue);
+        expect(target.uploads, isEmpty);
+      },
+    );
 
-    test('a shell that printed something first is not read as a home', () async {
-      final target = FakeTarget()..home = '/home/dlohani';
-      target.scripted[r'echo "$HOME"'] = const RemoteRun(
-        0,
-        'Welcome to Ubuntu\n/home/dlohani\n',
-        '',
-      );
-      final deployment = await deployerFor(target).deploy();
+    test(
+      'a shell that printed something first is not read as a home',
+      () async {
+        final target = FakeTarget()..home = '/home/dlohani';
+        target.scripted[r'echo "$HOME"'] = const RemoteRun(
+          0,
+          'Welcome to Ubuntu\n/home/dlohani\n',
+          '',
+        );
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.remotePath, startsWith('/home/dlohani/.karmashala/bin/'));
-    });
+        expect(
+          deployment.remotePath,
+          startsWith('/home/dlohani/.karmashala/bin/'),
+        );
+      },
+    );
   });
 
   group('a bundle, which is what every current build ships', () {
     FakeBinaries bundled() => FakeBinaries(isBundleArchive: true);
 
-    test('the archive is uploaded and the executable is run from inside it', () async {
-      final target = FakeTarget()..home = '/home/dlohani';
+    test(
+      'the archive is uploaded and the executable is run from inside it',
+      () async {
+        final target = FakeTarget()..home = '/home/dlohani';
 
-      final deployment = await deployerFor(target, binaries: bundled()).deploy();
+        final deployment = await deployerFor(
+          target,
+          binaries: bundled(),
+        ).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.ready);
-      // The tarball lands beside the directory, not on top of the executable.
-      expect(
-        target.uploads.single.$1,
-        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.tar.gz',
-      );
-      // `../lib` has to resolve, so the executable cannot be flattened.
-      expect(
-        deployment.remotePath,
-        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.d/bin/karmashala_host',
-      );
-    });
+        expect(deployment.status, HostDeploymentStatus.ready);
+        // The tarball lands beside the directory, not on top of the executable.
+        expect(
+          target.uploads.single.$1,
+          '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.tar.gz',
+        );
+        // `../lib` has to resolve, so the executable cannot be flattened.
+        expect(
+          deployment.remotePath,
+          '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.d/bin/karmashala_host',
+        );
+      },
+    );
 
-    test('it is unpacked into a directory of its own, replacing what was there', () async {
-      final target = FakeTarget()..home = '/home/dlohani';
+    test(
+      'it is unpacked into a directory of its own, replacing what was there',
+      () async {
+        final target = FakeTarget()..home = '/home/dlohani';
 
-      await deployerFor(target, binaries: bundled()).deploy();
+        await deployerFor(target, binaries: bundled()).deploy();
 
-      final unpack = target.commands.firstWhere((c) => c.contains('tar -xzf'));
-      // An interrupted deploy leaves a half-extracted tree that looks installed.
-      expect(unpack, contains('rm -rf'));
-      expect(
-        unpack,
-        contains("-C '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.d'"),
-      );
-    });
+        final unpack = target.commands.firstWhere(
+          (c) => c.contains('tar -xzf'),
+        );
+        // An interrupted deploy leaves a half-extracted tree that looks installed.
+        expect(unpack, contains('rm -rf'));
+        expect(
+          unpack,
+          contains(
+            "-C '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64.d'",
+          ),
+        );
+      },
+    );
 
-    test('a machine with no tar says so rather than failing at the handshake', () async {
-      final target = FakeTarget()..home = '/home/dlohani';
-      target.scripted['tar -xzf'] = const RemoteRun(127, '', 'sh: tar: not found');
+    test(
+      'a machine with no tar says so rather than failing at the handshake',
+      () async {
+        final target = FakeTarget()..home = '/home/dlohani';
+        target.scripted['tar -xzf'] = const RemoteRun(
+          127,
+          '',
+          'sh: tar: not found',
+        );
 
-      final deployment = await deployerFor(target, binaries: bundled()).deploy();
+        final deployment = await deployerFor(
+          target,
+          binaries: bundled(),
+        ).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.cannotInstall);
-      expect(deployment.reason, contains('tar'));
-    });
+        expect(deployment.status, HostDeploymentStatus.cannotInstall);
+        expect(deployment.reason, contains('tar'));
+      },
+    );
 
-    test('an archive already the right size is still unpacked if nothing was', () async {
-      final target = FakeTarget()
-        ..home = '/home/dlohani'
-        ..existingSize = 1024
-        // The archive arrived once and was never extracted.
-        ..executableInstalled = false;
+    test(
+      'an archive already the right size is still unpacked if nothing was',
+      () async {
+        final target = FakeTarget()
+          ..home = '/home/dlohani'
+          ..existingSize = 1024
+          // The archive arrived once and was never extracted.
+          ..executableInstalled = false;
 
-      await deployerFor(target, binaries: bundled()).deploy();
+        await deployerFor(target, binaries: bundled()).deploy();
 
-      expect(target.commands.any((c) => c.contains('tar -xzf')), isTrue);
-    });
+        expect(target.commands.any((c) => c.contains('tar -xzf')), isTrue);
+      },
+    );
 
     test('an already-installed host is never read off disk', () async {
       final target = FakeTarget()
@@ -432,17 +506,23 @@ void main() {
       expect(binaries.reads, 0);
     });
 
-    test('a bare binary from before the store is still installed in place', () async {
-      final target = FakeTarget()..home = '/home/dlohani';
+    test(
+      'a bare binary from before the store is still installed in place',
+      () async {
+        final target = FakeTarget()..home = '/home/dlohani';
 
-      final deployment = await deployerFor(target, binaries: FakeBinaries()).deploy();
+        final deployment = await deployerFor(
+          target,
+          binaries: FakeBinaries(),
+        ).deploy();
 
-      expect(
-        deployment.remotePath,
-        '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
-      );
-      expect(target.commands.any((c) => c.contains('tar -xzf')), isFalse);
-    });
+        expect(
+          deployment.remotePath,
+          '/home/dlohani/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+        );
+        expect(target.commands.any((c) => c.contains('tar -xzf')), isFalse);
+      },
+    );
   });
 
   group('installing', () {
@@ -451,51 +531,78 @@ void main() {
       final deployment = await deployerFor(target).deploy();
 
       expect(deployment.status, HostDeploymentStatus.ready);
-      expect(target.uploads.single.$1, contains('karmashala_host-0.1.0-linux-x64'));
+      expect(
+        target.uploads.single.$1,
+        contains('karmashala_host-0.1.0-linux-x64'),
+      );
       expect(target.uploads.single.$2, 1024);
-      expect(deployment.remotePath, '/home/fake/.karmashala/bin/karmashala_host-0.1.0-linux-x64');
+      expect(
+        deployment.remotePath,
+        '/home/fake/.karmashala/bin/karmashala_host-0.1.0-linux-x64',
+      );
       expect(deployment.hostVersion, '0.1.0');
       expect(deployment.protocolVersion, kProtocolVersion);
       expect(deployment.observedAt, DateTime.utc(2026, 9, 8, 14, 0));
       expect(target.commands.any((c) => c.contains('chmod +x')), isTrue);
     });
 
-    test('skips the upload when the remote file is already this build', () async {
-      final target = FakeTarget()..existingSize = 1024;
-      final deployment = await deployerFor(target).deploy();
+    test(
+      'skips the upload when the remote file is already this build',
+      () async {
+        final target = FakeTarget()..existingSize = 1024;
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.ready);
-      expect(target.uploads, isEmpty, reason: 'same name, same size, same build');
-      expect(
-        target.commands.any((c) => c.contains('chmod +x')),
-        isTrue,
-        reason: 'a restored file can be the right size and not executable',
-      );
-    });
+        expect(deployment.status, HostDeploymentStatus.ready);
+        expect(
+          target.uploads,
+          isEmpty,
+          reason: 'same name, same size, same build',
+        );
+        expect(
+          target.commands.any((c) => c.contains('chmod +x')),
+          isTrue,
+          reason: 'a restored file can be the right size and not executable',
+        );
+      },
+    );
 
-    test('a different size means a different build and is re-uploaded', () async {
-      final target = FakeTarget()..existingSize = 999;
-      await deployerFor(target).deploy();
-      expect(target.uploads, hasLength(1));
-    });
+    test(
+      'a different size means a different build and is re-uploaded',
+      () async {
+        final target = FakeTarget()..existingSize = 999;
+        await deployerFor(target).deploy();
+        expect(target.uploads, hasLength(1));
+      },
+    );
 
-    test('a read-only home is reported as cannot-install, in those words', () async {
-      final target = FakeTarget()..uploadError = StateError('permission denied');
-      final deployment = await deployerFor(target).deploy();
+    test(
+      'a read-only home is reported as cannot-install, in those words',
+      () async {
+        final target = FakeTarget()
+          ..uploadError = StateError('permission denied');
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.cannotInstall);
-      expect(deployment.reason, contains('read-only home'));
-      expect(deployment.fallsBackToTmux, isTrue);
-    });
+        expect(deployment.status, HostDeploymentStatus.cannotInstall);
+        expect(deployment.reason, contains('read-only home'));
+        expect(deployment.fallsBackToTmux, isTrue);
+      },
+    );
 
-    test('a noexec home is caught by the chmod check, not discovered later', () async {
-      final target = FakeTarget()
-        ..scripted['chmod +x'] = const RemoteRun(1, '', 'Operation not permitted');
-      final deployment = await deployerFor(target).deploy();
+    test(
+      'a noexec home is caught by the chmod check, not discovered later',
+      () async {
+        final target = FakeTarget()
+          ..scripted['chmod +x'] = const RemoteRun(
+            1,
+            '',
+            'Operation not permitted',
+          );
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.cannotInstall);
-      expect(deployment.reason, contains('noexec'));
-    });
+        expect(deployment.status, HostDeploymentStatus.cannotInstall);
+        expect(deployment.reason, contains('noexec'));
+      },
+    );
   });
 
   group('starting and greeting', () {
@@ -508,54 +615,69 @@ void main() {
       expect(target.commands.any((c) => c.contains('setsid nohup')), isFalse);
     });
 
-    test('a silent host is started with setsid nohup and then asked again', () async {
-      final target = FakeTarget();
-      var asked = 0;
-      target.greet = (hello) {
-        asked++;
-        return asked == 1
-            ? null
-            : WelcomeMessage(
-                requestId: 1,
-                protocolVersion: kProtocolVersion,
-                hostVersion: '0.1.0',
-                operatingSystem: 'linux',
-                architecture: 'x64',
-                ptyLibrary: 'libc.so.6',
-                pid: 5,
-                startedAt: DateTime.utc(2026),
-                observedAt: DateTime.utc(2026),
-              );
-      };
+    test(
+      'a silent host is started with setsid nohup and then asked again',
+      () async {
+        final target = FakeTarget();
+        var asked = 0;
+        target.greet = (hello) {
+          asked++;
+          return asked == 1
+              ? null
+              : WelcomeMessage(
+                  requestId: 1,
+                  protocolVersion: kProtocolVersion,
+                  hostVersion: '0.1.0',
+                  operatingSystem: 'linux',
+                  architecture: 'x64',
+                  ptyLibrary: 'libc.so.6',
+                  pid: 5,
+                  startedAt: DateTime.utc(2026),
+                  observedAt: DateTime.utc(2026),
+                );
+        };
 
-      final deployment = await deployerFor(target).deploy();
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.isReady, isTrue);
-      expect(asked, 2);
-      final start = target.commands.firstWhere((c) => c.contains('setsid nohup'));
-      expect(start, contains('serve'));
-      expect(start, contains('< /dev/null'), reason: 'the channel must not stay open');
-      expect(start, contains('host.log'));
-    }, timeout: const Timeout(Duration(seconds: 40)));
+        expect(deployment.isReady, isTrue);
+        expect(asked, 2);
+        final start = target.commands.firstWhere(
+          (c) => c.contains('setsid nohup'),
+        );
+        expect(start, contains('serve'));
+        expect(
+          start,
+          contains('< /dev/null'),
+          reason: 'the channel must not stay open',
+        );
+        expect(start, contains('host.log'));
+      },
+      timeout: const Timeout(Duration(seconds: 40)),
+    );
 
     test('a serve from an older binary, holding nothing, is replaced', () async {
       // Every build reports the same `hostVersion`, so the *path* is what says
       // which one is running.
       final target = FakeTarget()
-        ..runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
+        ..runningServe =
+            '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
 
       final deployment = await deployerFor(target).deploy();
 
       expect(deployment.isReady, isTrue);
       expect(deployment.restartedByUs, isTrue);
-      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isTrue);
+      expect(
+        target.commands.any((c) => c.contains('karmashala-still-running')),
+        isTrue,
+      );
       expect(target.commands.any((c) => c.contains('setsid nohup')), isTrue);
     }, timeout: const Timeout(Duration(seconds: 40)));
 
     test('an older serve with work on it is left alone, and says so', () async {
       final target = FakeTarget()
         ..heldSessions = 2
-        ..runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
+        ..runningServe =
+            '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
 
       final deployment = await deployerFor(target).deploy();
 
@@ -566,93 +688,139 @@ void main() {
       expect(deployment.reason, contains('karmashala_host-0.0.9-linux-x64'));
       expect(deployment.reason, contains('2 session(s)'));
       expect(deployment.reason, contains('left alone'));
-      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isFalse);
+      expect(
+        target.commands.any((c) => c.contains('karmashala-still-running')),
+        isFalse,
+      );
     }, timeout: const Timeout(Duration(seconds: 40)));
 
-    test('an older serve that will not say what it holds is not touched', () async {
-      final target = FakeTarget()
-        ..heldSessions = null
-        ..runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
+    test(
+      'an older serve that will not say what it holds is not touched',
+      () async {
+        final target = FakeTarget()
+          ..heldSessions = null
+          ..runningServe =
+              '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
 
-      final deployment = await deployerFor(target).deploy();
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.reason, contains('would not say'));
-      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isFalse);
-    }, timeout: const Timeout(Duration(seconds: 40)));
+        expect(deployment.reason, contains('would not say'));
+        expect(
+          target.commands.any((c) => c.contains('karmashala-still-running')),
+          isFalse,
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 40)),
+    );
 
-    test('an older serve that will not stop is reported, not pretended about', () async {
-      final target = FakeTarget()
-        ..stopOutput = 'karmashala-still-running\n'
-        ..runningServe = '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
+    test(
+      'an older serve that will not stop is reported, not pretended about',
+      () async {
+        final target = FakeTarget()
+          ..stopOutput = 'karmashala-still-running\n'
+          ..runningServe =
+              '/home/fake/.karmashala/bin/karmashala_host-0.0.9-linux-x64';
 
-      final deployment = await deployerFor(target).deploy();
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.restartedByUs, isFalse);
-      expect(deployment.reason, contains('could not be replaced'));
-    }, timeout: const Timeout(Duration(seconds: 40)));
+        expect(deployment.restartedByUs, isFalse);
+        expect(deployment.reason, contains('could not be replaced'));
+      },
+      timeout: const Timeout(Duration(seconds: 40)),
+    );
 
-    test('a serve from this very binary is never asked to stand down', () async {
-      final target = FakeTarget();
+    test(
+      'a serve from this very binary is never asked to stand down',
+      () async {
+        final target = FakeTarget();
 
-      final deployment = await deployerFor(target).deploy();
+        final deployment = await deployerFor(target).deploy();
 
-      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isFalse);
-      expect(deployment.reason, isNot(contains('installed beside it')));
-    }, timeout: const Timeout(Duration(seconds: 40)));
+        expect(
+          target.commands.any((c) => c.contains('karmashala-still-running')),
+          isFalse,
+        );
+        expect(deployment.reason, isNot(contains('installed beside it')));
+      },
+      timeout: const Timeout(Duration(seconds: 40)),
+    );
 
-    test('a machine that will not name the running serve is left alone', () async {
-      final target = FakeTarget()..runningServe = null;
+    test(
+      'a machine that will not name the running serve is left alone',
+      () async {
+        final target = FakeTarget()..runningServe = null;
 
-      final deployment = await deployerFor(target).deploy();
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.isReady, isTrue);
-      expect(target.commands.any((c) => c.contains('karmashala-still-running')), isFalse);
-    }, timeout: const Timeout(Duration(seconds: 40)));
+        expect(deployment.isReady, isTrue);
+        expect(
+          target.commands.any((c) => c.contains('karmashala-still-running')),
+          isFalse,
+        );
+      },
+      timeout: const Timeout(Duration(seconds: 40)),
+    );
 
-    test('a host that was already running is not reported as restarted', () async {
-      final deployment = await deployerFor(FakeTarget()).deploy();
-      expect(deployment.isReady, isTrue);
-      expect(deployment.restartedByUs, isFalse);
-      expect(deployment.reason, isNot(contains('restarted')));
-    });
+    test(
+      'a host that was already running is not reported as restarted',
+      () async {
+        final deployment = await deployerFor(FakeTarget()).deploy();
+        expect(deployment.isReady, isTrue);
+        expect(deployment.restartedByUs, isFalse);
+        expect(deployment.reason, isNot(contains('restarted')));
+      },
+    );
 
-    test('a host that had to be started reports that its sessions are gone', () async {
-      final target = FakeTarget();
-      var asked = 0;
-      target.greet = (hello) {
-        asked++;
-        // Exactly the shape of a reboot: nothing is listening until we start it.
-        return asked == 1
-            ? null
-            : WelcomeMessage(
-                requestId: 1,
-                protocolVersion: kProtocolVersion,
-                hostVersion: '0.1.0',
-                operatingSystem: 'linux',
-                architecture: 'x64',
-                ptyLibrary: 'libc.so.6',
-                pid: 5,
-                startedAt: DateTime.utc(2026),
-                observedAt: DateTime.utc(2026),
-              );
-      };
+    test(
+      'a host that had to be started reports that its sessions are gone',
+      () async {
+        final target = FakeTarget();
+        var asked = 0;
+        target.greet = (hello) {
+          asked++;
+          // Exactly the shape of a reboot: nothing is listening until we start it.
+          return asked == 1
+              ? null
+              : WelcomeMessage(
+                  requestId: 1,
+                  protocolVersion: kProtocolVersion,
+                  hostVersion: '0.1.0',
+                  operatingSystem: 'linux',
+                  architecture: 'x64',
+                  ptyLibrary: 'libc.so.6',
+                  pid: 5,
+                  startedAt: DateTime.utc(2026),
+                  observedAt: DateTime.utc(2026),
+                );
+        };
 
-      final deployment = await deployerFor(target).deploy();
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.isReady, isTrue);
-      expect(deployment.restartedByUs, isTrue);
-      expect(deployment.reason, contains('was not running and has been restarted'));
-      expect(deployment.reason, contains('sessions it held before are gone'));
-      expect(target.commands.any((c) => c.contains('setsid nohup')), isTrue);
-    });
+        expect(deployment.isReady, isTrue);
+        expect(deployment.restartedByUs, isTrue);
+        expect(
+          deployment.reason,
+          contains('was not running and has been restarted'),
+        );
+        expect(deployment.reason, contains('sessions it held before are gone'));
+        expect(target.commands.any((c) => c.contains('setsid nohup')), isTrue);
+      },
+    );
 
-    test('a host that would not start is still reported as one we tried to start', () async {
-      final target = FakeTarget()
-        ..greet = ((_) => null)
-        ..scripted['setsid nohup'] = const RemoteRun(127, '', 'sh: setsid: not found');
-      final deployment = await deployerFor(target).deploy();
-      expect(deployment.restartedByUs, isTrue);
-    });
+    test(
+      'a host that would not start is still reported as one we tried to start',
+      () async {
+        final target = FakeTarget()
+          ..greet = ((_) => null)
+          ..scripted['setsid nohup'] = const RemoteRun(
+            127,
+            '',
+            'sh: setsid: not found',
+          );
+        final deployment = await deployerFor(target).deploy();
+        expect(deployment.restartedByUs, isTrue);
+      },
+    );
 
     test('a host that never answers is cannot-start, and falls back', () async {
       final target = FakeTarget()..greet = (_) => null;
@@ -668,45 +836,62 @@ void main() {
       // to the null, not to the target.
       final target = FakeTarget()
         ..greet = ((_) => null)
-        ..scripted['setsid nohup'] = const RemoteRun(127, '', 'sh: setsid: not found');
+        ..scripted['setsid nohup'] = const RemoteRun(
+          127,
+          '',
+          'sh: setsid: not found',
+        );
       final deployment = await deployerFor(target).deploy();
 
       expect(deployment.status, HostDeploymentStatus.cannotStart);
       expect(deployment.reason, contains('setsid: not found'));
     }, timeout: const Timeout(Duration(seconds: 40)));
 
-    test('an older host still running is reported as a protocol mismatch', () async {
-      final target = FakeTarget()
-        ..greet = ((_) => const ErrorMessage(
-          1,
-          ProtocolErrorCode.protocolMismatch,
-          'host speaks protocol 7, client speaks 1',
-        ));
-      final deployment = await deployerFor(target).deploy();
+    test(
+      'an older host still running is reported as a protocol mismatch',
+      () async {
+        final target = FakeTarget()
+          ..greet = ((_) => const ErrorMessage(
+            1,
+            ProtocolErrorCode.protocolMismatch,
+            'host speaks protocol 7, client speaks 1',
+          ));
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.protocolMismatch);
-      expect(deployment.protocolVersion, 7);
-      expect(deployment.reason, contains('speaks protocol 7'));
-      expect(deployment.reason, contains('stale `serve`'));
-      expect(deployment.fallsBackToTmux, isTrue);
-    });
+        expect(deployment.status, HostDeploymentStatus.protocolMismatch);
+        expect(deployment.protocolVersion, 7);
+        expect(deployment.reason, contains('speaks protocol 7'));
+        expect(deployment.reason, contains('stale `serve`'));
+        expect(deployment.fallsBackToTmux, isTrue);
+      },
+    );
 
-    test('a refusal that is not a version mismatch is not read as one', () async {
-      final target = FakeTarget()
-        ..greet = ((_) =>
-            const ErrorMessage(1, ProtocolErrorCode.internal, 'something else entirely'));
-      final deployment = await deployerFor(target).deploy();
+    test(
+      'a refusal that is not a version mismatch is not read as one',
+      () async {
+        final target = FakeTarget()
+          ..greet = ((_) => const ErrorMessage(
+            1,
+            ProtocolErrorCode.internal,
+            'something else entirely',
+          ));
+        final deployment = await deployerFor(target).deploy();
 
-      expect(deployment.status, HostDeploymentStatus.cannotStart);
-    }, timeout: const Timeout(Duration(seconds: 60)));
+        expect(deployment.status, HostDeploymentStatus.cannotStart);
+      },
+      timeout: const Timeout(Duration(seconds: 60)),
+    );
   });
 
   group('HostPlatform', () {
-    test('normalises the architectures that matter and leaves the rest alone', () {
-      expect(HostPlatform.normaliseArchitecture('x86_64'), 'x64');
-      expect(HostPlatform.normaliseArchitecture('amd64'), 'x64');
-      expect(HostPlatform.normaliseArchitecture('aarch64'), 'arm64');
-      expect(HostPlatform.normaliseArchitecture('armv7l'), 'armv7l');
-    });
+    test(
+      'normalises the architectures that matter and leaves the rest alone',
+      () {
+        expect(HostPlatform.normaliseArchitecture('x86_64'), 'x64');
+        expect(HostPlatform.normaliseArchitecture('amd64'), 'x64');
+        expect(HostPlatform.normaliseArchitecture('aarch64'), 'arm64');
+        expect(HostPlatform.normaliseArchitecture('armv7l'), 'armv7l');
+      },
+    );
   });
 }

@@ -40,9 +40,9 @@ void main() {
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(
-      repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
-    );
+    RepositoryDao(
+      db,
+    ).insert(repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'));
     container = ProviderContainer(
       overrides: [
         ...fakeTerminalOverrides(database: db),
@@ -71,8 +71,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  void configure([WorktreeSetup? setup]) =>
-      container.read(worktreeSetupControllerProvider).save(
+  void configure([WorktreeSetup? setup]) => container
+      .read(worktreeSetupControllerProvider)
+      .save(
         'r1',
         setup ??
             const WorktreeSetup(
@@ -121,28 +122,31 @@ void main() {
     tester,
   ) async {
     configure();
-    container.read(worktreeSetupDaoProvider).record(
-      WorktreeSetupReport(
-        repositoryId: 'r1',
-        worktreePath: worktree.path,
-        environmentId: 'wsl:Ubuntu',
-        ranAt: testTime,
-        copies: const [
-          WorktreeCopyVerdict(
-            path: 'macos/Vendor',
-            result: WorktreeCopyResult.failed,
-            reason: 'Copy failed: Permission denied.',
+    container
+        .read(worktreeSetupDaoProvider)
+        .record(
+          WorktreeSetupReport(
+            repositoryId: 'r1',
+            worktreePath: worktree.path,
+            environmentId: 'wsl:Ubuntu',
+            ranAt: testTime,
+            copies: const [
+              WorktreeCopyVerdict(
+                path: 'macos/Vendor',
+                result: WorktreeCopyResult.failed,
+                reason: 'Copy failed: Permission denied.',
+              ),
+            ],
+            command: const WorktreeCommandVerdict(
+              result: WorktreeCommandResult.failed,
+              reason:
+                  'Exited with code 1. Its output is in the pane it ran in.',
+              command: ['flutter', 'pub', 'get'],
+              paneId: 'pane-1',
+              exitCode: 1,
+            ),
           ),
-        ],
-        command: const WorktreeCommandVerdict(
-          result: WorktreeCommandResult.failed,
-          reason: 'Exited with code 1. Its output is in the pane it ran in.',
-          command: ['flutter', 'pub', 'get'],
-          paneId: 'pane-1',
-          exitCode: 1,
-        ),
-      ),
-    );
+        );
     container.read(worktreeSetupRevisionProvider.notifier).bump();
     await pumpPage(tester);
 
@@ -162,21 +166,23 @@ void main() {
 
   testWidgets('a clean setup is one quiet line, not a wall', (tester) async {
     configure();
-    container.read(worktreeSetupDaoProvider).record(
-      WorktreeSetupReport(
-        repositoryId: 'r1',
-        worktreePath: worktree.path,
-        environmentId: 'wsl:Ubuntu',
-        ranAt: testTime,
-        copies: const [
-          WorktreeCopyVerdict(
-            path: '.dart_tool',
-            result: WorktreeCopyResult.copied,
-            reason: 'Copied with `cp -a`.',
+    container
+        .read(worktreeSetupDaoProvider)
+        .record(
+          WorktreeSetupReport(
+            repositoryId: 'r1',
+            worktreePath: worktree.path,
+            environmentId: 'wsl:Ubuntu',
+            ranAt: testTime,
+            copies: const [
+              WorktreeCopyVerdict(
+                path: '.dart_tool',
+                result: WorktreeCopyResult.copied,
+                reason: 'Copied with `cp -a`.',
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+        );
     container.read(worktreeSetupRevisionProvider.notifier).bump();
     await pumpPage(tester);
 
@@ -194,21 +200,23 @@ void main() {
 
     // What a session launch does: record, then bump. Nothing polls, and the
     // page is not reopened.
-    container.read(worktreeSetupDaoProvider).record(
-      WorktreeSetupReport(
-        repositoryId: 'r1',
-        worktreePath: worktree.path,
-        environmentId: 'wsl:Ubuntu',
-        ranAt: testTime,
-        copies: const [
-          WorktreeCopyVerdict(
-            path: 'lib',
-            result: WorktreeCopyResult.refusedTracked,
-            reason: 'refused',
+    container
+        .read(worktreeSetupDaoProvider)
+        .record(
+          WorktreeSetupReport(
+            repositoryId: 'r1',
+            worktreePath: worktree.path,
+            environmentId: 'wsl:Ubuntu',
+            ranAt: testTime,
+            copies: const [
+              WorktreeCopyVerdict(
+                path: 'lib',
+                result: WorktreeCopyResult.refusedTracked,
+                reason: 'refused',
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+        );
     container.read(worktreeSetupRevisionProvider.notifier).bump();
     await tester.pumpAndSettle();
 

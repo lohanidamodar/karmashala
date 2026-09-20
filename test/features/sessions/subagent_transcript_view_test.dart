@@ -256,10 +256,7 @@ void main() {
             TranscriptMessage(
               role: 'tool',
               text: 'Task(read the store)',
-              tool: const ToolActivity(
-                name: 'Task',
-                subject: 'read the store',
-              ),
+              tool: const ToolActivity(name: 'Task', subject: 'read the store'),
               subagent: inner,
             ),
           ],

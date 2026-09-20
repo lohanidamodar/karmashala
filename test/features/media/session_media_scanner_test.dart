@@ -274,35 +274,38 @@ void main() {
       expect(result.bytesExtracted, 0);
     });
 
-    test('the skip survives the call and its answer being scanned apart', () async {
-      // A poll can catch the file between the two lines, so the fact that the
-      // call already gave us a path has to outlive the pass that saw it.
-      final transcript = writeTranscript(dir, 'c.jsonl', [
-        toolUseLine(
-          at: '2026-09-01T10:00:00.000Z',
-          id: 't1',
-          name: 'Read',
-          input: {'file_path': r'C:\work\thumbs\temple.png'},
-        ),
-      ]);
-      final first = await store.refresh(transcript.path, AgentIds.claudeCode);
-      appendTranscript(transcript, [
-        toolResultLine(
-          at: '2026-09-01T10:00:01.000Z',
-          id: 't1',
-          imageData: bulkyBase64(300),
-        ),
-      ]);
+    test(
+      'the skip survives the call and its answer being scanned apart',
+      () async {
+        // A poll can catch the file between the two lines, so the fact that the
+        // call already gave us a path has to outlive the pass that saw it.
+        final transcript = writeTranscript(dir, 'c.jsonl', [
+          toolUseLine(
+            at: '2026-09-01T10:00:00.000Z',
+            id: 't1',
+            name: 'Read',
+            input: {'file_path': r'C:\work\thumbs\temple.png'},
+          ),
+        ]);
+        final first = await store.refresh(transcript.path, AgentIds.claudeCode);
+        appendTranscript(transcript, [
+          toolResultLine(
+            at: '2026-09-01T10:00:01.000Z',
+            id: 't1',
+            imageData: bulkyBase64(300),
+          ),
+        ]);
 
-      final second = await store.refresh(
-        transcript.path,
-        AgentIds.claudeCode,
-        previous: first,
-      );
+        final second = await store.refresh(
+          transcript.path,
+          AgentIds.claudeCode,
+          previous: first,
+        );
 
-      expect(second.items, hasLength(1));
-      expect(second.bytesExtracted, 0);
-    });
+        expect(second.items, hasLength(1));
+        expect(second.bytesExtracted, 0);
+      },
+    );
   });
 
   group('the order the owner asked for', () {
@@ -326,11 +329,11 @@ void main() {
 
       final items = await scan(transcript);
 
-      expect(
-        items.map((item) => item.label),
-        ['last.png', 'Pasted image', 'first.png'],
-        reason: 'descending order, as asked',
-      );
+      expect(items.map((item) => item.label), [
+        'last.png',
+        'Pasted image',
+        'first.png',
+      ], reason: 'descending order, as asked');
       // Descending by the order they were recorded, which is the order that
       // survives a transcript with no timestamps.
       expect(items.first.sequence, greaterThan(items.last.sequence));
@@ -370,26 +373,32 @@ void main() {
       expect(items.single.origin, SessionMediaOrigin.pasted);
     });
 
-    test('a pasted block too large to preview is listed, not decoded', () async {
-      final transcript = writeTranscript(dir, 'a.jsonl', [
-        pastedImageLine(
-          at: '2026-09-01T10:00:00.000Z',
-          data: bulkyBase64(64),
-        ),
-      ]);
+    test(
+      'a pasted block too large to preview is listed, not decoded',
+      () async {
+        final transcript = writeTranscript(dir, 'a.jsonl', [
+          pastedImageLine(
+            at: '2026-09-01T10:00:00.000Z',
+            data: bulkyBase64(64),
+          ),
+        ]);
 
-      final small = SessionMediaStore(cache, maxItemBytes: 1024);
-      final result = await small.refresh(transcript.path, AgentIds.claudeCode);
+        final small = SessionMediaStore(cache, maxItemBytes: 1024);
+        final result = await small.refresh(
+          transcript.path,
+          AgentIds.claudeCode,
+        );
 
-      expect(result.items, hasLength(1));
-      expect(result.items.single.path, isNull);
-      expect(result.items.single.problem, contains('too large'));
-      expect(
-        result.bytesExtracted,
-        0,
-        reason: 'the size is read off the base64 length, never by decoding',
-      );
-    });
+        expect(result.items, hasLength(1));
+        expect(result.items.single.path, isNull);
+        expect(result.items.single.problem, contains('too large'));
+        expect(
+          result.bytesExtracted,
+          0,
+          reason: 'the size is read off the base64 length, never by decoding',
+        );
+      },
+    );
 
     test('an image block with no usable data is listed with a reason', () async {
       final transcript = writeTranscript(dir, 'a.jsonl', [
@@ -423,10 +432,7 @@ void main() {
         pastedImageLine(at: '2026-09-01T10:00:00.000Z'),
       ]);
 
-      final result = await store.refresh(
-        transcript.path,
-        AgentIds.antigravity,
-      );
+      final result = await store.refresh(transcript.path, AgentIds.antigravity);
 
       expect(result.items, isEmpty);
       expect(result.bytesRead, 0);
@@ -447,10 +453,7 @@ void main() {
       final transcript = writeTranscript(dir, 'a.jsonl', lines);
 
       final capped = SessionMediaStore(cache, cap: 5);
-      final result = await capped.refresh(
-        transcript.path,
-        AgentIds.claudeCode,
-      );
+      final result = await capped.refresh(transcript.path, AgentIds.claudeCode);
 
       expect(result.items, hasLength(5));
       expect(

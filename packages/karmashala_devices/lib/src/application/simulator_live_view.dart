@@ -137,7 +137,6 @@ final simulatorLiveViewProvider =
       SimulatorLiveViewController.new,
     );
 
-
 /// The last input failure, so a refused tap is visible rather than silent: a
 /// gesture is sent and forgotten, or the finger would lag the picture.
 class SimulatorInputError extends Notifier<String?> {

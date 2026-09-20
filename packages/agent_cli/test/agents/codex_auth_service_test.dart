@@ -20,39 +20,45 @@ void main() {
   });
   tearDown(() => removeTempDirectory(dir));
 
-  test('an auth.json that is not JSON is named, not read as signed out', () async {
-    File(path).writeAsStringSync('{"tokens": ');
+  test(
+    'an auth.json that is not JSON is named, not read as signed out',
+    () async {
+      File(path).writeAsStringSync('{"tokens": ');
 
-    final snapshot = await service.readSnapshot(path, 'windows');
-    expect(snapshot.isSignedIn, isFalse);
-    expect(snapshot.readFailure, contains('is not valid JSON'));
+      final snapshot = await service.readSnapshot(path, 'windows');
+      expect(snapshot.isSignedIn, isFalse);
+      expect(snapshot.readFailure, contains('is not valid JSON'));
 
-    await expectLater(
-      service.capture(path, 'windows'),
-      throwsA(
-        isA<CodexAuthException>().having(
-          (e) => e.message,
-          'message',
-          contains('is not valid JSON'),
+      await expectLater(
+        service.capture(path, 'windows'),
+        throwsA(
+          isA<CodexAuthException>().having(
+            (e) => e.message,
+            'message',
+            contains('is not valid JSON'),
+          ),
         ),
-      ),
-    );
-  });
+      );
+    },
+  );
 
-  test('an absent auth.json is simply signed out, and capture says it is absent', () async {
-    final snapshot = await service.readSnapshot(path, 'windows');
-    expect(snapshot.isSignedIn, isFalse);
-    expect(snapshot.readFailure, isNull);
+  test(
+    'an absent auth.json is simply signed out, and capture says it is absent',
+    () async {
+      final snapshot = await service.readSnapshot(path, 'windows');
+      expect(snapshot.isSignedIn, isFalse);
+      expect(snapshot.readFailure, isNull);
 
-    await expectLater(
-      service.capture(path, 'windows'),
-      throwsA(
-        isA<CodexAuthException>().having(
-          (e) => e.message,
-          'message',
-          contains('No Codex credentials found'),
+      await expectLater(
+        service.capture(path, 'windows'),
+        throwsA(
+          isA<CodexAuthException>().having(
+            (e) => e.message,
+            'message',
+            contains('No Codex credentials found'),
+          ),
         ),
-      ),
-    );
-  });
+      );
+    },
+  );
 }

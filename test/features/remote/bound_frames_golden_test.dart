@@ -435,7 +435,9 @@ void main() {
           'sessionId': 's1',
           'toolUseId': 'toolu_1',
           'answers': [
-            {'options': [1]},
+            {
+              'options': [1],
+            },
           ],
         },
         {'sessionId': 's1', 'toolUseId': 'toolu_1', 'decline': true},
@@ -476,7 +478,12 @@ void main() {
         {'sessionId': 's1'},
       ],
       FrameType.attachmentBegin: [
-        {'sessionId': live, 'name': 'shot.png', 'type': 'image/png', 'bytes': 4},
+        {
+          'sessionId': live,
+          'name': 'shot.png',
+          'type': 'image/png',
+          'bytes': 4,
+        },
       ],
       FrameType.attachmentChunk: [
         // Filled in below with the id the store just handed out.

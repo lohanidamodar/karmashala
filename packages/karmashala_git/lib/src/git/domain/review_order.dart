@@ -82,10 +82,7 @@ String orderUnifiedDiffForReview(String diff) {
   }
   if (sections.length < 2) return diff;
   final ordered = orderedForReview(sections, _diffSectionPath);
-  return [
-    ...preamble,
-    for (final section in ordered) ...section,
-  ].join('\n');
+  return [...preamble, for (final section in ordered) ...section].join('\n');
 }
 
 /// The `b/` path of a `diff --git a/<old> b/<new>` header.

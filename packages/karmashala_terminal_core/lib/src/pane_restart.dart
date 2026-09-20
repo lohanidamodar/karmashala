@@ -12,7 +12,6 @@ bool shouldRestartOnLaunch({
   required bool isAgentPane,
 }) => enabled && wasLive && inActiveTab && !isAgentPane;
 
-
 /// Whether a dormant pane should be started when its tab is *opened* —
 /// [shouldRestartOnLaunch] minus [inActiveTab], which opening stands in for.
 bool shouldRestartOnActivate({

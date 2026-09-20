@@ -222,68 +222,73 @@ void main() {
   test(
     'native resume launches a stopped row with its original conversation and directory',
     () async {
-    seedWorkspace();
-    final bindings = container.read(remoteHostBindingsProvider);
-    await expectLater(
-      bindings.resumeSession('s1'),
-      throwsA(isA<RemoteApiRefusal>()),
-    );
-    final launcher = container.read(sessionLauncherProvider);
-    final workFolder = await tempFolder();
-    final workDir = EnvironmentPath(
-      environmentId: 'windows',
-      path: workFolder.path,
-    );
-    final resumableInstallation = AgentInstallation(
-      id: 'i2',
-      agentId: 'codex',
-      executable: path(r'C:\bin\codex.exe'),
-      createdAt: now,
-    );
-    AgentInstallationDao(db).insert(resumableInstallation);
-    final result = await launcher.launch(
-      SessionLaunchRequest(
-        repository: RepositoryDao(db).getById('r1')!,
-        installation: resumableInstallation,
-        title: 'Active',
-        purpose: SessionPurpose.newSession,
-        workingDirectory: workDir,
-        permissionOverride: PermissionSelection.parse(
-          'approval=on-request;sandbox=bypass-all',
+      seedWorkspace();
+      final bindings = container.read(remoteHostBindingsProvider);
+      await expectLater(
+        bindings.resumeSession('s1'),
+        throwsA(isA<RemoteApiRefusal>()),
+      );
+      final launcher = container.read(sessionLauncherProvider);
+      final workFolder = await tempFolder();
+      final workDir = EnvironmentPath(
+        environmentId: 'windows',
+        path: workFolder.path,
+      );
+      final resumableInstallation = AgentInstallation(
+        id: 'i2',
+        agentId: 'codex',
+        executable: path(r'C:\bin\codex.exe'),
+        createdAt: now,
+      );
+      AgentInstallationDao(db).insert(resumableInstallation);
+      final result = await launcher.launch(
+        SessionLaunchRequest(
+          repository: RepositoryDao(db).getById('r1')!,
+          installation: resumableInstallation,
+          title: 'Active',
+          purpose: SessionPurpose.newSession,
+          workingDirectory: workDir,
+          permissionOverride: PermissionSelection.parse(
+            'approval=on-request;sandbox=bypass-all',
+          ),
         ),
-      ),
-    );
-    final original = result.session.id;
-    SessionDao(db).updateExternalSessionId(original, 'external-1');
-    final paneId = SessionDao(db).getById(original)!.paneId!;
-    container.read(terminalSessionsControllerProvider.notifier).endSession(paneId);
-    final resumed = await bindings.resumeSession(original);
-    expect(resumed.sessionId, result.session.id);
-    expect(SessionDao(db).getAll(), hasLength(1));
-    final resumedRow = SessionDao(db).getById(original)!;
-    expect(resumedRow.externalSessionId, 'external-1');
-    expect(resumedRow.permissionMode, 'approval=on-request;sandbox=bypass-all');
-    expect(resumedRow.workingDirectory, workDir);
-    final resumedPane = resumedRow.paneId!;
-    final instance = container
-        .read(terminalSessionsControllerProvider.notifier)
-        .instanceFor(resumedPane)!;
-    expect(instance.agentLaunch?.arguments, contains('external-1'));
-    expect(
-      instance.agentLaunch?.arguments,
-      contains('--dangerously-bypass-approvals-and-sandbox'),
-    );
-    expect(instance.agentLaunch?.workingDirectory, workDir.path);
-    final again = await bindings.resumeSession(original);
-    expect(again.sessionId, original);
-    expect(SessionDao(db).getAll(), hasLength(1));
-    expect(SessionDao(db).getById(original)!.paneId, resumedPane);
-    expect(
+      );
+      final original = result.session.id;
+      SessionDao(db).updateExternalSessionId(original, 'external-1');
+      final paneId = SessionDao(db).getById(original)!.paneId!;
       container
           .read(terminalSessionsControllerProvider.notifier)
-          .instanceFor(resumedPane),
-      same(instance),
-    );
+          .endSession(paneId);
+      final resumed = await bindings.resumeSession(original);
+      expect(resumed.sessionId, result.session.id);
+      expect(SessionDao(db).getAll(), hasLength(1));
+      final resumedRow = SessionDao(db).getById(original)!;
+      expect(resumedRow.externalSessionId, 'external-1');
+      expect(
+        resumedRow.permissionMode,
+        'approval=on-request;sandbox=bypass-all',
+      );
+      expect(resumedRow.workingDirectory, workDir);
+      final resumedPane = resumedRow.paneId!;
+      final instance = container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(resumedPane)!;
+      expect(instance.agentLaunch?.arguments, contains('external-1'));
+      expect(
+        instance.agentLaunch?.arguments,
+        contains('--dangerously-bypass-approvals-and-sandbox'),
+      );
+      expect(instance.agentLaunch?.workingDirectory, workDir.path);
+      final again = await bindings.resumeSession(original);
+      expect(again.sessionId, original);
+      expect(SessionDao(db).getAll(), hasLength(1));
+      expect(SessionDao(db).getById(original)!.paneId, resumedPane);
+      expect(
+        container
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(resumedPane),
+        same(instance),
+      );
     },
   );
 
@@ -409,7 +414,8 @@ void main() {
       expect(
         support.refusal,
         contains('another machine'),
-        reason: 'the agent has its own filesystem; a path written here names '
+        reason:
+            'the agent has its own filesystem; a path written here names '
             'nothing there — and that is nothing to do with the CLI',
       );
     });
@@ -432,31 +438,33 @@ void main() {
       expect(supportFor('s1')!.refusal, isNotEmpty);
     });
 
-    test('imported history says it is read-only rather than saying nothing',
-        () async {
-      seedWorkspace();
-      installAgent('claudeCode');
-      ImportedSessionDao(db).insertIfAbsent(
-        ImportedSession(
-          id: 'imp1',
-          repositoryId: 'r1',
-          cli: 'claudeCode',
-          externalId: 'x1',
-          environmentId: 'windows',
-          filePath: r'C:\nowhere\imp1.jsonl',
-          storeHome: r'C:\nowhere',
-          isSubagent: false,
-          preview: 'an old conversation',
-          title: 'Old CLI chat',
-          createdAt: now,
-        ),
-      );
+    test(
+      'imported history says it is read-only rather than saying nothing',
+      () async {
+        seedWorkspace();
+        installAgent('claudeCode');
+        ImportedSessionDao(db).insertIfAbsent(
+          ImportedSession(
+            id: 'imp1',
+            repositoryId: 'r1',
+            cli: 'claudeCode',
+            externalId: 'x1',
+            environmentId: 'windows',
+            filePath: r'C:\nowhere\imp1.jsonl',
+            storeHome: r'C:\nowhere',
+            isSubagent: false,
+            preview: 'an old conversation',
+            title: 'Old CLI chat',
+            createdAt: now,
+          ),
+        );
 
-      final support = supportFor('imp1')!;
+        final support = supportFor('imp1')!;
 
-      expect(support.allowsAnything, isFalse);
-      expect(support.refusal, contains('read-only'));
-    });
+        expect(support.allowsAnything, isFalse);
+        expect(support.refusal, contains('read-only'));
+      },
+    );
   });
 
   test('imported CLI sessions are listed, flagged, and read-only', () async {
@@ -607,93 +615,99 @@ void main() {
       );
     }
 
-    test('a store that keeps no transcript for this session is the reason',
-        () async {
-      seedWorkspace();
-      seedPaneSession('s-anti', agentId: 'antigravity');
-      storeKeepsNoTranscript('s-anti');
+    test(
+      'a store that keeps no transcript for this session is the reason',
+      () async {
+        seedWorkspace();
+        seedPaneSession('s-anti', agentId: 'antigravity');
+        storeKeepsNoTranscript('s-anti');
 
-      final bindings = container.read(remoteHostBindingsProvider);
-      final page = (await bindings.transcriptFor('s-anti')).page;
+        final bindings = container.read(remoteHostBindingsProvider);
+        final page = (await bindings.transcriptFor('s-anti')).page;
 
-      expect(page.messages, isEmpty);
-      // About this conversation, not about Antigravity: the sibling test below
-      // is the store-wide refusal, and they are two different sentences on the
-      // phone.
-      expect(page.absence, RemoteTranscriptAbsence.noTranscriptFile);
-      // The fact survives the round trip a phone actually reads it through.
-      expect(
-        RemoteTranscriptPage.fromJson(page.toJson()).absence,
-        RemoteTranscriptAbsence.noTranscriptFile,
-      );
-    });
+        expect(page.messages, isEmpty);
+        // About this conversation, not about Antigravity: the sibling test below
+        // is the store-wide refusal, and they are two different sentences on the
+        // phone.
+        expect(page.absence, RemoteTranscriptAbsence.noTranscriptFile);
+        // The fact survives the round trip a phone actually reads it through.
+        expect(
+          RemoteTranscriptPage.fromJson(page.toJson()).absence,
+          RemoteTranscriptAbsence.noTranscriptFile,
+        );
+      },
+    );
 
-    test('a store that yields no transcript path at all is the other reason',
-        () async {
-      // Nothing to derive a readable file from, for this session or any other
-      // of the same agent — which is what `noChatView` has always meant, and
-      // now means only.
-      seedWorkspace();
-      seedPaneSession('s-blind', agentId: 'antigravity');
-      locator.paths['antigravity/ext-s-blind'] = ph.join(
-        r'C:\store',
-        'ext-s-blind.db',
-      );
+    test(
+      'a store that yields no transcript path at all is the other reason',
+      () async {
+        // Nothing to derive a readable file from, for this session or any other
+        // of the same agent — which is what `noChatView` has always meant, and
+        // now means only.
+        seedWorkspace();
+        seedPaneSession('s-blind', agentId: 'antigravity');
+        locator.paths['antigravity/ext-s-blind'] = ph.join(
+          r'C:\store',
+          'ext-s-blind.db',
+        );
 
-      final bindings = container.read(remoteHostBindingsProvider);
-      final page = (await bindings.transcriptFor('s-blind')).page;
+        final bindings = container.read(remoteHostBindingsProvider);
+        final page = (await bindings.transcriptFor('s-blind')).page;
 
-      expect(page.messages, isEmpty);
-      expect(page.absence, RemoteTranscriptAbsence.noChatView);
-      expect(
-        RemoteTranscriptPage.fromJson(page.toJson()).absence,
-        RemoteTranscriptAbsence.noChatView,
-      );
-    });
+        expect(page.messages, isEmpty);
+        expect(page.absence, RemoteTranscriptAbsence.noChatView);
+        expect(
+          RemoteTranscriptPage.fromJson(page.toJson()).absence,
+          RemoteTranscriptAbsence.noChatView,
+        );
+      },
+    );
 
-    test('the same agent, where its store does keep one, sends the turns',
-        () async {
-      // The refusal above is about this session, not about Antigravity: the
-      // WSL install keeps a plain JSONL transcript for every conversation, and
-      // sending `noChatView` for one of those was the wrong half of a
-      // per-format answer.
-      final store = Directory.systemTemp.createTempSync('karmashala_agy_rb_');
-      addTearDown(() => removeTempDirectory(store));
-      final transcript = File(
-        ph.join(
+    test(
+      'the same agent, where its store does keep one, sends the turns',
+      () async {
+        // The refusal above is about this session, not about Antigravity: the
+        // WSL install keeps a plain JSONL transcript for every conversation, and
+        // sending `noChatView` for one of those was the wrong half of a
+        // per-format answer.
+        final store = Directory.systemTemp.createTempSync('karmashala_agy_rb_');
+        addTearDown(() => removeTempDirectory(store));
+        final transcript = File(
+          ph.join(
+            store.path,
+            'brain',
+            'ext-s-live',
+            '.system_generated',
+            'logs',
+            'transcript.jsonl',
+          ),
+        )..parent.createSync(recursive: true);
+        transcript.writeAsStringSync(
+          jsonEncode({
+            'step_index': 0,
+            'source': 'USER_EXPLICIT',
+            'type': 'USER_INPUT',
+            'status': 'DONE',
+            'created_at': '2026-09-09T10:00:00Z',
+            'content': 'list the folder',
+          }),
+        );
+        locator.paths['antigravity/ext-s-live'] = ph.join(
           store.path,
-          'brain',
-          'ext-s-live',
-          '.system_generated',
-          'logs',
-          'transcript.jsonl',
-        ),
-      )..parent.createSync(recursive: true);
-      transcript.writeAsStringSync(
-        jsonEncode({
-          'step_index': 0,
-          'source': 'USER_EXPLICIT',
-          'type': 'USER_INPUT',
-          'status': 'DONE',
-          'created_at': '2026-09-09T10:00:00Z',
-          'content': 'list the folder',
-        }),
-      );
-      locator.paths['antigravity/ext-s-live'] = ph.join(
-        store.path,
-        'conversations',
-        'ext-s-live.db',
-      );
+          'conversations',
+          'ext-s-live.db',
+        );
 
-      seedWorkspace();
-      seedPaneSession('s-live', agentId: 'antigravity');
+        seedWorkspace();
+        seedPaneSession('s-live', agentId: 'antigravity');
 
-      final bindings = container.read(remoteHostBindingsProvider);
-      final page = (await bindings.transcriptFor('s-live')).page;
+        final bindings = container.read(remoteHostBindingsProvider);
+        final page = (await bindings.transcriptFor('s-live')).page;
 
-      expect(page.absence, isNull);
-      expect(page.messages.single.text, 'list the folder');
-    });
+        expect(page.absence, isNull);
+        expect(page.messages.single.text, 'list the folder');
+      },
+    );
 
     // One read, two answers: the page the phone renders and what that same
     // parse says is in flight. Asking twice would double what the poll sweep
@@ -735,28 +749,32 @@ void main() {
 
       // §19: a session that is working and whose record we cannot read must
       // not answer with an empty list, which reads as "nothing is running".
-      test('a working session we cannot look into says which nothing', () async {
-        statusIs(AgentActivityStatus.working);
-        seedWorkspace();
-        seedPaneSession('s-anti', agentId: 'antigravity');
-        locator.paths['antigravity/ext-s-anti'] =
-            ph.join(r'C:\store', 'conversations', 'ext-s-anti.db');
+      test(
+        'a working session we cannot look into says which nothing',
+        () async {
+          statusIs(AgentActivityStatus.working);
+          seedWorkspace();
+          seedPaneSession('s-anti', agentId: 'antigravity');
+          locator.paths['antigravity/ext-s-anti'] = ph.join(
+            r'C:\store',
+            'conversations',
+            'ext-s-anti.db',
+          );
 
-        final record = await container
-            .read(remoteHostBindingsProvider)
-            .transcriptFor('s-anti');
+          final record = await container
+              .read(remoteHostBindingsProvider)
+              .transcriptFor('s-anti');
 
-        expect(record.page.absence, RemoteTranscriptAbsence.noTranscriptFile);
-        expect(record.activity.calls, isEmpty);
-        expect(record.activity.absence, RemoteActivityAbsence.noRecord);
-        // The fact survives the round trip a phone actually reads it through.
-        expect(
-          RemoteSessionActivity.fromJson(
-            record.activity.toJson(),
-          ).absence,
-          RemoteActivityAbsence.noRecord,
-        );
-      });
+          expect(record.page.absence, RemoteTranscriptAbsence.noTranscriptFile);
+          expect(record.activity.calls, isEmpty);
+          expect(record.activity.absence, RemoteActivityAbsence.noRecord);
+          // The fact survives the round trip a phone actually reads it through.
+          expect(
+            RemoteSessionActivity.fromJson(record.activity.toJson()).absence,
+            RemoteActivityAbsence.noRecord,
+          );
+        },
+      );
 
       test('...and an idle one answers plainly that nothing is', () async {
         statusIs(AgentActivityStatus.idle);
@@ -956,23 +974,23 @@ void main() {
       waiting: waiting,
     );
 
-    test('an open prompt is sent with both of the keys the agent named',
-        () async {
-      seedWorkspace();
-      seedClaudeSession('c1');
-      final bindings = withReport(
-        stopped(AgentWaitKind.approval),
-      ).read(remoteHostBindingsProvider);
+    test(
+      'an open prompt is sent with both of the keys the agent named',
+      () async {
+        seedWorkspace();
+        seedClaudeSession('c1');
+        final bindings = withReport(
+          stopped(AgentWaitKind.approval),
+        ).read(remoteHostBindingsProvider);
 
-      final request = await bindings.approvalEvidenceFor('c1');
+        final request = await bindings.approvalEvidenceFor('c1');
 
-      expect(request.waiting, RemoteWaitKind.approval);
-      expect(request.approveLabel, 'Approve');
-      expect(request.denyLabel, 'Deny');
-      expect(request.evidence, [
-        'Claude needs your permission to use Bash',
-      ]);
-    });
+        expect(request.waiting, RemoteWaitKind.approval);
+        expect(request.approveLabel, 'Approve');
+        expect(request.denyLabel, 'Deny');
+        expect(request.evidence, ['Claude needs your permission to use Bash']);
+      },
+    );
 
     test('a session at its own prompt is sent its words and no keys', () async {
       seedWorkspace();
@@ -988,9 +1006,7 @@ void main() {
       expect(request.denyLabel, isNull);
       // The evidence still travels: the phone shows what the agent said, it
       // just has nothing to press.
-      expect(request.evidence, [
-        'Claude needs your permission to use Bash',
-      ]);
+      expect(request.evidence, ['Claude needs your permission to use Bash']);
     });
 
     test('a wait no source could name is sent no keys either', () async {
@@ -1050,36 +1066,34 @@ void main() {
         throwsA(
           isA<RemoteApiRefusal>()
               .having((r) => r.code, 'code', ErrorCode.badRequest)
-              .having(
-                (r) => r.message,
-                'message',
-                contains('no prompt open'),
-              ),
+              .having((r) => r.message, 'message', contains('no prompt open')),
         ),
       );
     });
 
-    test('an open prompt gets past that guard and stops on the terminal',
-        () async {
-      seedWorkspace();
-      seedClaudeSession('c1');
-      final bindings = withReport(
-        stopped(AgentWaitKind.approval),
-      ).read(remoteHostBindingsProvider);
+    test(
+      'an open prompt gets past that guard and stops on the terminal',
+      () async {
+        seedWorkspace();
+        seedClaudeSession('c1');
+        final bindings = withReport(
+          stopped(AgentWaitKind.approval),
+        ).read(remoteHostBindingsProvider);
 
-      // No live pane in this container, so the press itself has nowhere to
-      // land — which is the refusal that proves the wait-kind guard passed.
-      await expectLater(
-        bindings.answerApproval('c1', 'approve'),
-        throwsA(
-          isA<RemoteApiRefusal>().having(
-            (r) => r.message,
-            'message',
-            contains('no live terminal'),
+        // No live pane in this container, so the press itself has nowhere to
+        // land — which is the refusal that proves the wait-kind guard passed.
+        await expectLater(
+          bindings.answerApproval('c1', 'approve'),
+          throwsA(
+            isA<RemoteApiRefusal>().having(
+              (r) => r.message,
+              'message',
+              contains('no live terminal'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 
   // --- A conversation the desktop has reconciled ----------------------------
@@ -1136,63 +1150,70 @@ void main() {
       expect(rows.single.imported, isFalse);
     });
 
-    test('opens on the live row when the phone holds the imported id', () async {
-      seedWorkspace();
-      seedImported('imp1', externalId: 'x1');
-      seedSession('s1', title: 'Old CLI chat');
-      attribute('s1', 'x1');
-      appendEvent('s1', SessionEventTypes.agentMessage, {'text': 'still here'});
+    test(
+      'opens on the live row when the phone holds the imported id',
+      () async {
+        seedWorkspace();
+        seedImported('imp1', externalId: 'x1');
+        seedSession('s1', title: 'Old CLI chat');
+        attribute('s1', 'x1');
+        appendEvent('s1', SessionEventTypes.agentMessage, {
+          'text': 'still here',
+        });
 
-      final bindings = container.read(remoteHostBindingsProvider);
+        final bindings = container.read(remoteHostBindingsProvider);
 
-      // The stale id the phone is holding resolves to the running session.
-      final snapshot = bindings.sessionById('imp1');
-      expect(snapshot, isNotNull);
-      expect(snapshot!.sessionId, 's1');
-      expect(snapshot.imported, isFalse);
-      expect(snapshot.status, 'running');
+        // The stale id the phone is holding resolves to the running session.
+        final snapshot = bindings.sessionById('imp1');
+        expect(snapshot, isNotNull);
+        expect(snapshot!.sessionId, 's1');
+        expect(snapshot.imported, isFalse);
+        expect(snapshot.status, 'running');
 
-      // And so does everything that takes a session id.
-      final page = (await bindings.transcriptFor('imp1')).page;
-      expect([for (final m in page.messages) m.text], ['still here']);
+        // And so does everything that takes a session id.
+        final page = (await bindings.transcriptFor('imp1')).page;
+        expect([for (final m in page.messages) m.text], ['still here']);
 
-      // Not "imported from the CLI — read-only here": this reaches the live
-      // row and stops on the agent's own approval rules, like `s1` does.
-      await expectLater(
-        bindings.answerApproval('imp1', 'approve'),
-        throwsA(
-          isA<RemoteApiRefusal>().having(
-            (r) => r.message,
-            'message',
-            contains('names no way to approve'),
+        // Not "imported from the CLI — read-only here": this reaches the live
+        // row and stops on the agent's own approval rules, like `s1` does.
+        await expectLater(
+          bindings.answerApproval('imp1', 'approve'),
+          throwsA(
+            isA<RemoteApiRefusal>().having(
+              (r) => r.message,
+              'message',
+              contains('names no way to approve'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
-    test('history with no native row is still listed and still read-only',
-        () async {
-      seedWorkspace();
-      seedImported('imp2', externalId: 'x2');
+    test(
+      'history with no native row is still listed and still read-only',
+      () async {
+        seedWorkspace();
+        seedImported('imp2', externalId: 'x2');
 
-      final bindings = container.read(remoteHostBindingsProvider);
-      final rows = bindings.listSessions();
+        final bindings = container.read(remoteHostBindingsProvider);
+        final rows = bindings.listSessions();
 
-      expect(rows, hasLength(1));
-      expect(rows.single.sessionId, 'imp2');
-      expect(rows.single.imported, isTrue);
-      expect(bindings.sessionById('imp2')?.imported, isTrue);
-      await expectLater(
-        bindings.answerApproval('imp2', 'approve'),
-        throwsA(
-          isA<RemoteApiRefusal>().having(
-            (r) => r.message,
-            'message',
-            contains('imported from the CLI'),
+        expect(rows, hasLength(1));
+        expect(rows.single.sessionId, 'imp2');
+        expect(rows.single.imported, isTrue);
+        expect(bindings.sessionById('imp2')?.imported, isTrue);
+        await expectLater(
+          bindings.answerApproval('imp2', 'approve'),
+          throwsA(
+            isA<RemoteApiRefusal>().having(
+              (r) => r.message,
+              'message',
+              contains('imported from the CLI'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
     test('a native row with no conversation id yet hides nothing', () {
       // The window `LaunchedSessionAttributionService` exists to close: a
@@ -1205,10 +1226,9 @@ void main() {
       final bindings = container.read(remoteHostBindingsProvider);
       final rows = bindings.listSessions();
 
-      expect(
-        [for (final row in rows) row.sessionId],
-        containsAll(<String>['s1', 'imp3']),
-      );
+      expect([
+        for (final row in rows) row.sessionId,
+      ], containsAll(<String>['s1', 'imp3']));
       expect(bindings.sessionById('imp3')?.imported, isTrue);
     });
   });
@@ -1325,25 +1345,31 @@ void main() {
     );
 
     Matcher refusedWith(String words) => throwsA(
-      isA<RemoteApiRefusal>().having((r) => r.message, 'message', contains(words)),
+      isA<RemoteApiRefusal>().having(
+        (r) => r.message,
+        'message',
+        contains(words),
+      ),
     );
 
-    test('the question travels with the request, and no keys beside it',
-        () async {
-      seedWorkspace();
-      seedClaude('q1');
-      final bindings = with_(
-        showing(AgentWaitKind.question),
-      ).read(remoteHostBindingsProvider);
+    test(
+      'the question travels with the request, and no keys beside it',
+      () async {
+        seedWorkspace();
+        seedClaude('q1');
+        final bindings = with_(
+          showing(AgentWaitKind.question),
+        ).read(remoteHostBindingsProvider);
 
-      final request = await bindings.approvalEvidenceFor('q1');
+        final request = await bindings.approvalEvidenceFor('q1');
 
-      expect(request.waiting, RemoteWaitKind.question);
-      expect(request.question!.toolUseId, 'toolu_1');
-      expect(request.question!.questions.single.options.last.label, 'Banana');
-      expect(request.approveLabel, isNull);
-      expect(request.denyLabel, isNull);
-    });
+        expect(request.waiting, RemoteWaitKind.question);
+        expect(request.question!.toolUseId, 'toolu_1');
+        expect(request.question!.questions.single.options.last.label, 'Banana');
+        expect(request.approveLabel, isNull);
+        expect(request.denyLabel, isNull);
+      },
+    );
 
     test('a message is refused while the question is open', () async {
       seedWorkspace();
@@ -1381,8 +1407,7 @@ void main() {
       );
     });
 
-    test('an answer to a question that has since changed is refused',
-        () async {
+    test('an answer to a question that has since changed is refused', () async {
       seedWorkspace();
       seedClaude('q1');
       final bindings = with_(
@@ -1402,25 +1427,31 @@ void main() {
       ).read(remoteHostBindingsProvider);
       await expectLater(
         bindings.answerQuestion(
-          answering(answers: const [RemoteQuestionAnswer.options([5])]),
+          answering(
+            answers: const [
+              RemoteQuestionAnswer.options([5]),
+            ],
+          ),
         ),
         refusedWith('no such option'),
       );
     });
 
-    test('a fitting answer passes every guard and stops on the terminal',
-        () async {
-      seedWorkspace();
-      seedClaude('q1');
-      final bindings = with_(
-        showing(AgentWaitKind.question),
-      ).read(remoteHostBindingsProvider);
-      // No live pane here: the refusal that proves the keys were built.
-      await expectLater(
-        bindings.answerQuestion(answering()),
-        refusedWith('no live terminal'),
-      );
-    });
+    test(
+      'a fitting answer passes every guard and stops on the terminal',
+      () async {
+        seedWorkspace();
+        seedClaude('q1');
+        final bindings = with_(
+          showing(AgentWaitKind.question),
+        ).read(remoteHostBindingsProvider);
+        // No live pane here: the refusal that proves the keys were built.
+        await expectLater(
+          bindings.answerQuestion(answering()),
+          refusedWith('no live terminal'),
+        );
+      },
+    );
   });
 
   test('a session carries the model the desktop launched it on', () {
@@ -1529,21 +1560,23 @@ void main() {
       waiting: waiting,
     );
 
-    test('the menu travels with the request, and no Approve beside it',
-        () async {
-      seedWorkspace();
-      seedClaude('m1');
-      final bindings = with_(
-        showing(AgentWaitKind.approval),
-      ).read(remoteHostBindingsProvider);
+    test(
+      'the menu travels with the request, and no Approve beside it',
+      () async {
+        seedWorkspace();
+        seedClaude('m1');
+        final bindings = with_(
+          showing(AgentWaitKind.approval),
+        ).read(remoteHostBindingsProvider);
 
-      final request = await bindings.approvalEvidenceFor('m1');
+        final request = await bindings.approvalEvidenceFor('m1');
 
-      expect(request.menu!.options, options);
-      expect(request.menu!.highlighted, 0);
-      expect(request.approveLabel, isNull);
-      expect(request.denyLabel, isNull);
-    });
+        expect(request.menu!.options, options);
+        expect(request.menu!.highlighted, 0);
+        expect(request.approveLabel, isNull);
+        expect(request.denyLabel, isNull);
+      },
+    );
 
     test('the option chosen is the option confirmed', () async {
       seedWorkspace();
@@ -1554,7 +1587,11 @@ void main() {
       final menu = (await bindings.approvalEvidenceFor('m1')).menu!;
 
       final chosen = await bindings.answerMenu(
-        RemoteMenuAnswerRequest(sessionId: 'm1', menuId: menu.menuId, option: 1),
+        RemoteMenuAnswerRequest(
+          sessionId: 'm1',
+          menuId: menu.menuId,
+          option: 1,
+        ),
       );
 
       expect(chosen, 'Yes, I trust this folder');
@@ -1563,67 +1600,77 @@ void main() {
 
     // Found on the Oppo: the empty session offered "Explain architecture"
     // beside the trust menu. Sent, its Enter would have chosen "No, exit".
-    test('a message is refused while the menu is open, and nothing typed',
-        () async {
-      seedWorkspace();
-      seedClaude('m1');
-      final bindings = with_(
-        showing(AgentWaitKind.approval),
-      ).read(remoteHostBindingsProvider);
-      await expectLater(
-        bindings.sendPrompt('m1', 'Explain the architecture'),
-        throwsA(
-          isA<RemoteApiRefusal>().having(
-            (r) => r.message,
-            'message',
-            contains('answer it first'),
+    test(
+      'a message is refused while the menu is open, and nothing typed',
+      () async {
+        seedWorkspace();
+        seedClaude('m1');
+        final bindings = with_(
+          showing(AgentWaitKind.approval),
+        ).read(remoteHostBindingsProvider);
+        await expectLater(
+          bindings.sendPrompt('m1', 'Explain the architecture'),
+          throwsA(
+            isA<RemoteApiRefusal>().having(
+              (r) => r.message,
+              'message',
+              contains('answer it first'),
+            ),
           ),
-        ),
-      );
-      expect(pressed, isEmpty);
-    });
+        );
+        expect(pressed, isEmpty);
+      },
+    );
 
-    test('an answer with no prompt open is refused, and nothing pressed',
-        () async {
-      seedWorkspace();
-      seedClaude('m1');
-      final bindings = with_(
-        showing(AgentWaitKind.input),
-      ).read(remoteHostBindingsProvider);
-      await expectLater(
-        bindings.answerMenu(
-          const RemoteMenuAnswerRequest(sessionId: 'm1', menuId: 'x', option: 1),
-        ),
-        throwsA(isA<RemoteApiRefusal>()),
-      );
-      expect(pressed, isEmpty);
-    });
+    test(
+      'an answer with no prompt open is refused, and nothing pressed',
+      () async {
+        seedWorkspace();
+        seedClaude('m1');
+        final bindings = with_(
+          showing(AgentWaitKind.input),
+        ).read(remoteHostBindingsProvider);
+        await expectLater(
+          bindings.answerMenu(
+            const RemoteMenuAnswerRequest(
+              sessionId: 'm1',
+              menuId: 'x',
+              option: 1,
+            ),
+          ),
+          throwsA(isA<RemoteApiRefusal>()),
+        );
+        expect(pressed, isEmpty);
+      },
+    );
 
-    test('an answer for a menu that has since changed chooses nothing',
-        () async {
-      seedWorkspace();
-      seedClaude('m1');
-      final bindings = with_(
-        showing(AgentWaitKind.approval),
-      ).read(remoteHostBindingsProvider);
-      await expectLater(
-        bindings.answerMenu(
-          const RemoteMenuAnswerRequest(
-            sessionId: 'm1',
-            menuId: 'not-this-one',
-            option: 1,
+    test(
+      'an answer for a menu that has since changed chooses nothing',
+      () async {
+        seedWorkspace();
+        seedClaude('m1');
+        final bindings = with_(
+          showing(AgentWaitKind.approval),
+        ).read(remoteHostBindingsProvider);
+        await expectLater(
+          bindings.answerMenu(
+            const RemoteMenuAnswerRequest(
+              sessionId: 'm1',
+              menuId: 'not-this-one',
+              option: 1,
+            ),
           ),
-        ),
-        throwsA(
-          isA<RemoteApiRefusal>().having(
-            (r) => r.message,
-            'message',
-            contains('prompt changed'),
+          throwsA(
+            isA<RemoteApiRefusal>().having(
+              (r) => r.message,
+              'message',
+              contains('prompt changed'),
+            ),
           ),
-        ),
-      );
-      expect(pressed, isEmpty);
-    });
+        );
+        expect(pressed, isEmpty);
+      },
+    );
   });
 
   // The registry resolves a transcript only for a session it has to probe, and

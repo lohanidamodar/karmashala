@@ -53,10 +53,9 @@ final companionLinkTroubleProvider = StreamProvider<String?>(
 );
 
 /// Every desktop this phone has paired with, one of them active.
-final companionConnectionsProvider =
-    StreamProvider<List<CompanionConnection>>(
-      (ref) => ref.watch(companionGatewayProvider).connectionsStates,
-    );
+final companionConnectionsProvider = StreamProvider<List<CompanionConnection>>(
+  (ref) => ref.watch(companionGatewayProvider).connectionsStates,
+);
 
 /// Drives [CompanionGateway.switchTo] / [CompanionGateway.removeConnection],
 /// holding the in-flight host id so every surface shows the same progress.
@@ -97,8 +96,9 @@ class CompanionSwitcher extends Notifier<String?> {
 }
 
 /// The host id a switch is currently in flight for, or null.
-final companionSwitchingProvider =
-    NotifierProvider<CompanionSwitcher, String?>(CompanionSwitcher.new);
+final companionSwitchingProvider = NotifierProvider<CompanionSwitcher, String?>(
+  CompanionSwitcher.new,
+);
 
 /// Which path carries the link — Direct (LAN) or Relay — or null while down.
 final companionLinkPathProvider = StreamProvider<CompanionLinkPath?>(
@@ -224,23 +224,21 @@ final companionActiveHostKeyProvider = Provider<String?>((ref) {
   return pairing.hostId?.value ?? pairing.hostName;
 });
 
-final companionWorkspaceProvider = FutureProvider.autoDispose<
-  List<RemoteWorkspaceProject>
->((ref) {
-  if (ref.watch(companionActiveHostKeyProvider) == null) {
-    return const <RemoteWorkspaceProject>[];
-  }
-  return ref.watch(companionGatewayProvider).listWorkspace();
-});
+final companionWorkspaceProvider =
+    FutureProvider.autoDispose<List<RemoteWorkspaceProject>>((ref) {
+      if (ref.watch(companionActiveHostKeyProvider) == null) {
+        return const <RemoteWorkspaceProject>[];
+      }
+      return ref.watch(companionGatewayProvider).listWorkspace();
+    });
 
 /// Projects on the active desktop, including those with no sessions. A pull
 /// separate from the session stream, so a transcript event cannot trigger
 /// another project scan.
-final companionProjectsProvider = FutureProvider.autoDispose<
-  List<RemoteWorkspaceProject>
->((ref) {
-  if (ref.watch(companionActiveHostKeyProvider) == null) {
-    return const <RemoteWorkspaceProject>[];
-  }
-  return ref.watch(companionGatewayProvider).listProjects();
-});
+final companionProjectsProvider =
+    FutureProvider.autoDispose<List<RemoteWorkspaceProject>>((ref) {
+      if (ref.watch(companionActiveHostKeyProvider) == null) {
+        return const <RemoteWorkspaceProject>[];
+      }
+      return ref.watch(companionGatewayProvider).listProjects();
+    });

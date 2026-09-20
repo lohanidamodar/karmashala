@@ -49,10 +49,9 @@ session — and neither is anything the rest of these skills name.
 );
 
 /// The topic listing, from the same guides `instructions` serves.
-String _topicRoster() =>
-    <String>[
-      for (final guide in kMcpGuides) '  ${guide.topic} — ${guide.summary}',
-    ].join('\n');
+String _topicRoster() => <String>[
+  for (final guide in kMcpGuides) '  ${guide.topic} — ${guide.summary}',
+].join('\n');
 
 const KarmashalaSkill _advisorSkill = KarmashalaSkill(
   name: 'karmashala-advisor',

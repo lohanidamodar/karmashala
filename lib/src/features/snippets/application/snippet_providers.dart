@@ -60,14 +60,15 @@ class CommandSnippetsController extends Notifier<List<CommandSnippet>> {
       submit: submit,
       updatedAt: now,
     );
-    state = [...state]..[index] = state[index].copyWith(
-      label: trimmed,
-      command: flattened,
-      shellId: shellId,
-      clearShell: shellId == null,
-      submit: submit,
-      updatedAt: now,
-    );
+    state = [...state]
+      ..[index] = state[index].copyWith(
+        label: trimmed,
+        command: flattened,
+        shellId: shellId,
+        clearShell: shellId == null,
+        submit: submit,
+        updatedAt: now,
+      );
   }
 
   void delete(String id) {

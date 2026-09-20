@@ -62,7 +62,10 @@ void main() {
       ),
     );
     addTearDown(pty.close);
-    final screen = _Screen(pty.output, reply: (bytes) => pty.write(Uint8List.fromList(bytes)));
+    final screen = _Screen(
+      pty.output,
+      reply: (bytes) => pty.write(Uint8List.fromList(bytes)),
+    );
 
     await screen.until('❯', const Duration(seconds: 60));
     await Future<void>.delayed(const Duration(seconds: 1));
@@ -93,11 +96,17 @@ void main() {
   group('Claude Code AskUserQuestion keys', skip: skip, () {
     final support = AgentRegistry.builtIn.byId('claudeCode')!.questions!;
 
-    Map<String, Object?> q(String question, List<String> options, {bool multi = false}) => {
+    Map<String, Object?> q(
+      String question,
+      List<String> options, {
+      bool multi = false,
+    }) => {
       'question': question,
       'header': question.split(' ').last,
       'multiSelect': multi,
-      'options': [for (final o in options) {'label': o, 'description': o}],
+      'options': [
+        for (final o in options) {'label': o, 'description': o},
+      ],
     };
 
     /// Asks [questions], answers them with the production key builder, and
@@ -106,7 +115,9 @@ void main() {
       List<Map<String, Object?>> questions,
       List<AgentQuestionAnswer> answers,
     ) async {
-      final set = AgentQuestionSet.fromToolInput('t', {'questions': questions})!;
+      final set = AgentQuestionSet.fromToolInput('t', {
+        'questions': questions,
+      })!;
       final keys = support.keysFor(set, answers);
       // One write per key, and an arrow's escape sequence travels whole, the
       // way a terminal sends it.
@@ -119,27 +130,38 @@ void main() {
 
     test('one option of one question', () async {
       expect(
-        await round([q('Pick a fruit', ['Apple', 'Banana', 'Cherry'])], [
-          const AgentQuestionAnswer.option(1),
-        ]),
+        await round(
+          [
+            q('Pick a fruit', ['Apple', 'Banana', 'Cherry']),
+          ],
+          [const AgentQuestionAnswer.option(1)],
+        ),
         {'Pick a fruit': 'Banana'},
       );
     }, timeout: const Timeout(Duration(minutes: 3)));
 
     test('own words', () async {
       expect(
-        await round([q('Pick a fruit', ['Apple', 'Banana', 'Cherry'])], [
-          const AgentQuestionAnswer.text('Durian'),
-        ]),
+        await round(
+          [
+            q('Pick a fruit', ['Apple', 'Banana', 'Cherry']),
+          ],
+          [const AgentQuestionAnswer.text('Durian')],
+        ),
         {'Pick a fruit': 'Durian'},
       );
     }, timeout: const Timeout(Duration(minutes: 3)));
 
     test('several boxes', () async {
       expect(
-        await round([q('Pick colours', ['Red', 'Green', 'Blue'], multi: true)], [
-          const AgentQuestionAnswer.options([0, 2]),
-        ]),
+        await round(
+          [
+            q('Pick colours', ['Red', 'Green', 'Blue'], multi: true),
+          ],
+          [
+            const AgentQuestionAnswer.options([0, 2]),
+          ],
+        ),
         {'Pick colours': 'Red, Blue'},
       );
     }, timeout: const Timeout(Duration(minutes: 3)));
@@ -161,6 +183,7 @@ void main() {
     }, timeout: const Timeout(Duration(minutes: 3)));
   });
 }
+
 String _uuid() {
   final r = Random.secure();
   final b = [for (var i = 0; i < 16; i++) r.nextInt(256)];
@@ -188,7 +211,8 @@ Future<String> _toolResult(String cwd, String session, Duration within) async {
         if (content is! List) continue;
         for (final block in content) {
           if (block is! Map) continue;
-          if (block['type'] == 'tool_use' && block['name'] == 'AskUserQuestion') {
+          if (block['type'] == 'tool_use' &&
+              block['name'] == 'AskUserQuestion') {
             askId = block['id'] as String?;
           }
           if (block['type'] == 'tool_result' && block['tool_use_id'] == askId) {

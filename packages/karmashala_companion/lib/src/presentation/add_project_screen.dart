@@ -40,8 +40,12 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
 
   @override
   void dispose() {
-    _name..removeListener(_intentChanged)..dispose();
-    _path..removeListener(_intentChanged)..dispose();
+    _name
+      ..removeListener(_intentChanged)
+      ..dispose();
+    _path
+      ..removeListener(_intentChanged)
+      ..dispose();
     super.dispose();
   }
 
@@ -53,7 +57,9 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
     if (_busy) return;
     final gateway = ref.read(companionGatewayProvider);
     if (gateway.link != CompanionLinkState.connected) {
-      setState(() => _error = 'Connect to your desktop before adding a project.');
+      setState(
+        () => _error = 'Connect to your desktop before adding a project.',
+      );
       return;
     }
     final name = _name.text.trim();
@@ -66,7 +72,10 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
       setState(() => _error = 'Enter the project path on your desktop.');
       return;
     }
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     try {
       final hostId = gateway.pairing?.hostId;
       final project = await gateway.addProject(
@@ -76,7 +85,9 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
       );
       if (!mounted) return;
       if (gateway.pairing?.hostId != hostId) {
-        setState(() => _error = 'The active desktop changed. Review and submit again.');
+        setState(
+          () => _error = 'The active desktop changed. Review and submit again.',
+        );
         return;
       }
       ref.invalidate(companionProjectsProvider);
@@ -96,9 +107,10 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final granted = ref.watch(companionGatewayProvider).capabilities.has(
-      Capability.addProject,
-    );
+    final granted = ref
+        .watch(companionGatewayProvider)
+        .capabilities
+        .has(Capability.addProject);
     return Scaffold(
       appBar: companionAppBar(context, title: const Text('Add project')),
       body: SafeArea(
@@ -112,7 +124,8 @@ class _AddProjectScreenState extends ConsumerState<AddProjectScreen> {
                       icon: AppIcons.warningCircle,
                       title: 'Not granted',
                       tone: NoticeTone.attention,
-                      body: 'This desktop did not grant this phone permission '
+                      body:
+                          'This desktop did not grant this phone permission '
                           'to add projects.',
                     )
                   : _form(),

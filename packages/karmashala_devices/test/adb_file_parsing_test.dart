@@ -15,7 +15,10 @@ void main() {
     test('survives an apostrophe, which is the only hard character', () {
       // Verified against a real emulator: `touch` with this exact quoting made
       // a file called `it's here.txt`.
-      expect(shellQuote("/sdcard/it's here.txt"), r"'/sdcard/it'\''s here.txt'");
+      expect(
+        shellQuote("/sdcard/it's here.txt"),
+        r"'/sdcard/it'\''s here.txt'",
+      );
     });
 
     test('leaves shell metacharacters inert rather than escaping them', () {
@@ -227,8 +230,10 @@ drwxrwx--- 4 root everybody   4096 2025-07-20 14:29 DCIM
 
     test('tells absent apart from unreadable', () {
       expect(
-        classifyLsFailure('ls: /sdcard/nope: No such file or directory',
-            ok: false),
+        classifyLsFailure(
+          'ls: /sdcard/nope: No such file or directory',
+          ok: false,
+        ),
         LsFailure.missing,
       );
       expect(
@@ -257,8 +262,10 @@ drwxrwx--- 4 root everybody   4096 2025-07-20 14:29 DCIM
     });
 
     test('a non-zero exit with words it does not know is still a failure', () {
-      expect(classifyLsFailure('something went wrong', ok: false),
-          LsFailure.unknown);
+      expect(
+        classifyLsFailure('something went wrong', ok: false),
+        LsFailure.unknown,
+      );
     });
   });
 
@@ -283,16 +290,17 @@ drwxrwx--- 4 root everybody   4096 2025-07-20 14:29 DCIM
     });
 
     test('an adb error is not a success however it is spelled', () {
-      const failed =
-          "adb: error: remote object '/data/x' does not exist";
+      const failed = "adb: error: remote object '/data/x' does not exist";
       expect(transferSucceeded(failed), isFalse);
       expect(parseTransferredBytes(failed), isNull);
       expect(cleanAdbError(failed), "remote object '/data/x' does not exist");
     });
 
     test('an error with no adb prefix is still reported verbatim', () {
-      expect(cleanAdbError('rm: /system/build.prop: Read-only file system'),
-          'rm: /system/build.prop: Read-only file system');
+      expect(
+        cleanAdbError('rm: /system/build.prop: Read-only file system'),
+        'rm: /system/build.prop: Read-only file system',
+      );
     });
   });
 

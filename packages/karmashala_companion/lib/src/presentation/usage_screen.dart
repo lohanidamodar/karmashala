@@ -81,11 +81,7 @@ class UsageScreen extends ConsumerWidget {
 
 /// One account: who, where, how fresh, and each of its windows.
 class UsageAccountCard extends StatelessWidget {
-  const UsageAccountCard({
-    required this.account,
-    required this.now,
-    super.key,
-  });
+  const UsageAccountCard({required this.account, required this.now, super.key});
 
   final RemoteUsageAccount account;
 
@@ -202,7 +198,8 @@ class UsageWindowRow extends StatelessWidget {
                   ?pace,
                 ].join(' · '),
                 style: theme.textTheme.labelSmall?.copyWith(
-                  color: window.pace == RemoteUsagePace.overPace ||
+                  color:
+                      window.pace == RemoteUsagePace.overPace ||
                           window.pace == RemoteUsagePace.spent
                       ? semantic.attention
                       : scheme.onSurfaceVariant,

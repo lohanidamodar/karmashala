@@ -83,7 +83,8 @@ class FakeQuestionScreen {
                   .map((i) => q.options[i].label)
                   .join(', ')
             : q.options[row - 1].label;
-        final multi = set.questions.length > 1 || set.questions.any((x) => x.multiSelect);
+        final multi =
+            set.questions.length > 1 || set.questions.any((x) => x.multiSelect);
         if (tab + 1 < set.questions.length) {
           tab++;
           row = 1;
@@ -129,19 +130,21 @@ void main() {
         settle: Duration.zero,
       );
 
-  test('boxes then own words, though the first key after the tab is lost',
-      () async {
-    const set = AgentQuestionSet(toolUseId: 't', questions: [colours, fruit]);
-    final screen = FakeQuestionScreen(set);
+  test(
+    'boxes then own words, though the first key after the tab is lost',
+    () async {
+      const set = AgentQuestionSet(toolUseId: 't', questions: [colours, fruit]);
+      final screen = FakeQuestionScreen(set);
 
-    await typistOn(screen).answer('s', set, const [
-      AgentQuestionAnswer.options([0, 2]),
-      AgentQuestionAnswer.text('Durian'),
-    ]);
+      await typistOn(screen).answer('s', set, const [
+        AgentQuestionAnswer.options([0, 2]),
+        AgentQuestionAnswer.text('Durian'),
+      ]);
 
-    expect(screen.chosen, {0: 'Red, Blue', 1: 'Durian'});
-    expect(screen.done, isTrue);
-  });
+      expect(screen.chosen, {0: 'Red, Blue', 1: 'Durian'});
+      expect(screen.done, isTrue);
+    },
+  );
 
   test('one option on each tab', () async {
     const set = AgentQuestionSet(toolUseId: 't', questions: [colours, fruit]);
@@ -160,9 +163,9 @@ void main() {
     const set = AgentQuestionSet(toolUseId: 't', questions: [fruit]);
     final screen = FakeQuestionScreen(set);
 
-    await typistOn(screen).answer('s', set, const [
-      AgentQuestionAnswer.option(1),
-    ]);
+    await typistOn(
+      screen,
+    ).answer('s', set, const [AgentQuestionAnswer.option(1)]);
 
     expect(screen.chosen, {0: 'Banana'});
     expect(screen.done, isTrue);

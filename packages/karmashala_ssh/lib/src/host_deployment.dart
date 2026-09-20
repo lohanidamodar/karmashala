@@ -30,11 +30,12 @@ class HostPlatform {
   /// The filename fragment the deployer looks for and uploads under.
   String get targetKey => '$operatingSystem-$architecture';
 
-  static String normaliseArchitecture(String machine) => switch (machine.toLowerCase()) {
-    'x86_64' || 'amd64' || 'x64' => 'x64',
-    'aarch64' || 'arm64' => 'arm64',
-    final other => other,
-  };
+  static String normaliseArchitecture(String machine) =>
+      switch (machine.toLowerCase()) {
+        'x86_64' || 'amd64' || 'x64' => 'x64',
+        'aarch64' || 'arm64' => 'arm64',
+        final other => other,
+      };
 
   @override
   String toString() => '$operatingSystem/$architecture (${libc.name})';
@@ -85,7 +86,11 @@ class HostDeployment {
   });
 
   factory HostDeployment.unknown(String reason, DateTime observedAt) =>
-      HostDeployment(status: HostDeploymentStatus.unknown, observedAt: observedAt, reason: reason);
+      HostDeployment(
+        status: HostDeploymentStatus.unknown,
+        observedAt: observedAt,
+        reason: reason,
+      );
 
   final HostDeploymentStatus status;
   final DateTime observedAt;

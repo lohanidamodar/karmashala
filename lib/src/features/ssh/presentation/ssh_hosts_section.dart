@@ -65,10 +65,12 @@ class _HostCard extends ConsumerWidget {
         .toList();
 
     void openTerminal() {
-      ref.read(terminalSessionsControllerProvider.notifier).openTab(
-        TerminalProfile.ssh(host.id, hostName: host.name),
-        workingDirectory: host.defaultDirectory?.path,
-      );
+      ref
+          .read(terminalSessionsControllerProvider.notifier)
+          .openTab(
+            TerminalProfile.ssh(host.id, hostName: host.name),
+            workingDirectory: host.defaultDirectory?.path,
+          );
       // A new shell opens in the group the keyboard is in.
       ref.read(terminalSessionsControllerProvider.notifier).showTerminalHere();
     }
@@ -118,9 +120,9 @@ class _HostCard extends ConsumerWidget {
         'terminal' => openTerminal(),
         'sessions' => HostSessionsDialog.show(context, host: host),
         'new_project' => NewProjectDialog.show(
-            context,
-            initialEnvironmentId: host.environmentId,
-          ),
+          context,
+          initialEnvironmentId: host.environmentId,
+        ),
         'browse' => openFilesTabOn(ref, host.environmentId),
         'edit' => SshHostDialog.show(context, existing: host),
         'pair_phone' => PairPhoneDialog.show(context, host: host),

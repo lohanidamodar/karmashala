@@ -174,7 +174,8 @@ void main() {
         expect(
           activity.calls,
           isEmpty,
-          reason: 'an unanswered call on a ${status.name} session is a '
+          reason:
+              'an unanswered call on a ${status.name} session is a '
               'transcript that stopped, not a command that is running',
         );
       });
@@ -183,15 +184,17 @@ void main() {
 
   // `SessionEngine.stop` writes `cancelled` on the row before any status source
   // has a chance to notice, so the row is the faster of the two gates.
-  test('a stopped session shows nothing, whatever the status source says',
-      () async {
-    final activity = await activityFor(
-      messages: [call(id: 't1')],
-      rowStatus: SessionStatus.cancelled,
-    );
+  test(
+    'a stopped session shows nothing, whatever the status source says',
+    () async {
+      final activity = await activityFor(
+        messages: [call(id: 't1')],
+        rowStatus: SessionStatus.cancelled,
+      );
 
-    expect(activity.calls, isEmpty);
-  });
+      expect(activity.calls, isEmpty);
+    },
+  );
 
   // A session outside our panes renders from the engine's event log, which
   // emits `tool.call` and never `tool.result` — nothing emits one — so every
@@ -203,30 +206,37 @@ void main() {
   // the owner's whole Claude Code store is a `Bash` call at 514.8 minutes. A
   // ceiling above every real call is not a thing that can be chosen; the age of
   // a call says nothing about whether it is running.
-  group('a call is running for as long as the session is observably working', () {
-    for (final (name, elapsed) in [
-      ('a 76-minute subagent', const Duration(milliseconds: 4549121)),
-      ('an 80-minute subagent', const Duration(milliseconds: 4798063)),
-      ('a 514-minute Bash call', const Duration(minutes: 514, seconds: 48)),
-    ]) {
-      test(name, () async {
-        final activity = await activityFor(messages: [call(id: 't1')]);
+  group(
+    'a call is running for as long as the session is observably working',
+    () {
+      for (final (name, elapsed) in [
+        ('a 76-minute subagent', const Duration(milliseconds: 4549121)),
+        ('an 80-minute subagent', const Duration(milliseconds: 4798063)),
+        ('a 514-minute Bash call', const Duration(minutes: 514, seconds: 48)),
+      ]) {
+        test(name, () async {
+          final activity = await activityFor(messages: [call(id: 't1')]);
 
-        expect(activity.calls, hasLength(1));
-        expect(activity.calls.single.ageAt(issued.add(elapsed)), elapsed);
-      });
-    }
-  });
+          expect(activity.calls, hasLength(1));
+          expect(activity.calls.single.ageAt(issued.add(elapsed)), elapsed);
+        });
+      }
+    },
+  );
 
-  test('a clock that runs behind the transcript never yields a negative age',
-      () async {
-    final activity = await activityFor(messages: [call(id: 't1')]);
+  test(
+    'a clock that runs behind the transcript never yields a negative age',
+    () async {
+      final activity = await activityFor(messages: [call(id: 't1')]);
 
-    expect(
-      activity.calls.single.ageAt(issued.subtract(const Duration(minutes: 5))),
-      Duration.zero,
-    );
-  });
+      expect(
+        activity.calls.single.ageAt(
+          issued.subtract(const Duration(minutes: 5)),
+        ),
+        Duration.zero,
+      );
+    },
+  );
 
   test('a Task call is a subagent, by the name the protocol uses', () async {
     final activity = await activityFor(
@@ -244,8 +254,17 @@ void main() {
     final activity = await activityFor(
       messages: [
         call(id: 't1', subject: 'flutter test'),
-        call(id: 't2', subject: 'git log', at: issued.add(const Duration(seconds: 30))),
-        call(id: 't3', name: 'Read', subject: '/repo/main.dart', answered: true),
+        call(
+          id: 't2',
+          subject: 'git log',
+          at: issued.add(const Duration(seconds: 30)),
+        ),
+        call(
+          id: 't3',
+          name: 'Read',
+          subject: '/repo/main.dart',
+          answered: true,
+        ),
       ],
     );
 
@@ -397,7 +416,11 @@ void main() {
       final activity = await activityFor(
         messages: [
           backgroundSubagent(subject: 'audit the diff'),
-          call(id: 't1', subject: 'flutter test', at: issued.add(const Duration(minutes: 1))),
+          call(
+            id: 't1',
+            subject: 'flutter test',
+            at: issued.add(const Duration(minutes: 1)),
+          ),
         ],
       );
 
@@ -469,7 +492,9 @@ void main() {
     expect(
       one,
       isNot(
-        SessionActivity(outstandingCallsIn([call(id: 't2', subject: 'git log')])),
+        SessionActivity(
+          outstandingCallsIn([call(id: 't2', subject: 'git log')]),
+        ),
       ),
     );
   });

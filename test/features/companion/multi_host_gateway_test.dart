@@ -16,8 +16,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala_remote/client.dart'
-    as stored;
+import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
@@ -46,6 +45,7 @@ void main() {
   late Uri relayUri;
   late Map<String, String> phoneDisk;
   late SecureCompanionStore store;
+
   /// Set, every keystore write hangs — which is how a real one fails when it
   /// fails worst. [SecureCompanionStore] turns that into a `TimeoutException`
   /// rather than holding the mutation chain open for the life of the process.
@@ -265,16 +265,14 @@ void main() {
 
     // Transcripts are per host too: the studio's stream must not replay the
     // laptop's rows.
-    final transcript = await gateway.transcript('s-studio').firstWhere(
-      (rows) => rows.isNotEmpty,
-    );
+    final transcript = await gateway
+        .transcript('s-studio')
+        .firstWhere((rows) => rows.isNotEmpty);
     expect([for (final m in transcript) m.text], ['from Studio work']);
 
     // And the prompt goes to the desktop we are actually on.
     await gateway.sendPrompt('s-studio', 'carry on');
-    expect(studio.fake.prompts, [
-      (sessionId: 's-studio', text: 'carry on'),
-    ]);
+    expect(studio.fake.prompts, [(sessionId: 's-studio', text: 'carry on')]);
     expect(
       laptop.fake.prompts,
       isEmpty,
@@ -412,35 +410,37 @@ void main() {
     expect((await gateway.listSessions()).single.id, 's-laptop');
   });
 
-  test('a pairing this phone cannot record as the active one fails out loud',
-      () async {
-    final studio = await startHost(
-      hostId: idA,
-      sessionId: 's-studio',
-      title: 'Studio work',
-    );
-    final laptop = await startHost(
-      hostId: idB,
-      sessionId: 's-laptop',
-      title: 'Laptop work',
-    );
-    final gateway = makeGateway();
-    await pairWith(gateway, studio);
+  test(
+    'a pairing this phone cannot record as the active one fails out loud',
+    () async {
+      final studio = await startHost(
+        hostId: idA,
+        sessionId: 's-studio',
+        title: 'Studio work',
+      );
+      final laptop = await startHost(
+        hostId: idB,
+        sessionId: 's-laptop',
+        title: 'Laptop work',
+      );
+      final gateway = makeGateway();
+      await pairWith(gateway, studio);
 
-    // The desktop confirms; what fails is the phone writing down which
-    // desktop to use from now on. Escaping from there is an unhandled async
-    // error and a pairing screen that never moves off "proving".
-    hangOnActiveHost = idB;
-    final session = await laptop.service.beginPairing(
-      capabilities: CapabilitySet.all,
-    );
-    await expectLater(
-      gateway.pairWithQr(session.payload.encode()),
-      throwsA(isA<PairingException>()),
-    );
-    await session.done;
-    hangOnActiveHost = null;
-  });
+      // The desktop confirms; what fails is the phone writing down which
+      // desktop to use from now on. Escaping from there is an unhandled async
+      // error and a pairing screen that never moves off "proving".
+      hangOnActiveHost = idB;
+      final session = await laptop.service.beginPairing(
+        capabilities: CapabilitySet.all,
+      );
+      await expectLater(
+        gateway.pairWithQr(session.payload.encode()),
+        throwsA(isA<PairingException>()),
+      );
+      await session.done;
+      hangOnActiveHost = null;
+    },
+  );
 
   test('removing the LAST desktop leaves the phone unpaired', () async {
     final studio = await startHost(
@@ -738,10 +738,7 @@ void main() {
     expect(gateway.connections, isEmpty);
     // Usable, not wedged: the refusal is the gateway's own sentence about
     // being unpaired, not a storage error escaping from the constructor.
-    await expectLater(
-      gateway.listSessions(),
-      throwsA(isA<GatewayException>()),
-    );
+    await expectLater(gateway.listSessions(), throwsA(isA<GatewayException>()));
   });
 }
 
@@ -749,7 +746,8 @@ void main() {
 /// decrypt what it holds.
 class _ThrowingStore implements stored.CompanionStore {
   @override
-  Future<String?> read(String key) async => throw StateError('keystore says no');
+  Future<String?> read(String key) async =>
+      throw StateError('keystore says no');
 
   @override
   Future<void> write(String key, String value) async {}

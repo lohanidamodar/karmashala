@@ -38,8 +38,7 @@ class CountingDatabase extends AppDatabase {
 
   List<String> get reads => statements.where(_isRead).toList();
 
-  List<String> get writes =>
-      statements.where((sql) => !_isRead(sql)).toList();
+  List<String> get writes => statements.where((sql) => !_isRead(sql)).toList();
 
   @override
   List<Map<String, Object?>> query(
@@ -158,33 +157,31 @@ class ScaleLayout {
         ),
         shellIntegrationEnabledProvider.overrideWithValue(false),
         restoreLivePanesProvider.overrideWithValue(true),
-        terminalInstanceFactoryProvider.overrideWithValue(
-          ({
-            required id,
-            required profile,
-            workingDirectory,
-            restoredScrollback,
-            shellIntegration = false,
-            agentLaunch,
-            adoptTerminal,
-          }) {
-            final terminal = CountingTerminal()..resize(120, 40);
-            if (restoredScrollback != null && restoredScrollback.isNotEmpty) {
-              terminal.write(restoredScrollback);
-            }
-            terminals[id] = terminal;
-            return instances[id] = FakeTerminalInstance(
-              id: id,
-              title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
-              profileId: agentLaunch?.profileId ?? profile.id,
-              workingDirectory: workingDirectory,
-              agentLaunch: agentLaunch,
-              // Handed the buffer rather than the text: the pane then counts
-              // every read of it, including the ones the restore did.
-              adoptTerminal: terminal,
-            );
-          },
-        ),
+        terminalInstanceFactoryProvider.overrideWithValue(({
+          required id,
+          required profile,
+          workingDirectory,
+          restoredScrollback,
+          shellIntegration = false,
+          agentLaunch,
+          adoptTerminal,
+        }) {
+          final terminal = CountingTerminal()..resize(120, 40);
+          if (restoredScrollback != null && restoredScrollback.isNotEmpty) {
+            terminal.write(restoredScrollback);
+          }
+          terminals[id] = terminal;
+          return instances[id] = FakeTerminalInstance(
+            id: id,
+            title: agentLaunch?.title ?? agentLaunch?.agentId ?? profile.label,
+            profileId: agentLaunch?.profileId ?? profile.id,
+            workingDirectory: workingDirectory,
+            agentLaunch: agentLaunch,
+            // Handed the buffer rather than the text: the pane then counts
+            // every read of it, including the ones the restore did.
+            adoptTerminal: terminal,
+          );
+        }),
       ],
     );
     return ScaleLayout._(
@@ -237,14 +234,17 @@ class ScaleLayout {
   /// Fills [paneId] with [lines] lines of colourised output — the kind of text
   /// that makes a stored scrollback big enough for its encoding to matter.
   void fill(String paneId, {int lines = 200}) {
-    controller.instanceFor(paneId)!.terminal.write(
-      [
-        for (var i = 0; i < lines; i++)
-          '\x1b[38;5;${(i % 200) + 16}m*\x1b[0m \x1b[1mUpdate\x1b[0m('
-              'lib/src/features/terminal/data/file_$i.dart)  '
-              '\x1b[2m+${i % 40} -${i % 7}\x1b[0m',
-      ].join('\r\n'),
-    );
+    controller
+        .instanceFor(paneId)!
+        .terminal
+        .write(
+          [
+            for (var i = 0; i < lines; i++)
+              '\x1b[38;5;${(i % 200) + 16}m*\x1b[0m \x1b[1mUpdate\x1b[0m('
+                  'lib/src/features/terminal/data/file_$i.dart)  '
+                  '\x1b[2m+${i % 40} -${i % 7}\x1b[0m',
+          ].join('\r\n'),
+        );
   }
 
   /// Opens [count] filled panes and returns their ids.

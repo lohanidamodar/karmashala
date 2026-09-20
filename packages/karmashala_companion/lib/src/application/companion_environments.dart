@@ -81,20 +81,21 @@ List<CompanionEnvironment> companionEnvironments(
     if (project != null) tally.projects.add(project);
   }
 
-  final out = [
-    for (final entry in byKey.entries)
-      CompanionEnvironment(
-        key: entry.key,
-        label: entry.value.label,
-        kind: entry.value.kind,
-        projects: entry.value.projects.length,
-        sessions: entry.value.sessions,
-      ),
-  ]..sort((a, b) {
-    final rank = _rank(a.kind).compareTo(_rank(b.kind));
-    if (rank != 0) return rank;
-    return a.label.toLowerCase().compareTo(b.label.toLowerCase());
-  });
+  final out =
+      [
+        for (final entry in byKey.entries)
+          CompanionEnvironment(
+            key: entry.key,
+            label: entry.value.label,
+            kind: entry.value.kind,
+            projects: entry.value.projects.length,
+            sessions: entry.value.sessions,
+          ),
+      ]..sort((a, b) {
+        final rank = _rank(a.kind).compareTo(_rank(b.kind));
+        if (rank != 0) return rank;
+        return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+      });
   return out;
 }
 
@@ -136,7 +137,6 @@ class _Tally {
   final projects = <String>{};
   var sessions = 0;
 }
-
 
 /// The machine the phone has narrowed to, by [CompanionEnvironment.key], or
 /// null for "all of them".

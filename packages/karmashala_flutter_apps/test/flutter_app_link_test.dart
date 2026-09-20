@@ -1,4 +1,3 @@
-
 import 'package:test/test.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
@@ -47,14 +46,17 @@ void main() {
       expect(link.isolateId, 'isolates/1');
     });
 
-    test('subscribes before asking anything, so no history is missed', () async {
-      final (link, fake) = await build();
-      addTearDown(link.dispose);
-      expect(
-        fake.methods.indexOf('getVM'),
-        greaterThan(fake.methods.indexOf('streamListen')),
-      );
-    });
+    test(
+      'subscribes before asking anything, so no history is missed',
+      () async {
+        final (link, fake) = await build();
+        addTearDown(link.dispose);
+        expect(
+          fake.methods.indexOf('getVM'),
+          greaterThan(fake.methods.indexOf('streamListen')),
+        );
+      },
+    );
 
     test('a VM service without ToolEvent is reported, not assumed', () async {
       final (link, _) = await build(refuseStreams: const {'ToolEvent'});
@@ -95,18 +97,25 @@ void main() {
       );
     });
 
-    test('carries a dart:developer record with its channel and level', () async {
-      final (link, fake) = await build();
-      addTearDown(link.dispose);
-      fake.emitDeveloperLog('the thing', loggerName: 'probe.channel', level: 900);
-      await pumpEventQueue();
-      final record = link.console.firstWhere(
-        (r) => r.source == AppLogSource.developerLog,
-      );
-      expect(record.message, 'the thing');
-      expect(record.loggerName, 'probe.channel');
-      expect(record.level, 900);
-    });
+    test(
+      'carries a dart:developer record with its channel and level',
+      () async {
+        final (link, fake) = await build();
+        addTearDown(link.dispose);
+        fake.emitDeveloperLog(
+          'the thing',
+          loggerName: 'probe.channel',
+          level: 900,
+        );
+        await pumpEventQueue();
+        final record = link.console.firstWhere(
+          (r) => r.source == AppLogSource.developerLog,
+        );
+        expect(record.message, 'the thing');
+        expect(record.loggerName, 'probe.channel');
+        expect(record.level, 900);
+      },
+    );
 
     test('keeps Flutter.Error and drops Flutter.Frame', () async {
       final (link, fake) = await build();
@@ -126,8 +135,14 @@ void main() {
       final attachedAt = DateTime.utc(2026, 9, 8, 12);
       final (link, fake) = await build(now: attachedAt);
       addTearDown(link.dispose);
-      fake.emitStdout('startup', at: attachedAt.subtract(const Duration(minutes: 5)));
-      fake.emitStdout('right now', at: attachedAt.add(const Duration(seconds: 1)));
+      fake.emitStdout(
+        'startup',
+        at: attachedAt.subtract(const Duration(minutes: 5)),
+      );
+      fake.emitStdout(
+        'right now',
+        at: attachedAt.add(const Duration(seconds: 1)),
+      );
       await pumpEventQueue();
       final byMessage = <String, bool>{
         for (final record in link.console) record.message: record.beforeAttach,
@@ -136,34 +151,40 @@ void main() {
       expect(byMessage['right now'], isFalse);
     });
 
-    test('notes attaching, because the console explains its own gaps', () async {
-      final (link, _) = await build();
-      addTearDown(link.dispose);
-      expect(
-        link.console.where((r) => r.source == AppLogSource.lifecycle),
-        isNotEmpty,
-      );
-    });
+    test(
+      'notes attaching, because the console explains its own gaps',
+      () async {
+        final (link, _) = await build();
+        addTearDown(link.dispose);
+        expect(
+          link.console.where((r) => r.source == AppLogSource.lifecycle),
+          isNotEmpty,
+        );
+      },
+    );
   });
 
   group('hot reload', () {
-    test('uses the method name the tool registered, not a guessed prefix', () async {
-      final (link, fake) = await build();
-      addTearDown(link.dispose);
-      // Measured 2026-09-08: DDS numbers the registering client per
-      // connection, so ours sees `s1.`, not the `s0.` the tool sees.
-      fake.emitServiceRegistered('reloadSources', 's1.reloadSources');
-      await pumpEventQueue();
-      expect(link.reloadMethod, 's1.reloadSources');
+    test(
+      'uses the method name the tool registered, not a guessed prefix',
+      () async {
+        final (link, fake) = await build();
+        addTearDown(link.dispose);
+        // Measured 2026-09-08: DDS numbers the registering client per
+        // connection, so ours sees `s1.`, not the `s0.` the tool sees.
+        fake.emitServiceRegistered('reloadSources', 's1.reloadSources');
+        await pumpEventQueue();
+        expect(link.reloadMethod, 's1.reloadSources');
 
-      await link.hotReload();
-      expect(fake.methods, contains('s1.reloadSources'));
-      expect(fake.paramsFor('s1.reloadSources'), <String, Object?>{
-        'isolateId': 'isolates/1',
-        'force': false,
-        'pause': false,
-      });
-    });
+        await link.hotReload();
+        expect(fake.methods, contains('s1.reloadSources'));
+        expect(fake.paramsFor('s1.reloadSources'), <String, Object?>{
+          'isolateId': 'isolates/1',
+          'force': false,
+          'pause': false,
+        });
+      },
+    );
 
     test('refuses when nothing is there to recompile', () async {
       final (link, _) = await build();
@@ -190,7 +211,9 @@ void main() {
       expect(link.reloadMethod, isNull);
       expect(
         link.console.map((r) => r.message),
-        contains('The Flutter tool detached; hot reload is no longer available.'),
+        contains(
+          'The Flutter tool detached; hot reload is no longer available.',
+        ),
       );
     });
 
@@ -200,7 +223,9 @@ void main() {
       fake.emitServiceRegistered('hotRestart', 's1.hotRestart');
       await pumpEventQueue();
       await link.hotRestart();
-      expect(fake.paramsFor('s1.hotRestart'), <String, Object?>{'pause': false});
+      expect(fake.paramsFor('s1.hotRestart'), <String, Object?>{
+        'pause': false,
+      });
     });
   });
 
@@ -210,35 +235,44 @@ void main() {
       addTearDown(link.dispose);
       expect(await link.widgetLocationSupport(), WidgetLocationSupport.tracked);
 
-      fake.handlers['ext.flutter.inspector.isWidgetCreationTracked'] =
-          (_) => <String, Object?>{'type': '_extensionType', 'result': false};
+      fake.handlers['ext.flutter.inspector.isWidgetCreationTracked'] = (_) =>
+          <String, Object?>{'type': '_extensionType', 'result': false};
       expect(await link.widgetLocationSupport(), WidgetLocationSupport.absent);
     });
 
-    test('a build with no inspector at all reads as unknown, not absent', () async {
-      final (link, fake) = await build();
-      addTearDown(link.dispose);
-      fake.handlers['ext.flutter.inspector.isWidgetCreationTracked'] =
-          (_) => const FakeRpcError.methodNotFound();
-      expect(await link.widgetLocationSupport(), WidgetLocationSupport.unknown);
-    });
+    test(
+      'a build with no inspector at all reads as unknown, not absent',
+      () async {
+        final (link, fake) = await build();
+        addTearDown(link.dispose);
+        fake.handlers['ext.flutter.inspector.isWidgetCreationTracked'] = (_) =>
+            const FakeRpcError.methodNotFound();
+        expect(
+          await link.widgetLocationSupport(),
+          WidgetLocationSupport.unknown,
+        );
+      },
+    );
 
-    test('select mode is turned on with the string the framework compares', () async {
-      final (link, fake) = await build();
-      addTearDown(link.dispose);
-      await link.setWidgetSelectMode(enabled: true);
-      expect(
-        fake.paramsFor('ext.flutter.inspector.show')!['enabled'],
-        'true',
-        reason: '_registerBoolServiceExtension compares against the string',
-      );
-    });
+    test(
+      'select mode is turned on with the string the framework compares',
+      () async {
+        final (link, fake) = await build();
+        addTearDown(link.dispose);
+        await link.setWidgetSelectMode(enabled: true);
+        expect(
+          fake.paramsFor('ext.flutter.inspector.show')!['enabled'],
+          'true',
+          reason: '_registerBoolServiceExtension compares against the string',
+        );
+      },
+    );
 
     test('a missing extension is named as a build problem', () async {
       final (link, fake) = await build();
       addTearDown(link.dispose);
-      fake.handlers['ext.flutter.inspector.show'] =
-          (_) => const FakeRpcError.methodNotFound();
+      fake.handlers['ext.flutter.inspector.show'] = (_) =>
+          const FakeRpcError.methodNotFound();
       await expectLater(
         link.setWidgetSelectMode(enabled: true),
         throwsA(

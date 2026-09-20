@@ -60,9 +60,9 @@ void main() {
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('karmashala_slot_cost_');
     storeHome = p.join(tmp.path, '.claude');
-    Directory(p.join(storeHome, 'projects', '-repo')).createSync(
-      recursive: true,
-    );
+    Directory(
+      p.join(storeHome, 'projects', '-repo'),
+    ).createSync(recursive: true);
     for (var i = 0; i < conversations; i++) {
       _writeConversation(storeHome, _conversationId(i), 'Conversation $i');
     }
@@ -84,9 +84,9 @@ void main() {
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     ProjectDao(db).insert(project());
     RepositoryDao(db).insert(repository());
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.claudeCode),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.claudeCode));
     for (var i = 0; i < named; i++) {
       db.insertSession(
         id: 's$i',
@@ -152,33 +152,36 @@ void main() {
       expect(measured.bytes, 0);
     });
 
-    test('a brand-new session buys one scan, shared by its passengers', () async {
-      final busy = slot(named: 20, waiting: 1);
-      await busy.run();
+    test(
+      'a brand-new session buys one scan, shared by its passengers',
+      () async {
+        final busy = slot(named: 20, waiting: 1);
+        await busy.run();
 
-      final measured = await busy.run();
+        final measured = await busy.run();
 
-      // ignore: avoid_print
-      print(
-        'STORE-SLOT waiting=1 statements=${measured.statements.length} '
-        'scans=${measured.scans} bytes=${measured.bytes}',
-      );
-      expect(
-        measured.scans,
-        1,
-        reason:
-            'attribution and the title sync ask the disk the same question, '
-            'and `cliStoreScanPassProvider` exists so one slot reads it once',
-      );
-      expect(
-        measured.bytes,
-        0,
-        reason:
-            'nothing in the store moved between the two slots, so a stat is '
-            'the whole of the second one — the incremental read '
-            '`claude_store_scan_cost_test.dart` pins',
-      );
-    });
+        // ignore: avoid_print
+        print(
+          'STORE-SLOT waiting=1 statements=${measured.statements.length} '
+          'scans=${measured.scans} bytes=${measured.bytes}',
+        );
+        expect(
+          measured.scans,
+          1,
+          reason:
+              'attribution and the title sync ask the disk the same question, '
+              'and `cliStoreScanPassProvider` exists so one slot reads it once',
+        );
+        expect(
+          measured.bytes,
+          0,
+          reason:
+              'nothing in the store moved between the two slots, so a stat is '
+              'the whole of the second one — the incremental read '
+              '`claude_store_scan_cost_test.dart` pins',
+        );
+      },
+    );
 
     test('and the scan it buys does not grow with the workspace', () async {
       final statements = <int, int>{};

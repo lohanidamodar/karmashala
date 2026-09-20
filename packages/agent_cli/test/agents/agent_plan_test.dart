@@ -44,10 +44,7 @@ void main() {
         'Calibrate the Nepali patro Surya Siddhanta defaults against the '
         'user-provided 2081 Baisakh reference.',
     'plan': [
-      {
-        'step': 'Inspect current Nepali patro SS config',
-        'status': 'completed',
-      },
+      {'step': 'Inspect current Nepali patro SS config', 'status': 'completed'},
       {
         'step': 'Measure current Baisakh 2081 outputs against the reference',
         'status': 'in_progress',

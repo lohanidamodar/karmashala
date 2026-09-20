@@ -76,21 +76,24 @@ void main() {
       ]);
     });
 
-    test('drop the slimming flags but keep the renderer when slimming is off', () async {
-      // The renderer is a choice about this pane's preview, not an
-      // optimisation, so switching slimming off must not silently swap it back.
-      final container = _container(
-        settings: const Settings(
-          androidSlimming: false,
-          androidEmulatorGpu: 'swiftshader',
-        ),
-      );
-      expect(container.read(androidSlimmingCategoriesProvider), isEmpty);
-      expect(container.read(androidEmulatorArgumentsProvider), [
-        '-gpu',
-        'swiftshader',
-      ]);
-    });
+    test(
+      'drop the slimming flags but keep the renderer when slimming is off',
+      () async {
+        // The renderer is a choice about this pane's preview, not an
+        // optimisation, so switching slimming off must not silently swap it back.
+        final container = _container(
+          settings: const Settings(
+            androidSlimming: false,
+            androidEmulatorGpu: 'swiftshader',
+          ),
+        );
+        expect(container.read(androidSlimmingCategoriesProvider), isEmpty);
+        expect(container.read(androidEmulatorArgumentsProvider), [
+          '-gpu',
+          'swiftshader',
+        ]);
+      },
+    );
 
     test('a saved category this build dropped is ignored', () async {
       final container = _container(
@@ -110,9 +113,7 @@ void main() {
       final slimming = _RecordingSlimming();
       final container = _container(
         slimming: slimming,
-        settings: const Settings(
-          androidSlimmingEnabled: ['animations', 'gms'],
-        ),
+        settings: const Settings(androidSlimmingEnabled: ['animations', 'gms']),
       );
 
       await container

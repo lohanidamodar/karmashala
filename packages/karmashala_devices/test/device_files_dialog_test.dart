@@ -176,11 +176,7 @@ void main() {
   testWidgets('lists the first root and puts folders before files', (
     tester,
   ) async {
-    await _pump(
-      tester,
-      runner: _runner(),
-      host: FakeHostClipboard(),
-    );
+    await _pump(tester, runner: _runner(), host: FakeHostClipboard());
     expect(find.text('Download'), findsOneWidget);
     expect(find.text('a.txt'), findsOneWidget);
     // Nothing is on the clipboard yet, so there is no Paste to press.
@@ -281,12 +277,7 @@ void main() {
   ) async {
     final host = FakeHostClipboard();
     final made = <String>[];
-    await _pump(
-      tester,
-      runner: _runner(),
-      host: host,
-      directoriesMade: made,
-    );
+    await _pump(tester, runner: _runner(), host: host, directoriesMade: made);
 
     await tester.tap(find.byKey(const Key('device-file-menu-a.txt')));
     await tester.pumpAndSettle();
@@ -385,9 +376,6 @@ void main() {
     await _pump(tester, runner: _runner(), host: FakeHostClipboard());
     await tester.tap(find.byKey(const Key('device-files-paste-from-host')));
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('no files on this computer'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('no files on this computer'), findsOneWidget);
   });
 }

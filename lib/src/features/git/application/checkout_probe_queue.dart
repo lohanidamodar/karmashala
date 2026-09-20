@@ -7,7 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// Where a row's git probe waits before it may spawn: a frame, because a probe
 /// reached from the build phase charges the synchronous half of its ask to it.
 final probeGateProvider = Provider<Future<void> Function()>(
-  (ref) => () => SchedulerBinding.instance.endOfFrame,
+  (ref) =>
+      () => SchedulerBinding.instance.endOfFrame,
 );
 
 /// How many git probes may run at once across every visible row. Four: two rows

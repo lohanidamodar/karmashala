@@ -123,10 +123,10 @@ Map<String, String> gradlePluginCatalog(String toml) {
     if (!inPlugins || line.isEmpty || line.startsWith('#')) continue;
     final equals = line.indexOf('=');
     if (equals < 0) continue;
-    final key = line.substring(0, equals).trim().replaceAll(
-      RegExp(r'[-_]'),
-      '.',
-    );
+    final key = line
+        .substring(0, equals)
+        .trim()
+        .replaceAll(RegExp(r'[-_]'), '.');
     final id = _literalAfter(line.substring(equals + 1), 'id');
     if (key.isNotEmpty && id != null) catalog[key] = id;
   }
@@ -136,7 +136,9 @@ Map<String, String> gradlePluginCatalog(String toml) {
 /// `applicationId = "com.x"`, `applicationId "com.x"` and `id = "com.x"` —
 /// the three spellings Kotlin, Groovy and TOML use for the same statement.
 String? _literalAfter(String line, String key) {
-  final match = RegExp('(?:^|[\\s{,])$key\\s*=?\\s*([\'"])(.*?)\\1').firstMatch(line);
+  final match = RegExp(
+    '(?:^|[\\s{,])$key\\s*=?\\s*([\'"])(.*?)\\1',
+  ).firstMatch(line);
   return match?.group(2);
 }
 
@@ -144,9 +146,14 @@ final RegExp _pluginId = RegExp(
   r"""\bid\s*[( ]\s*(?:"([^"]*)"|'([^']*)')|apply\s+plugin\s*:\s*(?:"([^"]*)"|'([^']*)')""",
 );
 
-final RegExp _pluginAlias = RegExp(r'alias\s*\(\s*libs\.plugins\.([\w.]+)\s*\)');
+final RegExp _pluginAlias = RegExp(
+  r'alias\s*\(\s*libs\.plugins\.([\w.]+)\s*\)',
+);
 
-final RegExp _quoted = RegExp('"([^"]*)"' "|'([^']*)'");
+final RegExp _quoted = RegExp(
+  '"([^"]*)"'
+  "|'([^']*)'",
+);
 
 List<String> _quotedValues(String line) => <String>[
   for (final match in _quoted.allMatches(line))
@@ -162,7 +169,6 @@ String _withoutComment(String line) {
   if (cut < 0) return line;
   final before = line.substring(0, cut);
   // A `//` inside a quoted value — a URL — is not a comment.
-  final quotes =
-      '"'.allMatches(before).length + "'".allMatches(before).length;
+  final quotes = '"'.allMatches(before).length + "'".allMatches(before).length;
   return quotes.isEven ? before : line;
 }

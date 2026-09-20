@@ -12,7 +12,8 @@ import '../data/local_host_access.dart';
 final localHostSessionAccessProvider = Provider<LocalHostSessionAccess?>((ref) {
   // A companion build has no filesystem to find a binary in and no business
   // starting a daemon.
-  if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return null;
+  if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux)
+    {return null;}
   return LocalHostSessionAccess();
 });
 
@@ -27,7 +28,8 @@ final hostBackedLocalPanesProvider = Provider<bool>(
 /// Nothing polls and nothing here starts a daemon — [observe] takes no action.
 class LocalHostStatusController extends Notifier<HostDeployment?> {
   @override
-  HostDeployment? build() => ref.watch(localHostSessionAccessProvider)?.lastReading;
+  HostDeployment? build() =>
+      ref.watch(localHostSessionAccessProvider)?.lastReading;
 
   bool _busy = false;
   bool get isChecking => _busy;

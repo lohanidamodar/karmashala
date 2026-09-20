@@ -3,8 +3,14 @@ import 'package:karmashala_flutter_apps/flutter_apps.dart';
 
 import './fake_vm_service.dart';
 
-AppLogRecord _line(String message, {AppLogSource source = AppLogSource.stdout}) =>
-    AppLogRecord(source: source, at: DateTime.utc(2026, 9, 8), message: message);
+AppLogRecord _line(
+  String message, {
+  AppLogSource source = AppLogSource.stdout,
+}) => AppLogRecord(
+  source: source,
+  at: DateTime.utc(2026, 9, 8),
+  message: message,
+);
 
 void main() {
   group('AppLogBuffer', () {
@@ -23,10 +29,11 @@ void main() {
       for (var i = 0; i < 10; i++) {
         buffer.add(_line('line $i'));
       }
-      expect(
-        buffer.tail(limit: 3).map((r) => r.message),
-        ['line 7', 'line 8', 'line 9'],
-      );
+      expect(buffer.tail(limit: 3).map((r) => r.message), [
+        'line 7',
+        'line 8',
+        'line 9',
+      ]);
     });
 
     test('a tail can be narrowed to one origin', () {
@@ -35,9 +42,7 @@ void main() {
         ..add(_line('boom', source: AppLogSource.stderr))
         ..add(_line('out again'));
       expect(
-        buffer
-            .tail(sources: const {AppLogSource.stderr})
-            .map((r) => r.message),
+        buffer.tail(sources: const {AppLogSource.stderr}).map((r) => r.message),
         ['boom'],
       );
     });
@@ -59,20 +64,15 @@ void main() {
     });
 
     test('falls back to the category when there is no summary node', () {
-      final record = summariseFlutterError(
-        const <Object?, Object?>{
-          'description': 'Exception caught by rendering library',
-        },
-        at: DateTime.utc(2026, 9, 8),
-      );
+      final record = summariseFlutterError(const <Object?, Object?>{
+        'description': 'Exception caught by rendering library',
+      }, at: DateTime.utc(2026, 9, 8));
       expect(record.message, 'Exception caught by rendering library');
     });
 
     test('bounds the body, because a diagnostics tree has no bound', () {
       final record = summariseFlutterError(
-        flutterErrorTree(
-          body: List<String>.generate(200, (i) => 'frame $i'),
-        ),
+        flutterErrorTree(body: List<String>.generate(200, (i) => 'frame $i')),
         at: DateTime.utc(2026, 9, 8),
         detailLines: 5,
       );

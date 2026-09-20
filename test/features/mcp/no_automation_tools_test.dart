@@ -55,9 +55,6 @@ void main() {
       isEmpty,
       reason: 'no scheduling surface is served to an agent under any name',
     );
-    expect(
-      servedNames.where((name) => name.contains('cron')),
-      isEmpty,
-    );
+    expect(servedNames.where((name) => name.contains('cron')), isEmpty);
   });
 }

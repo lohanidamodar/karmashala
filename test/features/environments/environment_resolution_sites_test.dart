@@ -126,23 +126,17 @@ void main() {
     );
 
     test('Claude Code refuses', () {
-      final adapter = ClaudeCodeAdapter(
-        runnerFor: appRunnerResolver(),
-      );
+      final adapter = ClaudeCodeAdapter(runnerFor: appRunnerResolver());
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });
 
     test('Codex refuses', () {
-      final adapter = CodexAdapter(
-        runnerFor: appRunnerResolver(),
-      );
+      final adapter = CodexAdapter(runnerFor: appRunnerResolver());
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });
 
     test('Antigravity refuses', () {
-      final adapter = AntigravityAdapter(
-        runnerFor: appRunnerResolver(),
-      );
+      final adapter = AntigravityAdapter(runnerFor: appRunnerResolver());
       expect(() => adapter.start(launch()), saysSo<StateError>());
     });
 
@@ -198,21 +192,25 @@ void main() {
       return c;
     }
 
-    test('the git-presence probe answers unknown rather than guessing',
-        () async {
-      expect(
-        await container().read(checkoutGitPresenceProvider(gone).future),
-        GitPresence.unknown,
-      );
-      expect(runner.requests, isEmpty);
-    });
+    test(
+      'the git-presence probe answers unknown rather than guessing',
+      () async {
+        expect(
+          await container().read(checkoutGitPresenceProvider(gone).future),
+          GitPresence.unknown,
+        );
+        expect(runner.requests, isEmpty);
+      },
+    );
 
     test('creating a project on an environment that is gone refuses', () async {
       ProjectDao(db).insert(project());
       RepositoryDao(db).insert(repository());
 
       await expectLater(
-        container().read(projectsControllerProvider.notifier).createProject(
+        container()
+            .read(projectsControllerProvider.notifier)
+            .createProject(
               name: 'Demo',
               targetEnvironmentId: gone.environmentId,
               folderPath: '/home/me/demo',

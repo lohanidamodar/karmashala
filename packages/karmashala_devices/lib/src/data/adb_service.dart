@@ -1174,16 +1174,17 @@ class AdbService {
     required String serial,
     required String path,
   }) => switch (failure) {
-    LsFailure.permissionDenied => _appPrivate(path)
-        // Worth explaining rather than reporting: the path looks like it works.
-        ? '$path is an app\'s own directory, and adb\'s shell user cannot read '
-              'one. Reaching it needs `run-as <package>`, which only works on a '
-              'debuggable build of that app — this build does not do it. '
-              'Everything under /sdcard is readable, and so is '
-              '/data/local/tmp.'
-        : '$path is not readable on $serial. Most of /data needs root, which '
-              'an ordinary device does not give adb. /sdcard and '
-              '/data/local/tmp are readable.',
+    LsFailure.permissionDenied =>
+      _appPrivate(path)
+          // Worth explaining rather than reporting: the path looks like it works.
+          ? '$path is an app\'s own directory, and adb\'s shell user cannot read '
+                'one. Reaching it needs `run-as <package>`, which only works on a '
+                'debuggable build of that app — this build does not do it. '
+                'Everything under /sdcard is readable, and so is '
+                '/data/local/tmp.'
+          : '$path is not readable on $serial. Most of /data needs root, which '
+                'an ordinary device does not give adb. /sdcard and '
+                '/data/local/tmp are readable.',
     LsFailure.missing => 'There is nothing at $path on $serial.',
     LsFailure.notADirectory => '$path on $serial is a file, not a directory.',
     LsFailure.unknown =>

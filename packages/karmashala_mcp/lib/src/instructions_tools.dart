@@ -46,8 +46,7 @@ class McpGuide {
   /// each tool's annotations beside it.
   String render() {
     final roster = <String>[
-      for (final name in tools)
-        '  $name${_marks(kMcpToolAnnotations[name]!)}',
+      for (final name in tools) '  $name${_marks(kMcpToolAnnotations[name]!)}',
     ];
     return <String>[
       '# $topic',

@@ -184,10 +184,11 @@ void main() {
         [at('unknown', minutes: 100), at('ancient', minutes: 0)],
         activeAt: {'ancient': testTime},
       );
-      expect([for (final node in nodes) node.session.id], [
-        'ancient',
-        'unknown',
-      ], reason: 'unknown is not "idle since the epoch", it is unspoken for');
+      expect(
+        [for (final node in nodes) node.session.id],
+        ['ancient', 'unknown'],
+        reason: 'unknown is not "idle since the epoch", it is unspoken for',
+      );
     });
 
     test('with no readings at all the order is what it always was', () {
@@ -215,10 +216,10 @@ void main() {
         ],
         activeAt: {'first': testTime.add(const Duration(hours: 9))},
       );
-      expect([for (final child in nodes.single.children) child.session.id], [
-        'first',
-        'second',
-      ]);
+      expect(
+        [for (final child in nodes.single.children) child.session.id],
+        ['first', 'second'],
+      );
     });
   });
 }

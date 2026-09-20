@@ -30,7 +30,10 @@ void main() {
       container.read(terminalSessionsControllerProvider).activeTab!;
 
   /// Runs [read] inside a widget, which is the only place a `WidgetRef` exists.
-  Future<T> withRef<T>(WidgetTester tester, T Function(WidgetRef ref) read) async {
+  Future<T> withRef<T>(
+    WidgetTester tester,
+    T Function(WidgetRef ref) read,
+  ) async {
     late T result;
     await tester.pumpWidget(
       UncontrolledProviderScope(
@@ -58,16 +61,16 @@ void main() {
       TerminalProfile.powerShell,
     )!;
 
-    final entries = await withRef(
-      tester,
-      (ref) => panesMovableInto(ref, left),
-    );
+    final entries = await withRef(tester, (ref) => panesMovableInto(ref, left));
 
     expect(entries, hasLength(1), reason: 'the other region, not this one');
     entries.single.item.onSelect();
     await tester.pump();
 
-    expect(container.read(terminalSessionsControllerProvider).tabs, hasLength(1));
+    expect(
+      container.read(terminalSessionsControllerProvider).tabs,
+      hasLength(1),
+    );
     expect(activeTab().layout.groupOf(left)!.panes, [left, right]);
   });
 

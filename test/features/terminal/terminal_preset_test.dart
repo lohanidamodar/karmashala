@@ -68,10 +68,10 @@ void main() {
         hasLength(2),
         reason: 'the split is part of the shape',
       );
-      expect(
-        preset.tabs.first.panes.map((pane) => pane.profileId),
-        [TerminalProfile.powerShellId, TerminalProfile.commandPromptId],
-      );
+      expect(preset.tabs.first.panes.map((pane) => pane.profileId), [
+        TerminalProfile.powerShellId,
+        TerminalProfile.commandPromptId,
+      ]);
       expect(preset.tabs.first.panes.map((pane) => pane.workingDirectory), [
         r'C:\ws\one',
         r'C:\ws\two',
@@ -89,7 +89,10 @@ void main() {
         shape: json,
       )!;
       expect(again.paneCount, 3);
-      expect(again.tabs.first.layout.toJson(), preset.tabs.first.layout.toJson());
+      expect(
+        again.tabs.first.layout.toJson(),
+        preset.tabs.first.layout.toJson(),
+      );
       expect(
         '$json',
         isNot(contains('a command somebody ran')),
@@ -125,7 +128,8 @@ void main() {
       );
       final preset = controller.capturePreset(id: 'p1', name: 'Pair');
       final before = {
-        for (final tab in container.read(terminalSessionsControllerProvider).tabs)
+        for (final tab
+            in container.read(terminalSessionsControllerProvider).tabs)
           ...tab.layout.panes,
       };
 
@@ -215,8 +219,9 @@ void main() {
         name: 'Windows and Ubuntu',
         tabs: [
           PresetTab(
-            layout: PaneLayout.single('a')
-                .split('a', SplitAxis.horizontal, 'b', 's1'),
+            layout: PaneLayout.single(
+              'a',
+            ).split('a', SplitAxis.horizontal, 'b', 's1'),
             focusedPaneId: 'a',
             panes: const [
               PresetPane(id: 'a', profileId: TerminalProfile.powerShellId),
@@ -254,11 +259,7 @@ void main() {
     test('a preset whose every profile has gone opens nothing and says so', () {
       final container = harness();
       final controller = controllerOf(container);
-      const preset = TerminalPreset(
-        id: 'p1',
-        name: 'All gone',
-        tabs: [],
-      );
+      const preset = TerminalPreset(id: 'p1', name: 'All gone', tabs: []);
       final gone = TerminalPreset(
         id: preset.id,
         name: preset.name,
@@ -306,10 +307,7 @@ void main() {
       expect(read, hasLength(1));
       expect(read.single.name, 'Daily');
       expect(read.single.paneCount, 1);
-      expect(
-        read.single.tabs.single.panes.single.workingDirectory,
-        r'C:\ws',
-      );
+      expect(read.single.tabs.single.panes.single.workingDirectory, r'C:\ws');
 
       // A second pane, saved under the same name: one preset, corrected.
       controller.splitPaneWith(

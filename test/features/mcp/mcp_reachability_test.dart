@@ -170,11 +170,9 @@ void main() async {
           401,
         );
         expect(
-          (await post(
-            _switchHookUri(wslStandIn.address, port),
-            const {'session_id': 's1'},
-            token: closed.hookEndpoint!.token,
-          )).status,
+          (await post(_switchHookUri(wslStandIn.address, port), const {
+            'session_id': 's1',
+          }, token: closed.hookEndpoint!.token)).status,
           200,
         );
       },

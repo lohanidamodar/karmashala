@@ -84,7 +84,10 @@ class ToolchainReadings
     state = {...state}..remove(environmentId);
   }
 
-  ToolchainReading _fromFlutterReading(FlutterSdkReading reading, DateTime now) {
+  ToolchainReading _fromFlutterReading(
+    FlutterSdkReading reading,
+    DateTime now,
+  ) {
     if (reading.isUsable) {
       return ToolchainReading(
         toolchain: Toolchain.flutterSdk,

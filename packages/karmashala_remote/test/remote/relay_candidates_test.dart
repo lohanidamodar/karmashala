@@ -99,9 +99,9 @@ void main() {
       );
 
       expect(candidate.inCooldown(_now), isFalse);
-      expect(orderRelayCandidates([
-        candidate,
-      ], fallback: _hosted, now: _now), [_hosted]);
+      expect(orderRelayCandidates([candidate], fallback: _hosted, now: _now), [
+        _hosted,
+      ]);
     });
 
     test('the configured default is the last resort, and only when it is not '
@@ -291,7 +291,10 @@ void main() {
 
     test('a corrupt candidate costs its own entry, never the pairing', () {
       final json = record(
-        candidates: [RelayCandidate(url: _local), RelayCandidate(url: _hosted)],
+        candidates: [
+          RelayCandidate(url: _local),
+          RelayCandidate(url: _hosted),
+        ],
       ).toJson();
       json['relays'] = [
         'not a map',
@@ -316,7 +319,10 @@ void main() {
 
     test('withRelay moves the mirror without disturbing the set', () {
       final saved = record(
-        candidates: [RelayCandidate(url: _local), RelayCandidate(url: _hosted)],
+        candidates: [
+          RelayCandidate(url: _local),
+          RelayCandidate(url: _hosted),
+        ],
       );
 
       final moved = saved.withRelay(_local);

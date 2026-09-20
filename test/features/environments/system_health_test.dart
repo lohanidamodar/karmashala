@@ -99,8 +99,8 @@ void main() {
           : null,
     ),
     bridgeExecutable:
-        locate ?? () => File('${temp.path}/karmashala_mcp')
-          ..writeAsStringSync(''),
+        locate ??
+        () => File('${temp.path}/karmashala_mcp')..writeAsStringSync(''),
     timeout: const Duration(milliseconds: 100),
   );
 
@@ -207,31 +207,37 @@ void main() {
   });
 
   group('the agent tools endpoint sits beside the bridge, not inside it', () {
-    test('a fail-closed server is reported as the server reported it', () async {
-      final container = containerWith(
-        probe: probeReturning(ProcessHandleScript.replies(initializeResult)),
-        control: const ControlServerStatus.failedClosed(
-          stage: ControlServerFailureStage.socketBind,
-          detail: 'bind failed: permission denied',
-        ),
-      );
-      addTearDown(container.dispose);
+    test(
+      'a fail-closed server is reported as the server reported it',
+      () async {
+        final container = containerWith(
+          probe: probeReturning(ProcessHandleScript.replies(initializeResult)),
+          control: const ControlServerStatus.failedClosed(
+            stage: ControlServerFailureStage.socketBind,
+            detail: 'bind failed: permission denied',
+          ),
+        );
+        addTearDown(container.dispose);
 
-      final checks = await container
-          .read(systemHealthServiceProvider)
-          .checkAll();
-      final endpoint = checks.firstWhere(
-        (c) => c.id == SystemCheckId.controlServer,
-      );
+        final checks = await container
+            .read(systemHealthServiceProvider)
+            .checkAll();
+        final endpoint = checks.firstWhere(
+          (c) => c.id == SystemCheckId.controlServer,
+        );
 
-      expect(endpoint.level, HealthLevel.failed);
-      expect(endpoint.summary, contains('the owner-only socket could not be'));
-      expect(endpoint.detail, contains('bind failed: permission denied'));
-      // This row is read from what the server recorded, not probed — and it
-      // says so, so the panel's timestamp cannot imply a fresh measurement.
-      expect(endpoint.detail, contains('nothing was probed for this row'));
-      expect(endpoint.took, Duration.zero);
-    });
+        expect(endpoint.level, HealthLevel.failed);
+        expect(
+          endpoint.summary,
+          contains('the owner-only socket could not be'),
+        );
+        expect(endpoint.detail, contains('bind failed: permission denied'));
+        // This row is read from what the server recorded, not probed — and it
+        // says so, so the panel's timestamp cannot imply a fresh measurement.
+        expect(endpoint.detail, contains('nothing was probed for this row'));
+        expect(endpoint.took, Duration.zero);
+      },
+    );
 
     test('a server that never started is unknown, not healthy', () async {
       final container = containerWith(
@@ -312,15 +318,18 @@ void main() {
       expect(check.remedyCommand, kWslInteropRepairCommand);
     });
 
-    test('a distribution that does not answer is unknown, not broken', () async {
-      final container = withDistro((_) => throw CommandException('no wsl'));
-      addTearDown(container.dispose);
+    test(
+      'a distribution that does not answer is unknown, not broken',
+      () async {
+        final container = withDistro((_) => throw CommandException('no wsl'));
+        addTearDown(container.dispose);
 
-      final check = await interopCheck(container);
+        final check = await interopCheck(container);
 
-      expect(check.level, HealthLevel.unknown);
-      expect(check.summary, contains('archlinux did not answer'));
-    });
+        expect(check.level, HealthLevel.unknown);
+        expect(check.summary, contains('archlinux did not answer'));
+      },
+    );
 
     test('a machine with no WSL gets no interop row at all', () async {
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -364,7 +373,10 @@ void main() {
 
     test('plenty of room is healthy and still shows the number', () async {
       final check = await diskCheck(
-        output(freeBytes: 400 * 1024 * 1024 * 1024, totalBytes: 512 * 1024 * 1024 * 1024),
+        output(
+          freeBytes: 400 * 1024 * 1024 * 1024,
+          totalBytes: 512 * 1024 * 1024 * 1024,
+        ),
       );
 
       expect(check.level, HealthLevel.healthy);

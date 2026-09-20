@@ -37,38 +37,41 @@ const _declaring = AgentRegistry([
 
 void main() {
   group('Windows discovery — on PATH', () {
-    test('an agent on the Windows PATH is discovered with its version', () async {
-      final runner = FakeCommandRunner(
-        responder: (req) {
-          if (req.executable == 'where') {
-            return req.arguments.first == 'codex'
-                ? _ok(
-                    r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin'
-                    '\\codex.exe\r\n',
-                  )
-                : _notOnPath;
-          }
-          return _ok('codex-cli 0.145.0');
-        },
-      );
+    test(
+      'an agent on the Windows PATH is discovered with its version',
+      () async {
+        final runner = FakeCommandRunner(
+          responder: (req) {
+            if (req.executable == 'where') {
+              return req.arguments.first == 'codex'
+                  ? _ok(
+                      r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin'
+                      '\\codex.exe\r\n',
+                    )
+                  : _notOnPath;
+            }
+            return _ok('codex-cli 0.145.0');
+          },
+        );
 
-      final found = await AgentDiscoveryService(
-        runner: runner,
-        environment: windowsEnv(),
-        ids: SequentialIdGenerator(),
-        clock: FixedClock(testTime),
-        // No variables, so no declared install path expands: this test is
-        // about the PATH lookup alone, on any machine.
-        hostEnvironment: const {},
-      ).discover();
+        final found = await AgentDiscoveryService(
+          runner: runner,
+          environment: windowsEnv(),
+          ids: SequentialIdGenerator(),
+          clock: FixedClock(testTime),
+          // No variables, so no declared install path expands: this test is
+          // about the PATH lookup alone, on any machine.
+          hostEnvironment: const {},
+        ).discover();
 
-      expect(found.map((i) => i.agentId), [AgentIds.codex]);
-      expect(
-        found.single.executable.path,
-        r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe',
-      );
-      expect(found.single.version, '0.145.0');
-    });
+        expect(found.map((i) => i.agentId), [AgentIds.codex]);
+        expect(
+          found.single.executable.path,
+          r'C:\Users\d\AppData\Local\Programs\OpenAI\Codex\bin\codex.exe',
+        );
+        expect(found.single.version, '0.145.0');
+      },
+    );
   });
 
   group('Windows discovery — declared install locations', () {
@@ -95,7 +98,9 @@ void main() {
       // The existence check *is* the version probe, so it must not be re-run.
       expect(found.single.version, '2.1.252');
       expect(
-        runner.requests.where((r) => r.executable.endsWith('claude.exe')).length,
+        runner.requests
+            .where((r) => r.executable.endsWith('claude.exe'))
+            .length,
         1,
       );
     });
@@ -158,9 +163,7 @@ void main() {
 
       expect(found.single.executable.path, r'C:\tools\claude.exe');
       expect(
-        runner.requests.any(
-          (r) => r.executable.contains(r'.local\bin'),
-        ),
+        runner.requests.any((r) => r.executable.contains(r'.local\bin')),
         isFalse,
       );
     });
@@ -196,10 +199,8 @@ void main() {
     const release = r'C:\Users\d\.store\releases\2.1.252';
     const real = r'C:\Users\d\.store\releases\2.1.252\claude.exe';
 
-    FakePathProbe behindAJunction() => FakePathProbe(
-      files: const {real},
-      links: const {declaredDir: release},
-    );
+    FakePathProbe behindAJunction() =>
+        FakePathProbe(files: const {real}, links: const {declaredDir: release});
 
     test('is found at the path the junction actually leads to', () async {
       final runner = FakeCommandRunner(
@@ -383,17 +384,21 @@ void main() {
       );
     });
 
-    test('every declared location is an absolute file path, not a directory', () {
-      for (final descriptor in AgentRegistry.builtIn.descriptors) {
-        for (final template in descriptor.binaries.windowsInstallPaths) {
-          expect(
-            template.endsWith('.exe'),
-            isTrue,
-            reason: '$template must name one executable — discovery probes '
-                'exactly these files and never walks the disk',
-          );
+    test(
+      'every declared location is an absolute file path, not a directory',
+      () {
+        for (final descriptor in AgentRegistry.builtIn.descriptors) {
+          for (final template in descriptor.binaries.windowsInstallPaths) {
+            expect(
+              template.endsWith('.exe'),
+              isTrue,
+              reason:
+                  '$template must name one executable — discovery probes '
+                  'exactly these files and never walks the disk',
+            );
+          }
         }
-      }
-    });
+      },
+    );
   });
 }

@@ -68,14 +68,17 @@ void main() {
   });
 
   /// The phone's half: one request, wait for the frame that carries its id.
-  Future<Envelope> ask(FrameType type, {Map<String, Object?> payload = const {}}) async {
+  Future<Envelope> ask(
+    FrameType type, {
+    Map<String, Object?> payload = const {},
+  }) async {
     pipe.sendToHost(Envelope.of(type, seq: 1, id: 'r1', payload: payload));
     return Future.doWhile(() async {
-      await Future<void>.delayed(Duration.zero);
-      return !answers.any((e) => e.id == 'r1');
-    }).then((_) => answers.firstWhere((e) => e.id == 'r1')).timeout(
-      const Duration(seconds: 5),
-    );
+          await Future<void>.delayed(Duration.zero);
+          return !answers.any((e) => e.id == 'r1');
+        })
+        .then((_) => answers.firstWhere((e) => e.id == 'r1'))
+        .timeout(const Duration(seconds: 5));
   }
 
   test('a host with no sessions answers an empty list, not silence', () async {
@@ -99,13 +102,18 @@ void main() {
 
     final answer = await ask(FrameType.sessionsList);
 
-    final sessions = (answer.payload['sessions']! as List).cast<Map<String, Object?>>();
+    final sessions = (answer.payload['sessions']! as List)
+        .cast<Map<String, Object?>>();
     expect(sessions, hasLength(1));
     expect(sessions.single['sessionId'], 'karmashala_live');
     // The command is the only name this machine has for the session.
     expect(sessions.single['title'], 'claude --resume');
     expect(sessions.single['status'], 'running');
-    expect(sessions.single['whereabouts'], 'on do-box', reason: 'which box, not which folder');
+    expect(
+      sessions.single['whereabouts'],
+      'on do-box',
+      reason: 'which box, not which folder',
+    );
   });
 
   test('what a host cannot answer is refused by name, never faked', () async {
@@ -135,15 +143,18 @@ void main() {
     expect(answer.payload['message'], contains('transcript'));
   });
 
-  test('a session the host does not have is refused before any binding', () async {
-    final answer = await ask(
-      FrameType.transcriptGet,
-      payload: {'sessionId': 'never-started'},
-    );
+  test(
+    'a session the host does not have is refused before any binding',
+    () async {
+      final answer = await ask(
+        FrameType.transcriptGet,
+        payload: {'sessionId': 'never-started'},
+      );
 
-    expect(answer.type, FrameType.error.wire);
-    expect(answer.payload['message'], contains('no such session'));
-  });
+      expect(answer.type, FrameType.error.wire);
+      expect(answer.payload['message'], contains('no such session'));
+    },
+  );
 
   test('a phone paired with less is granted less', () async {
     // The grant travels with the paired device, the same way it does on the
@@ -169,9 +180,7 @@ void main() {
       ).serve(viewOnly),
     );
 
-    viewOnly.sendToHost(
-      Envelope.of(FrameType.sessionsList, seq: 1, id: 'a'),
-    );
+    viewOnly.sendToHost(Envelope.of(FrameType.sessionsList, seq: 1, id: 'a'));
     viewOnly.sendToHost(
       Envelope.of(
         FrameType.transcriptGet,

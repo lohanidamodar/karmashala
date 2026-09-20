@@ -31,12 +31,12 @@ void main() {
     String? excerpt = 'final value = map[key]!;',
   }) async =>
       (await tools.call('review_thread_add', {
-        'path': path,
-        'comment': comment,
-        'startLine': ?startLine,
-        'endLine': ?endLine,
-        'excerpt': ?excerpt,
-      }))!
+            'path': path,
+            'comment': comment,
+            'startLine': ?startLine,
+            'endLine': ?endLine,
+            'excerpt': ?excerpt,
+          }))!
           as Map<String, Object?>;
 
   test('the calling session supplies the checkout', () async {
@@ -78,8 +78,10 @@ void main() {
     // The sha is computed from the file, not accepted as an argument — a
     // caller-supplied hash could describe content it read three turns ago.
     expect(thread['blobSha'], 'sha-one');
-    expect(harness.runner.requests.any((r) => r.arguments.contains('hash-object')),
-        isTrue);
+    expect(
+      harness.runner.requests.any((r) => r.arguments.contains('hash-object')),
+      isTrue,
+    );
   });
 
   test('a detached thread is reported as detached, with no guessing', () async {

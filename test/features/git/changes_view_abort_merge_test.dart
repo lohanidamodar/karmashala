@@ -117,7 +117,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          repoWorktreesProvider.overrideWith((ref) async => const <GitWorktree>[]),
+          repoWorktreesProvider.overrideWith(
+            (ref) async => const <GitWorktree>[],
+          ),
           viewedCheckoutProvider.overrideWithValue(repo),
           repositoryChangesProvider.overrideWith(
             (ref) async =>
@@ -138,8 +140,9 @@ void main() {
   }
 
   group('it appears only when there is something to abort', () {
-    testWidgets('a dirty tree that is not a merge does not offer to undo one',
-        (tester) async {
+    testWidgets('a dirty tree that is not a merge does not offer to undo one', (
+      tester,
+    ) async {
       final files = _GitDirWith(mergeHead: false);
       await pump(
         tester,
@@ -153,8 +156,9 @@ void main() {
       expect(runner.requests, isEmpty);
     });
 
-    testWidgets('a clean tree is not a merge, and costs no read to know',
-        (tester) async {
+    testWidgets('a clean tree is not a merge, and costs no read to know', (
+      tester,
+    ) async {
       // A merge that stopped left its work in the index and resolving one with
       // `git add` leaves it staged, so an empty listing settles it.
       final files = _GitDirWith(mergeHead: true);
@@ -163,8 +167,9 @@ void main() {
       expect(files.stats, 0);
     });
 
-    testWidgets('a conflicted row is a merge, and costs no file read at all',
-        (tester) async {
+    testWidgets('a conflicted row is a merge, and costs no file read at all', (
+      tester,
+    ) async {
       final files = _GitDirWith(mergeHead: false);
       await pump(
         tester,
@@ -179,8 +184,9 @@ void main() {
       );
     });
 
-    testWidgets('every conflict resolved still leaves a merge to abort',
-        (tester) async {
+    testWidgets('every conflict resolved still leaves a merge to abort', (
+      tester,
+    ) async {
       // The state the listing cannot see: `git add` on every conflict clears
       // the `u` records, and `.git/MERGE_HEAD` is still there because nothing
       // has been committed.
@@ -193,98 +199,100 @@ void main() {
       expect(find.byTooltip('Abort merge'), findsOneWidget);
     });
 
-    testWidgets('a listing git could not produce hides it, and arms no retry',
-        (tester) async {
+    testWidgets('a listing git could not produce hides it, and arms no retry', (
+      tester,
+    ) async {
       // The pane beside this already shows git's own words for the trouble.
       // What this must not do is inherit the listing's retry: that backoff
       // timer outlives the pane, and the framework fails the test for it.
-      await pump(
-        tester,
-        serviceThatAborts(aborted: true),
-        changes: null,
-      );
+      await pump(tester, serviceThatAborts(aborted: true), changes: null);
       expect(find.byTooltip('Abort merge'), findsNothing);
     });
 
-    testWidgets('a filesystem this host cannot read hides it rather than guessing',
-        (tester) async {
-      // `noGitFiles` answers `PathEntry.none` for everything, which is what a
-      // dead share and an absent `.git` both look like. A button that destroys
-      // work appears on evidence, never on a shrug.
-      await pump(
-        tester,
-        serviceThatAborts(aborted: true),
-        changes: [ordinary],
+    testWidgets(
+      'a filesystem this host cannot read hides it rather than guessing',
+      (tester) async {
+        // `noGitFiles` answers `PathEntry.none` for everything, which is what a
+        // dead share and an absent `.git` both look like. A button that destroys
+        // work appears on evidence, never on a shrug.
+        await pump(
+          tester,
+          serviceThatAborts(aborted: true),
+          changes: [ordinary],
+        );
+        expect(find.byTooltip('Abort merge'), findsNothing);
+      },
+    );
+  });
+
+  testWidgets(
+    'the confirm says what is discarded, and cancelling runs nothing',
+    (tester) async {
+      final service = serviceThatAborts(aborted: true);
+      await pump(tester, service, changes: [conflicted]);
+
+      await tester.tap(find.byTooltip('Abort merge'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Abort the merge in progress?'), findsOneWidget);
+      expect(
+        find.textContaining('conflict resolution'),
+        findsOneWidget,
+        reason: 'the sentence must say what pressing it throws away',
       );
-      expect(find.byTooltip('Abort merge'), findsNothing);
-    });
-  });
 
-  testWidgets('the confirm says what is discarded, and cancelling runs nothing',
-      (tester) async {
-    final service = serviceThatAborts(aborted: true);
-    await pump(tester, service, changes: [conflicted]);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(runner.requests, isEmpty);
+    },
+  );
 
-    await tester.tap(find.byTooltip('Abort merge'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Abort the merge in progress?'), findsOneWidget);
-    expect(
-      find.textContaining('conflict resolution'),
-      findsOneWidget,
-      reason: 'the sentence must say what pressing it throws away',
-    );
-
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(runner.requests, isEmpty);
-  });
-
-  testWidgets('confirming runs git merge --abort and says the tree is back',
-      (tester) async {
-    await pump(
-      tester,
-      serviceThatAborts(aborted: true),
-      changes: [conflicted],
-    );
+  testWidgets('confirming runs git merge --abort and says the tree is back', (
+    tester,
+  ) async {
+    await pump(tester, serviceThatAborts(aborted: true), changes: [conflicted]);
 
     await tester.tap(find.byTooltip('Abort merge'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Abort merge').last);
     await tester.pumpAndSettle();
 
-    expect(runner.requests.single.arguments, ['-C', r'C:\app', 'merge', '--abort']);
+    expect(runner.requests.single.arguments, [
+      '-C',
+      r'C:\app',
+      'merge',
+      '--abort',
+    ]);
     expect(find.textContaining('Merge aborted'), findsOneWidget);
   });
 
-  testWidgets('an abort with no merge to undo says so rather than claiming one',
-      (tester) async {
-    // The reading was taken a moment ago and is not a promise about what git
-    // will find, so the outcome still states which of the two happened.
-    await pump(
-      tester,
-      serviceThatAborts(aborted: false),
-      changes: [conflicted],
-    );
+  testWidgets(
+    'an abort with no merge to undo says so rather than claiming one',
+    (tester) async {
+      // The reading was taken a moment ago and is not a promise about what git
+      // will find, so the outcome still states which of the two happened.
+      await pump(
+        tester,
+        serviceThatAborts(aborted: false),
+        changes: [conflicted],
+      );
 
-    await tester.tap(find.byTooltip('Abort merge'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Abort merge').last);
-    await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Abort merge'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Abort merge').last);
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('no merge'), findsOneWidget);
-    expect(find.textContaining('Merge aborted'), findsNothing);
-  });
+      expect(find.textContaining('no merge'), findsOneWidget);
+      expect(find.textContaining('Merge aborted'), findsNothing);
+    },
+  );
 
-  testWidgets('a conflicted file is rendered as one, and says which kind',
-      (tester) async {
+  testWidgets('a conflicted file is rendered as one, and says which kind', (
+    tester,
+  ) async {
     // It used to draw as "changed (unrecognised git status)" — git's shrug
     // borrowed for a status git names exactly.
-    await pump(
-      tester,
-      serviceThatAborts(aborted: true),
-      changes: [conflicted],
-    );
+    await pump(tester, serviceThatAborts(aborted: true), changes: [conflicted]);
     expect(find.byTooltip('conflicted — both modified'), findsOneWidget);
   });
 }

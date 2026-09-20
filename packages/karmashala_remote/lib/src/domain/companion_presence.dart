@@ -84,7 +84,8 @@ class CompanionPresence {
   /// nothing to say is absent**, never a word meaning unknown, so an old host
   /// still reads a new phone's frame.
   Map<String, Object?> toRegisterFields() => <String, Object?>{
-    if (deviceKind != CompanionDeviceKind.unknown) 'deviceKind': deviceKind.wire,
+    if (deviceKind != CompanionDeviceKind.unknown)
+      'deviceKind': deviceKind.wire,
     if (visibility != CompanionVisibility.unknown)
       'visibility': visibility.wire,
     if (focusedSessionId != null && focusedSessionId!.isNotEmpty)

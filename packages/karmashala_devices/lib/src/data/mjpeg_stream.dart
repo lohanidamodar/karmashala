@@ -97,8 +97,7 @@ class _MultipartJpegParser {
       // trailing pair at offset zero — and every frame after the first then
       // begins with the boundary line rather than a JPEG header.
       var lead = 0;
-      while (lead < bytes.length &&
-          (bytes[lead] == 13 || bytes[lead] == 10)) {
+      while (lead < bytes.length && (bytes[lead] == 13 || bytes[lead] == 10)) {
         lead++;
       }
       if (lead > 0) bytes = Uint8List.sublistView(bytes, lead);
@@ -115,7 +114,8 @@ class _MultipartJpegParser {
       final start = headerEnd + _headerEnd.length;
       final declared = _contentLength(headers);
       // A negative or absurd length is not one; fall back to the end marker.
-      final length = declared == null || declared < 0 || declared > maxFrameBytes
+      final length =
+          declared == null || declared < 0 || declared > maxFrameBytes
           ? null
           : declared;
 

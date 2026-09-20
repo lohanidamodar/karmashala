@@ -51,27 +51,23 @@ class EnvSecretsController extends Notifier<EnvVaultData> {
 
   /// Replaces the name, value and secrecy of [id]. [value] is null when the user
   /// edited a secret's name only — "leave it alone" has to be expressible.
-  Future<void> update(
-    String id, {
-    String? name,
-    String? value,
-    bool? secret,
-  }) => _save(
-    state.copyWith(
-      variables: [
-        for (final variable in state.variables)
-          if (variable.id == id)
-            variable.copyWith(
-              name: name?.trim(),
-              value: value,
-              secret: secret,
-              updatedAt: ref.read(clockProvider).nowUtc(),
-            )
-          else
-            variable,
-      ],
-    ),
-  );
+  Future<void> update(String id, {String? name, String? value, bool? secret}) =>
+      _save(
+        state.copyWith(
+          variables: [
+            for (final variable in state.variables)
+              if (variable.id == id)
+                variable.copyWith(
+                  name: name?.trim(),
+                  value: value,
+                  secret: secret,
+                  updatedAt: ref.read(clockProvider).nowUtc(),
+                )
+              else
+                variable,
+          ],
+        ),
+      );
 
   Future<void> setVariableEnabled(String id, bool enabled) => _save(
     state.copyWith(

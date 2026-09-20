@@ -86,9 +86,7 @@ void main() {
       expect(closeButton, findsOneWidget);
       expect(
         tester.getCenter(closeButton).dx,
-        greaterThan(
-          tester.getCenter(find.byIcon(AppIcons.arrowsClockwise)).dx,
-        ),
+        greaterThan(tester.getCenter(find.byIcon(AppIcons.arrowsClockwise)).dx),
         reason: 'the way out belongs in the corner, past what the surface owns',
       );
     });

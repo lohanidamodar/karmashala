@@ -89,7 +89,8 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
 
   RecordingSink? _sink;
   Mp4RecordingWriter? _mp4;
-  DeviceRecordingContainer _container = DeviceRecordingContainer.transportStream;
+  DeviceRecordingContainer _container =
+      DeviceRecordingContainer.transportStream;
   StreamSubscription<void>? _video;
   StreamSubscription<DeviceScreenSize>? _sizes;
   ProcessHandle? _process;
@@ -163,7 +164,11 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
         sink = await ref.read(recordingSinkOpenerProvider)(path);
       }
     } on Object catch (error, stack) {
-      _log.warning('A recording of ${source.target.id} would not open', error, stack);
+      _log.warning(
+        'A recording of ${source.target.id} would not open',
+        error,
+        stack,
+      );
       _set(
         DeviceRecordingIdle(
           DeviceRecordingOutcome.failed(
@@ -228,11 +233,7 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     _geometryChanges = 0;
     _finishing = false;
     _set(
-      DeviceRecordingActive(
-        target: target,
-        path: path,
-        startedAt: startedAt,
-      ),
+      DeviceRecordingActive(target: target, path: path, startedAt: startedAt),
     );
     // `recordVideo` only ends when it is asked to, so an exit of its own is an
     // event: the simulator shut down under it, or simctl refused the request.
@@ -357,7 +358,10 @@ class DeviceRecordingController extends Notifier<DeviceRecordingState> {
     }
     if (bytes == 0) bytes = await _sizeOf(active.path);
 
-    final length = ref.read(deviceClockProvider).nowUtc().difference(active.startedAt);
+    final length = ref
+        .read(deviceClockProvider)
+        .nowUtc()
+        .difference(active.startedAt);
     // A transport stream whose only event was the container tables holds no
     // picture, however many bytes. An MP4 counts access units, so one is real.
     final noPicture =

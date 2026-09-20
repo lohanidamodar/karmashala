@@ -108,12 +108,14 @@ void main() {
     final answer = await answerTo(phone.answers, 'r1');
 
     expect(answer.type, FrameType.result.wire);
-    final sessions = (answer.payload['sessions']! as List).cast<Map<String, Object?>>();
+    final sessions = (answer.payload['sessions']! as List)
+        .cast<Map<String, Object?>>();
     expect(sessions.single['sessionId'], 'karmashala_live');
   });
 
   test('a dialer with no rendezvous is closed, not answered', () async {
-    final stranger = LanTransport(host: '127.0.0.1', port: listener.port)..start();
+    final stranger = LanTransport(host: '127.0.0.1', port: listener.port)
+      ..start();
     addTearDown(stranger.close);
 
     // A rendezvous derived from a key this host has never seen.
@@ -129,7 +131,8 @@ void main() {
   });
 
   test('a dialer that does not say hello is closed', () async {
-    final stranger = LanTransport(host: '127.0.0.1', port: listener.port)..start();
+    final stranger = LanTransport(host: '127.0.0.1', port: listener.port)
+      ..start();
     addTearDown(stranger.close);
 
     stranger.send(Uint8List.fromList('hello?'.codeUnits));
@@ -166,33 +169,38 @@ void main() {
     expect(logs, contains(contains('said nothing')));
   }, timeout: const Timeout(Duration(seconds: 40)));
 
-  test('a frame sealed with the wrong key is refused, and the link survives', () async {
-    final phone = await dialAsPhone();
-    addTearDown(phone.link.close);
+  test(
+    'a frame sealed with the wrong key is refused, and the link survives',
+    () async {
+      final phone = await dialAsPhone();
+      addTearDown(phone.link.close);
 
-    // Same rendezvous — this *is* the paired phone — but a frame sealed with a
-    // key that is not the one the row holds. A forgery, not a peer.
-    final wrong = await SealedChannel.forDevice(
-      deviceKey: SecretKeyData(Uint8List.fromList(List.filled(32, 3))),
-      role: ChannelRole.companion,
-      generation: 0,
-    );
-    phone.link.send(
-      await wrong.seal(Envelope.of(FrameType.sessionsList, seq: 1, id: 'x').toBytes()),
-    );
+      // Same rendezvous — this *is* the paired phone — but a frame sealed with a
+      // key that is not the one the row holds. A forgery, not a peer.
+      final wrong = await SealedChannel.forDevice(
+        deviceKey: SecretKeyData(Uint8List.fromList(List.filled(32, 3))),
+        role: ChannelRole.companion,
+        generation: 0,
+      );
+      phone.link.send(
+        await wrong.seal(
+          Envelope.of(FrameType.sessionsList, seq: 1, id: 'x').toBytes(),
+        ),
+      );
 
-    await Future.doWhile(() async {
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      return !logs.any((l) => l.contains('refused a frame'));
-    }).timeout(const Duration(seconds: 10));
+      await Future.doWhile(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        return !logs.any((l) => l.contains('refused a frame'));
+      }).timeout(const Duration(seconds: 10));
 
-    // The real phone is still served: one bad frame is not a reason to drop a
-    // link that a paired device is holding.
-    phone.link.send(
-      await phone.channel.seal(
-        Envelope.of(FrameType.sessionsList, seq: 2, id: 'r2').toBytes(),
-      ),
-    );
-    expect((await answerTo(phone.answers, 'r2')).id, 'r2');
-  });
+      // The real phone is still served: one bad frame is not a reason to drop a
+      // link that a paired device is holding.
+      phone.link.send(
+        await phone.channel.seal(
+          Envelope.of(FrameType.sessionsList, seq: 2, id: 'r2').toBytes(),
+        ),
+      );
+      expect((await answerTo(phone.answers, 'r2')).id, 'r2');
+    },
+  );
 }

@@ -17,8 +17,7 @@ import 'package:karmashala/src/app/companion/companion_lifecycle.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala_remote/client.dart'
-    as stored;
+import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/pairing.dart';
@@ -141,8 +140,8 @@ void main() {
     );
     relayUri = Uri.parse('ws://127.0.0.1:${relay.port}');
     store = stored.InMemoryCompanionStore();
-    store.values[RemoteCompanionGateway.kPairingRelayStoreKey] =
-        relayUri.toString();
+    store.values[RemoteCompanionGateway.kPairingRelayStoreKey] = relayUri
+        .toString();
     phoneTransports.clear();
     logs.clear();
   });
@@ -239,8 +238,7 @@ void main() {
   /// failed, or a hold-off saying how many beacons are left. Counting beacons
   /// only means anything if the test feeds them one at a time.
   Future<void> beaconOnce(ScriptedScout scout, DiscoveredHost host) async {
-    int outcomes() =>
-        logs.where((l) => l.startsWith('lan promotion:')).length;
+    int outcomes() => logs.where((l) => l.startsWith('lan promotion:')).length;
     final before = outcomes();
     scout.hear(host);
     final deadline = DateTime.now().add(const Duration(seconds: 10));
@@ -271,357 +269,391 @@ void main() {
     seenAt: DateTime.now(),
   );
 
-  test('the link holds while the local relay is up, through the lone-peer '
-      'timeout, the heartbeat and the beacon', timeout: const Timeout(
-    Duration(minutes: 3),
-  ), () async {
-    await startService();
-    final scout = ScriptedScout(
-      attemptTimeout: const Duration(milliseconds: 100),
-      // Nothing answers on the advertised LAN port: a firewall, the ordinary
-      // case on a freshly installed desktop app.
-      dialer: (host, port) => RelayTransport(
-        endpoint: Uri.parse('ws://127.0.0.1:1'),
-        backoff: fastBackoff(),
-        connectTimeout: const Duration(milliseconds: 50),
-      )..start(),
-    );
-    final gateway = await pairedPhone(scout: scout);
-    expect(gateway.linkPath, CompanionLinkPath.relay);
+  test(
+    'the link holds while the local relay is up, through the lone-peer '
+    'timeout, the heartbeat and the beacon',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final scout = ScriptedScout(
+        attemptTimeout: const Duration(milliseconds: 100),
+        // Nothing answers on the advertised LAN port: a firewall, the ordinary
+        // case on a freshly installed desktop app.
+        dialer: (host, port) => RelayTransport(
+          endpoint: Uri.parse('ws://127.0.0.1:1'),
+          backoff: fastBackoff(),
+          connectTimeout: const Duration(milliseconds: 50),
+        )..start(),
+      );
+      final gateway = await pairedPhone(scout: scout);
+      expect(gateway.linkPath, CompanionLinkPath.relay);
 
-    final states = <CompanionLinkState>[];
-    final watch = gateway.linkStates.listen(states.add);
-    addTearDown(watch.cancel);
+      final states = <CompanionLinkState>[];
+      final watch = gateway.linkStates.listen(states.add);
+      addTearDown(watch.cancel);
 
-    // Eight seconds of compressed clock: eight lone-peer timeouts, twenty-odd
-    // heartbeats, forty beacons. In production that is the best part of an
-    // afternoon.
-    final beacon = beaconFor(relayUri);
-    final ticker = Timer.periodic(beaconInterval, (_) => scout.hear(beacon));
-    addTearDown(ticker.cancel);
-    await Future<void>.delayed(const Duration(seconds: 8));
-    ticker.cancel();
-    await watch.cancel();
+      // Eight seconds of compressed clock: eight lone-peer timeouts, twenty-odd
+      // heartbeats, forty beacons. In production that is the best part of an
+      // afternoon.
+      final beacon = beaconFor(relayUri);
+      final ticker = Timer.periodic(beaconInterval, (_) => scout.hear(beacon));
+      addTearDown(ticker.cancel);
+      await Future<void>.delayed(const Duration(seconds: 8));
+      ticker.cancel();
+      await watch.cancel();
 
-    expect(
-      states.where((s) => s != CompanionLinkState.connected),
-      isEmpty,
-      reason: 'once paired, the link stays up for as long as the local relay '
-          'is up — nothing may tear down a link that is answering',
-    );
-    expect(gateway.link, CompanionLinkState.connected);
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
+      expect(
+        states.where((s) => s != CompanionLinkState.connected),
+        isEmpty,
+        reason:
+            'once paired, the link stays up for as long as the local relay '
+            'is up — nothing may tear down a link that is answering',
+      );
+      expect(gateway.link, CompanionLinkState.connected);
+      expect((await gateway.listSessions()).single.id, 's1');
+    },
+  );
 
-  test('a desktop that is NOT where the relay earns direct attempts at a '
-      'widening count of beacons, and the link pays for none of them',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    final scout = ScriptedScout(
-      attemptTimeout: const Duration(milliseconds: 100),
-      dialer: (host, port) => RelayTransport(
-        endpoint: Uri.parse('ws://127.0.0.1:1'),
-        backoff: fastBackoff(),
-        connectTimeout: const Duration(milliseconds: 50),
-      )..start(),
-    );
-    final gateway = await pairedPhone(scout: scout);
+  test(
+    'a desktop that is NOT where the relay earns direct attempts at a '
+    'widening count of beacons, and the link pays for none of them',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final scout = ScriptedScout(
+        attemptTimeout: const Duration(milliseconds: 100),
+        dialer: (host, port) => RelayTransport(
+          endpoint: Uri.parse('ws://127.0.0.1:1'),
+          backoff: fastBackoff(),
+          connectTimeout: const Duration(milliseconds: 50),
+        )..start(),
+      );
+      final gateway = await pairedPhone(scout: scout);
 
-    // A relay somewhere else entirely: the direct path is then a real
-    // upgrade, and worth one try.
-    final elsewhere = DiscoveredHost(
-      address: InternetAddress('192.168.99.99'),
-      advert: const LanAdvert(port: 41234, tag: 'test'),
-      seenAt: DateTime.now(),
-    );
-    final states = <CompanionLinkState>[];
-    final watch = gateway.linkStates.listen(states.add);
-    addTearDown(watch.cancel);
-    for (var i = 0; i < 6; i++) {
-      await beaconOnce(scout, elsewhere);
-    }
-    await watch.cancel();
-
-    expect(
-      scout.dials,
-      3,
-      reason: 'six sightings, three attempts: one, then a beacon\'s wait, '
-          'then two — the hold-off doubles after each failure and is counted '
-          'in beacons, because the beacon is the only event here',
-    );
-    expect(
-      states.where((s) => s != CompanionLinkState.connected),
-      isEmpty,
-      reason: 'and it costs the link nothing at all: the candidate is dialled '
-          'on a second transport, so a path that turns out to be unusable is '
-          'a dial nobody paid for — make-before-break',
-    );
-    expect(gateway.link, CompanionLinkState.connected);
-    expect(
-      (await gateway.listSessions()).single.id,
-      's1',
-      reason: 'and the link that survived still answers — `connected` on its '
-          'own is a claim, not a link',
-    );
-  });
-
-  test('a desktop that keeps beaconing keeps being tried — never again is '
-      'not an answer', timeout: const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    final scout = ScriptedScout(
-      attemptTimeout: const Duration(milliseconds: 100),
-      dialer: (host, port) => RelayTransport(
-        endpoint: Uri.parse('ws://127.0.0.1:1'),
-        backoff: fastBackoff(),
-        connectTimeout: const Duration(milliseconds: 50),
-      )..start(),
-    );
-    final gateway = await pairedPhone(scout: scout);
-
-    final elsewhere = DiscoveredHost(
-      address: InternetAddress('192.168.99.99'),
-      advert: const LanAdvert(port: 41234, tag: 'test'),
-      seenAt: DateTime.now(),
-    );
-    final states = <CompanionLinkState>[];
-    final watch = gateway.linkStates.listen(states.add);
-    addTearDown(watch.cancel);
-
-    Future<void> beaconRepeatedly() async {
+      // A relay somewhere else entirely: the direct path is then a real
+      // upgrade, and worth one try.
+      final elsewhere = DiscoveredHost(
+        address: InternetAddress('192.168.99.99'),
+        advert: const LanAdvert(port: 41234, tag: 'test'),
+        seenAt: DateTime.now(),
+      );
+      final states = <CompanionLinkState>[];
+      final watch = gateway.linkStates.listen(states.add);
+      addTearDown(watch.cancel);
       for (var i = 0; i < 6; i++) {
         await beaconOnce(scout, elsewhere);
       }
-    }
+      await watch.cancel();
 
-    await beaconRepeatedly();
-    expect(scout.dials, 3, reason: 'one, then one beacon\'s wait, then two');
+      expect(
+        scout.dials,
+        3,
+        reason:
+            'six sightings, three attempts: one, then a beacon\'s wait, '
+            'then two — the hold-off doubles after each failure and is counted '
+            'in beacons, because the beacon is the only event here',
+      );
+      expect(
+        states.where((s) => s != CompanionLinkState.connected),
+        isEmpty,
+        reason:
+            'and it costs the link nothing at all: the candidate is dialled '
+            'on a second transport, so a path that turns out to be unusable is '
+            'a dial nobody paid for — make-before-break',
+      );
+      expect(gateway.link, CompanionLinkState.connected);
+      expect(
+        (await gateway.listSessions()).single.id,
+        's1',
+        reason:
+            'and the link that survived still answers — `connected` on its '
+            'own is a claim, not a link',
+      );
+    },
+  );
 
-    // Six more. Whatever made the dial fail is a thing that gets fixed — a
-    // firewall rule, a desktop restarted with its LAN listener up, or a
-    // different network wearing the same address, which an `address:port`
-    // cannot tell apart — so the count widens and never closes.
-    await beaconRepeatedly();
-    await watch.cancel();
+  test(
+    'a desktop that keeps beaconing keeps being tried — never again is '
+    'not an answer',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final scout = ScriptedScout(
+        attemptTimeout: const Duration(milliseconds: 100),
+        dialer: (host, port) => RelayTransport(
+          endpoint: Uri.parse('ws://127.0.0.1:1'),
+          backoff: fastBackoff(),
+          connectTimeout: const Duration(milliseconds: 50),
+        )..start(),
+      );
+      final gateway = await pairedPhone(scout: scout);
 
-    expect(
-      scout.dials,
-      4,
-      reason: 'four beacons held off, then a fourth attempt: one blip must '
-          'not pin this phone to the relay for as long as the app happens to '
-          'stay alive',
-    );
-    expect(
-      states.where((s) => s != CompanionLinkState.connected),
-      isEmpty,
-      reason: 'and neither attempt was paid for with the link that works',
-    );
-    await until(
-      () => gateway.link == CompanionLinkState.connected,
-      reason: 'and the relay carries the link through both attempts',
-    );
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
+      final elsewhere = DiscoveredHost(
+        address: InternetAddress('192.168.99.99'),
+        advert: const LanAdvert(port: 41234, tag: 'test'),
+        seenAt: DateTime.now(),
+      );
+      final states = <CompanionLinkState>[];
+      final watch = gateway.linkStates.listen(states.add);
+      addTearDown(watch.cancel);
 
-  test('a resume asks the desktop to answer instead of trusting the socket',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    final gateway = await pairedPhone();
-    final transport = phoneTransports.last;
-    final before = transport.helloes;
+      Future<void> beaconRepeatedly() async {
+        for (var i = 0; i < 6; i++) {
+          await beaconOnce(scout, elsewhere);
+        }
+      }
 
-    // Android froze the app; on the way back the socket may be a corpse that
-    // still reads "connected". The only honest way to know is to ask.
-    final reconnector = CompanionLifecycleReconnector(gateway);
-    reconnector.didChangeAppLifecycleState(AppLifecycleState.resumed);
-    await Future<void>.delayed(const Duration(seconds: 1));
+      await beaconRepeatedly();
+      expect(scout.dials, 3, reason: 'one, then one beacon\'s wait, then two');
 
-    expect(
-      transport.helloes,
-      greaterThan(before),
-      reason: 'a resume must prove the link, not assume it',
-    );
-    expect(gateway.link, CompanionLinkState.connected);
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
+      // Six more. Whatever made the dial fail is a thing that gets fixed — a
+      // firewall rule, a desktop restarted with its LAN listener up, or a
+      // different network wearing the same address, which an `address:port`
+      // cannot tell apart — so the count widens and never closes.
+      await beaconRepeatedly();
+      await watch.cancel();
 
-  test('a resume resets the schedule, not just the wait in front of it',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    // The reason this is not covered by "a success resets it": the phone that
-    // needs the reset is the one that has NOT succeeded — it has been climbing
-    // toward the ceiling in the user's pocket, and the moment the app comes
-    // back is the moment everything it learned while away stopped being true.
-    // Completing the wait it happens to be sitting in is not the same thing:
-    // the very next failure would be answered with the delay it had climbed
-    // to.
-    await startService();
-    // Both schedules, because which one the next wait comes from is decided
-    // by the path that was lost — and a relay on this machine is a local one.
-    final backoff = RecordingBackoff();
-    final gateway = makeGateway(backoff: backoff, localBackoff: backoff);
-    final session = await service!.beginPairing(
-      capabilities: CapabilitySet.all,
-      relay: relayUri,
-      relayIsLocal: true,
-    );
-    await gateway.pairWithQr(session.payload.encode());
-    await session.done;
-    await awaitLink(gateway, CompanionLinkState.connected);
+      expect(
+        scout.dials,
+        4,
+        reason:
+            'four beacons held off, then a fourth attempt: one blip must '
+            'not pin this phone to the relay for as long as the app happens to '
+            'stay alive',
+      );
+      expect(
+        states.where((s) => s != CompanionLinkState.connected),
+        isEmpty,
+        reason: 'and neither attempt was paid for with the link that works',
+      );
+      await until(
+        () => gateway.link == CompanionLinkState.connected,
+        reason: 'and the relay carries the link through both attempts',
+      );
+      expect((await gateway.listSessions()).single.id, 's1');
+    },
+  );
 
-    // The desktop goes away, and the schedule starts climbing.
-    await service!.stop();
-    service = null;
-    await awaitLink(gateway, CompanionLinkState.disconnected);
-    await until(
-      () => backoff.attempts > 0,
-      reason: 'the phone waits out at least one failed dial',
-    );
-    final resetsBefore = backoff.resets;
+  test(
+    'a resume asks the desktop to answer instead of trusting the socket',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      final transport = phoneTransports.last;
+      final before = transport.helloes;
 
-    CompanionLifecycleReconnector(
-      gateway,
-    ).didChangeAppLifecycleState(AppLifecycleState.resumed);
+      // Android froze the app; on the way back the socket may be a corpse that
+      // still reads "connected". The only honest way to know is to ask.
+      final reconnector = CompanionLifecycleReconnector(gateway);
+      reconnector.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      await Future<void>.delayed(const Duration(seconds: 1));
 
-    await until(
-      () => backoff.resets > resetsBefore,
-      reason: 'coming back to the foreground resets the schedule',
-    );
-  });
+      expect(
+        transport.helloes,
+        greaterThan(before),
+        reason: 'a resume must prove the link, not assume it',
+      );
+      expect(gateway.link, CompanionLinkState.connected);
+      expect((await gateway.listSessions()).single.id, 's1');
+    },
+  );
 
-  test('a local link that does break comes back in a moment, not on the '
-      'schedule an internet relay needs', timeout: const Timeout(
-    Duration(minutes: 3),
-  ), () async {
-    await startService();
-    // The schedule a far-away relay deserves — and must not be applied to a
-    // desktop on the same table.
-    final gateway = makeGateway(
-      backoff: Backoff(
-        initial: const Duration(seconds: 20),
-        maximum: const Duration(seconds: 30),
-        jitter: 0,
-      ),
-    );
-    final session = await service!.beginPairing(
-      capabilities: CapabilitySet.all,
-      relay: relayUri,
-      relayIsLocal: true,
-    );
-    await gateway.pairWithQr(session.payload.encode());
-    await session.done;
-    await awaitLink(gateway, CompanionLinkState.connected);
+  test(
+    'a resume resets the schedule, not just the wait in front of it',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      // The reason this is not covered by "a success resets it": the phone that
+      // needs the reset is the one that has NOT succeeded — it has been climbing
+      // toward the ceiling in the user's pocket, and the moment the app comes
+      // back is the moment everything it learned while away stopped being true.
+      // Completing the wait it happens to be sitting in is not the same thing:
+      // the very next failure would be answered with the delay it had climbed
+      // to.
+      await startService();
+      // Both schedules, because which one the next wait comes from is decided
+      // by the path that was lost — and a relay on this machine is a local one.
+      final backoff = RecordingBackoff();
+      final gateway = makeGateway(backoff: backoff, localBackoff: backoff);
+      final session = await service!.beginPairing(
+        capabilities: CapabilitySet.all,
+        relay: relayUri,
+        relayIsLocal: true,
+      );
+      await gateway.pairWithQr(session.payload.encode());
+      await session.done;
+      await awaitLink(gateway, CompanionLinkState.connected);
 
-    await service!.stop();
-    service = null;
-    await awaitLink(gateway, CompanionLinkState.disconnected);
-    final downAt = DateTime.now();
-    await startService();
-    await awaitLink(
-      gateway,
-      CompanionLinkState.connected,
-      timeout: const Duration(seconds: 15),
-    );
-    expect(
-      DateTime.now().difference(downAt),
-      lessThan(const Duration(seconds: 10)),
-      reason: 'a relay on this machine is not an internet relay',
-    );
-  });
+      // The desktop goes away, and the schedule starts climbing.
+      await service!.stop();
+      service = null;
+      await awaitLink(gateway, CompanionLinkState.disconnected);
+      await until(
+        () => backoff.attempts > 0,
+        reason: 'the phone waits out at least one failed dial',
+      );
+      final resetsBefore = backoff.resets;
 
-  test('a desktop too busy to answer one request keeps its link', timeout:
-      const Timeout(Duration(minutes: 3)), () async {
-    await startService();
-    final gateway = await pairedPhone();
-    final states = <CompanionLinkState>[];
-    final watch = gateway.linkStates.listen(states.add);
-    addTearDown(watch.cancel);
+      CompanionLifecycleReconnector(
+        gateway,
+      ).didChangeAppLifecycleState(AppLifecycleState.resumed);
 
-    // The desktop is there and answering helloes; it is simply slow on this
-    // one call. Fifteen seconds of silence used to be read as a dead link.
-    final busy = Completer<void>();
-    fake.promptGate = busy;
-    await expectLater(
-      gateway.sendPrompt('s1', 'are you busy?'),
-      throwsA(isA<GatewayException>()),
-    );
-    // Long enough for the proof to run and for a teardown to have shown up.
-    await Future<void>.delayed(const Duration(seconds: 2));
-    busy.complete();
-    fake.promptGate = null;
-    await watch.cancel();
+      await until(
+        () => backoff.resets > resetsBefore,
+        reason: 'coming back to the foreground resets the schedule',
+      );
+    },
+  );
 
-    expect(
-      states.where((s) => s != CompanionLinkState.connected),
-      isEmpty,
-      reason: 'one slow answer is not a broken link',
-    );
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
+  test(
+    'a local link that does break comes back in a moment, not on the '
+    'schedule an internet relay needs',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      // The schedule a far-away relay deserves — and must not be applied to a
+      // desktop on the same table.
+      final gateway = makeGateway(
+        backoff: Backoff(
+          initial: const Duration(seconds: 20),
+          maximum: const Duration(seconds: 30),
+          jitter: 0,
+        ),
+      );
+      final session = await service!.beginPairing(
+        capabilities: CapabilitySet.all,
+        relay: relayUri,
+        relayIsLocal: true,
+      );
+      await gateway.pairWithQr(session.payload.encode());
+      await session.done;
+      await awaitLink(gateway, CompanionLinkState.connected);
 
-  test('a local relay that moves address takes its phone with it — no '
-      're-pairing, ever', timeout: const Timeout(Duration(minutes: 3)),
-      () async {
-    await startService();
-    final gateway = await pairedPhone();
-    final pairedAt = DateTime.now();
+      await service!.stop();
+      service = null;
+      await awaitLink(gateway, CompanionLinkState.disconnected);
+      final downAt = DateTime.now();
+      await startService();
+      await awaitLink(
+        gateway,
+        CompanionLinkState.connected,
+        timeout: const Duration(seconds: 15),
+      );
+      expect(
+        DateTime.now().difference(downAt),
+        lessThan(const Duration(seconds: 10)),
+        reason: 'a relay on this machine is not an internet relay',
+      );
+    },
+  );
 
-    // A round-trip before the move, because `pairedPhone` waits on the
-    // *phone's* link state and that is only half the link: the desktop is
-    // still finishing its own side. `updateRelays` announces to the devices it
-    // has a live link to and silently skips the rest, so moving the relay in
-    // that gap means the announcement is never sent at all and the phone is
-    // left dialling an address nobody is at.
-    expect((await gateway.listSessions()).single.id, 's1');
+  test(
+    'a desktop too busy to answer one request keeps its link',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      final states = <CompanionLinkState>[];
+      final watch = gateway.linkStates.listen(states.add);
+      addTearDown(watch.cancel);
 
-    // The desktop's LAN address moves under it: a DHCP renew, a Wi-Fi band
-    // switch, a VPN coming up. The relay is the same server on a new address.
-    final moved = await RelayServer.bind(
-      address: '127.0.0.1',
-      port: 0,
-      options: const RelayOptions(loneTimeout: loneTimeout),
-    );
-    addTearDown(moved.close);
-    final movedUri = Uri.parse('ws://127.0.0.1:${moved.port}');
-    await service!.updateRelays(localRelayUrl: movedUri, hostedEnabled: false);
-    // The announcement goes out on the link that is still up, then the
-    // listeners re-point — [RemoteHostService.updateRelays] is explicit that
-    // the order matters. Awaiting it only means the frame was *sent*, so the
-    // old relay stays up until the phone has written the new address down;
-    // cutting the socket from under a frame in flight is not the move this
-    // test is about.
-    await until(
-      () =>
-          store.values[stored.CompanionPairing.storeKey]?.contains(
-            '${moved.port}',
-          ) ??
-          false,
-      reason: 'the phone writes down the new address before the old one goes',
-    );
-    await relay.close();
+      // The desktop is there and answering helloes; it is simply slow on this
+      // one call. Fifteen seconds of silence used to be read as a dead link.
+      final busy = Completer<void>();
+      fake.promptGate = busy;
+      await expectLater(
+        gateway.sendPrompt('s1', 'are you busy?'),
+        throwsA(isA<GatewayException>()),
+      );
+      // Long enough for the proof to run and for a teardown to have shown up.
+      await Future<void>.delayed(const Duration(seconds: 2));
+      busy.complete();
+      fake.promptGate = null;
+      await watch.cancel();
 
-    // Nothing is touched on the phone. It must find the desktop again on its
-    // own — the rendezvous comes from the device key, never from the URL, so
-    // an address is only ever a place to meet.
-    //
-    // What is waited for is the MOVE, not the link state: the phone is still
-    // sitting on the old address at this point and still reads `connected`,
-    // so a `linkStates` wait — which seeds its current value — would answer
-    // instantly and prove nothing about the move.
-    await until(
-      () => gateway.activeRelay == movedUri &&
-          gateway.link == CompanionLinkState.connected,
-      timeout: const Duration(seconds: 20),
-      reason: 'the phone follows the relay to its new address',
-    );
-    expect((await gateway.listSessions()).single.id, 's1');
-    expect(
-      gateway.pairing?.hostId?.value,
-      hostId.value,
-      reason: 'the same pairing throughout — an address move is not a re-pair',
-    );
-    expect(DateTime.now().difference(pairedAt), lessThan(
-      const Duration(seconds: 30),
-    ));
-  });
+      expect(
+        states.where((s) => s != CompanionLinkState.connected),
+        isEmpty,
+        reason: 'one slow answer is not a broken link',
+      );
+      expect((await gateway.listSessions()).single.id, 's1');
+    },
+  );
+
+  test(
+    'a local relay that moves address takes its phone with it — no '
+    're-pairing, ever',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      await startService();
+      final gateway = await pairedPhone();
+      final pairedAt = DateTime.now();
+
+      // A round-trip before the move, because `pairedPhone` waits on the
+      // *phone's* link state and that is only half the link: the desktop is
+      // still finishing its own side. `updateRelays` announces to the devices it
+      // has a live link to and silently skips the rest, so moving the relay in
+      // that gap means the announcement is never sent at all and the phone is
+      // left dialling an address nobody is at.
+      expect((await gateway.listSessions()).single.id, 's1');
+
+      // The desktop's LAN address moves under it: a DHCP renew, a Wi-Fi band
+      // switch, a VPN coming up. The relay is the same server on a new address.
+      final moved = await RelayServer.bind(
+        address: '127.0.0.1',
+        port: 0,
+        options: const RelayOptions(loneTimeout: loneTimeout),
+      );
+      addTearDown(moved.close);
+      final movedUri = Uri.parse('ws://127.0.0.1:${moved.port}');
+      await service!.updateRelays(
+        localRelayUrl: movedUri,
+        hostedEnabled: false,
+      );
+      // The announcement goes out on the link that is still up, then the
+      // listeners re-point — [RemoteHostService.updateRelays] is explicit that
+      // the order matters. Awaiting it only means the frame was *sent*, so the
+      // old relay stays up until the phone has written the new address down;
+      // cutting the socket from under a frame in flight is not the move this
+      // test is about.
+      await until(
+        () =>
+            store.values[stored.CompanionPairing.storeKey]?.contains(
+              '${moved.port}',
+            ) ??
+            false,
+        reason: 'the phone writes down the new address before the old one goes',
+      );
+      await relay.close();
+
+      // Nothing is touched on the phone. It must find the desktop again on its
+      // own — the rendezvous comes from the device key, never from the URL, so
+      // an address is only ever a place to meet.
+      //
+      // What is waited for is the MOVE, not the link state: the phone is still
+      // sitting on the old address at this point and still reads `connected`,
+      // so a `linkStates` wait — which seeds its current value — would answer
+      // instantly and prove nothing about the move.
+      await until(
+        () =>
+            gateway.activeRelay == movedUri &&
+            gateway.link == CompanionLinkState.connected,
+        timeout: const Duration(seconds: 20),
+        reason: 'the phone follows the relay to its new address',
+      );
+      expect((await gateway.listSessions()).single.id, 's1');
+      expect(
+        gateway.pairing?.hostId?.value,
+        hostId.value,
+        reason:
+            'the same pairing throughout — an address move is not a re-pair',
+      );
+      expect(
+        DateTime.now().difference(pairedAt),
+        lessThan(const Duration(seconds: 30)),
+      );
+    },
+  );
 
   // The direct path and the generation window.
   //
@@ -633,56 +665,58 @@ void main() {
   // never use the direct path again. It cools the host down for two minutes
   // after each refusal, so this is not a blip that heals; only a relay
   // connection resyncs the counters.
-  test('the direct path walks the generation window like the relay does',
-      timeout: const Timeout(Duration(minutes: 3)), () async {
-    final started = await startService();
-    // A first pairing, over the relay: the phone connects at generation 0 and
-    // writes down 1 for next time.
-    final first = await pairedPhone();
-    await first.close();
-    gateways.remove(first);
+  test(
+    'the direct path walks the generation window like the relay does',
+    timeout: const Timeout(Duration(minutes: 3)),
+    () async {
+      final started = await startService();
+      // A first pairing, over the relay: the phone connects at generation 0 and
+      // writes down 1 for next time.
+      final first = await pairedPhone();
+      await first.close();
+      gateways.remove(first);
 
-    // The host moves on without this phone — the shape a retired generation
-    // leaves behind, and the shape a counter bump that did not reach the
-    // keystore leaves behind. Driven with a throwaway store so the phone's own
-    // saved counter stays where it was.
-    final record = (await stored.CompanionPairing.load(store))!;
-    // One rendezvous past where the phone will dial. The host adopts whatever
-    // carries traffic and slides its window onto it, closing what is below —
-    // so the phone's own counter is now under the window.
-    final ahead = CompanionClient(
-      pairing: record.withGeneration(record.generation + 1),
-      store: stored.InMemoryCompanionStore(),
-      relayFactory: (url, rendezvous) => RelayTransport(
-        endpoint: RelayTransport.endpointFor(url, rendezvous),
-        backoff: fastBackoff(),
-        heartbeat: heartbeat,
-      )..start(),
-    );
-    await ahead.connect(helloTimeout: const Duration(seconds: 5));
-    await ahead.close();
+      // The host moves on without this phone — the shape a retired generation
+      // leaves behind, and the shape a counter bump that did not reach the
+      // keystore leaves behind. Driven with a throwaway store so the phone's own
+      // saved counter stays where it was.
+      final record = (await stored.CompanionPairing.load(store))!;
+      // One rendezvous past where the phone will dial. The host adopts whatever
+      // carries traffic and slides its window onto it, closing what is below —
+      // so the phone's own counter is now under the window.
+      final ahead = CompanionClient(
+        pairing: record.withGeneration(record.generation + 1),
+        store: stored.InMemoryCompanionStore(),
+        relayFactory: (url, rendezvous) => RelayTransport(
+          endpoint: RelayTransport.endpointFor(url, rendezvous),
+          backoff: fastBackoff(),
+          heartbeat: heartbeat,
+        )..start(),
+      );
+      await ahead.connect(helloTimeout: const Duration(seconds: 5));
+      await ahead.close();
 
-    // The phone comes back, still holding 1, and the desktop is on the same
-    // network — its real LAN listener, dialled for real.
-    final scout = ScriptedScout(
-      attemptTimeout: const Duration(milliseconds: 800),
-    );
-    final gateway = makeGateway(scout: scout);
-    scout.hear(
-      DiscoveredHost(
-        address: InternetAddress('127.0.0.1'),
-        advert: LanAdvert(port: started.lanPortBound!, tag: 'test'),
-        seenAt: DateTime.now(),
-      ),
-    );
+      // The phone comes back, still holding 1, and the desktop is on the same
+      // network — its real LAN listener, dialled for real.
+      final scout = ScriptedScout(
+        attemptTimeout: const Duration(milliseconds: 800),
+      );
+      final gateway = makeGateway(scout: scout);
+      scout.hear(
+        DiscoveredHost(
+          address: InternetAddress('127.0.0.1'),
+          advert: LanAdvert(port: started.lanPortBound!, tag: 'test'),
+          seenAt: DateTime.now(),
+        ),
+      );
 
-    await awaitLink(gateway, CompanionLinkState.connected);
+      await awaitLink(gateway, CompanionLinkState.connected);
 
-    expect(
-      gateway.linkPath,
-      CompanionLinkPath.lan,
-      reason: 'the host is one rendezvous ahead, not unreachable',
-    );
-  });
-
+      expect(
+        gateway.linkPath,
+        CompanionLinkPath.lan,
+        reason: 'the host is one rendezvous ahead, not unreachable',
+      );
+    },
+  );
 }

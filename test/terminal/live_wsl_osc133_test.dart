@@ -236,7 +236,8 @@ class _Pane {
 
   /// The pane as a person would see it, which is where a marker that failed to
   /// parse would have ended up.
-  String get screen => terminalTailLines(instance.terminal, lines: 200).join('\n');
+  String get screen =>
+      terminalTailLines(instance.terminal, lines: 200).join('\n');
 
   void type(String command) => instance.terminal
     ..textInput(command)
@@ -249,9 +250,7 @@ class _Pane {
     type(command);
     return waiter.future.timeout(
       const Duration(seconds: 30),
-      onTimeout: () => fail(
-        'no OSC 133 D for `$command`. Screen:\n$screen',
-      ),
+      onTimeout: () => fail('no OSC 133 D for `$command`. Screen:\n$screen'),
     );
   }
 

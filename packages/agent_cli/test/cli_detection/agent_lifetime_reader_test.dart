@@ -84,28 +84,31 @@ void main() {
       'totalSpeculationTimeSavedMs': 0,
     };
 
-    test('it reads the totals, the models and the date they were computed', () async {
-      writeCache(real());
+    test(
+      'it reads the totals, the models and the date they were computed',
+      () async {
+        writeCache(real());
 
-      final stats = await ClaudeLifetimeReader(
-        cache: ClaudeLifetimeCache(),
-      ).read(home);
+        final stats = await ClaudeLifetimeReader(
+          cache: ClaudeLifetimeCache(),
+        ).read(home);
 
-      expect(stats, isNotNull);
-      expect(stats!.source, LifetimeStatsSource.agentCache);
-      expect(stats.sessions, 1);
-      expect(stats.messages, 1297);
-      expect(stats.tokens.input, 5332);
-      expect(stats.tokens.output, 1199);
-      expect(stats.tokens.cacheRead, 44952107);
-      expect(stats.tokens.cacheCreated, 1384461);
-      expect(stats.totalTokens, 5332 + 1199 + 44952107 + 1384461);
-      // The calendar day the CLI stamped, in the timezone it stamped it —
-      // pushed to UTC it would read as the 23rd here and the dialog would call
-      // the cache a day staler than it is.
-      expect(stats.computedAt, DateTime(2026, 2, 24));
-      expect(stats.firstActivityAt, DateTime.utc(2026, 2, 1, 9, 41, 48, 537));
-    });
+        expect(stats, isNotNull);
+        expect(stats!.source, LifetimeStatsSource.agentCache);
+        expect(stats.sessions, 1);
+        expect(stats.messages, 1297);
+        expect(stats.tokens.input, 5332);
+        expect(stats.tokens.output, 1199);
+        expect(stats.tokens.cacheRead, 44952107);
+        expect(stats.tokens.cacheCreated, 1384461);
+        expect(stats.totalTokens, 5332 + 1199 + 44952107 + 1384461);
+        // The calendar day the CLI stamped, in the timezone it stamped it —
+        // pushed to UTC it would read as the 23rd here and the dialog would call
+        // the cache a day staler than it is.
+        expect(stats.computedAt, DateTime(2026, 2, 24));
+        expect(stats.firstActivityAt, DateTime.utc(2026, 2, 1, 9, 41, 48, 537));
+      },
+    );
 
     test('the cache carries a cost and it is deliberately not read', () async {
       writeCache(real());
@@ -176,7 +179,9 @@ void main() {
     });
 
     test('a half-written cache is refused rather than half-read', () async {
-      File(p.join(home, 'stats-cache.json')).writeAsStringSync('{"version": 2,');
+      File(
+        p.join(home, 'stats-cache.json'),
+      ).writeAsStringSync('{"version": 2,');
       expect(
         await ClaudeLifetimeReader(cache: ClaudeLifetimeCache()).read(home),
         isNull,
@@ -275,12 +280,17 @@ void main() {
     });
 
     test('a store with no index at all is absent', () async {
-      expect(await CodexLifetimeReader(readRows: sqlite.read).read(home), isNull);
+      expect(
+        await CodexLifetimeReader(readRows: sqlite.read).read(home),
+        isNull,
+      );
     });
 
     test('a home that does not exist is absent', () async {
       expect(
-        await CodexLifetimeReader(readRows: sqlite.read).read(p.join(tmp.path, 'nope')),
+        await CodexLifetimeReader(
+          readRows: sqlite.read,
+        ).read(p.join(tmp.path, 'nope')),
         isNull,
       );
     });

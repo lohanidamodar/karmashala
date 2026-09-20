@@ -125,15 +125,18 @@ WirelessPairingState _state(ProviderContainer container) =>
 
 void main() {
   group('showing a QR code', () {
-    test('checks mDNS once, then watches for the name it put in the QR', () async {
-      final adb = _FakeAdb(services: [_pairingRow, _connectRow]);
-      final container = _container(adb);
+    test(
+      'checks mDNS once, then watches for the name it put in the QR',
+      () async {
+        final adb = _FakeAdb(services: [_pairingRow, _connectRow]);
+        final container = _container(adb);
 
-      await _open(container).controller.showQrCode();
+        await _open(container).controller.showQrCode();
 
-      expect(adb.runner.requests[0].arguments, ['mdns', 'check']);
-      expect(adb.runner.requests[1].arguments, ['mdns', 'services']);
-    });
+        expect(adb.runner.requests[0].arguments, ['mdns', 'check']);
+        expect(adb.runner.requests[1].arguments, ['mdns', 'services']);
+      },
+    );
 
     test('pairs against the pairing port, never the connect port', () async {
       final adb = _FakeAdb(
@@ -295,10 +298,9 @@ void main() {
       final adb = _FakeAdb(services: [_connectRow], pair: _pairedOk);
       final container = _container(adb);
 
-      await _open(container).controller.pairWithCode(
-        address: '10.0.0.5:41733',
-        code: '123456',
-      );
+      await _open(
+        container,
+      ).controller.pairWithCode(address: '10.0.0.5:41733', code: '123456');
 
       expect(adb.verbs, ['pair', 'mdns', 'connect']);
       expect(adb.spawns, 3);
@@ -309,10 +311,9 @@ void main() {
       final adb = _FakeAdb(services: [_connectRow]);
       final container = _container(adb);
 
-      await _open(container).controller.pairWithCode(
-        address: '10.0.0.5:41733',
-        code: '123456',
-      );
+      await _open(
+        container,
+      ).controller.pairWithCode(address: '10.0.0.5:41733', code: '123456');
 
       expect(adb.verbs, ['pair']);
       final failed = _state(container) as WirelessPairingFailed;
@@ -323,10 +324,9 @@ void main() {
       final adb = _FakeAdb();
       final container = _container(adb);
 
-      await _open(container).controller.pairWithCode(
-        address: '10.0.0.5',
-        code: '123456',
-      );
+      await _open(
+        container,
+      ).controller.pairWithCode(address: '10.0.0.5', code: '123456');
 
       expect(adb.spawns, 0);
       expect(
@@ -335,63 +335,69 @@ void main() {
       );
     });
 
-    test('a code of the wrong shape is refused before adb is spawned', () async {
-      final adb = _FakeAdb();
-      final container = _container(adb);
+    test(
+      'a code of the wrong shape is refused before adb is spawned',
+      () async {
+        final adb = _FakeAdb();
+        final container = _container(adb);
 
-      await _open(container).controller.pairWithCode(
-        address: '10.0.0.5:41733',
-        code: '12345',
-      );
+        await _open(
+          container,
+        ).controller.pairWithCode(address: '10.0.0.5:41733', code: '12345');
 
-      expect(adb.spawns, 0);
-      expect(
-        (_state(container) as WirelessPairingFailed).message,
-        contains('six digits'),
-      );
-    });
+        expect(adb.spawns, 0);
+        expect(
+          (_state(container) as WirelessPairingFailed).message,
+          contains('six digits'),
+        );
+      },
+    );
 
-    test('paired but never advertised: it asks for the port, keeping the pair', () async {
-      final adb = _FakeAdb(pair: _pairedOk);
-      final container = _container(adb);
+    test(
+      'paired but never advertised: it asks for the port, keeping the pair',
+      () async {
+        final adb = _FakeAdb(pair: _pairedOk);
+        final container = _container(adb);
 
-      await _open(container).controller.pairWithCode(
-        address: '10.0.0.5:41733',
-        code: '123456',
-      );
+        await _open(
+          container,
+        ).controller.pairWithCode(address: '10.0.0.5:41733', code: '123456');
 
-      final paired = _state(container) as WirelessPairingPaired;
-      expect(paired.host, '10.0.0.5');
-      expect(paired.message, contains('IP address & Port'));
-      expect(
-        adb.mdnsServiceCalls,
-        kConnectDiscoveryBudget,
-        reason: 'the search for the connect service is bounded too',
-      );
-    });
+        final paired = _state(container) as WirelessPairingPaired;
+        expect(paired.host, '10.0.0.5');
+        expect(paired.message, contains('IP address & Port'));
+        expect(
+          adb.mdnsServiceCalls,
+          kConnectDiscoveryBudget,
+          reason: 'the search for the connect service is bounded too',
+        );
+      },
+    );
 
-    test('mDNS off after a pair costs one scan, not the whole budget', () async {
-      final adb = _FakeAdb(pair: _pairedOk);
-      final container = _container(adb);
-      adb.runner.responder = (request) {
-        if (request.arguments.first == 'pair') {
-          return _ok(_pairedOk);
-        }
-        if (request.arguments.join(' ') == 'mdns services') {
-          adb.mdnsServiceCalls++;
-          return _ok(_mdnsDisabled);
-        }
-        return _ok('');
-      };
+    test(
+      'mDNS off after a pair costs one scan, not the whole budget',
+      () async {
+        final adb = _FakeAdb(pair: _pairedOk);
+        final container = _container(adb);
+        adb.runner.responder = (request) {
+          if (request.arguments.first == 'pair') {
+            return _ok(_pairedOk);
+          }
+          if (request.arguments.join(' ') == 'mdns services') {
+            adb.mdnsServiceCalls++;
+            return _ok(_mdnsDisabled);
+          }
+          return _ok('');
+        };
 
-      await _open(container).controller.pairWithCode(
-        address: '10.0.0.5:41733',
-        code: '123456',
-      );
+        await _open(
+          container,
+        ).controller.pairWithCode(address: '10.0.0.5:41733', code: '123456');
 
-      expect(adb.mdnsServiceCalls, 1);
-      expect(_state(container), isA<WirelessPairingPaired>());
-    });
+        expect(adb.mdnsServiceCalls, 1);
+        expect(_state(container), isA<WirelessPairingPaired>());
+      },
+    );
 
     test('a refused connection names the port it used', () async {
       final adb = _FakeAdb(
@@ -402,10 +408,9 @@ void main() {
       );
       final container = _container(adb);
 
-      await _open(container).controller.pairWithCode(
-        address: '10.0.0.5:41733',
-        code: '123456',
-      );
+      await _open(
+        container,
+      ).controller.pairWithCode(address: '10.0.0.5:41733', code: '123456');
 
       final paired = _state(container) as WirelessPairingPaired;
       expect(paired.message, contains('10.0.0.5:5555'));
@@ -435,27 +440,30 @@ void main() {
   });
 
   group('the paired phone joins the normal device list', () {
-    test('a connection refreshes the list rather than keeping its own', () async {
-      final adb = _FakeAdb(services: [_connectRow], pair: _pairedOk);
-      final container = _container(adb);
-      final open = _open(container);
+    test(
+      'a connection refreshes the list rather than keeping its own',
+      () async {
+        final adb = _FakeAdb(services: [_connectRow], pair: _pairedOk);
+        final container = _container(adb);
+        final open = _open(container);
 
-      // Something is watching the list, the way the pane does.
-      final devices = container.listen(devicesProvider, (_, _) {});
-      addTearDown(devices.close);
-      await container.read(devicesProvider.future);
-      final before = adb.verbs.where((v) => v == 'devices').length;
+        // Something is watching the list, the way the pane does.
+        final devices = container.listen(devicesProvider, (_, _) {});
+        addTearDown(devices.close);
+        await container.read(devicesProvider.future);
+        final before = adb.verbs.where((v) => v == 'devices').length;
 
-      await open.controller.pairWithCode(
-        address: '10.0.0.5:41733',
-        code: '123456',
-      );
-      await container.read(devicesProvider.future);
+        await open.controller.pairWithCode(
+          address: '10.0.0.5:41733',
+          code: '123456',
+        );
+        await container.read(devicesProvider.future);
 
-      expect(
-        adb.verbs.where((v) => v == 'devices').length,
-        greaterThan(before),
-      );
-    });
+        expect(
+          adb.verbs.where((v) => v == 'devices').length,
+          greaterThan(before),
+        );
+      },
+    );
   });
 }

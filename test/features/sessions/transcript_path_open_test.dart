@@ -166,7 +166,9 @@ void main() {
 
     await clickPath(tester);
 
-    expect(probed, [r'C:\src\demo\app\sub\windows\installer\output\Setup-1.4.0.exe']);
+    expect(probed, [
+      r'C:\src\demo\app\sub\windows\installer\output\Setup-1.4.0.exe',
+    ]);
   });
 
   testWidgets('with no working directory recorded, the repository root is the '
@@ -210,10 +212,7 @@ void main() {
 
     await clickPath(tester);
 
-    expect(
-      scope(tester).read(fileRevealTargetProvider)?.isDirectory,
-      isTrue,
-    );
+    expect(scope(tester).read(fileRevealTargetProvider)?.isDirectory, isTrue);
   });
 
   testWidgets('a path outside the tree goes to the host file manager', (
@@ -256,7 +255,10 @@ void main() {
 
     await clickPath(tester);
 
-    expect(find.textContaining(r'C:\src\demo\app\lib\gone.dart'), findsOneWidget);
+    expect(
+      find.textContaining(r'C:\src\demo\app\lib\gone.dart'),
+      findsOneWidget,
+    );
     expect(find.textContaining('is not on disk'), findsOneWidget);
   });
 
@@ -271,15 +273,21 @@ void main() {
         path: '/home/me/src/app',
       ),
     );
-    await pump(tester, 'Wrote lib/main.dart on the box.', environments: [remote]);
+    await pump(
+      tester,
+      'Wrote lib/main.dart on the box.',
+      environments: [remote],
+    );
 
     await clickPath(tester);
 
     // No host spelling exists, so nothing is statted and nothing is opened.
     expect(probed, isEmpty);
     expect(host.requests, isEmpty);
-    expect(find.textContaining('is on build-box, not on this machine'),
-        findsOneWidget);
+    expect(
+      find.textContaining('is on build-box, not on this machine'),
+      findsOneWidget,
+    );
   });
 
   group('what rendering costs', () {

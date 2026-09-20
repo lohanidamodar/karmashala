@@ -151,9 +151,9 @@ class LinkBanner extends ConsumerWidget {
           .setRoutePin(pinned.hostId, CompanionRoutePin.auto);
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text(companionErrorText(error))),
-      );
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(companionErrorText(error))));
     }
   }
 

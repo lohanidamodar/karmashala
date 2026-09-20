@@ -54,9 +54,7 @@ void main() {
     );
   });
 
-  testWidgets('each header keeps its age and actions', (
-    tester,
-  ) async {
+  testWidgets('each header keeps its age and actions', (tester) async {
     await tester.pumpWidget(build());
     await tester.pumpAndSettle();
 

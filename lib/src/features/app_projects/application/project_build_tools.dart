@@ -167,7 +167,7 @@ class ProjectBuildTools {
         'nextStep':
             'device_install_app with path "${artifact.path}"'
             '${artifact.applicationId == null ? '' : ', then device_launch_app '
-                'with appId "${artifact.applicationId}"'}. Those are the '
+                      'with appId "${artifact.applicationId}"'}. Those are the '
             'existing device tools; there is no install or launch in this one.',
       if (log.isNotEmpty) 'log': log,
       if (!worthReading && log.isEmpty)
@@ -277,7 +277,8 @@ const List<Map<String, dynamic>> projectBuildToolSchemas =
             'target': {
               'type': 'string',
               'enum': ['android', 'ios'],
-              'description': 'Which device family to build for. Android by '
+              'description':
+                  'Which device family to build for. Android by '
                   'default; iOS refuses and says why.',
             },
             'paneId': {

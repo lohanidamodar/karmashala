@@ -17,8 +17,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala_remote/client.dart'
-    as stored;
+import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
@@ -157,96 +156,111 @@ void main() {
     }
   }
 
-  test('a relay that went away costs a reconnect, not a re-pairing: the next '
-      'candidate answers', timeout: const Timeout(Duration(minutes: 2)),
-      () async {
-    await startService(localRelayUrl: localUri);
-    final first = makeGateway();
-    await pairPhone(first);
+  test(
+    'a relay that went away costs a reconnect, not a re-pairing: the next '
+    'candidate answers',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService(localRelayUrl: localUri);
+      final first = makeGateway();
+      await pairPhone(first);
 
-    // Pairing left the phone with the whole set, not just the tab it scanned.
-    expect(await savedRelays(), containsAll(<Uri>[hostedUri, localUri]));
-    expect(first.activeRelay, hostedUri);
-    final device = dao.getAll().single;
-    await first.close();
+      // Pairing left the phone with the whole set, not just the tab it scanned.
+      expect(await savedRelays(), containsAll(<Uri>[hostedUri, localUri]));
+      expect(first.activeRelay, hostedUri);
+      final device = dao.getAll().single;
+      await first.close();
 
-    // The relay the phone knows best simply stops existing — an outage, or an
-    // internet the phone no longer has.
-    await hosted.close();
-    hostedClosed = true;
+      // The relay the phone knows best simply stops existing — an outage, or an
+      // internet the phone no longer has.
+      await hosted.close();
+      hostedClosed = true;
 
-    final second = makeGateway();
-    await awaitLink(second, CompanionLinkState.connected);
+      final second = makeGateway();
+      await awaitLink(second, CompanionLinkState.connected);
 
-    // It fell through to the other saved candidate and is fully working.
-    expect(second.activeRelay, localUri);
-    expect((await second.listSessions()).single.id, 's1');
-    // The same device row, the same key: nothing was re-paired.
-    expect(dao.getAll().single.id, device.id);
-    expect(dao.getAll().single.deviceKey, device.deviceKey);
+      // It fell through to the other saved candidate and is fully working.
+      expect(second.activeRelay, localUri);
+      expect((await second.listSessions()).single.id, 's1');
+      // The same device row, the same key: nothing was re-paired.
+      expect(dao.getAll().single.id, device.id);
+      expect(dao.getAll().single.deviceKey, device.deviceKey);
 
-    final record = await saved();
-    final dead = record.candidates.firstWhere((c) => c.url == hostedUri);
-    final live = record.candidates.firstWhere((c) => c.url == localUri);
-    expect(dead.lastFailureAt, isNotNull, reason: 'the dead relay is stamped');
-    expect(dead.inCooldown(DateTime.now().toUtc()), isTrue);
-    expect(live.lastSuccessAt, isNotNull, reason: 'the winner is last-good');
-    // And the legacy single-relay mirror follows the relay actually in use,
-    // so even a downgraded build would now dial the one that works.
-    expect(record.relay, localUri);
-  });
+      final record = await saved();
+      final dead = record.candidates.firstWhere((c) => c.url == hostedUri);
+      final live = record.candidates.firstWhere((c) => c.url == localUri);
+      expect(
+        dead.lastFailureAt,
+        isNotNull,
+        reason: 'the dead relay is stamped',
+      );
+      expect(dead.inCooldown(DateTime.now().toUtc()), isTrue);
+      expect(live.lastSuccessAt, isNotNull, reason: 'the winner is last-good');
+      // And the legacy single-relay mirror follows the relay actually in use,
+      // so even a downgraded build would now dial the one that works.
+      expect(record.relay, localUri);
+    },
+  );
 
-  test('a relay switched on later reaches the phone over the live link — no '
-      're-pairing', timeout: const Timeout(Duration(minutes: 2)), () async {
-    // A desktop serving the hosted relay only: exactly the shape that used to
-    // strand a phone when the owner turned the local relay on afterwards.
-    await startService();
-    final gateway = makeGateway();
-    await pairPhone(gateway);
-    expect(await savedRelays(), [hostedUri]);
+  test(
+    'a relay switched on later reaches the phone over the live link — no '
+    're-pairing',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      // A desktop serving the hosted relay only: exactly the shape that used to
+      // strand a phone when the owner turned the local relay on afterwards.
+      await startService();
+      final gateway = makeGateway();
+      await pairPhone(gateway);
+      expect(await savedRelays(), [hostedUri]);
 
-    await service!.updateRelays(localRelayUrl: localUri, hostedEnabled: true);
+      await service!.updateRelays(localRelayUrl: localUri, hostedEnabled: true);
 
-    await eventually(
-      () async => (await savedRelays()).contains(localUri),
-      reason: 'the phone learns the new relay from host.status',
-    );
-    expect(await savedRelays(), containsAll(<Uri>[hostedUri, localUri]));
-    // The link never dropped and the desktop never asked for a new pairing.
-    expect(gateway.link, CompanionLinkState.connected);
-    expect(gateway.activeRelay, hostedUri);
-    expect(dao.getAll(), hasLength(1));
-    expect((await gateway.listSessions()).single.id, 's1');
-  });
+      await eventually(
+        () async => (await savedRelays()).contains(localUri),
+        reason: 'the phone learns the new relay from host.status',
+      );
+      expect(await savedRelays(), containsAll(<Uri>[hostedUri, localUri]));
+      // The link never dropped and the desktop never asked for a new pairing.
+      expect(gateway.link, CompanionLinkState.connected);
+      expect(gateway.activeRelay, hostedUri);
+      expect(dao.getAll(), hasLength(1));
+      expect((await gateway.listSessions()).single.id, 's1');
+    },
+  );
 
-  test('a desktop whose LAN address moved retires the address it used to '
-      'have', timeout: const Timeout(Duration(minutes: 2)), () async {
-    // The embedded relay as the desktop advertises it: a LAN URL, which is
-    // exactly what DHCP is free to change under a paired phone.
-    final was = Uri.parse('ws://192.168.5.9:${local.port}');
-    final now = Uri.parse('ws://192.168.5.20:${local.port}');
-    await startService(localRelayUrl: was);
-    final gateway = makeGateway();
-    await pairPhone(gateway);
-    // The greeting lands just after the link comes up — the phone is usable
-    // first and better-informed a moment later.
-    await eventually(
-      () async => (await saved()).lanHint == lanHint('192.168.5.9'),
-      reason: 'the LAN relay and its hint are saved',
-    );
-    expect(await savedRelays(), contains(was));
+  test(
+    'a desktop whose LAN address moved retires the address it used to '
+    'have',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      // The embedded relay as the desktop advertises it: a LAN URL, which is
+      // exactly what DHCP is free to change under a paired phone.
+      final was = Uri.parse('ws://192.168.5.9:${local.port}');
+      final now = Uri.parse('ws://192.168.5.20:${local.port}');
+      await startService(localRelayUrl: was);
+      final gateway = makeGateway();
+      await pairPhone(gateway);
+      // The greeting lands just after the link comes up — the phone is usable
+      // first and better-informed a moment later.
+      await eventually(
+        () async => (await saved()).lanHint == lanHint('192.168.5.9'),
+        reason: 'the LAN relay and its hint are saved',
+      );
+      expect(await savedRelays(), contains(was));
 
-    await service!.updateRelays(localRelayUrl: now, hostedEnabled: true);
+      await service!.updateRelays(localRelayUrl: now, hostedEnabled: true);
 
-    await eventually(
-      () async => (await savedRelays()).contains(now),
-      reason: 'the moved address arrives',
-    );
-    // The stale one is gone rather than kept forever: an announcement is the
-    // truth about where the host is, not an addition to it.
-    expect(await savedRelays(), isNot(contains(was)));
-    expect(await savedRelays(), contains(hostedUri));
-    expect((await saved()).lanHint, lanHint('192.168.5.20'));
-    expect(gateway.link, CompanionLinkState.connected);
-  });
+      await eventually(
+        () async => (await savedRelays()).contains(now),
+        reason: 'the moved address arrives',
+      );
+      // The stale one is gone rather than kept forever: an announcement is the
+      // truth about where the host is, not an addition to it.
+      expect(await savedRelays(), isNot(contains(was)));
+      expect(await savedRelays(), contains(hostedUri));
+      expect((await saved()).lanHint, lanHint('192.168.5.20'));
+      expect(gateway.link, CompanionLinkState.connected);
+    },
+  );
 }

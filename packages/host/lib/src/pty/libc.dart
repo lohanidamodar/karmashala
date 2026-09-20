@@ -23,7 +23,9 @@ final class Winsize extends Struct {
 final int kTIOCSWINSZ = Platform.isMacOS ? 0x80087467 : 0x5414;
 final int kTIOCGWINSZ = Platform.isMacOS ? 0x40087468 : 0x5413;
 const int kOReadWrite = 2; // O_RDWR, the same on both
-final int kPosixSpawnSetsid = Platform.isMacOS ? 0x400 : 0x80; // POSIX_SPAWN_SETSID
+final int kPosixSpawnSetsid = Platform.isMacOS
+    ? 0x400
+    : 0x80; // POSIX_SPAWN_SETSID
 
 /// glibc's `posix_spawnattr_t` is 336 bytes and `posix_spawn_file_actions_t` 80
 /// on x86_64, both opaque; over-allocating survives a libc that grew them. On
@@ -33,11 +35,24 @@ final int kPosixSpawnSetsid = Platform.isMacOS ? 0x400 : 0x80; // POSIX_SPAWN_SE
 const int kOpaqueSpawnStructBytes = 1024;
 
 typedef OpenptyNative =
-    Int32 Function(Pointer<Int32>, Pointer<Int32>, Pointer<Uint8>, Pointer<Void>, Pointer<Winsize>);
+    Int32 Function(
+      Pointer<Int32>,
+      Pointer<Int32>,
+      Pointer<Uint8>,
+      Pointer<Void>,
+      Pointer<Winsize>,
+    );
 typedef OpenptyDart =
-    int Function(Pointer<Int32>, Pointer<Int32>, Pointer<Uint8>, Pointer<Void>, Pointer<Winsize>);
+    int Function(
+      Pointer<Int32>,
+      Pointer<Int32>,
+      Pointer<Uint8>,
+      Pointer<Void>,
+      Pointer<Winsize>,
+    );
 
-typedef IoctlWinsizeNative = Int32 Function(Int32, UnsignedLong, VarArgs<(Pointer<Winsize>,)>);
+typedef IoctlWinsizeNative =
+    Int32 Function(Int32, UnsignedLong, VarArgs<(Pointer<Winsize>,)>);
 typedef IoctlWinsizeDart = int Function(int, int, Pointer<Winsize>);
 
 typedef PosixSpawnNative =
@@ -67,7 +82,10 @@ enum PtySymbolSource { libc, libutil }
 /// One instance per isolate: a `DynamicLibrary` cannot travel over a `SendPort`.
 class Libc {
   Libc._(this._libc, this.ptySymbolSource, this.ptySymbolLibrary)
-    : openpty = _resolveOpenpty(_libc, ptySymbolSource == PtySymbolSource.libc ? _libc : _util!),
+    : openpty = _resolveOpenpty(
+        _libc,
+        ptySymbolSource == PtySymbolSource.libc ? _libc : _util!,
+      ),
       ioctlWinsize = _libc
           .lookup<NativeFunction<IoctlWinsizeNative>>('ioctl')
           .asFunction<IoctlWinsizeDart>(),
@@ -75,13 +93,19 @@ class Libc {
           .lookup<NativeFunction<PosixSpawnNative>>('posix_spawn')
           .asFunction<PosixSpawnDart>(),
       waitpid = _libc
-          .lookup<NativeFunction<Int32 Function(Int32, Pointer<Int32>, Int32)>>('waitpid')
+          .lookup<NativeFunction<Int32 Function(Int32, Pointer<Int32>, Int32)>>(
+            'waitpid',
+          )
           .asFunction<int Function(int, Pointer<Int32>, int)>(),
       read = _libc
-          .lookup<NativeFunction<IntPtr Function(Int32, Pointer<Uint8>, IntPtr)>>('read')
+          .lookup<
+            NativeFunction<IntPtr Function(Int32, Pointer<Uint8>, IntPtr)>
+          >('read')
           .asFunction<int Function(int, Pointer<Uint8>, int)>(),
       write = _libc
-          .lookup<NativeFunction<IntPtr Function(Int32, Pointer<Uint8>, IntPtr)>>('write')
+          .lookup<
+            NativeFunction<IntPtr Function(Int32, Pointer<Uint8>, IntPtr)>
+          >('write')
           .asFunction<int Function(int, Pointer<Uint8>, int)>(),
       close = _libc
           .lookup<NativeFunction<Int32 Function(Int32)>>('close')
@@ -106,9 +130,19 @@ class Libc {
           .asFunction<int Function(Pointer<Void>)>(),
       faAddOpen = _libc
           .lookup<
-            NativeFunction<Int32 Function(Pointer<Void>, Int32, Pointer<Uint8>, Int32, Uint32)>
+            NativeFunction<
+              Int32 Function(
+                Pointer<Void>,
+                Int32,
+                Pointer<Uint8>,
+                Int32,
+                Uint32,
+              )
+            >
           >('posix_spawn_file_actions_addopen')
-          .asFunction<int Function(Pointer<Void>, int, Pointer<Uint8>, int, int)>(),
+          .asFunction<
+            int Function(Pointer<Void>, int, Pointer<Uint8>, int, int)
+          >(),
       faAddDup2 = _libc
           .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32, Int32)>>(
             'posix_spawn_file_actions_adddup2',
@@ -120,13 +154,19 @@ class Libc {
           )
           .asFunction<int Function(Pointer<Void>, int)>(),
       attrInit = _libc
-          .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>('posix_spawnattr_init')
+          .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+            'posix_spawnattr_init',
+          )
           .asFunction<int Function(Pointer<Void>)>(),
       attrDestroy = _libc
-          .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>('posix_spawnattr_destroy')
+          .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+            'posix_spawnattr_destroy',
+          )
           .asFunction<int Function(Pointer<Void>)>(),
       attrSetFlags = _libc
-          .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int16)>>('posix_spawnattr_setflags')
+          .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int16)>>(
+            'posix_spawnattr_setflags',
+          )
           .asFunction<int Function(Pointer<Void>, int)>();
 
   final DynamicLibrary _libc;
@@ -161,17 +201,21 @@ class Libc {
   late final int Function(Pointer<Void>, Pointer<Uint8>)? faAddChdir = () {
     try {
       return _libc
-          .lookup<NativeFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>)>>(
-            'posix_spawn_file_actions_addchdir_np',
-          )
+          .lookup<
+            NativeFunction<Int32 Function(Pointer<Void>, Pointer<Uint8>)>
+          >('posix_spawn_file_actions_addchdir_np')
           .asFunction<int Function(Pointer<Void>, Pointer<Uint8>)>();
     } on ArgumentError {
       return null;
     }
   }();
 
-  static OpenptyDart _resolveOpenpty(DynamicLibrary libc, DynamicLibrary owner) =>
-      owner.lookup<NativeFunction<OpenptyNative>>('openpty').asFunction<OpenptyDart>();
+  static OpenptyDart _resolveOpenpty(
+    DynamicLibrary libc,
+    DynamicLibrary owner,
+  ) => owner
+      .lookup<NativeFunction<OpenptyNative>>('openpty')
+      .asFunction<OpenptyDart>();
 
   static Libc? _instance;
 
@@ -183,7 +227,11 @@ class Libc {
     if (Platform.isMacOS) {
       // libSystem carries libc and libutil alike: openpty, posix_spawn, __error.
       const system = '/usr/lib/libSystem.B.dylib';
-      return _instance = Libc._(DynamicLibrary.open(system), PtySymbolSource.libc, system);
+      return _instance = Libc._(
+        DynamicLibrary.open(system),
+        PtySymbolSource.libc,
+        system,
+      );
     }
     final libc = DynamicLibrary.open('libc.so.6');
     PtySymbolSource source;
@@ -202,7 +250,8 @@ class Libc {
   /// Looked up, never called: after `fork` in a multithreaded VM only
   /// async-signal-safe code is legal and returning into Dart is not.
   bool get providesForkpty =>
-      _libc.providesSymbol('forkpty') || (_util?.providesSymbol('forkpty') ?? false);
+      _libc.providesSymbol('forkpty') ||
+      (_util?.providesSymbol('forkpty') ?? false);
 }
 
 /// Zero-terminated bytes for a C string parameter, owned by [alloc].

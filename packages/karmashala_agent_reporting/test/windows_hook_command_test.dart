@@ -83,40 +83,46 @@ void main() {
       ],
     };
 
-    test('upgrading replaces the old cmd.exe entry rather than adding one', () async {
-      config().writeAsStringSync(
-        jsonEncode({
-          'hooks': {
-            'Stop': [
-              entry(
-                'cmd.exe /c "%USERPROFILE%\\.claude\\$agentHookMarker.cmd" Stop',
-              ),
-            ],
-          },
-        }),
-      );
+    test(
+      'upgrading replaces the old cmd.exe entry rather than adding one',
+      () async {
+        config().writeAsStringSync(
+          jsonEncode({
+            'hooks': {
+              'Stop': [
+                entry(
+                  'cmd.exe /c "%USERPROFILE%\\.claude\\$agentHookMarker.cmd" Stop',
+                ),
+              ],
+            },
+          }),
+        );
 
-      await installer.install(
-        descriptor: claude,
-        storeHome: home.path,
-        endpoint: endpoint,
-        environment: EnvironmentKind.windowsNative,
-      );
-
-      expect(stopCommands(), [commandFor('Stop')]);
-    });
-
-    test('a second install finds its own encoded entry and adds nothing', () async {
-      for (var i = 0; i < 2; i++) {
         await installer.install(
           descriptor: claude,
           storeHome: home.path,
           endpoint: endpoint,
           environment: EnvironmentKind.windowsNative,
         );
-      }
-      expect(stopCommands(), [commandFor('Stop')]);
-    });
+
+        expect(stopCommands(), [commandFor('Stop')]);
+      },
+    );
+
+    test(
+      'a second install finds its own encoded entry and adds nothing',
+      () async {
+        for (var i = 0; i < 2; i++) {
+          await installer.install(
+            descriptor: claude,
+            storeHome: home.path,
+            endpoint: endpoint,
+            environment: EnvironmentKind.windowsNative,
+          );
+        }
+        expect(stopCommands(), [commandFor('Stop')]);
+      },
+    );
 
     test('someone else\'s encoded PowerShell hook is left alone', () async {
       // The shape another tool on this machine really uses.

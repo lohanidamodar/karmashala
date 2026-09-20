@@ -66,9 +66,7 @@ void main() {
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
     final runner = FakeCommandRunner();
-    final adapter = AntigravityAdapter(
-      runnerFor: (_) => runner,
-    );
+    final adapter = AntigravityAdapter(runnerFor: (_) => runner);
 
     adapter.start(
       AgentLaunch(

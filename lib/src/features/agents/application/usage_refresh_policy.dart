@@ -15,9 +15,7 @@ export 'package:agent_cli/usage.dart' show kUsageMinInterval;
 
 /// The floor under the tick, and the seam a test uses to turn it off:
 /// [Duration.zero] means **no timer at all**, which `flutter_test` requires.
-final usagePollFloorProvider = Provider<Duration>(
-  (ref) => kUsageMinInterval,
-);
+final usagePollFloorProvider = Provider<Duration>((ref) => kUsageMinInterval);
 
 /// **The one timer behind an account's usage chip**, keyed by account and not
 /// by pane. Blur cancels it outright, and nothing may outlive the chip.

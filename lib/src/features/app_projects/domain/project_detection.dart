@@ -208,12 +208,11 @@ ProjectReading? _readNativeIos({
   final project = projects.first;
 
   // Sorted, so "the first shared scheme" is the same answer every time.
-  final schemes =
-      <String>[
-        for (final entry in list('$project/xcshareddata/xcschemes'))
-          if (entry.endsWith('.xcscheme'))
-            entry.substring(0, entry.length - '.xcscheme'.length),
-      ]..sort();
+  final schemes = <String>[
+    for (final entry in list('$project/xcshareddata/xcschemes'))
+      if (entry.endsWith('.xcscheme'))
+        entry.substring(0, entry.length - '.xcscheme'.length),
+  ]..sort();
 
   return ProjectReading(
     kind: ProjectKind.nativeIos,

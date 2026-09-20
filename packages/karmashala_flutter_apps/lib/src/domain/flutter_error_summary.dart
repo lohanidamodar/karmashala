@@ -62,7 +62,8 @@ void _flatten(
     final text = description.trim();
     if (text != skip) {
       final name = node['name'];
-      final labelled = name is String && name.isNotEmpty && node['showName'] != false
+      final labelled =
+          name is String && name.isNotEmpty && node['showName'] != false
           ? '$name: $text'
           : text;
       out.add('${'  ' * depth}$labelled');

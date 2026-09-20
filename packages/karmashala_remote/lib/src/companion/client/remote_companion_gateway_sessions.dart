@@ -180,7 +180,9 @@ extension _GatewaySessions on RemoteCompanionGateway {
             subagent: call.subagent,
             // Both instants are the host's, so this duration is the one number
             // here that needs no clock of ours.
-            elapsed: _nonNegative(activity.observedAt.difference(call.startedAt)),
+            elapsed: _nonNegative(
+              activity.observedAt.difference(call.startedAt),
+            ),
           ),
       ],
     );

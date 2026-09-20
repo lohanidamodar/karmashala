@@ -35,7 +35,7 @@ Future<AgentHookInstallationReport?> sweepAgentHooks(
       '${results.length - report.installed - report.unknown} skipped'
       '${report.unknown == 0 ? '' : ', ${report.unknown} unknown'}'
       '${report.spoolSources.isEmpty ? '' : ', '
-            '${report.spoolSources.length} reporting by spool'}.',
+                '${report.spoolSources.length} reporting by spool'}.',
     );
     return report;
   } on Object catch (error, stack) {

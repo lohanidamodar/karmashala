@@ -17,11 +17,7 @@ import '../../support/fake_command_runner.dart';
 AndroidDevice _device([
   String serial = 'emulator-5554',
   DeviceConnectionState state = DeviceConnectionState.device,
-]) => AndroidDevice(
-  serial: serial,
-  environmentId: 'windows',
-  state: state,
-);
+]) => AndroidDevice(serial: serial, environmentId: 'windows', state: state);
 
 AndroidTarget _target([String serial = 'emulator-5554']) =>
     AndroidTarget(_device(serial));
@@ -73,9 +69,7 @@ Future<_StubRecorder> _pump(
           ),
         ),
       ],
-      child: const MaterialApp(
-        home: Scaffold(body: DeviceRecordingBanner()),
-      ),
+      child: const MaterialApp(home: Scaffold(body: DeviceRecordingBanner())),
     ),
   );
   await tester.pumpAndSettle();

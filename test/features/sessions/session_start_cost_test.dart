@@ -316,10 +316,9 @@ void main() {
         ),
       );
       expect(
-        workspace.db.query(
-          'SELECT pane_id FROM sessions WHERE id = ?;',
-          [result.session.id],
-        ).single['pane_id'],
+        workspace.db.query('SELECT pane_id FROM sessions WHERE id = ?;', [
+          result.session.id,
+        ]).single['pane_id'],
         result.paneId,
         reason: 'the row must record the pane it claimed',
       );
@@ -393,10 +392,7 @@ void main() {
       await workspace.settle();
 
       var settingsRebuilds = 0;
-      workspace.container.listen(
-        _settingsSignal,
-        (_, _) => settingsRebuilds++,
-      );
+      workspace.container.listen(_settingsSignal, (_, _) => settingsRebuilds++);
       await workspace.container.pump();
 
       await workspace.launch();

@@ -32,7 +32,11 @@ enum DeviceKeyboardTransport {
     'Ctrl, Alt and Cmd chords cannot be sent to iOS',
   );
 
-  const DeviceKeyboardTransport(this.label, this.carriesModifiers, this.limitation);
+  const DeviceKeyboardTransport(
+    this.label,
+    this.carriesModifiers,
+    this.limitation,
+  );
 
   final String label;
 
@@ -89,7 +93,8 @@ class ScrcpyKeyboardSink implements DeviceKeyboardSink {
   final void Function()? onDropped;
 
   @override
-  DeviceKeyboardTransport get transport => DeviceKeyboardTransport.scrcpyControl;
+  DeviceKeyboardTransport get transport =>
+      DeviceKeyboardTransport.scrcpyControl;
 
   String? _refusal;
 
@@ -206,7 +211,8 @@ class SimulatorKeyboardSink implements DeviceKeyboardSink {
   final void Function(Object error)? onError;
 
   @override
-  DeviceKeyboardTransport get transport => DeviceKeyboardTransport.webDriverAgent;
+  DeviceKeyboardTransport get transport =>
+      DeviceKeyboardTransport.webDriverAgent;
 
   String? _refusal;
 

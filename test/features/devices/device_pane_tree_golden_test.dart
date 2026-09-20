@@ -238,7 +238,12 @@ void main() {
   });
 
   testWidgets('an SDK and no device', (tester) async {
-    await capture(tester, 'an SDK and no device', sdk: _sdk(), devices: const []);
+    await capture(
+      tester,
+      'an SDK and no device',
+      sdk: _sdk(),
+      devices: const [],
+    );
   });
 
   testWidgets('an AVD that could be booted', (tester) async {

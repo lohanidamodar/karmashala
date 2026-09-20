@@ -193,7 +193,11 @@ void main() {
       clock.advance(const Duration(seconds: 8));
 
       final refusal = failure(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
 
       expect(refusal, contains('the screen has moved'));
@@ -215,7 +219,11 @@ void main() {
       final before = adb.requests.length;
 
       failure(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
 
       expect(
@@ -229,7 +237,11 @@ void main() {
       dumpXml = _screen(withDialog: true);
 
       failure(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
       // A refusal that filed the screen it had just read would let this one
       // straight through, against a screen the caller never looked at.
@@ -249,7 +261,11 @@ void main() {
       ok(await call('device_ui_dump', {'serial': 'emulator-5554'}));
       dumpXml = _screen(withDialog: true);
       failure(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
 
       ok(await call('device_ui_dump', {'serial': 'emulator-5554'}));
@@ -271,7 +287,11 @@ void main() {
       clock.advance(kDeviceLookWindow + const Duration(minutes: 1));
 
       final result = ok(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
       expect(result['checked'], contains('not refused'));
       expect(result['checked'], contains('6m ago'));
@@ -281,7 +301,11 @@ void main() {
   group('a screen this app has never read', () {
     test('is a note, never a refusal: an unknown is not evidence', () async {
       final result = ok(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
 
       expect(result['tapped'], '(540, 780)');
@@ -299,7 +323,11 @@ void main() {
       clock.advance(const Duration(seconds: 4));
 
       final result = ok(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
 
       expect(result['checked'], contains('matches the screen last read'));
@@ -310,23 +338,26 @@ void main() {
       expect(result['prefer'], contains('costs exactly what this call costs'));
     });
 
-    test('a label that changed but a layout that did not still passes', () async {
-      ok(await call('device_ui_dump', {'serial': 'emulator-5554'}));
-      // A clock, a counter, a streaming response: text moves, the screen has
-      // not. Fingerprinting text would refuse every tap on a live screen.
-      dumpXml = _screen(label: 'Signing in…');
+    test(
+      'a label that changed but a layout that did not still passes',
+      () async {
+        ok(await call('device_ui_dump', {'serial': 'emulator-5554'}));
+        // A clock, a counter, a streaming response: text moves, the screen has
+        // not. Fingerprinting text would refuse every tap on a live screen.
+        dumpXml = _screen(label: 'Signing in…');
 
-      expect(
-        ok(
-          await call('device_tap', {
-            'serial': 'emulator-5554',
-            'x': 540,
-            'y': 780,
-          }),
-        )['checked'],
-        contains('matches'),
-      );
-    });
+        expect(
+          ok(
+            await call('device_tap', {
+              'serial': 'emulator-5554',
+              'x': 540,
+              'y': 780,
+            }),
+          )['checked'],
+          contains('matches'),
+        );
+      },
+    );
 
     test('the same labels in different places do not', () async {
       ok(await call('device_ui_dump', {'serial': 'emulator-5554'}));
@@ -368,7 +399,11 @@ void main() {
       final before = adb.requests.length;
 
       ok(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
 
       final work = workSince(before);
@@ -409,7 +444,11 @@ void main() {
 
       final beforeTap = adb.requests.length;
       ok(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
       final tapWork = workSince(beforeTap).length;
 
@@ -432,7 +471,11 @@ void main() {
       dumpFails = true;
 
       final result = ok(
-        await call('device_tap', {'serial': 'emulator-5554', 'x': 540, 'y': 780}),
+        await call('device_tap', {
+          'serial': 'emulator-5554',
+          'x': 540,
+          'y': 780,
+        }),
       );
 
       expect(result['tapped'], '(540, 780)');

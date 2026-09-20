@@ -784,9 +784,7 @@ void main() {
 
     test('a stale base is fixed before the draft is published', () {
       expect(
-        primaryOf(
-          draft(checks: const ChecksSummary(passed: 2), behindBase: 3),
-        ),
+        primaryOf(draft(checks: const ChecksSummary(passed: 2), behindBase: 3)),
         DeliveryAction.updateFromBase,
       );
     });
@@ -840,8 +838,10 @@ void main() {
     test('an unasked repository keeps the sentence it always sent', () {
       // The important direction: knowing nothing must never make the strip
       // guess. gh falls back to the repository's own default.
-      expect(mergeWith(MergeStrategies.unknown).prompt,
-          'Merge the pull request.');
+      expect(
+        mergeWith(MergeStrategies.unknown).prompt,
+        'Merge the pull request.',
+      );
     });
 
     test('a repository that allows nothing disables Merge', () {

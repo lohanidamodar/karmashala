@@ -34,7 +34,8 @@ void main() {
       runner: runner,
       sdk: AndroidSdk(
         root: EnvironmentPath(
-          environmentId: 'windows', path: File(adbPath).parent.parent.path,
+          environmentId: 'windows',
+          path: File(adbPath).parent.parent.path,
         ),
         adb: const EnvironmentPath(environmentId: 'windows', path: adbPath),
       ),
@@ -53,7 +54,8 @@ void main() {
     addTearDown(health.cancel);
     final player = Player(
       configuration: const PlayerConfiguration(
-        vo: 'null', bufferSize: 256 * 1024,
+        vo: 'null',
+        bufferSize: 256 * 1024,
         protocolWhitelist: ['file', 'tcp', 'http'],
       ),
     );
@@ -74,9 +76,11 @@ void main() {
       final pause = await native.getProperty('pause');
       final networkTimeout = await native.getProperty('network-timeout');
       // ignore: avoid_print
-      print('SAMPLE $sample received=${session.mark.frames} '
-          'delivered=${session.mark.writtenUs} position=$position '
-          'eof=$eof pause=$pause networkTimeout=$networkTimeout');
+      print(
+        'SAMPLE $sample received=${session.mark.frames} '
+        'delivered=${session.mark.writtenUs} position=$position '
+        'eof=$eof pause=$pause networkTimeout=$networkTimeout',
+      );
     }
     // State assertions, not latency thresholds. Read the sample sequence to
     // establish that input after idleness actually resumed decoding.

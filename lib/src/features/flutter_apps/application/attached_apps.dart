@@ -74,10 +74,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
     try {
       directory = await ref.read(flutterAppDiscoveryDirectoryProvider.future);
     } on Object catch (error) {
-      state = state.copyWith(
-        lookedAt: _now,
-        discoveryFailure: '$error',
-      );
+      state = state.copyWith(lookedAt: _now, discoveryFailure: '$error');
       return;
     }
     if (!_mounted) return;
@@ -440,10 +437,7 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
       if (app == null) {
         throw FlutterAppException(
           FlutterAppFailure.unknownApp,
-          describeFlutterAppFailure(
-            FlutterAppFailure.unknownApp,
-            detail: id,
-          ),
+          describeFlutterAppFailure(FlutterAppFailure.unknownApp, detail: id),
         );
       }
       if (!app.isAttached) {
@@ -616,8 +610,9 @@ class AttachedApps extends Notifier<FlutterAppRegistry> {
   }
 }
 
-final attachedAppsProvider =
-    NotifierProvider<AttachedApps, FlutterAppRegistry>(AttachedApps.new);
+final attachedAppsProvider = NotifierProvider<AttachedApps, FlutterAppRegistry>(
+  AttachedApps.new,
+);
 
 /// One app, and the daemon that named it — the pair a row is built from.
 typedef _DaemonApp = ({DtdApp app, DtdInstance daemon});

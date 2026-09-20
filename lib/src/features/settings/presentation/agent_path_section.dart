@@ -196,8 +196,9 @@ class _ExecutableRowState extends ConsumerState<_ExecutableRow> {
   }
 
   /// The sentence for a row that is not simply fine, or null when it is.
-  static String? _status(AgentPathReading? reading) => switch (reading
-      ?.reachability) {
+  static String? _status(
+    AgentPathReading? reading,
+  ) => switch (reading?.reachability) {
     // The distinction the feature exists for: opposite actions.
     ExecutableReachability.unreachable =>
       'Installed, but this path cannot be reached — it leads through a link '

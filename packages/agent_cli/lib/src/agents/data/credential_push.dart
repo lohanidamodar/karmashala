@@ -46,7 +46,11 @@ Future<List<String>> pushClaudeAccount(
 ) async {
   final written = <String>[];
 
-  final credentials = p.posix.join(home.homePath, '.claude', '.credentials.json');
+  final credentials = p.posix.join(
+    home.homePath,
+    '.claude',
+    '.credentials.json',
+  );
   await home.writePrivate(
     credentials,
     _spliced(

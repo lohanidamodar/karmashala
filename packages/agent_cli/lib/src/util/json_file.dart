@@ -25,7 +25,8 @@ class JsonFileUnreadable extends JsonFileRead {
   final FileSystemException cause;
 
   @override
-  String get failure => 'Could not read $path (${cause.osError?.message ?? cause.message}).';
+  String get failure =>
+      'Could not read $path (${cause.osError?.message ?? cause.message}).';
 }
 
 class JsonFileMalformed extends JsonFileRead {

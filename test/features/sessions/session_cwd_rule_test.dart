@@ -82,19 +82,20 @@ void main() {
       // `sampada_trails` and `sampada-trails` land in the same place and a path
       // comparison is strictly sharper than reproducing it. (Which is why
       // `resumeDirectoryRefusalFor` compares paths and not buckets.)
-      File(
-        p.join(home, 'projects', 'C--src-demo-app', 'conv-root.jsonl'),
-      )
+      File(p.join(home, 'projects', 'C--src-demo-app', 'conv-root.jsonl'))
         ..createSync(recursive: true)
-        ..writeAsStringSync(r'{"type":"user","cwd":"C:\\src\\demo\\app"}' '\n');
+        ..writeAsStringSync(
+          r'{"type":"user","cwd":"C:\\src\\demo\\app"}'
+          '\n',
+        );
       File(
-        p.join(
-          home,
-          'projects',
-          'C--src-.karmashala-worktrees-app-session-1',
-          'conv-worktree.jsonl',
-        ),
-      )
+          p.join(
+            home,
+            'projects',
+            'C--src-.karmashala-worktrees-app-session-1',
+            'conv-worktree.jsonl',
+          ),
+        )
         ..createSync(recursive: true)
         ..writeAsStringSync(
           r'{"type":"user","cwd":"C:\\src\\.karmashala-worktrees\\app-session-1"}'
@@ -120,40 +121,43 @@ void main() {
     /// `<home>/sessions/<Y>/<M>/<D>/rollout-<timestamp>-<id>.jsonl`, with the
     /// cwd inside the first line's `session_meta` — copied from
     /// `~/.codex/sessions/2026/07/31/rollout-2026-07-31T07-46-11-…jsonl`.
-    test('Codex files a rollout by date and records the cwd inside it',
-        () async {
-      final home = p.join(tmp.path, '.codex');
-      const id = '019fb5e7-6f41-75f2-83ce-7f5fe5176483';
-      final file = File(
-        p.join(
-          home,
-          'sessions',
-          '2026',
-          '07',
-          '31',
-          'rollout-2026-07-31T07-46-11-$id.jsonl',
-        ),
-      )
-        ..createSync(recursive: true)
-        ..writeAsStringSync(
-          '{"timestamp":"2026-07-31T02:02:43.404Z","type":"session_meta",'
-          '"payload":{"session_id":"$id","cwd":"/mnt/c/src/demo",'
-          '"originator":"codex-tui"}}\n',
-        );
+    test(
+      'Codex files a rollout by date and records the cwd inside it',
+      () async {
+        final home = p.join(tmp.path, '.codex');
+        const id = '019fb5e7-6f41-75f2-83ce-7f5fe5176483';
+        final file =
+            File(
+                p.join(
+                  home,
+                  'sessions',
+                  '2026',
+                  '07',
+                  '31',
+                  'rollout-2026-07-31T07-46-11-$id.jsonl',
+                ),
+              )
+              ..createSync(recursive: true)
+              ..writeAsStringSync(
+                '{"timestamp":"2026-07-31T02:02:43.404Z","type":"session_meta",'
+                '"payload":{"session_id":"$id","cwd":"/mnt/c/src/demo",'
+                '"originator":"codex-tui"}}\n',
+              );
 
-      // Nothing in the path names a directory…
-      expect(p.split(file.path), isNot(contains('demo')));
-      // …and the directory that *is* recorded is content, not a key.
-      expect(file.readAsStringSync(), contains('"cwd":"/mnt/c/src/demo"'));
-      expect(
-        await const ConversationStoreIndex().presenceOf(
-          storeHome: home,
-          format: AgentStoreFormat.codexRollout,
-          conversationId: id,
-        ),
-        ConversationPresence.present,
-      );
-    });
+        // Nothing in the path names a directory…
+        expect(p.split(file.path), isNot(contains('demo')));
+        // …and the directory that *is* recorded is content, not a key.
+        expect(file.readAsStringSync(), contains('"cwd":"/mnt/c/src/demo"'));
+        expect(
+          await const ConversationStoreIndex().presenceOf(
+            storeHome: home,
+            format: AgentStoreFormat.codexRollout,
+            conversationId: id,
+          ),
+          ConversationPresence.present,
+        );
+      },
+    );
 
     /// `<home>/conversations/<id>.db` — flat — beside a
     /// `cache/last_conversations.json` that is the *only* directory key in the
@@ -168,7 +172,10 @@ void main() {
         ..writeAsStringSync('');
       File(p.join(home, 'cache', 'last_conversations.json'))
         ..createSync(recursive: true)
-        ..writeAsStringSync(r'{"C:\\src\\demo\\app": "' '$id"}');
+        ..writeAsStringSync(
+          r'{"C:\\src\\demo\\app": "'
+          '$id"}',
+        );
 
       expect(
         await const ConversationStoreIndex().presenceOf(
@@ -197,14 +204,16 @@ void main() {
     }
 
     for (final id in [AgentIds.claudeCode, AgentIds.codex, 'antigravity']) {
-      test('$id resumes from any directory, and says where that was checked',
-          () {
-        final locality = byId(id).launch.resumeLocality;
-        expect(locality.findsConversationAnywhere, isTrue);
-        // Evidence is the contract every other verified capability on this
-        // descriptor holds itself to; a claim nobody can re-check is folklore.
-        expect(locality.evidence, isNotEmpty);
-      });
+      test(
+        '$id resumes from any directory, and says where that was checked',
+        () {
+          final locality = byId(id).launch.resumeLocality;
+          expect(locality.findsConversationAnywhere, isTrue);
+          // Evidence is the contract every other verified capability on this
+          // descriptor holds itself to; a claim nobody can re-check is folklore.
+          expect(locality.evidence, isNotEmpty);
+        },
+      );
     }
 
     test('no built-in claims one without saying where it was checked', () {
@@ -477,7 +486,10 @@ void main() {
 
     test('the same resume says only what the fallback says, for an agent that '
         'was checked', () async {
-      final h = harness(agent: checkedAgent, missingDirectories: {worktreePath});
+      final h = harness(
+        agent: checkedAgent,
+        missingDirectories: {worktreePath},
+      );
       addTearDown(h.db.close);
       addTearDown(h.container.dispose);
       insertArchivedWorktreeSession(h.db);
@@ -502,60 +514,64 @@ void main() {
       );
     });
 
-    test('fork into a new worktree says so for an agent nobody has checked',
-        () async {
-      final h = harness(agent: uncheckedAgent);
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      insertArchivedWorktreeSession(h.db);
+    test(
+      'fork into a new worktree says so for an agent nobody has checked',
+      () async {
+        final h = harness(agent: uncheckedAgent);
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+        insertArchivedWorktreeSession(h.db);
 
-      final result = await h.container
-          .read(sessionLauncherProvider)
-          .launch(
-            SessionLaunchRequest(
-              repository: repository(),
-              installation: agentInstallation(agentId: 'roverCli'),
-              title: 'fork',
-              purpose: SessionPurpose.newSession,
-              forkExternalSessionId: 'conv-1',
-              useWorktree: true,
-            ),
-          );
-      // Nothing "went away" here — the app chose a new directory — so there is
-      // no fallback notice, and the caveat is the whole message.
-      expect(result.session.worktree, isNotNull);
-      expect(
-        result.workingDirectoryNotice,
-        contains('may open a new conversation'),
-      );
-      expect(result.workingDirectoryNotice, contains(worktreePath));
-    });
+        final result = await h.container
+            .read(sessionLauncherProvider)
+            .launch(
+              SessionLaunchRequest(
+                repository: repository(),
+                installation: agentInstallation(agentId: 'roverCli'),
+                title: 'fork',
+                purpose: SessionPurpose.newSession,
+                forkExternalSessionId: 'conv-1',
+                useWorktree: true,
+              ),
+            );
+        // Nothing "went away" here — the app chose a new directory — so there is
+        // no fallback notice, and the caveat is the whole message.
+        expect(result.session.worktree, isNotNull);
+        expect(
+          result.workingDirectoryNotice,
+          contains('may open a new conversation'),
+        );
+        expect(result.workingDirectoryNotice, contains(worktreePath));
+      },
+    );
 
-    test('fork into a new worktree says nothing for an agent that was checked',
-        () async {
-      final h = harness(agent: checkedAgent);
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      insertArchivedWorktreeSession(h.db);
+    test(
+      'fork into a new worktree says nothing for an agent that was checked',
+      () async {
+        final h = harness(agent: checkedAgent);
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+        insertArchivedWorktreeSession(h.db);
 
-      final result = await h.container
-          .read(sessionLauncherProvider)
-          .launch(
-            SessionLaunchRequest(
-              repository: repository(),
-              installation: agentInstallation(agentId: 'roverCli'),
-              title: 'fork',
-              purpose: SessionPurpose.newSession,
-              forkExternalSessionId: 'conv-1',
-              useWorktree: true,
-            ),
-          );
-      expect(result.session.worktree, isNotNull);
-      expect(result.workingDirectoryNotice, isNull);
-      // A fork is a create: the source conversation is left where it is, and
-      // the row that named it is untouched.
-      expect(SessionDao(h.db).getById('src-1')!.worktree!.path, worktreePath);
-    });
+        final result = await h.container
+            .read(sessionLauncherProvider)
+            .launch(
+              SessionLaunchRequest(
+                repository: repository(),
+                installation: agentInstallation(agentId: 'roverCli'),
+                title: 'fork',
+                purpose: SessionPurpose.newSession,
+                forkExternalSessionId: 'conv-1',
+                useWorktree: true,
+              ),
+            );
+        expect(result.session.worktree, isNotNull);
+        expect(result.workingDirectoryNotice, isNull);
+        // A fork is a create: the source conversation is left where it is, and
+        // the row that named it is untouched.
+        expect(SessionDao(h.db).getById('src-1')!.worktree!.path, worktreePath);
+      },
+    );
 
     /// The third suspect, cleared. `select_checkout` was listed alongside
     /// archiving and handoff as a way an agent could move a session's checkout;

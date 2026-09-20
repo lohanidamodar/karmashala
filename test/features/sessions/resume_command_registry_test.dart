@@ -109,9 +109,9 @@ Harness harness(AgentDescriptor agent) {
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
   ProjectDao(db).insert(project());
   RepositoryDao(db).insert(repository());
-  AgentInstallationDao(db).insert(
-    agentInstallation(agentId: agent.id, path: r'C:\bin\agent.exe'),
-  );
+  AgentInstallationDao(
+    db,
+  ).insert(agentInstallation(agentId: agent.id, path: r'C:\bin\agent.exe'));
   SessionDao(db).insert(session(id: 'n1', title: 'Native work'));
   SessionDao(db).updateExternalSessionId('n1', 'ext-1');
   ImportedSessionDao(db).insertIfAbsent(_imported(agent));
@@ -148,11 +148,7 @@ Matcher _refusesToStartSomethingNew(String displayName) => throwsA(
   isA<StateError>().having(
     (e) => e.message,
     'message',
-    allOf(
-      contains(displayName),
-      contains('ext-1'),
-      contains('start a new'),
-    ),
+    allOf(contains(displayName), contains('ext-1'), contains('start a new')),
   ),
 );
 
@@ -225,10 +221,10 @@ void main() {
           .read(sessionActionsProvider)
           .openSessionInSystemTerminal('n1', _terminal);
 
-      expect(h.terminals.launches.single, containsAllInOrder([
-        '--conversation',
-        'ext-1',
-      ]));
+      expect(
+        h.terminals.launches.single,
+        containsAllInOrder(['--conversation', 'ext-1']),
+      );
     });
   });
 
@@ -239,8 +235,7 @@ void main() {
       addTearDown(h.container.dispose);
 
       expect(
-        () => h
-            .container
+        () => h.container
             .read(sessionActionsProvider)
             .resumeShellCommand(_imported(_silent)),
         _refusesToStartSomethingNew('Silent Agent'),
@@ -253,10 +248,9 @@ void main() {
       addTearDown(h.container.dispose);
 
       expect(
-        () =>
-            h.container.read(sessionActionsProvider).nativeResumeShellCommand(
-              'n1',
-            ),
+        () => h.container
+            .read(sessionActionsProvider)
+            .nativeResumeShellCommand('n1'),
         _refusesToStartSomethingNew('Silent Agent'),
       );
     });
@@ -267,8 +261,7 @@ void main() {
       addTearDown(h.container.dispose);
 
       expect(
-        () => h
-            .container
+        () => h.container
             .read(sessionActionsProvider)
             .openInSystemTerminal(_imported(_silent), _terminal),
         _refusesToStartSomethingNew('Silent Agent'),
@@ -276,19 +269,22 @@ void main() {
       expect(h.terminals.launches, isEmpty);
     });
 
-    test('the native external-terminal open refuses, launching nothing', () async {
-      final h = harness(_silent);
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
+    test(
+      'the native external-terminal open refuses, launching nothing',
+      () async {
+        final h = harness(_silent);
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
 
-      await expectLater(
-        h.container
-            .read(sessionActionsProvider)
-            .openSessionInSystemTerminal('n1', _terminal),
-        _refusesToStartSomethingNew('Silent Agent'),
-      );
-      expect(h.terminals.launches, isEmpty);
-    });
+        await expectLater(
+          h.container
+              .read(sessionActionsProvider)
+              .openSessionInSystemTerminal('n1', _terminal),
+          _refusesToStartSomethingNew('Silent Agent'),
+        );
+        expect(h.terminals.launches, isEmpty);
+      },
+    );
 
     test('but a *new* session command is not refused', () {
       // The third copy button goes through the same decision, and the honest
@@ -314,7 +310,9 @@ void main() {
     addTearDown(h.container.dispose);
 
     expect(
-      () => h.container.read(sessionActionsProvider).resumeShellCommand(
+      () => h.container
+          .read(sessionActionsProvider)
+          .resumeShellCommand(
             ImportedSession(
               id: 'i2',
               repositoryId: 'r1',

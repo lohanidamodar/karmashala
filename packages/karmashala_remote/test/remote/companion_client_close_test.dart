@@ -15,47 +15,49 @@ import 'package:test/test.dart';
 /// desktops, unpaired, or been closed. Seen as relay dials landing in the next
 /// test's counters.
 void main() {
-  test('closing mid-dial ends connect at once and dials nothing more',
-      () async {
-    var dials = 0;
-    final client = CompanionClient(
-      pairing: CompanionPairing(
-        hostId: DeviceId.parse('11111111222222223333333344444444'),
-        deviceId: DeviceId.parse('aaaaaaaabbbbbbbbccccccccdddddddd'),
-        deviceKey: Uint8List(32),
-        capabilities: CapabilitySet.all,
-        relay: Uri.parse('wss://relay.example.com'),
-        generation: 1,
-        hostName: 'Desk',
-      ),
-      store: InMemoryCompanionStore(),
-      relayFactory: (relay, rendezvous) {
-        dials++;
-        return _SilentTransport();
-      },
-    );
+  test(
+    'closing mid-dial ends connect at once and dials nothing more',
+    () async {
+      var dials = 0;
+      final client = CompanionClient(
+        pairing: CompanionPairing(
+          hostId: DeviceId.parse('11111111222222223333333344444444'),
+          deviceId: DeviceId.parse('aaaaaaaabbbbbbbbccccccccdddddddd'),
+          deviceKey: Uint8List(32),
+          capabilities: CapabilitySet.all,
+          relay: Uri.parse('wss://relay.example.com'),
+          generation: 1,
+          hostName: 'Desk',
+        ),
+        store: InMemoryCompanionStore(),
+        relayFactory: (relay, rendezvous) {
+          dials++;
+          return _SilentTransport();
+        },
+      );
 
-    final connecting = client.connect(
-      helloTimeout: const Duration(seconds: 2),
-    );
-    // Let the first attempt reach its hello.
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(dials, 1);
+      final connecting = client.connect(
+        helloTimeout: const Duration(seconds: 2),
+      );
+      // Let the first attempt reach its hello.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(dials, 1);
 
-    // Listened to before the close: the close is what fails it.
-    final ended = expectLater(connecting, throwsA(isA<RemoteApiException>()));
-    final closedAt = DateTime.now();
-    await client.close();
-    await ended;
-    expect(
-      DateTime.now().difference(closedAt),
-      lessThan(const Duration(milliseconds: 500)),
-      reason: 'the attempt in flight ends with the close, not at its timeout',
-    );
+      // Listened to before the close: the close is what fails it.
+      final ended = expectLater(connecting, throwsA(isA<RemoteApiException>()));
+      final closedAt = DateTime.now();
+      await client.close();
+      await ended;
+      expect(
+        DateTime.now().difference(closedAt),
+        lessThan(const Duration(milliseconds: 500)),
+        reason: 'the attempt in flight ends with the close, not at its timeout',
+      );
 
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    expect(dials, 1, reason: 'no generation is dialled after close');
-  });
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(dials, 1, reason: 'no generation is dialled after close');
+    },
+  );
 
   test('a closed client refuses to connect', () async {
     var dials = 0;

@@ -18,18 +18,21 @@ const _spec = AgentLaunchSpec(
 
 /// [selection] resolved against [spec], the way the caller that holds the
 /// descriptor resolves it before an adapter ever sees it.
-ResolvedPermission _resolved(AgentLaunchSpec spec, PermissionSelection? selection) =>
-    ResolvedPermission.of(spec.permission, selection);
+ResolvedPermission _resolved(
+  AgentLaunchSpec spec,
+  PermissionSelection? selection,
+) => ResolvedPermission.of(spec.permission, selection);
 
-AgentLaunch _launch(ResolvedPermission permission, String? resume) => AgentLaunch(
-  workingDirectory: repository().path,
-  installation: agentInstallation(
-    agentId: 'roverCli',
-    path: r'C:\bin\rover.exe',
-  ),
-  permission: permission,
-  resumeSessionId: resume,
-);
+AgentLaunch _launch(ResolvedPermission permission, String? resume) =>
+    AgentLaunch(
+      workingDirectory: repository().path,
+      installation: agentInstallation(
+        agentId: 'roverCli',
+        path: r'C:\bin\rover.exe',
+      ),
+      permission: permission,
+      resumeSessionId: resume,
+    );
 
 void main() {
   group('genericLaunchArgs', () {
@@ -59,10 +62,11 @@ void main() {
         ),
         ['--headless'],
       );
-      expect(
-        genericLaunchArgs(_spec, _launch(_resolved(_spec, null), null)),
-        ['--headless', '--mode', 'ask'],
-      );
+      expect(genericLaunchArgs(_spec, _launch(_resolved(_spec, null), null)), [
+        '--headless',
+        '--mode',
+        'ask',
+      ]);
     });
 
     test('an agent with no launch spec runs bare', () {

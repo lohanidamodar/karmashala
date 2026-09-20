@@ -18,12 +18,14 @@ void main() {
     }
   });
 
-  SessionStore storeOf({int capacityBytes = 4096, int keepEndedSessions = 16}) =>
-      SessionStore(
-        Directory('${root.path}/sessions'),
-        capacityBytes: capacityBytes,
-        keepEndedSessions: keepEndedSessions,
-      )..ensureDirectory();
+  SessionStore storeOf({
+    int capacityBytes = 4096,
+    int keepEndedSessions = 16,
+  }) => SessionStore(
+    Directory('${root.path}/sessions'),
+    capacityBytes: capacityBytes,
+    keepEndedSessions: keepEndedSessions,
+  )..ensureDirectory();
 
   const request = PtySpawnRequest(
     argv: ['cmd.exe', '/k'],
@@ -73,24 +75,27 @@ void main() {
     expect(_text(session.backlog.since(6)), 'world');
   });
 
-  test('a session that was running is lost, and the record says so in words', () {
-    final store = storeOf();
-    // No `ended`: this is a host that stopped while the session was alive.
-    store.open('pane-b', request, startedAt)
-      ..record(_bytes('half a build'))
-      ..close();
+  test(
+    'a session that was running is lost, and the record says so in words',
+    () {
+      final store = storeOf();
+      // No `ended`: this is a host that stopped while the session was alive.
+      store.open('pane-b', request, startedAt)
+        ..record(_bytes('half a build'))
+        ..close();
 
-    final session = storeOf().restore().single;
-    expect(session.wasRunning, isTrue);
-    // Never a zero: the process did not exit, it died with the host.
-    expect(session.lifecycle, isA<SessionEndedWithoutCode>());
-    expect(session.lifecycle.exitCode, isNull);
-    expect(
-      (session.lifecycle as SessionEndedWithoutCode).reason,
-      allOf(contains('stopped'), contains('did not survive')),
-    );
-    expect(_text(session.backlog.since(0)), 'half a build');
-  });
+      final session = storeOf().restore().single;
+      expect(session.wasRunning, isTrue);
+      // Never a zero: the process did not exit, it died with the host.
+      expect(session.lifecycle, isA<SessionEndedWithoutCode>());
+      expect(session.lifecycle.exitCode, isNull);
+      expect(
+        (session.lifecycle as SessionEndedWithoutCode).reason,
+        allOf(contains('stopped'), contains('did not survive')),
+      );
+      expect(_text(session.backlog.since(0)), 'half a build');
+    },
+  );
 
   test('the record is bounded the way the ring is, and says what it dropped', () {
     final store = storeOf(capacityBytes: 1024);
@@ -103,7 +108,9 @@ void main() {
       ..ended(SessionExited(0, DateTime.utc(2026, 9, 9, 13)))
       ..close();
 
-    final onDisk = File('${store.directory.path}/${_only(store.directory)}/out.bin').lengthSync();
+    final onDisk = File(
+      '${store.directory.path}/${_only(store.directory)}/out.bin',
+    ).lengthSync();
     expect(
       onDisk,
       lessThanOrEqualTo(store.rotateAboveBytes),
@@ -111,9 +118,16 @@ void main() {
     );
 
     final session = storeOf(capacityBytes: 1024).restore().single;
-    expect(session.backlog.totalBytes, 4000, reason: 'the absolute count is what it always was');
+    expect(
+      session.backlog.totalBytes,
+      4000,
+      reason: 'the absolute count is what it always was',
+    );
     expect(session.backlog.heldBytes, lessThanOrEqualTo(1024));
-    expect(session.backlog.firstAvailableOffset, 4000 - session.backlog.heldBytes);
+    expect(
+      session.backlog.firstAvailableOffset,
+      4000 - session.backlog.heldBytes,
+    );
 
     // A client from before the rotation is told how much it lost.
     final slice = session.backlog.since(0);
@@ -134,23 +148,28 @@ void main() {
     expect(storeOf().restore(), isEmpty);
   });
 
-  test('only the newest ended records are kept; running ones are never pruned', () {
-    final store = storeOf(keepEndedSessions: 2);
-    for (var i = 0; i < 4; i++) {
-      store.open('ended-$i', request, startedAt)
-        ..record(_bytes('$i'))
-        ..ended(SessionExited(i, DateTime.utc(2026, 9, 9, 12, i)))
-        ..close();
-    }
-    // Opened and left running: the host's job is to hold it.
-    store.open('alive', request, startedAt).record(_bytes('still going'));
+  test(
+    'only the newest ended records are kept; running ones are never pruned',
+    () {
+      final store = storeOf(keepEndedSessions: 2);
+      for (var i = 0; i < 4; i++) {
+        store.open('ended-$i', request, startedAt)
+          ..record(_bytes('$i'))
+          ..ended(SessionExited(i, DateTime.utc(2026, 9, 9, 12, i)))
+          ..close();
+      }
+      // Opened and left running: the host's job is to hold it.
+      store.open('alive', request, startedAt).record(_bytes('still going'));
 
-    final ids = storeOf(keepEndedSessions: 2).restore().map((s) => s.id).toSet();
-    expect(ids, contains('alive'));
-    expect(ids, containsAll(['ended-2', 'ended-3']));
-    expect(ids, isNot(contains('ended-0')));
-    expect(ids, isNot(contains('ended-1')));
-  });
+      final ids = storeOf(
+        keepEndedSessions: 2,
+      ).restore().map((s) => s.id).toSet();
+      expect(ids, contains('alive'));
+      expect(ids, containsAll(['ended-2', 'ended-3']));
+      expect(ids, isNot(contains('ended-0')));
+      expect(ids, isNot(contains('ended-1')));
+    },
+  );
 
   test('a half-written record costs its own session and no other', () {
     final store = storeOf();
@@ -184,12 +203,17 @@ void main() {
 }
 
 Uint8List _bytes(String s) => Uint8List.fromList(utf8.encode(s));
-String _text(BacklogSlice slice) => utf8.decode(slice.bytes, allowMalformed: true);
+String _text(BacklogSlice slice) =>
+    utf8.decode(slice.bytes, allowMalformed: true);
 
-String _only(Directory directory) =>
-    directory.listSync().whereType<Directory>().single.uri.pathSegments
-        .where((s) => s.isNotEmpty)
-        .last;
+String _only(Directory directory) => directory
+    .listSync()
+    .whereType<Directory>()
+    .single
+    .uri
+    .pathSegments
+    .where((s) => s.isNotEmpty)
+    .last;
 
 /// The same FNV-1a the store names directories with, so a test can reach one
 /// without the store exposing its naming.

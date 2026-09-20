@@ -32,8 +32,12 @@ Future<int> runPtyProbe({IOSink? out}) async {
 
   final launcher = platform.launcher;
   if (launcher is PosixPtyLauncher) {
-    sink.writeln('forkpty   ${launcher.providesForkpty ? 'resolvable' : 'absent'} (never called)');
-    sink.writeln('chdir     ${launcher.honoursWorkingDirectory ? 'supported' : 'unsupported'}');
+    sink.writeln(
+      'forkpty   ${launcher.providesForkpty ? 'resolvable' : 'absent'} (never called)',
+    );
+    sink.writeln(
+      'chdir     ${launcher.honoursWorkingDirectory ? 'supported' : 'unsupported'}',
+    );
   }
   if (launcher is ConPtyLauncher) {
     // Windows has no signals: said here rather than found in an exit code that
@@ -111,7 +115,8 @@ _ProbeShell _probeShell() {
       ),
       echoCommand: "Write-Output ('karma'+'shala')\r\n",
       // Does the process learn the size it was resized to?
-      sizeCommand: 'Write-Output "\$(\$Host.UI.RawUI.WindowSize.Height) '
+      sizeCommand:
+          'Write-Output "\$(\$Host.UI.RawUI.WindowSize.Height) '
           '\$(\$Host.UI.RawUI.WindowSize.Width)"\r\n',
       expectedSize: '30 100',
       exitCommand: 'exit 7\r\n',
@@ -157,15 +162,21 @@ class _ByteWatcher {
     return s.length <= n ? s : s.substring(s.length - n);
   }
 
-  Future<bool> until(String needle, {Duration limit = const Duration(seconds: 10)}) {
+  Future<bool> until(
+    String needle, {
+    Duration limit = const Duration(seconds: 10),
+  }) {
     if (_buffer.toString().contains(needle)) return Future.value(true);
     _wanted = needle;
     final completer = _waiting = Completer<bool>();
-    return completer.future.timeout(limit, onTimeout: () {
-      _wanted = null;
-      _waiting = null;
-      return false;
-    });
+    return completer.future.timeout(
+      limit,
+      onTimeout: () {
+        _wanted = null;
+        _waiting = null;
+        return false;
+      },
+    );
   }
 
   void _check() {

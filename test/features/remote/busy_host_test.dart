@@ -137,146 +137,163 @@ void main() {
     return client;
   }
 
-  test('a desktop whose transcript sweep is slower than its poll interval '
-      'still answers its phone', timeout: const Timeout(Duration(minutes: 2)),
-      () async {
-    await startService();
-    final client = await connectedPhone();
+  test(
+    'a desktop whose transcript sweep is slower than its poll interval '
+    'still answers its phone',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final client = await connectedPhone();
 
-    // Exactly what the phone does on every connect: subscribe to every session
-    // the desktop listed, because subscription is also what keeps the cards
-    // live — and it is not something the phone can be asked to stop doing.
-    // It used to make every sweep read every one of those transcripts; the
-    // host now reads only the session whose history the phone has asked for,
-    // so this loop is the cheap case rather than the expensive one. The
-    // deadline below is what stops that regressing.
-    fake.transcriptCost = _transcriptCost;
-    for (var i = 0; i < _sessionCount; i++) {
-      await client.subscribeSession('s$i');
-    }
+      // Exactly what the phone does on every connect: subscribe to every session
+      // the desktop listed, because subscription is also what keeps the cards
+      // live — and it is not something the phone can be asked to stop doing.
+      // It used to make every sweep read every one of those transcripts; the
+      // host now reads only the session whose history the phone has asked for,
+      // so this loop is the cheap case rather than the expensive one. The
+      // deadline below is what stops that regressing.
+      fake.transcriptCost = _transcriptCost;
+      for (var i = 0; i < _sessionCount; i++) {
+        await client.subscribeSession('s$i');
+      }
 
-    // Let the poll timer run for many multiples of its own interval. Whatever
-    // it has queued behind itself by now, a request the user just made has to
-    // be answered — a desktop that is up and holding this link is not allowed
-    // to be silent on it.
-    await Future<void>.delayed(const Duration(seconds: 3));
+      // Let the poll timer run for many multiples of its own interval. Whatever
+      // it has queued behind itself by now, a request the user just made has to
+      // be answered — a desktop that is up and holding this link is not allowed
+      // to be silent on it.
+      await Future<void>.delayed(const Duration(seconds: 3));
 
-    final asked = DateTime.now();
-    final rows = await client.listSessionRows();
-    final took = DateTime.now().difference(asked);
+      final asked = DateTime.now();
+      final rows = await client.listSessionRows();
+      final took = DateTime.now().difference(asked);
 
-    expect(rows, hasLength(_sessionCount));
-    expect(
-      took,
-      lessThan(const Duration(seconds: 2)),
-      reason: 'the phone waited ${took.inMilliseconds}ms for one request: the '
-          'poll timer has queued more work than the chain can drain, and every '
-          'frame the user sends is behind it',
-    );
-  });
+      expect(rows, hasLength(_sessionCount));
+      expect(
+        took,
+        lessThan(const Duration(seconds: 2)),
+        reason:
+            'the phone waited ${took.inMilliseconds}ms for one request: the '
+            'poll timer has queued more work than the chain can drain, and every '
+            'frame the user sends is behind it',
+      );
+    },
+  );
 
-  test('a tick that arrives while a sweep is running is swallowed, not '
-      'stacked behind it', timeout: const Timeout(Duration(minutes: 2)),
-      () async {
-    // The timer off, so the only ticks are the ones this test delivers.
-    await startService(pollInterval: Duration.zero);
-    final client = await connectedPhone();
-    for (var i = 0; i < _sessionCount; i++) {
-      await client.subscribeSession('s$i');
-      // And read each one's history, which is what makes the host poll it:
-      // subscription alone only keeps the card live, because the phone
-      // subscribes to every session it lists.
-      await client.transcript('s$i');
-    }
-    fake.transcriptCost = _transcriptCost;
-    fake.transcriptReads = 0;
+  test(
+    'a tick that arrives while a sweep is running is swallowed, not '
+    'stacked behind it',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      // The timer off, so the only ticks are the ones this test delivers.
+      await startService(pollInterval: Duration.zero);
+      final client = await connectedPhone();
+      for (var i = 0; i < _sessionCount; i++) {
+        await client.subscribeSession('s$i');
+        // And read each one's history, which is what makes the host poll it:
+        // subscription alone only keeps the card live, because the phone
+        // subscribes to every session it lists.
+        await client.transcript('s$i');
+      }
+      fake.transcriptCost = _transcriptCost;
+      fake.transcriptReads = 0;
 
-    // One sweep starts; two more ticks arrive long before it can finish, which
-    // is exactly what a 100ms timer does to a sweep that takes a second.
-    final sweep = service!.pollTranscriptsNow();
-    await Future<void>.delayed(const Duration(milliseconds: 40));
-    await service!.pollTranscriptsNow();
-    await Future<void>.delayed(const Duration(milliseconds: 40));
-    await service!.pollTranscriptsNow();
-    await sweep;
+      // One sweep starts; two more ticks arrive long before it can finish, which
+      // is exactly what a 100ms timer does to a sweep that takes a second.
+      final sweep = service!.pollTranscriptsNow();
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      await service!.pollTranscriptsNow();
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      await service!.pollTranscriptsNow();
+      await sweep;
 
-    expect(
-      fake.transcriptReads,
-      _sessionCount,
-      reason: 'three ticks did ${fake.transcriptReads} transcript reads: a '
-          'sweep already in flight reads the same sessions from the same '
-          'state, so a tick on top of it is work the chain can never repay',
-    );
-  });
+      expect(
+        fake.transcriptReads,
+        _sessionCount,
+        reason:
+            'three ticks did ${fake.transcriptReads} transcript reads: a '
+            'sweep already in flight reads the same sessions from the same '
+            'state, so a tick on top of it is work the chain can never repay',
+      );
+    },
+  );
 
-  test('a burst of session changes is answered by one pass, not by a queue '
-      'the phone then sits behind', timeout: const Timeout(Duration(minutes: 2)),
-      () async {
-    await startService(pollInterval: Duration.zero);
-    final client = await connectedPhone();
-    for (var i = 0; i < _sessionCount; i++) {
-      await client.subscribeSession('s$i');
-    }
-    // The stage lookup is the expensive half of a snapshot push, and it is
-    // what a desktop with live agents pays on every change.
-    fake.stageCost = _transcriptCost;
-    fake.stageReads = 0;
+  test(
+    'a burst of session changes is answered by one pass, not by a queue '
+    'the phone then sits behind',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService(pollInterval: Duration.zero);
+      final client = await connectedPhone();
+      for (var i = 0; i < _sessionCount; i++) {
+        await client.subscribeSession('s$i');
+      }
+      // The stage lookup is the expensive half of a snapshot push, and it is
+      // what a desktop with live agents pays on every change.
+      fake.stageCost = _transcriptCost;
+      fake.stageReads = 0;
 
-    // Six sessions all move at once — which on a desktop watching six agents
-    // is an ordinary second.
-    final first = service!.notifySessionsChanged();
-    for (var i = 0; i < 5; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-      unawaited(service!.notifySessionsChanged());
-    }
-    await first;
-    await Future<void>.delayed(const Duration(seconds: 2));
+      // Six sessions all move at once — which on a desktop watching six agents
+      // is an ordinary second.
+      final first = service!.notifySessionsChanged();
+      for (var i = 0; i < 5; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        unawaited(service!.notifySessionsChanged());
+      }
+      await first;
+      await Future<void>.delayed(const Duration(seconds: 2));
 
-    expect(
-      fake.stageReads,
-      lessThanOrEqualTo(_sessionCount * 2),
-      reason: 'six notifications did ${fake.stageReads} stage lookups: a pass '
-          'that sends only what moved says everything a queue of them would, '
-          'and the queue is what starves the link',
-    );
-    final asked = DateTime.now();
-    expect((await client.listSessionRows()), hasLength(_sessionCount));
-    expect(DateTime.now().difference(asked), lessThan(
-      const Duration(seconds: 2),
-    ));
-  });
+      expect(
+        fake.stageReads,
+        lessThanOrEqualTo(_sessionCount * 2),
+        reason:
+            'six notifications did ${fake.stageReads} stage lookups: a pass '
+            'that sends only what moved says everything a queue of them would, '
+            'and the queue is what starves the link',
+      );
+      final asked = DateTime.now();
+      expect((await client.listSessionRows()), hasLength(_sessionCount));
+      expect(
+        DateTime.now().difference(asked),
+        lessThan(const Duration(seconds: 2)),
+      );
+    },
+  );
 
-  test('subscribing to every session costs no transcript reads at all',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    // The cause behind the symptom this file was written about, reproduced on
-    // the owner's phone on 2026-09-02: opening a project made it subscribe to
-    // ~25 sessions, the host parsed a transcript before answering each, two
-    // timed out, and the phone concluded the link was dead and tore it down —
-    // which is the same report as "the connection keeps dropping".
-    //
-    // Counted rather than timed, per the house rule: the property is that a
-    // subscribe reads nothing, so it cannot be slow for a big store.
-    await startService(pollInterval: Duration.zero);
-    final client = await connectedPhone();
-    fake.transcriptReads = 0;
+  test(
+    'subscribing to every session costs no transcript reads at all',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      // The cause behind the symptom this file was written about, reproduced on
+      // the owner's phone on 2026-09-02: opening a project made it subscribe to
+      // ~25 sessions, the host parsed a transcript before answering each, two
+      // timed out, and the phone concluded the link was dead and tore it down —
+      // which is the same report as "the connection keeps dropping".
+      //
+      // Counted rather than timed, per the house rule: the property is that a
+      // subscribe reads nothing, so it cannot be slow for a big store.
+      await startService(pollInterval: Duration.zero);
+      final client = await connectedPhone();
+      fake.transcriptReads = 0;
 
-    for (var i = 0; i < _sessionCount; i++) {
-      await client.subscribeSession('s$i');
-    }
+      for (var i = 0; i < _sessionCount; i++) {
+        await client.subscribeSession('s$i');
+      }
 
-    expect(
-      fake.transcriptReads,
-      0,
-      reason: 'a subscribe is bookkeeping — the phone asks for history itself',
-    );
+      expect(
+        fake.transcriptReads,
+        0,
+        reason:
+            'a subscribe is bookkeeping — the phone asks for history itself',
+      );
 
-    // And the sweep follows what the phone actually reads, not what it
-    // subscribed to, so one open session costs one read however many are
-    // subscribed.
-    await client.transcript('s3');
-    fake.transcriptReads = 0;
-    await service!.pollTranscriptsNow();
+      // And the sweep follows what the phone actually reads, not what it
+      // subscribed to, so one open session costs one read however many are
+      // subscribed.
+      await client.transcript('s3');
+      fake.transcriptReads = 0;
+      await service!.pollTranscriptsNow();
 
-    expect(fake.transcriptReads, 1, reason: 'only the session being read');
-  });
+      expect(fake.transcriptReads, 1, reason: 'only the session being read');
+    },
+  );
 }

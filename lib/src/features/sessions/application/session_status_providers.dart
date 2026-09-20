@@ -31,16 +31,19 @@ final sessionActivityLookupProvider =
 /// must not type into an open prompt. Null is *unknown*, not either state.
 final sessionStatusLookupProvider =
     Provider<AgentStatusReport? Function(String sessionId)>(
-      (ref) => (sessionId) =>
-          ref.read(sessionStatusRegistryProvider).reportForOpenId(sessionId),
+      (ref) =>
+          (sessionId) => ref
+              .read(sessionStatusRegistryProvider)
+              .reportForOpenId(sessionId),
     );
 
 /// One session's status now and every later change — the signal a wait ends on.
 /// A wait wants a subscription it opens and closes, not one it might inherit.
 final sessionStatusStreamProvider =
     Provider<Stream<AgentStatusReport> Function(String sessionId)>(
-      (ref) => (sessionId) =>
-          ref.read(sessionStatusRegistryProvider).reportsFor(sessionId),
+      (ref) =>
+          (sessionId) =>
+              ref.read(sessionStatusRegistryProvider).reportsFor(sessionId),
     );
 
 /// paneId → the session standing in it. One shared producer, watched on

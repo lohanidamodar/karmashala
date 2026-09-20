@@ -60,7 +60,10 @@ void main() {
     test('a question an older phone cannot read is not an approval to it', () {
       // What an older companion does with the new word: the safe direction.
       expect(RemoteWaitKind.parse('question'), RemoteWaitKind.question);
-      expect(RemoteWaitKind.parse('some-future-word'), RemoteWaitKind.unrecorded);
+      expect(
+        RemoteWaitKind.parse('some-future-word'),
+        RemoteWaitKind.unrecorded,
+      );
     });
 
     test('a garbled question is dropped, not half-read', () {
@@ -99,8 +102,14 @@ void main() {
     });
 
     test('an answer outcome an older phone does not know retires the card', () {
-      expect(RemoteApprovalOutcome.parse('answered'), RemoteApprovalOutcome.answered);
-      expect(RemoteApprovalOutcome.parse('later-word'), RemoteApprovalOutcome.elsewhere);
+      expect(
+        RemoteApprovalOutcome.parse('answered'),
+        RemoteApprovalOutcome.answered,
+      );
+      expect(
+        RemoteApprovalOutcome.parse('later-word'),
+        RemoteApprovalOutcome.elsewhere,
+      );
     });
   });
 
@@ -128,32 +137,35 @@ void main() {
         if (frame.type == FrameType.approvalResolved) frame,
     ];
 
-    test('is handed to the desktop, and the phone is told it was answered',
-        () async {
-      final harness = await waiting();
-      await harness.request(
-        FrameType.questionAnswer,
-        payload: const RemoteQuestionAnswerRequest(
-          sessionId: 's1',
-          toolUseId: 'toolu_1',
-          answers: [
-            RemoteQuestionAnswer.options([1]),
-            RemoteQuestionAnswer.options([0, 1]),
-          ],
-        ).toJson(),
-      );
+    test(
+      'is handed to the desktop, and the phone is told it was answered',
+      () async {
+        final harness = await waiting();
+        await harness.request(
+          FrameType.questionAnswer,
+          payload: const RemoteQuestionAnswerRequest(
+            sessionId: 's1',
+            toolUseId: 'toolu_1',
+            answers: [
+              RemoteQuestionAnswer.options([1]),
+              RemoteQuestionAnswer.options([0, 1]),
+            ],
+          ).toJson(),
+        );
 
-      final given = harness.fake.questionAnswers.single;
-      expect(given.toolUseId, 'toolu_1');
-      expect(given.answers.first.options, [1]);
-      expect(given.answers.last.options, [0, 1]);
-      expect(
-        RemoteApprovalResolved.fromJson(resolutions(harness).single.payload)
-            .outcome,
-        RemoteApprovalOutcome.answered,
-      );
-      expect(harness.last.type, FrameType.result);
-    });
+        final given = harness.fake.questionAnswers.single;
+        expect(given.toolUseId, 'toolu_1');
+        expect(given.answers.first.options, [1]);
+        expect(given.answers.last.options, [0, 1]);
+        expect(
+          RemoteApprovalResolved.fromJson(
+            resolutions(harness).single.payload,
+          ).outcome,
+          RemoteApprovalOutcome.answered,
+        );
+        expect(harness.last.type, FrameType.result);
+      },
+    );
 
     test('a decline is told as denied', () async {
       final harness = await waiting();
@@ -167,37 +179,44 @@ void main() {
       );
       expect(harness.fake.questionAnswers.single.decline, isTrue);
       expect(
-        RemoteApprovalResolved.fromJson(resolutions(harness).single.payload)
-            .outcome,
+        RemoteApprovalResolved.fromJson(
+          resolutions(harness).single.payload,
+        ).outcome,
         RemoteApprovalOutcome.denied,
       );
     });
 
-    test('an answer to a question already settled is refused, not typed',
-        () async {
-      final harness = await waiting();
-      harness.fake.setAwaitingApproval('s1', waiting: false);
-      await harness.request(
-        FrameType.questionAnswer,
-        payload: const RemoteQuestionAnswerRequest(
-          sessionId: 's1',
-          toolUseId: 'toolu_1',
-          answers: [RemoteQuestionAnswer.options([0])],
-        ).toJson(),
-      );
-      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
-      expect(harness.fake.questionAnswers, isEmpty);
-    });
+    test(
+      'an answer to a question already settled is refused, not typed',
+      () async {
+        final harness = await waiting();
+        harness.fake.setAwaitingApproval('s1', waiting: false);
+        await harness.request(
+          FrameType.questionAnswer,
+          payload: const RemoteQuestionAnswerRequest(
+            sessionId: 's1',
+            toolUseId: 'toolu_1',
+            answers: [
+              RemoteQuestionAnswer.options([0]),
+            ],
+          ).toJson(),
+        );
+        expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+        expect(harness.fake.questionAnswers, isEmpty);
+      },
+    );
 
-    test('an answer with neither answers nor a decline is a bad request',
-        () async {
-      final harness = await waiting();
-      await harness.request(
-        FrameType.questionAnswer,
-        payload: const {'sessionId': 's1', 'toolUseId': 'toolu_1'},
-      );
-      expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
-      expect(harness.fake.questionAnswers, isEmpty);
-    });
+    test(
+      'an answer with neither answers nor a decline is a bad request',
+      () async {
+        final harness = await waiting();
+        await harness.request(
+          FrameType.questionAnswer,
+          payload: const {'sessionId': 's1', 'toolUseId': 'toolu_1'},
+        );
+        expect(harness.lastErrorCode(), ErrorCode.badRequest.wire);
+        expect(harness.fake.questionAnswers, isEmpty);
+      },
+    );
   });
 }

@@ -25,8 +25,9 @@ class _StubLocator implements CliStoreLocator {
   final List<CliStore> stores;
 
   @override
-  Future<List<CliStore>> locate(List<ExecutionEnvironment> environments) async =>
-      stores;
+  Future<List<CliStore>> locate(
+    List<ExecutionEnvironment> environments,
+  ) async => stores;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -181,35 +182,38 @@ void main() {
     expect(Directory(store).listSync(), isEmpty);
   });
 
-  test('an agent that declares nothing and says nothing still says why', () async {
-    const silent = AgentDescriptor(
-      id: 'silent',
-      displayName: 'Silent CLI',
-      binaries: AgentBinaries(windows: ['silent'], posix: ['silent']),
-      store: AgentStoreSpec(
-        homeDirectoryName: '.silent',
-        format: AgentStoreFormat.none,
-      ),
-    );
-    final store = p.join(home.path, '.silent');
-    Directory(store).createSync(recursive: true);
-    final container = containerWith(
-      _StubLocator([
-        CliStore(
-          environmentId: localEnvironmentId(),
-          homesByAgentId: {'silent': store},
+  test(
+    'an agent that declares nothing and says nothing still says why',
+    () async {
+      const silent = AgentDescriptor(
+        id: 'silent',
+        displayName: 'Silent CLI',
+        binaries: AgentBinaries(windows: ['silent'], posix: ['silent']),
+        store: AgentStoreSpec(
+          homeDirectoryName: '.silent',
+          format: AgentStoreFormat.none,
         ),
-      ]),
-      registry: const AgentRegistry([silent]),
-    );
+      );
+      final store = p.join(home.path, '.silent');
+      Directory(store).createSync(recursive: true);
+      final container = containerWith(
+        _StubLocator([
+          CliStore(
+            environmentId: localEnvironmentId(),
+            homesByAgentId: {'silent': store},
+          ),
+        ]),
+        registry: const AgentRegistry([silent]),
+      );
 
-    final report = await serviceIn(container).sweep();
+      final report = await serviceIn(container).sweep();
 
-    expect(
-      report.incompleteByAgent['silent'],
-      contains('nobody has established where this CLI discovers a skill'),
-    );
-  });
+      expect(
+        report.incompleteByAgent['silent'],
+        contains('nobody has established where this CLI discovers a skill'),
+      );
+    },
+  );
 
   test('a store home that never answers is unknown, not failed', () async {
     Directory(claudeStore()).createSync(recursive: true);
@@ -226,10 +230,9 @@ void main() {
     expect(results.single.installed, 0);
     // §19: an unobserved state does not borrow an observed one's words.
     expect(results.single.skippedBecause, contains('unknown'));
-    expect(
-      AgentSkillInstallationReport(results).unknownByAgent.keys,
-      ['claudeCode'],
-    );
+    expect(AgentSkillInstallationReport(results).unknownByAgent.keys, [
+      'claudeCode',
+    ]);
 
     // **And the work stopped with the wait.** The bound ends the wait; a Dart
     // future cannot be cancelled, so without `SkillSweepDeadline` the install

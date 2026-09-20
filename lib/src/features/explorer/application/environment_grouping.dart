@@ -48,18 +48,19 @@ List<EnvironmentGroup> groupProjectsByEnvironment(
     grouped.putIfAbsent(project.root.environmentId, () => []).add(project);
   }
 
-  final groups = [
-    for (final entry in grouped.entries)
-      EnvironmentGroup(
-        environmentId: entry.key,
-        environment: byId[entry.key],
-        projects: entry.value,
-      ),
-  ]..sort((a, b) {
-    final rank = _rank(a.environment).compareTo(_rank(b.environment));
-    if (rank != 0) return rank;
-    return a.label.toLowerCase().compareTo(b.label.toLowerCase());
-  });
+  final groups =
+      [
+        for (final entry in grouped.entries)
+          EnvironmentGroup(
+            environmentId: entry.key,
+            environment: byId[entry.key],
+            projects: entry.value,
+          ),
+      ]..sort((a, b) {
+        final rank = _rank(a.environment).compareTo(_rank(b.environment));
+        if (rank != 0) return rank;
+        return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+      });
   return groups;
 }
 

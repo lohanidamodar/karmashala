@@ -33,9 +33,18 @@ void main() {
 
     test('every default install measured fits, so nobody\'s socket moves', () {
       for (final (os, path) in [
-        ('macos', '/Users/dlohani/Library/Application Support/com.popupbits.karmashala/ipc/rpc.sock'),
-        ('windows', r'C:\Users\dlohani\AppData\Roaming\com.popupbits\karmashala\ipc\rpc.sock'),
-        ('linux', '/home/dlohani/.local/share/com.popupbits.karmashala/ipc/rpc.sock'),
+        (
+          'macos',
+          '/Users/dlohani/Library/Application Support/com.popupbits.karmashala/ipc/rpc.sock',
+        ),
+        (
+          'windows',
+          r'C:\Users\dlohani\AppData\Roaming\com.popupbits\karmashala\ipc\rpc.sock',
+        ),
+        (
+          'linux',
+          '/home/dlohani/.local/share/com.popupbits.karmashala/ipc/rpc.sock',
+        ),
       ]) {
         expect(
           locateSocket(path, operatingSystem: os, environment: const {}),
@@ -67,7 +76,10 @@ void main() {
         '/var/folders/bc/5fhr3gyn01x7mq3v7p3ffrvm0000gn/T/karmashala',
       );
       expect(location.path, startsWith('${location.directory}/'));
-      expect(location.path.split('/').last, matches(RegExp(r'^[0-9a-f]{12}\.sock$')));
+      expect(
+        location.path.split('/').last,
+        matches(RegExp(r'^[0-9a-f]{12}\.sock$')),
+      );
       expect(location.sharedParent, isFalse);
       expect(location.reason, contains('125 bytes'));
     });
@@ -84,18 +96,25 @@ void main() {
       expect(location.sharedParent, isFalse);
     });
 
-    test('on Linux without one, in /tmp under a name that says whose it is', () {
-      final location =
-          locateSocket(
-                pathOf(130, prefix: '/home/x/'),
-                operatingSystem: 'linux',
-                environment: const {},
-                currentUid: () => 1000,
-              )
-              as FallbackSocketLocation;
-      expect(location.directory, '/tmp/karmashala-1000');
-      expect(location.sharedParent, isTrue, reason: 'anyone can write to /tmp');
-    });
+    test(
+      'on Linux without one, in /tmp under a name that says whose it is',
+      () {
+        final location =
+            locateSocket(
+                  pathOf(130, prefix: '/home/x/'),
+                  operatingSystem: 'linux',
+                  environment: const {},
+                  currentUid: () => 1000,
+                )
+                as FallbackSocketLocation;
+        expect(location.directory, '/tmp/karmashala-1000');
+        expect(
+          location.sharedParent,
+          isTrue,
+          reason: 'anyone can write to /tmp',
+        );
+      },
+    );
 
     test('on Windows, under LOCALAPPDATA, spelled with backslashes', () {
       final location =
@@ -104,22 +123,33 @@ void main() {
                 r'\projects\karmashala-app\karmashala-app\build\debug-data'
                 r'\ipc\rpc.sock',
                 operatingSystem: 'windows',
-                environment: const {'LOCALAPPDATA': r'C:\Users\dlohani\AppData\Local'},
+                environment: const {
+                  'LOCALAPPDATA': r'C:\Users\dlohani\AppData\Local',
+                },
               )
               as FallbackSocketLocation;
-      expect(location.directory, r'C:\Users\dlohani\AppData\Local\karmashala\s');
+      expect(
+        location.directory,
+        r'C:\Users\dlohani\AppData\Local\karmashala\s',
+      );
       expect(location.path, startsWith('${location.directory}\\'));
       expect(location.limit, 107);
     });
 
-    test('one data directory always gets the same socket, and two never share', () {
-      String place(String preferred) =>
-          locateSocket(preferred, operatingSystem: 'macos', environment: mac).path!;
-      final real = pathOf(120, prefix: '/Users/x/real/');
-      final debug = pathOf(120, prefix: '/Users/x/debug/');
-      expect(place(real), place(real));
-      expect(place(real), isNot(place(debug)));
-    });
+    test(
+      'one data directory always gets the same socket, and two never share',
+      () {
+        String place(String preferred) => locateSocket(
+          preferred,
+          operatingSystem: 'macos',
+          environment: mac,
+        ).path!;
+        final real = pathOf(120, prefix: '/Users/x/real/');
+        final debug = pathOf(120, prefix: '/Users/x/debug/');
+        expect(place(real), place(real));
+        expect(place(real), isNot(place(debug)));
+      },
+    );
   });
 
   group('nowhere to put it is said, not attempted', () {
@@ -148,7 +178,11 @@ void main() {
 
     test('a relative directory is not somewhere to put a socket', () {
       expect(
-        locateSocket(pathOf(125), operatingSystem: 'macos', environment: const {'TMPDIR': 'tmp'}),
+        locateSocket(
+          pathOf(125),
+          operatingSystem: 'macos',
+          environment: const {'TMPDIR': 'tmp'},
+        ),
         isA<UnplaceableSocket>(),
       );
     });
@@ -179,40 +213,57 @@ void main() {
       final target = Directory('${parent.path}/elsewhere')..createSync();
       final link = '${parent.path}/karmashala-1000';
       Link(link).createSync(target.path);
-      final refused = await prepareFallbackSocketDirectory(at(link, shared: true));
+      final refused = await prepareFallbackSocketDirectory(
+        at(link, shared: true),
+      );
       expect(refused, contains('symlink'));
     }, testOn: 'posix');
 
-    test('in a shared parent, a directory another account owns is refused', () async {
-      final dir = '${parent.path}/karmashala-1000';
-      final refused = await prepareFallbackSocketDirectory(
-        at(dir, shared: true),
-        // Somebody else: whoever this test runs as, it is not uid 999999.
-        currentUid: () => 999999,
-      );
-      expect(refused, contains('not to this account'));
-    }, testOn: 'posix');
+    test(
+      'in a shared parent, a directory another account owns is refused',
+      () async {
+        final dir = '${parent.path}/karmashala-1000';
+        final refused = await prepareFallbackSocketDirectory(
+          at(dir, shared: true),
+          // Somebody else: whoever this test runs as, it is not uid 999999.
+          currentUid: () => 999999,
+        );
+        expect(refused, contains('not to this account'));
+      },
+      testOn: 'posix',
+    );
   });
 
   group('on this machine', () {
-    test('a path too long to bind is refused, and its fallback binds and answers', () async {
-      final base = Directory.systemTemp.createTempSync('sl');
-      addTearDown(() => base.deleteSync(recursive: true));
-      final deep = Directory('${base.path}/${'d' * 60}/${'e' * 40}')..createSync(recursive: true);
-      final preferred = '${deep.path}/rpc.sock';
-      expect(preferred.length, greaterThan(maxSocketPathBytes(Platform.operatingSystem)));
+    test(
+      'a path too long to bind is refused, and its fallback binds and answers',
+      () async {
+        final base = Directory.systemTemp.createTempSync('sl');
+        addTearDown(() => base.deleteSync(recursive: true));
+        final deep = Directory('${base.path}/${'d' * 60}/${'e' * 40}')
+          ..createSync(recursive: true);
+        final preferred = '${deep.path}/rpc.sock';
+        expect(
+          preferred.length,
+          greaterThan(maxSocketPathBytes(Platform.operatingSystem)),
+        );
 
-      // The failure this replaces, measured rather than assumed.
-      await expectLater(
-        ServerSocket.bind(localSocketAddress(preferred), 0),
-        throwsA(isA<SocketException>()),
-      );
+        // The failure this replaces, measured rather than assumed.
+        await expectLater(
+          ServerSocket.bind(localSocketAddress(preferred), 0),
+          throwsA(isA<SocketException>()),
+        );
 
-      final location = locateSocket(preferred) as FallbackSocketLocation;
-      expect(await prepareFallbackSocketDirectory(location), isNull);
-      final server = await LocalRpcServer.bind(location.path, (line) => 'echo:$line');
-      addTearDown(server.close);
-      expect(await LocalRpcClient.call(location.path, 'hi'), 'echo:hi');
-    }, testOn: 'mac-os || linux');
+        final location = locateSocket(preferred) as FallbackSocketLocation;
+        expect(await prepareFallbackSocketDirectory(location), isNull);
+        final server = await LocalRpcServer.bind(
+          location.path,
+          (line) => 'echo:$line',
+        );
+        addTearDown(server.close);
+        expect(await LocalRpcClient.call(location.path, 'hi'), 'echo:hi');
+      },
+      testOn: 'mac-os || linux',
+    );
   });
 }

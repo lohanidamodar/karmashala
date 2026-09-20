@@ -36,11 +36,9 @@ void main() {
       expect(layout.root, isA<PaneGroup>());
       expect(layout.panes, ['a', 'b']);
       expect((layout.root as PaneGroup).activePaneId, 'b');
-      expect(
-        layout.visiblePanes,
-        ['b'],
-        reason: 'only the front pane of a region is on screen',
-      );
+      expect(layout.visiblePanes, [
+        'b',
+      ], reason: 'only the front pane of a region is on screen');
     });
 
     test('adding to an unknown pane leaves the layout alone', () {
@@ -78,9 +76,9 @@ void main() {
     });
 
     test('closing the last pane in a region collapses that region', () {
-      final layout = PaneLayout.single('a')
-          .split('a', SplitAxis.horizontal, 'b', 's1')
-          .close('b')!;
+      final layout = PaneLayout.single(
+        'a',
+      ).split('a', SplitAxis.horizontal, 'b', 's1').close('b')!;
 
       expect(layout.root, isA<PaneGroup>());
       expect(layout.panes, ['a']);
@@ -103,9 +101,9 @@ void main() {
     });
 
     test('directional focus lands on the front pane of the next region', () {
-      final layout = PaneLayout.single('a')
-          .split('a', SplitAxis.horizontal, 'b', 's1')
-          .addPane('b', 'c');
+      final layout = PaneLayout.single(
+        'a',
+      ).split('a', SplitAxis.horizontal, 'b', 's1').addPane('b', 'c');
 
       expect(
         layout.paneInDirection('a', PaneDirection.right),
@@ -115,20 +113,23 @@ void main() {
       expect(layout.paneInDirection('c', PaneDirection.left), 'a');
     });
 
-    test('a region survives a JSON round trip with its stack and its front', () {
-      final layout = PaneLayout.single('a')
-          .addPane('a', 'b')
-          .activate('a')
-          .split('a', SplitAxis.vertical, 'c', 's1');
+    test(
+      'a region survives a JSON round trip with its stack and its front',
+      () {
+        final layout = PaneLayout.single('a')
+            .addPane('a', 'b')
+            .activate('a')
+            .split('a', SplitAxis.vertical, 'c', 's1');
 
-      final restored = PaneLayout.fromJson(layout.toJson())!;
+        final restored = PaneLayout.fromJson(layout.toJson())!;
 
-      expect(restored.panes, layout.panes);
-      expect(restored.visiblePanes, layout.visiblePanes);
-      final group = restored.groups.first;
-      expect(group.panes, ['a', 'b']);
-      expect(group.activePaneId, 'a');
-    });
+        expect(restored.panes, layout.panes);
+        expect(restored.visiblePanes, layout.visiblePanes);
+        final group = restored.groups.first;
+        expect(group.panes, ['a', 'b']);
+        expect(group.activePaneId, 'a');
+      },
+    );
 
     test('a layout stored before regions existed reads as one pane each', () {
       final restored = PaneLayout.fromJson({
@@ -364,23 +365,26 @@ void main() {
       expect(activeTab().focusedPaneId, first);
     });
 
-    test('a pane that exits cleanly beside a stack-mate takes itself off', () async {
-      controller.openTab(TerminalProfile.powerShell);
-      final first = activeTab().layout.panes.single;
-      controller.openTab(TerminalProfile.commandPrompt);
-      final guestPane = activeTab().layout.panes.single;
-      controller.movePaneIntoRegion(guestPane, first);
+    test(
+      'a pane that exits cleanly beside a stack-mate takes itself off',
+      () async {
+        controller.openTab(TerminalProfile.powerShell);
+        final first = activeTab().layout.panes.single;
+        controller.openTab(TerminalProfile.commandPrompt);
+        final guestPane = activeTab().layout.panes.single;
+        controller.movePaneIntoRegion(guestPane, first);
 
-      (controller.instanceFor(guestPane)! as FakeTerminalInstance)
-          .exitCleanly();
-      await Future<void>.delayed(Duration.zero);
+        (controller.instanceFor(guestPane)! as FakeTerminalInstance)
+            .exitCleanly();
+        await Future<void>.delayed(Duration.zero);
 
-      expect(
-        activeTab().layout.panes,
-        [first],
-        reason: 'there is somewhere else to look, so the finished shell goes',
-      );
-    });
+        expect(
+          activeTab().layout.panes,
+          [first],
+          reason: 'there is somewhere else to look, so the finished shell goes',
+        );
+      },
+    );
   });
 
   group('regions survive a save and a restore', () {
@@ -505,5 +509,4 @@ void main() {
     // With a working directory the tab names itself by that instead of
     // borrowing a region's name; without one it still drops the count.
   });
-
 }

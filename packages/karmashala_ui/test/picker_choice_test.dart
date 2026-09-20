@@ -34,17 +34,18 @@ void main() {
               environmentId: environmentId,
               what: 'a thing',
               startNear: r'C:\Users\me',
-              show: ({
-                List<XTypeGroup> acceptedTypeGroups = const [],
-                String? confirmButtonText,
-                String? initialDirectory,
-              }) async {
-                asked = true;
-                return null;
-              },
+              show:
+                  ({
+                    List<XTypeGroup> acceptedTypeGroups = const [],
+                    String? confirmButtonText,
+                    String? initialDirectory,
+                  }) async {
+                    asked = true;
+                    return null;
+                  },
               forget: () async => 0,
               forgetRemote: (_) async => 0,
-                inApp: inApp,
+              inApp: inApp,
             ),
             child: const Text('browse'),
           ),
@@ -115,10 +116,7 @@ void main() {
         source('windows', local: true),
         source('ssh:h1', local: false),
       ];
-      expect(
-        await hostDialogWasUsed(tester, environmentId: 'windows'),
-        isTrue,
-      );
+      expect(await hostDialogWasUsed(tester, environmentId: 'windows'), isTrue);
     });
 
     testWidgets('an environment nothing knows falls back to the choice', (

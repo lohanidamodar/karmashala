@@ -104,11 +104,8 @@ void main() {
       // `Ctrl+wheel` — a zoom, in most of them — sees the modifier only if it
       // survives to the wire.
       final terminal = _terminalWith('$_vt200Mouse$_sgrEncoding');
-      String? withModifier(TerminalMouseModifiers modifiers) => _report(
-        terminal,
-        TerminalMouseButton.wheelUp,
-        modifiers: modifiers,
-      );
+      String? withModifier(TerminalMouseModifiers modifiers) =>
+          _report(terminal, TerminalMouseButton.wheelUp, modifiers: modifiers);
       expect(
         withModifier(const TerminalMouseModifiers(shift: true)),
         '\x1b[<68;10;19M',

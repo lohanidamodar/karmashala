@@ -314,7 +314,9 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
 
   Future<void> _open(String path, {bool record = true}) async {
     if (record) {
-      if (_step < _trail.length - 1) _trail.removeRange(_step + 1, _trail.length);
+      if (_step < _trail.length - 1) {
+        _trail.removeRange(_step + 1, _trail.length);
+      }
       _trail.add(path);
       _step = _trail.length - 1;
     }
@@ -357,17 +359,18 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
   /// Folders first, then names — the order every file manager uses, so the eye
   /// does not have to learn a new one.
   List<BrowsedEntry> _ordered(List<BrowsedEntry> entries) {
-    final kept = [
-      for (final entry in entries)
-        if (entry.isDirectory || _accepts(entry.name)) entry,
-    ]..sort(
-      (a, b) => compareBrowsedRows(
-        aIsDirectory: a.isDirectory,
-        aName: a.name,
-        bIsDirectory: b.isDirectory,
-        bName: b.name,
-      ),
-    );
+    final kept =
+        [
+          for (final entry in entries)
+            if (entry.isDirectory || _accepts(entry.name)) entry,
+        ]..sort(
+          (a, b) => compareBrowsedRows(
+            aIsDirectory: a.isDirectory,
+            aName: a.name,
+            bIsDirectory: b.isDirectory,
+            bName: b.name,
+          ),
+        );
     return kept;
   }
 
@@ -563,9 +566,7 @@ class _FileBrowserDialogState extends State<FileBrowserDialog> {
 
     final Widget body;
     if (_loading) {
-      body = const Center(
-        child: InlineSpinner(size: InlineSpinnerSize.large),
-      );
+      body = const Center(child: InlineSpinner(size: InlineSpinnerSize.large));
     } else if (_error != null) {
       body = _Message(icon: AppIcons.warningCircle, text: _error!);
     } else {
@@ -874,9 +875,11 @@ Future<List<_Place>> _shortcuts(
     if (Platform.isWindows)
       // A: and B: are floppy letters; probing them spins hardware that is not
       // there on the machines that still map them.
-      for (var letter = 'C'.codeUnitAt(0);
-          letter <= 'Z'.codeUnitAt(0);
-          letter++)
+      for (
+        var letter = 'C'.codeUnitAt(0);
+        letter <= 'Z'.codeUnitAt(0);
+        letter++
+      )
         _Place(
           '${String.fromCharCode(letter)}:',
           '${String.fromCharCode(letter)}:\\',
@@ -886,10 +889,9 @@ Future<List<_Place>> _shortcuts(
 
   final answered = await Future.wait([
     for (final place in candidates)
-      exists(place.path).timeout(
-        const Duration(milliseconds: 400),
-        onTimeout: () => false,
-      ),
+      exists(
+        place.path,
+      ).timeout(const Duration(milliseconds: 400), onTimeout: () => false),
   ]);
   return [
     for (var i = 0; i < candidates.length; i++)

@@ -93,21 +93,29 @@ void main() {
 
   group('the reads that must never scan', () {
     test('one row by id', () {
-      expect(plan('SELECT * FROM sessions WHERE id = ?;').single, contains('SEARCH sessions'));
-    });
-
-    test('the rows in a repository — the Explorer list and the header count', () {
       expect(
-        plan('SELECT * FROM sessions WHERE repository_id = ?;').first,
-        contains('SEARCH sessions USING INDEX idx_sessions_repository'),
+        plan('SELECT * FROM sessions WHERE id = ?;').single,
+        contains('SEARCH sessions'),
       );
     });
 
+    test(
+      'the rows in a repository — the Explorer list and the header count',
+      () {
+        expect(
+          plan('SELECT * FROM sessions WHERE repository_id = ?;').first,
+          contains('SEARCH sessions USING INDEX idx_sessions_repository'),
+        );
+      },
+    );
+
     test('the row in a pane — every tab switch', () {
       expect(
-        plan(withOnePlaceholder(
-          'SELECT * FROM sessions WHERE pane_id IN (\$placeholders);',
-        )).first,
+        plan(
+          withOnePlaceholder(
+            'SELECT * FROM sessions WHERE pane_id IN (\$placeholders);',
+          ),
+        ).first,
         contains('SEARCH sessions USING INDEX idx_sessions_pane'),
       );
     });

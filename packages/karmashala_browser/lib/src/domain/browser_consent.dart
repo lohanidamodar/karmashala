@@ -78,8 +78,8 @@ class BrowserConsentGrant {
   }
 }
 
-  /// Where grants are read from and written to. An interface so the store is
-  /// testable without a database, and so this feature need not know the table.
+/// Where grants are read from and written to. An interface so the store is
+/// testable without a database, and so this feature need not know the table.
 abstract interface class ConsentJournal {
   String? read(String key);
   void write(String key, String value);
@@ -159,12 +159,11 @@ class BrowserConsentStore {
     _save(kept);
   }
 
-  void revoke(String scopeId, BrowserCapability capability) => _save(<
-    BrowserConsentGrant
-  >[
-    for (final grant in all())
-      if (grant.scopeId != scopeId || grant.capability != capability) grant,
-  ]);
+  void revoke(String scopeId, BrowserCapability capability) =>
+      _save(<BrowserConsentGrant>[
+        for (final grant in all())
+          if (grant.scopeId != scopeId || grant.capability != capability) grant,
+      ]);
 
   void _save(List<BrowserConsentGrant> grants) => _journal.write(
     storageKey,
@@ -176,9 +175,7 @@ class BrowserConsentStore {
 
 /// The answer to "may this call proceed", and if not, what to tell the agent.
 class BrowserConsentDecision {
-  const BrowserConsentDecision.allowed()
-    : allowed = true,
-      reason = '';
+  const BrowserConsentDecision.allowed() : allowed = true, reason = '';
   const BrowserConsentDecision.denied(this.reason) : allowed = false;
 
   final bool allowed;

@@ -49,8 +49,7 @@ class InboxScreen extends ConsumerWidget {
                 const EdgeInsets.only(bottom: Insets.xl),
               ),
               itemCount: waiting.length,
-              separatorBuilder: (context, index) =>
-                  const CompanionRowDivider(),
+              separatorBuilder: (context, index) => const CompanionRowDivider(),
               itemBuilder: (context, index) =>
                   _InboxRow(session: waiting[index], now: now),
             ),

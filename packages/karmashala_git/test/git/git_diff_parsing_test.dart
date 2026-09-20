@@ -479,8 +479,7 @@ void main() {
       expect(status.changes.single.type, FileChangeType.conflicted);
     });
 
-    test('deleted by us — our stage is absent, and the path keeps its space',
-        () {
+    test('deleted by us — our stage is absent, and the path keeps its space', () {
       final status = parseGitStatusV2(
         'u DU N... 100644 000000 100644 100644 $h1 $nul $h3 tool/build it.sh\n',
       );
@@ -501,8 +500,7 @@ void main() {
       expect(parseGitStatusV2('u UU N... 100644 100644\n').changes, isEmpty);
     });
 
-    test('v1 reads the same seven pairs, because v1 is what the panel asks',
-        () {
+    test('v1 reads the same seven pairs, because v1 is what the panel asks', () {
       // `ChangesService.changes` runs `--porcelain=v1`, which has no separate
       // record: `AA`/`DD` are the two a letter-at-a-time read turns into a plain
       // add and a plain delete.

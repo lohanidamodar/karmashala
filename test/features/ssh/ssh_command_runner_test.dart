@@ -53,7 +53,8 @@ void main() {
 
   test('an ssh environment without a saved host fails loudly', () {
     expect(
-      () => SshCommandRunnerFactory(sshConnections: pool).forEnvironment(remote),
+      () =>
+          SshCommandRunnerFactory(sshConnections: pool).forEnvironment(remote),
       throwsA(isA<ArgumentError>()),
     );
   });
@@ -67,7 +68,8 @@ void main() {
       createdAt: testTime,
     );
     expect(
-      () => SshCommandRunnerFactory(sshConnections: pool).forEnvironment(orphan),
+      () =>
+          SshCommandRunnerFactory(sshConnections: pool).forEnvironment(orphan),
       throwsA(isA<ArgumentError>()),
     );
   });

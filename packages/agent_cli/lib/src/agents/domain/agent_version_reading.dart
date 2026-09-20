@@ -70,11 +70,7 @@ String? describeVersionReading(
 }) {
   final version = installation.version;
   if (version == null) return null;
-  return switch (versionFreshness(
-    installation,
-    now: now,
-    freshFor: freshFor,
-  )) {
+  return switch (versionFreshness(installation, now: now, freshFor: freshFor)) {
     VersionFreshness.unknown => null,
     VersionFreshness.undated => '$version · read at an unknown time',
     VersionFreshness.fresh =>

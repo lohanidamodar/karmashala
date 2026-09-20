@@ -72,7 +72,9 @@ void main() {
     tearDown(() => db.close());
 
     void seed({String? externalId = 'u1'}) {
-      AgentInstallationDao(db).insert(agentInstallation(agentId: AgentIds.codex));
+      AgentInstallationDao(
+        db,
+      ).insert(agentInstallation(agentId: AgentIds.codex));
       SessionDao(db).insert(
         session(title: 'Session 0').copyWith(externalSessionId: externalId),
       );

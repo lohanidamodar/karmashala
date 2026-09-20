@@ -199,45 +199,51 @@ void main() {
   });
 
   group('restore', () {
-    test('deletes every managed setting and re-enables only our packages', () async {
-      // `com.android.nfc` was disabled by something else on this emulator.
-      // Re-enabling it would be undoing a decision that was not ours.
-      final runner = _booted(
-        disabledList:
-            'package:com.google.android.gms\n'
-            'package:com.android.nfc\n',
-      );
-      final report = await _service(runner).restore('emulator-5554');
+    test(
+      'deletes every managed setting and re-enables only our packages',
+      () async {
+        // `com.android.nfc` was disabled by something else on this emulator.
+        // Re-enabling it would be undoing a decision that was not ours.
+        final runner = _booted(
+          disabledList:
+              'package:com.google.android.gms\n'
+              'package:com.android.nfc\n',
+        );
+        final report = await _service(runner).restore('emulator-5554');
 
-      final commands = _commands(runner);
-      expect(commands.take(3), [
-        ['shell', 'settings', 'delete', 'global', 'window_animation_scale'],
-        ['shell', 'settings', 'delete', 'global', 'transition_animation_scale'],
-        ['shell', 'settings', 'delete', 'global', 'animator_duration_scale'],
-      ]);
-      expect(commands.last, [
-        'shell',
-        'pm',
-        'enable',
-        '--user',
-        '0',
-        'com.google.android.gms',
-      ]);
-      expect(
-        commands.any((c) => c.contains('com.android.nfc')),
-        isFalse,
-        reason: 'a package this build did not disable is left alone',
-      );
-      expect(report.ok, isTrue);
-    });
+        final commands = _commands(runner);
+        expect(commands.take(3), [
+          ['shell', 'settings', 'delete', 'global', 'window_animation_scale'],
+          [
+            'shell',
+            'settings',
+            'delete',
+            'global',
+            'transition_animation_scale',
+          ],
+          ['shell', 'settings', 'delete', 'global', 'animator_duration_scale'],
+        ]);
+        expect(commands.last, [
+          'shell',
+          'pm',
+          'enable',
+          '--user',
+          '0',
+          'com.google.android.gms',
+        ]);
+        expect(
+          commands.any((c) => c.contains('com.android.nfc')),
+          isFalse,
+          reason: 'a package this build did not disable is left alone',
+        );
+        expect(report.ok, isTrue);
+      },
+    );
 
     test('an emulator that was never slimmed is left as it is', () async {
       final runner = _booted();
       await _service(runner).restore('emulator-5554');
-      expect(
-        _commands(runner).any((c) => c.contains('enable')),
-        isFalse,
-      );
+      expect(_commands(runner).any((c) => c.contains('enable')), isFalse);
     });
 
     test('does not wait for a boot it does not need', () async {

@@ -232,7 +232,8 @@ FileEditRecord? _claudeResultEdit(Map<Object?, Object?> result) {
     );
   }
 
-  final oldText = _string(result['originalFile']) ?? _string(result['oldString']);
+  final oldText =
+      _string(result['originalFile']) ?? _string(result['oldString']);
   final newText = _string(result['content']) ?? _string(result['newString']);
   if (oldText == null && newText == null) return null;
   return FileEditRecord(

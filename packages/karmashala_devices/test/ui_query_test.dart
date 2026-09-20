@@ -6,8 +6,7 @@ import 'package:karmashala_devices/src/domain/ui_node.dart';
 import 'package:karmashala_devices/src/domain/ui_summary.dart';
 import 'package:test/test.dart';
 
-String _fixture(String name) =>
-    File('test/fixtures/$name').readAsStringSync();
+String _fixture(String name) => File('test/fixtures/$name').readAsStringSync();
 
 /// The emulator's Settings home screen, 1080x2400.
 UiHierarchy get _settings =>

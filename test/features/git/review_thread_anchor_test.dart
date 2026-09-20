@@ -72,7 +72,8 @@ void main() {
     expect(
       entry.anchor.startLine,
       12,
-      reason: 'the stored line must be the line it was written at, not a guess '
+      reason:
+          'the stored line must be the line it was written at, not a guess '
           'at where the excerpt went',
     );
     expect(
@@ -82,22 +83,25 @@ void main() {
     );
   });
 
-  test('content coming back re-attaches, because it is the same bytes', () async {
-    await comment();
-    harness.shas['lib/a.dart'] = 'sha-two';
-    expect(
-      (await harness.service.indexFor('r1')).all.single.attachment,
-      ReviewThreadAttachment.detached,
-    );
+  test(
+    'content coming back re-attaches, because it is the same bytes',
+    () async {
+      await comment();
+      harness.shas['lib/a.dart'] = 'sha-two';
+      expect(
+        (await harness.service.indexFor('r1')).all.single.attachment,
+        ReviewThreadAttachment.detached,
+      );
 
-    // A revert, a checkout, an undone edit. This is not a guess about where
-    // the code went: it is the identity the sha states.
-    harness.shas['lib/a.dart'] = 'sha-one';
-    expect(
-      (await harness.service.indexFor('r1')).all.single.attachment,
-      ReviewThreadAttachment.attached,
-    );
-  });
+      // A revert, a checkout, an undone edit. This is not a guess about where
+      // the code went: it is the identity the sha states.
+      harness.shas['lib/a.dart'] = 'sha-one';
+      expect(
+        (await harness.service.indexFor('r1')).all.single.attachment,
+        ReviewThreadAttachment.attached,
+      );
+    },
+  );
 
   test('a file git cannot read is unknown, never attached', () async {
     await comment();
@@ -123,31 +127,31 @@ void main() {
     expect(index.unplaced('lib/a.dart'), hasLength(1));
   });
 
-  test('one unreadable file does not blind the threads on every other', () async {
-    harness.shas['lib/b.dart'] = 'sha-b';
-    await comment();
-    await comment(path: 'lib/b.dart');
-    // `git hash-object` aborts the whole invocation on the first path it
-    // cannot read. Without the per-path retry behind it, one deleted file
-    // would report every thread in the repository as "cannot tell".
-    harness.shas.remove('lib/a.dart');
+  test(
+    'one unreadable file does not blind the threads on every other',
+    () async {
+      harness.shas['lib/b.dart'] = 'sha-b';
+      await comment();
+      await comment(path: 'lib/b.dart');
+      // `git hash-object` aborts the whole invocation on the first path it
+      // cannot read. Without the per-path retry behind it, one deleted file
+      // would report every thread in the repository as "cannot tell".
+      harness.shas.remove('lib/a.dart');
 
-    final index = await harness.service.indexFor('r1');
-    final byPath = {
-      for (final entry in index.all) entry.anchor.path: entry.attachment,
-    };
-    expect(byPath['lib/a.dart'], ReviewThreadAttachment.unknown);
-    expect(byPath['lib/b.dart'], ReviewThreadAttachment.attached);
-  });
+      final index = await harness.service.indexFor('r1');
+      final byPath = {
+        for (final entry in index.all) entry.anchor.path: entry.attachment,
+      };
+      expect(byPath['lib/a.dart'], ReviewThreadAttachment.unknown);
+      expect(byPath['lib/b.dart'], ReviewThreadAttachment.attached);
+    },
+  );
 
   test('an empty comment is refused before an anchor is even taken', () async {
     // Refused in the service and not only at each caller, because a thread
     // whose only comment is whitespace renders as a marker on a line with
     // nothing behind it — a reader clicks it and learns nothing.
-    await expectLater(
-      comment(body: '   '),
-      throwsA(isA<ArgumentError>()),
-    );
+    await expectLater(comment(body: '   '), throwsA(isA<ArgumentError>()));
     expect((await harness.service.indexFor('r1')).all, isEmpty);
 
     final thread = await comment();

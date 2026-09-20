@@ -90,10 +90,11 @@ class SessionChatView {
   /// Why this session has, or has not, a chat view — one sentence, in the words
   /// a reader can act on.
   String get reason => switch (evidence) {
-    ChatViewEvidence.unread => prior
-        ? 'Not looked at yet — this agent’s store format is one this app reads.'
-        : 'Not looked at yet — this agent’s store format is not one this app '
-              'reads.',
+    ChatViewEvidence.unread =>
+      prior
+          ? 'Not looked at yet — this agent’s store format is one this app reads.'
+          : 'Not looked at yet — this agent’s store format is not one this app '
+                'reads.',
     ChatViewEvidence.noSessionRecord =>
       'This session has no CLI session id yet, so there is nothing to look for.',
     ChatViewEvidence.storeUnreadable =>

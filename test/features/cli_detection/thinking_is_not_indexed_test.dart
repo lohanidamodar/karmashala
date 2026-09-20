@@ -205,11 +205,10 @@ void main() {
       await index('c-without', AgentIds.antigravity, without);
 
       expect(indexed('c-with'), indexed('c-without'));
-      expect(
-        indexed('c-with').map((row) => row.ordinal),
-        [0, 2],
-        reason: 'the user turn, then the agent turn two rows later',
-      );
+      expect(indexed('c-with').map((row) => row.ordinal), [
+        0,
+        2,
+      ], reason: 'the user turn, then the agent turn two rows later');
       expect(dao.turnCountFor('c-with'), 2);
     });
 

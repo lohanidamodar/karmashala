@@ -63,8 +63,7 @@ final conversationIndexBackfillProvider = Provider<ConversationIndexBackfill>(
     dao: ref.watch(conversationIndexDaoProvider),
     indexer: ref.watch(conversationIndexerProvider),
     clock: ref.watch(clockProvider),
-    locateTranscripts: () =>
-        ref.read(sessionTranscriptLocatorProvider).index(),
+    locateTranscripts: () => ref.read(sessionTranscriptLocatorProvider).index(),
   ),
 );
 
@@ -188,7 +187,9 @@ void followSupersededHistory(Ref ref, String sessionId, String conversationId) {
 }
 
 /// Copies a CLI's own name for a conversation into the session row running it.
-final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((ref) {
+final sessionTitleSyncServiceProvider = Provider<SessionTitleSyncService>((
+  ref,
+) {
   return SessionTitleSyncService(
     sessionDao: ref.watch(sessionDaoProvider),
     agents: ref.watch(agentRegistryProvider),
@@ -308,7 +309,8 @@ List<AdoptablePane> adoptablePanes(Ref ref) {
 /// [adoptablePanes] for a reader that holds a container rather than a `Ref` —
 /// a hook callback. Callable, not cached: the pane list changes every frame.
 final adoptablePanesProvider = Provider<List<AdoptablePane> Function()>(
-  (ref) => () => adoptablePanes(ref),
+  (ref) =>
+      () => adoptablePanes(ref),
 );
 
 /// One pass over every CLI store, flattened to the sessions it found. Walks on
@@ -318,9 +320,9 @@ Future<List<DetectedSession>> scanCliStores(Ref ref) async {
   final stores = await ref.read(cliStoreLocatorProvider).locate(environments);
   final sessions = <DetectedSession>[];
   await for (final chunk
-      in ref.read(storeScanRunnerProvider).scan(
-        StoreScanRequest(stores: stores),
-      )) {
+      in ref
+          .read(storeScanRunnerProvider)
+          .scan(StoreScanRequest(stores: stores))) {
     sessions.addAll(chunk.sessions);
   }
   return sessions;
@@ -426,11 +428,7 @@ class DetectedProjectsController extends AsyncNotifier<List<DetectedProject>> {
   Future<void> renameSession(DetectedSession session, String newTitle) async {
     await ref
         .read(cliSessionMutatorProvider)
-        .rename(
-          session,
-          newTitle,
-          codex: ref.read(codexAppServersProvider),
-        );
+        .rename(session, newTitle, codex: ref.read(codexAppServersProvider));
     await detect();
   }
 

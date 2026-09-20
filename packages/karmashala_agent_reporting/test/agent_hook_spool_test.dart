@@ -70,21 +70,34 @@ void main() {
     // `PreToolUse` then `Stop` read in the other order leaves a finished
     // session saying `working` until the next event happens to arrive.
     final base = DateTime.now().subtract(const Duration(minutes: 1));
-    write('7-0.json', '{"n":2}', event: 'Stop', at: base.add(const Duration(seconds: 2)));
-    write('3-0.json', '{"n":1}', event: 'PreToolUse', at: base);
-    write('9-0.json', '{"n":3}', event: 'SessionEnd', at: base.add(const Duration(seconds: 4)));
-
-    expect(
-      (await spool.drain(dir)).map((e) => e.event),
-      ['PreToolUse', 'Stop', 'SessionEnd'],
+    write(
+      '7-0.json',
+      '{"n":2}',
+      event: 'Stop',
+      at: base.add(const Duration(seconds: 2)),
     );
+    write('3-0.json', '{"n":1}', event: 'PreToolUse', at: base);
+    write(
+      '9-0.json',
+      '{"n":3}',
+      event: 'SessionEnd',
+      at: base.add(const Duration(seconds: 4)),
+    );
+
+    expect((await spool.drain(dir)).map((e) => e.event), [
+      'PreToolUse',
+      'Stop',
+      'SessionEnd',
+    ]);
   });
 
   test('a half-written payload is not read at all', () async {
     // The script writes `<pid>-<n>.part` and renames it, so a `.json` is
     // always whole. Reading a `.part` would hand the receiver truncated JSON
     // and lose the event when the rename landed a millisecond later.
-    File(p.join(dir.path, '5-0.part')).writeAsStringSync('agent=claudeCode\nev');
+    File(
+      p.join(dir.path, '5-0.part'),
+    ).writeAsStringSync('agent=claudeCode\nev');
 
     expect(await spool.drain(dir), isEmpty);
     expect(
@@ -94,13 +107,16 @@ void main() {
     );
   });
 
-  test('a payload it cannot parse is removed, not left to accumulate', () async {
-    // It will not become parseable, and the script's own cap cannot see it.
-    File(p.join(dir.path, '5-0.json')).writeAsStringSync('not an envelope');
+  test(
+    'a payload it cannot parse is removed, not left to accumulate',
+    () async {
+      // It will not become parseable, and the script's own cap cannot see it.
+      File(p.join(dir.path, '5-0.json')).writeAsStringSync('not an envelope');
 
-    expect(await spool.drain(dir), isEmpty);
-    expect(dir.listSync(), isEmpty);
-  });
+      expect(await spool.drain(dir), isEmpty);
+      expect(dir.listSync(), isEmpty);
+    },
+  );
 
   test('a payload with no headers, or half of them, is refused', () {
     for (final raw in [
@@ -138,10 +154,13 @@ void main() {
     expect((await spool.drain(dir, limit: 4)).first.body, '{"n":4}');
   });
 
-  test('a directory that is not there is nothing to do, not an error', () async {
-    // The exit path deletes it, and a distribution can go away mid-tick.
-    expect(await spool.drain(Directory(p.join(dir.path, 'gone'))), isEmpty);
-  });
+  test(
+    'a directory that is not there is nothing to do, not an error',
+    () async {
+      // The exit path deletes it, and a distribution can go away mid-tick.
+      expect(await spool.drain(Directory(p.join(dir.path, 'gone'))), isEmpty);
+    },
+  );
 
   test('anything that is not a payload is left where it is', () async {
     File(p.join(dir.path, 'notes.txt')).writeAsStringSync('hello');

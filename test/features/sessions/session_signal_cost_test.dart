@@ -130,7 +130,9 @@ void main() {
         await container.pump();
 
         db.reset();
-        unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
+        unawaited(
+          container.read(sessionActionsProvider).renameNative('s0', 'Renamed'),
+        );
         await container.pump();
 
         reads[count] = db.sessionReads;
@@ -188,7 +190,9 @@ void main() {
       subscribe();
       await container.pump();
       db.reset();
-      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
+      unawaited(
+        container.read(sessionActionsProvider).renameNative('s0', 'Renamed'),
+      );
       await container.pump();
     }
 
@@ -199,17 +203,20 @@ void main() {
       expect(db.sessionReads, renamedRowLookup, reason: '${db.reads}');
     });
 
-    test('the project summary — it counts rows, it does not name them', () async {
-      await renameAfter(
-        () => container.listen(projectSummaryProvider('p1'), (_, _) {}),
-      );
-      expect(
-        db.reads.where((sql) => sql.contains('WHERE repository_id = ?')),
-        isEmpty,
-        reason: 'a header counts sessions; a rename changes no count',
-      );
-      expect(db.tableScans, 0, reason: '${db.reads}');
-    });
+    test(
+      'the project summary — it counts rows, it does not name them',
+      () async {
+        await renameAfter(
+          () => container.listen(projectSummaryProvider('p1'), (_, _) {}),
+        );
+        expect(
+          db.reads.where((sql) => sql.contains('WHERE repository_id = ?')),
+          isEmpty,
+          reason: 'a header counts sessions; a rename changes no count',
+        );
+        expect(db.tableScans, 0, reason: '${db.reads}');
+      },
+    );
 
     test('another session whereabouts', () async {
       await renameAfter(
@@ -235,7 +242,9 @@ void main() {
       container.listen(sessionsForSelectedRepositoryProvider, (_, _) {});
       await container.pump();
 
-      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
+      unawaited(
+        container.read(sessionActionsProvider).renameNative('s0', 'Renamed'),
+      );
       await container.pump();
 
       expect(
@@ -252,7 +261,9 @@ void main() {
       await container.pump();
       expect(container.read(openFollowUpsProvider).single.label, 'Session 0');
 
-      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
+      unawaited(
+        container.read(sessionActionsProvider).renameNative('s0', 'Renamed'),
+      );
       await container.pump();
 
       expect(container.read(openFollowUpsProvider).single.label, 'Renamed');
@@ -263,7 +274,9 @@ void main() {
       await container.pump();
       db.reset();
 
-      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
+      unawaited(
+        container.read(sessionActionsProvider).renameNative('s0', 'Renamed'),
+      );
       await container.pump();
 
       expect(
@@ -295,10 +308,7 @@ void main() {
         reason: 'the placement map must not miss a coarse bump',
       );
       expect(container.read(projectSummaryProvider('p1')).sessions, 11);
-      expect(
-        container.read(sessionsForSelectedRepositoryProvider).length,
-        11,
-      );
+      expect(container.read(sessionsForSelectedRepositoryProvider).length, 11);
       expect(
         db.sessionReads,
         greaterThan(3),
@@ -349,7 +359,10 @@ void main() {
           .deleteNative('s3', deleteFromCli: false);
       await container.pump();
 
-      expect(container.read(sessionProjectIdsProvider).containsKey('s3'), isFalse);
+      expect(
+        container.read(sessionProjectIdsProvider).containsKey('s3'),
+        isFalse,
+      );
       expect(container.read(projectSummaryProvider('p1')).sessions, 9);
       expect(
         container.read(sessionsForSelectedRepositoryProvider).map((s) => s.id),
@@ -380,7 +393,9 @@ void main() {
       await container.pump();
 
       git.requests.clear();
-      unawaited(container.read(sessionActionsProvider).renameNative('s0', 'Renamed'));
+      unawaited(
+        container.read(sessionActionsProvider).renameNative('s0', 'Renamed'),
+      );
       await container.pump();
 
       // ignore: avoid_print

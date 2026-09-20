@@ -75,10 +75,7 @@ void main() {
     // watcher's retirement pass knows only about agent status, so anything it
     // is allowed to retire must be something it can actually see stop.
     var inbox = AttentionInbox.empty.syncFollowUps([followUp('s1')]);
-    inbox = inbox.apply(
-      InboxUpdate(watched: {watched('s1').key}),
-      t0,
-    );
+    inbox = inbox.apply(InboxUpdate(watched: {watched('s1').key}), t0);
     expect(inbox.items.single.kind, InboxItemKind.followUp);
   });
 
@@ -110,8 +107,10 @@ void main() {
     final inbox = AttentionInbox.empty.syncFollowUps([followUp('s1')]);
     expect(identical(inbox.syncFollowUps([followUp('s1')]), inbox), isTrue);
     expect(
-      identical(AttentionInbox.empty.syncFollowUps(const []),
-          AttentionInbox.empty),
+      identical(
+        AttentionInbox.empty.syncFollowUps(const []),
+        AttentionInbox.empty,
+      ),
       isTrue,
     );
   });
@@ -126,7 +125,9 @@ void main() {
       inbox = inbox.apply(
         InboxUpdate(
           watched: {watched('e$i').key},
-          news: [(session: watched('e$i'), reason: NotificationReason.finished)],
+          news: [
+            (session: watched('e$i'), reason: NotificationReason.finished),
+          ],
         ),
         t0.add(Duration(seconds: i)),
       );

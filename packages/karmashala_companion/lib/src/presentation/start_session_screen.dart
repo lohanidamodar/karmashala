@@ -255,9 +255,11 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
       if (!mounted) return;
       final hostAfter = ref.read(companionGatewayProvider).pairing?.hostId;
       if (hostBefore != hostAfter) {
-        setState(() => _failure =
-            'The active desktop changed while this session was starting. '
-            'Try again.');
+        setState(
+          () => _failure =
+              'The active desktop changed while this session was starting. '
+              'Try again.',
+        );
         return;
       }
       // Replace rather than push: coming back to a filled-in form for a session
@@ -365,12 +367,11 @@ class _StartSessionScreenState extends ConsumerState<StartSessionScreen> {
       return CompanionNotice(
         icon: AppIcons.folder,
         title: _repositoryId == null ? 'No checkout here' : 'Checkout changed',
-        body:
-            _repositoryId == null
-                ? '${project.name} has no repository your desktop can start '
-                    'a session in.'
-                : 'That checkout is no longer available on the desktop. '
-                    'Go back and choose another checkout.',
+        body: _repositoryId == null
+            ? '${project.name} has no repository your desktop can start '
+                  'a session in.'
+            : 'That checkout is no longer available on the desktop. '
+                  'Go back and choose another checkout.',
       );
     }
     final agent = _agent(checkout);

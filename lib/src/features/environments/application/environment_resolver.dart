@@ -69,8 +69,10 @@ class ExecutionEnvironmentResolver {
   final CommandRunnerFactory runners;
 
   /// The environment [path]'s commands run in, or why that cannot be said.
-  EnvironmentResolution resolveFor(EnvironmentPath? path, {bool runnable = true}) =>
-      resolve(path?.environmentId, runnable: runnable);
+  EnvironmentResolution resolveFor(
+    EnvironmentPath? path, {
+    bool runnable = true,
+  }) => resolve(path?.environmentId, runnable: runnable);
 
   /// As [resolveFor], for a caller holding only an id. [runnable] asks the
   /// stronger question — turn it off where nothing is spawned.

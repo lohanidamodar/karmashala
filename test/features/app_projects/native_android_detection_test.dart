@@ -159,7 +159,9 @@ void main() {
       // Without the catalog the alias means nothing and is not guessed at.
       expect(reading.appliesAndroidApplication(), isFalse);
       expect(
-        reading.appliesAndroidApplication(catalog: gradlePluginCatalog(_catalog)),
+        reading.appliesAndroidApplication(
+          catalog: gradlePluginCatalog(_catalog),
+        ),
         isTrue,
       );
       // Groovy's no-equals spelling reads the same as Kotlin's.
@@ -167,15 +169,21 @@ void main() {
       expect(reading.namespace, 'com.example.legacy');
     });
 
-    test('the catalog maps a dashed key onto the accessor Gradle generates', () {
-      final catalog = gradlePluginCatalog(_catalog);
-      expect(catalog['android.application'], 'com.android.application');
-      expect(catalog['kotlin.android'], 'org.jetbrains.kotlin.android');
-      expect(gradlePluginCatalog('[versions]\nagp = "8.7.0"\n'), isEmpty);
-    });
+    test(
+      'the catalog maps a dashed key onto the accessor Gradle generates',
+      () {
+        final catalog = gradlePluginCatalog(_catalog);
+        expect(catalog['android.application'], 'com.android.application');
+        expect(catalog['kotlin.android'], 'org.jetbrains.kotlin.android');
+        expect(gradlePluginCatalog('[versions]\nagp = "8.7.0"\n'), isEmpty);
+      },
+    );
 
     test('a library is not an application', () {
-      expect(readGradleModule(_libraryModule).appliesAndroidApplication(), isFalse);
+      expect(
+        readGradleModule(_libraryModule).appliesAndroidApplication(),
+        isFalse,
+      );
     });
 
     test('a Flutter host settings script is recognised as one', () {
@@ -270,9 +278,13 @@ void main() {
       final files = <String, String>{
         'settings.gradle.kts': _probeSettings,
         'app/build.gradle.kts': _probeAppModule,
-        '../pubspec.yaml': 'name: app\nflutter:\n  uses-material-design: true\n',
+        '../pubspec.yaml':
+            'name: app\nflutter:\n  uses-material-design: true\n',
       };
-      expect(detectProject(directoryName: 'android', read: _files(files)), isNull);
+      expect(
+        detectProject(directoryName: 'android', read: _files(files)),
+        isNull,
+      );
       expect(notAProjectNote(read: _files(files)), isNotNull);
     });
 
@@ -292,12 +304,15 @@ void main() {
       expect(kProjectRootFiles, contains('settings.gradle.kts'));
       expect(kProjectRootFiles, contains('../pubspec.yaml'));
       expect(kProjectRootFiles.length, lessThan(10));
-      expect(gradleModuleScriptPaths(<String>[':app', ':wear:mobile']), <String>[
-        'app/build.gradle.kts',
-        'app/build.gradle',
-        'wear/mobile/build.gradle.kts',
-        'wear/mobile/build.gradle',
-      ]);
+      expect(
+        gradleModuleScriptPaths(<String>[':app', ':wear:mobile']),
+        <String>[
+          'app/build.gradle.kts',
+          'app/build.gradle',
+          'wear/mobile/build.gradle.kts',
+          'wear/mobile/build.gradle',
+        ],
+      );
     });
   });
 
@@ -309,7 +324,9 @@ void main() {
       expect(android.tool, ProjectBuildTool.gradleWrapper);
       // Two spellings of one module, and mixing them is the obvious bug: a
       // Gradle *task* path keeps the leading colon, a *directory* drops it.
-      expect(android.commandFor(module: ':app'), <String>[':app:assembleDebug']);
+      expect(android.commandFor(module: ':app'), <String>[
+        ':app:assembleDebug',
+      ]);
       expect(
         android.artifactFor(module: 'app')!.path,
         'app/build/outputs/apk/debug/app-debug.apk',
@@ -331,7 +348,9 @@ void main() {
 
     test('it has no iOS row at all, rather than an unchecked one', () {
       expect(descriptor.buildFor(ProjectTarget.ios), isNull);
-      expect(descriptor.runnableTargets, <ProjectTarget>[ProjectTarget.android]);
+      expect(descriptor.runnableTargets, <ProjectTarget>[
+        ProjectTarget.android,
+      ]);
     });
   });
 }

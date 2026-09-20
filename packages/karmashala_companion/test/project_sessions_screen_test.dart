@@ -183,7 +183,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No sessions yet'), findsOneWidget);
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Empty beta')),
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('Empty beta'),
+      ),
       findsOneWidget,
     );
   });

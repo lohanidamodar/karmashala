@@ -61,7 +61,9 @@ class _PermissionCard extends StatelessWidget {
     final theme = Theme.of(context);
     final support = descriptor.launch.permission;
     final newSelection = support.resolveStored(permissions.newSessions);
-    final existingSelection = support.resolveStored(permissions.existingSessions);
+    final existingSelection = support.resolveStored(
+      permissions.existingSessions,
+    );
     final dangerous =
         support.isDangerous(newSelection) ||
         support.isDangerous(existingSelection);
@@ -97,12 +99,7 @@ class _PermissionCard extends StatelessWidget {
                   ))
                     SizedBox(
                       width: 260,
-                      child: _axisDropdown(
-                        axis,
-                        selection,
-                        support,
-                        onChanged,
-                      ),
+                      child: _axisDropdown(axis, selection, support, onChanged),
                     ),
                 ],
               ),

@@ -50,13 +50,7 @@ class VerificationDao {
       'UPDATE verification_runs SET finished_at = ?, verdict = ?, reason = ?, '
       'produced_by_session_id = COALESCE(?, produced_by_session_id) '
       'WHERE id = ?;',
-      [
-        isoFromDate(finishedAt),
-        verdict.name,
-        reason,
-        producedBySessionId,
-        id,
-      ],
+      [isoFromDate(finishedAt), verdict.name, reason, producedBySessionId, id],
     );
   }
 

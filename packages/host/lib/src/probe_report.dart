@@ -12,7 +12,8 @@ String get hostArchitecture {
 }
 
 /// The first line of every probe.
-String probeHeader() => 'host      ${Platform.operatingSystem} $hostArchitecture';
+String probeHeader() =>
+    'host      ${Platform.operatingSystem} $hostArchitecture';
 
 /// One checked fact. The name column is five wide so `ok` and `FAIL` align.
 String probeStep(String name, bool ok, [String detail = '']) =>

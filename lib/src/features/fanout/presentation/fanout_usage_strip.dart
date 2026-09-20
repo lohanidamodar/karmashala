@@ -218,7 +218,8 @@ class _UsageMeter extends StatelessWidget {
             value: percent / 100,
             marker: usagePace(window, readAt).elapsed,
             color: color,
-            semanticsLabel: '$account · ${window.label}: '
+            semanticsLabel:
+                '$account · ${window.label}: '
                 '${percent.toStringAsFixed(0)}% used$reset',
           ),
           if (note case final note?)

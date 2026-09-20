@@ -97,7 +97,8 @@ enum PermissionRisk {
 
   /// The rung with the smaller reach. Permission axes are **caps**, so a
   /// selection across several of them permits the least any one of them does.
-  PermissionRisk lesser(PermissionRisk other) => index <= other.index ? this : other;
+  PermissionRisk lesser(PermissionRisk other) =>
+      index <= other.index ? this : other;
 
   /// The rung named [name], or `null`. Parsed by name rather than
   /// `values.byName`, which throws on anything it does not recognise.
@@ -115,4 +116,10 @@ enum PermissionRisk {
 /// The MCP tool schemas are one `const` structure built at load time, and a
 /// `for` over `PermissionRisk.values` is not a constant expression. Kept beside
 /// the enum, and pinned to it by a test, so the two cannot drift.
-const permissionRiskNames = ['readOnly', 'ask', 'acceptEdits', 'autoRun', 'bypass'];
+const permissionRiskNames = [
+  'readOnly',
+  'ask',
+  'acceptEdits',
+  'autoRun',
+  'bypass',
+];

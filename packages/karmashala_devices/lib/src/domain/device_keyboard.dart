@@ -15,8 +15,9 @@ class DesktopKey {
   final int keyId;
 
   /// 'A', '2', 'Backspace', 'Arrow Up' — or empty for a key with no name here.
-  String get keyLabel =>
-      (keyId >> 32) == 0 ? String.fromCharCode(keyId).toUpperCase() : (_labels[keyId] ?? '');
+  String get keyLabel => (keyId >> 32) == 0
+      ? String.fromCharCode(keyId).toUpperCase()
+      : (_labels[keyId] ?? '');
 
   @override
   bool operator ==(Object other) => other is DesktopKey && other.keyId == keyId;
@@ -494,7 +495,10 @@ class DeviceKeyTranslator {
   _down = {};
 
   /// The event's Android form, or `null` when nothing should be sent.
-  DeviceKeyIntent? translate(DesktopKeyEvent event, DesktopModifiers modifiers) {
+  DeviceKeyIntent? translate(
+    DesktopKeyEvent event,
+    DesktopModifiers modifiers,
+  ) {
     // Reserved before anything else: this is the way back out, and it must not
     // be reachable by any path that could send it to the device.
     if (isEscapeChord(event, modifiers)) return null;
@@ -524,8 +528,9 @@ class DeviceKeyTranslator {
     if (keyCode == null) return null;
 
     final previous = _down[event.physicalKey];
-    final repeat =
-        event.kind == DesktopKeyEventKind.repeat ? (previous?.repeat ?? 0) + 1 : 0;
+    final repeat = event.kind == DesktopKeyEventKind.repeat
+        ? (previous?.repeat ?? 0) + 1
+        : 0;
     _down[event.physicalKey] = (
       keyCode: keyCode,
       repeat: repeat,
@@ -560,7 +565,10 @@ class DeviceKeyTranslator {
 
   /// Whether [event] is [kDeviceKeyboardEscape], down or up. Both halves, or the
   /// release of a swallowed press goes out as an unpaired `ACTION_UP`.
-  static bool isEscapeChord(DesktopKeyEvent event, DesktopModifiers modifiers) =>
+  static bool isEscapeChord(
+    DesktopKeyEvent event,
+    DesktopModifiers modifiers,
+  ) =>
       event.logicalKey == kDeviceKeyboardEscape.trigger &&
       modifiers.control &&
       modifiers.alt &&

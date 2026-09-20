@@ -114,7 +114,10 @@ void main() {
       ),
     ])!;
 
-    expect(request.body, 'Fix login \u2014 Run this command? \u00b7 rm -rf build/');
+    expect(
+      request.body,
+      'Fix login \u2014 Run this command? \u00b7 rm -rf build/',
+    );
   });
 
   test('a long quote is clipped at the end, not the middle', () {
@@ -151,7 +154,7 @@ void main() {
     expect(
       request.body,
       'Fix login — I ran the echo command, which printed "hi" to the '
-          'terminal.',
+      'terminal.',
     );
   });
 

@@ -66,8 +66,7 @@ class FileEditRecord {
   ///
   /// True exactly when there is no recorded patch to place them: a fragment has
   /// no line numbers, so a diff from it must not print a `@@ -a,b +c,d @@` header.
-  bool get isFragment =>
-      recordedDiff == null && kind == FileEditKind.modified;
+  bool get isFragment => recordedDiff == null && kind == FileEditKind.modified;
 
   @override
   bool operator ==(Object other) =>

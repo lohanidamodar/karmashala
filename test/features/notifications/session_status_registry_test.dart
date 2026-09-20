@@ -153,29 +153,32 @@ void main() {
 
   group('nothing is capped by list position', () {
     for (final count in [100, 500]) {
-      test('$count hook-backed sessions are all covered in one cycle', () async {
-        addHookedSessions(count);
-        // A budget of one: even a registry that could afford exactly one disk
-        // read must still observe every hook, because a hook costs nothing.
-        final registry = build(probeBudget: 1);
+      test(
+        '$count hook-backed sessions are all covered in one cycle',
+        () async {
+          addHookedSessions(count);
+          // A budget of one: even a registry that could afford exactly one disk
+          // read must still observe every hook, because a hook costs nothing.
+          final registry = build(probeBudget: 1);
 
-        final cycle = await registry.cycle();
+          final cycle = await registry.cycle();
 
-        expect(cycle.entries, hasLength(count));
-        expect(registry.trackedCount, count);
-        for (var i = 0; i < count; i++) {
-          final report = registry.reportForKey(
-            AgentSessionKey(AgentIds.claudeCode, 'hook-$i'),
-          );
-          expect(
-            report?.status,
-            AgentActivityStatus.working,
-            reason: 'session $i was not observed',
-          );
-          expect(report?.source, AgentStatusSource.hook);
-        }
-        expect(registry.probes, 0, reason: 'a hook needs no disk read');
-      });
+          expect(cycle.entries, hasLength(count));
+          expect(registry.trackedCount, count);
+          for (var i = 0; i < count; i++) {
+            final report = registry.reportForKey(
+              AgentSessionKey(AgentIds.claudeCode, 'hook-$i'),
+            );
+            expect(
+              report?.status,
+              AgentActivityStatus.working,
+              reason: 'session $i was not observed',
+            );
+            expect(report?.source, AgentStatusSource.hook);
+          }
+          expect(registry.probes, 0, reason: 'a hook needs no disk read');
+        },
+      );
     }
 
     test('hook coverage does not depend on where a session sorts', () async {
@@ -187,7 +190,9 @@ void main() {
 
       expect(
         registry
-            .reportForKey(const AgentSessionKey(AgentIds.claudeCode, 'hook-119'))
+            .reportForKey(
+              const AgentSessionKey(AgentIds.claudeCode, 'hook-119'),
+            )
             ?.status,
         AgentActivityStatus.working,
       );
@@ -270,20 +275,23 @@ void main() {
       expect(starved, isEmpty, reason: 'starved: $starved');
     });
 
-    test('probes run concurrently, capped, rather than one after another', () async {
-      addTranscriptSessions(20);
-      source.delay = const Duration(milliseconds: 2);
-      final registry = build(probeBudget: 20, probeConcurrency: 4);
+    test(
+      'probes run concurrently, capped, rather than one after another',
+      () async {
+        addTranscriptSessions(20);
+        source.delay = const Duration(milliseconds: 2);
+        final registry = build(probeBudget: 20, probeConcurrency: 4);
 
-      await registry.cycle();
+        await registry.cycle();
 
-      expect(source.peakInFlight, 4, reason: 'the cap is the cap');
-      expect(
-        source.peakInFlight,
-        greaterThan(1),
-        reason: 'serial probing is what let one slow file blow the cycle',
-      );
-    });
+        expect(source.peakInFlight, 4, reason: 'the cap is the cap');
+        expect(
+          source.peakInFlight,
+          greaterThan(1),
+          reason: 'serial probing is what let one slow file blow the cycle',
+        );
+      },
+    );
 
     test('an unchanged transcript costs a stat and no read', () async {
       addTranscriptSessions(4);
@@ -299,39 +307,42 @@ void main() {
   });
 
   group('the shape of the cost at a hundred sessions', () {
-    test('ten seconds of cycles is bounded by the budget, not the count', () async {
-      // The measurement Loop 87 reports. Ten seconds at the default 1.2 s
-      // cycle is eight passes.
-      //
-      // Before: one poller *per rendered badge* at 1.2 s, each calling the
-      // status service, each reading its transcript from disk with no mtime
-      // cache — 100 rows x 8 ticks = 800 tail reads in ten seconds (~83/s),
-      // plus a full CLI-store scan per unresolved badge every 10 s (up to 100
-      // scans, ~10/s), plus the 5-second watcher reading up to 60 more.
-      addTranscriptSessions(100);
-      final registry = build();
+    test(
+      'ten seconds of cycles is bounded by the budget, not the count',
+      () async {
+        // The measurement Loop 87 reports. Ten seconds at the default 1.2 s
+        // cycle is eight passes.
+        //
+        // Before: one poller *per rendered badge* at 1.2 s, each calling the
+        // status service, each reading its transcript from disk with no mtime
+        // cache — 100 rows x 8 ticks = 800 tail reads in ten seconds (~83/s),
+        // plus a full CLI-store scan per unresolved badge every 10 s (up to 100
+        // scans, ~10/s), plus the 5-second watcher reading up to 60 more.
+        addTranscriptSessions(100);
+        final registry = build();
 
-      for (var i = 0; i < 8; i++) {
-        clock.now = clock.now.add(kStatusCycleInterval);
-        await registry.cycle();
-      }
+        for (var i = 0; i < 8; i++) {
+          clock.now = clock.now.add(kStatusCycleInterval);
+          await registry.cycle();
+        }
 
-      expect(registry.cycles, 8, reason: 'one pass for all 100, eight times');
-      expect(
-        registry.probes,
-        8 * kStatusProbeBudget,
-        reason: 'the budget is the ceiling: 24 a cycle, ~20 a second',
-      );
-      expect(
-        registry.tailReads,
-        100,
-        reason: 'each transcript read once; unchanged files cost a stat',
-      );
-      expect(registry.transcriptScans, 0, reason: 'every path was known');
-      // ...and every one of the hundred is covered, which is the half the old
-      // 60-session watcher could not do at any price.
-      expect(registry.entries.where((e) => e.lastProbedAt == null), isEmpty);
-    });
+        expect(registry.cycles, 8, reason: 'one pass for all 100, eight times');
+        expect(
+          registry.probes,
+          8 * kStatusProbeBudget,
+          reason: 'the budget is the ceiling: 24 a cycle, ~20 a second',
+        );
+        expect(
+          registry.tailReads,
+          100,
+          reason: 'each transcript read once; unchanged files cost a stat',
+        );
+        expect(registry.transcriptScans, 0, reason: 'every path was known');
+        // ...and every one of the hundred is covered, which is the half the old
+        // 60-session watcher could not do at any price.
+        expect(registry.entries.where((e) => e.lastProbedAt == null), isEmpty);
+      },
+    );
   });
 
   group('state survives a cycle that did not sample it', () {
@@ -485,33 +496,36 @@ void main() {
       expect(registry.transcriptScans, 1);
     });
 
-    test('an unresolved session rescans on its own slow interval, not per tick', () async {
-      var scans = 0;
-      watched.add(
-        const WatchedSession(
-          key: AgentSessionKey(AgentIds.claudeCode, 'cli-missing'),
-          label: 'Native',
-          openId: 'row-0',
-          imported: false,
-        ),
-      );
-      final registry = build(
-        resolveTranscripts: () async {
-          scans++;
-          return const {};
-        },
-      );
+    test(
+      'an unresolved session rescans on its own slow interval, not per tick',
+      () async {
+        var scans = 0;
+        watched.add(
+          const WatchedSession(
+            key: AgentSessionKey(AgentIds.claudeCode, 'cli-missing'),
+            label: 'Native',
+            openId: 'row-0',
+            imported: false,
+          ),
+        );
+        final registry = build(
+          resolveTranscripts: () async {
+            scans++;
+            return const {};
+          },
+        );
 
-      for (var i = 0; i < 5; i++) {
-        clock.now = clock.now.add(kStatusCycleInterval);
+        for (var i = 0; i < 5; i++) {
+          clock.now = clock.now.add(kStatusCycleInterval);
+          await registry.cycle();
+        }
+        expect(scans, 1, reason: 'five cycles inside one search interval');
+
+        clock.now = clock.now.add(kTranscriptSearchInterval);
         await registry.cycle();
-      }
-      expect(scans, 1, reason: 'five cycles inside one search interval');
-
-      clock.now = clock.now.add(kTranscriptSearchInterval);
-      await registry.cycle();
-      expect(scans, 2);
-    });
+        expect(scans, 2);
+      },
+    );
 
     test('a session the CLI never named asks for no scan at all', () async {
       var scans = 0;
@@ -610,25 +624,29 @@ void main() {
       expect(behind.toString(), contains('110 watched'));
     });
 
-    test('the rotation reaches everyone inside the period it reports', () async {
-      // The reported period has to be a promise, not a decoration.
-      addTranscriptSessions(500);
-      final registry = build(probeBudget: 24);
-      addTearDown(registry.dispose);
-      final period = (await registry.cycle()).coverage.rotationPeriod!;
-      final cycles = period.inMilliseconds ~/ kStatusCycleInterval.inMilliseconds;
+    test(
+      'the rotation reaches everyone inside the period it reports',
+      () async {
+        // The reported period has to be a promise, not a decoration.
+        addTranscriptSessions(500);
+        final registry = build(probeBudget: 24);
+        addTearDown(registry.dispose);
+        final period = (await registry.cycle()).coverage.rotationPeriod!;
+        final cycles =
+            period.inMilliseconds ~/ kStatusCycleInterval.inMilliseconds;
 
-      for (var i = 1; i < cycles; i++) {
-        clock.now = clock.now.add(kStatusCycleInterval);
-        await registry.cycle();
-      }
+        for (var i = 1; i < cycles; i++) {
+          clock.now = clock.now.add(kStatusCycleInterval);
+          await registry.cycle();
+        }
 
-      expect(
-        registry.entries.where((e) => e.lastProbedAt == null),
-        isEmpty,
-        reason: 'the reported rotation period must bound the real one',
-      );
-    });
+        expect(
+          registry.entries.where((e) => e.lastProbedAt == null),
+          isEmpty,
+          reason: 'the reported rotation period must bound the real one',
+        );
+      },
+    );
 
     test('a rotation that cannot keep up says so, once', () async {
       final records = <LogRecord>[];
@@ -685,9 +703,7 @@ void main() {
           imported: false,
         ),
       );
-      final registry = build(
-        readTail: (_) => const ['  esc to interrupt  '],
-      );
+      final registry = build(readTail: (_) => const ['  esc to interrupt  ']);
 
       await registry.cycle();
 
@@ -699,9 +715,7 @@ void main() {
 
     test('a screen showing an approval outranks the transcript', () async {
       addTranscriptSessions(1);
-      final registry = build(
-        readTail: (_) => const ['  Enter to confirm  '],
-      );
+      final registry = build(readTail: (_) => const ['  Enter to confirm  ']);
 
       await registry.cycle();
 
@@ -752,24 +766,27 @@ void main() {
   });
 
   group('the cycle carries its passengers', () {
-    test('a passenger runs every cycle but may scan the stores rarely', () async {
-      final scanOffers = <bool>[];
-      final registry = build(
-        onCycle: (mayScanStores) async => scanOffers.add(mayScanStores),
-      );
+    test(
+      'a passenger runs every cycle but may scan the stores rarely',
+      () async {
+        final scanOffers = <bool>[];
+        final registry = build(
+          onCycle: (mayScanStores) async => scanOffers.add(mayScanStores),
+        );
 
-      for (var i = 0; i < 5; i++) {
-        await registry.cycle();
-        clock.now = clock.now.add(kStatusCycleInterval);
-      }
+        for (var i = 0; i < 5; i++) {
+          await registry.cycle();
+          clock.now = clock.now.add(kStatusCycleInterval);
+        }
 
-      // Every cycle, so a free in-memory observation is never skipped …
-      expect(scanOffers, hasLength(5));
-      // … and one store slot, because five cycles is six seconds and the slot
-      // is offered once every ten.
-      expect(scanOffers.where((offered) => offered), hasLength(1));
-      expect(registry.storeSlots, 1);
-    });
+        // Every cycle, so a free in-memory observation is never skipped …
+        expect(scanOffers, hasLength(5));
+        // … and one store slot, because five cycles is six seconds and the slot
+        // is offered once every ten.
+        expect(scanOffers.where((offered) => offered), hasLength(1));
+        expect(registry.storeSlots, 1);
+      },
+    );
 
     test('the store slot reopens once its interval has passed', () async {
       final scanOffers = <bool>[];
@@ -823,9 +840,9 @@ void main() {
       hookArrives(0, 'Notification');
 
       expect(
-        registry.reportForKey(
-          const AgentSessionKey(AgentIds.claudeCode, 'hook-0'),
-        )?.status,
+        registry
+            .reportForKey(const AgentSessionKey(AgentIds.claudeCode, 'hook-0'))
+            ?.status,
         AgentActivityStatus.awaitingApproval,
       );
       expect(registry.cycles, cycles, reason: 'no cycle was needed');
@@ -878,22 +895,25 @@ void main() {
       ]);
     });
 
-    test('a stranger forces one cycle per floor, not one per callback', () async {
-      registry = build();
-      const stranger = AgentSessionKey(AgentIds.claudeCode, 'stranger');
+    test(
+      'a stranger forces one cycle per floor, not one per callback',
+      () async {
+        registry = build();
+        const stranger = AgentSessionKey(AgentIds.claudeCode, 'stranger');
 
-      for (var i = 0; i < 20; i++) {
+        for (var i = 0; i < 20; i++) {
+          registry.hookReported(stranger);
+        }
+        await registry.cycle();
+        expect(registry.hookReports, 20);
+        expect(registry.hookCycles, 1);
+
+        clock.now = clock.now.add(kHookCycleFloor);
         registry.hookReported(stranger);
-      }
-      await registry.cycle();
-      expect(registry.hookReports, 20);
-      expect(registry.hookCycles, 1);
-
-      clock.now = clock.now.add(kHookCycleFloor);
-      registry.hookReported(stranger);
-      await registry.cycle();
-      expect(registry.hookCycles, 2);
-    });
+        await registry.cycle();
+        expect(registry.hookCycles, 2);
+      },
+    );
 
     for (final count in [100, 500]) {
       test('$count sessions, one hook each, cost no cycle at all', () async {

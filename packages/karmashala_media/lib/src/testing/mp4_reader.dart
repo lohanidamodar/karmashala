@@ -107,8 +107,5 @@ Mp4Track readMp4Track(Uint8List file) {
     );
     payload += sizes[i];
   }
-  return Mp4Track(
-    sequenceHeader: Uint8List.fromList(header),
-    frames: frames,
-  );
+  return Mp4Track(sequenceHeader: Uint8List.fromList(header), frames: frames);
 }

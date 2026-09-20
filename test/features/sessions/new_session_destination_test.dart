@@ -139,10 +139,8 @@ void main() {
           home: Scaffold(
             body: Builder(
               builder: (context) => TextButton(
-                onPressed: () => NewSessionDialog.show(
-                  context,
-                  targetPaneId: targetPaneId,
-                ),
+                onPressed: () =>
+                    NewSessionDialog.show(context, targetPaneId: targetPaneId),
                 child: const Text('open'),
               ),
             ),
@@ -190,10 +188,7 @@ void main() {
       // what it offers is a workspace that can still be started in.
       expect(find.text('Alpha'), findsOneWidget);
       expect(find.textContaining('alpha-app'), findsOneWidget);
-      expect(
-        tester.widget<FilledButton>(startButton()).onPressed,
-        isNotNull,
-      );
+      expect(tester.widget<FilledButton>(startButton()).onPressed, isNotNull);
     });
   });
 
@@ -365,10 +360,7 @@ void main() {
       final container = containerFor();
       await open(tester, container);
 
-      expect(
-        find.textContaining('nowhere recorded to run in'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('nowhere recorded to run in'), findsOneWidget);
       expect(tester.widget<FilledButton>(startButton()).onPressed, isNull);
     });
   });

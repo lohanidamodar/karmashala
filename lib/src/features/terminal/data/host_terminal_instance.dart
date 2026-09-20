@@ -68,14 +68,18 @@ class HostTerminalInstance
     _osc.add(_cwd.handleOsc);
 
     if (adoptTerminal == null) {
-      _hasStoredHistory = restoredScrollback != null && restoredScrollback.isNotEmpty;
+      _hasStoredHistory =
+          restoredScrollback != null && restoredScrollback.isNotEmpty;
       writeRestoredScrollback(terminal, restoredScrollback);
     } else {
       _hasStoredHistory = nonBlankLineCount(terminal) > 0;
       writeRestoreMarker(terminal);
     }
 
-    _coalescer = PtyOutputCoalescer(onData: terminal.write, budget: ingestBudget);
+    _coalescer = PtyOutputCoalescer(
+      onData: terminal.write,
+      budget: ingestBudget,
+    );
     _cold = ColdIngest(terminal: terminal, budget: ingestBudget);
 
     terminal.onOutput = (data) {
@@ -138,7 +142,9 @@ class HostTerminalInstance
   @override
   ValueListenable<String?> get directory => _cwd.listenable;
 
-  final ValueNotifier<PaneLiveness> _liveness = ValueNotifier(PaneLiveness.live);
+  final ValueNotifier<PaneLiveness> _liveness = ValueNotifier(
+    PaneLiveness.live,
+  );
 
   @override
   ValueListenable<PaneLiveness> get liveness => _liveness;
@@ -187,7 +193,9 @@ class HostTerminalInstance
 
   @override
   Terminal? get adoptableBuffer =>
-      _exited && !_cold.isParked && !terminal.isUsingAltBuffer ? terminal : null;
+      _exited && !_cold.isParked && !terminal.isUsingAltBuffer
+      ? terminal
+      : null;
 
   @override
   CastRecorder? get recorder => _recorder;
@@ -243,7 +251,9 @@ class HostTerminalInstance
     try {
       deployment = await access.deployment();
     } on Object catch (e) {
-      _fail('Could not ask the session host on ${access.address} about itself: $e');
+      _fail(
+        'Could not ask the session host on ${access.address} about itself: $e',
+      );
       return;
     }
     if (_disposed) return;
@@ -297,7 +307,9 @@ class HostTerminalInstance
       );
 
       _output = link.output.listen(_onDataBytes, onDone: _onLinkClosed);
-      _notices = link.notices.listen((n) => _emit('\r\n\x1b[33m[$n]\x1b[0m\r\n'));
+      _notices = link.notices.listen(
+        (n) => _emit('\r\n\x1b[33m[$n]\x1b[0m\r\n'),
+      );
       unawaited(link.ended.then(_onSessionEnded));
     } on Object catch (e) {
       _link = null;
@@ -439,7 +451,10 @@ TerminalInstance createHostTerminalInstance({
   if (agentLaunch != null) {
     launch = agentPtyLaunchFor(
       agentLaunch,
-      context: LaunchContext.forAgent(agentLaunch, hostIsWindows: Platform.isWindows),
+      context: LaunchContext.forAgent(
+        agentLaunch,
+        hostIsWindows: Platform.isWindows,
+      ),
       environment: environmentOverlay,
     );
     title = agentLaunch.title ?? agentLaunch.agentId;

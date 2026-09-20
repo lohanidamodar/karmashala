@@ -36,10 +36,9 @@ void main() {
     });
 
     test('a supported one must carry the evidence it was read off', () {
-      const support = AgentAttachmentSupport.byPath(
-        ['image/png'],
-        evidence: 'read off a real transcript',
-      );
+      const support = AgentAttachmentSupport.byPath([
+        'image/png',
+      ], evidence: 'read off a real transcript');
 
       expect(support.isSupported, isTrue);
       expect(support.evidence, isNotEmpty);
@@ -66,7 +65,8 @@ void main() {
       expect(
         support.isSupported,
         isFalse,
-        reason: 'codex-cli 0.153.4 takes --image on the command line that '
+        reason:
+            'codex-cli 0.153.4 takes --image on the command line that '
             'starts a session, which a running one cannot be handed',
       );
       expect(support.refusal, contains('--image'));
@@ -79,7 +79,8 @@ void main() {
       expect(
         support.refusal,
         contains('Nobody here has seen'),
-        reason: 'its store is protobuf in an unpublished schema this app reads '
+        reason:
+            'its store is protobuf in an unpublished schema this app reads '
             'none of, so §19 forbids reporting the unknown as either answer',
       );
     });
@@ -90,7 +91,8 @@ void main() {
           expect(
             kAttachmentExtensions,
             contains(type),
-            reason: '$id declares $type, which the store cannot write an '
+            reason:
+                '$id declares $type, which the store cannot write an '
                 'extension for — a path nobody can open',
           );
         }
@@ -106,9 +108,9 @@ void main() {
       // the day one does, it is a line in `built_in_agents.dart` — not code.
       for (final id in AgentIds.builtIn) {
         expect(
-          _descriptor(id).attachments.mediaTypes.where(
-            (type) => type.startsWith('audio/'),
-          ),
+          _descriptor(
+            id,
+          ).attachments.mediaTypes.where((type) => type.startsWith('audio/')),
           isEmpty,
         );
       }

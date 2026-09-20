@@ -245,7 +245,8 @@ void main() {
         deviceRecordingDirectoryProvider.overrideWithValue(
           () async => directory.path,
         ),
-        if (opener != null) recordingSinkOpenerProvider.overrideWithValue(opener),
+        if (opener != null)
+          recordingSinkOpenerProvider.overrideWithValue(opener),
         if (mp4 != null) mp4WriterOpenerProvider.overrideWithValue(mp4),
         simctlServiceProvider.overrideWithValue(simctl),
       ],
@@ -318,8 +319,7 @@ void main() {
       recorder.offerLiveView(live.source);
       await recorder.startLiveViewRecording();
 
-      final active =
-          ref.read(deviceRecordingProvider) as DeviceRecordingActive;
+      final active = ref.read(deviceRecordingProvider) as DeviceRecordingActive;
       expect(p.basename(active.path), isNot(contains(':')));
       expect(p.basename(active.path), '192.168.1.24-37129-20260908-140307.ts');
     });
@@ -339,68 +339,72 @@ void main() {
       clock.advance(const Duration(seconds: 12));
       await recorder.stop();
 
-      final report = validateTransportStream(
-        await File(path).readAsBytes(),
-      );
+      final report = validateTransportStream(await File(path).readAsBytes());
       expect(report.errors, isEmpty, reason: report.toString());
       expect(report.pes, hasLength(5));
       expect(report.patPackets, isNotEmpty);
     });
 
-    test('costs the device nothing: no process, and no second capture',
-        () async {
-      final before = processSpawnsOnThisIsolate;
-      final ref = container(opener: (_) async => _ListSink());
-      final live = _FakeLiveView(_android());
-      final recorder = ref.read(deviceRecordingProvider.notifier);
+    test(
+      'costs the device nothing: no process, and no second capture',
+      () async {
+        final before = processSpawnsOnThisIsolate;
+        final ref = container(opener: (_) async => _ListSink());
+        final live = _FakeLiveView(_android());
+        final recorder = ref.read(deviceRecordingProvider.notifier);
 
-      recorder.offerLiveView(live.source);
-      await recorder.startLiveViewRecording();
-      await live.sendFrame();
-      await recorder.stop();
+        recorder.offerLiveView(live.source);
+        await recorder.startLiveViewRecording();
+        await live.sendFrame();
+        await recorder.stop();
 
-      expect(processSpawnsOnThisIsolate - before, 0);
-      // One consumer, and it is the recording's. The picture opens its own;
-      // neither asks the device for a second stream.
-      expect(live.consumers, 1);
-    });
+        expect(processSpawnsOnThisIsolate - before, 0);
+        // One consumer, and it is the recording's. The picture opens its own;
+        // neither asks the device for a second stream.
+        expect(live.consumers, 1);
+      },
+    );
 
-    test('a stopped recording names the file, its size and how long it ran',
-        () async {
-      final ref = container(opener: (_) async => _ListSink());
-      final live = _FakeLiveView(_android());
-      final recorder = ref.read(deviceRecordingProvider.notifier);
+    test(
+      'a stopped recording names the file, its size and how long it ran',
+      () async {
+        final ref = container(opener: (_) async => _ListSink());
+        final live = _FakeLiveView(_android());
+        final recorder = ref.read(deviceRecordingProvider.notifier);
 
-      recorder.offerLiveView(live.source);
-      await recorder.startLiveViewRecording();
-      await live.sendFrame();
-      clock.advance(const Duration(seconds: 12));
-      await recorder.stop();
+        recorder.offerLiveView(live.source);
+        await recorder.startLiveViewRecording();
+        await live.sendFrame();
+        clock.advance(const Duration(seconds: 12));
+        await recorder.stop();
 
-      final idle = ref.read(deviceRecordingProvider) as DeviceRecordingIdle;
-      expect(idle.last!.result, DeviceRecordingResult.saved);
-      expect(idle.last!.message, contains('over 12s'));
-      expect(idle.last!.path, endsWith('.ts'));
-    });
+        final idle = ref.read(deviceRecordingProvider) as DeviceRecordingIdle;
+        expect(idle.last!.result, DeviceRecordingResult.saved);
+        expect(idle.last!.message, contains('over 12s'));
+        expect(idle.last!.path, endsWith('.ts'));
+      },
+    );
 
-    test('a recording no frame ever reached is not offered as a file',
-        () async {
-      final ref = container(opener: FileRecordingSink.open);
-      final live = _FakeLiveView(_android());
-      final recorder = ref.read(deviceRecordingProvider.notifier);
+    test(
+      'a recording no frame ever reached is not offered as a file',
+      () async {
+        final ref = container(opener: FileRecordingSink.open);
+        final live = _FakeLiveView(_android());
+        final recorder = ref.read(deviceRecordingProvider.notifier);
 
-      recorder.offerLiveView(live.source);
-      await recorder.startLiveViewRecording();
-      final path =
-          (ref.read(deviceRecordingProvider) as DeviceRecordingActive).path;
-      await recorder.stop();
+        recorder.offerLiveView(live.source);
+        await recorder.startLiveViewRecording();
+        final path =
+            (ref.read(deviceRecordingProvider) as DeviceRecordingActive).path;
+        await recorder.stop();
 
-      final idle = ref.read(deviceRecordingProvider) as DeviceRecordingIdle;
-      expect(idle.last!.result, DeviceRecordingResult.empty);
-      expect(idle.last!.path, isNull);
-      expect(idle.last!.message, contains('Nothing was recorded'));
-      expect(File(path).existsSync(), isFalse);
-    });
+        final idle = ref.read(deviceRecordingProvider) as DeviceRecordingIdle;
+        expect(idle.last!.result, DeviceRecordingResult.empty);
+        expect(idle.last!.path, isNull);
+        expect(idle.last!.message, contains('Nothing was recorded'));
+        expect(File(path).existsSync(), isFalse);
+      },
+    );
 
     test('a destination that will not open ends before it starts', () async {
       final ref = container(
@@ -418,23 +422,25 @@ void main() {
       expect(idle.last!.message, contains('read-only file system'));
     });
 
-    test('running out of disk stops the recording and keeps what it had',
-        () async {
-      final sink = _ListSink(failAfter: 400);
-      final ref = container(opener: (_) async => sink);
-      final live = _FakeLiveView(_android());
-      final recorder = ref.read(deviceRecordingProvider.notifier);
+    test(
+      'running out of disk stops the recording and keeps what it had',
+      () async {
+        final sink = _ListSink(failAfter: 400);
+        final ref = container(opener: (_) async => sink);
+        final live = _FakeLiveView(_android());
+        final recorder = ref.read(deviceRecordingProvider.notifier);
 
-      recorder.offerLiveView(live.source);
-      await recorder.startLiveViewRecording();
-      await live.sendFrame();
+        recorder.offerLiveView(live.source);
+        await recorder.startLiveViewRecording();
+        await live.sendFrame();
 
-      final outcome = await settled(ref);
-      expect(outcome.result, DeviceRecordingResult.failed);
-      expect(outcome.message, contains('not enough space'));
-      expect(outcome.message, contains('was saved before it'));
-      expect(sink.closed, isTrue);
-    });
+        final outcome = await settled(ref);
+        expect(outcome.result, DeviceRecordingResult.failed);
+        expect(outcome.message, contains('not enough space'));
+        expect(outcome.message, contains('was saved before it'));
+        expect(sink.closed, isTrue);
+      },
+    );
   });
 
   group('recording an Android live view into an MP4', () {
@@ -543,28 +549,31 @@ void main() {
       expect((state as DeviceRecordingActive).receiving, isFalse);
     });
 
-    test('a live view that comes back is recorded into the same file', () async {
-      final sink = _ListSink();
-      final ref = container(opener: (_) async => sink);
-      final first = _FakeLiveView(_android());
-      final recorder = ref.read(deviceRecordingProvider.notifier);
+    test(
+      'a live view that comes back is recorded into the same file',
+      () async {
+        final sink = _ListSink();
+        final ref = container(opener: (_) async => sink);
+        final first = _FakeLiveView(_android());
+        final recorder = ref.read(deviceRecordingProvider.notifier);
 
-      recorder.offerLiveView(first.source);
-      await recorder.startLiveViewRecording();
-      await first.sendFrame();
-      final afterFirst = sink.builder.length;
-      await first.end();
+        recorder.offerLiveView(first.source);
+        await recorder.startLiveViewRecording();
+        await first.sendFrame();
+        final afterFirst = sink.builder.length;
+        await first.end();
 
-      final second = _FakeLiveView(_android());
-      recorder.offerLiveView(second.source);
-      await second.sendFrame();
+        final second = _FakeLiveView(_android());
+        recorder.offerLiveView(second.source);
+        await second.sendFrame();
 
-      final active =
-          ref.read(deviceRecordingProvider) as DeviceRecordingActive;
-      expect(active.receiving, isTrue);
-      expect(active.gaps, 1);
-      expect(sink.builder.length, greaterThan(afterFirst));
-    });
+        final active =
+            ref.read(deviceRecordingProvider) as DeviceRecordingActive;
+        expect(active.receiving, isTrue);
+        expect(active.gaps, 1);
+        expect(sink.builder.length, greaterThan(afterFirst));
+      },
+    );
 
     test('the gap is a sentence of its own when the recording ends', () async {
       final ref = container(opener: (_) async => _ListSink());
@@ -585,72 +594,78 @@ void main() {
       expect(idle.last!.message, contains('the picture jumps once'));
     });
 
-    test('a live view of another device is never spliced into the file',
-        () async {
-      final sink = _ListSink();
-      final ref = container(opener: (_) async => sink);
-      final first = _FakeLiveView(_android('emulator-5554'));
-      final recorder = ref.read(deviceRecordingProvider.notifier);
+    test(
+      'a live view of another device is never spliced into the file',
+      () async {
+        final sink = _ListSink();
+        final ref = container(opener: (_) async => sink);
+        final first = _FakeLiveView(_android('emulator-5554'));
+        final recorder = ref.read(deviceRecordingProvider.notifier);
 
-      recorder.offerLiveView(first.source);
-      await recorder.startLiveViewRecording();
-      await first.sendFrame();
-      await first.end();
+        recorder.offerLiveView(first.source);
+        await recorder.startLiveViewRecording();
+        await first.sendFrame();
+        await first.end();
 
-      final other = _FakeLiveView(_android('emulator-5556'));
-      recorder.offerLiveView(other.source);
-      await other.sendFrame();
+        final other = _FakeLiveView(_android('emulator-5556'));
+        recorder.offerLiveView(other.source);
+        await other.sendFrame();
 
-      expect(other.consumers, 0);
-      final active =
-          ref.read(deviceRecordingProvider) as DeviceRecordingActive;
-      expect(active.receiving, isFalse);
-      expect(active.gaps, 0);
-    });
+        expect(other.consumers, 0);
+        final active =
+            ref.read(deviceRecordingProvider) as DeviceRecordingActive;
+        expect(active.receiving, isFalse);
+        expect(active.gaps, 0);
+      },
+    );
   });
 
   group('when the device rotates', () {
-    test('the recording carries on, and the file says it changes size',
-        () async {
-      final ref = container(opener: FileRecordingSink.open);
-      final live = _FakeLiveView(_android());
-      final recorder = ref.read(deviceRecordingProvider.notifier);
+    test(
+      'the recording carries on, and the file says it changes size',
+      () async {
+        final ref = container(opener: FileRecordingSink.open);
+        final live = _FakeLiveView(_android());
+        final recorder = ref.read(deviceRecordingProvider.notifier);
 
-      recorder.offerLiveView(live.source);
-      await recorder.startLiveViewRecording();
-      await live.sendFrame();
-      await live.rotate();
-      await live.sendFrame();
+        recorder.offerLiveView(live.source);
+        await recorder.startLiveViewRecording();
+        await live.sendFrame();
+        await live.rotate();
+        await live.sendFrame();
 
-      expect(
-        (ref.read(deviceRecordingProvider) as DeviceRecordingActive)
-            .geometryChanges,
-        1,
-      );
-      clock.advance(const Duration(seconds: 3));
-      await recorder.stop();
+        expect(
+          (ref.read(deviceRecordingProvider) as DeviceRecordingActive)
+              .geometryChanges,
+          1,
+        );
+        clock.advance(const Duration(seconds: 3));
+        await recorder.stop();
 
-      final idle = ref.read(deviceRecordingProvider) as DeviceRecordingIdle;
-      expect(idle.last!.result, DeviceRecordingResult.saved);
-      expect(idle.last!.message, contains('changes size partway through'));
-    });
+        final idle = ref.read(deviceRecordingProvider) as DeviceRecordingIdle;
+        expect(idle.last!.result, DeviceRecordingResult.saved);
+        expect(idle.last!.message, contains('changes size partway through'));
+      },
+    );
   });
 
   group('recording a simulator', () {
-    test('a host with no simulators records nothing and claims nothing',
-        () async {
-      final ref = container();
+    test(
+      'a host with no simulators records nothing and claims nothing',
+      () async {
+        final ref = container();
 
-      await ref
-          .read(deviceRecordingProvider.notifier)
-          .startSimulatorRecording(_simulator());
+        await ref
+            .read(deviceRecordingProvider.notifier)
+            .startSimulatorRecording(_simulator());
 
-      expect(ref.read(deviceRecordingProvider), isA<DeviceRecordingIdle>());
-      expect(
-        (ref.read(deviceRecordingProvider) as DeviceRecordingIdle).last,
-        isNull,
-      );
-    });
+        expect(ref.read(deviceRecordingProvider), isA<DeviceRecordingIdle>());
+        expect(
+          (ref.read(deviceRecordingProvider) as DeviceRecordingIdle).last,
+          isNull,
+        );
+      },
+    );
 
     test('asks simctl to record, and names the file .mov', () async {
       final runner = FakeCommandRunner();
@@ -660,8 +675,7 @@ void main() {
           .read(deviceRecordingProvider.notifier)
           .startSimulatorRecording(_simulator());
 
-      final active =
-          ref.read(deviceRecordingProvider) as DeviceRecordingActive;
+      final active = ref.read(deviceRecordingProvider) as DeviceRecordingActive;
       expect(p.basename(active.path), endsWith('-20260908-140307.mov'));
       expect(runner.startRequests.single.arguments, [
         'simctl',
@@ -672,29 +686,31 @@ void main() {
       ]);
     });
 
-    test('is stopped with an interrupt, because a kill loses the index',
-        () async {
-      late FakeProcessHandle handle;
-      final runner = FakeCommandRunner(
-        processFactory: (_) => handle = FakeProcessHandle(),
-      );
-      final ref = container(simctl: SimctlService(runner: runner));
-      final recorder = ref.read(deviceRecordingProvider.notifier);
+    test(
+      'is stopped with an interrupt, because a kill loses the index',
+      () async {
+        late FakeProcessHandle handle;
+        final runner = FakeCommandRunner(
+          processFactory: (_) => handle = FakeProcessHandle(),
+        );
+        final ref = container(simctl: SimctlService(runner: runner));
+        final recorder = ref.read(deviceRecordingProvider.notifier);
 
-      await recorder.startSimulatorRecording(_simulator());
-      final path =
-          (ref.read(deviceRecordingProvider) as DeviceRecordingActive).path;
-      // What simctl would have written by now.
-      await File(path).writeAsBytes(List.filled(2048, 0));
-      clock.advance(const Duration(seconds: 6));
-      await recorder.stop();
+        await recorder.startSimulatorRecording(_simulator());
+        final path =
+            (ref.read(deviceRecordingProvider) as DeviceRecordingActive).path;
+        // What simctl would have written by now.
+        await File(path).writeAsBytes(List.filled(2048, 0));
+        clock.advance(const Duration(seconds: 6));
+        await recorder.stop();
 
-      expect(handle.interrupted, isTrue);
-      expect(handle.killed, isFalse);
-      final idle = ref.read(deviceRecordingProvider) as DeviceRecordingIdle;
-      expect(idle.last!.result, DeviceRecordingResult.saved);
-      expect(idle.last!.message, contains('2.0 KB over 6s'));
-    });
+        expect(handle.interrupted, isTrue);
+        expect(handle.killed, isFalse);
+        final idle = ref.read(deviceRecordingProvider) as DeviceRecordingIdle;
+        expect(idle.last!.result, DeviceRecordingResult.saved);
+        expect(idle.last!.message, contains('2.0 KB over 6s'));
+      },
+    );
 
     test('simctl exiting on its own is reported as ending early', () async {
       late FakeProcessHandle handle;

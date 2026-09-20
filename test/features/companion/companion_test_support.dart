@@ -39,7 +39,6 @@ Widget buildPhoneApp({
   ),
 );
 
-
 /// Pumps [home] at [size] — [kPhoneSize] unless a test says otherwise. The
 /// extra pump lets the gateway's seeded streams deliver their first value.
 Future<void> pumpPhone(

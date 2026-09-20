@@ -137,28 +137,32 @@ void _installProbe(String distro) {
       'echo KARMASHALA_PROBE_DONE\n';
   // `--exec` hands `wsl.exe` an argv byte for byte with no shell in the way
   // (measured), so the script can simply be one of the arguments.
-  final write = Process.runSync('wsl.exe', [
-    '-d',
-    distro,
-    '--exec',
-    '/bin/sh',
-    '-c',
-    'printf %s "\$1" > $_probePath; chmod +x $_probePath',
-    'sh',
-    script,
-  ], stdoutEncoding: utf8, stderrEncoding: utf8);
+  final write = Process.runSync(
+    'wsl.exe',
+    [
+      '-d',
+      distro,
+      '--exec',
+      '/bin/sh',
+      '-c',
+      'printf %s "\$1" > $_probePath; chmod +x $_probePath',
+      'sh',
+      script,
+    ],
+    stdoutEncoding: utf8,
+    stderrEncoding: utf8,
+  );
   if (write.exitCode != 0) {
     throw StateError('could not install the probe: ${write.stderr}');
   }
 }
 
-Future<ProcessResult> _runIn(String distro, List<String> argv) =>
-    Process.run('wsl.exe', [
-      '-d',
-      distro,
-      '--exec',
-      ...argv,
-    ], stdoutEncoding: utf8, stderrEncoding: utf8);
+Future<ProcessResult> _runIn(String distro, List<String> argv) => Process.run(
+  'wsl.exe',
+  ['-d', distro, '--exec', ...argv],
+  stdoutEncoding: utf8,
+  stderrEncoding: utf8,
+);
 
 Future<void> _clear(String distro) =>
     _runIn(distro, ['/bin/rm', '-f', _argPath, _argcPath]);

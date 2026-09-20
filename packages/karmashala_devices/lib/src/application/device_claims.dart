@@ -86,9 +86,8 @@ class DeviceClaims {
   }
 
   /// Drops everything [sessionId] holds, because that session is over.
-  void release(String sessionId) => _byDevice.removeWhere(
-    (_, claim) => claim.holderSessionId == sessionId,
-  );
+  void release(String sessionId) =>
+      _byDevice.removeWhere((_, claim) => claim.holderSessionId == sessionId);
 
   /// Every claim still standing, newest hold last. For a caller that wants to
   /// show them; nothing in the refusal path needs it.
@@ -118,8 +117,6 @@ class DeviceClaims {
 /// busy; the app overrides it with a lookup through its session store, which
 /// reads a DAO and is why that half cannot live here.
 final deviceClaimsProvider = Provider<DeviceClaims>(
-  (ref) => DeviceClaims(
-    clock: ref.watch(deviceClockProvider),
-    holder: (_) => null,
-  ),
+  (ref) =>
+      DeviceClaims(clock: ref.watch(deviceClockProvider), holder: (_) => null),
 );

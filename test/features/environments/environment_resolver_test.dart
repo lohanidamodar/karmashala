@@ -25,9 +25,9 @@ void main() {
 
   group('resolves', () {
     test('a checkout to the environment its row names', () {
-      final resolved = resolverWith(
-        FakeCommandRunnerFactory(),
-      ).resolveFor(const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/x'));
+      final resolved = resolverWith(FakeCommandRunnerFactory()).resolveFor(
+        const EnvironmentPath(environmentId: 'wsl:Ubuntu', path: '/x'),
+      );
 
       expect(resolved.isResolved, isTrue);
       expect(resolved.environment, wslEnv());
@@ -37,7 +37,9 @@ void main() {
     });
 
     test('an SSH row when the factory can dial it', () {
-      final resolved = resolverWith(FakeCommandRunnerFactory()).resolve('ssh:h1');
+      final resolved = resolverWith(
+        FakeCommandRunnerFactory(),
+      ).resolve('ssh:h1');
       expect(resolved.environment, sshEnvFixture());
     });
   });
@@ -49,12 +51,17 @@ void main() {
       expect(refused.isResolved, isFalse);
       expect(refused.environment, isNull);
       expect(refused.refusal, EnvironmentRefusal.noCheckout);
-      expect(refused.reason, 'No checkout, so nothing says where its commands would run');
+      expect(
+        refused.reason,
+        'No checkout, so nothing says where its commands would run',
+      );
       expect(() => refused.require, throwsStateError);
     });
 
     test('an environment row that is gone, in the words git already used', () {
-      final refused = resolverWith(FakeCommandRunnerFactory()).resolve('wsl:Gone');
+      final refused = resolverWith(
+        FakeCommandRunnerFactory(),
+      ).resolve('wsl:Gone');
 
       expect(refused.refusal, EnvironmentRefusal.environmentUnknown);
       expect(refused.reason, 'Unknown environment: wsl:Gone');
@@ -70,10 +77,15 @@ void main() {
         ),
       );
 
-      final refused = resolverWith(FakeCommandRunnerFactory()).resolve('wsl:Broken');
+      final refused = resolverWith(
+        FakeCommandRunnerFactory(),
+      ).resolve('wsl:Broken');
 
       expect(refused.refusal, EnvironmentRefusal.wslDistributionUnknown);
-      expect(refused.reason, 'WSL environment wsl:Broken has no distribution name');
+      expect(
+        refused.reason,
+        'WSL environment wsl:Broken has no distribution name',
+      );
     });
 
     test('an SSH row when nothing is composed to dial it', () {

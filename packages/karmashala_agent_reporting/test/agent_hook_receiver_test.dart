@@ -69,9 +69,7 @@ void main() {
 
     expect(report.status, AgentActivityStatus.awaitingApproval);
     expect(report.waiting, AgentWaitKind.approval);
-    expect(report.evidence, [
-      'Claude needs your permission to use Bash',
-    ]);
+    expect(report.evidence, ['Claude needs your permission to use Bash']);
   });
 
   test('the idle nudge stops the session without offering a key', () {
@@ -93,7 +91,8 @@ void main() {
     // the shipped binary's `notificationType:` call sites.
     const notices = {
       'auth_success': 'Claude Code login successful',
-      'elicitation_complete': 'MCP server "files" confirmed elicitation e1 '
+      'elicitation_complete':
+          'MCP server "files" confirmed elicitation e1 '
           'complete',
       'elicitation_response': 'Elicitation response for server "files": accept',
       'computer_use_exit': 'Claude is done using your computer',
@@ -129,7 +128,7 @@ void main() {
       'quota_auto_resume_stale': 'Usage limit reset — press enter to continue',
       'quota_auto_resume_disabled':
           'Automatic continue was turned off — the task will not resume on '
-              'its own',
+          'its own',
     };
 
     for (final entry in stopped.entries) {
@@ -475,11 +474,9 @@ void main() {
     test('events that are not about waiting record no wait kind', () {
       for (final event in ['PreToolUse', 'Stop']) {
         expect(
-          receiver.handle(
-            agentId: 'claudeCode',
-            event: event,
-            body: body('s1'),
-          ).waiting,
+          receiver
+              .handle(agentId: 'claudeCode', event: event, body: body('s1'))
+              .waiting,
           AgentWaitKind.unrecorded,
           reason: event,
         );
@@ -510,8 +507,10 @@ void main() {
       expect(failed.failureReason, 'rate_limit');
       // A failure holds the user up but offers nothing to press.
       expect(failed.waiting, AgentWaitKind.unrecorded);
-      expect(reports.latest('claudeCode', 's1')!.status,
-          AgentActivityStatus.failed);
+      expect(
+        reports.latest('claudeCode', 's1')!.status,
+        AgentActivityStatus.failed,
+      );
 
       // And an ordinary finished turn is untouched by any of it.
       final stopped = receiver.handle(
@@ -596,54 +595,63 @@ void main() {
       }
     });
 
-    test('Antigravity Stop extracts error message as evidence when present', () {
-      final report = receiver.handle(
-        agentId: 'antigravity',
-        event: 'Stop',
-        body: jsonEncode({
-          'conversationId': 'c1',
-          'terminationReason': 'ERROR',
-          'error': 'API quota limit exceeded',
-        }),
-      );
-      expect(report.status, AgentActivityStatus.failed);
-      expect(report.evidence, ['API quota limit exceeded']);
-    });
-
-    test('Antigravity Stop extracts finalModelOutput as evidence on success', () {
-      final report = receiver.handle(
-        agentId: 'antigravity',
-        event: 'Stop',
-        body: jsonEncode({
-          'conversationId': 'c1',
-          'terminationReason': 'NO_TOOL_CALL',
-          'finalModelOutput': 'Task complete. All tests pass.',
-        }),
-      );
-      expect(report.status, AgentActivityStatus.idle);
-      expect(report.evidence, ['Task complete. All tests pass.']);
-    });
-
-    test('Antigravity Stop uses fallbackMessage when error and finalModelOutput are empty', () {
-      final expectedFallbacks = {
-        'MAX_INVOCATIONS': 'Maximum invocations reached',
-        'MAX_FORCED_INVOCATIONS': 'Maximum forced invocations reached',
-        'MAX_TOKEN_BUDGET_EXCEEDED': 'Maximum token budget exceeded',
-        'ERROR': 'Execution failed',
-      };
-      for (final entry in expectedFallbacks.entries) {
+    test(
+      'Antigravity Stop extracts error message as evidence when present',
+      () {
         final report = receiver.handle(
           agentId: 'antigravity',
           event: 'Stop',
           body: jsonEncode({
             'conversationId': 'c1',
-            'terminationReason': entry.key,
+            'terminationReason': 'ERROR',
+            'error': 'API quota limit exceeded',
           }),
         );
-        expect(report.status, AgentActivityStatus.failed, reason: entry.key);
-        expect(report.evidence, [entry.value], reason: entry.key);
-      }
-    });
+        expect(report.status, AgentActivityStatus.failed);
+        expect(report.evidence, ['API quota limit exceeded']);
+      },
+    );
+
+    test(
+      'Antigravity Stop extracts finalModelOutput as evidence on success',
+      () {
+        final report = receiver.handle(
+          agentId: 'antigravity',
+          event: 'Stop',
+          body: jsonEncode({
+            'conversationId': 'c1',
+            'terminationReason': 'NO_TOOL_CALL',
+            'finalModelOutput': 'Task complete. All tests pass.',
+          }),
+        );
+        expect(report.status, AgentActivityStatus.idle);
+        expect(report.evidence, ['Task complete. All tests pass.']);
+      },
+    );
+
+    test(
+      'Antigravity Stop uses fallbackMessage when error and finalModelOutput are empty',
+      () {
+        final expectedFallbacks = {
+          'MAX_INVOCATIONS': 'Maximum invocations reached',
+          'MAX_FORCED_INVOCATIONS': 'Maximum forced invocations reached',
+          'MAX_TOKEN_BUDGET_EXCEEDED': 'Maximum token budget exceeded',
+          'ERROR': 'Execution failed',
+        };
+        for (final entry in expectedFallbacks.entries) {
+          final report = receiver.handle(
+            agentId: 'antigravity',
+            event: 'Stop',
+            body: jsonEncode({
+              'conversationId': 'c1',
+              'terminationReason': entry.key,
+            }),
+          );
+          expect(report.status, AgentActivityStatus.failed, reason: entry.key);
+          expect(report.evidence, [entry.value], reason: entry.key);
+        }
+      },
+    );
   });
 
   test('clear() drops everything recorded', () {

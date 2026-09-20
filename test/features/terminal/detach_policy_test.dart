@@ -195,7 +195,10 @@ void main() {
       );
 
       expect(
-        container.read(terminalSessionsControllerProvider).detached.single
+        container
+            .read(terminalSessionsControllerProvider)
+            .detached
+            .single
             .paneId,
         pane,
       );
@@ -216,7 +219,10 @@ void main() {
       controller.closeTab(opened.tabId);
 
       expect(
-        container.read(terminalSessionsControllerProvider).detached.single
+        container
+            .read(terminalSessionsControllerProvider)
+            .detached
+            .single
             .paneId,
         opened.paneId,
       );
@@ -255,7 +261,10 @@ void main() {
       );
 
       expect(
-        container.read(terminalSessionsControllerProvider).detached.single
+        container
+            .read(terminalSessionsControllerProvider)
+            .detached
+            .single
             .paneId,
         pane,
       );

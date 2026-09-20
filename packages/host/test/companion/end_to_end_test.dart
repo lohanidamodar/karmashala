@@ -121,12 +121,14 @@ void main() {
 
     await expectLater(
       impostor.connect(
-        transport: LanTransport(host: '127.0.0.1', port: listener.port)..start(),
+        transport: LanTransport(host: '127.0.0.1', port: listener.port)
+          ..start(),
         generation: 0,
         helloTimeout: const Duration(seconds: 3),
       ),
       throwsA(anything),
-      reason: 'the key is the only thing that decides, and it is not in the row',
+      reason:
+          'the key is the only thing that decides, and it is not in the row',
     );
   });
 

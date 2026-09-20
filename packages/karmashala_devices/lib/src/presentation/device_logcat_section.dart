@@ -626,7 +626,9 @@ class _Status extends ConsumerWidget {
     // Counted, and shown whenever it is not zero — a tail that quietly dropped
     // its oldest lines looks exactly like one that never saw them.
     if (session.dropped > 0) parts.add('${session.dropped} dropped');
-    if (session.packageFilter != null) parts.add('only ${session.packageFilter}');
+    if (session.packageFilter != null) {
+      parts.add('only ${session.packageFilter}');
+    }
     return parts.join(' · ');
   }
 

@@ -280,7 +280,8 @@ void main() {
           // answers on the owner's machine, labels localised, paths not.
           return const CommandResult(
             exitCode: 0,
-            stdout: 'Rule Name: Karmashala\n'
+            stdout:
+                'Rule Name: Karmashala\n'
                 'Enabled: Yes\n'
                 'Direction: In\n'
                 'Program: C:\\Program Files\\Karmashala\\karmashala.exe\n'
@@ -322,7 +323,8 @@ void main() {
         responder: (request) => request.arguments.contains('show')
             ? const CommandResult(
                 exitCode: 0,
-                stdout: 'Rule Name: Karmashala\n'
+                stdout:
+                    'Rule Name: Karmashala\n'
                     'Program: C:\\Other\\thing.exe\n'
                     'LocalPort: Any\n',
                 stderr: '',

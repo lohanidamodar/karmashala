@@ -387,9 +387,7 @@ void main() {
     setUpAll(() async {
       vectors =
           jsonDecode(
-                File(
-                  'test/remote/remote_test_vectors.json',
-                ).readAsStringSync(),
+                File('test/remote/remote_test_vectors.json').readAsStringSync(),
               )
               as Map<String, Object?>;
       deviceKey = await deriveDeviceKey(

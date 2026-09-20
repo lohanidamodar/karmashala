@@ -68,7 +68,6 @@ void main() {
         );
       }
     });
-
   });
 
   group('the command each CLI is asked with', () {
@@ -142,33 +141,43 @@ void main() {
         'haiku',
         kSessionRecapRequest,
       ]);
-      expect(h.container.read(sessionRecapDaoProvider).forSession('s1')!.model,
-          'haiku');
-    });
-
-    test('a conversation too long for the wire says so in its own text',
-        () async {
-      final h = harness(
-        agentId: AgentIds.claudeCode,
-        transcript: _transcript(padTurns: 60, padBytes: 2000),
+      expect(
+        h.container.read(sessionRecapDaoProvider).forSession('s1')!.model,
+        'haiku',
       );
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-
-      await h.container.read(sessionRecapServiceProvider).write('s1');
-
-      final blob = h.runner.requests.single.stdinText!;
-      expect(utf8.encode(blob).length, lessThanOrEqualTo(kMaxTranscriptTextBytes));
-      expect(blob, startsWith('[The earliest'));
-      // Fitted from the end: a recap is asked for by somebody returning to the
-      // conversation, and the end is what they are returning to.
-      expect(blob, contains('we settled on B'));
     });
+
+    test(
+      'a conversation too long for the wire says so in its own text',
+      () async {
+        final h = harness(
+          agentId: AgentIds.claudeCode,
+          transcript: _transcript(padTurns: 60, padBytes: 2000),
+        );
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+
+        await h.container.read(sessionRecapServiceProvider).write('s1');
+
+        final blob = h.runner.requests.single.stdinText!;
+        expect(
+          utf8.encode(blob).length,
+          lessThanOrEqualTo(kMaxTranscriptTextBytes),
+        );
+        expect(blob, startsWith('[The earliest'));
+        // Fitted from the end: a recap is asked for by somebody returning to the
+        // conversation, and the end is what they are returning to.
+        expect(blob, contains('we settled on B'));
+      },
+    );
   });
 
   group('nothing produces a recap but the action', () {
     test('a launch, an end and a restore spawn nothing', () async {
-      final h = harness(agentId: AgentIds.claudeCode, transcript: _transcript());
+      final h = harness(
+        agentId: AgentIds.claudeCode,
+        transcript: _transcript(),
+      );
       addTearDown(h.db.close);
 
       // Launch: the row exists and every surface that would show a recap is
@@ -177,10 +186,9 @@ void main() {
       await h.container.read(sessionChatViewProbeProvider('s1').future);
 
       // End.
-      h.container.read(sessionDaoProvider).updateStatus(
-            's1',
-            SessionStatus.completed,
-          );
+      h.container
+          .read(sessionDaoProvider)
+          .updateStatus('s1', SessionStatus.completed);
       expect(h.container.read(sessionRecapProvider('s1')), isNull);
       h.container.dispose();
 
@@ -201,10 +209,11 @@ void main() {
 
     test('only the action reaches the service', () {
       final callers = <String>[];
-      for (final file in Directory('lib')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.dart'))) {
+      for (final file
+          in Directory('lib')
+              .listSync(recursive: true)
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.dart'))) {
         if (file.readAsStringSync().contains('sessionRecapServiceProvider')) {
           callers.add(file.uri.pathSegments.last);
         }
@@ -262,15 +271,15 @@ void main() {
         writtenAt: testTime.subtract(const Duration(hours: 3)),
       );
 
-      await tester.pumpWidget(
-        _card(db: db, turnsNow: 4),
-      );
+      await tester.pumpWidget(_card(db: db, turnsNow: 4));
       await tester.pump();
 
       expect(find.text('Recap'), findsOneWidget);
       expect(find.textContaining('Concluded: we settled on B'), findsOneWidget);
       expect(
-        find.textContaining('Written by Claude Code (haiku) 3h ago, over 4 turns'),
+        find.textContaining(
+          'Written by Claude Code (haiku) 3h ago, over 4 turns',
+        ),
         findsOneWidget,
       );
       expect(find.text('Recap again'), findsNothing);
@@ -370,10 +379,10 @@ AppDatabase _seededDb({String agentId = AgentIds.claudeCode}) {
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
   ProjectDao(db).insert(project());
   RepositoryDao(db).insert(repository());
-  AgentInstallationDao(db).insert(agentInstallation(id: 'a1', agentId: agentId));
-  SessionDao(db).insert(
-    session(id: 's1').copyWith(externalSessionId: 'cli-1'),
-  );
+  AgentInstallationDao(
+    db,
+  ).insert(agentInstallation(id: 'a1', agentId: agentId));
+  SessionDao(db).insert(session(id: 's1').copyWith(externalSessionId: 'cli-1'));
   return db;
 }
 
@@ -443,7 +452,9 @@ abstract final class SessionRecapDaoWriter {
       overrides: [...fakeTerminalOverrides(database: db)],
     );
     addTearDown(container.dispose);
-    container.read(sessionRecapDaoProvider).write(
+    container
+        .read(sessionRecapDaoProvider)
+        .write(
           SessionRecap(
             sessionId: 's1',
             text: 'Concluded: we settled on B\nLeft: nothing\nDo not: A',
@@ -456,19 +467,18 @@ abstract final class SessionRecapDaoWriter {
   }
 }
 
-Widget _card({required AppDatabase db, required int turnsNow}) =>
-    ProviderScope(
-      overrides: [
-        ...fakeTerminalOverrides(database: db),
-        clockProvider.overrideWithValue(FixedClock(testTime)),
-        sessionChatTranscriptProvider.overrideWith(
-          (ref, id) => Stream.value([
-            for (var i = 0; i < turnsNow; i++)
-              const TranscriptMessage(role: 'agent', text: 'x'),
-          ]),
-        ),
-      ],
-      child: const MaterialApp(
-        home: Scaffold(body: SessionRecapCard(sessionId: 's1')),
-      ),
-    );
+Widget _card({required AppDatabase db, required int turnsNow}) => ProviderScope(
+  overrides: [
+    ...fakeTerminalOverrides(database: db),
+    clockProvider.overrideWithValue(FixedClock(testTime)),
+    sessionChatTranscriptProvider.overrideWith(
+      (ref, id) => Stream.value([
+        for (var i = 0; i < turnsNow; i++)
+          const TranscriptMessage(role: 'agent', text: 'x'),
+      ]),
+    ),
+  ],
+  child: const MaterialApp(
+    home: Scaffold(body: SessionRecapCard(sessionId: 's1')),
+  ),
+);

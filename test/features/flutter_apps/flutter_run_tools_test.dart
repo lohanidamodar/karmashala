@@ -92,8 +92,7 @@ void main() {
     if (artifacts.existsSync()) artifacts.deleteSync(recursive: true);
   });
 
-  FlutterRunTools tools() =>
-      FlutterRunTools(container, callerSessionId: 's1');
+  FlutterRunTools tools() => FlutterRunTools(container, callerSessionId: 's1');
 
   Future<Map<String, Object?>> call(Map<String, dynamic> args) async =>
       (await tools().call('flutter_run', args))! as Map<String, Object?>;
@@ -121,19 +120,21 @@ void main() {
       );
     });
 
-    test('an unknown action says so rather than doing the nearest thing',
-        () async {
-      expect(
-        () => tools().call('flutter_run', {'action': 'launch'}),
-        throwsA(
-          isA<ArgumentError>().having(
-            (error) => '${error.message}',
-            'message',
-            contains('Unknown action "launch"'),
+    test(
+      'an unknown action says so rather than doing the nearest thing',
+      () async {
+        expect(
+          () => tools().call('flutter_run', {'action': 'launch'}),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => '${error.message}',
+              'message',
+              contains('Unknown action "launch"'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
 
     test('no checkoutId points at list_checkouts and says why an id', () async {
       expect(
@@ -153,10 +154,8 @@ void main() {
 
     test('run with no deviceId names where the ids come from', () async {
       expect(
-        () => tools().call('flutter_run', {
-          'action': 'run',
-          'checkoutId': 'r2',
-        }),
+        () =>
+            tools().call('flutter_run', {'action': 'run', 'checkoutId': 'r2'}),
         throwsA(
           isA<ArgumentError>().having(
             (error) => '${error.message}',
@@ -181,8 +180,7 @@ void main() {
 
   group('the preflight is in the answer', () {
     test('the §17 refusal comes back whole, and nothing was started', () async {
-      responder = (request) =>
-          request.arguments.contains('command -v flutter')
+      responder = (request) => request.arguments.contains('command -v flutter')
           ? const CommandResult(
               exitCode: 0,
               stdout: '/mnt/c/Users/dlohani/flutter/bin/flutter\n',
@@ -204,8 +202,11 @@ void main() {
   });
 
   group('run', () {
-    Future<Map<String, Object?>> launch() =>
-        call({'action': 'run', 'checkoutId': 'r2', 'deviceId': 'emulator-5554'});
+    Future<Map<String, Object?>> launch() => call({
+      'action': 'run',
+      'checkoutId': 'r2',
+      'deviceId': 'emulator-5554',
+    });
 
     test('the answer names the pane and says nothing waits for it', () async {
       final answer = await launch();
@@ -214,13 +215,19 @@ void main() {
       expect(run['deviceId'], 'emulator-5554');
       expect(run['liveness'], 'running');
       expect(run['projectDirectory'], '/home/me/app');
-      expect('${answer['summary']}', contains('where the developer can see it'));
+      expect(
+        '${answer['summary']}',
+        contains('where the developer can see it'),
+      );
       expect('${answer['summary']}', contains('${run['paneId']}'));
     });
 
-    test('a launch answer carries no log: nothing has gone wrong yet', () async {
-      expect((await launch())['run'], isNot(contains('log')));
-    });
+    test(
+      'a launch answer carries no log: nothing has gone wrong yet',
+      () async {
+        expect((await launch())['run'], isNot(contains('log')));
+      },
+    );
 
     test('a second launch onto the same device is refused by name', () async {
       final first = await launch();
@@ -258,41 +265,45 @@ void main() {
       expect((run['log']! as List<Object?>).join('\n'), contains('Gradle'));
     });
 
-    test('a gate that passed comes back as a verdict, not a transcript',
-        () async {
-      final started = await call({'action': 'analyze', 'checkoutId': 'r2'});
-      final paneId = '${(started['run']! as Map<String, Object?>)['paneId']}';
-      paneOf(paneId).terminal.write('No issues found!\r\n');
-      paneOf(paneId).exitWith(0);
-      await settle();
+    test(
+      'a gate that passed comes back as a verdict, not a transcript',
+      () async {
+        final started = await call({'action': 'analyze', 'checkoutId': 'r2'});
+        final paneId = '${(started['run']! as Map<String, Object?>)['paneId']}';
+        paneOf(paneId).terminal.write('No issues found!\r\n');
+        paneOf(paneId).exitWith(0);
+        await settle();
 
-      final answer = await call({'action': 'status', 'paneId': paneId});
-      final run = answer['run']! as Map<String, Object?>;
-      expect(run['exitCode'], 0);
-      expect(run['liveness'], 'finished');
-      expect(run.containsKey('log'), isFalse);
-      expect('${run['logNote']}', contains('finished cleanly'));
-      expect(run['verificationRunId'], isNotNull);
-    });
+        final answer = await call({'action': 'status', 'paneId': paneId});
+        final run = answer['run']! as Map<String, Object?>;
+        expect(run['exitCode'], 0);
+        expect(run['liveness'], 'finished');
+        expect(run.containsKey('log'), isFalse);
+        expect('${run['logNote']}', contains('finished cleanly'));
+        expect(run['verificationRunId'], isNotNull);
+      },
+    );
 
-    test('a failed build carries the tail, because that is the question',
-        () async {
-      final started = await call({'action': 'test', 'checkoutId': 'r2'});
-      final paneId = '${(started['run']! as Map<String, Object?>)['paneId']}';
-      paneOf(paneId).terminal.write(
-        'lib/main.dart:12:3: Error: Expected a declaration.\r\n'
-        'Target kernel_snapshot_program failed.\r\n',
-      );
-      paneOf(paneId).exitWith(1);
-      await settle();
+    test(
+      'a failed build carries the tail, because that is the question',
+      () async {
+        final started = await call({'action': 'test', 'checkoutId': 'r2'});
+        final paneId = '${(started['run']! as Map<String, Object?>)['paneId']}';
+        paneOf(paneId).terminal.write(
+          'lib/main.dart:12:3: Error: Expected a declaration.\r\n'
+          'Target kernel_snapshot_program failed.\r\n',
+        );
+        paneOf(paneId).exitWith(1);
+        await settle();
 
-      final answer = await call({'action': 'status', 'paneId': paneId});
-      final run = answer['run']! as Map<String, Object?>;
-      expect(run['exitCode'], 1);
-      final log = (run['log']! as List<Object?>).join('\n');
-      expect(log, contains('Error:'));
-      expect(log, contains('kernel_snapshot_program failed'));
-    });
+        final answer = await call({'action': 'status', 'paneId': paneId});
+        final run = answer['run']! as Map<String, Object?>;
+        expect(run['exitCode'], 1);
+        final log = (run['log']! as List<Object?>).join('\n');
+        expect(log, contains('Error:'));
+        expect(log, contains('kernel_snapshot_program failed'));
+      },
+    );
 
     test('the log is ROWS, and a row is the pane\'s width — which is why the '
         'VM service address is not read from one', () {
@@ -311,8 +322,9 @@ void main() {
           .read(terminalSessionsControllerProvider.notifier)
           .closePane(paneId, detach: false);
 
-      final run = (await call({'action': 'status', 'paneId': paneId}))['run']!
-          as Map<String, Object?>;
+      final run =
+          (await call({'action': 'status', 'paneId': paneId}))['run']!
+              as Map<String, Object?>;
       expect(run['liveness'], 'unknown');
       expect('${run['livenessNote']}', contains('unknown rather than no'));
     });
@@ -384,14 +396,16 @@ void main() {
     ]);
   });
 
-  test('a sub-project is joined onto the checkout in its own spelling',
-      () async {
-    final started = await call({
-      'action': 'pubGet',
-      'checkoutId': 'r2',
-      'projectDirectory': 'packages/mobile',
-    });
-    final run = started['run']! as Map<String, Object?>;
-    expect(run['projectDirectory'], '/home/me/app/packages/mobile');
-  });
+  test(
+    'a sub-project is joined onto the checkout in its own spelling',
+    () async {
+      final started = await call({
+        'action': 'pubGet',
+        'checkoutId': 'r2',
+        'projectDirectory': 'packages/mobile',
+      });
+      final run = started['run']! as Map<String, Object?>;
+      expect(run['projectDirectory'], '/home/me/app/packages/mobile');
+    },
+  );
 }

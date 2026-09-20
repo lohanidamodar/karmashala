@@ -100,20 +100,23 @@ void main() {
     expect(items.single.fromAgentEnvironment, isFalse);
   });
 
-  test('a session with no record at all is an empty panel, not an error', () async {
-    ImportedSessionDao(
-      db,
-    ).insertIfAbsent(imported(filePath: '${dir.path}/never-written.jsonl'));
-    final container = containerFor();
+  test(
+    'a session with no record at all is an empty panel, not an error',
+    () async {
+      ImportedSessionDao(
+        db,
+      ).insertIfAbsent(imported(filePath: '${dir.path}/never-written.jsonl'));
+      final container = containerFor();
 
-    final subscription = container.listen(
-      sessionMediaProvider('i1'),
-      (_, _) {},
-    );
-    addTearDown(subscription.close);
+      final subscription = container.listen(
+        sessionMediaProvider('i1'),
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
 
-    expect(await container.read(sessionMediaProvider('i1').future), isEmpty);
-  });
+      expect(await container.read(sessionMediaProvider('i1').future), isEmpty);
+    },
+  );
 
   test(
     'an append is noticed when the modification time does not move',
@@ -122,8 +125,9 @@ void main() {
         textLine(at: '2026-09-01T10:00:00.000Z', role: 'user', text: 'hello'),
       ]);
       final originalModified = transcript.lastModifiedSync();
-      ImportedSessionDao(db)
-          .insertIfAbsent(imported(filePath: transcript.path));
+      ImportedSessionDao(
+        db,
+      ).insertIfAbsent(imported(filePath: transcript.path));
       final container = containerFor();
       final nextItems = Completer<List<SessionMediaItem>>();
       var sawInitial = false;

@@ -119,7 +119,6 @@ class _GatedRunner extends FakeCommandRunner {
     }
     _gates.clear();
   }
-
 }
 
 void main() {
@@ -172,11 +171,9 @@ void main() {
       final container = containerWith(_FamilyFiles());
 
       final labels = await inFlight(container);
-      expect(
-        git.worktreeListDirectories,
-        [_app],
-        reason: 'three rows, one family, one process',
-      );
+      expect(git.worktreeListDirectories, [
+        _app,
+      ], reason: 'three rows, one family, one process');
       git.release();
 
       final result = await labels;
@@ -188,7 +185,12 @@ void main() {
     });
 
     test('two families are asked at once, not one after the other', () async {
-      insert([('hub', _hub), ('app', _app), ('relay', _relay), ('inbox', _inbox)]);
+      insert([
+        ('hub', _hub),
+        ('app', _app),
+        ('relay', _relay),
+        ('inbox', _inbox),
+      ]);
       final container = containerWith(_FamilyFiles());
 
       final labels = await inFlight(container);
@@ -212,7 +214,12 @@ void main() {
       // What an SSH checkout looks like from here: no path this process can
       // open, so no key — and grouping each unknown row on its own would turn
       // the one saving in this provider into a process per row.
-      insert([('hub', _hub), ('app', _app), ('relay', _relay), ('inbox', _inbox)]);
+      insert([
+        ('hub', _hub),
+        ('app', _app),
+        ('relay', _relay),
+        ('inbox', _inbox),
+      ]);
       final container = containerWith(noGitFiles);
 
       final labels = await inFlight(container);

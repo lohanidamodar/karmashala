@@ -67,7 +67,10 @@ void main() {
     test('one attached app is the obvious one', () {
       final registry = FlutterAppRegistry(
         lookedAt: looked,
-        apps: [_app('a'), _app('b', reachability: AppReachability.unreachable)],
+        apps: [
+          _app('a'),
+          _app('b', reachability: AppReachability.unreachable),
+        ],
       );
       expect(registry.onlyAttached?.id, 'a');
     });

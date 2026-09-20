@@ -103,9 +103,7 @@ void main() {
       addTearDown(db.close);
       ExecutionEnvironmentDao(db).upsert(windowsEnv());
       final runner = FakeCommandRunner();
-      final adapter = ClaudeCodeAdapter(
-        runnerFor: (_) => runner,
-      );
+      final adapter = ClaudeCodeAdapter(runnerFor: (_) => runner);
 
       adapter.start(
         AgentLaunch(

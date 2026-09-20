@@ -82,22 +82,25 @@ void main() {
     expect(atExit, contains('window close → quit'));
   });
 
-  test('a shutdown that spends its budget still writes its own account', () async {
-    // The regression this replaces, exactly: the flush was a `_step`, and
-    // `_step` bounds every action by what is left of the shared deadline. With
-    // none left it logged `skipped log flush` — into the queue that was about
-    // to be dropped — and the whole tail of the quit went with it.
-    final atExit = await closeTheWindowCapturingTheLog(budget: Duration.zero);
+  test(
+    'a shutdown that spends its budget still writes its own account',
+    () async {
+      // The regression this replaces, exactly: the flush was a `_step`, and
+      // `_step` bounds every action by what is left of the shared deadline. With
+      // none left it logged `skipped log flush` — into the queue that was about
+      // to be dropped — and the whole tail of the quit went with it.
+      final atExit = await closeTheWindowCapturingTheLog(budget: Duration.zero);
 
-    expect(
-      atExit,
-      contains('lifecycle: shutdown in'),
-      reason: 'the quits worth reading are the ones that overran',
-    );
-    expect(
-      atExit,
-      contains('skipped'),
-      reason: 'and the skips that explain why they overran',
-    );
-  });
+      expect(
+        atExit,
+        contains('lifecycle: shutdown in'),
+        reason: 'the quits worth reading are the ones that overran',
+      );
+      expect(
+        atExit,
+        contains('skipped'),
+        reason: 'and the skips that explain why they overran',
+      );
+    },
+  );
 }

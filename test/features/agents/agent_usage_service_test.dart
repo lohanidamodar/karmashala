@@ -121,16 +121,21 @@ void main() {
     // draws is absent rather than zero.
     test('names each tier and claims no quota for it', () {
       final expiry = DateTime.utc(2026, 7, 28, 13);
-      final usage = parseAntigravityUsage({
-        'allowedTiers': [
-          {
-            'id': 'standard-tier',
-            'name': 'Gemini Code Assist',
-            'description': 'Unlimited coding assistant',
-          },
-          {'id': 'legacy-tier', 'name': 'Code Assist (legacy)'},
-        ],
-      }, now, email: 'dev@google.com', tokenExpiry: expiry);
+      final usage = parseAntigravityUsage(
+        {
+          'allowedTiers': [
+            {
+              'id': 'standard-tier',
+              'name': 'Gemini Code Assist',
+              'description': 'Unlimited coding assistant',
+            },
+            {'id': 'legacy-tier', 'name': 'Code Assist (legacy)'},
+          ],
+        },
+        now,
+        email: 'dev@google.com',
+        tokenExpiry: expiry,
+      );
 
       expect(usage.email, 'dev@google.com');
       expect(usage.windows.map((w) => w.label).toList(), [
@@ -150,11 +155,15 @@ void main() {
       // never read would reset the moment the user's sign-in lapsed. Two
       // different facts, and only one of them puts a number back to zero.
       final expiry = DateTime.utc(2026, 7, 28, 13);
-      final usage = parseAntigravityUsage({
-        'allowedTiers': [
-          {'id': 'standard-tier', 'name': 'Gemini Code Assist'},
-        ],
-      }, now, tokenExpiry: expiry);
+      final usage = parseAntigravityUsage(
+        {
+          'allowedTiers': [
+            {'id': 'standard-tier', 'name': 'Gemini Code Assist'},
+          ],
+        },
+        now,
+        tokenExpiry: expiry,
+      );
 
       expect(usage.tokenExpiresAt, expiry);
       expect(usage.windows.single.resetsAt, isNull);
@@ -165,12 +174,15 @@ void main() {
       );
     });
 
-    test('falls back to default Code Assist window when allowedTiers is empty', () {
-      final usage = parseAntigravityUsage({}, now, email: 'test@example.com');
-      expect(usage.windows.single.label, 'Gemini Code Assist');
-      expect(usage.windows.single.percent, isNull);
-      expect(usage.email, 'test@example.com');
-    });
+    test(
+      'falls back to default Code Assist window when allowedTiers is empty',
+      () {
+        final usage = parseAntigravityUsage({}, now, email: 'test@example.com');
+        expect(usage.windows.single.label, 'Gemini Code Assist');
+        expect(usage.windows.single.percent, isNull);
+        expect(usage.email, 'test@example.com');
+      },
+    );
   });
 
   group('parseRetryAfter', () {
@@ -348,12 +360,14 @@ void main() {
 
       expect(service.pendingPause(agentInstallation()), isNotNull);
       expect(
-        service.pendingPause(agentInstallation(id: 'a2', agentId: AgentIds.codex),
+        service.pendingPause(
+          agentInstallation(id: 'a2', agentId: AgentIds.codex),
         ),
         isNull,
       );
       expect(
-        service.pendingPause(agentInstallation(id: 'a3', environmentId: 'wsl:Ubuntu'),
+        service.pendingPause(
+          agentInstallation(id: 'a3', environmentId: 'wsl:Ubuntu'),
         ),
         isNull,
       );
@@ -430,10 +444,7 @@ void main() {
       final service = serviceWith();
       final failure = await failureOf(
         service,
-        installation: agentInstallation(
-          id: 'a9',
-          agentId: 'unknownAgent',
-        ),
+        installation: agentInstallation(id: 'a9', agentId: 'unknownAgent'),
       );
 
       expect(failure.kind, UsageFailureKind.notAsked);
@@ -469,10 +480,7 @@ void main() {
 
       // `_usageBody` is a `five_hour` window, so one point of it is three
       // minutes. Nothing chose that number; the key did.
-      expect(
-        service.askFloor(agentInstallation()),
-        const Duration(minutes: 3),
-      );
+      expect(service.askFloor(agentInstallation()), const Duration(minutes: 3));
       expect(service.rememberedIfFresh(agentInstallation()), isNotNull);
       clock.advance(kUsageMinInterval);
       expect(

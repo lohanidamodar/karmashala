@@ -18,7 +18,10 @@ void main() {
     });
 
     test('byId finds a category and refuses an unknown one', () {
-      expect(AndroidSlimmingCategory.byId('gms'), AndroidSlimmingCategory.playServices);
+      expect(
+        AndroidSlimmingCategory.byId('gms'),
+        AndroidSlimmingCategory.playServices,
+      );
       expect(AndroidSlimmingCategory.byId('playServices'), isNull);
       expect(AndroidSlimmingCategory.byId(''), isNull);
     });
@@ -89,7 +92,10 @@ void main() {
     });
 
     test('an unknown saved renderer falls back to automatic', () {
-      expect(AndroidGpuMode.byId('vulkan-from-the-future'), AndroidGpuMode.auto);
+      expect(
+        AndroidGpuMode.byId('vulkan-from-the-future'),
+        AndroidGpuMode.auto,
+      );
     });
   });
 
@@ -110,7 +116,10 @@ void main() {
     });
 
     test('are empty when the category is not selected', () {
-      expect(settingsArguments(enabled: {AndroidSlimmingCategory.audio}), isEmpty);
+      expect(
+        settingsArguments(enabled: {AndroidSlimmingCategory.audio}),
+        isEmpty,
+      );
     });
 
     test('restore deletes every managed key rather than writing 1.0', () {
@@ -126,7 +135,10 @@ void main() {
     test('restore covers everything, not just the current selection', () {
       // A user who unticks a category and then restores must not be left with
       // exactly the setting nobody put back.
-      expect(settingsRestoreArguments(), hasLength(allManagedSettingsKeys.length));
+      expect(
+        settingsRestoreArguments(),
+        hasLength(allManagedSettingsKeys.length),
+      );
     });
   });
 

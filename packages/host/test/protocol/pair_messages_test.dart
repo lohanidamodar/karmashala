@@ -17,7 +17,11 @@ void main() {
 
       expect(back.requestId, 7);
       expect(back.capabilities, 0x2a);
-      expect(back.relay, isEmpty, reason: 'a box with its own address needs none');
+      expect(
+        back.relay,
+        isEmpty,
+        reason: 'a box with its own address needs none',
+      );
     });
 
     test('an answer carries the code and when it stops working', () {
@@ -54,16 +58,19 @@ void main() {
   });
 
   group('a host with no store', () {
-    test('refuses to pair by name rather than failing at the ceremony', () async {
-      // `openPairing` null is a `serve` whose SQLite would not load. It still
-      // owns every PTY on the machine, so it serves sessions and says plainly
-      // that this one thing is unavailable.
-      final server = HostServer(
-        registry: SessionRegistry(launcher: FakePtyLauncher()),
-        ptyLibrary: 'fake',
-      );
+    test(
+      'refuses to pair by name rather than failing at the ceremony',
+      () async {
+        // `openPairing` null is a `serve` whose SQLite would not load. It still
+        // owns every PTY on the machine, so it serves sessions and says plainly
+        // that this one thing is unavailable.
+        final server = HostServer(
+          registry: SessionRegistry(launcher: FakePtyLauncher()),
+          ptyLibrary: 'fake',
+        );
 
-      expect(server.openPairing, isNull);
-    });
+        expect(server.openPairing, isNull);
+      },
+    );
   });
 }

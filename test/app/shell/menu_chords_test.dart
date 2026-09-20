@@ -192,10 +192,10 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
     await pumpShell(tester);
-    final quit = (await chordsIn(tester, 'Workspace'))
-        .where((e) => e.$1 == 'Quit')
-        .single
-        .$2;
+    final quit = (await chordsIn(
+      tester,
+      'Workspace',
+    )).where((e) => e.$1 == 'Quit').single.$2;
     expect(quit.trigger, LogicalKeyboardKey.keyQ);
     expect(quit.meta, isTrue);
     expect(quit.control, isFalse);

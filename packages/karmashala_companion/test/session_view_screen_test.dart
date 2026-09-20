@@ -11,20 +11,20 @@ import 'companion_test_support.dart';
 
 class _PendingResumeGateway extends FakeCompanionGateway {
   _PendingResumeGateway({super.connections = const []})
-      : super(
-          pairing: CompanionPairing(
-            capabilities: CapabilitySet.all,
-            hostName: 'Desktop',
-            hostId: DeviceId.parse(
-              connections.isEmpty ? fakeHostId(0) : connections.first.hostId,
-            ),
+    : super(
+        pairing: CompanionPairing(
+          capabilities: CapabilitySet.all,
+          hostName: 'Desktop',
+          hostId: DeviceId.parse(
+            connections.isEmpty ? fakeHostId(0) : connections.first.hostId,
           ),
-          link: CompanionLinkState.connected,
-          sessions: [
-            summary('s1', imported: true, status: CompanionSessionStatus.idle),
-          ],
-          transcripts: const {'s1': []},
-        );
+        ),
+        link: CompanionLinkState.connected,
+        sessions: [
+          summary('s1', imported: true, status: CompanionSessionStatus.idle),
+        ],
+        transcripts: const {'s1': []},
+      );
 
   final completer = Completer<RemoteSessionStarted>();
   var calls = 0;
@@ -234,7 +234,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.textContaining('Claude Code  ·  running  ·  opus'), findsOneWidget);
+    expect(
+      find.textContaining('Claude Code  ·  running  ·  opus'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('sending a prompt goes through the gateway', (tester) async {
@@ -455,7 +458,10 @@ void main() {
       expect(find.byType(FilledButton), findsNothing);
       expect(find.byType(OutlinedButton), findsNothing);
       // And it points at the answer that does exist: the composer below it.
-      expect(find.textContaining('There is nothing to approve'), findsOneWidget);
+      expect(
+        find.textContaining('There is nothing to approve'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('refuses keys even if a host sends them anyway', (
@@ -658,7 +664,9 @@ void main() {
     );
   });
 
-  testWidgets('a stopped native session offers explicit resume', (tester) async {
+  testWidgets('a stopped native session offers explicit resume', (
+    tester,
+  ) async {
     final gateway = FakeCompanionGateway.paired(
       sessions: [summary('s1', status: CompanionSessionStatus.idle)],
       transcripts: const {'s1': []},
@@ -710,7 +718,9 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('resume does not navigate after the host switches', (tester) async {
+  testWidgets('resume does not navigate after the host switches', (
+    tester,
+  ) async {
     final gateway = _PendingResumeGateway(
       connections: [
         CompanionConnection(hostId: fakeHostId(0), name: 'A', active: true),
@@ -738,7 +748,9 @@ void main() {
     ('phone', kPhoneSize),
     ('tablet', kTabletSize),
   ]) {
-    testWidgets('$label: resume panel lays out without overflow', (tester) async {
+    testWidgets('$label: resume panel lays out without overflow', (
+      tester,
+    ) async {
       final gateway = FakeCompanionGateway.paired(
         sessions: [summary('s1', imported: true)],
         transcripts: const {'s1': []},

@@ -237,7 +237,11 @@ void main() {
       instance.exitWith(7);
       final result = await call.timeout(const Duration(seconds: 5));
 
-      expect(result['finished'], isFalse, reason: 'the pane ended, not the command');
+      expect(
+        result['finished'],
+        isFalse,
+        reason: 'the pane ended, not the command',
+      );
       expect(result['exitCode'], 7);
       expect(result['exitCodeKnown'], isTrue);
       expect(result['note'], contains('code 7'));
@@ -245,19 +249,21 @@ void main() {
       expect(result['note'], isNot(contains('nothing reported an exit code')));
     });
 
-    test('a command that timed out still has no code, whatever the pane holds',
-        () async {
-      // The pane is alive; there is nothing to take a code from, and the one
-      // the pane happens to be carrying is not this command's.
-      final pane = await shellPane();
-      pane.shell.finishes = false;
+    test(
+      'a command that timed out still has no code, whatever the pane holds',
+      () async {
+        // The pane is alive; there is nothing to take a code from, and the one
+        // the pane happens to be carrying is not this command's.
+        final pane = await shellPane();
+        pane.shell.finishes = false;
 
-      final result = await run(pane.paneId, 'vim', timeoutSeconds: 0.05);
+        final result = await run(pane.paneId, 'vim', timeoutSeconds: 0.05);
 
-      expect(result['exitCode'], isNull);
-      expect(result['exitCodeKnown'], isFalse);
-      expect(result['note'], contains('still running'));
-    });
+        expect(result['exitCode'], isNull);
+        expect(result['exitCodeKnown'], isFalse);
+        expect(result['note'], contains('still running'));
+      },
+    );
   });
 
   group('a shell with no integration', () {

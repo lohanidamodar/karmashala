@@ -84,14 +84,21 @@ class LocalHost {
       }),
     );
     final greeting = await ready.future.timeout(const Duration(seconds: 90));
-    return LocalHost._(process, HostPaths(Directory('${home.path}/.karmashala')), greeting);
+    return LocalHost._(
+      process,
+      HostPaths(Directory('${home.path}/.karmashala')),
+      greeting,
+    );
   }
 
   /// Kills the daemon with no chance to write anything, so every session it
   /// held is left recorded as running.
   Future<void> kill() async {
     process.kill(ProcessSignal.sigkill);
-    await process.exitCode.timeout(const Duration(seconds: 20), onTimeout: () => -1);
+    await process.exitCode.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () => -1,
+    );
   }
 }
 
@@ -127,8 +134,9 @@ class LocalHostClient {
   void send(HostMessage message) => _socket.add(message.toFrame().encode());
 
   /// One line into the session, the way a person would type it.
-  void type(int sessionRef, String line) =>
-      send(InputMessage(sessionRef, Uint8List.fromList(utf8.encode('$line\r\n'))));
+  void type(int sessionRef, String line) => send(
+    InputMessage(sessionRef, Uint8List.fromList(utf8.encode('$line\r\n'))),
+  );
 
   void _onBytes(Uint8List chunk) {
     for (final frame in _parser.add(chunk)) {
@@ -148,7 +156,10 @@ class LocalHostClient {
   }) async {
     final buffered = _pending.indexWhere((m) => m is T);
     if (buffered >= 0) return _pending.removeAt(buffered) as T;
-    final message = await _messages.stream.where((m) => m is T).first.timeout(within);
+    final message = await _messages.stream
+        .where((m) => m is T)
+        .first
+        .timeout(within);
     _pending.remove(message);
     return message as T;
   }
@@ -162,7 +173,10 @@ class LocalHostClient {
   Completer<bool>? _waiting;
 
   /// Waits for a substring by counting bytes, never by waking up to look.
-  Future<bool> output(String needle, {Duration within = const Duration(seconds: 30)}) {
+  Future<bool> output(
+    String needle, {
+    Duration within = const Duration(seconds: 30),
+  }) {
     if (_seen.toString().contains(needle)) return Future.value(true);
     _wanted = needle;
     final completer = _waiting = Completer<bool>();
@@ -188,7 +202,8 @@ class LocalHostClient {
 
 /// The shell this platform runs, asked in two variables so the line it echoes
 /// back does not itself contain the answer.
-List<String> get probeShell => Platform.isWindows ? const ['cmd.exe'] : const ['/bin/sh'];
+List<String> get probeShell =>
+    Platform.isWindows ? const ['cmd.exe'] : const ['/bin/sh'];
 String get setA => Platform.isWindows ? 'set A=karma' : 'A=karma';
 String get setB => Platform.isWindows ? 'set B=shala' : 'B=shala';
 String get echoAB => Platform.isWindows ? r'echo %A%%B%' : r'echo $A$B';

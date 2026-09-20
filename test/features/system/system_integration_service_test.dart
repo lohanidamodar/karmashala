@@ -317,22 +317,25 @@ void main() {
       expect(quitCalls, isEmpty);
     });
 
-    test('the OS Quit runs the ordered shutdown, close-to-tray or not', () async {
-      // Cmd+Q is not a window close. `window_manager`'s prevent-close answers
-      // `applicationShouldTerminate` with a window *close* event, so with
-      // close-to-tray on the app used to hide instead of quitting and Cmd+Q
-      // looked like it did nothing.
-      await build();
-      settings().setCloseToTray(true);
-      await pumpEventQueue();
+    test(
+      'the OS Quit runs the ordered shutdown, close-to-tray or not',
+      () async {
+        // Cmd+Q is not a window close. `window_manager`'s prevent-close answers
+        // `applicationShouldTerminate` with a window *close* event, so with
+        // close-to-tray on the app used to hide instead of quitting and Cmd+Q
+        // looked like it did nothing.
+        await build();
+        settings().setCloseToTray(true);
+        await pumpEventQueue();
 
-      expect(osQuit, isNotNull, reason: 'every desktop registers one');
-      await osQuit!();
-      await pumpEventQueue();
+        expect(osQuit, isNotNull, reason: 'every desktop registers one');
+        await osQuit!();
+        await pumpEventQueue();
 
-      expect(quitCalls, ['shutdown']);
-      expect(natives.window.destroyed, isTrue);
-    });
+        expect(quitCalls, ['shutdown']);
+        expect(natives.window.destroyed, isTrue);
+      },
+    );
 
     test('close to tray quits when there is no tray to close to', () async {
       // Stock GNOME has no StatusNotifier host unless an AppIndicator extension
@@ -368,8 +371,8 @@ void main() {
     test('the shutdown hook runs before the window is destroyed', () async {
       final order = <String>[];
       service = SystemIntegrationService(
-      registerOsQuit: (quit) => osQuit = quit,
-      endProcess: () {},
+        registerOsQuit: (quit) => osQuit = quit,
+        endProcess: () {},
         container,
         adapters: natives.adapters,
         onQuitRequested: () async => order.add('shutdown'),
@@ -410,16 +413,13 @@ void main() {
 
       expect(order, ['shutdown'], reason: 'the shutdown runs once');
       expect(ended, 1, reason: 'and the process is ended once');
-      expect(
-        natives.window.calls.where((c) => c == 'destroy'),
-        hasLength(1),
-      );
+      expect(natives.window.calls.where((c) => c == 'destroy'), hasLength(1));
     });
 
     test('a shutdown hook that throws still lets the app close', () async {
       service = SystemIntegrationService(
-      registerOsQuit: (quit) => osQuit = quit,
-      endProcess: () {},
+        registerOsQuit: (quit) => osQuit = quit,
+        endProcess: () {},
         container,
         adapters: natives.adapters,
         onQuitRequested: () async => throw StateError('teardown blew up'),

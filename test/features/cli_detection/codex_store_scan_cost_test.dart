@@ -37,23 +37,40 @@ void main() {
   /// A rollout with its meta at the head and enough bulk after it that
   /// re-reading is measurable.
   void write(String id, {int filler = 300, String cwd = '/repo'}) {
-    rollout(id).writeAsStringSync([
-      line({
-        'type': 'session_meta',
-        'timestamp': '2026-09-02T10:11:12.953Z',
-        'payload': {'cwd': cwd, 'id': id, 'timestamp': '2026-09-02T10:11:12.953Z'},
-      }),
-      line({'type': 'message', 'role': 'user', 'content': 'the first thing said'}),
-      for (var i = 0; i < filler; i++)
-        line({'type': 'message', 'role': 'assistant', 'content': 'padding $i ' * 8}),
-    ].join());
+    rollout(id).writeAsStringSync(
+      [
+        line({
+          'type': 'session_meta',
+          'timestamp': '2026-09-02T10:11:12.953Z',
+          'payload': {
+            'cwd': cwd,
+            'id': id,
+            'timestamp': '2026-09-02T10:11:12.953Z',
+          },
+        }),
+        line({
+          'type': 'message',
+          'role': 'user',
+          'content': 'the first thing said',
+        }),
+        for (var i = 0; i < filler; i++)
+          line({
+            'type': 'message',
+            'role': 'assistant',
+            'content': 'padding $i ' * 8,
+          }),
+      ].join(),
+    );
   }
 
   void append(String id, {int lines = 50}) {
-    rollout(id).writeAsStringSync([
-      for (var i = 0; i < lines; i++)
-        line({'type': 'message', 'role': 'assistant', 'content': 'more $i'}),
-    ].join(), mode: FileMode.append);
+    rollout(id).writeAsStringSync(
+      [
+        for (var i = 0; i < lines; i++)
+          line({'type': 'message', 'role': 'assistant', 'content': 'more $i'}),
+      ].join(),
+      mode: FileMode.append,
+    );
   }
 
   test('a second scan of an unchanged store reads nothing again', () async {
@@ -106,26 +123,31 @@ void main() {
     expect(sessions.single.cwd.path, '/after');
   });
 
-  test('a rollout rewritten in place to the same length is read again', () async {
-    // The hole a size-only cache left open. `/before` and `/aftera` are the
-    // same number of bytes, so nothing but the mtime says the file moved — and
-    // a rollout served from a stale cache is served stale for ever.
-    write('s1', cwd: '/before');
-    final reader = CodexStoreReader(cache: CodexRolloutCache());
-    await reader.read(home, 'windows');
-    final afterFirst = reader.bytesRead;
-    final was = rollout('s1').lengthSync();
+  test(
+    'a rollout rewritten in place to the same length is read again',
+    () async {
+      // The hole a size-only cache left open. `/before` and `/aftera` are the
+      // same number of bytes, so nothing but the mtime says the file moved — and
+      // a rollout served from a stale cache is served stale for ever.
+      write('s1', cwd: '/before');
+      final reader = CodexStoreReader(cache: CodexRolloutCache());
+      await reader.read(home, 'windows');
+      final afterFirst = reader.bytesRead;
+      final was = rollout('s1').lengthSync();
 
-    write('s1', cwd: '/aftera');
-    // Stamped rather than raced: two writes inside one clock tick would leave
-    // the mtime unchanged and the case would prove nothing.
-    rollout('s1').setLastModifiedSync(DateTime.now().add(const Duration(minutes: 1)));
-    final sessions = await reader.read(home, 'windows');
+      write('s1', cwd: '/aftera');
+      // Stamped rather than raced: two writes inside one clock tick would leave
+      // the mtime unchanged and the case would prove nothing.
+      rollout(
+        's1',
+      ).setLastModifiedSync(DateTime.now().add(const Duration(minutes: 1)));
+      final sessions = await reader.read(home, 'windows');
 
-    expect(rollout('s1').lengthSync(), was, reason: 'the same size, exactly');
-    expect(reader.bytesRead, greaterThan(afterFirst), reason: 'it re-read');
-    expect(sessions.single.cwd.path, '/aftera');
-  });
+      expect(rollout('s1').lengthSync(), was, reason: 'the same size, exactly');
+      expect(reader.bytesRead, greaterThan(afterFirst), reason: 'it re-read');
+      expect(sessions.single.cwd.path, '/aftera');
+    },
+  );
 
   test('the cost of a scan follows what changed, not the store size', () async {
     for (var i = 0; i < 20; i++) {

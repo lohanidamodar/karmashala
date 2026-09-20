@@ -43,7 +43,8 @@ class VerificationTarget {
       );
 
   /// The change under review. Addressless: `session_id` and the title say it.
-  const VerificationTarget.change() : this._(kind: VerificationTargetKind.change);
+  const VerificationTarget.change()
+    : this._(kind: VerificationTargetKind.change);
 
   final VerificationTargetKind kind;
   final String? url;

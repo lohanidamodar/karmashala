@@ -130,7 +130,10 @@ class HostPaneLink {
   );
 
   Future<HostAttachment> _attachment(HostMessage Function(int) build) async {
-    final attached = await _request<AttachedMessage>(build, const Duration(seconds: 20));
+    final attached = await _request<AttachedMessage>(
+      build,
+      const Duration(seconds: 20),
+    );
     _sessionRef = attached.sessionRef;
     lastOffset = attached.replayFromOffset;
     if (attached.droppedBytes > 0) {
@@ -219,7 +222,9 @@ class HostPaneLink {
     if (!_output.isClosed) unawaited(_output.close());
     for (final completer in _pending.values) {
       if (!completer.isCompleted) {
-        completer.completeError(const HostLinkException('The link closed first.'));
+        completer.completeError(
+          const HostLinkException('The link closed first.'),
+        );
       }
     }
     _pending.clear();
@@ -239,7 +244,9 @@ class HostPaneLink {
     try {
       frames = _parser.add(chunk);
     } on FrameFormatException catch (e) {
-      _fail(HostLinkException('The host sent something unreadable: ${e.message}'));
+      _fail(
+        HostLinkException('The host sent something unreadable: ${e.message}'),
+      );
       return;
     }
     for (final frame in frames) {
@@ -258,12 +265,20 @@ class HostPaneLink {
           lastOffset = message.nextOffset;
         case ExitedMessage():
           if (!_exit.isCompleted) {
-            _exit.complete(HostSessionEnd(message.exitCode, message.reason, message.observedAt));
+            _exit.complete(
+              HostSessionEnd(
+                message.exitCode,
+                message.reason,
+                message.observedAt,
+              ),
+            );
           }
         case ErrorMessage():
           final waiting = _pending.remove(message.requestId);
           if (waiting != null && !waiting.isCompleted) {
-            waiting.completeError(HostLinkException(message.message, code: message.code));
+            waiting.completeError(
+              HostLinkException(message.message, code: message.code),
+            );
           } else if (!_notices.isClosed) {
             // Unsolicited: a refused write, most often.
             _notices.add(message.message);

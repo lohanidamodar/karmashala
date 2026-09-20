@@ -15,16 +15,19 @@ void main() {
     );
   });
 
-  test('wrapped at the space before the address, which is what a pane does', () {
-    // Wrapping backs up to the last whitespace, so the address starts a row.
-    expect(
-      vmServiceUriInPaneRows([
-        'A Dart VM Service on sdk gphone64 x86 64 is available at:',
-        _address,
-      ])?.toString(),
-      _expected,
-    );
-  });
+  test(
+    'wrapped at the space before the address, which is what a pane does',
+    () {
+      // Wrapping backs up to the last whitespace, so the address starts a row.
+      expect(
+        vmServiceUriInPaneRows([
+          'A Dart VM Service on sdk gphone64 x86 64 is available at:',
+          _address,
+        ])?.toString(),
+        _expected,
+      );
+    },
+  );
 
   test('the sentence itself wrapped as well, in a narrow pane', () {
     expect(

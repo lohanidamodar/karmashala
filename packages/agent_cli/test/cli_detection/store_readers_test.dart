@@ -65,10 +65,9 @@ void main() {
         '{"id":"u1","thread_name":"My Thread"}',
       ]);
 
-      final sessions = await CodexStoreReader(cache: CodexRolloutCache()).read(
-        p.join(tmp.path, '.codex'),
-        'wsl:Ubuntu',
-      );
+      final sessions = await CodexStoreReader(
+        cache: CodexRolloutCache(),
+      ).read(p.join(tmp.path, '.codex'), 'wsl:Ubuntu');
       expect(sessions.length, 1);
       final s = sessions.single;
       expect(s.cli, AgentIds.codex);
@@ -82,10 +81,9 @@ void main() {
       write('.codex/sessions/rollout-x-uuid.jsonl', [
         '{"id":"u2","timestamp":"t"}',
       ]);
-      final sessions = await CodexStoreReader(cache: CodexRolloutCache()).read(
-        p.join(tmp.path, '.codex'),
-        'wsl:Ubuntu',
-      );
+      final sessions = await CodexStoreReader(
+        cache: CodexRolloutCache(),
+      ).read(p.join(tmp.path, '.codex'), 'wsl:Ubuntu');
       expect(sessions, isEmpty);
     });
   });

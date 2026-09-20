@@ -58,10 +58,10 @@ void main() {
   });
 
   test('a declared root carries no refusal', () {
-    const declared = AgentSkillSupport.homeDirectory(
-      ['.x', 'skills'],
-      evidence: 'x --help, 2026-09-09',
-    );
+    const declared = AgentSkillSupport.homeDirectory([
+      '.x',
+      'skills',
+    ], evidence: 'x --help, 2026-09-09');
     expect(declared.isSupported, isTrue);
     expect(declared.refusal, isEmpty);
   });

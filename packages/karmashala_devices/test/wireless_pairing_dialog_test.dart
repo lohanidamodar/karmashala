@@ -198,18 +198,22 @@ void main() {
       );
     });
 
-    testWidgets('the budget running out says what to check, and offers a retry', (
-      tester,
-    ) async {
-      final adb = _FakeAdb();
-      await _pumpDialog(tester, adb);
-      await _settle(tester, steps: 200);
+    testWidgets(
+      'the budget running out says what to check, and offers a retry',
+      (tester) async {
+        final adb = _FakeAdb();
+        await _pumpDialog(tester, adb);
+        await _settle(tester, steps: 200);
 
-      expect(adb.mdnsServiceCalls, kMdnsPollBudget);
-      expect(find.textContaining('No phone advertised itself'), findsOneWidget);
-      expect(find.byKey(const Key('wireless-pairing-retry')), findsOneWidget);
-      expect(find.byKey(const Key('wireless-pairing-qr')), findsNothing);
-    });
+        expect(adb.mdnsServiceCalls, kMdnsPollBudget);
+        expect(
+          find.textContaining('No phone advertised itself'),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('wireless-pairing-retry')), findsOneWidget);
+        expect(find.byKey(const Key('wireless-pairing-qr')), findsNothing);
+      },
+    );
   });
 
   group('the typed half', () {

@@ -183,7 +183,8 @@ class SlimmingStatus {
   /// Categories with every label disabled.
   Set<SlimmingCategory> get fullyDisabledCategories => {
     for (final category in SlimmingCategory.values)
-      if (category.labels.isNotEmpty && category.labels.every(disabled.contains))
+      if (category.labels.isNotEmpty &&
+          category.labels.every(disabled.contains))
         category,
   };
 
@@ -329,7 +330,10 @@ class SimulatorSlimmingService {
     if (state == SimulatorState.shutdown) return;
 
     final result = await runner.run(
-      CommandRequest(executable: _xcrun, arguments: ['simctl', 'shutdown', udid]),
+      CommandRequest(
+        executable: _xcrun,
+        arguments: ['simctl', 'shutdown', udid],
+      ),
     );
     final deadline = DateTime.now().add(shutdownTimeout);
     while (DateTime.now().isBefore(deadline)) {

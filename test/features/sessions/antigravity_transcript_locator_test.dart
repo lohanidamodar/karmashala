@@ -42,7 +42,9 @@ void main() {
     return file.path;
   }
 
-  SessionTranscriptLocator locatorWith({List<DetectedSession> scanned = const []}) {
+  SessionTranscriptLocator locatorWith({
+    List<DetectedSession> scanned = const [],
+  }) {
     final db = AppDatabase.memory();
     addTearDown(db.close);
     ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -116,10 +118,9 @@ void main() {
       storeHome: store.path,
     );
 
-    final found = await locatorWith(scanned: [scanned]).locate(
-      agentId: AgentIds.antigravity,
-      externalSessionId: 'conv-1',
-    );
+    final found = await locatorWith(
+      scanned: [scanned],
+    ).locate(agentId: AgentIds.antigravity, externalSessionId: 'conv-1');
 
     expect(found, isNot(record));
     expect(found, scanned.filePath);

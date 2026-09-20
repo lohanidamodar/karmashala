@@ -365,9 +365,8 @@ void main() {
   group('the trust boundary', () {
     test('our sentences stay outside the fence, the page stays in', () async {
       final (tools, _) = await connectedTools(
-        replies: (kind, _) => kind == PageScript.find
-            ? findReply([describedElement()])
-            : null,
+        replies: (kind, _) =>
+            kind == PageScript.find ? findReply([describedElement()]) : null,
       );
       final text = textOf(await tools.call('browser_find', {'text': 'Go'}));
       final open = text.indexOf('<$untrustedContentTag ');
@@ -378,15 +377,17 @@ void main() {
       expect(text.indexOf('1 element match'), lessThan(open));
       expect(text.indexOf('[0] button#go'), greaterThan(open));
       expect(text.indexOf('[0] button#go'), lessThan(close));
-      expect(text.indexOf('Example — https://example.com/app'), lessThan(close));
+      expect(
+        text.indexOf('Example — https://example.com/app'),
+        lessThan(close),
+      );
     });
 
     test('both markers carry the same id, and it is fresh each call', () async {
       final (tools, _) = await connectedTools();
-      String idOf(String text) =>
-          RegExp('<$untrustedContentTag id="([0-9a-f]{8})"')
-              .firstMatch(text)!
-              .group(1)!;
+      String idOf(String text) => RegExp(
+        '<$untrustedContentTag id="([0-9a-f]{8})"',
+      ).firstMatch(text)!.group(1)!;
       final first = textOf(await tools.call('browser_key', {'key': 'enter'}));
       final second = textOf(await tools.call('browser_key', {'key': 'enter'}));
       expect(first, contains('</$untrustedContentTag id="${idOf(first)}">'));
@@ -400,9 +401,9 @@ void main() {
       final text = textOf(
         await tools.call('browser_evaluate', {'expression': 'x'}),
       );
-      final id = RegExp('<$untrustedContentTag id="([0-9a-f]{8})"')
-          .firstMatch(text)!
-          .group(1)!;
+      final id = RegExp(
+        '<$untrustedContentTag id="([0-9a-f]{8})"',
+      ).firstMatch(text)!.group(1)!;
       // Exactly one closer, it carries the real id, and it is the last line.
       expect('</$untrustedContentTag id='.allMatches(text).length, 1);
       expect(text.trimRight(), endsWith('</$untrustedContentTag id="$id">'));
@@ -476,10 +477,16 @@ void main() {
         'browser_screenshot',
         'browser_click',
       ]) {
-        expect(BrowserTools.gatedTools.containsKey(name), isFalse, reason: name);
+        expect(
+          BrowserTools.gatedTools.containsKey(name),
+          isFalse,
+          reason: name,
+        );
       }
-      expect(BrowserTools.gatedTools['browser_evaluate'],
-          BrowserCapability.evaluate);
+      expect(
+        BrowserTools.gatedTools['browser_evaluate'],
+        BrowserCapability.evaluate,
+      );
     });
   });
 

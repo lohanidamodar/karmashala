@@ -219,7 +219,9 @@ void main() {
           });
           return reports.stream;
         }),
-        sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
+        sessionTranscriptProvider.overrideWith(
+          (ref, id) => Stream.value(const []),
+        ),
         importedTranscriptProvider.overrideWith(
           (ref, _) => Stream.value(const []),
         ),
@@ -394,7 +396,8 @@ void main() {
     expect(
       rebuilds.total,
       0,
-      reason: '$label: no provider may wake for a character: ${rebuilds.report}',
+      reason:
+          '$label: no provider may wake for a character: ${rebuilds.report}',
     );
     expect(
       widgets.outsideTotal,
@@ -416,7 +419,9 @@ void main() {
     );
   }
 
-  testWidgets('one key pressed in a focused pane wakes nothing', (tester) async {
+  testWidgets('one key pressed in a focused pane wakes nothing', (
+    tester,
+  ) async {
     await mountAndFocus(tester);
     reset();
     final encodesBefore = encodes();
@@ -501,7 +506,8 @@ void main() {
     expect(
       widgets.total,
       0,
-      reason: 'a second of an idle window must build nothing: ${widgets.report}',
+      reason:
+          'a second of an idle window must build nothing: ${widgets.report}',
     );
     expect(rebuilds.total, 0, reason: rebuilds.report);
     expect(db.count, 0, reason: _tally(db.statements));
@@ -734,14 +740,13 @@ void main() {
     test('reads the transcript while the conversation is in front', () async {
       final container = pollingContainer(terminalVisible: false);
       final seen = <List<TranscriptMessage>>[];
-      final sub = container.listen(
-        sessionChatTranscriptProvider('s1'),
-        (_, next) {
-          final value = next.asData?.value;
-          if (value != null && value.isNotEmpty) seen.add(value);
-        },
-        fireImmediately: true,
-      );
+      final sub = container.listen(sessionChatTranscriptProvider('s1'), (
+        _,
+        next,
+      ) {
+        final value = next.asData?.value;
+        if (value != null && value.isNotEmpty) seen.add(value);
+      }, fireImmediately: true);
       addTearDown(sub.close);
 
       expect(
@@ -764,14 +769,13 @@ void main() {
     test('reads nothing at all while the terminal is in front', () async {
       final container = pollingContainer(terminalVisible: true);
       final seen = <List<TranscriptMessage>>[];
-      final sub = container.listen(
-        sessionChatTranscriptProvider('s1'),
-        (_, next) {
-          final value = next.asData?.value;
-          if (value != null && value.isNotEmpty) seen.add(value);
-        },
-        fireImmediately: true,
-      );
+      final sub = container.listen(sessionChatTranscriptProvider('s1'), (
+        _,
+        next,
+      ) {
+        final value = next.asData?.value;
+        if (value != null && value.isNotEmpty) seen.add(value);
+      }, fireImmediately: true);
       addTearDown(sub.close);
 
       // Long enough for ~40 ticks at the 5 ms interval this container polls at.
@@ -793,9 +797,7 @@ void main() {
 
       // ...and it is a pause, not a stop: looking at the conversation brings it
       // back on the next tick.
-      container
-          .read(terminalFacesProvider.notifier)
-          .show('g', terminal: false);
+      container.read(terminalFacesProvider.notifier).show('g', terminal: false);
       expect(
         await waitFor(() => seen.isNotEmpty),
         isTrue,

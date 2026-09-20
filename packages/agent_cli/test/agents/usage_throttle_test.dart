@@ -179,7 +179,8 @@ void main() {
       expect(
         refuse(claude).wait,
         const Duration(minutes: 2),
-        reason: 'a server that stops advising must not restart us at one minute',
+        reason:
+            'a server that stops advising must not restart us at one minute',
       );
     });
   });
@@ -213,26 +214,24 @@ void main() {
     test('exists so one outage does not bring everyone back at once', () {
       // The owner's 2026-09-04 failure was upstream and self-resolving, which
       // is the shape that produces a synchronised crowd on the way out.
-      final early = spread(0).recordRefusal(
-        claude,
-        kind: UsageFailureKind.serverBusy,
-        reason: 'no',
-      );
-      final late = spread(0.9).recordRefusal(
-        claude,
-        kind: UsageFailureKind.serverBusy,
-        reason: 'no',
-      );
+      final early = spread(
+        0,
+      ).recordRefusal(claude, kind: UsageFailureKind.serverBusy, reason: 'no');
+      final late = spread(
+        0.9,
+      ).recordRefusal(claude, kind: UsageFailureKind.serverBusy, reason: 'no');
       expect(late.wait, greaterThan(early.wait));
     });
 
     test('never pushes a wait past the ceiling on the clock', () {
-      final wait = spread(1).recordRefusal(
-        claude,
-        kind: UsageFailureKind.rateLimited,
-        reason: 'no',
-        retryAfter: const Duration(days: 1),
-      ).wait;
+      final wait = spread(1)
+          .recordRefusal(
+            claude,
+            kind: UsageFailureKind.rateLimited,
+            reason: 'no',
+            retryAfter: const Duration(days: 1),
+          )
+          .wait;
       expect(wait, kUsageBackoffMax);
     });
   });
@@ -420,10 +419,7 @@ void main() {
       // The chip shows one window, but the seven-day figure creeping is still
       // an account being spent.
       clock.advance(throttle.dueIn(claude));
-      throttle.recordSuccess(
-        claude,
-        measured(at: clock.nowUtc(), weekly: 4),
-      );
+      throttle.recordSuccess(claude, measured(at: clock.nowUtc(), weekly: 4));
       expect(throttle.dueIn(claude), fiveHourFloor);
     });
 

@@ -101,9 +101,7 @@ class PaneLayout {
 
   /// Pane ids depth-first, including the ones stacked behind another. Walked
   /// once and kept, because a layout is immutable and this is asked for often.
-  late final List<String> panes = [
-    for (final group in groups) ...group.panes,
-  ];
+  late final List<String> panes = [for (final group in groups) ...group.panes];
 
   /// The pane on screen in each region — what "on screen" means once a region
   /// can hold more than one pane.
@@ -355,9 +353,7 @@ PaneNode _mapGroups(PaneNode node, PaneGroup Function(PaneGroup) map) {
       return PaneSplit(
         node.id,
         axis: node.axis,
-        children: [
-          for (final child in node.children) _mapGroups(child, map),
-        ],
+        children: [for (final child in node.children) _mapGroups(child, map)],
         weights: List.of(node.weights),
       );
   }
@@ -400,7 +396,11 @@ PaneNode _splitIn(
   }
 }
 
-PaneNode _replaceGroupIn(PaneNode node, PaneGroup target, PaneNode replacement) {
+PaneNode _replaceGroupIn(
+  PaneNode node,
+  PaneGroup target,
+  PaneNode replacement,
+) {
   switch (node) {
     case PaneGroup():
       return identical(node, target) ? replacement : node;
@@ -429,11 +429,7 @@ PaneNode? _prune(PaneNode node, bool Function(String paneId) keep) {
       if (panes.isEmpty) return null;
       // The front pane may have been one of the dropped ones; the constructor
       // brings whatever is left forward rather than leaving a dangling id.
-      return PaneGroup(
-        node.id,
-        panes: panes,
-        activePaneId: node.activePaneId,
-      );
+      return PaneGroup(node.id, panes: panes, activePaneId: node.activePaneId);
     case PaneSplit():
       final children = <PaneNode>[];
       final weights = <double>[];

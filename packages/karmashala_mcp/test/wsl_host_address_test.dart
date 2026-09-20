@@ -21,10 +21,7 @@ void main() {
   ({String name, List<InternetAddress> addresses}) iface(
     String name,
     List<String> addresses,
-  ) => (
-    name: name,
-    addresses: [for (final a in addresses) InternetAddress(a)],
-  );
+  ) => (name: name, addresses: [for (final a in addresses) InternetAddress(a)]);
 
   test('the Hyper-V firewall spelling of the adapter is found', () {
     // What `NetworkInterface.list()` really reports on Windows 11 — the alias

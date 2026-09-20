@@ -37,7 +37,12 @@ void main() {
     path: r'C:\src\.karmashala-worktrees\app-s1',
   );
 
-  var statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0);
+  var statusOutput = porcelainV2(
+    branch: 'work',
+    upstream: 'origin/work',
+    ahead: 2,
+    behind: 0,
+  );
   var remoteUrl = 'git@github.com:popupbits/app.git\n';
   var originHead = 'origin/main\n';
   var revList = '0\t2\n';
@@ -53,7 +58,12 @@ void main() {
       '[{"isResolved":false},{"isResolved":true}]}}}}}';
 
   setUp(() {
-    statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0);
+    statusOutput = porcelainV2(
+      branch: 'work',
+      upstream: 'origin/work',
+      ahead: 2,
+      behind: 0,
+    );
     remoteUrl = 'git@github.com:popupbits/app.git\n';
     originHead = 'origin/main\n';
     revList = '0\t2\n';
@@ -177,8 +187,14 @@ void main() {
     'reads branch, upstream, dirt, lines and distance from one checkout',
     () async {
       addSession('s1', at: null);
-      statusOutput =
-          porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0, modified: ['lib/a.dart'], untracked: ['new.txt']);
+      statusOutput = porcelainV2(
+        branch: 'work',
+        upstream: 'origin/work',
+        ahead: 2,
+        behind: 0,
+        modified: ['lib/a.dart'],
+        untracked: ['new.txt'],
+      );
 
       final delivery = await harness().read(
         sessionDeliveryProvider('s1').future,
@@ -203,19 +219,35 @@ void main() {
   test('the stage walks the line as git answers differently', () async {
     addSession('s1', at: null);
 
-    statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0, modified: ['a']);
+    statusOutput = porcelainV2(
+      branch: 'work',
+      upstream: 'origin/work',
+      ahead: 2,
+      behind: 0,
+      modified: ['a'],
+    );
     expect(
       (await harness().read(sessionDeliveryProvider('s1').future)).stage,
       DeliveryStage.working,
     );
 
-    statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0);
+    statusOutput = porcelainV2(
+      branch: 'work',
+      upstream: 'origin/work',
+      ahead: 2,
+      behind: 0,
+    );
     expect(
       (await harness().read(sessionDeliveryProvider('s1').future)).stage,
       DeliveryStage.committed,
     );
 
-    statusOutput = porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 0, behind: 0);
+    statusOutput = porcelainV2(
+      branch: 'work',
+      upstream: 'origin/work',
+      ahead: 0,
+      behind: 0,
+    );
     expect(
       (await harness().read(sessionDeliveryProvider('s1').future)).stage,
       DeliveryStage.pushed,
@@ -312,9 +344,8 @@ void main() {
     // observed it. Every open pull request in a protected repository reports
     // BLOCKED, so paying for this on any other status would be a process per
     // tick for a sentence nobody reads.
-    List<List<String>> protectionCalls() => ghCalls
-        .where((c) => c.first == 'api' && c[1] != 'graphql')
-        .toList();
+    List<List<String>> protectionCalls() =>
+        ghCalls.where((c) => c.first == 'api' && c[1] != 'graphql').toList();
 
     test('a blocked merge buys the rule, once, for the base branch', () async {
       addSession('s1', at: null);
@@ -458,7 +489,9 @@ void main() {
                     asked++;
                     return CommandResult(
                       exitCode: 0,
-                      stdout: asked == 1 ? porcelainV2(branch: 'work', ahead: 0, behind: 0) : porcelainV2(branch: 'main', ahead: 0, behind: 0),
+                      stdout: asked == 1
+                          ? porcelainV2(branch: 'work', ahead: 0, behind: 0)
+                          : porcelainV2(branch: 'main', ahead: 0, behind: 0),
                       stderr: '',
                     );
                   }

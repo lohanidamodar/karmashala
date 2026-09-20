@@ -107,14 +107,7 @@ void main() {
       // put it. xterm2 attaches it to the base character, so `f` lands in
       // column 1 and the mark is still in the text.
       final t = terminal()..write('e\u0301f');
-      expect(codePoints(t), [
-        'e'.codeUnitAt(0),
-        'f'.codeUnitAt(0),
-        0,
-        0,
-        0,
-        0,
-      ]);
+      expect(codePoints(t), ['e'.codeUnitAt(0), 'f'.codeUnitAt(0), 0, 0, 0, 0]);
       expect(t.buffer.lines[0].getText(0, 2).runes, [
         'e'.codeUnitAt(0),
         0x0301,
@@ -179,7 +172,8 @@ void main() {
     // One write with every case in it at once, and a second with the same text
     // delivered a character at a time — so every escape sequence in it is
     // split from its parameters and the rollback path runs on all of them.
-    const source = 'build \u{1F680} ok\r\n\x1b[32mpass\x1b[0m \u4f60\u597d e\u0301\r\n';
+    const source =
+        'build \u{1F680} ok\r\n\x1b[32mpass\x1b[0m \u4f60\u597d e\u0301\r\n';
     final whole = Terminal(maxLines: 200)
       ..resize(30, 4)
       ..write(source);

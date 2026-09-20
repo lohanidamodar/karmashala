@@ -24,29 +24,32 @@ import 'package:flutter_test/flutter_test.dart';
 ///  2. a source assertion that the plugin follows the rule, which is what an
 ///     upstream merge or a re-vendor would undo.
 void main() {
-  test('a ReceivePort closed before it emits poisons first(), not listen()', () async {
-    Future<int> unhandledFrom(void Function(ReceivePort) read) async {
-      final errors = <Object>[];
-      await runZonedGuarded(() async {
-            final port = ReceivePort();
-            read(port);
-            port.close();
-            await Future<void>.delayed(const Duration(milliseconds: 20));
-          }, (error, _) => errors.add(error))!;
-      return errors.length;
-    }
+  test(
+    'a ReceivePort closed before it emits poisons first(), not listen()',
+    () async {
+      Future<int> unhandledFrom(void Function(ReceivePort) read) async {
+        final errors = <Object>[];
+        await runZonedGuarded(() async {
+          final port = ReceivePort();
+          read(port);
+          port.close();
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }, (error, _) => errors.add(error))!;
+        return errors.length;
+      }
 
-    expect(
-      await unhandledFrom((port) => port.first.then((_) {})),
-      1,
-      reason: 'this is the crash: Stream.first has no element to give',
-    );
-    expect(
-      await unhandledFrom((port) => port.listen((_) {})),
-      0,
-      reason: 'a closed port simply ends a listen',
-    );
-  });
+      expect(
+        await unhandledFrom((port) => port.first.then((_) {})),
+        1,
+        reason: 'this is the crash: Stream.first has no element to give',
+      );
+      expect(
+        await unhandledFrom((port) => port.listen((_) {})),
+        0,
+        reason: 'a closed port simply ends a listen',
+      );
+    },
+  );
 
   test('the vendored pty reads its exit port with listen', () {
     final source = File(

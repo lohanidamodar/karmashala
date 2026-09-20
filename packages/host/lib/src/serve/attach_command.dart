@@ -22,7 +22,9 @@ Future<int> runAttach(
   } on SocketException catch (e) {
     // A distinct code, so the deployer can tell "no host running" from
     // "the host refused me" and start one.
-    errSink.writeln('karmashala_host attach: no host at ${paths.socketPath} (${e.osError?.message ?? e.message})');
+    errSink.writeln(
+      'karmashala_host attach: no host at ${paths.socketPath} (${e.osError?.message ?? e.message})',
+    );
     return 5;
   }
 

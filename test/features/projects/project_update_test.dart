@@ -275,14 +275,17 @@ void main() {
       expect(projectDao.getById('p1')!.defaultRepositoryId, 'r2');
     });
 
-    test('falls back rather than storing a checkout of another project', () async {
-      final project = seeded();
-      final result = await build().updateProject(
-        project,
-        defaultRepositoryId: 'someone-elses',
-      );
-      expect(result.project.defaultRepositoryId, isNull);
-    });
+    test(
+      'falls back rather than storing a checkout of another project',
+      () async {
+        final project = seeded();
+        final result = await build().updateProject(
+          project,
+          defaultRepositoryId: 'someone-elses',
+        );
+        expect(result.project.defaultRepositoryId, isNull);
+      },
+    );
 
     test('is cleared on request, which copyWith cannot express', () async {
       seeded();

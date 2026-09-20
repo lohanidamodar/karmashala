@@ -122,7 +122,8 @@ void main() {
       expect(
         io.async.where((op) => op.startsWith('File.writeAsString')),
         isEmpty,
-        reason: 'a rewrite that changes nothing is still a write to somebody '
+        reason:
+            'a rewrite that changes nothing is still a write to somebody '
             'else\'s config',
       );
       // Nine, plus the one stat the config rewrite takes before its read; a
@@ -139,7 +140,10 @@ void main() {
       final retire = _CountingIO();
       expect(
         await retire.run(
-          () => installer.retireEndpoint(descriptor: claude, storeHome: home.path),
+          () => installer.retireEndpoint(
+            descriptor: claude,
+            storeHome: home.path,
+          ),
         ),
         isTrue,
       );
@@ -261,7 +265,8 @@ void main() {
         expect(
           hung.unknown,
           isTrue,
-          reason: 'a false "not installed" sends someone looking for a config '
+          reason:
+              'a false "not installed" sends someone looking for a config '
               'bug that may not be there',
         );
         expect(hung.skippedBecause, contains('unknown'));
@@ -302,8 +307,9 @@ class _StubLocator implements CliStoreLocator {
   final List<CliStore> stores;
 
   @override
-  Future<List<CliStore>> locate(List<ExecutionEnvironment> environments) async =>
-      stores;
+  Future<List<CliStore>> locate(
+    List<ExecutionEnvironment> environments,
+  ) async => stores;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

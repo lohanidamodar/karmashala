@@ -34,7 +34,8 @@ void main() {
             expect(
               value.evidence,
               isNotEmpty,
-              reason: '${descriptor.id}/${axis.id}/${value.id} claims a mode '
+              reason:
+                  '${descriptor.id}/${axis.id}/${value.id} claims a mode '
                   'without saying where it was read',
             );
           }
@@ -64,7 +65,8 @@ void main() {
           expect(
             permits,
             sorted,
-            reason: '${axis.id} lists a more permissive value before a safer '
+            reason:
+                '${axis.id} lists a more permissive value before a safer '
                 'one; the order is what every picker renders',
           );
         }
@@ -81,7 +83,14 @@ void main() {
       // dontAsk, plan."
       expect(
         [for (final v in support.axes.single.values) v.id],
-        ['plan', 'dontAsk', 'manual', 'acceptEdits', 'auto', 'bypassPermissions'],
+        [
+          'plan',
+          'dontAsk',
+          'manual',
+          'acceptEdits',
+          'auto',
+          'bypassPermissions',
+        ],
       );
     });
 
@@ -114,7 +123,10 @@ void main() {
     test('composes the two by min, not max', () {
       // A read-only sandbox cannot write however the approval policy is set,
       // so the sandbox is what bounds `never` rather than the other way round.
-      expect(support.riskOf(pick('read-only', 'never')), PermissionRisk.readOnly);
+      expect(
+        support.riskOf(pick('read-only', 'never')),
+        PermissionRisk.readOnly,
+      );
       expect(
         support.riskOf(pick('workspace-write', 'on-request')),
         PermissionRisk.acceptEdits,
@@ -149,20 +161,29 @@ void main() {
       );
     });
 
-    test('a dangerous combination of two ordinary picks is still dangerous', () {
-      // Neither value carries a warning of its own; together they leave
-      // nothing in the way.
-      expect(support.isDangerous(pick('danger-full-access', 'never')), isTrue);
-      expect(support.isDangerous(pick('workspace-write', 'on-request')), isFalse);
-    });
+    test(
+      'a dangerous combination of two ordinary picks is still dangerous',
+      () {
+        // Neither value carries a warning of its own; together they leave
+        // nothing in the way.
+        expect(
+          support.isDangerous(pick('danger-full-access', 'never')),
+          isTrue,
+        );
+        expect(
+          support.isDangerous(pick('workspace-write', 'on-request')),
+          isFalse,
+        );
+      },
+    );
 
     test('declares only what the latest Codex accepts', () {
       // 0.151.0 rejects `untrusted`; 0.145.0 accepts everything below. The
       // latest set is a subset of the older one, so it launches on both.
-      expect([for (final v in support.axes[1].values) v.id], [
-        'on-request',
-        'never',
-      ]);
+      expect(
+        [for (final v in support.axes[1].values) v.id],
+        ['on-request', 'never'],
+      );
     });
 
     test('has no "ask before anything" left, and does not pretend to', () {
@@ -185,12 +206,10 @@ void main() {
     final support = supportFor('antigravity');
 
     test('has plan mode, and its ask is the unflagged behaviour', () {
-      expect([for (final v in support.axes.single.values) v.id], [
-        'plan',
-        'prompt',
-        'accept-edits',
-        'skip-permissions',
-      ]);
+      expect(
+        [for (final v in support.axes.single.values) v.id],
+        ['plan', 'prompt', 'accept-edits', 'skip-permissions'],
+      );
       expect(support.argumentsFor(support.defaultSelection), isEmpty);
     });
 
@@ -313,10 +332,9 @@ void main() {
         '--ask-for-approval',
         'on-request',
       ]);
-      expect(
-        codex.argumentsFor(codex.resolveStored('bypass')),
-        ['--dangerously-bypass-approvals-and-sandbox'],
-      );
+      expect(codex.argumentsFor(codex.resolveStored('bypass')), [
+        '--dangerously-bypass-approvals-and-sandbox',
+      ]);
     });
   });
 
@@ -326,7 +344,10 @@ void main() {
         'sandbox': 'workspace-write',
         'approval': 'on-request',
       });
-      expect(selection.canonical, 'approval=on-request;sandbox=workspace-write');
+      expect(
+        selection.canonical,
+        'approval=on-request;sandbox=workspace-write',
+      );
       expect(PermissionSelection.parse(selection.canonical), selection);
     });
 
@@ -345,5 +366,4 @@ void main() {
       expect(support.normalise(stored).valueFor('mode'), 'manual');
     });
   });
-
 }

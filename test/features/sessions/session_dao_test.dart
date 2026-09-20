@@ -236,9 +236,7 @@ void main() {
       final rows = dao.getByRepository('r1');
       expect(dao.countsByRepositories(['r1']), (
         sessions: rows.length,
-        running: rows
-            .where((s) => s.status == SessionStatus.running)
-            .length,
+        running: rows.where((s) => s.status == SessionStatus.running).length,
       ));
     });
   });
@@ -285,39 +283,58 @@ void main() {
     ]);
   });
 
-  test('heldExternalSessionIds projects only non-empty external session ids', () {
-    dao.insert(session(id: 's1').copyWith(externalSessionId: 'ext-1'));
-    dao.insert(session(id: 's2').copyWith(externalSessionId: 'ext-2'));
-    dao.insert(session(id: 's3'));
-    dao.insert(session(id: 's4').copyWith(externalSessionId: ''));
+  test(
+    'heldExternalSessionIds projects only non-empty external session ids',
+    () {
+      dao.insert(session(id: 's1').copyWith(externalSessionId: 'ext-1'));
+      dao.insert(session(id: 's2').copyWith(externalSessionId: 'ext-2'));
+      dao.insert(session(id: 's3'));
+      dao.insert(session(id: 's4').copyWith(externalSessionId: ''));
 
-    expect(dao.heldExternalSessionIds(), {'ext-1', 'ext-2'});
-    expect(dao.heldExternalSessionIds(excludingSessionId: 's1'), {'ext-2'});
-  });
+      expect(dao.heldExternalSessionIds(), {'ext-1', 'ext-2'});
+      expect(dao.heldExternalSessionIds(excludingSessionId: 's1'), {'ext-2'});
+    },
+  );
 
-  test('getWaitingForTitleSync returns active sessions with external ids and non-user titles', () {
-    dao.insert(session(id: 's1').copyWith(externalSessionId: 'ext-1', titleByUser: false));
-    dao.insert(session(id: 's2').copyWith(externalSessionId: 'ext-2', titleByUser: true));
-    dao.insert(session(id: 's3').copyWith(titleByUser: false));
-    dao.insert(session(id: 's4').copyWith(
-      externalSessionId: 'ext-4',
-      titleByUser: false,
-      archivedAt: DateTime.utc(2026, 9, 1),
-    ));
+  test(
+    'getWaitingForTitleSync returns active sessions with external ids and non-user titles',
+    () {
+      dao.insert(
+        session(
+          id: 's1',
+        ).copyWith(externalSessionId: 'ext-1', titleByUser: false),
+      );
+      dao.insert(
+        session(
+          id: 's2',
+        ).copyWith(externalSessionId: 'ext-2', titleByUser: true),
+      );
+      dao.insert(session(id: 's3').copyWith(titleByUser: false));
+      dao.insert(
+        session(id: 's4').copyWith(
+          externalSessionId: 'ext-4',
+          titleByUser: false,
+          archivedAt: DateTime.utc(2026, 9, 1),
+        ),
+      );
 
-    final waiting = dao.getWaitingForTitleSync();
-    expect(waiting.map((s) => s.id).toList(), ['s1']);
-  });
+      final waiting = dao.getWaitingForTitleSync();
+      expect(waiting.map((s) => s.id).toList(), ['s1']);
+    },
+  );
 
-  test('getUnattributed returns active sessions with null or empty external ids', () {
-    dao.insert(session(id: 's1').copyWith(externalSessionId: 'ext-1'));
-    dao.insert(session(id: 's2'));
-    dao.insert(session(id: 's3').copyWith(externalSessionId: ''));
-    dao.insert(session(id: 's4').copyWith(
-      archivedAt: DateTime.utc(2026, 9, 1),
-    ));
+  test(
+    'getUnattributed returns active sessions with null or empty external ids',
+    () {
+      dao.insert(session(id: 's1').copyWith(externalSessionId: 'ext-1'));
+      dao.insert(session(id: 's2'));
+      dao.insert(session(id: 's3').copyWith(externalSessionId: ''));
+      dao.insert(
+        session(id: 's4').copyWith(archivedAt: DateTime.utc(2026, 9, 1)),
+      );
 
-    final unattributed = dao.getUnattributed();
-    expect(unattributed.map((s) => s.id).toList(), ['s2', 's3']);
-  });
+      final unattributed = dao.getUnattributed();
+      expect(unattributed.map((s) => s.id).toList(), ['s2', 's3']);
+    },
+  );
 }

@@ -71,20 +71,25 @@ void main() {
     expect(pane.liveness.value, PaneLiveness.live);
   });
 
-  test('bytes from the host reach the buffer, and typing reaches the host', () async {
-    final access = PaneAccess(readyDeployment());
-    final pane = paneOn(access);
-    await settle();
+  test(
+    'bytes from the host reach the buffer, and typing reaches the host',
+    () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = paneOn(access);
+      await settle();
 
-    access.channels.single.pushOutput(0, 'C:\\work> hello from the host\r\n');
-    await settle();
-    expect(screenOf(pane), contains('hello from the host'));
+      access.channels.single.pushOutput(0, 'C:\\work> hello from the host\r\n');
+      await settle();
+      expect(screenOf(pane), contains('hello from the host'));
 
-    pane.terminal.textInput('dir\r');
-    await settle();
-    final typed = access.channels.single.received.whereType<InputMessage>().single;
-    expect(String.fromCharCodes(typed.bytes), 'dir\r');
-  });
+      pane.terminal.textInput('dir\r');
+      await settle();
+      final typed = access.channels.single.received
+          .whereType<InputMessage>()
+          .single;
+      expect(String.fromCharCodes(typed.bytes), 'dir\r');
+    },
+  );
 
   test('an exit code the host reports is the pane\'s exit code', () async {
     final access = PaneAccess(readyDeployment());
@@ -128,77 +133,99 @@ void main() {
     expect(screenOf(pane), contains('the host stopped while it was running'));
   });
 
-  test('a host that is not ready ends the pane in words, and never dials', () async {
-    final access = PaneAccess(
-      HostDeployment(
-        status: HostDeploymentStatus.noBinary,
-        observedAt: DateTime.utc(2026),
-        reason: 'No karmashala_host.exe beside this app.',
-      ),
-    );
-    final pane = paneOn(access);
-    await settle();
-
-    expect(access.channels, isEmpty, reason: 'there is no fallback to slide into');
-    expect(pane.liveness.value, PaneLiveness.exited);
-    expect(screenOf(pane), contains('No karmashala_host.exe beside this app.'));
-  });
-
-  test('a host we had to start says the earlier session is not running', () async {
-    final access = PaneAccess(readyDeployment(restarted: true));
-    final pane = paneOn(access);
-    await settle();
-    expect(screenOf(pane), contains('has been started'));
-    expect(screenOf(pane), contains('no longer running'));
-  });
-
-  test('closing the pane is a disconnect: the session is never closed', () async {
-    final access = PaneAccess(readyDeployment());
-    final pane = paneOn(access);
-    await settle();
-    final channel = access.channels.single;
-
-    pane.dispose();
-    await pane.reaped;
-
-    expect(channel.closed, isTrue);
-    expect(
-      channel.received.whereType<CloseMessage>(),
-      isEmpty,
-      reason: 'a session outliving its pane is the whole point of the host',
-    );
-  });
-
-  test('a resumed session that died with its host is cleared away once shown', () async {
-    final access = PaneAccess(readyDeployment())..liveSessions.add('karmashala_local_p1');
-    final pane = paneOn(access);
-    await settle();
-
-    final channel = access.channels.single;
-    expect(channel.received.whereType<AttachMessage>(), hasLength(1));
-    expect(channel.received.whereType<OpenMessage>(), isEmpty);
-
-    channel
-      ..pushOutput(0, 'what the agent was doing\r\n')
-      ..push(
-        ExitedMessage(
-          sessionRef: 1,
-          sessionId: 'karmashala_local_p1',
-          exitCode: null,
-          reason: 'the host that owned this session stopped while it was running',
+  test(
+    'a host that is not ready ends the pane in words, and never dials',
+    () async {
+      final access = PaneAccess(
+        HostDeployment(
+          status: HostDeploymentStatus.noBinary,
           observedAt: DateTime.utc(2026),
+          reason: 'No karmashala_host.exe beside this app.',
         ),
       );
-    await settle();
+      final pane = paneOn(access);
+      await settle();
 
-    expect(screenOf(pane), contains('what the agent was doing'));
-    // Shown, then let go: the record is what a person came back for, and
-    // keeping it would make every later start of this pane replay a corpse.
-    expect(channel.only<CloseMessage>().sessionId, 'karmashala_local_p1');
-  });
+      expect(
+        access.channels,
+        isEmpty,
+        reason: 'there is no fallback to slide into',
+      );
+      expect(pane.liveness.value, PaneLiveness.exited);
+      expect(
+        screenOf(pane),
+        contains('No karmashala_host.exe beside this app.'),
+      );
+    },
+  );
+
+  test(
+    'a host we had to start says the earlier session is not running',
+    () async {
+      final access = PaneAccess(readyDeployment(restarted: true));
+      final pane = paneOn(access);
+      await settle();
+      expect(screenOf(pane), contains('has been started'));
+      expect(screenOf(pane), contains('no longer running'));
+    },
+  );
+
+  test(
+    'closing the pane is a disconnect: the session is never closed',
+    () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = paneOn(access);
+      await settle();
+      final channel = access.channels.single;
+
+      pane.dispose();
+      await pane.reaped;
+
+      expect(channel.closed, isTrue);
+      expect(
+        channel.received.whereType<CloseMessage>(),
+        isEmpty,
+        reason: 'a session outliving its pane is the whole point of the host',
+      );
+    },
+  );
+
+  test(
+    'a resumed session that died with its host is cleared away once shown',
+    () async {
+      final access = PaneAccess(readyDeployment())
+        ..liveSessions.add('karmashala_local_p1');
+      final pane = paneOn(access);
+      await settle();
+
+      final channel = access.channels.single;
+      expect(channel.received.whereType<AttachMessage>(), hasLength(1));
+      expect(channel.received.whereType<OpenMessage>(), isEmpty);
+
+      channel
+        ..pushOutput(0, 'what the agent was doing\r\n')
+        ..push(
+          ExitedMessage(
+            sessionRef: 1,
+            sessionId: 'karmashala_local_p1',
+            exitCode: null,
+            reason:
+                'the host that owned this session stopped while it was running',
+            observedAt: DateTime.utc(2026),
+          ),
+        );
+      await settle();
+
+      expect(screenOf(pane), contains('what the agent was doing'));
+      // Shown, then let go: the record is what a person came back for, and
+      // keeping it would make every later start of this pane replay a corpse.
+      expect(channel.only<CloseMessage>().sessionId, 'karmashala_local_p1');
+    },
+  );
 
   test('a resumed session that really exited is left alone', () async {
-    final access = PaneAccess(readyDeployment())..liveSessions.add('karmashala_local_p1');
+    final access = PaneAccess(readyDeployment())
+      ..liveSessions.add('karmashala_local_p1');
     final pane = paneOn(access);
     await settle();
 
@@ -217,49 +244,60 @@ void main() {
     expect(
       access.channels.single.received.whereType<CloseMessage>(),
       isEmpty,
-      reason: 'the host keeps an ended session so a late pane can read its code',
+      reason:
+          'the host keeps an ended session so a late pane can read its code',
     );
   });
 
-  test('a resumed session is not printed twice over the app\'s own record', () async {
-    final access = PaneAccess(readyDeployment())
-      ..liveSessions.add('karmashala_local_p1')
-      ..resumedTotalBytes = 26;
-    final pane = HostTerminalInstance(
-      id: 'p1',
-      title: 'Local',
-      profileId: 'powershell',
-      access: access,
-      launch: launch,
-      // What the app stored when it last closed — the same output the host
-      // still holds in its ring.
-      restoredScrollback: 'a build that was running\r\n',
-    );
-    addTearDown(pane.dispose);
-    pane.terminal.resize(120, 40);
-    await settle();
+  test(
+    'a resumed session is not printed twice over the app\'s own record',
+    () async {
+      final access = PaneAccess(readyDeployment())
+        ..liveSessions.add('karmashala_local_p1')
+        ..resumedTotalBytes = 26;
+      final pane = HostTerminalInstance(
+        id: 'p1',
+        title: 'Local',
+        profileId: 'powershell',
+        access: access,
+        launch: launch,
+        // What the app stored when it last closed — the same output the host
+        // still holds in its ring.
+        restoredScrollback: 'a build that was running\r\n',
+      );
+      addTearDown(pane.dispose);
+      pane.terminal.resize(120, 40);
+      await settle();
 
-    access.channels.single.pushOutput(0, 'a build that was running\r\nand now this\r\n');
-    await settle();
+      access.channels.single.pushOutput(
+        0,
+        'a build that was running\r\nand now this\r\n',
+      );
+      await settle();
 
-    final screen = screenOf(pane);
-    expect(
-      'a build that was running'.allMatches(screen).length,
-      1,
-      reason: 'the host replayed it; the stored copy is the one that goes',
-    );
-    expect(screen, contains('and now this'));
-  });
+      final screen = screenOf(pane);
+      expect(
+        'a build that was running'.allMatches(screen).length,
+        1,
+        reason: 'the host replayed it; the stored copy is the one that goes',
+      );
+      expect(screen, contains('and now this'));
+    },
+  );
 
-  test('a pane with no stored history keeps every byte the host replays', () async {
-    final access = PaneAccess(readyDeployment())..liveSessions.add('karmashala_local_p1');
-    final pane = paneOn(access);
-    await settle();
+  test(
+    'a pane with no stored history keeps every byte the host replays',
+    () async {
+      final access = PaneAccess(readyDeployment())
+        ..liveSessions.add('karmashala_local_p1');
+      final pane = paneOn(access);
+      await settle();
 
-    access.channels.single.pushOutput(0, 'only the host has this\r\n');
-    await settle();
-    expect(screenOf(pane), contains('only the host has this'));
-  });
+      access.channels.single.pushOutput(0, 'only the host has this\r\n');
+      await settle();
+      expect(screenOf(pane), contains('only the host has this'));
+    },
+  );
 
   test('a resize reaches the host', () async {
     final access = PaneAccess(readyDeployment());
@@ -268,28 +306,40 @@ void main() {
 
     pane.terminal.resize(100, 30);
     await settle();
-    final resized = access.channels.single.received.whereType<ResizeMessage>().last;
+    final resized = access.channels.single.received
+        .whereType<ResizeMessage>()
+        .last;
     expect((resized.columns, resized.rows), (100, 30));
   });
 
-  test('a session found at another size is told the size of the pane', () async {
-    // The host kept the session at the grid its last pane had. This pane was
-    // laid out before the link existed, so no resize of its own will say so.
-    final access = PaneAccess(readyDeployment())..liveSessions.add('karmashala_local_p1');
-    paneOn(access);
-    await settle();
+  test(
+    'a session found at another size is told the size of the pane',
+    () async {
+      // The host kept the session at the grid its last pane had. This pane was
+      // laid out before the link existed, so no resize of its own will say so.
+      final access = PaneAccess(readyDeployment())
+        ..liveSessions.add('karmashala_local_p1');
+      paneOn(access);
+      await settle();
 
-    final resized = access.channels.single.all<ResizeMessage>().toList();
-    expect([for (final r in resized) (r.sessionRef, r.columns, r.rows)], [(1, 120, 40)]);
-  });
+      final resized = access.channels.single.all<ResizeMessage>().toList();
+      expect(
+        [for (final r in resized) (r.sessionRef, r.columns, r.rows)],
+        [(1, 120, 40)],
+      );
+    },
+  );
 
-  test('a session opened at the size of the pane is not resized again', () async {
-    final access = PaneAccess(readyDeployment());
-    paneOn(access);
-    await settle();
+  test(
+    'a session opened at the size of the pane is not resized again',
+    () async {
+      final access = PaneAccess(readyDeployment());
+      paneOn(access);
+      await settle();
 
-    expect(access.channels.single.all<ResizeMessage>(), isEmpty);
-  });
+      expect(access.channels.single.all<ResizeMessage>(), isEmpty);
+    },
+  );
 
   test('an agent pane keeps its session id across pane replacement', () async {
     final access = PaneAccess(readyDeployment());

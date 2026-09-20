@@ -36,9 +36,9 @@ void main() {
       ..upsert(windowsEnv())
       ..upsert(wslEnv());
     ProjectDao(db).insert(project());
-    RepositoryDao(db).insert(
-      repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'),
-    );
+    RepositoryDao(
+      db,
+    ).insert(repository(environmentId: 'wsl:Ubuntu', path: '/home/me/app'));
     runner = FakeCommandRunner(
       environmentId: 'wsl:Ubuntu',
       responder: (request) => request.arguments.contains('check-ignore')
@@ -75,57 +75,65 @@ void main() {
     return worktree.path;
   }
 
-  test('a checkout with no setting opens no pane and records nothing', () async {
-    await create();
-    expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
-    expect(
-      container.read(worktreeSetupDaoProvider).runsFor('r1'),
-      isEmpty,
-      reason: 'nothing happened, so there is nothing to say about it',
-    );
-  });
+  test(
+    'a checkout with no setting opens no pane and records nothing',
+    () async {
+      await create();
+      expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
+      expect(
+        container.read(worktreeSetupDaoProvider).runsFor('r1'),
+        isEmpty,
+        reason: 'nothing happened, so there is nothing to say about it',
+      );
+    },
+  );
 
-  test('the command reaches a real pane, pointed at the distribution', () async {
-    container.read(worktreeSetupDaoProvider).save(
-      'r1',
-      const WorktreeSetup(
-        command: ['flutter', 'pub', 'get'],
-        copyPaths: ['.dart_tool'],
-      ),
-      testTime,
-    );
+  test(
+    'the command reaches a real pane, pointed at the distribution',
+    () async {
+      container
+          .read(worktreeSetupDaoProvider)
+          .save(
+            'r1',
+            const WorktreeSetup(
+              command: ['flutter', 'pub', 'get'],
+              copyPaths: ['.dart_tool'],
+            ),
+            testTime,
+          );
 
-    final path = await create();
-    final terminals = container.read(
-      terminalSessionsControllerProvider.notifier,
-    );
-    final tab = container
-        .read(terminalSessionsControllerProvider)
-        .tabs
-        .single;
-    final instance =
-        terminals.instanceFor(tab.focusedPaneId) as FakeTerminalInstance;
-    final launch = instance.agentLaunch!;
+      final path = await create();
+      final terminals = container.read(
+        terminalSessionsControllerProvider.notifier,
+      );
+      final tab = container
+          .read(terminalSessionsControllerProvider)
+          .tabs
+          .single;
+      final instance =
+          terminals.instanceFor(tab.focusedPaneId) as FakeTerminalInstance;
+      final launch = instance.agentLaunch!;
 
-    expect(launch.executable, 'flutter');
-    expect(launch.arguments, ['pub', 'get']);
-    expect(launch.workingDirectory, path.path);
-    // The whole point: the pane is pointed at the *repository's* environment,
-    // so `wrapForPty` builds `cmd.exe /c wsl.exe -d Ubuntu …` rather than
-    // running a Windows `flutter` against a Linux checkout — CLAUDE.md §17.
-    expect(launch.wslDistribution, 'Ubuntu');
-    expect(launch.sshHostId, isNull);
-    expect(launch.agentId, kWorktreeSetupAgentId);
-    // Not a session's pane: nothing here is an agent conversation.
-    expect(launch.sessionId, isNull);
-    expect(launch.title, contains('app-s1'));
+      expect(launch.executable, 'flutter');
+      expect(launch.arguments, ['pub', 'get']);
+      expect(launch.workingDirectory, path.path);
+      // The whole point: the pane is pointed at the *repository's* environment,
+      // so `wrapForPty` builds `cmd.exe /c wsl.exe -d Ubuntu …` rather than
+      // running a Windows `flutter` against a Linux checkout — CLAUDE.md §17.
+      expect(launch.wslDistribution, 'Ubuntu');
+      expect(launch.sshHostId, isNull);
+      expect(launch.agentId, kWorktreeSetupAgentId);
+      // Not a session's pane: nothing here is an agent conversation.
+      expect(launch.sessionId, isNull);
+      expect(launch.title, contains('app-s1'));
 
-    final run = container.read(worktreeSetupDaoProvider).lastRun('r1', path)!;
-    expect(run.command!.result, WorktreeCommandResult.running);
-    expect(run.command!.paneId, tab.focusedPaneId);
-    expect(run.command!.exitCode, isNull);
-    expect(run.copies.single.path, '.dart_tool');
-  });
+      final run = container.read(worktreeSetupDaoProvider).lastRun('r1', path)!;
+      expect(run.command!.result, WorktreeCommandResult.running);
+      expect(run.command!.paneId, tab.focusedPaneId);
+      expect(run.command!.exitCode, isNull);
+      expect(run.copies.single.path, '.dart_tool');
+    },
+  );
 
   test('an SSH checkout is pointed at its host, not at this one', () async {
     ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
@@ -137,28 +145,25 @@ void main() {
         name: 'remote',
       ),
     );
-    container.read(worktreeSetupDaoProvider).save(
-      'r2',
-      const WorktreeSetup(command: ['make', 'setup']),
-      testTime,
-    );
+    container
+        .read(worktreeSetupDaoProvider)
+        .save('r2', const WorktreeSetup(command: ['make', 'setup']), testTime);
 
-    await container.read(worktreeServiceProvider).createForSession(
-      repo: const EnvironmentPath(
-        environmentId: 'ssh:h1',
-        path: '/srv/app',
-      ),
-      worktreeName: 's1',
-      branch: 'session/s1',
-    );
+    await container
+        .read(worktreeServiceProvider)
+        .createForSession(
+          repo: const EnvironmentPath(
+            environmentId: 'ssh:h1',
+            path: '/srv/app',
+          ),
+          worktreeName: 's1',
+          branch: 'session/s1',
+        );
 
     final terminals = container.read(
       terminalSessionsControllerProvider.notifier,
     );
-    final tab = container
-        .read(terminalSessionsControllerProvider)
-        .tabs
-        .single;
+    final tab = container.read(terminalSessionsControllerProvider).tabs.single;
     final launch =
         (terminals.instanceFor(tab.focusedPaneId) as FakeTerminalInstance)
             .agentLaunch!;
@@ -167,11 +172,13 @@ void main() {
   });
 
   test('the pane stopping turns "running" into a recorded verdict', () async {
-    container.read(worktreeSetupDaoProvider).save(
-      'r1',
-      const WorktreeSetup(command: ['flutter', 'pub', 'get']),
-      testTime,
-    );
+    container
+        .read(worktreeSetupDaoProvider)
+        .save(
+          'r1',
+          const WorktreeSetup(command: ['flutter', 'pub', 'get']),
+          testTime,
+        );
     final path = await create();
     final paneId = container
         .read(terminalSessionsControllerProvider)
@@ -180,9 +187,9 @@ void main() {
         .focusedPaneId;
     final before = container.read(worktreeSetupRevisionProvider);
 
-    container.read(paneExitProvider.notifier).record(
-      PaneExit(paneId: paneId, sessionId: null, exitCode: 1),
-    );
+    container
+        .read(paneExitProvider.notifier)
+        .record(PaneExit(paneId: paneId, sessionId: null, exitCode: 1));
 
     final run = container.read(worktreeSetupDaoProvider).lastRun('r1', path)!;
     expect(run.command!.result, WorktreeCommandResult.failed);
@@ -196,17 +203,20 @@ void main() {
   });
 
   test('some other pane stopping changes nothing', () async {
-    container.read(worktreeSetupDaoProvider).save(
-      'r1',
-      const WorktreeSetup(command: ['make']),
-      testTime,
-    );
+    container
+        .read(worktreeSetupDaoProvider)
+        .save('r1', const WorktreeSetup(command: ['make']), testTime);
     final path = await create();
-    container.read(paneExitProvider.notifier).record(
-      const PaneExit(paneId: 'a-shell', sessionId: null, exitCode: 3),
-    );
+    container
+        .read(paneExitProvider.notifier)
+        .record(
+          const PaneExit(paneId: 'a-shell', sessionId: null, exitCode: 3),
+        );
     expect(
-      container.read(worktreeSetupDaoProvider).lastRun('r1', path)!.command!
+      container
+          .read(worktreeSetupDaoProvider)
+          .lastRun('r1', path)!
+          .command!
           .result,
       WorktreeCommandResult.running,
     );
@@ -214,11 +224,9 @@ void main() {
 
   test('the setup pane is not a session pane, and is stored as one restore '
       'will not re-run', () async {
-    container.read(worktreeSetupDaoProvider).save(
-      'r1',
-      const WorktreeSetup(command: ['make']),
-      testTime,
-    );
+    container
+        .read(worktreeSetupDaoProvider)
+        .save('r1', const WorktreeSetup(command: ['make']), testTime);
     await create();
     final paneId = container
         .read(terminalSessionsControllerProvider)
@@ -226,7 +234,8 @@ void main() {
         .single
         .focusedPaneId;
     final instance =
-        container.read(terminalSessionsControllerProvider.notifier)
+        container
+                .read(terminalSessionsControllerProvider.notifier)
                 .instanceFor(paneId)
             as FakeTerminalInstance;
     // `shouldRestartOnActivate` excludes agent panes, so a restored setup pane

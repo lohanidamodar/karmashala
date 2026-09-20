@@ -101,7 +101,8 @@ class DeviceDriveTools extends DeviceToolFamily {
     }
 
     final screen = read.screen;
-    if (screen != null && (x < 0 || y < 0 || x >= screen.width || y >= screen.height)) {
+    if (screen != null &&
+        (x < 0 || y < 0 || x >= screen.width || y >= screen.height)) {
       throw DeviceRefusal(
         'device_tap: ($x, $y) is off a $screen ${read.space.label} screen on '
         '${driver.target.id}. A tap outside the display does nothing and '
@@ -259,11 +260,7 @@ class DeviceDriveTools extends DeviceToolFamily {
         '${DeviceKey.values.map((k) => k.name).join(', ')}.',
       );
     }
-    final driver = await driverToDrive(
-      id,
-      'device_key',
-      DeviceCapability.keys,
-    );
+    final driver = await driverToDrive(id, 'device_key', DeviceCapability.keys);
     // The driver refuses the individual keys its device does not have: per-key
     // rather than a capability, because a device with *some* of them is normal.
     final press = await driver.pressKey(parsed);
@@ -424,7 +421,6 @@ const String kDeviceLocatingPolicy =
     'There is no speed reason to skip the dynamic path: device_tap reads the '
     'screen before it acts, so the two cost the same, and device_tap is the '
     'one that gets refused when the screen has moved since you looked.';
-
 
 /// The schemas for [DeviceDriveTools].
 const Map<String, dynamic> deviceTapSchema = {

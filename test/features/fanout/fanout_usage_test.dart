@@ -294,10 +294,7 @@ void main() {
     await pumpSetup(tester, usageFor: (_) => antigravitySnapshot());
 
     expect(find.text('not recorded'), findsNWidgets(2));
-    expect(
-      find.text('No quota reported for this account.'),
-      findsNWidgets(2),
-    );
+    expect(find.text('No quota reported for this account.'), findsNWidgets(2));
     expect(find.textContaining('%'), findsNothing);
     expectLaunchStillOffered(tester);
   });

@@ -7,7 +7,6 @@ library;
 
 import 'dart:async';
 
-
 /// How many answers one device's ledger keeps. A start is a deliberate act, so
 /// this is generous for the retries it exists to absorb; the cap is only there
 /// so a long-lived link cannot grow the map without bound.
@@ -33,10 +32,7 @@ class SessionStartLedger<T> {
   bool holds(String key) => _answers.containsKey(key);
 
   /// The answer for [key], starting one with [start] only if there is none.
-  Future<T> once(
-    String key,
-    Future<T> Function() start,
-  ) {
+  Future<T> once(String key, Future<T> Function() start) {
     final remembered = _answers[key];
     if (remembered != null) return remembered;
     final attempt = start();

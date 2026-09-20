@@ -45,7 +45,10 @@ class HostDeployer {
   Future<HostDeployment> deploy({bool reinstall = false}) async {
     final platform = await measurePlatform();
     if (platform == null) {
-      return HostDeployment.unknown('${target.address} did not answer `uname -sm`.', _now());
+      return HostDeployment.unknown(
+        '${target.address} did not answer `uname -sm`.',
+        _now(),
+      );
     }
     final unsupported = _unsupported(platform);
     if (unsupported != null) return unsupported;
@@ -246,7 +249,10 @@ class HostDeployer {
       // and Alpine's exits non-zero; the redirect and `|| true` survive both.
       'uname -s; uname -m; (ldd --version 2>&1 || true) | head -1',
     );
-    final lines = const LineSplitter().convert(result.stdout).where((l) => l.isNotEmpty).toList();
+    final lines = const LineSplitter()
+        .convert(result.stdout)
+        .where((l) => l.isNotEmpty)
+        .toList();
     if (lines.length < 2) return null;
     final libcLine = (lines.length > 2 ? lines[2] : '').toLowerCase();
     return HostPlatform(
@@ -284,8 +290,12 @@ class HostDeployer {
     // The right size does not mean it can run: for a bundle nothing may have
     // unpacked the archive, and a bare file restored from a backup is the size
     // it should be and is not executable.
-    if (!force && reported == '${binary.length}' && await _isRunnable(layout.executable)) {
-      _logger.debug('${layout.upload} is already ${binary.length} bytes; skipping the upload.');
+    if (!force &&
+        reported == '${binary.length}' &&
+        await _isRunnable(layout.executable)) {
+      _logger.debug(
+        '${layout.upload} is already ${binary.length} bytes; skipping the upload.',
+      );
       return;
     }
     if (!existing.ok && reported != 'missing') {
@@ -331,7 +341,10 @@ class HostDeployer {
       'if command -v "\$m" >/dev/null 2>&1; then echo "pm=\$m"; break; fi; done; '
       'echo "uid=\$(id -u 2>/dev/null)"',
     );
-    final lines = const LineSplitter().convert(result.stdout).map((l) => l.trim()).toList();
+    final lines = const LineSplitter()
+        .convert(result.stdout)
+        .map((l) => l.trim())
+        .toList();
     final missing = [
       for (final line in lines)
         if (line.startsWith('missing=')) line.substring(8),
@@ -344,7 +357,9 @@ class HostDeployer {
       return null;
     }
 
-    final packages = {for (final tool in missing) tool == 'setsid' ? 'util-linux' : tool}.join(' ');
+    final packages = {
+      for (final tool in missing) tool == 'setsid' ? 'util-linux' : tool,
+    }.join(' ');
     final sudo = said('uid') == '0' ? '' : 'sudo ';
     final install = switch (said('pm')) {
       'apt-get' => '${sudo}apt-get install -y $packages',
@@ -364,7 +379,8 @@ class HostDeployer {
           ? null
           : PrivilegedCommand(
               command: install,
-              does: 'Installs $packages on ${target.address} from its own package manager.',
+              does:
+                  'Installs $packages on ${target.address} from its own package manager.',
               why:
                   'Installing a system package changes the whole machine and needs '
                   'root, so it is yours to run, in a terminal there.',
@@ -375,8 +391,9 @@ class HostDeployer {
   /// Whether what is already on the machine can run. The `chmod` rides along
   /// rather than costing a second round trip, and is allowed to fail — the
   /// `test -x` is the answer.
-  Future<bool> _isRunnable(String path) async =>
-      (await target.run('chmod +x ${_quote(path)} 2>/dev/null; test -x ${_quote(path)}')).ok;
+  Future<bool> _isRunnable(String path) async => (await target.run(
+    'chmod +x ${_quote(path)} 2>/dev/null; test -x ${_quote(path)}',
+  )).ok;
 
   /// Unpacks the bundle into a directory of its own, replacing whatever was
   /// there: a half-extracted tree from an interrupted deploy is the one state
@@ -439,7 +456,10 @@ class HostDeployer {
         }
       }, onError: (Object _) {});
       channel.add(
-        const HelloMessage(requestId: 1, clientId: 'karmashala-deployer').toFrame().encode(),
+        const HelloMessage(
+          requestId: 1,
+          clientId: 'karmashala-deployer',
+        ).toFrame().encode(),
       );
       try {
         return await greeting.future.timeout(helloTimeout);
@@ -460,7 +480,9 @@ class HostDeployer {
   /// changed wording then reports an unknown version rather than a wrong one.
   static HostGreeting? _greetingFromRefusal(ErrorMessage refusal) {
     if (refusal.code != ProtocolErrorCode.protocolMismatch) return null;
-    final match = RegExp(r'host speaks protocol (\d+)').firstMatch(refusal.message);
+    final match = RegExp(
+      r'host speaks protocol (\d+)',
+    ).firstMatch(refusal.message);
     return HostGreeting(
       hostVersion: 'unknown',
       protocolVersion: match == null ? -1 : int.parse(match.group(1)!),
@@ -493,7 +515,10 @@ class HostDeployer {
         }
       }, onError: (Object _) {});
       channel.add(
-        const HelloMessage(requestId: 1, clientId: 'karmashala-deployer').toFrame().encode(),
+        const HelloMessage(
+          requestId: 1,
+          clientId: 'karmashala-deployer',
+        ).toFrame().encode(),
       );
       channel.add(const ListMessage(2).toFrame().encode());
       try {
@@ -569,12 +594,20 @@ class HostDeployer {
 /// `_install` writes [upload], and the two cannot drift into disagreeing about
 /// what a bundle looks like once it is unpacked.
 class _RemoteLayout {
-  const _RemoteLayout({required this.upload, required this.executable, required this.unpackInto});
+  const _RemoteLayout({
+    required this.upload,
+    required this.executable,
+    required this.unpackInto,
+  });
 
   /// A bundle is unpacked into a directory of its own and run from inside it,
   /// so the executable keeps `../lib` — the SQLite it was built with — beside
   /// it. A bare file from before the store is uploaded straight to where it runs.
-  factory _RemoteLayout.of(String directory, HostBinary binary, HostPlatform platform) {
+  factory _RemoteLayout.of(
+    String directory,
+    HostBinary binary,
+    HostPlatform platform,
+  ) {
     final stem = 'karmashala_host-${binary.version}-${platform.targetKey}';
     if (!binary.isBundleArchive) {
       return _RemoteLayout(

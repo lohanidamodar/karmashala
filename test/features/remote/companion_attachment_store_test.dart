@@ -51,51 +51,59 @@ void main() {
     if (root.existsSync()) root.deleteSync(recursive: true);
   });
 
-  test('a whole file arrives, and only the committed name is a real file',
-      () async {
-    final content = _bytes(300);
-    final offer = await store.begin(_device, _request(bytes: content.length));
-    await store.write(_device, offer.uploadId, 0, content);
+  test(
+    'a whole file arrives, and only the committed name is a real file',
+    () async {
+      final content = _bytes(300);
+      final offer = await store.begin(_device, _request(bytes: content.length));
+      await store.write(_device, offer.uploadId, 0, content);
 
-    // Before the commit there is nothing an agent could be handed: the bytes
-    // are in `incoming/`, under a name nothing outside this store knows.
-    expect(_countFiles(root, kCompanionAttachmentPrefix), 0);
+      // Before the commit there is nothing an agent could be handed: the bytes
+      // are in `incoming/`, under a name nothing outside this store knows.
+      expect(_countFiles(root, kCompanionAttachmentPrefix), 0);
 
-    final file = await store.commit(_device, offer.uploadId);
+      final file = await store.commit(_device, offer.uploadId);
 
-    expect(await file.readAsBytes(), content);
-    expect(file.uri.pathSegments.last, endsWith('_IMG_4821.jpg'));
-    expect(_countFiles(root, kCompanionAttachmentPrefix), 1);
-    expect(
-      Directory('${root.path}/incoming').listSync().whereType<File>(),
-      isEmpty,
-      reason: 'the staged copy is renamed, not duplicated',
-    );
-  });
-
-  test('a photo-sized file crosses in chunks and reassembles exactly',
-      () async {
-    // Two and a bit chunks: enough that a boundary bug shows, small enough
-    // that the test is about the arithmetic rather than about megabytes.
-    final content = _bytes(kAttachmentChunkBytes * 2 + 517, 7);
-    final offer = await store.begin(_device, _request(bytes: content.length));
-
-    var seq = 0;
-    for (var at = 0; at < content.length; at += offer.chunkBytes) {
-      final end = (at + offer.chunkBytes).clamp(0, content.length);
-      await store.write(
-        _device,
-        offer.uploadId,
-        seq++,
-        Uint8List.sublistView(content, at, end),
+      expect(await file.readAsBytes(), content);
+      expect(file.uri.pathSegments.last, endsWith('_IMG_4821.jpg'));
+      expect(_countFiles(root, kCompanionAttachmentPrefix), 1);
+      expect(
+        Directory('${root.path}/incoming').listSync().whereType<File>(),
+        isEmpty,
+        reason: 'the staged copy is renamed, not duplicated',
       );
-    }
+    },
+  );
 
-    expect(seq, 3, reason: 'a $kAttachmentChunkBytes byte chunk, three of them');
-    final file = await store.commit(_device, offer.uploadId);
-    expect(await file.length(), content.length);
-    expect(await file.readAsBytes(), content);
-  });
+  test(
+    'a photo-sized file crosses in chunks and reassembles exactly',
+    () async {
+      // Two and a bit chunks: enough that a boundary bug shows, small enough
+      // that the test is about the arithmetic rather than about megabytes.
+      final content = _bytes(kAttachmentChunkBytes * 2 + 517, 7);
+      final offer = await store.begin(_device, _request(bytes: content.length));
+
+      var seq = 0;
+      for (var at = 0; at < content.length; at += offer.chunkBytes) {
+        final end = (at + offer.chunkBytes).clamp(0, content.length);
+        await store.write(
+          _device,
+          offer.uploadId,
+          seq++,
+          Uint8List.sublistView(content, at, end),
+        );
+      }
+
+      expect(
+        seq,
+        3,
+        reason: 'a $kAttachmentChunkBytes byte chunk, three of them',
+      );
+      final file = await store.commit(_device, offer.uploadId);
+      expect(await file.length(), content.length);
+      expect(await file.readAsBytes(), content);
+    },
+  );
 
   group('a half-delivered attachment', () {
     test('is refused at the commit rather than written short', () async {
@@ -214,7 +222,12 @@ void main() {
         _request(bytes: kAttachmentChunkBytes * 2),
       );
       await expectLater(
-        store.write(_device, offer.uploadId, 0, _bytes(kAttachmentChunkBytes + 1)),
+        store.write(
+          _device,
+          offer.uploadId,
+          0,
+          _bytes(kAttachmentChunkBytes + 1),
+        ),
         throwsA(isA<AttachmentUploadException>()),
       );
     });
@@ -235,7 +248,10 @@ void main() {
   });
 
   group('the name is the host\'s, not the phone\'s', () {
-    Future<String> committedNameFor(String sent, {String type = 'image/png'}) async {
+    Future<String> committedNameFor(
+      String sent, {
+      String type = 'image/png',
+    }) async {
       final offer = await store.begin(
         _device,
         _request(name: sent, type: type, bytes: 4),
@@ -252,13 +268,15 @@ void main() {
       expect(name, isNot(contains('/')));
     });
 
-    test('the extension comes from the media type, never from the name',
-        () async {
-      expect(
-        await committedNameFor('shot.exe', type: 'image/png'),
-        endsWith('.png'),
-      );
-    });
+    test(
+      'the extension comes from the media type, never from the name',
+      () async {
+        expect(
+          await committedNameFor('shot.exe', type: 'image/png'),
+          endsWith('.png'),
+        );
+      },
+    );
 
     test('a name that survives to nothing still gets one', () async {
       // A path an agent cannot pronounce is worse than a generic one.
@@ -268,42 +286,44 @@ void main() {
     });
   });
 
-  test('committed attachments are pruned to the newest, and only ours',
-      () async {
-    const keep = 3;
-    store = CompanionAttachmentStore(root, keep: keep);
-    root.createSync(recursive: true);
-    // What the desktop composer's own attach leaves in this same directory.
-    final theirs = File('${root.path}/img_1234.png')
-      ..writeAsBytesSync(_bytes(4));
+  test(
+    'committed attachments are pruned to the newest, and only ours',
+    () async {
+      const keep = 3;
+      store = CompanionAttachmentStore(root, keep: keep);
+      root.createSync(recursive: true);
+      // What the desktop composer's own attach leaves in this same directory.
+      final theirs = File('${root.path}/img_1234.png')
+        ..writeAsBytesSync(_bytes(4));
 
-    final committed = <File>[];
-    for (var i = 0; i < keep + 2; i++) {
-      final offer = await store.begin(
+      final committed = <File>[];
+      for (var i = 0; i < keep + 2; i++) {
+        final offer = await store.begin(
+          _device,
+          _request(name: 'shot$i.png', type: 'image/png', bytes: 4),
+        );
+        await store.write(_device, offer.uploadId, 0, _bytes(4));
+        final file = await store.commit(_device, offer.uploadId);
+        // The order the prune reads, said outright rather than raced for.
+        file.setLastModifiedSync(DateTime.utc(2026, 9, 1 + i));
+        committed.add(file);
+      }
+      // One more commit, so the prune runs against the order just written.
+      final last = await store.begin(
         _device,
-        _request(name: 'shot$i.png', type: 'image/png', bytes: 4),
+        _request(name: 'newest.png', type: 'image/png', bytes: 4),
       );
-      await store.write(_device, offer.uploadId, 0, _bytes(4));
-      final file = await store.commit(_device, offer.uploadId);
-      // The order the prune reads, said outright rather than raced for.
-      file.setLastModifiedSync(DateTime.utc(2026, 9, 1 + i));
-      committed.add(file);
-    }
-    // One more commit, so the prune runs against the order just written.
-    final last = await store.begin(
-      _device,
-      _request(name: 'newest.png', type: 'image/png', bytes: 4),
-    );
-    await store.write(_device, last.uploadId, 0, _bytes(4));
-    final newest = await store.commit(_device, last.uploadId);
+      await store.write(_device, last.uploadId, 0, _bytes(4));
+      final newest = await store.commit(_device, last.uploadId);
 
-    expect(_countFiles(root, kCompanionAttachmentPrefix), keep);
-    expect(newest.existsSync(), isTrue);
-    expect(committed.first.existsSync(), isFalse, reason: 'the oldest goes');
-    expect(
-      theirs.existsSync(),
-      isTrue,
-      reason: 'the composer\'s own attachments are not ours to delete',
-    );
-  });
+      expect(_countFiles(root, kCompanionAttachmentPrefix), keep);
+      expect(newest.existsSync(), isTrue);
+      expect(committed.first.existsSync(), isFalse, reason: 'the oldest goes');
+      expect(
+        theirs.existsSync(),
+        isTrue,
+        reason: 'the composer\'s own attachments are not ours to delete',
+      );
+    },
+  );
 }

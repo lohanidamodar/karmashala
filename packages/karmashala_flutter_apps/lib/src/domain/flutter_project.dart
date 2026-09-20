@@ -19,10 +19,7 @@ enum FlutterEvidence {
 /// What one `pubspec.yaml` says, as far as anything here needs to know.
 /// Deliberately not a YAML parse — `package:yaml` is not a dependency here.
 class PubspecReading {
-  const PubspecReading({
-    required this.name,
-    required this.evidence,
-  });
+  const PubspecReading({required this.name, required this.evidence});
 
   /// The package name, or null when the file does not declare one.
   final String? name;
@@ -137,7 +134,11 @@ List<FlutterProject> flutterProjectsIn({
     final reading = readPubspec(candidate.contents);
     if (!reading.isFlutter) continue;
     final directory = ctx.dirname(candidate.path);
-    final depth = flutterProjectDepth(root: root, directory: directory, context: ctx);
+    final depth = flutterProjectDepth(
+      root: root,
+      directory: directory,
+      context: ctx,
+    );
     if (depth == null || depth > maxDepth) continue;
     found.add(
       FlutterProject(

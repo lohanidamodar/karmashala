@@ -325,9 +325,7 @@ SessionDelivery? _localDelivery(Ref ref, SectionCandidate candidate) {
         // `repositoryOriginProvider` answers once per clone not per `wt-*`.
         _warm(
           ref,
-          checkoutDeliveryProvider(
-            Checkout(worktree, repository: repository),
-          ),
+          checkoutDeliveryProvider(Checkout(worktree, repository: repository)),
         );
   }
   return _warm(ref, checkoutDeliveryProvider(Checkout(repository)));

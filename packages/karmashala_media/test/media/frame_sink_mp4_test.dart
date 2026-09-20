@@ -9,7 +9,11 @@ import '../support/temp_directory.dart';
 
 /// Stands in for the operating system's encoder so no test needs a real one.
 class _FakeVideoEncoder implements VideoEncoder {
-  _FakeVideoEncoder({required this.path, required this.width, required this.height});
+  _FakeVideoEncoder({
+    required this.path,
+    required this.width,
+    required this.height,
+  });
 
   final String path;
   final int width;
@@ -102,20 +106,23 @@ void main() {
       expect(result.externalCommand, isNull);
     });
 
-    test('finishing with no frames refuses rather than writing an empty file', () {
-      final encoder = FrameEncoder(
-        format: RecordingFormat.mp4,
-        outputPath: p.join(temp.path, 'empty.mp4'),
-        openVideoEncoder:
-            ({
-              required String path,
-              required int width,
-              required int height,
-              required int frameRate,
-            }) => _FakeVideoEncoder(path: path, width: width, height: height),
-      );
-      expect(encoder.finish(), throwsStateError);
-    });
+    test(
+      'finishing with no frames refuses rather than writing an empty file',
+      () {
+        final encoder = FrameEncoder(
+          format: RecordingFormat.mp4,
+          outputPath: p.join(temp.path, 'empty.mp4'),
+          openVideoEncoder:
+              ({
+                required String path,
+                required int width,
+                required int height,
+                required int frameRate,
+              }) => _FakeVideoEncoder(path: path, width: width, height: height),
+        );
+        expect(encoder.finish(), throwsStateError);
+      },
+    );
   });
 
   group('IsolateFrameSink, MP4', () {
@@ -189,22 +196,24 @@ void main() {
     setUp(() => temp = Directory.systemTemp.createTempSync('fs-window'));
     tearDown(() => removeTempDirectory(temp));
 
-    test('addFrame waits until the worker has landed the frame before it',
-        () async {
-      final dir = p.join(temp.path, 'seq');
-      final sink = IsolateFrameSink(
-        format: RecordingFormat.pngSequence,
-        outputPath: dir,
-      );
-      for (var i = 0; i <= IsolateFrameSink.frameWindow; i++) {
-        await sink.addFrame(_frame(size: 256));
-      }
-      // The window is full only once frame 0 was acknowledged, and the worker
-      // acknowledges after the write.
-      expect(File(p.join(dir, 'frame_00000.png')).existsSync(), isTrue);
-      final result = await sink.close();
-      expect(result.frames, IsolateFrameSink.frameWindow + 1);
-    });
+    test(
+      'addFrame waits until the worker has landed the frame before it',
+      () async {
+        final dir = p.join(temp.path, 'seq');
+        final sink = IsolateFrameSink(
+          format: RecordingFormat.pngSequence,
+          outputPath: dir,
+        );
+        for (var i = 0; i <= IsolateFrameSink.frameWindow; i++) {
+          await sink.addFrame(_frame(size: 256));
+        }
+        // The window is full only once frame 0 was acknowledged, and the worker
+        // acknowledges after the write.
+        expect(File(p.join(dir, 'frame_00000.png')).existsSync(), isTrue);
+        final result = await sink.close();
+        expect(result.frames, IsolateFrameSink.frameWindow + 1);
+      },
+    );
 
     test('a worker that cannot write fails addFrame instead of taking more '
         'frames', () async {

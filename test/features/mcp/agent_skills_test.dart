@@ -23,8 +23,9 @@ void main() {
   /// this app serves and of nothing else in these bodies — `cli`,
   /// `projectId` and `agentInstallationId` are deliberately not caught.
   Set<String> toolNamesIn(String text) => <String>{
-    for (final match in RegExp(r'\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b')
-        .allMatches(text))
+    for (final match in RegExp(
+      r'\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b',
+    ).allMatches(text))
       match.group(0)!,
   };
 
@@ -56,11 +57,7 @@ void main() {
             'A skill is read without being asked for, so a stale name is a '
             'capability claim on every session on the machine.',
       );
-      expect(
-        named,
-        isNotEmpty,
-        reason: '${skill.name} names no tool at all',
-      );
+      expect(named, isNotEmpty, reason: '${skill.name} names no tool at all');
     }
   });
 

@@ -309,11 +309,9 @@ void main() {
 
       await gateway.switchTo('h2');
 
-      expect(
-        (await gateway.watchSessions().first).map((s) => s.id),
-        ['s-two'],
-        reason: "no session from the old desktop survives the switch",
-      );
+      expect((await gateway.watchSessions().first).map((s) => s.id), [
+        's-two',
+      ], reason: "no session from the old desktop survives the switch");
     });
   });
 

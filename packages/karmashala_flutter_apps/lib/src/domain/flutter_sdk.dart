@@ -100,8 +100,10 @@ class FlutterSdkReading {
   bool get isUsable => executable != null && refusal == null;
 
   /// Whether [readAt] is recent enough to reuse without asking again.
-  bool isFreshAt(DateTime now, {Duration freshFor = kFlutterSdkReadingFreshFor}) =>
-      now.difference(readAt) < freshFor;
+  bool isFreshAt(
+    DateTime now, {
+    Duration freshFor = kFlutterSdkReadingFreshFor,
+  }) => now.difference(readAt) < freshFor;
 
   FlutterSdkReading copyWith({String? version, DateTime? readAt}) =>
       FlutterSdkReading(

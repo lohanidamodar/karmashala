@@ -147,17 +147,20 @@ void main() {
       expect(container.read(selectedSimulatorProvider)?.udid, 'a');
     });
 
-    test('a pick that no longer exists falls back rather than sticking', () async {
-      // A simulator can be deleted from Xcode while the pane is open.
-      final container = _container(
-        simulators: [_sim('b', 'iPhone 16', SimulatorState.booted)],
-      );
-      await container.read(iosSimulatorsProvider.future);
+    test(
+      'a pick that no longer exists falls back rather than sticking',
+      () async {
+        // A simulator can be deleted from Xcode while the pane is open.
+        final container = _container(
+          simulators: [_sim('b', 'iPhone 16', SimulatorState.booted)],
+        );
+        await container.read(iosSimulatorsProvider.future);
 
-      container.read(selectedSimulatorUdidProvider.notifier).select('gone');
+        container.read(selectedSimulatorUdidProvider.notifier).select('gone');
 
-      expect(container.read(selectedSimulatorProvider)?.udid, 'b');
-    });
+        expect(container.read(selectedSimulatorProvider)?.udid, 'b');
+      },
+    );
   });
 }
 
@@ -238,11 +241,11 @@ void _slimmingTests() {
 
     expect(slimming.calls, hasLength(1));
     expect(slimming.calls.single.udid, 'UDID');
-    expect(
-      slimming.calls.single.except,
-      {SlimmingCategory.store, SlimmingCategory.photos, SlimmingCategory.web},
-      reason: 'the categories a Flutter app is most likely to need',
-    );
+    expect(slimming.calls.single.except, {
+      SlimmingCategory.store,
+      SlimmingCategory.photos,
+      SlimmingCategory.web,
+    }, reason: 'the categories a Flutter app is most likely to need');
     expect(
       slimming.calls.single.boot,
       isFalse,
@@ -328,7 +331,10 @@ void _slimmingTests() {
 /// opens one — and the risk is wiring it the way round that reads naturally
 /// from the Android side and is backwards here.
 void _headlessTests() {
-  ProviderContainer containerWith({required bool headless, required _RecordingSimctl simctl}) {
+  ProviderContainer containerWith({
+    required bool headless,
+    required _RecordingSimctl simctl,
+  }) {
     final container = ProviderContainer(
       overrides: [
         deviceCommandRunnerFactoryProvider.overrideWithValue(

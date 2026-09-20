@@ -68,7 +68,10 @@ void main() {
       id: id,
       layout: layout,
       focusedPaneId: '$id-p2',
-      panes: [pane(id, '$id-p1'), pane(id, '$id-p2', scrollback: '')],
+      panes: [
+        pane(id, '$id-p1'),
+        pane(id, '$id-p2', scrollback: ''),
+      ],
     );
   }
 
@@ -105,10 +108,10 @@ void main() {
               'nothing else moved',
         );
         // The store still says exactly what it was asked to.
-        expect(
-          dao.loadLayout().tabs.last.panes.map((p) => p.id),
-          ['t${n - 1}-p1', 't${n - 1}-p2'],
-        );
+        expect(dao.loadLayout().tabs.last.panes.map((p) => p.id), [
+          't${n - 1}-p1',
+          't${n - 1}-p2',
+        ]);
       });
     }
 
@@ -157,10 +160,10 @@ void main() {
       // The record is still correct in both directions.
       final loaded = dao.loadLayout();
       expect(loaded.tabs.map((t) => t.panes.single.wasLive), [false, false]);
-      expect(
-        loaded.tabs.map((t) => t.panes.single.scrollback),
-        ['some output', 'some output'],
-      );
+      expect(loaded.tabs.map((t) => t.panes.single.scrollback), [
+        'some output',
+        'some output',
+      ]);
     });
 
     test('is written when the text itself moved, metadata or not', () {
@@ -180,7 +183,10 @@ void main() {
       ], activeTabId: 't0');
 
       expect(db.scrollbackWrites, 1);
-      expect(dao.loadLayout().tabs.single.panes.single.scrollback, 'more output');
+      expect(
+        dao.loadLayout().tabs.single.panes.single.scrollback,
+        'more output',
+      );
       expect(dao.loadLayout().tabs.single.panes.single.wasLive, isFalse);
     });
 
@@ -192,7 +198,10 @@ void main() {
       dao.saveLayout([tab('t0')], activeTabId: 't0');
 
       expect(db.scrollbackWrites, 1);
-      expect(dao.loadLayout().tabs.single.panes.single.scrollback, 'some output');
+      expect(
+        dao.loadLayout().tabs.single.panes.single.scrollback,
+        'some output',
+      );
     });
   });
 
@@ -244,9 +253,9 @@ void main() {
       expect(dao.loadLayout().tabs.map((t) => t.id), ['t0', 't2']);
       expect(dao.storedTabCount(), 2);
       expect(
-        db.query('SELECT id FROM terminal_panes ORDER BY id;').map(
-          (r) => r['id'],
-        ),
+        db
+            .query('SELECT id FROM terminal_panes ORDER BY id;')
+            .map((r) => r['id']),
         ['t0-p1', 't2-p1'],
         reason: 'the deleted tab must not leave its panes behind',
       );
@@ -269,27 +278,22 @@ void main() {
         tab('t1'),
       ], activeTabId: 't0');
 
-      expect(dao.loadLayout().tabs.map((t) => t.id), [
-        't3',
-        't0',
-        't2',
-        't1',
-      ]);
+      expect(dao.loadLayout().tabs.map((t) => t.id), ['t3', 't0', 't2', 't1']);
     });
 
     test('ordinals survive: closing a tab from the middle closes the gap', () {
       dao.saveLayout(storedLayout(4), activeTabId: 't0');
-      dao.saveLayout([
-        tab('t0'),
-        tab('t2'),
-        tab('t3'),
-      ], activeTabId: 't0', userClosed: true);
+      dao.saveLayout(
+        [tab('t0'), tab('t2'), tab('t3')],
+        activeTabId: 't0',
+        userClosed: true,
+      );
 
       expect(dao.loadLayout().tabs.map((t) => t.id), ['t0', 't2', 't3']);
       expect(
-        db.query('SELECT ordinal FROM terminal_tabs ORDER BY ordinal;').map(
-          (r) => r['ordinal'],
-        ),
+        db
+            .query('SELECT ordinal FROM terminal_tabs ORDER BY ordinal;')
+            .map((r) => r['ordinal']),
         [0, 1, 2],
         reason: 'a hole in the ordinals is a layout that restores wrong',
       );
@@ -306,19 +310,22 @@ void main() {
       );
       dao.saveLayout([three], activeTabId: 't0');
 
-      dao.saveLayout([
-        StoredTerminalTab(
-          id: 't0',
-          layout: PaneLayout.single('a').split('a', SplitAxis.vertical, 'c', 's2'),
-          focusedPaneId: 'a',
-          panes: [pane('t0', 'a'), pane('t0', 'c')],
-        ),
-      ], activeTabId: 't0', userClosed: true);
+      dao.saveLayout(
+        [
+          StoredTerminalTab(
+            id: 't0',
+            layout: PaneLayout.single(
+              'a',
+            ).split('a', SplitAxis.vertical, 'c', 's2'),
+            focusedPaneId: 'a',
+            panes: [pane('t0', 'a'), pane('t0', 'c')],
+          ),
+        ],
+        activeTabId: 't0',
+        userClosed: true,
+      );
 
-      expect(dao.loadLayout().tabs.single.panes.map((p) => p.id), [
-        'a',
-        'c',
-      ]);
+      expect(dao.loadLayout().tabs.single.panes.map((p) => p.id), ['a', 'c']);
       expect(
         db
             .query('SELECT ordinal FROM terminal_panes ORDER BY ordinal;')
@@ -327,27 +334,34 @@ void main() {
       );
     });
 
-    test('a pane that moves between tabs moves, rather than being duplicated', () {
-      dao.saveLayout([splitTab('t0')], activeTabId: 't0');
+    test(
+      'a pane that moves between tabs moves, rather than being duplicated',
+      () {
+        dao.saveLayout([splitTab('t0')], activeTabId: 't0');
 
-      // What detaching does: the pane keeps its id and gets a tab of its own.
-      dao.saveLayout([
-        tab('t0'),
-        StoredTerminalTab(
-          id: 'detached:t0-p2',
-          layout: PaneLayout.single('t0-p2'),
-          focusedPaneId: 't0-p2',
-          detached: true,
-          panes: [pane('detached:t0-p2', 't0-p2', scrollback: 'kept')],
-        ),
-      ], activeTabId: 't0', userClosed: true);
+        // What detaching does: the pane keeps its id and gets a tab of its own.
+        dao.saveLayout(
+          [
+            tab('t0'),
+            StoredTerminalTab(
+              id: 'detached:t0-p2',
+              layout: PaneLayout.single('t0-p2'),
+              focusedPaneId: 't0-p2',
+              detached: true,
+              panes: [pane('detached:t0-p2', 't0-p2', scrollback: 'kept')],
+            ),
+          ],
+          activeTabId: 't0',
+          userClosed: true,
+        );
 
-      final loaded = dao.loadLayout();
-      expect(loaded.tabs.single.panes.map((p) => p.id), ['t0-p1']);
-      expect(loaded.detached.single.panes.single.id, 't0-p2');
-      expect(loaded.detached.single.panes.single.scrollback, 'kept');
-      expect(db.query('SELECT id FROM terminal_panes;'), hasLength(2));
-    });
+        final loaded = dao.loadLayout();
+        expect(loaded.tabs.single.panes.map((p) => p.id), ['t0-p1']);
+        expect(loaded.detached.single.panes.single.id, 't0-p2');
+        expect(loaded.detached.single.panes.single.scrollback, 'kept');
+        expect(db.query('SELECT id FROM terminal_panes;'), hasLength(2));
+      },
+    );
 
     test('the whole layout round-trips unchanged through save and load', () {
       const launch = AgentPaneLaunch(
@@ -400,10 +414,11 @@ void main() {
       dao.saveLayout(storedLayout(3), activeTabId: 't0');
       final fresh = TerminalLayoutDao(db);
 
-      fresh.saveLayout([
-        tab('t0'),
-        splitTab('t1'),
-      ], activeTabId: 't1', userClosed: true);
+      fresh.saveLayout(
+        [tab('t0'), splitTab('t1')],
+        activeTabId: 't1',
+        userClosed: true,
+      );
 
       final loaded = fresh.loadLayout();
       expect(loaded.tabs.map((t) => t.id), ['t0', 't1']);

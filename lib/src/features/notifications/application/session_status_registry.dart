@@ -318,17 +318,14 @@ class SessionStatusRegistry {
     return Stream<AgentStatusReport>.multi((controller) {
       var last = current();
       controller.add(last);
-      final subscription = _changes.stream.listen(
-        (_) {
-          final next = current();
-          // Only when the *evidence* moved: a cycle that reconfirms a status
-          // must not become eighty widget rebuilds a second.
-          if (_sameEvidence(last, next)) return;
-          last = next;
-          controller.add(next);
-        },
-        onDone: controller.close,
-      );
+      final subscription = _changes.stream.listen((_) {
+        final next = current();
+        // Only when the *evidence* moved: a cycle that reconfirms a status
+        // must not become eighty widget rebuilds a second.
+        if (_sameEvidence(last, next)) return;
+        last = next;
+        controller.add(next);
+      }, onDone: controller.close);
       controller.onCancel = subscription.cancel;
     });
   }
@@ -339,15 +336,12 @@ class SessionStatusRegistry {
       Stream<SessionStatusCoverage?>.multi((controller) {
         var last = coverage;
         controller.add(last);
-        final subscription = _changes.stream.listen(
-          (_) {
-            final next = coverage;
-            if (next == last) return;
-            last = next;
-            controller.add(next);
-          },
-          onDone: controller.close,
-        );
+        final subscription = _changes.stream.listen((_) {
+          final next = coverage;
+          if (next == last) return;
+          last = next;
+          controller.add(next);
+        }, onDone: controller.close);
         controller.onCancel = subscription.cancel;
       });
 
@@ -445,9 +439,7 @@ class SessionStatusRegistry {
     _tracked.removeWhere((key, _) => !seen.contains(key));
     _byOpenId
       ..clear()
-      ..addEntries(
-        _tracked.values.map((t) => MapEntry(t.session.openId, t)),
-      );
+      ..addEntries(_tracked.values.map((t) => MapEntry(t.session.openId, t)));
 
     final scans = await _resolvePaths(now);
     // A shutdown can land inside that scan; nothing below may touch the app.
@@ -728,9 +720,7 @@ class SessionStatusRegistry {
     if (picks.isEmpty) return;
     final queue = Queue<_Tracked>.of(picks);
     final workers = math.min(math.max(probeConcurrency, 1), picks.length);
-    await Future.wait([
-      for (var i = 0; i < workers; i++) _drain(queue, now),
-    ]);
+    await Future.wait([for (var i = 0; i < workers; i++) _drain(queue, now)]);
   }
 
   Future<void> _drain(Queue<_Tracked> queue, DateTime now) async {

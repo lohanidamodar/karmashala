@@ -98,10 +98,7 @@ void main() {
   testWidgets('a removed worktree with a long name keeps to a strip', (
     tester,
   ) async {
-    const checkout = EnvironmentPath(
-      environmentId: 'local',
-      path: r'C:\ws',
-    );
+    const checkout = EnvironmentPath(environmentId: 'local', path: r'C:\ws');
     final errors = await pumpAt(
       tester,
       200,

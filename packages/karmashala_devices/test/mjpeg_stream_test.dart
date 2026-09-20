@@ -92,9 +92,11 @@ void main() {
       // Content-Length is what makes this safe: a frame whose pixels happen to
       // spell the boundary would cut short any parser that scanned for one.
       final frame = Uint8List.fromList([
-        0xFF, 0xD8,
+        0xFF,
+        0xD8,
         ...'\r\n--BoundaryString\r\nContent-Length: 9\r\n\r\n'.codeUnits,
-        0xFF, 0xD9,
+        0xFF,
+        0xD9,
       ]);
       server = await serve([part(frame), part(jpeg(16))]);
 
@@ -103,15 +105,19 @@ void main() {
       expect(frames.first, frame);
     });
 
-    test('falls back to the end marker when there is no Content-Length',
-        () async {
-      final frame = jpeg(64, fill: 0x44);
-      server = await serve([part(frame, contentLength: false)]);
+    test(
+      'falls back to the end marker when there is no Content-Length',
+      () async {
+        final frame = jpeg(64, fill: 0x44);
+        server = await serve([part(frame, contentLength: false)]);
 
-      final frames = await MjpegStream.connect(urlOf(server)).take(1).toList();
+        final frames = await MjpegStream.connect(
+          urlOf(server),
+        ).take(1).toList();
 
-      expect(frames.single, frame);
-    });
+        expect(frames.single, frame);
+      },
+    );
 
     test('a negative Content-Length falls back to the end marker instead of '
         'crashing', () async {

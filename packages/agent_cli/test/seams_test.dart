@@ -33,10 +33,7 @@ void main() {
     test('the package places local and WSL, and refuses SSH in words', () {
       const factory = CommandRunnerFactory();
 
-      expect(
-        factory.forEnvironment(windowsEnv()),
-        isA<LocalCommandRunner>(),
-      );
+      expect(factory.forEnvironment(windowsEnv()), isA<LocalCommandRunner>());
       expect(factory.forEnvironment(wslEnv()), isA<WslCommandRunner>());
       expect(factory.canReachRemote, isFalse);
       expect(
@@ -58,10 +55,7 @@ void main() {
 
       expect(factory.canReachRemote, isTrue);
       expect(factory.forEnvironment(windowsEnv()), isA<LocalCommandRunner>());
-      expect(
-        factory.forEnvironment(sshEnvFixture()).environmentId,
-        'ssh:h1',
-      );
+      expect(factory.forEnvironment(sshEnvFixture()).environmentId, 'ssh:h1');
     });
   });
 
@@ -105,7 +99,10 @@ void main() {
       ClaudeCodeAdapter(runnerFor: resolve).start(launch);
       CodexAdapter(runnerFor: resolve).start(launch);
       AntigravityAdapter(runnerFor: resolve).start(launch);
-      GenericAgentAdapter(agentId: 'roverCli', runnerFor: resolve).start(launch);
+      GenericAgentAdapter(
+        agentId: 'roverCli',
+        runnerFor: resolve,
+      ).start(launch);
 
       expect(asked, everyElement('wsl:Ubuntu'));
       expect(asked, hasLength(4));
@@ -177,10 +174,7 @@ void main() {
       final stores = await locator.locate([windowsEnv(), wslEnv()]);
 
       expect(wsl.requests.single.arguments.last, r'printf %s "$HOME"');
-      expect(
-        stores.last.claudeHome,
-        r'\\wsl.localhost\Ubuntu\home\me\.claude',
-      );
+      expect(stores.last.claudeHome, r'\\wsl.localhost\Ubuntu\home\me\.claude');
     });
   });
 
@@ -197,51 +191,57 @@ void main() {
   });
 
   group('ask, the one-shot mode', () {
-    test('closes stdin, because these CLIs wait on it forever otherwise', () async {
-      final handle = FakeProcessHandle();
-      final runner = FakeCommandRunner(processFactory: (_) => handle);
-      final session = CliSession(
-        installation: agentInstallation(),
-        runner: runner,
-      );
+    test(
+      'closes stdin, because these CLIs wait on it forever otherwise',
+      () async {
+        final handle = FakeProcessHandle();
+        final runner = FakeCommandRunner(processFactory: (_) => handle);
+        final session = CliSession(
+          installation: agentInstallation(),
+          runner: runner,
+        );
 
-      final answers = session.ask('hi').toList();
-      await Future<void>.delayed(Duration.zero);
-      expect(handle.stdinClosed, isTrue);
+        final answers = session.ask('hi').toList();
+        await Future<void>.delayed(Duration.zero);
+        expect(handle.stdinClosed, isTrue);
 
-      handle.emitStdout(
-        '{"type":"assistant","message":{"content":'
-        '[{"type":"text","text":"hello"}]}}',
-      );
-      handle.complete();
-      expect(await answers, ['hello']);
-      expect(session.isBusy, isFalse);
-    });
+        handle.emitStdout(
+          '{"type":"assistant","message":{"content":'
+          '[{"type":"text","text":"hello"}]}}',
+        );
+        handle.complete();
+        expect(await answers, ['hello']);
+        expect(session.isBusy, isFalse);
+      },
+    );
 
-    test('a non-zero exit with nothing said is reported, not swallowed', () async {
-      final handle = FakeProcessHandle();
-      final runner = FakeCommandRunner(processFactory: (_) => handle);
-      final session = CliSession(
-        installation: agentInstallation(),
-        runner: runner,
-      );
+    test(
+      'a non-zero exit with nothing said is reported, not swallowed',
+      () async {
+        final handle = FakeProcessHandle();
+        final runner = FakeCommandRunner(processFactory: (_) => handle);
+        final session = CliSession(
+          installation: agentInstallation(),
+          runner: runner,
+        );
 
-      final answers = session.ask('hi').toList();
-      await Future<void>.delayed(Duration.zero);
-      handle.emitStderr('not logged in');
-      handle.complete(1);
+        final answers = session.ask('hi').toList();
+        await Future<void>.delayed(Duration.zero);
+        handle.emitStderr('not logged in');
+        handle.complete(1);
 
-      await expectLater(
-        answers,
-        throwsA(
-          isA<CliSessionException>().having(
-            (e) => e.toString(),
-            'toString',
-            allOf(contains('Claude Code'), contains('not logged in')),
+        await expectLater(
+          answers,
+          throwsA(
+            isA<CliSessionException>().having(
+              (e) => e.toString(),
+              'toString',
+              allOf(contains('Claude Code'), contains('not logged in')),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 }
 

@@ -47,31 +47,34 @@ String _credentials(String token) => jsonEncode({
 
 void main() {
   group('ClaudeKeychainCache', () {
-    test('a held refusal says when macOS was asked, not when we looked', () async {
-      // §19's rule reaching the one reading that is deliberately memoised for
-      // ten minutes: the stamp has to be the ask, or the message would call a
-      // ten-minute-old refusal fresh.
-      final security = _CountingKeychain(
-        const ClaudeKeychainRead(
-          ClaudeKeychainOutcome.refused,
-          detail: 'User interaction is not allowed.',
-        ),
-      );
-      final clock = _Movable(DateTime.utc(2026, 9, 2, 12));
-      final cache = ClaudeKeychainCache(read: security.read, now: clock.call);
+    test(
+      'a held refusal says when macOS was asked, not when we looked',
+      () async {
+        // §19's rule reaching the one reading that is deliberately memoised for
+        // ten minutes: the stamp has to be the ask, or the message would call a
+        // ten-minute-old refusal fresh.
+        final security = _CountingKeychain(
+          const ClaudeKeychainRead(
+            ClaudeKeychainOutcome.refused,
+            detail: 'User interaction is not allowed.',
+          ),
+        );
+        final clock = _Movable(DateTime.utc(2026, 9, 2, 12));
+        final cache = ClaudeKeychainCache(read: security.read, now: clock.call);
 
-      final asked = await cache.read();
-      expect(asked.readAt, DateTime.utc(2026, 9, 2, 12));
+        final asked = await cache.read();
+        expect(asked.readAt, DateTime.utc(2026, 9, 2, 12));
 
-      clock.now = clock.now.add(const Duration(minutes: 5));
-      final held = await cache.read();
-      expect(security.reads, 1, reason: 'the memo answered, macOS was not');
-      expect(held.readAt, DateTime.utc(2026, 9, 2, 12));
-      expect(
-        claudeKeychainRefusalMessage(held, now: clock.now),
-        contains('5m ago'),
-      );
-    });
+        clock.now = clock.now.add(const Duration(minutes: 5));
+        final held = await cache.read();
+        expect(security.reads, 1, reason: 'the memo answered, macOS was not');
+        expect(held.readAt, DateTime.utc(2026, 9, 2, 12));
+        expect(
+          claudeKeychainRefusalMessage(held, now: clock.now),
+          contains('5m ago'),
+        );
+      },
+    );
 
     test('an hour of polling asks the Keychain once', () async {
       final security = _CountingKeychain(

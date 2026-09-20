@@ -62,26 +62,29 @@ class DiffLineTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final semantic = SemanticColors.of(context);
-    final (Color? background, Color? foreground, Color? accent) =
-        switch (line.kind) {
-          DiffLineKind.added => (
-            semantic.diffAdded.withValues(alpha: 0.14),
-            null,
-            semantic.diffAdded,
-          ),
-          DiffLineKind.removed => (
-            semantic.diffRemoved.withValues(alpha: 0.14),
-            null,
-            semantic.diffRemoved,
-          ),
-          DiffLineKind.hunk => (
-            StateLayers.subtle(scheme),
-            scheme.primary,
-            scheme.primary,
-          ),
-          DiffLineKind.meta => (null, scheme.onSurfaceVariant, null),
-          DiffLineKind.context => (null, null, null),
-        };
+    final (
+      Color? background,
+      Color? foreground,
+      Color? accent,
+    ) = switch (line.kind) {
+      DiffLineKind.added => (
+        semantic.diffAdded.withValues(alpha: 0.14),
+        null,
+        semantic.diffAdded,
+      ),
+      DiffLineKind.removed => (
+        semantic.diffRemoved.withValues(alpha: 0.14),
+        null,
+        semantic.diffRemoved,
+      ),
+      DiffLineKind.hunk => (
+        StateLayers.subtle(scheme),
+        scheme.primary,
+        scheme.primary,
+      ),
+      DiffLineKind.meta => (null, scheme.onSurfaceVariant, null),
+      DiffLineKind.context => (null, null, null),
+    };
 
     final label = diffLineSemanticsLabel(line.kind);
     final text = Text(

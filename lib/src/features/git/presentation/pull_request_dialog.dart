@@ -87,10 +87,9 @@ class _PullRequestDialogState extends State<PullRequestDialog> {
           builder: (context, _) => FilledButton(
             onPressed: _title.text.trim().isEmpty
                 ? null
-                : () => Navigator.of(context).pop((
-                    title: _title.text.trim(),
-                    body: _body.text.trim(),
-                  )),
+                : () => Navigator.of(
+                    context,
+                  ).pop((title: _title.text.trim(), body: _body.text.trim())),
             child: const Text('Create'),
           ),
         ),

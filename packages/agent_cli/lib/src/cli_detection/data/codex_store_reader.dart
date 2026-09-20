@@ -172,8 +172,7 @@ class CodexStoreReader implements StoreSessionReader {
     // the mtime that last case was served stale for ever.
     if (cached != null &&
         (stat.size > cached.size ||
-            (stat.size == cached.size &&
-                stat.modified == cached.modified))) {
+            (stat.size == cached.size && stat.modified == cached.modified))) {
       return cached.meta;
     }
 

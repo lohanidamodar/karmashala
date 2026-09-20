@@ -19,8 +19,7 @@ import 'package:sqlite3/sqlite3.dart';
 /// stored `settings.v1` and, optionally, relay prefs already written.
 Database _before50({Map<String, Object?>? settings, String? prefs}) {
   final db = sqlite3.openInMemory();
-  final versions = schemaMigrations.keys.where((v) => v < 50).toList()
-    ..sort();
+  final versions = schemaMigrations.keys.where((v) => v < 50).toList()..sort();
   for (final version in versions) {
     schemaMigrations[version]!(db);
     db.execute('PRAGMA user_version = $version;');

@@ -124,10 +124,7 @@ AgentStatusReport applyAgentHookCallback(
   try {
     container
         .read(sessionOutcomeWriterProvider)
-        .record(
-          agentSessionId: report.sessionId,
-          ending: report.ending,
-        );
+        .record(agentSessionId: report.sessionId, ending: report.ending);
   } on Object catch (error) {
     logger?.warning('Recording a session ending from a hook failed: $error');
   }

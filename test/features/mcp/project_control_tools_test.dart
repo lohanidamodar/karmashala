@@ -136,12 +136,15 @@ void main() {
       expect(ProjectDao(db).getAll().single.name, 'Chosen');
     });
 
-    test('with neither a path nor a gitUrl it refuses and writes nothing', () async {
-      final call = await callTool('project_add');
-      expect(call.isError, isTrue);
-      expect(call.text, contains('path'));
-      expect(ProjectDao(db).getAll(), isEmpty);
-    });
+    test(
+      'with neither a path nor a gitUrl it refuses and writes nothing',
+      () async {
+        final call = await callTool('project_add');
+        expect(call.isError, isTrue);
+        expect(call.text, contains('path'));
+        expect(ProjectDao(db).getAll(), isEmpty);
+      },
+    );
 
     test('an unknown environment is refused by name', () async {
       final folder = Directory(p.join(work.path, 'x'))..createSync();
@@ -207,20 +210,24 @@ void main() {
       Directory(p.join(moved.path, 'app')).createSync();
 
       ProjectDao(db).update(
-        ProjectDao(db).getById('p1')!.copyWith(
-          root: EnvironmentPath(
-            environmentId: localHostEnvironmentId,
-            path: work.path,
-          ),
-        ),
+        ProjectDao(db)
+            .getById('p1')!
+            .copyWith(
+              root: EnvironmentPath(
+                environmentId: localHostEnvironmentId,
+                path: work.path,
+              ),
+            ),
       );
       RepositoryDao(db).update(
-        RepositoryDao(db).getById('r1')!.copyWith(
-          path: EnvironmentPath(
-            environmentId: localHostEnvironmentId,
-            path: p.join(work.path, 'app'),
-          ),
-        ),
+        RepositoryDao(db)
+            .getById('r1')!
+            .copyWith(
+              path: EnvironmentPath(
+                environmentId: localHostEnvironmentId,
+                path: p.join(work.path, 'app'),
+              ),
+            ),
       );
 
       final call = await callTool('project_update', {

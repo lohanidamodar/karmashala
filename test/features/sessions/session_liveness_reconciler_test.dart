@@ -125,14 +125,16 @@ void main() {
 
     test('a live pane of ours is the one thing that keeps a claim', () {
       dao.insert(
-        session(id: 'here', status: SessionStatus.running).copyWith(
-          paneId: 'pane-1',
-        ),
+        session(
+          id: 'here',
+          status: SessionStatus.running,
+        ).copyWith(paneId: 'pane-1'),
       );
       dao.insert(
-        session(id: 'gone', status: SessionStatus.running).copyWith(
-          paneId: 'pane-2',
-        ),
+        session(
+          id: 'gone',
+          status: SessionStatus.running,
+        ).copyWith(paneId: 'pane-2'),
       );
 
       final reconciler = SessionLivenessReconciler(sessionDao: dao);
@@ -142,19 +144,23 @@ void main() {
       expect(dao.getById('gone')!.status, SessionStatus.unknown);
     });
 
-    test('a session in somebody else\'s terminal is not assumed to be live', () {
-      // `SessionSurface.external` is only a record of where it was *started*.
-      // The app cannot see that window at all, so after a restart the honest
-      // answer is that we do not know — never "still running".
-      dao.insert(
-        session(id: 'out-there', status: SessionStatus.running).copyWith(
-          surface: SessionSurface.external,
-        ),
-      );
+    test(
+      'a session in somebody else\'s terminal is not assumed to be live',
+      () {
+        // `SessionSurface.external` is only a record of where it was *started*.
+        // The app cannot see that window at all, so after a restart the honest
+        // answer is that we do not know — never "still running".
+        dao.insert(
+          session(
+            id: 'out-there',
+            status: SessionStatus.running,
+          ).copyWith(surface: SessionSurface.external),
+        );
 
-      expect(markSessionsLostOnLaunch(dao), 1);
-      expect(dao.getById('out-there')!.status, SessionStatus.unknown);
-    });
+        expect(markSessionsLostOnLaunch(dao), 1);
+        expect(dao.getById('out-there')!.status, SessionStatus.unknown);
+      },
+    );
   });
 
   group('a pane that stops', () {
@@ -167,19 +173,22 @@ void main() {
       AgentInstallationDao(db).insert(agentInstallation());
       final dao = SessionDao(db)
         ..insert(
-          session(id: 'in-pane', status: SessionStatus.running).copyWith(
-            paneId: 'pane-1',
-          ),
+          session(
+            id: 'in-pane',
+            status: SessionStatus.running,
+          ).copyWith(paneId: 'pane-1'),
         )
         ..insert(
-          session(id: 'stopped', status: SessionStatus.cancelled).copyWith(
-            paneId: 'pane-1',
-          ),
+          session(
+            id: 'stopped',
+            status: SessionStatus.cancelled,
+          ).copyWith(paneId: 'pane-1'),
         )
         ..insert(
-          session(id: 'elsewhere', status: SessionStatus.running).copyWith(
-            paneId: 'pane-2',
-          ),
+          session(
+            id: 'elsewhere',
+            status: SessionStatus.running,
+          ).copyWith(paneId: 'pane-2'),
         );
 
       final moved = <String>[];

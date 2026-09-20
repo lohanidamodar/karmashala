@@ -146,7 +146,6 @@ class CodexAuthService {
       'Cannot switch accounts because ${file.path} is not a JSON object.',
     );
   }
-
 }
 
 ({String? accountId, String? email, String? planType, DateTime? expiresAt})
@@ -155,12 +154,14 @@ _identity(Map<String, dynamic> auth) {
   if (tokens is! Map<String, dynamic>) {
     return (accountId: null, email: null, planType: null, expiresAt: null);
   }
-  final claims = _jwtClaims(tokens['id_token']) ??
+  final claims =
+      _jwtClaims(tokens['id_token']) ??
       _jwtClaims(tokens['access_token']) ??
       const <String, dynamic>{};
   final openAi = claims['https://api.openai.com/auth'];
   final details = openAi is Map ? openAi : const <Object?, Object?>{};
-  final accountId = tokens['account_id'] as String? ??
+  final accountId =
+      tokens['account_id'] as String? ??
       details['chatgpt_account_id'] as String?;
   final exp = claims['exp'];
   return (
@@ -168,10 +169,7 @@ _identity(Map<String, dynamic> auth) {
     email: claims['email'] as String?,
     planType: details['chatgpt_plan_type'] as String?,
     expiresAt: exp is num
-        ? DateTime.fromMillisecondsSinceEpoch(
-            exp.toInt() * 1000,
-            isUtc: true,
-          )
+        ? DateTime.fromMillisecondsSinceEpoch(exp.toInt() * 1000, isUtc: true)
         : null,
   );
 }

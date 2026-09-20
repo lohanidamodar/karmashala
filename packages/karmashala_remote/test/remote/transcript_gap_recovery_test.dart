@@ -19,27 +19,29 @@ void main() {
       RemoteTranscriptPage.fromJson(harness.last.payload);
 
   group('an explicit `after` is a page, not the remainder', () {
-    test('a resume from a cursor a long way back is bounded and says so',
-        () async {
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = conversation(
-        kRemoteTranscriptPageMax * 3,
-      );
+    test(
+      'a resume from a cursor a long way back is bounded and says so',
+      () async {
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = conversation(
+          kRemoteTranscriptPageMax * 3,
+        );
 
-      await harness.request(
-        FrameType.transcriptGet,
-        payload: const {'sessionId': 's1', 'after': 10},
-      );
+        await harness.request(
+          FrameType.transcriptGet,
+          payload: const {'sessionId': 's1', 'after': 10},
+        );
 
-      final page = pageOf(harness);
-      expect(page.messages, hasLength(kRemoteTranscriptPageMax));
-      expect(page.messages.first.text, 'm10');
-      expect(page.omitted, 10);
-      // The window's end, not the whole count — a cursor that claimed the
-      // count would say the phone held turns nobody had sent it.
-      expect(page.cursor, 10 + kRemoteTranscriptPageMax);
-      expect(page.hasNewer, isTrue);
-    });
+        final page = pageOf(harness);
+        expect(page.messages, hasLength(kRemoteTranscriptPageMax));
+        expect(page.messages.first.text, 'm10');
+        expect(page.omitted, 10);
+        // The window's end, not the whole count — a cursor that claimed the
+        // count would say the phone held turns nobody had sent it.
+        expect(page.cursor, 10 + kRemoteTranscriptPageMax);
+        expect(page.hasNewer, isTrue);
+      },
+    );
 
     test('the last page reads false, and only the last page', () async {
       final harness = Harness();
@@ -56,29 +58,30 @@ void main() {
       expect(page.hasNewer, isFalse);
     });
 
-    test('a tail read of a long conversation is complete as it stands',
-        () async {
-      // The opening page is the *end* of the transcript, so there is nothing
-      // newer by construction. `omitted` says what is behind it; `hasNewer`
-      // would be a different claim and a false one.
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = conversation(
-        kRemoteTranscriptPageMax * 3,
-      );
+    test(
+      'a tail read of a long conversation is complete as it stands',
+      () async {
+        // The opening page is the *end* of the transcript, so there is nothing
+        // newer by construction. `omitted` says what is behind it; `hasNewer`
+        // would be a different claim and a false one.
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = conversation(
+          kRemoteTranscriptPageMax * 3,
+        );
 
-      await harness.request(
-        FrameType.transcriptGet,
-        payload: const {'sessionId': 's1'},
-      );
+        await harness.request(
+          FrameType.transcriptGet,
+          payload: const {'sessionId': 's1'},
+        );
 
-      final page = pageOf(harness);
-      expect(page.omitted, kRemoteTranscriptPageMax * 2);
-      expect(page.hasNewer, isFalse);
-    });
+        final page = pageOf(harness);
+        expect(page.omitted, kRemoteTranscriptPageMax * 2);
+        expect(page.hasNewer, isFalse);
+      },
+    );
   });
 
-  group('a reconnect after N missed turns yields exactly N, in order, once',
-      () {
+  group('a reconnect after N missed turns yields exactly N, in order, once', () {
     /// Walks the pages the way the phone does — from a cursor, until `hasNewer`
     /// reads false — and answers everything it was given, in the order it
     /// arrived.
@@ -115,72 +118,78 @@ void main() {
       expect(recovered, ['m40', 'm41', 'm42', 'm43', 'm44', 'm45', 'm46']);
     });
 
-    test('a gap far larger than a page comes back whole, and each turn once',
-        () async {
-      const missed = kRemoteTranscriptPageMax * 4 + 37;
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = conversation(10);
-      await harness.watch('s1');
-      harness.fake.transcripts['s1']!.addAll(conversation(missed, from: 10));
+    test(
+      'a gap far larger than a page comes back whole, and each turn once',
+      () async {
+        const missed = kRemoteTranscriptPageMax * 4 + 37;
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = conversation(10);
+        await harness.watch('s1');
+        harness.fake.transcripts['s1']!.addAll(conversation(missed, from: 10));
 
-      final recovered = await drain(harness, from: 10);
+        final recovered = await drain(harness, from: 10);
 
-      expect(recovered, hasLength(missed));
-      expect(recovered.toSet(), hasLength(missed), reason: 'once, not twice');
-      expect(recovered, [for (var i = 10; i < 10 + missed; i++) 'm$i']);
-    });
+        expect(recovered, hasLength(missed));
+        expect(recovered.toSet(), hasLength(missed), reason: 'once, not twice');
+        expect(recovered, [for (var i = 10; i < 10 + missed; i++) 'm$i']);
+      },
+    );
 
-    test('and the poll sweep does not re-send what the walk already carried',
-        () async {
-      // The two paths share one cursor on purpose. A resume that advanced only
-      // the phone's would have the sweep repeat the whole gap behind it.
-      const missed = kRemoteTranscriptPageMax * 2;
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = conversation(10);
-      await harness.watch('s1');
-      harness.fake.transcripts['s1']!.addAll(conversation(missed, from: 10));
+    test(
+      'and the poll sweep does not re-send what the walk already carried',
+      () async {
+        // The two paths share one cursor on purpose. A resume that advanced only
+        // the phone's would have the sweep repeat the whole gap behind it.
+        const missed = kRemoteTranscriptPageMax * 2;
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = conversation(10);
+        await harness.watch('s1');
+        harness.fake.transcripts['s1']!.addAll(conversation(missed, from: 10));
 
-      await drain(harness, from: 10);
-      harness.sent.clear();
-      await harness.api.pollTranscript('s1');
+        await drain(harness, from: 10);
+        harness.sent.clear();
+        await harness.api.pollTranscript('s1');
 
-      expect(
-        harness.sent.where((f) => f.type == FrameType.transcriptAppended),
-        isEmpty,
-        reason: 'the walk left nothing owing',
-      );
-    });
+        expect(
+          harness.sent.where((f) => f.type == FrameType.transcriptAppended),
+          isEmpty,
+          reason: 'the walk left nothing owing',
+        );
+      },
+    );
   });
 
   group('the live delta is a page too', () {
-    test('growth past a page is carried a page at a time, saying hasNewer',
-        () async {
-      // A resumed agent replaying its history grows a transcript by thousands
-      // of messages between two polls; sent whole it built a frame past the cap
-      // that was then rebuilt and refused on every poll after it.
-      final harness = Harness();
-      harness.fake.transcripts['s1'] = conversation(5);
-      await harness.watch('s1');
-      harness.sent.clear();
-      harness.fake.transcripts['s1']!.addAll(
-        conversation(kRemoteTranscriptPageMax + 20, from: 5),
-      );
+    test(
+      'growth past a page is carried a page at a time, saying hasNewer',
+      () async {
+        // A resumed agent replaying its history grows a transcript by thousands
+        // of messages between two polls; sent whole it built a frame past the cap
+        // that was then rebuilt and refused on every poll after it.
+        final harness = Harness();
+        harness.fake.transcripts['s1'] = conversation(5);
+        await harness.watch('s1');
+        harness.sent.clear();
+        harness.fake.transcripts['s1']!.addAll(
+          conversation(kRemoteTranscriptPageMax + 20, from: 5),
+        );
 
-      await harness.api.pollTranscript('s1');
+        await harness.api.pollTranscript('s1');
 
-      final first = pageOf(harness);
-      expect(first.messages, hasLength(kRemoteTranscriptPageMax));
-      expect(first.messages.first.text, 'm5');
-      expect(first.cursor, 5 + kRemoteTranscriptPageMax);
-      expect(first.hasNewer, isTrue);
+        final first = pageOf(harness);
+        expect(first.messages, hasLength(kRemoteTranscriptPageMax));
+        expect(first.messages.first.text, 'm5');
+        expect(first.cursor, 5 + kRemoteTranscriptPageMax);
+        expect(first.hasNewer, isTrue);
 
-      await harness.api.pollTranscript('s1');
+        await harness.api.pollTranscript('s1');
 
-      final second = pageOf(harness);
-      expect(second.messages, hasLength(20));
-      expect(second.messages.first.text, 'm${5 + kRemoteTranscriptPageMax}');
-      expect(second.hasNewer, isFalse);
-    });
+        final second = pageOf(harness);
+        expect(second.messages, hasLength(20));
+        expect(second.messages.first.text, 'm${5 + kRemoteTranscriptPageMax}');
+        expect(second.hasNewer, isFalse);
+      },
+    );
 
     test('an ordinary delta says nothing newer is waiting', () async {
       final harness = Harness();

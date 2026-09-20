@@ -53,9 +53,15 @@ void main() {
     expect(snapshot.windows.first.span, kUsageFiveHourWindow);
     expect(
       snapshot.windows.first.resetsAt,
-      DateTime.utc(2025, 10, 16, 10, 21, 41, 993).add(
-        const Duration(seconds: 17903),
-      ),
+      DateTime.utc(
+        2025,
+        10,
+        16,
+        10,
+        21,
+        41,
+        993,
+      ).add(const Duration(seconds: 17903)),
     );
     expect(snapshot.windows.last.percent, 40.0);
     expect(snapshot.limitReached, isFalse);
@@ -76,8 +82,7 @@ void main() {
     expect(snapshot.recordedAt, DateTime.utc(2026, 7, 20, 3, 25, 2, 34));
   });
 
-  test('a window at its ceiling is a limit reached, and is the one blocking',
-      () {
+  test('a window at its ceiling is a limit reached, and is the one blocking', () {
     final snapshot = parseCodexRateLimitTail(
       newSchema(
         primary: 100.0,

@@ -35,7 +35,9 @@ class _MovableClock implements Clock {
   DateTime nowUtc() => instant;
 }
 
-List<Override> _at(Clock clock) => [companionClockProvider.overrideWithValue(clock)];
+List<Override> _at(Clock clock) => [
+  companionClockProvider.overrideWithValue(clock),
+];
 
 /// Three projects on one desktop, each with work in it.
 ///
@@ -195,10 +197,20 @@ void main() {
         'whose titles repeat it', (tester) async {
       final gateway = FakeCompanionGateway.paired(
         sessions: [
-          summary('s1', title: 'popupbits rename', project: 'popupbits',
-              projectId: 'p1', projectPath: '/w/popupbits'),
-          summary('s2', title: 'Something else', project: 'popupbits',
-              projectId: 'p1', projectPath: '/w/popupbits'),
+          summary(
+            's1',
+            title: 'popupbits rename',
+            project: 'popupbits',
+            projectId: 'p1',
+            projectPath: '/w/popupbits',
+          ),
+          summary(
+            's2',
+            title: 'Something else',
+            project: 'popupbits',
+            projectId: 'p1',
+            projectPath: '/w/popupbits',
+          ),
           summary('s3', project: 'other', projectId: 'p2'),
         ],
       );
@@ -320,28 +332,30 @@ void main() {
   });
 
   group('the matchers themselves', () {
-    test('a kept key survives a filter that excludes it, sessions narrowed',
-        () {
-      final groups = [
-        CompanionProjectGroup(
-          key: 'p1',
-          sessions: [
-            summary('a', title: 'Alpha', project: 'one'),
-            summary('b', title: 'Beta', project: 'one'),
-          ],
-        ),
-        CompanionProjectGroup(
-          key: 'p2',
-          sessions: [summary('c', title: 'Alpha again', project: 'two')],
-        ),
-      ];
+    test(
+      'a kept key survives a filter that excludes it, sessions narrowed',
+      () {
+        final groups = [
+          CompanionProjectGroup(
+            key: 'p1',
+            sessions: [
+              summary('a', title: 'Alpha', project: 'one'),
+              summary('b', title: 'Beta', project: 'one'),
+            ],
+          ),
+          CompanionProjectGroup(
+            key: 'p2',
+            sessions: [summary('c', title: 'Alpha again', project: 'two')],
+          ),
+        ];
 
-      final kept = companionMatchingGroups(groups, 'zzz', keepKey: 'p1');
+        final kept = companionMatchingGroups(groups, 'zzz', keepKey: 'p1');
 
-      expect(kept.map((g) => g.key), ['p1']);
-      expect(kept.single.sessions, isEmpty);
-      expect(companionMatchingGroups(groups, 'zzz'), isEmpty);
-    });
+        expect(kept.map((g) => g.key), ['p1']);
+        expect(kept.single.sessions, isEmpty);
+        expect(companionMatchingGroups(groups, 'zzz'), isEmpty);
+      },
+    );
 
     test('a kept id survives a filter that excludes it', () {
       final sessions = [
@@ -349,13 +363,15 @@ void main() {
         summary('b', title: 'Beta'),
       ];
 
+      expect(companionMatchingSessions(sessions, 'alpha').map((s) => s.id), [
+        'a',
+      ]);
       expect(
-        companionMatchingSessions(sessions, 'alpha').map((s) => s.id),
-        ['a'],
-      );
-      expect(
-        companionMatchingSessions(sessions, 'alpha', keepId: 'b')
-            .map((s) => s.id),
+        companionMatchingSessions(
+          sessions,
+          'alpha',
+          keepId: 'b',
+        ).map((s) => s.id),
         ['a', 'b'],
       );
     });

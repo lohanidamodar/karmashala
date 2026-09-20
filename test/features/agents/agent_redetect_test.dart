@@ -54,11 +54,7 @@ void main() {
         }
         final name = script.split(' ').last;
         return installed.containsKey(name)
-            ? CommandResult(
-                exitCode: 0,
-                stdout: '/usr/bin/$name\n',
-                stderr: '',
-              )
+            ? CommandResult(exitCode: 0, stdout: '/usr/bin/$name\n', stderr: '')
             : const CommandResult(exitCode: 1, stdout: '', stderr: '');
       }
       if (req.executable == 'where') {
@@ -135,7 +131,9 @@ void main() {
     expect(report.removedCount, 1);
     expect(report.foundCount, 1);
     expect(
-      container.read(agentInstallationsControllerProvider).map((i) => i.agentId),
+      container
+          .read(agentInstallationsControllerProvider)
+          .map((i) => i.agentId),
       [AgentIds.claudeCode],
     );
   });
@@ -166,13 +164,16 @@ void main() {
     expect(report.summary, contains('1 agent'));
   });
 
-  test('a scan that finds nothing says so rather than claiming success', () async {
-    installed.clear();
-    final report = await notifier().discoverAll();
+  test(
+    'a scan that finds nothing says so rather than claiming success',
+    () async {
+      installed.clear();
+      final report = await notifier().discoverAll();
 
-    expect(report.foundCount, 0);
-    expect(report.summary.toLowerCase(), contains('no agents'));
-  });
+      expect(report.foundCount, 0);
+      expect(report.summary.toLowerCase(), contains('no agents'));
+    },
+  );
 
   test('an unreachable environment keeps its installations', () async {
     ExecutionEnvironmentDao(db).upsert(wslEnv());

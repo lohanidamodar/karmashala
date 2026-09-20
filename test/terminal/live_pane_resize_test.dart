@@ -131,10 +131,8 @@ void main() {
 
 /// `(columns, rows)` — the order the app thinks in, so both probes report the
 /// same shape whatever their own command prints.
-({int columns, int rows}) _size(int columns, int rows) => (
-  columns: columns,
-  rows: rows,
-);
+({int columns, int rows}) _size(int columns, int rows) =>
+    (columns: columns, rows: rows);
 
 /// One throwaway pane, built by the production factory so the wiring under test
 /// is the app's own.
@@ -181,10 +179,13 @@ class _Pane {
   /// `stty size` prints `rows columns`; this turns it round so both probes
   /// answer in the same order.
   Future<({int columns, int rows})?> askStty() => _ask(
-    (marker) => r'set -- $(stty size); ' 'echo "$marker:\${2}x\${1}:"',
+    (marker) =>
+        r'set -- $(stty size); '
+        'echo "$marker:\${2}x\${1}:"',
   );
 
-  String _screen() => terminalTailLines(instance.terminal, lines: 200).join('\n');
+  String _screen() =>
+      terminalTailLines(instance.terminal, lines: 200).join('\n');
 
   Future<bool> _waitFor(Pattern pattern, {required int seconds}) async {
     final deadline = DateTime.now().add(Duration(seconds: seconds));

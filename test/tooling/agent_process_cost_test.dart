@@ -16,10 +16,11 @@ import '../../tool/benchmark/agent_process_cost_bench.dart';
 void main() {
   group('CSV, as PowerShell writes it', () {
     test('quotes protect commas and are doubled to escape themselves', () {
-      expect(
-        splitCsvLine('"1234","dart","claude.exe --model ""opus"", -p"'),
-        ['1234', 'dart', 'claude.exe --model "opus", -p'],
-      );
+      expect(splitCsvLine('"1234","dart","claude.exe --model ""opus"", -p"'), [
+        '1234',
+        'dart',
+        'claude.exe --model "opus", -p',
+      ]);
     });
 
     test('an empty cell is empty, not absent', () {
@@ -64,7 +65,10 @@ void main() {
     });
 
     test('a header with no rows is no readings, not an error', () {
-      expect(parseGetProcessCsv('"Id","ProcessName","CPU","WorkingSet64"\n'), isEmpty);
+      expect(
+        parseGetProcessCsv('"Id","ProcessName","CPU","WorkingSet64"\n'),
+        isEmpty,
+      );
       expect(parseGetProcessCsv(''), isEmpty);
     });
   });
@@ -130,19 +134,25 @@ void main() {
   });
 
   group('fillMissing', () {
-    test('a pid that did not answer is a row of unknowns, never a dropped row', () {
-      // `Get-Process -Id` prints only the processes that still exist and exits
-      // 1 for the rest. Dropping those rows would make each sample shorter and
-      // therefore make the machine look cheaper than it was.
-      final rows = fillMissing(const [1, 2, 3], const [
-        ProcessReading(pid: 2, name: 'dart', cpuSeconds: 1, rssBytes: 4096),
-      ]);
-      expect(rows.map((r) => r.pid), [1, 2, 3]);
-      expect(rows.first.cpuSeconds, isNull);
-      expect(rows.first.rssBytes, isNull);
-      expect(rows.first.name, isNull);
-      expect(rows[1].name, 'dart');
-    });
+    test(
+      'a pid that did not answer is a row of unknowns, never a dropped row',
+      () {
+        // `Get-Process -Id` prints only the processes that still exist and exits
+        // 1 for the rest. Dropping those rows would make each sample shorter and
+        // therefore make the machine look cheaper than it was.
+        final rows = fillMissing(
+          const [1, 2, 3],
+          const [
+            ProcessReading(pid: 2, name: 'dart', cpuSeconds: 1, rssBytes: 4096),
+          ],
+        );
+        expect(rows.map((r) => r.pid), [1, 2, 3]);
+        expect(rows.first.cpuSeconds, isNull);
+        expect(rows.first.rssBytes, isNull);
+        expect(rows.first.name, isNull);
+        expect(rows[1].name, 'dart');
+      },
+    );
   });
 
   group('descendantsOf', () {
@@ -173,13 +183,16 @@ void main() {
       ProcessIdentity(pid: 99, parentPid: 1, commandLine: 'claude'),
     ];
 
-    test("a stranger's session is never in the plan, whatever it is called", () {
-      final plan = planFor(10, ours);
-      expect(plan.refusal, isNull);
-      expect(plan.pids, [10, 11]);
-      expect(plan.names[11], 'claude -p go');
-      expect(plan.pids, isNot(contains(99)));
-    });
+    test(
+      "a stranger's session is never in the plan, whatever it is called",
+      () {
+        final plan = planFor(10, ours);
+        expect(plan.refusal, isNull);
+        expect(plan.pids, [10, 11]);
+        expect(plan.names[11], 'claude -p go');
+        expect(plan.pids, isNot(contains(99)));
+      },
+    );
 
     test('no table, no run', () {
       final plan = planFor(10, const []);
@@ -193,51 +206,68 @@ void main() {
       expect(plan.refusal, contains('777'));
     });
 
-    test('a child we cannot describe stops the run rather than being dropped', () {
-      // Dropping it quietly would make the sample smaller and therefore make
-      // the machine look cheaper, which is the direction that lies.
-      final plan = planFor(10, const [
-        ProcessIdentity(pid: 10, parentPid: 1, commandLine: 'flutter test'),
-        ProcessIdentity(pid: 11, parentPid: 10, commandLine: null),
-      ]);
-      expect(plan.pids, isEmpty);
-      expect(plan.refusal, contains('11'));
-      expect(plan.refusal, contains('will not measure'));
-    });
+    test(
+      'a child we cannot describe stops the run rather than being dropped',
+      () {
+        // Dropping it quietly would make the sample smaller and therefore make
+        // the machine look cheaper, which is the direction that lies.
+        final plan = planFor(10, const [
+          ProcessIdentity(pid: 10, parentPid: 1, commandLine: 'flutter test'),
+          ProcessIdentity(pid: 11, parentPid: 10, commandLine: null),
+        ]);
+        expect(plan.pids, isEmpty);
+        expect(plan.refusal, contains('11'));
+        expect(plan.refusal, contains('will not measure'));
+      },
+    );
   });
 
   group('the table', () {
-    test('a first sample has no percentage, and a withheld field says so', () async {
-      final probe = _ScriptedProbe([
-        const [
-          ProcessReading(pid: 10, name: 'dart', cpuSeconds: 1, rssBytes: 1048576),
-          ProcessReading(pid: 11, name: 'claude', rssBytes: 2097152),
-        ],
-        const [
-          ProcessReading(pid: 10, name: 'dart', cpuSeconds: 2, rssBytes: 2097152),
-          ProcessReading(pid: 11, name: 'claude', rssBytes: 2097152),
-        ],
-      ]);
-      final samples = await sample(
-        probe,
-        pids: const [10, 11],
-        samples: 2,
-        interval: const Duration(seconds: 1),
-        // Counted, not waited on: the gate must never spend a second to watch
-        // a clock. The harness's own run is the thing allowed to time.
-        wait: (_) async {},
-      );
-      final table = renderTable(samples, own: 10, named: const {
-        10: 'flutter test',
-        11: 'claude -p go',
-      });
-      expect(table, contains('the app itself'));
-      // The first row of each process: nothing to difference against.
-      expect(table, contains('—'));
-      // Every reading of pid 11 lacked a CPU number.
-      expect(table, contains('?'));
-      expect(table, contains('1.0M'));
-    });
+    test(
+      'a first sample has no percentage, and a withheld field says so',
+      () async {
+        final probe = _ScriptedProbe([
+          const [
+            ProcessReading(
+              pid: 10,
+              name: 'dart',
+              cpuSeconds: 1,
+              rssBytes: 1048576,
+            ),
+            ProcessReading(pid: 11, name: 'claude', rssBytes: 2097152),
+          ],
+          const [
+            ProcessReading(
+              pid: 10,
+              name: 'dart',
+              cpuSeconds: 2,
+              rssBytes: 2097152,
+            ),
+            ProcessReading(pid: 11, name: 'claude', rssBytes: 2097152),
+          ],
+        ]);
+        final samples = await sample(
+          probe,
+          pids: const [10, 11],
+          samples: 2,
+          interval: const Duration(seconds: 1),
+          // Counted, not waited on: the gate must never spend a second to watch
+          // a clock. The harness's own run is the thing allowed to time.
+          wait: (_) async {},
+        );
+        final table = renderTable(
+          samples,
+          own: 10,
+          named: const {10: 'flutter test', 11: 'claude -p go'},
+        );
+        expect(table, contains('the app itself'));
+        // The first row of each process: nothing to difference against.
+        expect(table, contains('—'));
+        // Every reading of pid 11 lacked a CPU number.
+        expect(table, contains('?'));
+        expect(table, contains('1.0M'));
+      },
+    );
 
     test('nothing sampled says so rather than printing an empty grid', () {
       expect(renderTable(const [], own: 1), contains('nothing was sampled'));
@@ -245,48 +275,52 @@ void main() {
   });
 
   group('the dry run — this process tree, with no agents in it', () {
-    test('it either measures what it proved is ours, or refuses in words', () async {
-      final probe = await SystemProcessProbe.forHost();
-      if (probe == null) {
-        // macOS: `Get-Process` and `/proc` are both absent, and this harness
-        // says so rather than inventing a third reader it has never run.
-        expect(Platform.isWindows || Platform.isLinux, isFalse);
-        return;
-      }
-      final plan = await planSampling(probe, rootPid: pid);
-      if (plan.refusal != null) {
-        // A legitimate outcome on a real machine: Windows recycles pids, so a
-        // stale row can name this process as its parent and bring in something
-        // whose command line this user may not read. Refusing is the correct
-        // direction, and the refusal has to say why.
-        expect(plan.refusal, isNotEmpty);
-        return;
-      }
-      expect(plan.pids, contains(pid));
-      expect(plan.names[pid], isNotNull);
-      final samples = await sample(
-        probe,
-        pids: plan.pids,
-        samples: 2,
-        interval: const Duration(milliseconds: 1),
-        wait: (_) async {},
-      );
-      // Every requested pid gets a row, this process among them. Its own
-      // numbers are the ones that must be real: it is the process we are
-      // certainly allowed to read.
-      expect(
-        samples.last.readings.map((r) => r.pid),
-        plan.pids,
-        reason: 'every pid asked for must have a row',
-      );
-      final own = samples.last.readings.singleWhere((r) => r.pid == pid);
-      expect(own.rssBytes, isNotNull);
-      expect(own.cpuSeconds, isNotNull);
-      expect(
-        renderTable(samples, own: pid, named: plan.names),
-        contains('<- the app itself'),
-      );
-    }, timeout: const Timeout(Duration(minutes: 2)));
+    test(
+      'it either measures what it proved is ours, or refuses in words',
+      () async {
+        final probe = await SystemProcessProbe.forHost();
+        if (probe == null) {
+          // macOS: `Get-Process` and `/proc` are both absent, and this harness
+          // says so rather than inventing a third reader it has never run.
+          expect(Platform.isWindows || Platform.isLinux, isFalse);
+          return;
+        }
+        final plan = await planSampling(probe, rootPid: pid);
+        if (plan.refusal != null) {
+          // A legitimate outcome on a real machine: Windows recycles pids, so a
+          // stale row can name this process as its parent and bring in something
+          // whose command line this user may not read. Refusing is the correct
+          // direction, and the refusal has to say why.
+          expect(plan.refusal, isNotEmpty);
+          return;
+        }
+        expect(plan.pids, contains(pid));
+        expect(plan.names[pid], isNotNull);
+        final samples = await sample(
+          probe,
+          pids: plan.pids,
+          samples: 2,
+          interval: const Duration(milliseconds: 1),
+          wait: (_) async {},
+        );
+        // Every requested pid gets a row, this process among them. Its own
+        // numbers are the ones that must be real: it is the process we are
+        // certainly allowed to read.
+        expect(
+          samples.last.readings.map((r) => r.pid),
+          plan.pids,
+          reason: 'every pid asked for must have a row',
+        );
+        final own = samples.last.readings.singleWhere((r) => r.pid == pid);
+        expect(own.rssBytes, isNotNull);
+        expect(own.cpuSeconds, isNotNull);
+        expect(
+          renderTable(samples, own: pid, named: plan.names),
+          contains('<- the app itself'),
+        );
+      },
+      timeout: const Timeout(Duration(minutes: 2)),
+    );
   });
 }
 

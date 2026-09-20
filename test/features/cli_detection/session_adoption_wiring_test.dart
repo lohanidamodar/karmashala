@@ -67,15 +67,17 @@ Harness harness() {
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
   ProjectDao(db).insert(project());
   RepositoryDao(db).insert(repository());
-  AgentInstallationDao(db).insert(
-    agentInstallation(agentId: AgentIds.claudeCode),
-  );
+  AgentInstallationDao(
+    db,
+  ).insert(agentInstallation(agentId: AgentIds.claudeCode));
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
-      commandRunnerFactoryProvider.overrideWithValue(FakeCommandRunnerFactory()),
+      commandRunnerFactoryProvider.overrideWithValue(
+        FakeCommandRunnerFactory(),
+      ),
       idGeneratorProvider.overrideWithValue(SequentialIdGenerator('s-')),
       settingsControllerProvider.overrideWith(_StaticSettings.new),
       agentSessionStatusProvider.overrideWith(
@@ -177,72 +179,85 @@ void main() {
     );
   });
 
-  test('an adopted session renames and reattaches like a launched one', () async {
-    final h = harness();
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    openAgentLookingPane(h);
-    await runStoreSlot(h);
-    h.container
-        .read(sessionAdoptionServiceProvider)
-        .onHookPayload(
-          agentId: AgentIds.claudeCode,
-          sessionId: 'cli-abc',
-          body: '{"session_id":"cli-abc"}',
-        );
-    final id = h.container.read(sessionDaoProvider).getAll().single.id;
+  test(
+    'an adopted session renames and reattaches like a launched one',
+    () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      openAgentLookingPane(h);
+      await runStoreSlot(h);
+      h.container
+          .read(sessionAdoptionServiceProvider)
+          .onHookPayload(
+            agentId: AgentIds.claudeCode,
+            sessionId: 'cli-abc',
+            body: '{"session_id":"cli-abc"}',
+          );
+      final id = h.container.read(sessionDaoProvider).getAll().single.id;
 
-    unawaited(h.container.read(sessionActionsProvider).renameNative(id, 'The parser bug'));
-    final opened = await h.container.read(explorerActionsProvider).openNative(id);
+      unawaited(
+        h.container
+            .read(sessionActionsProvider)
+            .renameNative(id, 'The parser bug'),
+      );
+      final opened = await h.container
+          .read(explorerActionsProvider)
+          .openNative(id);
 
-    expect(
-      h.container.read(sessionDaoProvider).getById(id)?.title,
-      'The parser bug',
-    );
-    expect(
-      opened.outcome,
-      ExplorerOutcome.reattached,
-      reason: 'clicking the card brings back the terminal it is running in',
-    );
-    expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
-  });
+      expect(
+        h.container.read(sessionDaoProvider).getById(id)?.title,
+        'The parser bug',
+      );
+      expect(
+        opened.outcome,
+        ExplorerOutcome.reattached,
+        reason: 'clicking the card brings back the terminal it is running in',
+      );
+      expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
+    },
+  );
 
-  test('an adopted session resumes its own conversation once its pane is gone',
-      () async {
-    final h = harness();
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    final paneId = openAgentLookingPane(h);
-    await runStoreSlot(h);
-    h.container
-        .read(sessionAdoptionServiceProvider)
-        .onHookPayload(
-          agentId: AgentIds.claudeCode,
-          sessionId: 'cli-abc',
-          body: '{"session_id":"cli-abc"}',
-        );
-    final id = h.container.read(sessionDaoProvider).getAll().single.id;
+  test(
+    'an adopted session resumes its own conversation once its pane is gone',
+    () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      final paneId = openAgentLookingPane(h);
+      await runStoreSlot(h);
+      h.container
+          .read(sessionAdoptionServiceProvider)
+          .onHookPayload(
+            agentId: AgentIds.claudeCode,
+            sessionId: 'cli-abc',
+            body: '{"session_id":"cli-abc"}',
+          );
+      final id = h.container.read(sessionDaoProvider).getAll().single.id;
 
-    // The agent is ended, so there is nothing to reattach to.
-    h.container.read(terminalSessionsControllerProvider.notifier)
-      ..endSession(paneId)
-      ..closePane(paneId, detach: false);
+      // The agent is ended, so there is nothing to reattach to.
+      h.container.read(terminalSessionsControllerProvider.notifier)
+        ..endSession(paneId)
+        ..closePane(paneId, detach: false);
 
-    final opened = await h.container.read(explorerActionsProvider).openNative(id);
+      final opened = await h.container
+          .read(explorerActionsProvider)
+          .openNative(id);
 
-    expect(opened.outcome, ExplorerOutcome.resumed);
-    // The same row, continued — not a second one for one conversation.
-    expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
-    final resumed = h.container.read(sessionDaoProvider).getById(id)!;
-    expect(resumed.externalSessionId, 'cli-abc');
-    expect(resumed.status, SessionStatus.running);
-    expect(resumed.surface, SessionSurface.pane);
-    final launch = h.container
-        .read(terminalSessionsControllerProvider.notifier)
-        .instanceFor(resumed.paneId!)!
-        .agentLaunch!;
-    expect(launch.arguments, containsAllInOrder(['--resume', 'cli-abc']));
-  });
+      expect(opened.outcome, ExplorerOutcome.resumed);
+      // The same row, continued — not a second one for one conversation.
+      expect(h.container.read(sessionDaoProvider).getAll(), hasLength(1));
+      final resumed = h.container.read(sessionDaoProvider).getById(id)!;
+      expect(resumed.externalSessionId, 'cli-abc');
+      expect(resumed.status, SessionStatus.running);
+      expect(resumed.surface, SessionSurface.pane);
+      final launch = h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(resumed.paneId!)!
+          .agentLaunch!;
+      expect(launch.arguments, containsAllInOrder(['--resume', 'cli-abc']));
+    },
+  );
 
   test('a plain pane with nothing agent-like in it is never adopted', () async {
     final h = harness();
@@ -260,7 +275,10 @@ void main() {
         .tabs
         .firstWhere((tab) => tab.id == tabId)
         .focusedPaneId;
-    terminals.instanceFor(paneId)!.terminal.write('PS C:\\src\\demo\\app> ls\r\n');
+    terminals
+        .instanceFor(paneId)!
+        .terminal
+        .write('PS C:\\src\\demo\\app> ls\r\n');
 
     await runStoreSlot(h);
     h.container
@@ -271,8 +289,10 @@ void main() {
           body: '{"session_id":"cli-abc"}',
         );
 
-    expect(h.container.read(sessionAdoptionServiceProvider).armedPaneIds,
-        isEmpty);
+    expect(
+      h.container.read(sessionAdoptionServiceProvider).armedPaneIds,
+      isEmpty,
+    );
     expect(h.container.read(sessionDaoProvider).getAll(), isEmpty);
   });
 }

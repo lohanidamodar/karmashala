@@ -97,8 +97,12 @@ void main() {
     test('two reads of the same plan are the same value', () {
       // The transcript is re-parsed whenever the file moves; a re-parse that
       // found the same plan must leave the panel asleep.
-      final a = agentPlanIn([planRow([('One', 'pending')])]);
-      final b = agentPlanIn([planRow([('One', 'pending')])]);
+      final a = agentPlanIn([
+        planRow([('One', 'pending')]),
+      ]);
+      final b = agentPlanIn([
+        planRow([('One', 'pending')]),
+      ]);
       expect(a, b);
       expect(a.hashCode, b.hashCode);
     });
@@ -106,7 +110,9 @@ void main() {
 
   group('every reading carries its age', () {
     test('the age is the agent\'s own timestamp, not a sighting', () {
-      final reading = agentPlanIn([planRow([('One', 'in_progress')])]);
+      final reading = agentPlanIn([
+        planRow([('One', 'in_progress')]),
+      ]);
       expect(
         reading.ageAt(wroteAt.add(const Duration(minutes: 20))),
         const Duration(minutes: 20),
@@ -136,7 +142,9 @@ void main() {
     });
 
     test('a clock that runs ahead of ours is not a plan from the future', () {
-      final reading = agentPlanIn([planRow([('One', 'pending')])]);
+      final reading = agentPlanIn([
+        planRow([('One', 'pending')]),
+      ]);
       expect(
         reading.ageAt(wroteAt.subtract(const Duration(hours: 1))),
         Duration.zero,
@@ -149,22 +157,32 @@ void main() {
       final reading = agentPlanIn([
         planRow([('One', 'in_progress'), ('Two', 'pending')]),
       ]);
-      expect(reading.isStaleAt(wroteAt.add(const Duration(minutes: 14))), isFalse);
+      expect(
+        reading.isStaleAt(wroteAt.add(const Duration(minutes: 14))),
+        isFalse,
+      );
       expect(reading.isStaleAt(wroteAt.add(kPlanGoesStaleAfter)), isTrue);
     });
 
     test('a finished list is never stalled, however old it is', () {
-      final reading = agentPlanIn([planRow([('One', 'completed')])]);
+      final reading = agentPlanIn([
+        planRow([('One', 'completed')]),
+      ]);
       expect(reading.plan!.isFinished, isTrue);
       expect(reading.isStaleAt(wroteAt.add(const Duration(days: 3))), isFalse);
     });
 
-    test('an item in a word we do not know is not done and not stale-proof', () {
-      final reading = agentPlanIn([planRow([('One', 'blocked')])]);
-      expect(reading.plan!.items.single.state, AgentPlanItemState.unrecorded);
-      expect(reading.plan!.isFinished, isFalse);
-      expect(reading.isStaleAt(wroteAt.add(kPlanGoesStaleAfter)), isTrue);
-    });
+    test(
+      'an item in a word we do not know is not done and not stale-proof',
+      () {
+        final reading = agentPlanIn([
+          planRow([('One', 'blocked')]),
+        ]);
+        expect(reading.plan!.items.single.state, AgentPlanItemState.unrecorded);
+        expect(reading.plan!.isFinished, isFalse);
+        expect(reading.isStaleAt(wroteAt.add(kPlanGoesStaleAfter)), isTrue);
+      },
+    );
   });
 
   group('the provider, and the four ways there is no plan', () {
@@ -250,7 +268,9 @@ void main() {
 
     test('a Claude Code session reads its own list', () async {
       final reading = await readingFor(
-        messages: [planRow([('One', 'in_progress'), ('Two', 'pending')])],
+        messages: [
+          planRow([('One', 'in_progress'), ('Two', 'pending')]),
+        ],
       );
       expect(reading.plan!.total, 2);
       expect(reading.writtenAt, wroteAt);
@@ -280,7 +300,9 @@ void main() {
       var subscribed = 0;
       final reading = await readingFor(
         agentId: AgentIds.antigravity,
-        messages: [planRow([('One', 'pending')])],
+        messages: [
+          planRow([('One', 'pending')]),
+        ],
         readsTranscript: false,
         onTranscriptSubscribed: () => subscribed++,
       );
@@ -297,7 +319,9 @@ void main() {
 
     test('no CLI session id yet reads as noRecord', () async {
       final reading = await readingFor(
-        messages: [planRow([('One', 'pending')])],
+        messages: [
+          planRow([('One', 'pending')]),
+        ],
         externalSessionId: null,
         readsTranscript: false,
       );
@@ -306,7 +330,9 @@ void main() {
 
     test('a session outside our panes reads as noRecord', () async {
       final reading = await readingFor(
-        messages: [planRow([('One', 'pending')])],
+        messages: [
+          planRow([('One', 'pending')]),
+        ],
         surface: SessionSurface.external,
         readsTranscript: false,
       );
@@ -333,7 +359,9 @@ void main() {
       // whole feature is behind one rail glyph nobody has clicked.
       var subscribed = 0;
       final container = containerFor(
-        messages: [planRow([('One', 'pending')])],
+        messages: [
+          planRow([('One', 'pending')]),
+        ],
         onTranscriptSubscribed: () => subscribed++,
       );
       // A full frame's worth of other work, with the panel closed.
@@ -347,7 +375,9 @@ void main() {
       // all three.
       var subscribed = 0;
       await readingFor(
-        messages: [planRow([('One', 'pending')])],
+        messages: [
+          planRow([('One', 'pending')]),
+        ],
         onTranscriptSubscribed: () => subscribed++,
       );
       expect(subscribed, 1);

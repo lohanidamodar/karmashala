@@ -70,8 +70,10 @@ class ReviewBrief {
       ..writeln()
       ..writeln('## Where')
       ..writeln()
-      ..writeln('- **Session under review:** "$subjectTitle" '
-          '(`$subjectSessionId`)')
+      ..writeln(
+        '- **Session under review:** "$subjectTitle" '
+        '(`$subjectSessionId`)',
+      )
       ..writeln('- **Author:** $authorAgentName');
     if (workingDirectory != null) {
       out.writeln('- **Working directory:** `$workingDirectory`');

@@ -202,7 +202,9 @@ class SshTerminalInstance
 
   @override
   Terminal? get adoptableBuffer =>
-      _exited && !_cold.isParked && !terminal.isUsingAltBuffer ? terminal : null;
+      _exited && !_cold.isParked && !terminal.isUsingAltBuffer
+      ? terminal
+      : null;
 
   CastRecorder? _recorder;
 
@@ -281,11 +283,7 @@ class SshTerminalInstance
     try {
       final session = await client.execute(
         script,
-        pty: SSHPtyConfig(
-          width: width,
-          height: height,
-          type: 'xterm-256color',
-        ),
+        pty: SSHPtyConfig(width: width, height: height, type: 'xterm-256color'),
       );
 
       if (_disposed) {
@@ -298,20 +296,23 @@ class SshTerminalInstance
       _stderrSubscription = session.stderr.listen(_onDataBytes);
 
       unawaited(
-        session.done.then((_) {
-          _exited = true;
-          if (_disposed) return;
-          // Never a zero: dartssh2 reports no status for a signalled peer, and
-          // reading that as success is the mistake §19 exists to prevent.
-          _exitCode = session.exitCode;
-          _emit(remoteExitNotice(session.exitCode));
-          _liveness.value = PaneLiveness.exited;
-        }, onError: (Object error) {
-          _exited = true;
-          if (_disposed) return;
-          _emit(remoteExitNotice(null, reason: '$error'));
-          _liveness.value = PaneLiveness.exited;
-        }),
+        session.done.then(
+          (_) {
+            _exited = true;
+            if (_disposed) return;
+            // Never a zero: dartssh2 reports no status for a signalled peer, and
+            // reading that as success is the mistake §19 exists to prevent.
+            _exitCode = session.exitCode;
+            _emit(remoteExitNotice(session.exitCode));
+            _liveness.value = PaneLiveness.exited;
+          },
+          onError: (Object error) {
+            _exited = true;
+            if (_disposed) return;
+            _emit(remoteExitNotice(null, reason: '$error'));
+            _liveness.value = PaneLiveness.exited;
+          },
+        ),
       );
     } on Object catch (e) {
       if (_disposed) return;
@@ -367,7 +368,9 @@ class SshTerminalInstance
 
     // Re-dial on the pool re-establishing the connection, not on a timer: the
     // app already observes that transition.
-    _reconnects ??= access.reconnected.listen((_) => unawaited(_reconnectToHost(access)));
+    _reconnects ??= access.reconnected.listen(
+      (_) => unawaited(_reconnectToHost(access)),
+    );
     return true;
   }
 
@@ -475,7 +478,10 @@ class SshTerminalInstance
         '${attachment.totalBytes} bytes so far]\x1b[0m\r\n',
       );
 
-      _hostOutput = link.output.listen(_onDataBytes, onDone: _onHostChannelClosed);
+      _hostOutput = link.output.listen(
+        _onDataBytes,
+        onDone: _onHostChannelClosed,
+      );
       _hostNotices = link.notices.listen(
         (notice) => _emit('\r\n\x1b[33m[$notice]\x1b[0m\r\n'),
       );
@@ -583,8 +589,11 @@ class SshTerminalInstance
 
   /// The app's own id, not one the host invents: literally [sshTmuxSessionName],
   /// because a session cannot be in both places under two names.
-  String _hostSessionId() =>
-      sshTmuxSessionName(paneId: id, hostId: host.id, agentSessionId: agentLaunch?.sessionId);
+  String _hostSessionId() => sshTmuxSessionName(
+    paneId: id,
+    hostId: host.id,
+    agentSessionId: agentLaunch?.sessionId,
+  );
 
   /// What the pane has actually rendered, carried across a link being replaced
   /// so a reconnect neither repeats a byte nor drops one. Updated from the link
@@ -655,9 +664,11 @@ class SshTerminalInstance
       _reap = reap;
       // Closing the link is a *disconnect*, never a kill: the host frees the
       // write token and the session keeps running for the next pane.
-      unawaited(link.close().whenComplete(() {
-        if (!reap.isCompleted) reap.complete();
-      }));
+      unawaited(
+        link.close().whenComplete(() {
+          if (!reap.isCompleted) reap.complete();
+        }),
+      );
       return;
     }
 
@@ -670,9 +681,11 @@ class SshTerminalInstance
         session.close();
       } catch (_) {}
       unawaited(
-        session.done.whenComplete(() {
-          if (!reap.isCompleted) reap.complete();
-        }).catchError((Object _) {}),
+        session.done
+            .whenComplete(() {
+              if (!reap.isCompleted) reap.complete();
+            })
+            .catchError((Object _) {}),
       );
     }
   }
@@ -695,9 +708,7 @@ String buildSshTerminalScript({
     hostId: hostId,
     agentSessionId: agentLaunch?.sessionId,
   );
-  final cdSnippet = hasCwd
-      ? 'cd ${_posixQuote(cwd)} 2>/dev/null || true'
-      : '';
+  final cdSnippet = hasCwd ? 'cd ${_posixQuote(cwd)} 2>/dev/null || true' : '';
 
   if (agentLaunch case final launch?) {
     final cmdParts = [launch.executable, ...launch.commandArguments];

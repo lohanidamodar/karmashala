@@ -16,10 +16,13 @@ final hostBinarySourceProvider = Provider<HostBinarySource>(
 
 /// One [HostSessionAccess] per saved host, for the life of the app: deploying
 /// is an upload and a handshake, too dear to repeat for every tab.
-final hostSessionAccessRegistryProvider = Provider<HostSessionAccessRegistry>((ref) {
+final hostSessionAccessRegistryProvider = Provider<HostSessionAccessRegistry>((
+  ref,
+) {
   final registry = HostSessionAccessRegistry(
     binaries: ref.watch(hostBinarySourceProvider),
-    connectionFor: (hostId) => ref.read(sshConnectionPoolProvider).forHostId(hostId),
+    connectionFor: (hostId) =>
+        ref.read(sshConnectionPoolProvider).forHostId(hostId),
   );
   ref.onDispose(registry.dispose);
   return registry;
@@ -30,7 +33,8 @@ final hostSessionAccessRegistryProvider = Provider<HostSessionAccessRegistry>((r
 typedef HostSessionAccessLookup = HostSessionAccess? Function(SshHost host);
 
 final hostSessionAccessLookupProvider = Provider<HostSessionAccessLookup>(
-  (ref) => (host) => _hostSessionAccessFor(ref, host),
+  (ref) =>
+      (host) => _hostSessionAccessFor(ref, host),
 );
 
 /// The session host for [host], or null when this app cannot reach SSH. Only
@@ -38,7 +42,9 @@ final hostSessionAccessLookupProvider = Provider<HostSessionAccessLookup>(
 HostSessionAccess? _hostSessionAccessFor(Ref ref, SshHost host) {
   // The host binaries only exist on a desktop build; a companion has no
   // filesystem to find them in and no business deploying anything.
-  if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return null;
+  if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
+    return null;
+  }
 
   final environments = ref.read(executionEnvironmentDaoProvider).getAll();
   final match = environments

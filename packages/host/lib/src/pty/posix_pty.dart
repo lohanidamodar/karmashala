@@ -49,7 +49,9 @@ class PosixPtyLauncher implements PtyLauncher {
   @override
   PtyHandle start(PtySpawnRequest request) {
     if (!Platform.isLinux && !Platform.isMacOS) {
-      throw const PtyException('a pty needs a POSIX host; this build is not one');
+      throw const PtyException(
+        'a pty needs a POSIX host; this build is not one',
+      );
     }
     final arena = Arena();
     var masterFd = -1;
@@ -57,7 +59,9 @@ class PosixPtyLauncher implements PtyLauncher {
     try {
       final master = arena<Int32>();
       final slave = arena<Int32>();
-      final name = arena<Uint8>(128); // PATH_MAX is overkill; /dev/pts/N is short.
+      final name = arena<Uint8>(
+        128,
+      ); // PATH_MAX is overkill; /dev/pts/N is short.
       final win = arena<Winsize>()
         ..ref.ws_col = request.columns
         ..ref.ws_row = request.rows;
@@ -95,11 +99,17 @@ class PosixPtyLauncher implements PtyLauncher {
     _check(_libc.faInit(actions), 'posix_spawn_file_actions_init');
     _check(_libc.attrInit(attr), 'posix_spawnattr_init');
     try {
-      _check(_libc.attrSetFlags(attr, kPosixSpawnSetsid), 'posix_spawnattr_setflags');
+      _check(
+        _libc.attrSetFlags(attr, kPosixSpawnSetsid),
+        'posix_spawnattr_setflags',
+      );
       // Order matters: inherited fds first, then the slave onto 0, then 1 and 2.
       _check(_libc.faAddClose(actions, masterFd), 'addclose(master)');
       _check(_libc.faAddClose(actions, slaveFd), 'addclose(slave)');
-      _check(_libc.faAddOpen(actions, 0, slaveName, kOReadWrite, 0), 'addopen(slave)');
+      _check(
+        _libc.faAddOpen(actions, 0, slaveName, kOReadWrite, 0),
+        'addopen(slave)',
+      );
       _check(_libc.faAddDup2(actions, 0, 1), 'adddup2(1)');
       _check(_libc.faAddDup2(actions, 0, 2), 'adddup2(2)');
 
@@ -141,7 +151,10 @@ class PosixPtyLauncher implements PtyLauncher {
         envp,
       );
       if (rc != 0) {
-        throw PtyException('posix_spawn(${request.argv.first}) failed', errno: rc);
+        throw PtyException(
+          'posix_spawn(${request.argv.first}) failed',
+          errno: rc,
+        );
       }
       return pidOut.value;
     } finally {
@@ -163,7 +176,9 @@ class _PosixPtyHandle implements PtyHandle {
   /// A reader isolate that could not start ends this session, with the reason,
   /// rather than the host: an unread pty is one session lost, not every one.
   void _readerLost(Object error) {
-    if (!_output.isClosed) _output.addError(PtyException('the pty reader could not start: $error'));
+    if (!_output.isClosed) {
+      _output.addError(PtyException('the pty reader could not start: $error'));
+    }
     if (!_exit.isCompleted) _exit.complete(-1);
     if (!_output.isClosed) _output.close();
   }
@@ -191,15 +206,23 @@ class _PosixPtyHandle implements PtyHandle {
     port.listen((message) {
       if (message is Uint8List) {
         if (!_output.isClosed) _output.add(message);
-      } else if (message is List && message.isNotEmpty && message.first == 'exit') {
+      } else if (message is List &&
+          message.isNotEmpty &&
+          message.first == 'exit') {
         if (!_exit.isCompleted) _exit.complete(message[1] as int);
         if (!_output.isClosed) _output.close();
         port.close();
       } else if (message is List && message.first == 'error') {
-        if (!_output.isClosed) _output.addError(PtyException(message[1] as String));
+        if (!_output.isClosed) {
+          _output.addError(PtyException(message[1] as String));
+        }
       }
     });
-    await Isolate.spawn(_readerMain, [port.sendPort, _masterFd, pid], debugName: 'pty-read-$pid');
+    await Isolate.spawn(_readerMain, [
+      port.sendPort,
+      _masterFd,
+      pid,
+    ], debugName: 'pty-read-$pid');
   }
 
   Future<SendPort> _ensureWriter() =>
@@ -220,7 +243,9 @@ class _PosixPtyHandle implements PtyHandle {
   void write(Uint8List bytes) {
     if (_closed || bytes.isEmpty) return;
     // A blocking write on a full pty buffer must never stall the host.
-    unawaited(_ensureWriter().then((port) => port.send(bytes)).catchError((_) {}));
+    unawaited(
+      _ensureWriter().then((port) => port.send(bytes)).catchError((_) {}),
+    );
   }
 
   @override
@@ -265,7 +290,9 @@ List<int> sessionMembers(int sid, {Directory? proc}) {
   if (!root.existsSync()) return const [];
   final members = <int>[];
   for (final entry in root.listSync(followLinks: false)) {
-    final pid = int.tryParse(entry.uri.pathSegments.lastWhere((s) => s.isNotEmpty));
+    final pid = int.tryParse(
+      entry.uri.pathSegments.lastWhere((s) => s.isNotEmpty),
+    );
     if (pid == null || pid == sid) continue;
     try {
       final stat = File('${entry.path}/stat').readAsStringSync();
@@ -280,7 +307,10 @@ List<int> sessionMembers(int sid, {Directory? proc}) {
 /// Field 6 of `/proc/<pid>/stat`, counted from after the `(comm)`, which may
 /// itself hold spaces and parentheses.
 int? sessionIdOf(String stat) {
-  final fields = stat.substring(stat.lastIndexOf(')') + 1).trim().split(RegExp(r'\s+'));
+  final fields = stat
+      .substring(stat.lastIndexOf(')') + 1)
+      .trim()
+      .split(RegExp(r'\s+'));
   return fields.length > 3 ? int.tryParse(fields[3]) : null;
 }
 

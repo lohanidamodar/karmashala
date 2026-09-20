@@ -21,7 +21,10 @@ final class WirelessPairingIdle extends WirelessPairingState {
 
 /// A QR is on screen and mDNS is being watched for the name inside it.
 final class WirelessPairingWatching extends WirelessPairingState {
-  const WirelessPairingWatching({required this.invite, required this.scansLeft});
+  const WirelessPairingWatching({
+    required this.invite,
+    required this.scansLeft,
+  });
 
   final AdbPairingInvite invite;
 
@@ -64,9 +67,7 @@ final pairingInviteFactoryProvider = Provider<PairingInviteFactory>(
 
 /// How long between two `adb mdns services` polls. A provider so a test spends
 /// no wall-clock time on the budget.
-final mdnsPollIntervalProvider = Provider<Duration>(
-  (ref) => kMdnsPollInterval,
-);
+final mdnsPollIntervalProvider = Provider<Duration>((ref) => kMdnsPollInterval);
 
 /// Drives both ways of pairing a phone over Wi-Fi. Auto-disposed: the QR
 /// method polls `adb mdns services`, and a poll outliving the dialog spawns on.
@@ -125,10 +126,7 @@ class WirelessPairingController extends Notifier<WirelessPairingState> {
     if (adb == null) return _fail(attempt, kWirelessNoSdkMessage);
 
     final invite = ref.read(pairingInviteFactoryProvider)();
-    state = WirelessPairingWatching(
-      invite: invite,
-      scansLeft: kMdnsPollBudget,
-    );
+    state = WirelessPairingWatching(invite: invite, scansLeft: kMdnsPollBudget);
 
     final availability = await adb.mdnsAvailability();
     if (_spent(attempt)) return;
@@ -240,10 +238,7 @@ class WirelessPairingController extends Notifier<WirelessPairingState> {
       if (_spent(attempt)) return;
       final reading = await adb.mdnsServices();
       if (_spent(attempt)) return;
-      final advertised = reading.find(
-        type: kAdbConnectServiceType,
-        name: guid,
-      );
+      final advertised = reading.find(type: kAdbConnectServiceType, name: guid);
       if (advertised != null) {
         return _attachAt(
           attempt,
@@ -291,10 +286,11 @@ class WirelessPairingController extends Notifier<WirelessPairingState> {
 
 /// One attempt at a time — pairing is a modal act, and two invites in flight
 /// would both be watching for a name only one of them chose.
-final wirelessPairingProvider = NotifierProvider.autoDispose<
-  WirelessPairingController,
-  WirelessPairingState
->(WirelessPairingController.new);
+final wirelessPairingProvider =
+    NotifierProvider.autoDispose<
+      WirelessPairingController,
+      WirelessPairingState
+    >(WirelessPairingController.new);
 
 const String kWirelessNoSdkMessage =
     'No Android SDK was found, so there is no adb to pair with. Set '

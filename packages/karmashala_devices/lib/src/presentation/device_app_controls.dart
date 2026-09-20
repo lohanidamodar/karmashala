@@ -29,9 +29,7 @@ class DeviceAppControls extends ConsumerStatefulWidget {
 /// wrap it in double quotes, taken off here rather than left as a user's rule.
 String unquotePath(String value) {
   final trimmed = value.trim();
-  return trimmed.length >= 2 &&
-          trimmed.startsWith('"') &&
-          trimmed.endsWith('"')
+  return trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')
       ? trimmed.substring(1, trimmed.length - 1).trim()
       : trimmed;
 }
@@ -121,9 +119,7 @@ class _DeviceAppControlsState extends ConsumerState<DeviceAppControls> {
                     icon: const Icon(AppIcons.package, size: Chrome.iconAction),
                     // The ellipsis is a promise that a dialog is coming, so it
                     // goes when there is a path to act on and nothing will open.
-                    label: Text(
-                      _typedPath == null ? 'Install…' : 'Install',
-                    ),
+                    label: Text(_typedPath == null ? 'Install…' : 'Install'),
                     onPressed: _ready ? _install : null,
                   ),
                   const SizedBox(width: Insets.sm),
@@ -213,17 +209,13 @@ class _Answer extends ConsumerWidget {
         ? switch (outcome.value) {
             final InstalledApp app => app.note ?? 'Installed ${app.path}',
             final LaunchedApp app =>
-              app.note ?? 'Launched ${app.appId}${app.pid == null ? '' : ' (pid ${app.pid})'}',
+              app.note ??
+                  'Launched ${app.appId}${app.pid == null ? '' : ' (pid ${app.pid})'}',
             _ => 'Force-stopped',
           }
         : outcome.problem!;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        Insets.md,
-        0,
-        Insets.md,
-        Insets.sm,
-      ),
+      padding: const EdgeInsets.fromLTRB(Insets.md, 0, Insets.md, Insets.sm),
       child: SelectableText(
         // The age is not decoration: an install that succeeded four minutes ago
         // says nothing about what is on the device now.

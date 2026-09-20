@@ -95,8 +95,8 @@ List<AgentEvent> parseAntigravityMessage(String line) {
                 if (result['status'] == 'ERROR') {
                   return [
                     AgentEvent(SessionEventTypes.error, {
-                      'message':
-                          (result['error'] ?? 'unknown error').toString(),
+                      'message': (result['error'] ?? 'unknown error')
+                          .toString(),
                     }),
                   ];
                 }

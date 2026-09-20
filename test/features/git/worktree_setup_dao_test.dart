@@ -58,8 +58,13 @@ void main() {
     test('emptying the setting removes the row, not just its values', () {
       dao.save('r1', const WorktreeSetup(command: ['make']), testTime);
       dao.save('r1', const WorktreeSetup(), testTime);
-      expect(dao.getAll(), isEmpty, reason: 'a configured-but-inert row would '
-          'show in the list and do nothing');
+      expect(
+        dao.getAll(),
+        isEmpty,
+        reason:
+            'a configured-but-inert row would '
+            'show in the list and do nothing',
+      );
     });
 
     test('a copy-only setting stores no command at all', () {
@@ -114,18 +119,14 @@ void main() {
     test('the stored verdict is queryable without decoding the detail', () {
       dao.record(report(copy: WorktreeCopyResult.failed));
       expect(
-        db
-            .query('SELECT verdict FROM worktree_setup_runs;')
-            .single['verdict'],
+        db.query('SELECT verdict FROM worktree_setup_runs;').single['verdict'],
         'attention',
       );
     });
 
     test('a second run corrects the same worktree rather than piling up', () {
       dao.record(report(copy: WorktreeCopyResult.failed));
-      dao.record(
-        report(at: testTime.add(const Duration(hours: 1))),
-      );
+      dao.record(report(at: testTime.add(const Duration(hours: 1))));
       expect(dao.runsFor('r1'), hasLength(1));
       expect(dao.lastRun('r1', worktree)!.verdict, WorktreeSetupVerdict.ok);
       expect(
@@ -187,8 +188,13 @@ void main() {
         'copy_paths',
         'updated_at',
       });
-      expect(setting['command']!['notnull'], 0, reason: 'no command is a '
-          'complete setting');
+      expect(
+        setting['command']!['notnull'],
+        0,
+        reason:
+            'no command is a '
+            'complete setting',
+      );
       expect(setting['copy_paths']!['dflt_value'], "'[]'");
       expect(setting['repository_id']!['pk'], 1);
     });

@@ -235,9 +235,6 @@ void main() {
 
     // The conversation is not rewound whether or not anything was refused, so
     // the sentence is on the outcome as well as on the refusal.
-    expect(
-      find.textContaining(kRestoreLeavesTheConversation),
-      findsOneWidget,
-    );
+    expect(find.textContaining(kRestoreLeavesTheConversation), findsOneWidget);
   });
 }

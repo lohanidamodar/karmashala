@@ -125,6 +125,8 @@ class _DetectionBreakdown extends StatelessWidget {
       environment.found.isEmpty
       ? 'no agents'
       : environment.found
-            .map((i) => '${i.agentId}${i.version == null ? '' : ' ${i.version}'}')
+            .map(
+              (i) => '${i.agentId}${i.version == null ? '' : ' ${i.version}'}',
+            )
             .join(', ');
 }

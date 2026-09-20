@@ -43,20 +43,25 @@ void main() {
   group('one resolver answers who graded a candidate', () {
     /// A stand-in for the live lookup, so the fallback chain is what is under
     /// test rather than the DAO underneath it.
-    CandidateEvidenceLookup lookup([Map<String, CandidateEvidence> live = const {}]) =>
+    CandidateEvidenceLookup lookup([
+      Map<String, CandidateEvidence> live = const {},
+    ]) =>
         (sessionId) => live[sessionId];
 
     test('a live run outranks the copy frozen into the comparison', () {
       // The stored copy is a snapshot; a run that finished afterwards is the
       // current answer, and it brings its own producer with it.
       final candidate = winnerWith('s-win');
-      final resolved = attributionShownFor(candidate, lookup({
-        's-win': const CandidateEvidence(
-          verdict: EvidenceVerdict.passed,
-          label: 'checked again',
-          producerSessionId: 's-other',
-        ),
-      }));
+      final resolved = attributionShownFor(
+        candidate,
+        lookup({
+          's-win': const CandidateEvidence(
+            verdict: EvidenceVerdict.passed,
+            label: 'checked again',
+            producerSessionId: 's-other',
+          ),
+        }),
+      );
 
       expect(resolved, VerdictAttribution.independent);
     });
@@ -95,21 +100,24 @@ void main() {
       );
     });
 
-    test('a candidate that never started has no session to compare against', () {
-      const never = ComparisonCandidate(
-        id: 'cand-dead',
-        comparisonId: 'cmp-1',
-        position: 2,
-        installationId: 'a3',
-        agentId: 'flakyCli',
-        launch: CandidateLaunchState.failed,
-      );
+    test(
+      'a candidate that never started has no session to compare against',
+      () {
+        const never = ComparisonCandidate(
+          id: 'cand-dead',
+          comparisonId: 'cmp-1',
+          position: 2,
+          installationId: 'a3',
+          agentId: 'flakyCli',
+          launch: CandidateLaunchState.failed,
+        );
 
-      expect(
-        attributionShownFor(never, lookup()),
-        VerdictAttribution.notRecorded,
-      );
-    });
+        expect(
+          attributionShownFor(never, lookup()),
+          VerdictAttribution.notRecorded,
+        );
+      },
+    );
   });
 
   group('the outcome carries it on screen', () {

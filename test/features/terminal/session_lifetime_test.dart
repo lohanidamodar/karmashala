@@ -107,7 +107,8 @@ void main() {
       );
       final first = controller.openTab(TerminalProfile.powerShell);
       final second = controller.openTab(TerminalProfile.commandPrompt);
-      for (final tab in container.read(terminalSessionsControllerProvider).tabs) {
+      for (final tab
+          in container.read(terminalSessionsControllerProvider).tabs) {
         giveShellHistory(controller.instanceFor(tab.layout.panes.single)!);
       }
       controller
@@ -481,7 +482,10 @@ void main() {
           .panes
           .single;
       giveShellHistory(controller.instanceFor(backgroundPane)!);
-      controller.instanceFor(backgroundPane)!.terminal.write('a long build\r\n');
+      controller
+          .instanceFor(backgroundPane)!
+          .terminal
+          .write('a long build\r\n');
       controller.closeTab(closed);
       controller.persistLayout();
       first.dispose();
@@ -548,7 +552,10 @@ void main() {
       // without disposing the container, so a tab only written on close is a
       // tab that never comes back.
       controller.openTab(TerminalProfile.powerShell);
-      controller.splitPaneWith(SplitAxis.vertical, TerminalProfile.commandPrompt);
+      controller.splitPaneWith(
+        SplitAxis.vertical,
+        TerminalProfile.commandPrompt,
+      );
 
       expect(db.query('SELECT id FROM terminal_tabs;').length, 1);
       expect(db.query('SELECT id FROM terminal_panes;').length, 2);

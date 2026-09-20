@@ -60,8 +60,9 @@ class HostServer {
     }
   }
 
-  StreamSubscription<HostConnection> listen(HostListener listener) =>
-      listener.connections.listen((connection) => unawaited(serveConnection(connection)));
+  StreamSubscription<HostConnection> listen(HostListener listener) => listener
+      .connections
+      .listen((connection) => unawaited(serveConnection(connection)));
 
   DateTime now() => _now();
 }
@@ -151,7 +152,10 @@ class _ClientSession {
     _pausedForFlush.add(subscription);
     if (_flushing) return;
     _flushing = true;
-    _connection.flush().then((_) => _flushed(), onError: (Object _) => _peerGone());
+    _connection.flush().then(
+      (_) => _flushed(),
+      onError: (Object _) => _peerGone(),
+    );
   }
 
   void _flushed() {
@@ -188,7 +192,13 @@ class _ClientSession {
       _send(ErrorMessage(0, ProtocolErrorCode.badRequest, e.message));
       _hungUp = true;
     } on Object catch (e) {
-      _send(ErrorMessage(0, ProtocolErrorCode.internal, '${frame.type.name} failed: $e'));
+      _send(
+        ErrorMessage(
+          0,
+          ProtocolErrorCode.internal,
+          '${frame.type.name} failed: $e',
+        ),
+      );
       _hungUp = true;
     }
   }
@@ -297,7 +307,9 @@ class _ClientSession {
       return;
     }
     _greeted = true;
-    _clientId = message.clientId.isEmpty ? _connection.description : message.clientId;
+    _clientId = message.clientId.isEmpty
+        ? _connection.description
+        : message.clientId;
     _send(
       WelcomeMessage(
         requestId: message.requestId,
@@ -326,10 +338,22 @@ class _ClientSession {
         ),
       );
     } on SessionAlreadyExists catch (e) {
-      _send(ErrorMessage(message.requestId, ProtocolErrorCode.sessionExists, e.toString()));
+      _send(
+        ErrorMessage(
+          message.requestId,
+          ProtocolErrorCode.sessionExists,
+          e.toString(),
+        ),
+      );
       return;
     } on PtyException catch (e) {
-      _send(ErrorMessage(message.requestId, ProtocolErrorCode.spawnFailed, e.toString()));
+      _send(
+        ErrorMessage(
+          message.requestId,
+          ProtocolErrorCode.spawnFailed,
+          e.toString(),
+        ),
+      );
       return;
     }
     // Opening implies attaching from nothing, with the write token.
@@ -348,7 +372,13 @@ class _ClientSession {
     try {
       session = _server.registry.require(message.sessionId);
     } on UnknownSession catch (e) {
-      _send(ErrorMessage(message.requestId, ProtocolErrorCode.unknownSession, e.toString()));
+      _send(
+        ErrorMessage(
+          message.requestId,
+          ProtocolErrorCode.unknownSession,
+          e.toString(),
+        ),
+      );
       return;
     }
     final now = _server.now();
@@ -389,7 +419,9 @@ class _ClientSession {
     if (session.lifecycle.hasEnded) {
       _sendExit(ref, session);
     } else {
-      _exitWatches[ref] = session.ended.asStream().listen((_) => _sendExit(ref, session));
+      _exitWatches[ref] = session.ended.asStream().listen(
+        (_) => _sendExit(ref, session),
+      );
     }
   }
 
@@ -418,7 +450,12 @@ class _ClientSession {
   void _onResize(ResizeMessage message) {
     final session = _byRef[message.sessionRef];
     if (session == null) return _sendUnknownRef(message.sessionRef);
-    final refusal = session.resize(_clientId, message.columns, message.rows, _server.now());
+    final refusal = session.resize(
+      _clientId,
+      message.columns,
+      message.rows,
+      _server.now(),
+    );
     if (refusal != null) {
       _send(ErrorMessage(0, ProtocolErrorCode.writeRefused, refusal.message));
     }
@@ -429,7 +466,13 @@ class _ClientSession {
     if (session == null) return _sendUnknownRef(message.sessionRef);
     final refusal = session.token.claim(_clientId, _server.now());
     if (refusal != null) {
-      _send(ErrorMessage(message.requestId, ProtocolErrorCode.writeRefused, refusal.message));
+      _send(
+        ErrorMessage(
+          message.requestId,
+          ProtocolErrorCode.writeRefused,
+          refusal.message,
+        ),
+      );
       return;
     }
     _send(
@@ -459,16 +502,29 @@ class _ClientSession {
   Future<void> _onClose(CloseMessage message) async {
     final SessionLifecycle end;
     try {
-      end = await _server.registry.close(message.sessionId, signal: message.signal);
+      end = await _server.registry.close(
+        message.sessionId,
+        signal: message.signal,
+      );
     } on UnknownSession catch (e) {
-      _send(ErrorMessage(message.requestId, ProtocolErrorCode.unknownSession, e.toString()));
+      _send(
+        ErrorMessage(
+          message.requestId,
+          ProtocolErrorCode.unknownSession,
+          e.toString(),
+        ),
+      );
       return;
     }
     _send(ClosedMessage(message.requestId, message.sessionId, end.exitCode));
   }
 
   void _sendUnknownRef(int ref) => _send(
-    ErrorMessage(0, ProtocolErrorCode.unknownSession, 'no session attached at ref $ref'),
+    ErrorMessage(
+      0,
+      ProtocolErrorCode.unknownSession,
+      'no session attached at ref $ref',
+    ),
   );
 }
 

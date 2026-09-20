@@ -154,7 +154,9 @@ void main() {
     test('an `origin` section with no url is unknown', () async {
       // Not a shape git writes. Something else is setting the URL and only git
       // can see it.
-      final url = await urlFrom('[remote "origin"]\n\tfetch = +refs/*:refs/*\n');
+      final url = await urlFrom(
+        '[remote "origin"]\n\tfetch = +refs/*:refs/*\n',
+      );
       expect(url.known, isFalse);
     });
 
@@ -212,8 +214,10 @@ void main() {
     test('a remote that does not look like a URL is unknown', () async {
       // The catch-all for an `insteadOf` in the user's *global* config: a
       // shorthand is by construction not URL-shaped, and only git can expand it.
-      expect((await urlFrom('[remote "origin"]\n\turl = gh:acme/app\n')).known,
-          isFalse);
+      expect(
+        (await urlFrom('[remote "origin"]\n\turl = gh:acme/app\n')).known,
+        isFalse,
+      );
       expect(
         (await urlFrom('[remote "origin"]\n\turl = ../sibling-clone\n')).known,
         isFalse,

@@ -51,8 +51,10 @@ void main() {
     addTearDown(relay.close);
 
     final listener = IOWebSocketChannel.connect(
-      Uri.parse('ws://127.0.0.1:${relay.port}/v1/'
-          '0123456789abcdef0123456789abcdef'),
+      Uri.parse(
+        'ws://127.0.0.1:${relay.port}/v1/'
+        '0123456789abcdef0123456789abcdef',
+      ),
     );
     await listener.ready;
     final hungUpOn = listener.stream.drain<void>().then((_) => true);
@@ -100,23 +102,27 @@ void main() {
     await host.sink.close();
   });
 
-  test('a shared relay keeps its lone timeout — this is the local relay only',
-      () async {
-    final relay = await RelayServer.bind(
-      address: '127.0.0.1',
-      port: 0,
-      options: const RelayOptions(loneTimeout: Duration(milliseconds: 150)),
-    );
-    addTearDown(relay.close);
+  test(
+    'a shared relay keeps its lone timeout — this is the local relay only',
+    () async {
+      final relay = await RelayServer.bind(
+        address: '127.0.0.1',
+        port: 0,
+        options: const RelayOptions(loneTimeout: Duration(milliseconds: 150)),
+      );
+      addTearDown(relay.close);
 
-    final stranger = IOWebSocketChannel.connect(
-      Uri.parse('ws://127.0.0.1:${relay.port}/v1/'
-          'fedcba9876543210fedcba9876543210'),
-    );
-    await stranger.ready;
-    await stranger.stream.drain<void>();
+      final stranger = IOWebSocketChannel.connect(
+        Uri.parse(
+          'ws://127.0.0.1:${relay.port}/v1/'
+          'fedcba9876543210fedcba9876543210',
+        ),
+      );
+      await stranger.ready;
+      await stranger.stream.drain<void>();
 
-    expect(stranger.closeCode, kCloseNoPeer);
-    expect(relay.rendezvousCount, 0);
-  });
+      expect(stranger.closeCode, kCloseNoPeer);
+      expect(relay.rendezvousCount, 0);
+    },
+  );
 }

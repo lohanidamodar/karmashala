@@ -40,11 +40,9 @@ void main() {
   /// A conversation file with the real `steps` schema, as rows rather than as
   /// a database — see [FakeSqliteFiles].
   void writeConversation(String id, {int steps = 0}) {
-    sqlite.put(
-      p.join(storeHome, 'conversations', '$id.db'),
-      'steps',
-      [for (var i = 0; i < steps; i++) {'idx': i, 'step_type': 15}],
-    );
+    sqlite.put(p.join(storeHome, 'conversations', '$id.db'), 'steps', [
+      for (var i = 0; i < steps; i++) {'idx': i, 'step_type': 15},
+    ]);
   }
 
   void writeSummaries(List<(String id, String preview, int steps)> rows) {
@@ -173,7 +171,7 @@ void main() {
       writeFile(
         'history.jsonl',
         '{"display":"hi","workspace":"/work/older","conversationId":"older"}\n'
-        '{"display":"hello","workspace":"/work/newer","conversationId":"newer"}\n',
+            '{"display":"hello","workspace":"/work/newer","conversationId":"newer"}\n',
       );
 
       final workspaces = await reader().readWorkspacesByConversation(storeHome);
@@ -332,10 +330,16 @@ void main() {
   group('AntigravityStoreCache', () {
     test('serves cached workspaces and titles across sweeps', () async {
       final cache = AntigravityStoreCache();
-      final cachedReader = AntigravityStoreReader(countSteps: false, cache: cache);
+      final cachedReader = AntigravityStoreReader(
+        countSteps: false,
+        cache: cache,
+      );
 
       writeConversation('c1');
-      writeFile('history.jsonl', '{"conversationId":"c1","workspace":"/work"}\n');
+      writeFile(
+        'history.jsonl',
+        '{"conversationId":"c1","workspace":"/work"}\n',
+      );
       writeFile('annotations/c1.pbtxt', 'title:"Cached Title"');
 
       final first = await cachedReader.read(storeHome);

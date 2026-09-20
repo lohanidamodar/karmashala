@@ -56,34 +56,46 @@ void main() {
       expect(write.isAcknowledged, isTrue);
     });
 
-    test('never sends sequence 0, which the server would not acknowledge', () async {
-      // ControlMessage.SEQUENCE_INVALID is 0 and means "do not acknowledge",
-      // so a write numbered zero could never be confirmed at all.
-      host.text = 'x';
-      final bridge = build();
-      await bridge.copyHostToDevice();
-      expect(ByteData.sublistView(channel.sent.single).getInt64(1), isNonZero);
-    });
+    test(
+      'never sends sequence 0, which the server would not acknowledge',
+      () async {
+        // ControlMessage.SEQUENCE_INVALID is 0 and means "do not acknowledge",
+        // so a write numbered zero could never be confirmed at all.
+        host.text = 'x';
+        final bridge = build();
+        await bridge.copyHostToDevice();
+        expect(
+          ByteData.sublistView(channel.sent.single).getInt64(1),
+          isNonZero,
+        );
+      },
+    );
 
-    test('a write nobody acknowledged is neither a success nor a failure', () async {
-      host.text = 'sent into the void';
-      final bridge = build();
-      final write = await bridge.copyHostToDevice();
-      expect(write.outcome, DeviceClipboardWriteOutcome.unacknowledged);
-      expect(write.detail, contains('may or may not'));
-      // And it does not claim to have copied anything.
-      expect(write.isAcknowledged, isFalse);
-    });
+    test(
+      'a write nobody acknowledged is neither a success nor a failure',
+      () async {
+        host.text = 'sent into the void';
+        final bridge = build();
+        final write = await bridge.copyHostToDevice();
+        expect(write.outcome, DeviceClipboardWriteOutcome.unacknowledged);
+        expect(write.detail, contains('may or may not'));
+        // And it does not claim to have copied anything.
+        expect(write.isAcknowledged, isFalse);
+      },
+    );
 
-    test('an ack for a stale sequence does not answer the live write', () async {
-      host.text = 'current';
-      final bridge = build();
-      final pending = bridge.copyHostToDevice();
-      await Future<void>.delayed(Duration.zero);
-      channel.deliverAck(9999);
-      final write = await pending;
-      expect(write.outcome, DeviceClipboardWriteOutcome.unacknowledged);
-    });
+    test(
+      'an ack for a stale sequence does not answer the live write',
+      () async {
+        host.text = 'current';
+        final bridge = build();
+        final pending = bridge.copyHostToDevice();
+        await Future<void>.delayed(Duration.zero);
+        channel.deliverAck(9999);
+        final write = await pending;
+        expect(write.outcome, DeviceClipboardWriteOutcome.unacknowledged);
+      },
+    );
 
     test('a host clipboard that would not open is refused, not sent', () async {
       host.readFailure = 'Something else is holding it.';
@@ -102,15 +114,18 @@ void main() {
       expect(channel.sent, isEmpty);
     });
 
-    test('a closed socket refuses in words rather than doing nothing', () async {
-      host.text = 'anything';
-      channel.close();
-      final bridge = build();
-      final write = await bridge.copyHostToDevice();
-      expect(write.outcome, DeviceClipboardWriteOutcome.refused);
-      expect(write.detail, contains('control socket'));
-      expect(channel.sent, isEmpty);
-    });
+    test(
+      'a closed socket refuses in words rather than doing nothing',
+      () async {
+        host.text = 'anything';
+        channel.close();
+        final bridge = build();
+        final write = await bridge.copyHostToDevice();
+        expect(write.outcome, DeviceClipboardWriteOutcome.refused);
+        expect(write.detail, contains('control socket'));
+        expect(channel.sent, isEmpty);
+      },
+    );
 
     test('a socket that refuses the write says so', () async {
       channel.accepts = false;
@@ -121,18 +136,24 @@ void main() {
   });
 
   group('device → host', () {
-    test('asks with GET_CLIPBOARD and copies the answer to this computer', () async {
-      final bridge = build(timeout: const Duration(seconds: 5));
-      final pending = bridge.copyDeviceToHost();
-      await Future<void>.delayed(Duration.zero);
-      expect(channel.sent.single, [8, 0], reason: 'TYPE_GET_CLIPBOARD, no copy key');
-      channel.deliverClipboard('copied on the phone');
-      final read = await pending;
-      expect(read.hasText, isTrue);
-      expect(read.text, 'copied on the phone');
-      expect(read.source, DeviceClipboardSource.requested);
-      expect(host.text, 'copied on the phone');
-    });
+    test(
+      'asks with GET_CLIPBOARD and copies the answer to this computer',
+      () async {
+        final bridge = build(timeout: const Duration(seconds: 5));
+        final pending = bridge.copyDeviceToHost();
+        await Future<void>.delayed(Duration.zero);
+        expect(channel.sent.single, [
+          8,
+          0,
+        ], reason: 'TYPE_GET_CLIPBOARD, no copy key');
+        channel.deliverClipboard('copied on the phone');
+        final read = await pending;
+        expect(read.hasText, isTrue);
+        expect(read.text, 'copied on the phone');
+        expect(read.source, DeviceClipboardSource.requested);
+        expect(host.text, 'copied on the phone');
+      },
+    );
 
     test('a device that answers with nothing is empty — and says so', () async {
       final bridge = build(timeout: const Duration(seconds: 5));
@@ -157,33 +178,42 @@ void main() {
       expect(read.reason, contains('READ_CLIPBOARD_IN_BACKGROUND'));
     });
 
-    test('a device that could not be read does not clear the host clipboard', () async {
-      host.text = 'something the user copied here';
-      final bridge = build();
-      final read = await bridge.copyDeviceToHost();
-      expect(read.wasObserved, isFalse);
-      expect(host.text, 'something the user copied here');
-    });
+    test(
+      'a device that could not be read does not clear the host clipboard',
+      () async {
+        host.text = 'something the user copied here';
+        final bridge = build();
+        final read = await bridge.copyDeviceToHost();
+        expect(read.wasObserved, isFalse);
+        expect(host.text, 'something the user copied here');
+      },
+    );
 
-    test('trailing whitespace survives — it is part of what was copied', () async {
-      final bridge = build(timeout: const Duration(seconds: 5));
-      final pending = bridge.readFromDevice();
-      await Future<void>.delayed(Duration.zero);
-      channel.deliverClipboard('  padded \n');
-      expect((await pending).text, '  padded \n');
-    });
+    test(
+      'trailing whitespace survives — it is part of what was copied',
+      () async {
+        final bridge = build(timeout: const Duration(seconds: 5));
+        final pending = bridge.readFromDevice();
+        await Future<void>.delayed(Duration.zero);
+        channel.deliverClipboard('  padded \n');
+        expect((await pending).text, '  padded \n');
+      },
+    );
   });
 
   group('the push, which is an event and not a poll', () {
-    test('an unprompted clipboard becomes the latest reading, with a source', () async {
-      final bridge = build();
-      channel.deliverClipboard('copied on the phone');
-      await Future<void>.delayed(Duration.zero);
-      expect(bridge.latest.hasText, isTrue);
-      expect(bridge.latest.source, DeviceClipboardSource.pushedByDevice);
-      // Not written to this computer's clipboard: that takes an explicit act.
-      expect(host.text, isNull);
-    });
+    test(
+      'an unprompted clipboard becomes the latest reading, with a source',
+      () async {
+        final bridge = build();
+        channel.deliverClipboard('copied on the phone');
+        await Future<void>.delayed(Duration.zero);
+        expect(bridge.latest.hasText, isTrue);
+        expect(bridge.latest.source, DeviceClipboardSource.pushedByDevice);
+        // Not written to this computer's clipboard: that takes an explicit act.
+        expect(host.text, isNull);
+      },
+    );
 
     test('it announces the change without carrying the text', () async {
       final bridge = build();
@@ -216,15 +246,18 @@ void main() {
   });
 
   group('a socket this build can no longer read', () {
-    test('an unknown device message stops the bridge and explains itself', () async {
-      final bridge = build();
-      channel.deliver([7, 1, 2, 3]);
-      await Future<void>.delayed(Duration.zero);
-      expect(bridge.isOpen, isFalse);
-      expect(bridge.refusal, contains('cannot read'));
-      final read = await bridge.readFromDevice();
-      expect(read.outcome, DeviceClipboardOutcome.unavailable);
-    });
+    test(
+      'an unknown device message stops the bridge and explains itself',
+      () async {
+        final bridge = build();
+        channel.deliver([7, 1, 2, 3]);
+        await Future<void>.delayed(Duration.zero);
+        expect(bridge.isOpen, isFalse);
+        expect(bridge.refusal, contains('cannot read'));
+        final read = await bridge.readFromDevice();
+        expect(read.outcome, DeviceClipboardOutcome.unavailable);
+      },
+    );
   });
 
   group('what it costs', () {

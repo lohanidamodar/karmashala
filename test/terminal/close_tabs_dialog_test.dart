@@ -48,7 +48,10 @@ void main() {
     await show(tester, tabs: 7, live: 3);
 
     expect(find.text('Close 7 tabs?'), findsOneWidget);
-    expect(find.text('3 of them have a session still running.'), findsOneWidget);
+    expect(
+      find.text('3 of them have a session still running.'),
+      findsOneWidget,
+    );
     expect(find.text('End 3 sessions'), findsOneWidget);
     expect(find.text('Close, keep running'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);

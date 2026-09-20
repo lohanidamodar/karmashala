@@ -22,7 +22,10 @@ import 'session_signals.dart';
 /// What one session changed: the agent's own record where it keeps one, else
 /// the checkpoint chain, whose first link includes whatever was already dirty.
 class SessionChangedFilesService {
-  const SessionChangedFilesService(this._ref, {this.translator = const PathTranslator()});
+  const SessionChangedFilesService(
+    this._ref, {
+    this.translator = const PathTranslator(),
+  });
 
   final Ref _ref;
   final PathTranslator translator;
@@ -177,11 +180,9 @@ class SessionChangedFilesService {
     }
     final byPath = <String, SessionChangedFile>{};
     try {
-      await for (final line
-          in File(path)
-              .openRead()
-              .transform(utf8.decoder)
-              .transform(const LineSplitter())) {
+      await for (final line in File(
+        path,
+      ).openRead().transform(utf8.decoder).transform(const LineSplitter())) {
         if (line.isEmpty) continue;
         final Object? decoded;
         try {
@@ -211,8 +212,8 @@ class SessionChangedFilesService {
           null,
           path: file.path,
           kind: switch (file.type) {
-            FileChangeType.added || FileChangeType.untracked =>
-              FileEditKind.created,
+            FileChangeType.added ||
+            FileChangeType.untracked => FileEditKind.created,
             FileChangeType.deleted => FileEditKind.deleted,
             // Everything else is "not what HEAD has", which is the true weaker
             // claim for a copy or a status letter we do not name.
@@ -283,10 +284,9 @@ class SessionChangedFilesService {
   }
 }
 
-final sessionChangedFilesServiceProvider =
-    Provider<SessionChangedFilesService>(
-      (ref) => SessionChangedFilesService(ref),
-    );
+final sessionChangedFilesServiceProvider = Provider<SessionChangedFilesService>(
+  (ref) => SessionChangedFilesService(ref),
+);
 
 /// What a session changed, read once per opening of the surface that asks —
 /// **nothing polls this**, which is why a Codex reading costs one call.

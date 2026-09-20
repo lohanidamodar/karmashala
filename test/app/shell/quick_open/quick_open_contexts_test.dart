@@ -132,7 +132,9 @@ void main() {
     await open(
       tester,
       before: (container) {
-        container.read(workspacesControllerProvider.notifier).create('Personal');
+        container
+            .read(workspacesControllerProvider.notifier)
+            .create('Personal');
       },
     );
     await type(tester, 'all projects');

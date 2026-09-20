@@ -279,9 +279,9 @@ void main() {
       );
     }
     for (final query in ['pair phone', 'qr']) {
-      final hit = searchSettings(query).firstWhere(
-        (e) => e.label == 'Pair a phone with an SSH host',
-      );
+      final hit = searchSettings(
+        query,
+      ).firstWhere((e) => e.label == 'Pair a phone with an SSH host');
       // It lives where the machine is: the SSH host's card, on Environments.
       expect(hit.anchor, SettingsAnchor.sshHosts, reason: query);
     }

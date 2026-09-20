@@ -34,9 +34,9 @@ class FlutterGateObserver extends Notifier<void> {
           // A gate that could not be recorded must not stop the next one: an
           // errored future poisons every `then` chained after it.
           .catchError((Object error) {
-            AppLogger.named('flutter_apps').debug(
-              'recording a gate verdict failed: $error',
-            );
+            AppLogger.named(
+              'flutter_apps',
+            ).debug('recording a gate verdict failed: $error');
           });
     });
   }
@@ -59,7 +59,9 @@ class FlutterGateObserver extends Notifier<void> {
           sessionId: sessionId,
           producedBySessionId: sessionId,
         );
-    ref.read(flutterLoopProvider.notifier).noteRecorded(run.paneId, recorded.id);
+    ref
+        .read(flutterLoopProvider.notifier)
+        .noteRecorded(run.paneId, recorded.id);
   }
 }
 
@@ -67,5 +69,6 @@ class FlutterGateObserver extends Notifier<void> {
 /// `flutter analyze`'s issue list or the failing end of a test run.
 const int kFlutterGateRowsRecorded = 400;
 
-final flutterGateObserverProvider =
-    NotifierProvider<FlutterGateObserver, void>(FlutterGateObserver.new);
+final flutterGateObserverProvider = NotifierProvider<FlutterGateObserver, void>(
+  FlutterGateObserver.new,
+);

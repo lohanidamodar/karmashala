@@ -56,56 +56,63 @@ void main() {
     wslDistribution: distro,
   );
 
-  test('a shell that printed nothing is released; one that printed is kept',
-      () async {
-    final pane = await _WslPane.open(profile);
-    addTearDown(pane.close);
+  test(
+    'a shell that printed nothing is released; one that printed is kept',
+    () async {
+      final pane = await _WslPane.open(profile);
+      addTearDown(pane.close);
 
-    expect(
-      pane.greetingLines,
-      isNull,
-      reason: 'nothing has been submitted, so there is no greeting yet — and '
-          'the terminal\'s own ESC[I focus report must not have set one',
-    );
-    expect(
-      pane.parked,
-      isFalse,
-      reason: 'an untouched shell is not something anyone would come back for',
-    );
+      expect(
+        pane.greetingLines,
+        isNull,
+        reason:
+            'nothing has been submitted, so there is no greeting yet — and '
+            'the terminal\'s own ESC[I focus report must not have set one',
+      );
+      expect(
+        pane.parked,
+        isFalse,
+        reason:
+            'an untouched shell is not something anyone would come back for',
+      );
 
-    // Two commands that print absolutely nothing. Every line they add to the
-    // buffer is the shell redrawing its prompt.
-    await pane.run('true');
-    await pane.run('true');
+      // Two commands that print absolutely nothing. Every line they add to the
+      // buffer is the shell redrawing its prompt.
+      await pane.run('true');
+      await pane.run('true');
 
-    expect(
-      pane.greetingLines,
-      isNotNull,
-      reason: 'submitting a line is what records the greeting',
-    );
-    expect(
-      pane.greetingLines,
-      greaterThan(0),
-      reason: 'the shell had painted a prompt before anything was typed',
-    );
-    expect(
-      pane.parked,
-      isFalse,
-      reason: 'this is the report: two commands that printed nothing must not '
-          'park a shell in the background list. nonBlank=${pane.nonBlankLines} '
-          'greeting=${pane.greetingLines}',
-    );
+      expect(
+        pane.greetingLines,
+        isNotNull,
+        reason: 'submitting a line is what records the greeting',
+      );
+      expect(
+        pane.greetingLines,
+        greaterThan(0),
+        reason: 'the shell had painted a prompt before anything was typed',
+      );
+      expect(
+        pane.parked,
+        isFalse,
+        reason:
+            'this is the report: two commands that printed nothing must not '
+            'park a shell in the background list. nonBlank=${pane.nonBlankLines} '
+            'greeting=${pane.greetingLines}',
+      );
 
-    // Now something that really does print.
-    await pane.run('ls -a /usr/bin');
+      // Now something that really does print.
+      await pane.run('ls -a /usr/bin');
 
-    expect(
-      pane.parked,
-      isTrue,
-      reason: 'a shell with real output in it is still worth keeping. '
-          'nonBlank=${pane.nonBlankLines} greeting=${pane.greetingLines}',
-    );
-  }, timeout: const Timeout(Duration(seconds: 180)));
+      expect(
+        pane.parked,
+        isTrue,
+        reason:
+            'a shell with real output in it is still worth keeping. '
+            'nonBlank=${pane.nonBlankLines} greeting=${pane.greetingLines}',
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 180)),
+  );
 }
 
 /// One throwaway pane: the launch this app really builds, in a real ConPTY,
@@ -144,12 +151,12 @@ class _WslPane {
   /// The rule under test, asked the way the controller asks it for an
   /// un-instrumented shell that is still running.
   bool get parked => shouldDetachOnClose(
-        isLive: true,
-        isAgentSession: false,
-        commandRunning: null,
-        nonBlankLines: nonBlankLines,
-        greetingLines: greetingLines,
-      );
+    isLive: true,
+    isAgentSession: false,
+    commandRunning: null,
+    nonBlankLines: nonBlankLines,
+    greetingLines: greetingLines,
+  );
 
   /// Types [command] and waits for it to finish — the same two steps
   /// `PtyTerminalInstance.onOutput` takes, in the same order, so the greeting

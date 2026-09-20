@@ -26,7 +26,9 @@ void main() async {
 
   late Directory tmp;
 
-  setUp(() => tmp = Directory.systemTemp.createTempSync('karmashala_wslretry_'));
+  setUp(
+    () => tmp = Directory.systemTemp.createTempSync('karmashala_wslretry_'),
+  );
   tearDown(() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
@@ -112,9 +114,7 @@ void main() async {
     // The ordinary case: bound on the first attempt, so hooks are already
     // being written against it and re-running them would be noise.
     var announced = 0;
-    final server = await start(
-      lookup: () async => switchAddress,
-    );
+    final server = await start(lookup: () async => switchAddress);
     server.onWslInterfaceBound = () => announced++;
 
     await Future<void>.delayed(const Duration(milliseconds: 120));

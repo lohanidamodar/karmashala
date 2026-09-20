@@ -65,9 +65,7 @@ class ConversationIndexer {
 
   /// Indexes everything queued, resolving unknown paths through [scan]. Returns
   /// how many changed; [scan] runs only for a queued conversation with no path.
-  Future<int> drain(
-    Future<List<DetectedSession>> Function() scan,
-  ) async {
+  Future<int> drain(Future<List<DetectedSession>> Function() scan) async {
     if (_wanted.isEmpty) return 0;
     final queued = Map.of(_wanted);
     _wanted.clear();
@@ -116,10 +114,7 @@ class ConversationIndexer {
     final watermark = await _stat(filePath);
     if (state != null &&
         state.filePath == filePath &&
-        state.matches(
-          modifiedAt: watermark.modifiedAt,
-          size: watermark.size,
-        )) {
+        state.matches(modifiedAt: watermark.modifiedAt, size: watermark.size)) {
       skips++;
       return false;
     }

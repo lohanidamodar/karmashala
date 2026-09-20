@@ -135,7 +135,8 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
     }
     return [
       'Saved "${result.project.name}"',
-      if (result.rebased.isNotEmpty) '${result.rebased.length} checkout(s) moved',
+      if (result.rebased.isNotEmpty)
+        '${result.rebased.length} checkout(s) moved',
       if (result.discovered.isNotEmpty) '${result.discovered.length} found',
       if (result.leftBehind.isNotEmpty)
         '${result.leftBehind.length} left where they were',
@@ -208,7 +209,8 @@ class _EditProjectDialogState extends ConsumerState<EditProjectDialog> {
             ],
             const SizedBox(height: Insets.md),
             DropdownButtonFormField<String>(
-              initialValue: _workspaceId == _noContext ||
+              initialValue:
+                  _workspaceId == _noContext ||
                       workspaces.any((w) => w.id == _workspaceId)
                   ? _workspaceId
                   : _noContext,

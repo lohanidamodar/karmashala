@@ -382,10 +382,10 @@ void main() {
     await tester.pump();
 
     expect(service.calls.length, 2, reason: 'one request per account');
-    expect(
-      service.calls.map((i) => i.agentId).toSet(),
-      {AgentIds.claudeCode, AgentIds.codex},
-    );
+    expect(service.calls.map((i) => i.agentId).toSet(), {
+      AgentIds.claudeCode,
+      AgentIds.codex,
+    });
     final codexAccount = usageAccountKey(
       agentInstallation(id: 'a2', agentId: AgentIds.codex),
     );
@@ -517,7 +517,9 @@ void main() {
       UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(
-          home: Scaffold(body: Center(child: UsageChip(sessionId: 's1'))),
+          home: Scaffold(
+            body: Center(child: UsageChip(sessionId: 's1')),
+          ),
         ),
       ),
     );

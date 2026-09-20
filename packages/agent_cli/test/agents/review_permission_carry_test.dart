@@ -98,22 +98,25 @@ void main() {
   });
 
   group('the cap still goes through the downwards-only carry', () {
-    test('an agent that cannot express the ceiling is not raised to bypass', () {
-      final carry = carryReviewPermission(
-        sessionRisk: PermissionRisk.bypass,
-        target: _bypassOnly,
-      );
-      expect(carry.carried.fit, PermissionModeFit.none);
-      // Nothing is passed rather than this agent's only mode, which is a
-      // bypass — a reviewer that could write is not reviewing the change.
-      expect(carry.selection, PermissionSelection.empty);
-      expect(
-        _bypassOnly.launch.permission.argumentsFor(carry.selection),
-        isEmpty,
-      );
-      expect(carry.summary, contains('Bypass-only CLI'));
-      expect(carry.summary, contains('cannot govern it'));
-    });
+    test(
+      'an agent that cannot express the ceiling is not raised to bypass',
+      () {
+        final carry = carryReviewPermission(
+          sessionRisk: PermissionRisk.bypass,
+          target: _bypassOnly,
+        );
+        expect(carry.carried.fit, PermissionModeFit.none);
+        // Nothing is passed rather than this agent's only mode, which is a
+        // bypass — a reviewer that could write is not reviewing the change.
+        expect(carry.selection, PermissionSelection.empty);
+        expect(
+          _bypassOnly.launch.permission.argumentsFor(carry.selection),
+          isEmpty,
+        );
+        expect(carry.summary, contains('Bypass-only CLI'));
+        expect(carry.summary, contains('cannot govern it'));
+      },
+    );
 
     test('an unknown agent is named and not enforced', () {
       final carry = carryReviewPermission(

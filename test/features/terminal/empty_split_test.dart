@@ -166,7 +166,10 @@ void main() {
       expect(opened.tabId, host, reason: 'the split is filled in place');
       expect(activeTab(container).layout.panes, [first, opened.paneId]);
       expect(activeTab(container).focusedPaneId, opened.paneId);
-      expect(controller.instanceFor(opened.paneId)!.agentLaunch?.agentId, 'codex');
+      expect(
+        controller.instanceFor(opened.paneId)!.agentLaunch?.agentId,
+        'codex',
+      );
     });
 
     test('a stale session target starts nothing', () {
@@ -227,11 +230,9 @@ void main() {
       expect(state.tabs, hasLength(2));
       expect(state.activeTabId, newTab);
       expect(state.activeTab!.layout.panes, [movedPane]);
-      expect(
-        state.tabs.firstWhere((t) => t.id == host).layout.panes,
-        [kept],
-        reason: 'the region it left goes with it — the split collapses',
-      );
+      expect(state.tabs.firstWhere((t) => t.id == host).layout.panes, [
+        kept,
+      ], reason: 'the region it left goes with it — the split collapses');
       expect(controller.instanceFor(movedPane), same(instance));
       expect(instance.liveness.value, PaneLiveness.live);
     });
@@ -249,7 +250,8 @@ void main() {
       expect(
         state.tabs,
         hasLength(1),
-        reason: 'a tab with nothing in it and nothing to come back to is not '
+        reason:
+            'a tab with nothing in it and nothing to come back to is not '
             'a tab',
       );
       expect(state.activeTab!.layout.panes, [only]);

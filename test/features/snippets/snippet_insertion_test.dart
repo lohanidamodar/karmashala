@@ -60,15 +60,13 @@ void main() {
     return (paneId: paneId, written: written);
   }
 
-  SnippetInsertionResult insert(
-    String paneId,
-    CommandSnippet value,
-  ) => insertSnippet(
-    terminals: controller(),
-    state: state(),
-    snippet: value,
-    paneId: paneId,
-  );
+  SnippetInsertionResult insert(String paneId, CommandSnippet value) =>
+      insertSnippet(
+        terminals: controller(),
+        state: state(),
+        snippet: value,
+        paneId: paneId,
+      );
 
   group('type, do not send', () {
     test('a picked snippet lands at the prompt with no carriage return', () {
@@ -267,11 +265,13 @@ void main() {
 
       expect(target.shellId, 'wsl');
       expect(
-        target.filter([
-          snippet(id: 'any'),
-          snippet(id: 'wsl', shellId: 'wsl'),
-          snippet(id: 'pwsh', shellId: 'powerShell'),
-        ]).map((s) => s.id),
+        target
+            .filter([
+              snippet(id: 'any'),
+              snippet(id: 'wsl', shellId: 'wsl'),
+              snippet(id: 'pwsh', shellId: 'powerShell'),
+            ])
+            .map((s) => s.id),
         ['any', 'wsl'],
         reason:
             'a PowerShell snippet is absent from a WSL pane on the very same '

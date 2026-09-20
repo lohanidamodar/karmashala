@@ -79,7 +79,10 @@ class RemotePairing {
   /// Opens a window and answers what to type. [capabilities] is the grant the
   /// person chose — passed through untouched, because a desktop that widened it
   /// would be granting what nobody offered.
-  Future<PairingWindow> open({required int capabilities, String relay = ''}) async {
+  Future<PairingWindow> open({
+    required int capabilities,
+    String relay = '',
+  }) async {
     RemoteChannel? channel;
     try {
       channel = await target.exec('$remotePath attach');
@@ -117,14 +120,17 @@ class RemotePairing {
       // the version check it does there is the one that catches a skewed pair.
       channel
         ..add(
-          const HelloMessage(requestId: 1, clientId: 'karmashala-pairing')
-              .toFrame()
-              .encode(),
+          const HelloMessage(
+            requestId: 1,
+            clientId: 'karmashala-pairing',
+          ).toFrame().encode(),
         )
         ..add(
-          PairMessage(requestId: 2, capabilities: capabilities, relay: relay)
-              .toFrame()
-              .encode(),
+          PairMessage(
+            requestId: 2,
+            capabilities: capabilities,
+            relay: relay,
+          ).toFrame().encode(),
         );
 
       try {

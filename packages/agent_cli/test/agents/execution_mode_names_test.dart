@@ -106,18 +106,30 @@ void main() {
     test('never over a rung nobody established', () {
       // `riskOf` answers null for an agent with no declared modes, and an
       // unknown is never a name.
-      expect(pairedWithFamiliarName('Whatever it does', null),
-          'Whatever it does');
+      expect(
+        pairedWithFamiliarName('Whatever it does', null),
+        'Whatever it does',
+      );
     });
 
     test('never over the bypass rung, on any agent', () {
       for (final (agentId, selection) in [
-        (AgentIds.claudeCode, const PermissionSelection({'mode': 'bypassPermissions'})),
+        (
+          AgentIds.claudeCode,
+          const PermissionSelection({'mode': 'bypassPermissions'}),
+        ),
         (AgentIds.codex, const PermissionSelection({'sandbox': 'bypass-all'})),
-        (AgentIds.antigravity, const PermissionSelection({'mode': 'skip-permissions'})),
+        (
+          AgentIds.antigravity,
+          const PermissionSelection({'mode': 'skip-permissions'}),
+        ),
       ]) {
         final support = supportOf(agentId);
-        expect(support.riskOf(selection), PermissionRisk.bypass, reason: agentId);
+        expect(
+          support.riskOf(selection),
+          PermissionRisk.bypass,
+          reason: agentId,
+        );
         expect(
           describeSelectionFamiliar(support, selection),
           describeSelection(support, selection),

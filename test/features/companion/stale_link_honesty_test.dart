@@ -434,10 +434,7 @@ void main() {
           isA<GatewayException>().having(
             (e) => e.message,
             'message',
-            allOf(
-              contains('did not answer'),
-              isNot(contains('unreachable')),
-            ),
+            allOf(contains('did not answer'), isNot(contains('unreachable'))),
           ),
         ),
       );

@@ -169,9 +169,7 @@ DeviceDirectoryListing parseLsLong(String output, {required String directory}) {
     }
 
     if (name.isEmpty) {
-      skipped.add(
-        SkippedDeviceEntry(line: line, reason: 'it names nothing'),
-      );
+      skipped.add(SkippedDeviceEntry(line: line, reason: 'it names nothing'));
       continue;
     }
 

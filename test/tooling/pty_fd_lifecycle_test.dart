@@ -33,12 +33,14 @@ void main() {
     const src = 'packages/flutter_pty/src';
     final build = await Process.run(cc, [
       '-O0',
-      '-I', src,
+      '-I',
+      src,
       'packages/flutter_pty/test/fd_lifecycle_harness.c',
       '$src/flutter_pty_unix.c',
       '$src/forkpty.c',
       '$src/include/dart_api_dl.c',
-      '-o', binary,
+      '-o',
+      binary,
     ]);
     expect(
       build.exitCode,

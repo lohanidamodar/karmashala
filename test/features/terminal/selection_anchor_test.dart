@@ -82,7 +82,9 @@ void main() {
     await gesture.moveBy(const Offset(60, 0));
     await tester.pumpAndSettle();
 
-    final beforeOutput = terminal.buffer.getText(instance.controller.selection!);
+    final beforeOutput = terminal.buffer.getText(
+      instance.controller.selection!,
+    );
     expect(beforeOutput, startsWith('line 0'));
 
     // The process keeps printing. Enough to push the whole screen up.
@@ -99,7 +101,8 @@ void main() {
     expect(
       selection.begin.y,
       0,
-      reason: 'the selection still starts on the buffer line the drag did, '
+      reason:
+          'the selection still starts on the buffer line the drag did, '
           'not on whatever is at that point on the screen now',
     );
     expect(terminal.buffer.getText(selection), startsWith('line 0'));
@@ -140,7 +143,8 @@ void main() {
     expect(
       [selection.begin.y, selection.end.y],
       contains(anchorRow),
-      reason: 'the anchor is a buffer line, not a pixel row: scrolling moves '
+      reason:
+          'the anchor is a buffer line, not a pixel row: scrolling moves '
           'the end of the drag, never its start',
     );
 

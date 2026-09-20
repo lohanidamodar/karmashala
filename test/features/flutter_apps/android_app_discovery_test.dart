@@ -45,11 +45,8 @@ void main() {
     runner = FakeCommandRunner(
       // `adb forward tcp:0 tcp:<port>` prints the port adb picked. Measured on
       // the owner's emulator: 42771 on the device came back as 59152 here.
-      responder: (request) => const CommandResult(
-        exitCode: 0,
-        stdout: '59152\n',
-        stderr: '',
-      ),
+      responder: (request) =>
+          const CommandResult(exitCode: 0, stdout: '59152\n', stderr: ''),
       processFactory: (_) => logcat,
     );
     container = ProviderContainer(
@@ -83,22 +80,25 @@ void main() {
     apps: apps(),
   );
 
-  test('the log line becomes an attached app, through one adb forward', () async {
-    reachable['ws://127.0.0.1:59152/nQyjZWDSaNM=/ws'] = FakeVmService();
-    final found = discovery();
-    await found.watch(const ['emulator-5554']);
+  test(
+    'the log line becomes an attached app, through one adb forward',
+    () async {
+      reachable['ws://127.0.0.1:59152/nQyjZWDSaNM=/ws'] = FakeVmService();
+      final found = discovery();
+      await found.watch(const ['emulator-5554']);
 
-    logcat.emitStdout(kCapturedLine);
-    await pumpEventQueue();
+      logcat.emitStdout(kCapturedLine);
+      await pumpEventQueue();
 
-    expect(found.forwardsMade, 1);
-    final row = registry().apps.single;
-    expect(row.reachability, AppReachability.attached);
-    expect(row.discovery, AppDiscovery.deviceLog);
-    expect(row.sourcePath, 'emulator-5554');
-    expect(row.observedAt, at);
-    found.dispose();
-  });
+      expect(found.forwardsMade, 1);
+      final row = registry().apps.single;
+      expect(row.reachability, AppReachability.attached);
+      expect(row.discovery, AppDiscovery.deviceLog);
+      expect(row.sourcePath, 'emulator-5554');
+      expect(row.observedAt, at);
+      found.dispose();
+    },
+  );
 
   test('the same announcement twice is one app and one forward', () async {
     reachable['ws://127.0.0.1:59152/nQyjZWDSaNM=/ws'] = FakeVmService();
@@ -120,7 +120,9 @@ void main() {
     final found = discovery();
     await found.watch(const ['emulator-5554']);
 
-    logcat.emitStdout('09-09 14:01:30 4419 4471 I flutter : hello from the app');
+    logcat.emitStdout(
+      '09-09 14:01:30 4419 4471 I flutter : hello from the app',
+    );
     logcat.emitStdout('--------- beginning of main');
     await pumpEventQueue();
 

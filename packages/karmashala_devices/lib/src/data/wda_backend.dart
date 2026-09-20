@@ -356,7 +356,6 @@ class WdaBackend implements SimulatorBackend {
     }
   }
 
-
   Future<Map<String, Object?>> _get(String path) async =>
       _decode(await _getRaw(path));
 

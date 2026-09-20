@@ -441,27 +441,30 @@ void main() {
       expect(command, contains(subdirectory));
     });
 
-    test('a directory that has gone away falls back to the repository', () async {
-      // The resume must still happen. A recorded folder can be missing for
-      // reasons that have nothing to do with the conversation — an unmounted
-      // drive, a deleted scratch folder — and refusing would be worse than
-      // starting one level up.
-      final h = harness(_exclusive, missingDirectories: const {subdirectory});
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      adopted(h);
+    test(
+      'a directory that has gone away falls back to the repository',
+      () async {
+        // The resume must still happen. A recorded folder can be missing for
+        // reasons that have nothing to do with the conversation — an unmounted
+        // drive, a deleted scratch folder — and refusing would be worse than
+        // starting one level up.
+        final h = harness(_exclusive, missingDirectories: const {subdirectory});
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+        adopted(h);
 
-      await h.container
-          .read(sessionActionsProvider)
-          .openSessionInSystemTerminal('adopted-1', _terminal);
+        await h.container
+            .read(sessionActionsProvider)
+            .openSessionInSystemTerminal('adopted-1', _terminal);
 
-      expect(h.terminals.directories.single, repository().path.path);
-      // And the row still remembers where it ran: the folder may come back.
-      expect(
-        SessionDao(h.db).getById('adopted-1')!.workingDirectory,
-        elsewhere,
-      );
-    });
+        expect(h.terminals.directories.single, repository().path.path);
+        // And the row still remembers where it ran: the folder may come back.
+        expect(
+          SessionDao(h.db).getById('adopted-1')!.workingDirectory,
+          elsewhere,
+        );
+      },
+    );
   });
 
   group('a WSL row whose distribution is gone', () {
@@ -487,37 +490,40 @@ void main() {
       );
     }
 
-    Matcher saysSo() => throwsA(
-      isA<StateError>().having((e) => e.message, 'message', words),
-    );
+    Matcher saysSo() =>
+        throwsA(isA<StateError>().having((e) => e.message, 'message', words));
 
-    test('an imported entry refuses rather than spelling a broken line',
-        () async {
-      final h = harness(_sharing);
-      addTearDown(h.db.close);
-      addTearDown(h.container.dispose);
-      broken(h);
+    test(
+      'an imported entry refuses rather than spelling a broken line',
+      () async {
+        final h = harness(_sharing);
+        addTearDown(h.db.close);
+        addTearDown(h.container.dispose);
+        broken(h);
 
-      await expectLater(
-        h.container.read(sessionActionsProvider).openInSystemTerminal(
-              ImportedSession(
-                id: 'i2',
-                repositoryId: 'r2',
-                cli: _sharing.id,
-                externalId: 'ext-2',
-                environmentId: 'wsl:Ubuntu',
-                filePath: '/store/rollout-ext-2.jsonl',
-                storeHome: '/store',
-                isSubagent: false,
-                preview: 'earlier work',
-                createdAt: testTime,
+        await expectLater(
+          h.container
+              .read(sessionActionsProvider)
+              .openInSystemTerminal(
+                ImportedSession(
+                  id: 'i2',
+                  repositoryId: 'r2',
+                  cli: _sharing.id,
+                  externalId: 'ext-2',
+                  environmentId: 'wsl:Ubuntu',
+                  filePath: '/store/rollout-ext-2.jsonl',
+                  storeHome: '/store',
+                  isSubagent: false,
+                  preview: 'earlier work',
+                  createdAt: testTime,
+                ),
+                _terminal,
               ),
-              _terminal,
-            ),
-        saysSo(),
-      );
-      expect(h.terminals.launches, isEmpty);
-    });
+          saysSo(),
+        );
+        expect(h.terminals.launches, isEmpty);
+      },
+    );
 
     test('and one of our own sessions refuses in the same words', () async {
       final h = harness(_sharing);

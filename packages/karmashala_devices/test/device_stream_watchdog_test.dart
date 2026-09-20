@@ -16,7 +16,9 @@ void main() {
       // and calling that a stall is what restarted the view every 11 seconds.
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
-      final session = await fakeStreamService(device.runner()).start('F6IZLV6LMFT4U4ZT');
+      final session = await fakeStreamService(
+        device.runner(),
+      ).start('F6IZLV6LMFT4U4ZT');
       addTearDown(session.stop);
 
       final seen = <DeviceStreamHealth>[];
@@ -32,7 +34,8 @@ void main() {
       expect(
         seen.map((h) => h.state),
         isNot(contains(DeviceStreamState.stalled)),
-        reason: 'nothing is wrong: the connection is up and the server is alive',
+        reason:
+            'nothing is wrong: the connection is up and the server is alive',
       );
       expect(
         seen.map((h) => h.state),
@@ -49,7 +52,9 @@ void main() {
     test('frames arriving again ends the idle report', () async {
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
-      final session = await fakeStreamService(device.runner()).start('F6IZLV6LMFT4U4ZT');
+      final session = await fakeStreamService(
+        device.runner(),
+      ).start('F6IZLV6LMFT4U4ZT');
       addTearDown(session.stop);
 
       final seen = <DeviceStreamHealth>[];
@@ -62,30 +67,32 @@ void main() {
       expect(seen.last.state, DeviceStreamState.live);
     });
 
-    test('a device that will not answer the user is a fault, not idleness',
-        () async {
-      // Silence with nobody asking is idleness; silence while the user is
-      // asking is a live view that has stopped working, and both look the same.
-      final device = await FakeScrcpyDevice.bind();
-      addTearDown(device.dispose);
-      final session = await fakeStreamService(
-        device.runner(),
-      ).start('F6IZLV6LMFT4U4ZT');
-      addTearDown(session.stop);
+    test(
+      'a device that will not answer the user is a fault, not idleness',
+      () async {
+        // Silence with nobody asking is idleness; silence while the user is
+        // asking is a live view that has stopped working, and both look the same.
+        final device = await FakeScrcpyDevice.bind();
+        addTearDown(device.dispose);
+        final session = await fakeStreamService(
+          device.runner(),
+        ).start('F6IZLV6LMFT4U4ZT');
+        addTearDown(session.stop);
 
-      final seen = <DeviceStreamHealth>[];
-      session.health.listen(seen.add);
-      // Three interactions, far enough apart to be three rather than one.
-      for (var i = 0; i < 3; i++) {
-        session.noteInput();
-        await Future<void>.delayed(const Duration(milliseconds: 300));
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+        final seen = <DeviceStreamHealth>[];
+        session.health.listen(seen.add);
+        // Three interactions, far enough apart to be three rather than one.
+        for (var i = 0; i < 3; i++) {
+          session.noteInput();
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 400));
 
-      expect(seen.last.state, DeviceStreamState.stalled);
-      expect(seen.last.detail, contains('has not answered'));
-      expect(seen.last.needsRestart, isTrue);
-    });
+        expect(seen.last.state, DeviceStreamState.stalled);
+        expect(seen.last.detail, contains('has not answered'));
+        expect(seen.last.needsRestart, isTrue);
+      },
+    );
 
     test('a drag is one unanswered request, not fifty', () async {
       // Pointer moves arrive every few milliseconds. Counting events rather
@@ -177,58 +184,68 @@ void main() {
       expect(
         stall,
         isNotNull,
-        reason: 'the delivery clock never noticed a viewer that stopped '
+        reason:
+            'the delivery clock never noticed a viewer that stopped '
             'reading; states seen: ${seen.map((h) => h.state).toSet()}',
       );
       expect(stall!.state, DeviceStreamState.stalled);
       expect(stall.needsRestart, isTrue);
     });
 
-    test('a frozen picture can be repaired without tearing anything down',
-        () async {
-      // The cheapest rung end to end: one byte down the control socket, with
-      // the process, the forward, both sockets and the player left as they are.
-      final device = await FakeScrcpyDevice.bind();
-      addTearDown(device.dispose);
-      final runner = device.runner();
-      final session = await fakeStreamService(runner).start('F6IZLV6LMFT4U4ZT');
-      addTearDown(session.stop);
+    test(
+      'a frozen picture can be repaired without tearing anything down',
+      () async {
+        // The cheapest rung end to end: one byte down the control socket, with
+        // the process, the forward, both sockets and the player left as they are.
+        final device = await FakeScrcpyDevice.bind();
+        addTearDown(device.dispose);
+        final runner = device.runner();
+        final session = await fakeStreamService(
+          runner,
+        ).start('F6IZLV6LMFT4U4ZT');
+        addTearDown(session.stop);
 
-      expect(session.requestVideoReset(), isTrue);
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+        expect(session.requestVideoReset(), isTrue);
+        await Future<void>.delayed(const Duration(milliseconds: 200));
 
-      expect(
-        device.controlBytes,
-        [17],
-        reason: 'TYPE_RESET_VIDEO, and nothing after it: the server reads one '
-            'byte, so a payload would be read as the next message type',
-      );
-      // Nothing was torn down to do it.
-      expect(device.runningScids, hasLength(1));
-      expect(device.socketsClosedByHost, 0);
-      expect(runner.startRequests, hasLength(1));
-    });
+        expect(
+          device.controlBytes,
+          [17],
+          reason:
+              'TYPE_RESET_VIDEO, and nothing after it: the server reads one '
+              'byte, so a payload would be read as the next message type',
+        );
+        // Nothing was torn down to do it.
+        expect(device.runningScids, hasLength(1));
+        expect(device.socketsClosedByHost, 0);
+        expect(runner.startRequests, hasLength(1));
+      },
+    );
 
-    test('a session with no control socket says the rung is unavailable',
-        () async {
-      // Not an error: `adb shell input` still drives the device. But the cheap
-      // recovery is gone, which is what the caller needs to know.
-      final device = await FakeScrcpyDevice.bind();
-      addTearDown(device.dispose);
-      final session = await fakeStreamService(
-        device.runner(),
-      ).start('F6IZLV6LMFT4U4ZT', useControlSocket: false);
-      addTearDown(session.stop);
+    test(
+      'a session with no control socket says the rung is unavailable',
+      () async {
+        // Not an error: `adb shell input` still drives the device. But the cheap
+        // recovery is gone, which is what the caller needs to know.
+        final device = await FakeScrcpyDevice.bind();
+        addTearDown(device.dispose);
+        final session = await fakeStreamService(
+          device.runner(),
+        ).start('F6IZLV6LMFT4U4ZT', useControlSocket: false);
+        addTearDown(session.stop);
 
-      expect(session.control, isNull);
-      expect(session.requestVideoReset(), isFalse);
-      expect(device.controlBytes, isEmpty);
-    });
+        expect(session.control, isNull);
+        expect(session.requestVideoReset(), isFalse);
+        expect(device.controlBytes, isEmpty);
+      },
+    );
 
     test('a closed socket is ended, and that is a fault', () async {
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
-      final session = await fakeStreamService(device.runner()).start('F6IZLV6LMFT4U4ZT');
+      final session = await fakeStreamService(
+        device.runner(),
+      ).start('F6IZLV6LMFT4U4ZT');
       addTearDown(session.stop);
 
       final ended = session.health.firstWhere(
@@ -243,7 +260,9 @@ void main() {
     test('the server exiting is ended, and that is a fault', () async {
       final device = await FakeScrcpyDevice.bind();
       addTearDown(device.dispose);
-      final session = await fakeStreamService(device.runner()).start('F6IZLV6LMFT4U4ZT');
+      final session = await fakeStreamService(
+        device.runner(),
+      ).start('F6IZLV6LMFT4U4ZT');
       addTearDown(session.stop);
 
       final ended = session.health.firstWhere(
@@ -255,24 +274,26 @@ void main() {
       expect(health.needsRestart, isTrue);
     });
 
-    test('silence outlives the server: the device-side process is checked',
-        () async {
-      // The one case where silence really is death: the server was gone while
-      // its `adb forward` entry and the host-side socket stayed up.
-      final device = await FakeScrcpyDevice.bind();
-      addTearDown(device.dispose);
-      final session = await fakeStreamService(
-        device.runner(processList: 'USER PID ARGS\n 1 /init\n'),
-        livenessProbeInterval: const Duration(milliseconds: 400),
-      ).start('F6IZLV6LMFT4U4ZT');
-      addTearDown(session.stop);
+    test(
+      'silence outlives the server: the device-side process is checked',
+      () async {
+        // The one case where silence really is death: the server was gone while
+        // its `adb forward` entry and the host-side socket stayed up.
+        final device = await FakeScrcpyDevice.bind();
+        addTearDown(device.dispose);
+        final session = await fakeStreamService(
+          device.runner(processList: 'USER PID ARGS\n 1 /init\n'),
+          livenessProbeInterval: const Duration(milliseconds: 400),
+        ).start('F6IZLV6LMFT4U4ZT');
+        addTearDown(session.stop);
 
-      final ended = await session.health
-          .firstWhere((h) => h.state == DeviceStreamState.ended)
-          .timeout(const Duration(seconds: 3));
-      expect(ended.detail, contains('no longer running'));
-      expect(ended.needsRestart, isTrue);
-    });
+        final ended = await session.health
+            .firstWhere((h) => h.state == DeviceStreamState.ended)
+            .timeout(const Duration(seconds: 3));
+        expect(ended.detail, contains('no longer running'));
+        expect(ended.needsRestart, isTrue);
+      },
+    );
 
     test('a server that is still there leaves the silence alone', () async {
       final device = await FakeScrcpyDevice.bind();

@@ -22,6 +22,7 @@ library;
 import '../../features/companion/client/secure_companion_store.dart';
 import 'package:karmashala_companion/notifications.dart';
 import 'package:karmashala_companion/push.dart';
+
 /// Handles one push message's `data` map: unseal with the stored device key,
 /// render the local notification. Safe from a background isolate.
 Future<void> handleCompanionPushMessage(

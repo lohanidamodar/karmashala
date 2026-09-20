@@ -109,7 +109,9 @@ void main() {
         sessionStatusLookupProvider.overrideWithValue(
           (sessionId) => statusLookup(sessionId),
         ),
-        sessionStatusStreamProvider.overrideWithValue((_) => waitReports.stream),
+        sessionStatusStreamProvider.overrideWithValue(
+          (_) => waitReports.stream,
+        ),
         waitDeadlineProvider.overrideWithValue((_) => waitDeadline.future),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         // The built-ins plus one agent that declares no way to continue a
@@ -274,8 +276,7 @@ void main() {
       await waitSubscribed.future;
       waitReports.add(_report('s1', status: AgentActivityStatus.idle));
 
-      final body =
-          jsonDecode((await pending).text) as Map<String, Object?>;
+      final body = jsonDecode((await pending).text) as Map<String, Object?>;
       expect(body['state'], 'idle');
       // The sentence that stops a caller reading "not busy" as "did the work".
       expect(body['note'], contains('never started'));
@@ -300,8 +301,7 @@ void main() {
         ),
       );
 
-      final body =
-          jsonDecode((await pending).text) as Map<String, Object?>;
+      final body = jsonDecode((await pending).text) as Map<String, Object?>;
       expect(body['state'], 'blocked');
       final blockedOn = body['blockedOn']! as Map<String, Object?>;
       expect(blockedOn['kind'], 'approvalPrompt');
@@ -317,8 +317,7 @@ void main() {
       await pumpEventQueue();
       waitDeadline.complete();
 
-      final body =
-          jsonDecode((await pending).text) as Map<String, Object?>;
+      final body = jsonDecode((await pending).text) as Map<String, Object?>;
       expect(body['state'], 'timeout');
       expect(body['note'], contains('STILL RUNNING'));
       // A bare wait sent nothing, and null says that better than false does.
@@ -332,8 +331,7 @@ void main() {
       await waitSubscribed.future;
       waitReports.add(_report('s1', status: AgentActivityStatus.working));
 
-      final body =
-          jsonDecode((await pending).text) as Map<String, Object?>;
+      final body = jsonDecode((await pending).text) as Map<String, Object?>;
       expect(body['state'], 'ended');
       expect(body['exitCode'], isNull);
       expect(body['exitCodeKnown'], isFalse);
@@ -354,8 +352,7 @@ void main() {
       await pumpEventQueue();
       waitDeadline.complete();
 
-      final body =
-          jsonDecode((await pending).text) as Map<String, Object?>;
+      final body = jsonDecode((await pending).text) as Map<String, Object?>;
       expect(body['state'], 'timeout');
       expect(body['agentStatus'], 'unknown');
       expect(body['evidenceSource'], 'none');
@@ -369,25 +366,27 @@ void main() {
   });
 
   group('session_send with wait', () {
-    test('the blocked check runs before the send, and nothing is sent',
-        () async {
-      final written = attachPane('s1');
-      statusLookup = (_) => _report(
-        's1',
-        status: AgentActivityStatus.awaitingApproval,
-        waiting: AgentWaitKind.approval,
-      );
+    test(
+      'the blocked check runs before the send, and nothing is sent',
+      () async {
+        final written = attachPane('s1');
+        statusLookup = (_) => _report(
+          's1',
+          status: AgentActivityStatus.awaitingApproval,
+          waiting: AgentWaitKind.approval,
+        );
 
-      final result = await callTool('session_send', {
-        'sessionId': 's1',
-        'text': 'run the tests',
-        'wait': true,
-      });
+        final result = await callTool('session_send', {
+          'sessionId': 's1',
+          'text': 'run the tests',
+          'wait': true,
+        });
 
-      expect(result.isError, isTrue);
-      // The whole point of the ordering: the terminal saw nothing.
-      expect(written, isEmpty);
-    });
+        expect(result.isError, isTrue);
+        // The whole point of the ordering: the terminal saw nothing.
+        expect(written, isEmpty);
+      },
+    );
 
     test('a timeout after a send says the message went in', () async {
       attachPane('s1');
@@ -401,8 +400,7 @@ void main() {
       await pumpEventQueue();
       waitDeadline.complete();
 
-      final body =
-          jsonDecode((await pending).text) as Map<String, Object?>;
+      final body = jsonDecode((await pending).text) as Map<String, Object?>;
       expect(body['state'], 'timeout');
       expect(body['delivered'], isTrue);
       expect(body['inputSent'], isTrue);
@@ -643,18 +641,21 @@ void main() {
       expect(written, ['over to you', kEndOfLineKey, '\r']);
     });
 
-    test('an unrecorded wait sends rather than refusing on ignorance', () async {
-      final written = attachPane('s1');
-      statusLookup = (id) => report(
-        id,
-        status: AgentActivityStatus.awaitingApproval,
-        waiting: AgentWaitKind.unrecorded,
-      );
+    test(
+      'an unrecorded wait sends rather than refusing on ignorance',
+      () async {
+        final written = attachPane('s1');
+        statusLookup = (id) => report(
+          id,
+          status: AgentActivityStatus.awaitingApproval,
+          waiting: AgentWaitKind.unrecorded,
+        );
 
-      await callTool('session_send', {'sessionId': 's1', 'text': 'ping'});
+        await callTool('session_send', {'sessionId': 's1', 'text': 'ping'});
 
-      expect(written, ['ping', kEndOfLineKey, '\r']);
-    });
+        expect(written, ['ping', kEndOfLineKey, '\r']);
+      },
+    );
 
     test('a busy session receives, because a message queues', () async {
       final written = attachPane('s1');

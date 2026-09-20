@@ -80,8 +80,8 @@ void main() {
     return path;
   }
 
-  Future<bool> index(String path, {String id = 'c1'}) => indexer
-      .indexConversation(
+  Future<bool> index(String path, {String id = 'c1'}) =>
+      indexer.indexConversation(
         conversationId: id,
         cli: AgentIds.claudeCode,
         filePath: path,
@@ -221,10 +221,13 @@ void main() {
       expect(indexer.hasWork, isFalse);
       db.reset();
 
-      expect(await indexer.drain(() async {
-        scans++;
-        return const [];
-      }), 0);
+      expect(
+        await indexer.drain(() async {
+          scans++;
+          return const [];
+        }),
+        0,
+      );
 
       expect(scans, 0, reason: 'nothing wanted must not buy a store walk');
       expect(db.statements, isEmpty, reason: 'and no statement either');
@@ -354,7 +357,10 @@ void main() {
         }),
         'a line from a format we do not know\n',
         '{"type":"user","message":{"content":\n',
-        _line({'type': 'user', 'message': {'role': 'user', 'content': 'also'}}),
+        _line({
+          'type': 'user',
+          'message': {'role': 'user', 'content': 'also'},
+        }),
       ]);
 
       await index(path);

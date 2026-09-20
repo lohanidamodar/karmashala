@@ -307,10 +307,7 @@ void main() {
       final field = tester.widget<TextField>(find.byType(TextField));
       // The hint was a step down the ramp from the typed text, so the field's
       // text changed size the moment anything was typed into it.
-      expect(
-        field.decoration?.hintStyle?.fontSize,
-        field.style?.fontSize,
-      );
+      expect(field.decoration?.hintStyle?.fontSize, field.style?.fontSize);
       // Not the app's smallest step, either: this is read at arm's length.
       final theme = Theme.of(tester.element(find.byType(TextField)));
       expect(field.style?.fontSize, theme.textTheme.bodyLarge?.fontSize);

@@ -50,9 +50,9 @@ void main() {
   FakeVmService serve(String wsUri, {Map<String, Object?>? selectedWidget}) =>
       reachable[wsUri] = FakeVmService(selectedWidget: selectedWidget);
 
-  void writeUriFile(String name, String wsUri) =>
-      File('${temp.path}${Platform.pathSeparator}$name')
-          .writeAsStringSync(wsUri);
+  void writeUriFile(String name, String wsUri) => File(
+    '${temp.path}${Platform.pathSeparator}$name',
+  ).writeAsStringSync(wsUri);
 
   String textOf(Object? result) {
     final content = (result as Map)['_mcpContent'] as List;
@@ -76,7 +76,10 @@ void main() {
       for (final schema in flutterAppToolSchemas) {
         expect(schema['description'], isA<String>());
         expect(schema['inputSchema']['type'], 'object');
-        expect(schema['inputSchema']['properties'], isA<Map<String, dynamic>>());
+        expect(
+          schema['inputSchema']['properties'],
+          isA<Map<String, dynamic>>(),
+        );
       }
     });
 
@@ -116,8 +119,7 @@ void main() {
       final client = HttpClient();
       try {
         final handshake =
-            jsonDecode(File(bridge).readAsStringSync())
-                as Map<String, Object?>;
+            jsonDecode(File(bridge).readAsStringSync()) as Map<String, Object?>;
         final request = await client.post(
           '127.0.0.1',
           handshake['port']! as int,
@@ -128,7 +130,10 @@ void main() {
           'Bearer ${handshake['token']! as String}',
         );
         request.write(
-          jsonEncode({'tool': 'flutter_apps', 'arguments': <String, Object?>{}}),
+          jsonEncode({
+            'tool': 'flutter_apps',
+            'arguments': <String, Object?>{},
+          }),
         );
         final reply =
             jsonDecode(await utf8.decoder.bind(await request.close()).join())
@@ -151,28 +156,34 @@ void main() {
       expect(result['summary'], 'No Flutter app is running that we can see.');
       expect(result['apps'], isEmpty);
       expect(result['howToMakeOneVisible'], contains('found on their own'));
-      expect(result['howToMakeOneVisible'], isNot(contains('--vmservice-out-file')));
+      expect(
+        result['howToMakeOneVisible'],
+        isNot(contains('--vmservice-out-file')),
+      );
       expect(result['checkedAt'], isNotNull);
     });
 
-    test('reports each app with an id, and whether it can be reloaded', () async {
-      const uri = 'ws://127.0.0.1:53119/tok=/ws';
-      final fake = serve(uri);
-      writeUriFile('windows.uri', uri);
+    test(
+      'reports each app with an id, and whether it can be reloaded',
+      () async {
+        const uri = 'ws://127.0.0.1:53119/tok=/ws';
+        final fake = serve(uri);
+        writeUriFile('windows.uri', uri);
 
-      var result = await tools.call('flutter_apps', {}) as Map;
-      var app = (result['apps'] as List).single as Map;
-      expect(app['reachability'], 'attached');
-      expect(app['canHotReload'], isFalse);
-      expect(app['widgetLocations'], 'tracked');
-      expect(result['howToMakeOneVisible'], isNull);
+        var result = await tools.call('flutter_apps', {}) as Map;
+        var app = (result['apps'] as List).single as Map;
+        expect(app['reachability'], 'attached');
+        expect(app['canHotReload'], isFalse);
+        expect(app['widgetLocations'], 'tracked');
+        expect(result['howToMakeOneVisible'], isNull);
 
-      fake.emitServiceRegistered('reloadSources', 's1.reloadSources');
-      await pumpEventQueue();
-      result = await tools.call('flutter_apps', {}) as Map;
-      app = (result['apps'] as List).single as Map;
-      expect(app['canHotReload'], isTrue);
-    });
+        fake.emitServiceRegistered('reloadSources', 's1.reloadSources');
+        await pumpEventQueue();
+        result = await tools.call('flutter_apps', {}) as Map;
+        app = (result['apps'] as List).single as Map;
+        expect(app['canHotReload'], isTrue);
+      },
+    );
 
     test('an address nothing answers on is reported, not hidden', () async {
       writeUriFile('stale.uri', 'ws://127.0.0.1:9/gone=/ws');
@@ -237,20 +248,23 @@ void main() {
       expect(result['note'], contains('lost the state'));
     });
 
-    test('an app with no tool attached is told why, not just refused', () async {
-      const uri = 'ws://127.0.0.1:1/a=/ws';
-      serve(uri);
-      await tools.call('flutter_attach', {'vmServiceUri': uri});
-      await expectLater(
-        tools.call('flutter_reload', {}),
-        throwsA(
-          predicate<Object>(
-            (error) => '$error'.contains('no Flutter tool is attached'),
-            'explains that the recompile comes from the tool',
+    test(
+      'an app with no tool attached is told why, not just refused',
+      () async {
+        const uri = 'ws://127.0.0.1:1/a=/ws';
+        serve(uri);
+        await tools.call('flutter_attach', {'vmServiceUri': uri});
+        await expectLater(
+          tools.call('flutter_reload', {}),
+          throwsA(
+            predicate<Object>(
+              (error) => '$error'.contains('no Flutter tool is attached'),
+              'explains that the recompile comes from the tool',
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 
   group('flutter_logs', () {
@@ -280,7 +294,9 @@ void main() {
       fake.emitStdout('bad\n', stderr: true);
       await pumpEventQueue();
 
-      final text = textOf(await tools.call('flutter_logs', {'errorsOnly': true}));
+      final text = textOf(
+        await tools.call('flutter_logs', {'errorsOnly': true}),
+      );
       expect(text, contains('bad'));
       expect(text, isNot(contains('chatter')));
     });
@@ -334,32 +350,39 @@ void main() {
       expect(text, contains('main.dart:118:22'));
     });
 
-    test('a build with no widget locations says so instead of showing nothing', () async {
-      const uri = 'ws://127.0.0.1:1/a=/ws';
-      final fake = serve(
-        uri,
-        selectedWidget: const <String, Object?>{'description': 'Text'},
-      );
-      fake.handlers['ext.flutter.inspector.isWidgetCreationTracked'] =
-          (_) => <String, Object?>{'type': '_extensionType', 'result': false};
-      await tools.call('flutter_attach', {'vmServiceUri': uri});
+    test(
+      'a build with no widget locations says so instead of showing nothing',
+      () async {
+        const uri = 'ws://127.0.0.1:1/a=/ws';
+        final fake = serve(
+          uri,
+          selectedWidget: const <String, Object?>{'description': 'Text'},
+        );
+        fake.handlers['ext.flutter.inspector.isWidgetCreationTracked'] = (_) =>
+            <String, Object?>{'type': '_extensionType', 'result': false};
+        await tools.call('flutter_attach', {'vmServiceUri': uri});
 
-      final pick = tools.call('flutter_pick_widget', {'timeoutSeconds': 5});
-      await pumpEventQueue();
-      fake.emitNavigate();
-      final text = textOf(await pick);
+        final pick = tools.call('flutter_pick_widget', {'timeoutSeconds': 5});
+        await pumpEventQueue();
+        fake.emitNavigate();
+        final text = textOf(await pick);
 
-      expect(text, contains('without --track-widget-creation'));
-      expect(text, contains('Text'));
-    });
+        expect(text, contains('without --track-widget-creation'));
+        expect(text, contains('Text'));
+      },
+    );
   });
 
   group('choosing an app', () {
     test('two attached apps are refused by name', () async {
       serve('ws://127.0.0.1:1/a=/ws');
       serve('ws://127.0.0.1:2/b=/ws');
-      await tools.call('flutter_attach', {'vmServiceUri': 'ws://127.0.0.1:1/a=/ws'});
-      await tools.call('flutter_attach', {'vmServiceUri': 'ws://127.0.0.1:2/b=/ws'});
+      await tools.call('flutter_attach', {
+        'vmServiceUri': 'ws://127.0.0.1:1/a=/ws',
+      });
+      await tools.call('flutter_attach', {
+        'vmServiceUri': 'ws://127.0.0.1:2/b=/ws',
+      });
       await expectLater(
         tools.call('flutter_logs', {}),
         throwsA(
@@ -371,19 +394,24 @@ void main() {
       );
     });
 
-    test('an id from a finished run is refused, not resolved to another app', () async {
-      serve('ws://127.0.0.1:1/a=/ws');
-      await tools.call('flutter_attach', {'vmServiceUri': 'ws://127.0.0.1:1/a=/ws'});
-      await expectLater(
-        tools.call('flutter_logs', {'appId': '127.0.0.1:9/old='}),
-        throwsA(
-          predicate<Object>(
-            (error) => '$error'.contains('lasts only as long as the run'),
-            'explains why the id is gone',
+    test(
+      'an id from a finished run is refused, not resolved to another app',
+      () async {
+        serve('ws://127.0.0.1:1/a=/ws');
+        await tools.call('flutter_attach', {
+          'vmServiceUri': 'ws://127.0.0.1:1/a=/ws',
+        });
+        await expectLater(
+          tools.call('flutter_logs', {'appId': '127.0.0.1:9/old='}),
+          throwsA(
+            predicate<Object>(
+              (error) => '$error'.contains('lasts only as long as the run'),
+              'explains why the id is gone',
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   });
 }
 

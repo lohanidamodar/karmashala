@@ -38,8 +38,10 @@ void main() {
   });
 
   test('a LAN pin and a relay pin survive a write and a read', () {
-    expect(roundTrip(record(pin: CompanionRoutePin.lan)).pin,
-        CompanionRoutePin.lan);
+    expect(
+      roundTrip(record(pin: CompanionRoutePin.lan)).pin,
+      CompanionRoutePin.lan,
+    );
     final pinned = roundTrip(record(pin: CompanionRoutePin.relay(boxRelay)));
     expect(pinned.pin, CompanionRoutePin.relay(boxRelay));
     expect(pinned.pin.relay, boxRelay);
@@ -69,8 +71,10 @@ void main() {
   });
 
   test('pins compare by what they name', () {
-    expect(CompanionRoutePin.relay(boxRelay),
-        CompanionRoutePin.relay(Uri.parse(boxRelay.toString())));
+    expect(
+      CompanionRoutePin.relay(boxRelay),
+      CompanionRoutePin.relay(Uri.parse(boxRelay.toString())),
+    );
     expect(CompanionRoutePin.relay(boxRelay), isNot(CompanionRoutePin.lan));
     expect(CompanionRoutePin.auto.isAuto, isTrue);
     expect(CompanionRoutePin.lan.isAuto, isFalse);

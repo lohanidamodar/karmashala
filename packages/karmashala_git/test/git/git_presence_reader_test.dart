@@ -15,11 +15,10 @@ import '../support/fixtures.dart';
 /// checkout has no `.git` of its own, and calling that untracked would be a worse
 /// bug than the one being fixed.
 void main() {
-  GitPresenceReader readerFor(_StatFiles files) =>
-      GitPresenceReader(
-        files: files,
-        hostPathOf: hostPathMapperFor(windowsEnv()),
-      );
+  GitPresenceReader readerFor(_StatFiles files) => GitPresenceReader(
+    files: files,
+    hostPathOf: hostPathMapperFor(windowsEnv()),
+  );
 
   group('a Windows checkout', () {
     test('with a .git directory is a repository, from one stat', () async {
@@ -43,24 +42,25 @@ void main() {
       );
     });
 
-    test('with nothing above it is not a repository, and never spawns', () async {
-      final files = _StatFiles({
-        r'C:\Users\me\notes': PathEntry.directory,
-      });
-      expect(
-        await readerFor(files).read(r'C:\Users\me\notes'),
-        GitPresence.notARepository,
-      );
-      // Every ancestor, and the folder itself last — that final stat is the
-      // proof the filesystem was answering at all.
-      expect(files.stats, [
-        r'C:\Users\me\notes\.git',
-        r'C:\Users\me\.git',
-        r'C:\Users\.git',
-        r'C:\.git',
-        r'C:\Users\me\notes',
-      ]);
-    });
+    test(
+      'with nothing above it is not a repository, and never spawns',
+      () async {
+        final files = _StatFiles({r'C:\Users\me\notes': PathEntry.directory});
+        expect(
+          await readerFor(files).read(r'C:\Users\me\notes'),
+          GitPresence.notARepository,
+        );
+        // Every ancestor, and the folder itself last — that final stat is the
+        // proof the filesystem was answering at all.
+        expect(files.stats, [
+          r'C:\Users\me\notes\.git',
+          r'C:\Users\me\.git',
+          r'C:\Users\.git',
+          r'C:\.git',
+          r'C:\Users\me\notes',
+        ]);
+      },
+    );
   });
 
   group('git searches upwards, and so does this', () {
@@ -81,33 +81,31 @@ void main() {
         files: files,
         hostPathOf: hostPathMapperFor(posixEnv()),
       );
-      expect(
-        await reader.read('/home/me/app/lib/src'),
-        GitPresence.repository,
-      );
+      expect(await reader.read('/home/me/app/lib/src'), GitPresence.repository);
     });
 
-    test('a WSL subfolder climbs in host spelling and stops at the share',
-        () async {
-      // The environment decides the path shape, never the platform (§18): a WSL
-      // path is POSIX, its host spelling is a `\\wsl.localhost\…` UNC, and the
-      // wrong context builds something no `File` can open.
-      final files = _StatFiles({
-        r'\\wsl.localhost\Ubuntu\home\me\app\.git': PathEntry.directory,
-      });
-      final reader = GitPresenceReader(
-        files: files,
-        hostPathOf: hostPathMapperFor(wslEnv()),
-      );
-      expect(
-        await reader.read('/home/me/app/lib'),
-        GitPresence.repository,
-      );
-      expect(files.stats.first, r'\\wsl.localhost\Ubuntu\home\me\app\lib\.git');
-    });
+    test(
+      'a WSL subfolder climbs in host spelling and stops at the share',
+      () async {
+        // The environment decides the path shape, never the platform (§18): a WSL
+        // path is POSIX, its host spelling is a `\\wsl.localhost\…` UNC, and the
+        // wrong context builds something no `File` can open.
+        final files = _StatFiles({
+          r'\\wsl.localhost\Ubuntu\home\me\app\.git': PathEntry.directory,
+        });
+        final reader = GitPresenceReader(
+          files: files,
+          hostPathOf: hostPathMapperFor(wslEnv()),
+        );
+        expect(await reader.read('/home/me/app/lib'), GitPresence.repository);
+        expect(
+          files.stats.first,
+          r'\\wsl.localhost\Ubuntu\home\me\app\lib\.git',
+        );
+      },
+    );
 
-    test('a walk that runs out at the root of a WSL share terminates',
-        () async {
+    test('a walk that runs out at the root of a WSL share terminates', () async {
       final files = _StatFiles({
         r'\\wsl.localhost\Ubuntu\home\me\notes': PathEntry.directory,
       });
@@ -115,10 +113,7 @@ void main() {
         files: files,
         hostPathOf: hostPathMapperFor(wslEnv()),
       );
-      expect(
-        await reader.read('/home/me/notes'),
-        GitPresence.notARepository,
-      );
+      expect(await reader.read('/home/me/notes'), GitPresence.notARepository);
       // Bounded, and by the path rather than by [GitPresenceReader.maxAncestors]
       // — a runaway `dirname` would show up here as a stat count in the dozens.
       expect(files.stats.length, lessThan(8));

@@ -60,9 +60,7 @@ void main() {
 
   /// The three errors the panes have to tell apart, as they arrive.
   const notARepository = NotAGitRepository(checkout);
-  final unreachable = CommandException(
-    'Failed to run "git" in WSL "Ubuntu"',
-  );
+  final unreachable = CommandException('Failed to run "git" in WSL "Ubuntu"');
   final failed = GitException(
     'git status failed: fatal: detected dubious ownership in repository',
   );
@@ -161,9 +159,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: containerFailingWith(error),
-          child: const MaterialApp(
-            home: Scaffold(body: RepositoryInfoView()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: RepositoryInfoView())),
         ),
       );
       await tester.pumpAndSettle();
@@ -230,9 +226,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(
-            home: Scaffold(body: RepositoryInfoView()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: RepositoryInfoView())),
         ),
       );
       await tester.pumpAndSettle();
@@ -250,9 +244,7 @@ void main() {
         matrix: const [phone, desktopWindow],
         build: () => UncontrolledProviderScope(
           container: containerFailingWith(notARepository),
-          child: const MaterialApp(
-            home: Scaffold(body: RepositoryInfoView()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: RepositoryInfoView())),
         ),
         because: 'a wrapping paragraph where four rows used to be',
       );
@@ -287,9 +279,7 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(
-            home: Scaffold(body: RepositoryInfoView()),
-          ),
+          child: const MaterialApp(home: Scaffold(body: RepositoryInfoView())),
         ),
       );
       await tester.pumpAndSettle();

@@ -166,7 +166,14 @@ void main() {
         'INSERT INTO session_decisions '
         '(session_id, sequence, kind, summary, origin_kind, recorded_at) '
         'VALUES (?, ?, ?, ?, ?, ?);',
-        ['s-9', 1, 'somethingLater', 'x', 'decisionTool', '2026-01-01T00:00:00Z'],
+        [
+          's-9',
+          1,
+          'somethingLater',
+          'x',
+          'decisionTool',
+          '2026-01-01T00:00:00Z',
+        ],
       );
       // Never folded into a neighbour: a wrong heading over a real decision is
       // worse than an admission that the heading is unreadable.
@@ -178,7 +185,14 @@ void main() {
         'INSERT INTO session_decisions '
         '(session_id, sequence, kind, summary, origin_kind, recorded_at) '
         'VALUES (?, ?, ?, ?, ?, ?);',
-        ['s-8', 1, 'approachRejected', 'x', 'somethingLater', '2026-01-01T00:00:00Z'],
+        [
+          's-8',
+          1,
+          'approachRejected',
+          'x',
+          'somethingLater',
+          '2026-01-01T00:00:00Z',
+        ],
       );
       expect(dao.forSession('s-8').single.origin, DecisionOrigin.unrecognised);
     });

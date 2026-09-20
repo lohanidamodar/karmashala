@@ -66,7 +66,10 @@ void main() {
       if (!Platform.isWindows) {
         expect(support.available, isFalse);
         // §19: the reason names the platform, not a shrug.
-        expect(support.detail.toLowerCase(), contains(Platform.operatingSystem));
+        expect(
+          support.detail.toLowerCase(),
+          contains(Platform.operatingSystem),
+        );
       }
     });
 

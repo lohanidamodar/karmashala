@@ -12,9 +12,10 @@ void main() {
     // Every literal here is a value GitHub actually returned for a real pull
     // request; the shapes were taken from `gh pr view --json` against
     // `cli/cli` and `lohanidamodar/karmashala-app` on 2026-09-02.
-    PullRequestSnapshot parse(String mergeStateStatus) => parseGhPullRequestView(
-      '{"number":1,"state":"OPEN","mergeStateStatus":"$mergeStateStatus"}',
-    )!;
+    PullRequestSnapshot parse(String mergeStateStatus) =>
+        parseGhPullRequestView(
+          '{"number":1,"state":"OPEN","mergeStateStatus":"$mergeStateStatus"}',
+        )!;
 
     test('BEHIND is read as behind, and nothing else is', () {
       expect(parse('BEHIND').mergeStateStatus, MergeStateStatus.behind);
@@ -270,8 +271,7 @@ void main() {
           captured = req;
           return const CommandResult(
             exitCode: 0,
-            stdout:
-                '{"number":12,"state":"OPEN","mergeStateStatus":"BEHIND"}',
+            stdout: '{"number":12,"state":"OPEN","mergeStateStatus":"BEHIND"}',
             stderr: '',
           );
         },
@@ -374,77 +374,82 @@ void main() {
       expect(protection.requiresConversationResolution, isFalse);
     });
 
-    test('a 403 is the reader being refused, not the branch being open',
-        () async {
-      // The ordinary answer for anyone who is not an admin — `/protection` is
-      // an admin-only endpoint — so it must not read as "no rules here".
-      final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 1,
-          stdout:
-              '{"message":"Must have admin rights to Repository.",'
-              '"status":"403"}',
-          stderr: 'gh: Must have admin rights to Repository. (HTTP 403)',
-        ),
-      );
+    test(
+      'a 403 is the reader being refused, not the branch being open',
+      () async {
+        // The ordinary answer for anyone who is not an admin — `/protection` is
+        // an admin-only endpoint — so it must not read as "no rules here".
+        final runner = FakeCommandRunner(
+          responder: (_) => const CommandResult(
+            exitCode: 1,
+            stdout:
+                '{"message":"Must have admin rights to Repository.",'
+                '"status":"403"}',
+            stderr: 'gh: Must have admin rights to Repository. (HTTP 403)',
+          ),
+        );
 
-      final protection = await GitHubService(
-        runner,
-      ).branchProtectionFor(repo, branch: 'main');
+        final protection = await GitHubService(
+          runner,
+        ).branchProtectionFor(repo, branch: 'main');
 
-      expect(protection.status, BranchProtectionRead.forbidden);
-      expect(protection.rules, isEmpty);
-    });
+        expect(protection.status, BranchProtectionRead.forbidden);
+        expect(protection.rules, isEmpty);
+      },
+    );
 
-    test('a 404 and a body that will not parse are both "could not tell"',
-        () async {
-      // 404 is what an unprotected branch answers — and also what a branch
-      // guarded by a *ruleset* rather than by classic protection answers, so
-      // it is never evidence that nothing is in the way.
-      final missing = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 1,
-          stdout: '{"message":"Branch not protected","status":"404"}',
-          stderr: 'gh: Branch not protected (HTTP 404)',
-        ),
-      );
-      expect(
-        (await GitHubService(missing).branchProtectionFor(repo, branch: 'x'))
-            .status,
-        BranchProtectionRead.unknown,
-      );
+    test(
+      'a 404 and a body that will not parse are both "could not tell"',
+      () async {
+        // 404 is what an unprotected branch answers — and also what a branch
+        // guarded by a *ruleset* rather than by classic protection answers, so
+        // it is never evidence that nothing is in the way.
+        final missing = FakeCommandRunner(
+          responder: (_) => const CommandResult(
+            exitCode: 1,
+            stdout: '{"message":"Branch not protected","status":"404"}',
+            stderr: 'gh: Branch not protected (HTTP 404)',
+          ),
+        );
+        expect(
+          (await GitHubService(
+            missing,
+          ).branchProtectionFor(repo, branch: 'x')).status,
+          BranchProtectionRead.unknown,
+        );
 
-      final garbage = FakeCommandRunner(
-        responder: (_) =>
-            const CommandResult(exitCode: 0, stdout: 'not json', stderr: ''),
-      );
-      expect(
-        (await GitHubService(garbage).branchProtectionFor(repo, branch: 'x'))
-            .status,
-        BranchProtectionRead.unknown,
-      );
-    });
+        final garbage = FakeCommandRunner(
+          responder: (_) =>
+              const CommandResult(exitCode: 0, stdout: 'not json', stderr: ''),
+        );
+        expect(
+          (await GitHubService(
+            garbage,
+          ).branchProtectionFor(repo, branch: 'x')).status,
+          BranchProtectionRead.unknown,
+        );
+      },
+    );
 
-    test('markPullRequestReady names the number rather than the branch',
-        () async {
-      late CommandRequest captured;
-      final runner = FakeCommandRunner(
-        responder: (req) {
-          captured = req;
-          return const CommandResult(exitCode: 0, stdout: '', stderr: '');
-        },
-      );
-      await GitHubService(runner).markPullRequestReady(repo, number: 12);
-      expect(captured.arguments, ['pr', 'ready', '12']);
-    });
+    test(
+      'markPullRequestReady names the number rather than the branch',
+      () async {
+        late CommandRequest captured;
+        final runner = FakeCommandRunner(
+          responder: (req) {
+            captured = req;
+            return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+          },
+        );
+        await GitHubService(runner).markPullRequestReady(repo, number: 12);
+        expect(captured.arguments, ['pr', 'ready', '12']);
+      },
+    );
 
     test('a refused pr-ready throws with what gh said', () async {
       final runner = FakeCommandRunner(
-        responder: (_) => const CommandResult(
-          exitCode: 1,
-          stdout: '',
-          stderr: 'not a draft',
-        ),
+        responder: (_) =>
+            const CommandResult(exitCode: 1, stdout: '', stderr: 'not a draft'),
       );
       expect(
         () => GitHubService(runner).markPullRequestReady(repo, number: 12),

@@ -21,9 +21,7 @@ void main() {
   });
 
   testWidgets('no log directory, no log line', (tester) async {
-    await tester.pumpWidget(
-      const BootstrapFailureApp(error: 'x', stack: null),
-    );
+    await tester.pumpWidget(const BootstrapFailureApp(error: 'x', stack: null));
     expect(find.textContaining('Log:'), findsNothing);
   });
 }

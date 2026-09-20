@@ -94,7 +94,11 @@ void main() {
   group('SystemTerminalService.launch', () {
     test('Windows Terminal opens at -d <cwd> and runs the command', () async {
       final runner = FakeCommandRunner();
-      final service = SystemTerminalService(runner, windows: true, macOs: false);
+      final service = SystemTerminalService(
+        runner,
+        windows: true,
+        macOs: false,
+      );
 
       await service.launch(
         const SystemTerminal(
@@ -127,7 +131,11 @@ void main() {
           stderr: '',
         ),
       );
-      final service = SystemTerminalService(runner, windows: true, macOs: false);
+      final service = SystemTerminalService(
+        runner,
+        windows: true,
+        macOs: false,
+      );
 
       final found = await service.available();
       expect(found.map((t) => t.executable), contains('wt.exe'));
@@ -138,7 +146,11 @@ void main() {
       'PowerShell safely quotes executable, arguments, and working dir',
       () async {
         final runner = FakeCommandRunner();
-        final service = SystemTerminalService(runner, windows: true, macOs: false);
+        final service = SystemTerminalService(
+          runner,
+          windows: true,
+          macOs: false,
+        );
 
         await service.launch(
           const SystemTerminal(
@@ -444,8 +456,14 @@ void main() {
     });
 
     test('has nothing to refuse when no conversation is named', () {
-      expect(resumeRefusalFor(AgentRegistry.builtIn, 'mysteryAgent', null), isNull);
-      expect(resumeRefusalFor(AgentRegistry.builtIn, 'mysteryAgent', ''), isNull);
+      expect(
+        resumeRefusalFor(AgentRegistry.builtIn, 'mysteryAgent', null),
+        isNull,
+      );
+      expect(
+        resumeRefusalFor(AgentRegistry.builtIn, 'mysteryAgent', ''),
+        isNull,
+      );
     });
   });
 }

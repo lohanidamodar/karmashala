@@ -29,32 +29,35 @@ import '../support/fake_codex_app_server.dart';
 /// printed, every error reply carries its id. Nothing here correlates a reply
 /// any other way.
 void main() {
-  test('the handshake happens once, in order, however many calls follow', () async {
-    final server = FakeCodexAppServer();
-    final client = _clientFor(server);
-    addTearDown(client.close);
+  test(
+    'the handshake happens once, in order, however many calls follow',
+    () async {
+      final server = FakeCodexAppServer();
+      final client = _clientFor(server);
+      addTearDown(client.close);
 
-    await client.setThreadName('t1', 'one');
-    await client.setThreadName('t2', 'two');
+      await client.setThreadName('t1', 'one');
+      await client.setThreadName('t2', 'two');
 
-    expect(
-      server.methods,
-      ['initialize', 'initialized', 'thread/name/set', 'thread/name/set'],
-      reason:
-          'one connection serves many calls: a client that handshook per call '
-          'would pay the 1708 ms spawn every rename',
-    );
-    expect(client.connectionsOpened, 1);
-    expect(server.requests.first['params'], {
-      'clientInfo': {
-        'name': 'karmashala',
-        'title': 'Karmashala',
-        'version': '0.0.0',
-      },
-    });
-    // `initialized` is a notification, so it carries no id and expects no reply.
-    expect(server.requests[1].containsKey('id'), isFalse);
-  });
+      expect(
+        server.methods,
+        ['initialize', 'initialized', 'thread/name/set', 'thread/name/set'],
+        reason:
+            'one connection serves many calls: a client that handshook per call '
+            'would pay the 1708 ms spawn every rename',
+      );
+      expect(client.connectionsOpened, 1);
+      expect(server.requests.first['params'], {
+        'clientInfo': {
+          'name': 'karmashala',
+          'title': 'Karmashala',
+          'version': '0.0.0',
+        },
+      });
+      // `initialized` is a notification, so it carries no id and expects no reply.
+      expect(server.requests[1].containsKey('id'), isFalse);
+    },
+  );
 
   test('nothing is started until the first call', () async {
     final server = FakeCodexAppServer();
@@ -70,38 +73,47 @@ void main() {
     expect(client.info?.codexHome, '/home/me/.codex');
   });
 
-  test('a rename issues thread/name/set with the thread id and the name', () async {
-    final server = FakeCodexAppServer();
-    final client = _clientFor(server);
-    addTearDown(client.close);
+  test(
+    'a rename issues thread/name/set with the thread id and the name',
+    () async {
+      final server = FakeCodexAppServer();
+      final client = _clientFor(server);
+      addTearDown(client.close);
 
-    final result = await client.setThreadName('01a06f57-1efb', 'social campaigns');
+      final result = await client.setThreadName(
+        '01a06f57-1efb',
+        'social campaigns',
+      );
 
-    expect(result.ok, isTrue);
-    expect(result.value, isEmpty, reason: 'the real call answers {}');
-    final rename = server.requests.last;
-    expect(rename['method'], 'thread/name/set');
-    expect(rename['params'], {
-      'threadId': '01a06f57-1efb',
-      'name': 'social campaigns',
-    });
-  });
+      expect(result.ok, isTrue);
+      expect(result.value, isEmpty, reason: 'the real call answers {}');
+      final rename = server.requests.last;
+      expect(rename['method'], 'thread/name/set');
+      expect(rename['params'], {
+        'threadId': '01a06f57-1efb',
+        'name': 'social campaigns',
+      });
+    },
+  );
 
-  test('a thread/name/updated notification reaches the title listener', () async {
-    final updates = <CodexThreadNameUpdate>[];
-    final server = FakeCodexAppServer();
-    final client = CodexAppServerClient(
-      connect: () async => server,
-      onThreadNameUpdated: updates.add,
-    );
-    addTearDown(client.close);
+  test(
+    'a thread/name/updated notification reaches the title listener',
+    () async {
+      final updates = <CodexThreadNameUpdate>[];
+      final server = FakeCodexAppServer();
+      final client = CodexAppServerClient(
+        connect: () async => server,
+        onThreadNameUpdated: updates.add,
+      );
+      addTearDown(client.close);
 
-    await client.setThreadName('t1', ' renamed in Codex ');
+      await client.setThreadName('t1', ' renamed in Codex ');
 
-    expect(updates, hasLength(1));
-    expect(updates.single.threadId, 't1');
-    expect(updates.single.name, 'renamed in Codex');
-  });
+      expect(updates, hasLength(1));
+      expect(updates.single.threadId, 't1');
+      expect(updates.single.name, 'renamed in Codex');
+    },
+  );
 
   test('a name with non-ASCII characters crosses as escaped ASCII', () async {
     final server = FakeCodexAppServer();
@@ -127,7 +139,8 @@ void main() {
       reply: (server, id, method, params) => jsonEncode({
         'error': {
           'code': -32600,
-          'message': 'Invalid request: unknown variant `$method`, expected one '
+          'message':
+              'Invalid request: unknown variant `$method`, expected one '
               'of `initialize`, `thread/name/set`, `thread/list`',
         },
         'id': id,
@@ -144,41 +157,50 @@ void main() {
     expect(result.failure!.message, contains('unknown variant'));
   });
 
-  test('a domain error is the same shape, and fails only its own call', () async {
-    final server = FakeCodexAppServer(
-      reply: (server, id, method, params) => jsonEncode({
-        'error': {'code': -32600, 'message': 'no rollout found for thread id x'},
-        'id': id,
-      }),
-    );
-    final client = _clientFor(server);
-    addTearDown(client.close);
+  test(
+    'a domain error is the same shape, and fails only its own call',
+    () async {
+      final server = FakeCodexAppServer(
+        reply: (server, id, method, params) => jsonEncode({
+          'error': {
+            'code': -32600,
+            'message': 'no rollout found for thread id x',
+          },
+          'id': id,
+        }),
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
 
-    final result = await client.setThreadName('x', 'whatever');
+      final result = await client.setThreadName('x', 'whatever');
 
-    expect(result.failure!.kind, CodexAppServerFailureKind.rpcError);
-    expect(result.failure!.message, contains('no rollout'));
-  });
+      expect(result.failure!.kind, CodexAppServerFailureKind.rpcError);
+      expect(result.failure!.message, contains('no rollout'));
+    },
+  );
 
-  test('an error naming no call is dropped, never charged to a waiting one', () async {
-    // Codex attributes every reply it sends, so this should not arise at all —
-    // and if it ever does, guessing an owner can only fail the wrong call. The
-    // waiting call keeps waiting for the answer that is addressed to it.
-    final server = FakeCodexAppServer(
-      reply: (server, id, method, params) {
-        server.emitStdout(
-          jsonEncode({
-            'error': {'code': -32600, 'message': 'addressed to nobody'},
-          }),
-        );
-        return jsonEncode({'id': id, 'result': <String, Object?>{}});
-      },
-    );
-    final client = _clientFor(server);
-    addTearDown(client.close);
+  test(
+    'an error naming no call is dropped, never charged to a waiting one',
+    () async {
+      // Codex attributes every reply it sends, so this should not arise at all —
+      // and if it ever does, guessing an owner can only fail the wrong call. The
+      // waiting call keeps waiting for the answer that is addressed to it.
+      final server = FakeCodexAppServer(
+        reply: (server, id, method, params) {
+          server.emitStdout(
+            jsonEncode({
+              'error': {'code': -32600, 'message': 'addressed to nobody'},
+            }),
+          );
+          return jsonEncode({'id': id, 'result': <String, Object?>{}});
+        },
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
 
-    expect((await client.setThreadName('t1', 'one')).ok, isTrue);
-  });
+      expect((await client.setThreadName('t1', 'one')).ok, isTrue);
+    },
+  );
 
   test('a request Codex never answers is left to the timeout', () async {
     // Measured: malformed JSON — an unterminated object, a bare non-JSON line —
@@ -195,7 +217,10 @@ void main() {
             : jsonEncode({'id': id, 'result': <String, Object?>{}});
       },
     );
-    final client = _clientFor(server, timeout: const Duration(milliseconds: 50));
+    final client = _clientFor(
+      server,
+      timeout: const Duration(milliseconds: 50),
+    );
     addTearDown(client.close);
 
     expect(
@@ -209,72 +234,88 @@ void main() {
     );
   });
 
-  test('a Codex that cannot be started fails as unavailable, never throws', () async {
-    final client = CodexAppServerClient(
-      connect: () => Future<ProcessHandle>.error(
-        const ProcessException('codex', ['app-server']),
-      ),
-    );
-    addTearDown(client.close);
+  test(
+    'a Codex that cannot be started fails as unavailable, never throws',
+    () async {
+      final client = CodexAppServerClient(
+        connect: () => Future<ProcessHandle>.error(
+          const ProcessException('codex', ['app-server']),
+        ),
+      );
+      addTearDown(client.close);
 
-    final result = await client.setThreadName('t1', 'one');
+      final result = await client.setThreadName('t1', 'one');
 
-    expect(result.ok, isFalse);
-    expect(result.failure!.kind, CodexAppServerFailureKind.unavailable);
-    expect(result.failure!.cause, isA<ProcessException>());
-    expect(client.connectionsOpened, 0);
-  });
+      expect(result.ok, isFalse);
+      expect(result.failure!.kind, CodexAppServerFailureKind.unavailable);
+      expect(result.failure!.cause, isA<ProcessException>());
+      expect(client.connectionsOpened, 0);
+    },
+  );
 
-  test('a failed connection is not cached — the next call tries again', () async {
-    var attempts = 0;
-    final server = FakeCodexAppServer();
-    final client = CodexAppServerClient(
-      connect: () {
-        attempts++;
-        return attempts == 1
-            ? Future<ProcessHandle>.error(
-                const ProcessException('codex', ['app-server']),
-              )
-            : Future<ProcessHandle>.value(server);
-      },
-    );
-    addTearDown(client.close);
+  test(
+    'a failed connection is not cached — the next call tries again',
+    () async {
+      var attempts = 0;
+      final server = FakeCodexAppServer();
+      final client = CodexAppServerClient(
+        connect: () {
+          attempts++;
+          return attempts == 1
+              ? Future<ProcessHandle>.error(
+                  const ProcessException('codex', ['app-server']),
+                )
+              : Future<ProcessHandle>.value(server);
+        },
+      );
+      addTearDown(client.close);
 
-    expect((await client.setThreadName('t1', 'one')).ok, isFalse);
-    expect((await client.setThreadName('t1', 'one')).ok, isTrue);
-    expect(attempts, 2);
-  });
+      expect((await client.setThreadName('t1', 'one')).ok, isFalse);
+      expect((await client.setThreadName('t1', 'one')).ok, isTrue);
+      expect(attempts, 2);
+    },
+  );
 
-  test('an app-server that exits mid-call fails the call rather than hanging', () async {
-    final server = FakeCodexAppServer(reply: (server, id, method, params) => null);
-    final client = _clientFor(server);
-    addTearDown(client.close);
+  test(
+    'an app-server that exits mid-call fails the call rather than hanging',
+    () async {
+      final server = FakeCodexAppServer(
+        reply: (server, id, method, params) => null,
+      );
+      final client = _clientFor(server);
+      addTearDown(client.close);
 
-    final pending = client.setThreadName('t1', 'one');
-    // Wait for the request to be written before taking the process away, so
-    // this is a call that was in flight rather than one never sent.
-    while (server.methods.length < 3) {
+      final pending = client.setThreadName('t1', 'one');
+      // Wait for the request to be written before taking the process away, so
+      // this is a call that was in flight rather than one never sent.
+      while (server.methods.length < 3) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      server.emitStderr('codex: fatal');
       await Future<void>.delayed(Duration.zero);
-    }
-    server.emitStderr('codex: fatal');
-    await Future<void>.delayed(Duration.zero);
-    server.complete(1);
+      server.complete(1);
 
-    final result = await pending;
-    expect(result.failure!.kind, CodexAppServerFailureKind.exited);
-    expect(result.failure!.message, contains('code 1'));
-    expect(
-      result.failure!.message,
-      contains('codex: fatal'),
-      reason: 'what Codex printed is the only clue an exit leaves',
-    );
-  });
+      final result = await pending;
+      expect(result.failure!.kind, CodexAppServerFailureKind.exited);
+      expect(result.failure!.message, contains('code 1'));
+      expect(
+        result.failure!.message,
+        contains('codex: fatal'),
+        reason: 'what Codex printed is the only clue an exit leaves',
+      );
+    },
+  );
 
   test('a call that is never answered fails as a timeout', () async {
-    final server = FakeCodexAppServer(reply: (server, id, method, params) => null);
+    final server = FakeCodexAppServer(
+      reply: (server, id, method, params) => null,
+    );
     // A budget, not a measurement: the assertion is *which failure*, never how
     // long anything took.
-    final client = _clientFor(server, timeout: const Duration(milliseconds: 50));
+    final client = _clientFor(
+      server,
+      timeout: const Duration(milliseconds: 50),
+    );
     addTearDown(client.close);
 
     final result = await client.setThreadName('t1', 'one');
@@ -321,7 +362,11 @@ void main() {
       (await client.setThreadName('t2', 'two')).failure!.kind,
       CodexAppServerFailureKind.closed,
     );
-    expect(client.connectionsOpened, 1, reason: 'a closed client starts nothing');
+    expect(
+      client.connectionsOpened,
+      1,
+      reason: 'a closed client starts nothing',
+    );
   });
 
   test('closing while the spawn is in flight still kills it', () async {
@@ -347,7 +392,9 @@ void main() {
   });
 
   test('close fails a call that was still waiting', () async {
-    final server = FakeCodexAppServer(reply: (server, id, method, params) => null);
+    final server = FakeCodexAppServer(
+      reply: (server, id, method, params) => null,
+    );
     final client = _clientFor(server);
 
     final pending = client.setThreadName('t1', 'one');
@@ -368,17 +415,18 @@ void main() {
       final result = await client.setThreadName('t1', 'one');
 
       expect(result.failure!.kind, CodexAppServerFailureKind.wrongStore);
-      expect(
-        server.methods,
-        ['initialize'],
-        reason: 'a rename must never reach the wrong store',
-      );
+      expect(server.methods, [
+        'initialize',
+      ], reason: 'a rename must never reach the wrong store');
       expect(server.killed, isTrue);
     });
 
     test('the same home spelled differently is still the same store', () async {
       final server = FakeCodexAppServer(codexHome: r'C:\Users\Me\.codex');
-      final client = _clientFor(server, expectedCodexHome: r'c:\users\me\.codex\');
+      final client = _clientFor(
+        server,
+        expectedCodexHome: r'c:\users\me\.codex\',
+      );
       addTearDown(client.close);
 
       expect((await client.setThreadName('t1', 'one')).ok, isTrue);
@@ -387,10 +435,9 @@ void main() {
 
   group('thread/list', () {
     test('every source kind is asked for, on every page', () async {
-      final server = FakeCodexAppServer.withThreads(
-        [for (var i = 0; i < 5; i++) _row('t$i')],
-        pageSize: 2,
-      );
+      final server = FakeCodexAppServer.withThreads([
+        for (var i = 0; i < 5; i++) _row('t$i'),
+      ], pageSize: 2);
       final client = _clientFor(server);
       addTearDown(client.close);
 
@@ -412,10 +459,9 @@ void main() {
     });
 
     test('paging follows nextCursor to exhaustion', () async {
-      final server = FakeCodexAppServer.withThreads(
-        [for (var i = 0; i < 7; i++) _row('t$i')],
-        pageSize: 3,
-      );
+      final server = FakeCodexAppServer.withThreads([
+        for (var i = 0; i < 7; i++) _row('t$i'),
+      ], pageSize: 3);
       final client = _clientFor(server);
       addTearDown(client.close);
 
@@ -470,7 +516,10 @@ void main() {
       expect(thread.name, 'social campaigns');
       expect(thread.preview, 'i want you to create a chatgpt site');
       expect(thread.cwd, '/mnt/c/users/me/projects');
-      expect(thread.path, '/home/me/.codex/sessions/2026/09/05/rollout-x.jsonl');
+      expect(
+        thread.path,
+        '/home/me/.codex/sessions/2026/09/05/rollout-x.jsonl',
+      );
       // Seconds, not milliseconds: reading them as milliseconds dates every
       // session to 1970.
       expect(

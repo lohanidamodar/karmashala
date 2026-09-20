@@ -122,9 +122,7 @@ RemoteSessionSnapshot remoteSessionSnapshot(
     createdAt: session.createdAt.toUtc().toIso8601String(),
     // The desktop card's own first line, worded here — never on the phone.
     agentLabel: [
-      agentId == null
-          ? 'Agent'
-          : AgentRegistry.builtIn.displayNameFor(agentId),
+      agentId == null ? 'Agent' : AgentRegistry.builtIn.displayNameFor(agentId),
       session.status.name,
     ].join('  ·  '),
     whereabouts: presence.note,
@@ -163,7 +161,10 @@ RemoteSessionSnapshot remoteSessionSnapshot(
     environmentId: owner?.environmentId,
     environmentKind: environmentKindFor(ref, owner?.environmentId),
     // What the desktop's model chip says: chosen, or the default it follows.
-    model: ref.read(sessionLauncherProvider).effectiveModelFor(session.id)?.modelId,
+    model: ref
+        .read(sessionLauncherProvider)
+        .effectiveModelFor(session.id)
+        ?.modelId,
     usageLimit: _usageLimitFor(ref, session.id),
   );
 }
@@ -205,7 +206,9 @@ RemoteSessionSnapshot remoteImportedSnapshot(
     ].join('  ·  '),
     // The store file's own mtime — the agent's writing, nothing inferred.
     // Absent rather than invented when the file could not be dated (§19).
-    lastActivityAt: _lastActiveOfImported(session).at?.toUtc().toIso8601String(),
+    lastActivityAt: _lastActiveOfImported(
+      session,
+    ).at?.toUtc().toIso8601String(),
     imported: true,
     projectId: owner?.id,
     projectName: owner?.name,
@@ -246,7 +249,8 @@ RemoteSessionSnapshot remoteImportedSnapshot(
 /// field the phone draws and the order it is drawn in come from one reading.
 SessionLastActive _lastActiveOfSession(Ref ref, Session session) =>
     newestLastActive(
-      agentEvidenceAt: ref.read(remoteSessionPresenceProvider)(session.id)
+      agentEvidenceAt: ref
+          .read(remoteSessionPresenceProvider)(session.id)
           .lastSeen,
     );
 
@@ -276,29 +280,36 @@ List<RemoteSessionSnapshot> _rowSnapshots(
     for (final child in node.children) ...lineage(child),
   ];
   final entries =
-      <({SessionActivityOrder order, bool pinned, List<RemoteSessionSnapshot> rows})>[
-        for (final node in forest)
-          (
-            order: (
-              lastActive: _lastActiveOfSession(ref, node.session),
-              createdAt: node.session.createdAt,
+      <
+          ({
+            SessionActivityOrder order,
+            bool pinned,
+            List<RemoteSessionSnapshot> rows,
+          })
+        >[
+          for (final node in forest)
+            (
+              order: (
+                lastActive: _lastActiveOfSession(ref, node.session),
+                createdAt: node.session.createdAt,
+              ),
+              pinned: _isPinned(ref, node.session.id),
+              rows: lineage(node),
             ),
-            pinned: _isPinned(ref, node.session.id),
-            rows: lineage(node),
-          ),
-        for (final imported in sessions.imported)
-          (
-            order: (
-              lastActive: _lastActiveOfImported(imported),
-              createdAt: imported.createdAt,
+          for (final imported in sessions.imported)
+            (
+              order: (
+                lastActive: _lastActiveOfImported(imported),
+                createdAt: imported.createdAt,
+              ),
+              pinned: _isPinned(ref, imported.id),
+              rows: [remoteImportedSnapshot(ref, imported, project: project)],
             ),
-            pinned: _isPinned(ref, imported.id),
-            rows: [remoteImportedSnapshot(ref, imported, project: project)],
-          ),
-      ]..sort((a, b) {
-        if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
-        return compareByLastActive(a.order, b.order);
-      });
+        ]
+        ..sort((a, b) {
+          if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
+          return compareByLastActive(a.order, b.order);
+        });
   return [for (final entry in entries) ...entry.rows];
 }
 

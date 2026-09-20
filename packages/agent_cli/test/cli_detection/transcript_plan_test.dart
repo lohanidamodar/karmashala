@@ -46,11 +46,7 @@ void main() {
           'input': {
             'todos': [
               for (final (content, status) in items)
-                {
-                  'content': content,
-                  'activeForm': content,
-                  'status': status,
-                },
+                {'content': content, 'activeForm': content, 'status': status},
             ],
           },
         },
@@ -159,14 +155,16 @@ void main() {
     // Both CLIs resend the whole list, so the fold takes the newest — which it
     // can only do if the parse did not collapse them on the way through.
     final path = await write('claude-many.jsonl', [
-      claudeTodoWrite([
-        ('One', 'in_progress'),
-        ('Two', 'pending'),
-      ], at: '2026-09-08T10:00:00.000Z', id: 'a'),
-      claudeTodoWrite([
-        ('One', 'completed'),
-        ('Two', 'in_progress'),
-      ], at: '2026-09-08T10:05:00.000Z', id: 'b'),
+      claudeTodoWrite(
+        [('One', 'in_progress'), ('Two', 'pending')],
+        at: '2026-09-08T10:00:00.000Z',
+        id: 'a',
+      ),
+      claudeTodoWrite(
+        [('One', 'completed'), ('Two', 'in_progress')],
+        at: '2026-09-08T10:05:00.000Z',
+        id: 'b',
+      ),
     ]);
 
     final plans = [
@@ -242,9 +240,11 @@ void main() {
               ],
             },
           },
-        claudeTodoWrite([
-          ('Only plan', 'pending'),
-        ], at: '2026-09-08T10:01:00.000Z', id: 'plan'),
+        claudeTodoWrite(
+          [('Only plan', 'pending')],
+          at: '2026-09-08T10:01:00.000Z',
+          id: 'plan',
+        ),
       ]);
 
       final messages = await readCliTranscript(path, AgentIds.claudeCode);

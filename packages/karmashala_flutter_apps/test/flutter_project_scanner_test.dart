@@ -71,10 +71,13 @@ void main() {
       expect(await scan(), isEmpty);
     });
 
-    test('a checkout with no pubspec at all answers with an empty list', () async {
-      write('README.md', '# nothing here');
-      expect(await scan(), isEmpty);
-    });
+    test(
+      'a checkout with no pubspec at all answers with an empty list',
+      () async {
+        write('README.md', '# nothing here');
+        expect(await scan(), isEmpty);
+      },
+    );
 
     test('a directory that does not exist is empty, not a throw', () async {
       final missing = EnvironmentPath(
@@ -97,7 +100,8 @@ void main() {
         if (request.executable == 'find') {
           return const CommandResult(
             exitCode: 0,
-            stdout: '/home/me/repo/pubspec.yaml\n/home/me/repo/app/pubspec.yaml\n',
+            stdout:
+                '/home/me/repo/pubspec.yaml\n/home/me/repo/app/pubspec.yaml\n',
             stderr: '',
           );
         }
@@ -133,16 +137,21 @@ void main() {
       expect(find[find.indexOf('-maxdepth') + 1], '3');
     });
 
-    test('an environment that cannot be reached answers empty, not a throw',
-        () async {
-      runner.throwError = CommandException('the distribution is not running');
-      expect(
-        await scanner(EnvironmentKind.wsl).scan(
-          const EnvironmentPath(environmentId: 'ubuntu', path: '/home/me/repo'),
-        ),
-        isEmpty,
-      );
-    });
+    test(
+      'an environment that cannot be reached answers empty, not a throw',
+      () async {
+        runner.throwError = CommandException('the distribution is not running');
+        expect(
+          await scanner(EnvironmentKind.wsl).scan(
+            const EnvironmentPath(
+              environmentId: 'ubuntu',
+              path: '/home/me/repo',
+            ),
+          ),
+          isEmpty,
+        );
+      },
+    );
 
     test('a non-zero find is empty rather than a partial answer', () async {
       runner.responder = (_) =>

@@ -54,13 +54,21 @@ class SshHostDeployTarget implements HostDeployTarget {
   String get address => _connection.host.address;
 
   @override
-  Future<RemoteRun> run(String command) => _connection.runOnChannel((client) async {
+  Future<RemoteRun> run(String command) => _connection.runOnChannel((
+    client,
+  ) async {
     final session = await client.execute(command);
     final out = StringBuffer();
     final err = StringBuffer();
     final collecting = Future.wait([
-      session.stdout.cast<List<int>>().transform(utf8.decoder).forEach(out.write),
-      session.stderr.cast<List<int>>().transform(utf8.decoder).forEach(err.write),
+      session.stdout
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .forEach(out.write),
+      session.stderr
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .forEach(err.write),
     ]);
     await session.done;
     await collecting;
@@ -75,7 +83,10 @@ class SshHostDeployTarget implements HostDeployTarget {
         try {
           final file = await sftp.open(
             remotePath,
-            mode: SftpFileOpenMode.create | SftpFileOpenMode.write | SftpFileOpenMode.truncate,
+            mode:
+                SftpFileOpenMode.create |
+                SftpFileOpenMode.write |
+                SftpFileOpenMode.truncate,
           );
           try {
             await file.write(Stream.value(bytes));

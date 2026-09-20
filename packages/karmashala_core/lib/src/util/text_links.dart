@@ -10,7 +10,9 @@ library;
 /// delimiter that cannot appear in one — quotes and angle brackets bracket URLs
 /// in prose, and a backslash is a Windows path separator.
 final RegExp urlPattern = RegExp(
-  r'(?:https?://|file://|www\.)[^\s<>"' "'" r'`\\]+',
+  r'(?:https?://|file://|www\.)[^\s<>"'
+  "'"
+  r'`\\]+',
   caseSensitive: false,
 );
 
@@ -63,9 +65,8 @@ String? httpUrlOf(String text) {
 
 /// The absolute http(s) URL a scanned [text] means, or null when it is not one.
 /// A bare `www.…` from the scan means https.
-String? resolveHttpUrl(String text) => httpUrlOf(
-  text.toLowerCase().startsWith('www.') ? 'https://$text' : text,
-);
+String? resolveHttpUrl(String text) =>
+    httpUrlOf(text.toLowerCase().startsWith('www.') ? 'https://$text' : text);
 
 /// One URL found in a plain string, with where it sits in it.
 class TextLink {

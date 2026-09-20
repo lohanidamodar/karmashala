@@ -73,9 +73,10 @@ void main() {
       ),
     );
 
-    for (final size in tester
-        .widgetList<StatusDot>(find.byType(StatusDot))
-        .map((dot) => tester.getSize(find.byWidget(dot)))) {
+    for (final size
+        in tester
+            .widgetList<StatusDot>(find.byType(StatusDot))
+            .map((dot) => tester.getSize(find.byWidget(dot)))) {
       // The ring is drawn inside the box: a haloed dot takes no more room.
       expect(size, const Size(Chrome.dot, Chrome.dot));
     }

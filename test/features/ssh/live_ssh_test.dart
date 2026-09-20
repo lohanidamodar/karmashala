@@ -447,7 +447,11 @@ void main() {
       }
 
       final home = await deployer.resolveHome();
-      expect(home, isNotNull, reason: r'$HOME must be resolvable before anything is written');
+      expect(
+        home,
+        isNotNull,
+        reason: r'$HOME must be resolvable before anything is written',
+      );
       expect(home, startsWith('/'));
 
       final deployment = await deployer.deploy();
@@ -473,7 +477,10 @@ void main() {
 
     test('a pane can open a session on it and close it again', () async {
       final target = SshHostDeployTarget(await trusted());
-      final deployment = await HostDeployer(target: target, binaries: binaries).deploy();
+      final deployment = await HostDeployer(
+        target: target,
+        binaries: binaries,
+      ).deploy();
       if (deployment.status != HostDeploymentStatus.ready) {
         // ignore: avoid_print
         print('  skipped: ${deployment.status.name} — ${deployment.reason}');
@@ -486,7 +493,8 @@ void main() {
       );
       // A scratch id of our own, so this can never collide with a session a
       // real pane owns on that machine.
-      final sessionId = 'karmashala_live_test_${DateTime.now().millisecondsSinceEpoch}';
+      final sessionId =
+          'karmashala_live_test_${DateTime.now().millisecondsSinceEpoch}';
       try {
         final opened = await link.openSession(
           sessionId: sessionId,
@@ -497,7 +505,9 @@ void main() {
         );
         expect(opened.sessionId, sessionId);
         // ignore: avoid_print
-        print('  attached: ${opened.sessionId} on ${link.welcome?.hostVersion}');
+        print(
+          '  attached: ${opened.sessionId} on ${link.welcome?.hostVersion}',
+        );
         // Ended rather than left behind: this is a test's session, not a user's.
         await link.closeSession(sessionId);
       } finally {
@@ -535,7 +545,11 @@ void main() {
       final before = await it.check();
       // ignore: avoid_print
       print('  before: ${before.label} — ${before.reason}');
-      expect(before.state, isNot(HostInstallState.unknown), reason: before.reason);
+      expect(
+        before.state,
+        isNot(HostInstallState.unknown),
+        reason: before.reason,
+      );
       if (!before.canInstall) {
         // ignore: avoid_print
         print('  skipped: this build carries no bundle for ${before.platform}');
@@ -605,7 +619,11 @@ void main() {
       print('  ${said.stdout.trim().split('\n').join(', ')}');
       expect(
         said.stdout,
-        anyOf(contains('root'), contains('passwordless'), contains('needs-password')),
+        anyOf(
+          contains('root'),
+          contains('passwordless'),
+          contains('needs-password'),
+        ),
       );
     });
   });
@@ -630,7 +648,10 @@ void main() {
     test('starts from the deployed bundle, answers under its token, and is '
         'removed without a trace', () async {
       final target = SshHostDeployTarget(await trusted());
-      final deployment = await HostDeployer(target: target, binaries: binaries).deploy();
+      final deployment = await HostDeployer(
+        target: target,
+        binaries: binaries,
+      ).deploy();
       final remotePath = deployment.remotePath;
       if (remotePath == null) {
         // ignore: avoid_print
@@ -650,7 +671,9 @@ void main() {
         if (started.status == SshRelayStatus.cannotStart) {
           // A bundle from before `relay` existed: said, never a silent pass.
           // ignore: avoid_print
-          print('  skipped: the bundle in KARMASHALA_HOST_BINARIES has no relay command');
+          print(
+            '  skipped: the bundle in KARMASHALA_HOST_BINARIES has no relay command',
+          );
           return;
         }
         expect(started.status, SshRelayStatus.running, reason: started.reason);

@@ -242,7 +242,8 @@ void main() {
     expect(
       instance.terminal.mainBuffer.lines.length,
       lessThanOrEqualTo(instance.terminal.viewHeight),
-      reason: 'and it cost the screen it already had, not the buffer it gave up',
+      reason:
+          'and it cost the screen it already had, not the buffer it gave up',
     );
   });
 

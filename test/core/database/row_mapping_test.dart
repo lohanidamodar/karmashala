@@ -17,7 +17,11 @@ void main() {
     for (final moment in samples) {
       final stored = isoFromDate(moment);
       expect(dateFromIso(stored), moment, reason: stored);
-      expect(dateFromIso(stored), DateTime.parse(stored).toUtc(), reason: stored);
+      expect(
+        dateFromIso(stored),
+        DateTime.parse(stored).toUtc(),
+        reason: stored,
+      );
     }
   });
 
@@ -41,6 +45,9 @@ void main() {
 
   test('nonsense still raises, rather than returning a wrong answer', () {
     expect(() => dateFromIso('not-a-date'), throwsFormatException);
-    expect(() => dateFromIso('20xx-09-02T08:36:12.000Z'), throwsFormatException);
+    expect(
+      () => dateFromIso('20xx-09-02T08:36:12.000Z'),
+      throwsFormatException,
+    );
   });
 }

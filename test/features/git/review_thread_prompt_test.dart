@@ -94,19 +94,22 @@ void main() {
     expect(prompt, isNot(contains('has changed since')));
   });
 
-  test('a detached thread is still sent, and says the position is stale', () async {
-    await comment(body: 'Use the configured value.');
-    harness.shas['lib/a.dart'] = 'sha-two';
+  test(
+    'a detached thread is still sent, and says the position is stale',
+    () async {
+      await comment(body: 'Use the configured value.');
+      harness.shas['lib/a.dart'] = 'sha-two';
 
-    final pending = (await harness.service.indexFor('r1')).pending;
-    // Still requested: "fix the thing I asked about" survives the file moving.
-    expect(pending, hasLength(1));
-    final prompt = buildReviewThreadPrompt(pending);
-    expect(prompt, contains('the file has changed since this comment'));
-    expect(prompt, contains('do not trust the position'));
-    // The excerpt is what the agent can actually search for.
-    expect(prompt, contains('Code: `final value = map[key]!;`'));
-  });
+      final pending = (await harness.service.indexFor('r1')).pending;
+      // Still requested: "fix the thing I asked about" survives the file moving.
+      expect(pending, hasLength(1));
+      final prompt = buildReviewThreadPrompt(pending);
+      expect(prompt, contains('the file has changed since this comment'));
+      expect(prompt, contains('do not trust the position'));
+      // The excerpt is what the agent can actually search for.
+      expect(prompt, contains('Code: `final value = map[key]!;`'));
+    },
+  );
 
   test('a file that cannot be read says that, and not that it moved', () async {
     await comment(body: 'Use the configured value.');

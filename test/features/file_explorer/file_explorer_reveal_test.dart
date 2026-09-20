@@ -118,7 +118,9 @@ void main() {
   /// The row's background, which is null for every row but the selected one.
   Color? rowColour(WidgetTester tester, String name) => tester
       .widget<Container>(
-        find.ancestor(of: find.text(name), matching: find.byType(Container)).first,
+        find
+            .ancestor(of: find.text(name), matching: find.byType(Container))
+            .first,
       )
       .color;
 

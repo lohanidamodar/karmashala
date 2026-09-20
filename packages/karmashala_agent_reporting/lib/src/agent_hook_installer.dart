@@ -686,10 +686,7 @@ class AgentHookInstaller {
     final attempts = checkForConcurrentSaves ? maxRewriteAttempts : 1;
     for (var attempt = 0; attempt < attempts; attempt++) {
       final before = checkForConcurrentSaves ? await file.stat() : null;
-      final (trimmed, decoded) = await _readConfigObject(
-        descriptor,
-        storeHome,
-      );
+      final (trimmed, decoded) = await _readConfigObject(descriptor, storeHome);
       final current = decoded[spec.configKey];
       final hooks = current is Map<String, Object?>
           ? Map<String, Object?>.from(current)

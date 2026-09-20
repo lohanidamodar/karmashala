@@ -311,19 +311,21 @@ void main() {
       expect(dao.getRun('run-a')!.attribution, VerdictAttribution.independent);
     });
 
-    test('finishing without a caller keeps the producer the start recorded',
-        () {
-      // COALESCE, not assignment: a caller that cannot name itself must not
-      // erase an attribution that was already true.
-      dao.insertRun(
-        _run('run-a', sessionId: 's-1', producedBySessionId: 's-2'),
-      );
-      dao.finishRun(
-        'run-a',
-        finishedAt: _t0,
-        verdict: VerificationVerdict.pass,
-      );
-      expect(dao.getRun('run-a')!.producedBySessionId, 's-2');
-    });
+    test(
+      'finishing without a caller keeps the producer the start recorded',
+      () {
+        // COALESCE, not assignment: a caller that cannot name itself must not
+        // erase an attribution that was already true.
+        dao.insertRun(
+          _run('run-a', sessionId: 's-1', producedBySessionId: 's-2'),
+        );
+        dao.finishRun(
+          'run-a',
+          finishedAt: _t0,
+          verdict: VerificationVerdict.pass,
+        );
+        expect(dao.getRun('run-a')!.producedBySessionId, 's-2');
+      },
+    );
   });
 }

@@ -102,167 +102,185 @@ void main() {
   });
 
   group('Split interactions and tap focus', () {
-    testWidgets('tapping a terminal pane updates active focused pane and tab title', (
-      tester,
-    ) async {
-      final container = workbenchContainer();
-      final controller = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
+    testWidgets(
+      'tapping a terminal pane updates active focused pane and tab title',
+      (tester) async {
+        final container = workbenchContainer();
+        final controller = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
 
-      final tabId = controller.openTab(TerminalProfile.powerShell);
-      final pane1 = controller.state.tabs.first.focusedPaneId;
+        final tabId = controller.openTab(TerminalProfile.powerShell);
+        final pane1 = controller.state.tabs.first.focusedPaneId;
 
-      final pane2 = controller.openInSlot(
-        controller.splitPane(SplitAxis.horizontal)!,
-        TerminalProfile.commandPrompt,
-      )!;
+        final pane2 = controller.openInSlot(
+          controller.splitPane(SplitAxis.horizontal)!,
+          TerminalProfile.commandPrompt,
+        )!;
 
-      await pumpWorkbench(tester, container);
+        await pumpWorkbench(tester, container);
 
-      // Initially pane2 was opened and focused.
-      expect(controller.state.activeTab!.focusedPaneId, pane2);
-      expect(controller.titleForTab(tabId), 'PowerShell | Command Prompt');
+        // Initially pane2 was opened and focused.
+        expect(controller.state.activeTab!.focusedPaneId, pane2);
+        expect(controller.titleForTab(tabId), 'PowerShell | Command Prompt');
 
-      // Tap on pane 1.
-      final pane1Finder = find.byWidgetPredicate(
-        (w) => w is TerminalPaneView && w.instance.id == pane1,
-      );
-      expect(pane1Finder, findsOneWidget);
-      await tester.tap(pane1Finder);
-      await tester.pump();
+        // Tap on pane 1.
+        final pane1Finder = find.byWidgetPredicate(
+          (w) => w is TerminalPaneView && w.instance.id == pane1,
+        );
+        expect(pane1Finder, findsOneWidget);
+        await tester.tap(pane1Finder);
+        await tester.pump();
 
-      // Focusing pane1 should update tab's focusedPaneId.
-      expect(controller.state.activeTab!.focusedPaneId, pane1);
-      expect(controller.titleForTab(tabId), 'PowerShell | Command Prompt');
-    });
+        // Focusing pane1 should update tab's focusedPaneId.
+        expect(controller.state.activeTab!.focusedPaneId, pane1);
+        expect(controller.titleForTab(tabId), 'PowerShell | Command Prompt');
+      },
+    );
 
-    testWidgets('dragging tab over terminal pane shows split overlay and splits', (
-      tester,
-    ) async {
-      final container = workbenchContainer();
-      final controller = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
+    testWidgets(
+      'dragging tab over terminal pane shows split overlay and splits',
+      (tester) async {
+        final container = workbenchContainer();
+        final controller = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
 
-      final tab1 = controller.openTab(TerminalProfile.powerShell);
-      final pane1 = controller.state.tabs.first.focusedPaneId;
+        final tab1 = controller.openTab(TerminalProfile.powerShell);
+        final pane1 = controller.state.tabs.first.focusedPaneId;
 
-      controller.openTab(TerminalProfile.commandPrompt);
-      final pane2 = controller.state.tabs.last.focusedPaneId;
+        controller.openTab(TerminalProfile.commandPrompt);
+        final pane2 = controller.state.tabs.last.focusedPaneId;
 
-      controller.activateTab(tab1);
+        controller.activateTab(tab1);
 
-      await pumpWorkbench(tester, container);
-      expect(controller.state.tabs.length, 2);
+        await pumpWorkbench(tester, container);
+        expect(controller.state.tabs.length, 2);
 
-      // Find the tab chips in the workbench tab strip.
-      final tabChips = find.byType(TerminalTabChip);
-      expect(tabChips, findsNWidgets(2));
+        // Find the tab chips in the workbench tab strip.
+        final tabChips = find.byType(TerminalTabChip);
+        expect(tabChips, findsNWidgets(2));
 
-      // Drag tab 2 chip onto the right half of pane 1.
-      final pane1Finder = find.byWidgetPredicate(
-        (w) => w is TerminalPaneView && w.instance.id == pane1,
-      );
-      final pane1Rect = tester.getRect(pane1Finder);
-      final rightHalfTarget = Offset(
-        pane1Rect.left + pane1Rect.width * 0.75,
-        pane1Rect.center.dy,
-      );
+        // Drag tab 2 chip onto the right half of pane 1.
+        final pane1Finder = find.byWidgetPredicate(
+          (w) => w is TerminalPaneView && w.instance.id == pane1,
+        );
+        final pane1Rect = tester.getRect(pane1Finder);
+        final rightHalfTarget = Offset(
+          pane1Rect.left + pane1Rect.width * 0.75,
+          pane1Rect.center.dy,
+        );
 
-      final gesture = await tester.startGesture(tester.getCenter(tabChips.at(1)));
-      await tester.pump();
-      await gesture.moveTo(rightHalfTarget);
-      await tester.pump();
+        final gesture = await tester.startGesture(
+          tester.getCenter(tabChips.at(1)),
+        );
+        await tester.pump();
+        await gesture.moveTo(rightHalfTarget);
+        await tester.pump();
 
-      // Split overlay should be visible.
-      expect(find.text('Drop to split'), findsOneWidget);
+        // Split overlay should be visible.
+        expect(find.text('Drop to split'), findsOneWidget);
 
-      // Release drop.
-      await gesture.up();
-      await tester.pumpAndSettle();
+        // Release drop.
+        await gesture.up();
+        await tester.pumpAndSettle();
 
-      // Both are still tabs; the **workspace** divided, so the dropped tab has
-      // a strip and a status bar of its own.
-      expect(controller.state.tabs.length, 2);
-      expect(controller.state.workspace!.groups, hasLength(2));
-      expect(controller.state.workspace!.panes, hasLength(2));
-      for (final tab in controller.state.tabs) {
-        expect(tab.layout.panes, hasLength(1));
-      }
-      expect([pane1, pane2], hasLength(2));
-    });
+        // Both are still tabs; the **workspace** divided, so the dropped tab has
+        // a strip and a status bar of its own.
+        expect(controller.state.tabs.length, 2);
+        expect(controller.state.workspace!.groups, hasLength(2));
+        expect(controller.state.workspace!.panes, hasLength(2));
+        for (final tab in controller.state.tabs) {
+          expect(tab.layout.panes, hasLength(1));
+        }
+        expect([pane1, pane2], hasLength(2));
+      },
+    );
 
-    testWidgets('holding Ctrl while dragging tab onto another tab splits them', (
-      tester,
-    ) async {
-      final container = workbenchContainer();
-      final controller = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
+    testWidgets(
+      'holding Ctrl while dragging tab onto another tab splits them',
+      (tester) async {
+        final container = workbenchContainer();
+        final controller = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
 
-      controller.openTab(TerminalProfile.powerShell);
-      final pane1 = controller.state.tabs.first.focusedPaneId;
+        controller.openTab(TerminalProfile.powerShell);
+        final pane1 = controller.state.tabs.first.focusedPaneId;
 
-      controller.openTab(TerminalProfile.commandPrompt);
-      final pane2 = controller.state.tabs.last.focusedPaneId;
+        controller.openTab(TerminalProfile.commandPrompt);
+        final pane2 = controller.state.tabs.last.focusedPaneId;
 
-      await pumpWorkbench(tester, container);
-      expect(controller.state.tabs.length, 2);
+        await pumpWorkbench(tester, container);
+        expect(controller.state.tabs.length, 2);
 
-      // Simulate holding Ctrl key.
-      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pump();
+        // Simulate holding Ctrl key.
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pump();
 
-      final tabChips = find.byType(TerminalTabChip);
-      final gesture = await tester.startGesture(tester.getCenter(tabChips.at(1)));
-      await tester.pump();
-      await gesture.moveTo(tester.getCenter(tabChips.at(0)));
-      await tester.pump();
+        final tabChips = find.byType(TerminalTabChip);
+        final gesture = await tester.startGesture(
+          tester.getCenter(tabChips.at(1)),
+        );
+        await tester.pump();
+        await gesture.moveTo(tester.getCenter(tabChips.at(0)));
+        await tester.pump();
 
-      await gesture.up();
-      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-      await tester.pumpAndSettle();
+        await gesture.up();
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pumpAndSettle();
 
-      // Ctrl-drop divides the workspace too: two tabs, two groups.
-      expect(controller.state.tabs.length, 2);
-      expect(controller.state.workspace!.groups, hasLength(2));
-      expect([pane1, pane2], hasLength(2));
-    });
+        // Ctrl-drop divides the workspace too: two tabs, two groups.
+        expect(controller.state.tabs.length, 2);
+        expect(controller.state.workspace!.groups, hasLength(2));
+        expect([pane1, pane2], hasLength(2));
+      },
+    );
 
-    testWidgets('dragging tab without Ctrl reorders tabs (left half inserts before, right half after)', (
-      tester,
-    ) async {
-      final container = workbenchContainer();
-      final controller = container.read(
-        terminalSessionsControllerProvider.notifier,
-      );
+    testWidgets(
+      'dragging tab without Ctrl reorders tabs (left half inserts before, right half after)',
+      (tester) async {
+        final container = workbenchContainer();
+        final controller = container.read(
+          terminalSessionsControllerProvider.notifier,
+        );
 
-      final tab0 = controller.openTab(TerminalProfile.powerShell);
-      final tab1 = controller.openTab(TerminalProfile.commandPrompt);
-      final tab2 = controller.openTab(TerminalProfile.posix('/bin/bash'));
+        final tab0 = controller.openTab(TerminalProfile.powerShell);
+        final tab1 = controller.openTab(TerminalProfile.commandPrompt);
+        final tab2 = controller.openTab(TerminalProfile.posix('/bin/bash'));
 
-      await pumpWorkbench(tester, container);
-      expect(controller.state.tabs.map((t) => t.id).toList(), [tab0, tab1, tab2]);
+        await pumpWorkbench(tester, container);
+        expect(controller.state.tabs.map((t) => t.id).toList(), [
+          tab0,
+          tab1,
+          tab2,
+        ]);
 
-      // Drag tab2 (index 2) to the left half of tab0 (index 0).
-      final tabChips = find.byType(TerminalTabChip);
-      final tab0Rect = tester.getRect(tabChips.at(0));
-      final leftHalfTarget = Offset(
-        tab0Rect.left + tab0Rect.width * 0.25,
-        tab0Rect.center.dy,
-      );
+        // Drag tab2 (index 2) to the left half of tab0 (index 0).
+        final tabChips = find.byType(TerminalTabChip);
+        final tab0Rect = tester.getRect(tabChips.at(0));
+        final leftHalfTarget = Offset(
+          tab0Rect.left + tab0Rect.width * 0.25,
+          tab0Rect.center.dy,
+        );
 
-      final gesture = await tester.startGesture(tester.getCenter(tabChips.at(2)));
-      await tester.pump();
-      await gesture.moveTo(leftHalfTarget);
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
+        final gesture = await tester.startGesture(
+          tester.getCenter(tabChips.at(2)),
+        );
+        await tester.pump();
+        await gesture.moveTo(leftHalfTarget);
+        await tester.pump();
+        await gesture.up();
+        await tester.pumpAndSettle();
 
-      // tab2 should now be at the front: [tab2, tab0, tab1].
-      expect(controller.state.tabs.map((t) => t.id).toList(), [tab2, tab0, tab1]);
-    });
+        // tab2 should now be at the front: [tab2, tab0, tab1].
+        expect(controller.state.tabs.map((t) => t.id).toList(), [
+          tab2,
+          tab0,
+          tab1,
+        ]);
+      },
+    );
 
     testWidgets('and the right half of a tab puts it after that tab', (
       tester,
@@ -288,14 +306,20 @@ void main() {
         tab2Rect.center.dy,
       );
 
-      final gesture = await tester.startGesture(tester.getCenter(tabChips.at(0)));
+      final gesture = await tester.startGesture(
+        tester.getCenter(tabChips.at(0)),
+      );
       await tester.pump();
       await gesture.moveTo(rightHalfTarget);
       await tester.pump();
       await gesture.up();
       await tester.pumpAndSettle();
 
-      expect(controller.state.tabs.map((t) => t.id).toList(), [tab1, tab2, tab0]);
+      expect(controller.state.tabs.map((t) => t.id).toList(), [
+        tab1,
+        tab2,
+        tab0,
+      ]);
     });
   });
 }

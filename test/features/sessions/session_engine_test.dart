@@ -83,40 +83,50 @@ void main() {
     expect(engine.isActive(session.id), isTrue);
   });
 
-  test('a spawn that throws leaves no runtime and marks the row failed', () async {
-    final engine = buildEngine(
-      resolver: (_) => _RefusingAdapter(),
-    );
-    await expectLater(
-      engine.start(
+  test(
+    'a spawn that throws leaves no runtime and marks the row failed',
+    () async {
+      final engine = buildEngine(resolver: (_) => _RefusingAdapter());
+      await expectLater(
+        engine.start(
+          repository: repository(),
+          installation: agentInstallation(),
+          title: 'Work',
+          permission: ResolvedPermission.none,
+        ),
+        throwsA(isA<StateError>()),
+      );
+      final row = sessionDao.getAll().single;
+      expect(row.status, SessionStatus.failed);
+      expect(engine.isActive(row.id), isFalse);
+      // Nothing was registered, so a message is refused rather than "sent".
+      await expectLater(
+        engine.sendMessage(row.id, 'hi'),
+        throwsA(isA<StateError>()),
+      );
+    },
+  );
+
+  test(
+    'a CLI that exits non-zero ends the session failed, not completed',
+    () async {
+      final engine = buildEngine(resolver: (_) => _ExitingAdapter());
+      final session = await engine.start(
         repository: repository(),
         installation: agentInstallation(),
         title: 'Work',
         permission: ResolvedPermission.none,
-      ),
-      throwsA(isA<StateError>()),
-    );
-    final row = sessionDao.getAll().single;
-    expect(row.status, SessionStatus.failed);
-    expect(engine.isActive(row.id), isFalse);
-    // Nothing was registered, so a message is refused rather than "sent".
-    await expectLater(engine.sendMessage(row.id, 'hi'), throwsA(isA<StateError>()));
-  });
+      );
+      await engine.whenDone(session.id);
 
-  test('a CLI that exits non-zero ends the session failed, not completed', () async {
-    final engine = buildEngine(resolver: (_) => _ExitingAdapter());
-    final session = await engine.start(
-      repository: repository(),
-      installation: agentInstallation(),
-      title: 'Work',
-      permission: ResolvedPermission.none,
-    );
-    await engine.whenDone(session.id);
-
-    expect(sessionDao.getById(session.id)!.status, SessionStatus.failed);
-    expect(typesOf(session.id), contains(SessionEventTypes.error));
-    expect(typesOf(session.id).last, isNot(SessionEventTypes.sessionCompleted));
-  });
+      expect(sessionDao.getById(session.id)!.status, SessionStatus.failed);
+      expect(typesOf(session.id), contains(SessionEventTypes.error));
+      expect(
+        typesOf(session.id).last,
+        isNot(SessionEventTypes.sessionCompleted),
+      );
+    },
+  );
 
   test('sendMessage records the user message and the agent reply', () async {
     final engine = buildEngine();
@@ -256,7 +266,8 @@ class _RefusingAdapter implements AgentAdapter {
   String get agentId => AgentIds.claudeCode;
 
   @override
-  AgentSession start(AgentLaunch launch) => throw StateError('no such executable');
+  AgentSession start(AgentLaunch launch) =>
+      throw StateError('no such executable');
 }
 
 /// A CLI that starts, says why it is leaving, and exits 1 — a `--resume` of a

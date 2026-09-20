@@ -105,7 +105,6 @@ class SessionWhereabouts {
     }
     return null;
   }
-
 }
 
 /// A coarse, deliberately unexciting rendering of an age. Counting seconds

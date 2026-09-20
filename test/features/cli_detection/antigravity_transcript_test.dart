@@ -158,31 +158,33 @@ void main() {
       expect(rows.single.tool, isNull);
     });
 
-    test('a call the file says is RUNNING is the one reported in flight',
-        () async {
-      const id = 'conv-3';
-      writeTranscript(id, [
-        {
-          'step_index': 7,
-          'source': 'MODEL',
-          'type': 'PLANNER_RESPONSE',
-          'status': 'RUNNING',
-          'created_at': '2026-09-08T14:15:07Z',
-          'tool_calls': [
-            {
-              'name': 'run_command',
-              'args': {'CommandLine': 'sleep 60'},
-            },
-          ],
-        },
-      ]);
+    test(
+      'a call the file says is RUNNING is the one reported in flight',
+      () async {
+        const id = 'conv-3';
+        writeTranscript(id, [
+          {
+            'step_index': 7,
+            'source': 'MODEL',
+            'type': 'PLANNER_RESPONSE',
+            'status': 'RUNNING',
+            'created_at': '2026-09-08T14:15:07Z',
+            'tool_calls': [
+              {
+                'name': 'run_command',
+                'args': {'CommandLine': 'sleep 60'},
+              },
+            ],
+          },
+        ]);
 
-      final rows = await readCliTranscript(
-        conversationFile(id),
-        AgentIds.antigravity,
-      );
-      expect(rows.single.pendingToolUseId, '7');
-    });
+        final rows = await readCliTranscript(
+          conversationFile(id),
+          AgentIds.antigravity,
+        );
+        expect(rows.single.pendingToolUseId, '7');
+      },
+    );
 
     test('SYSTEM records render nothing, and a bad line is skipped', () async {
       const id = 'conv-4';

@@ -700,9 +700,7 @@ class _SyncEvidenceReader implements VerificationEvidenceReader {
   @override
   Future<String?> read(String path) {
     final file = File(path);
-    return Future.value(
-      file.existsSync() ? file.readAsStringSync() : null,
-    );
+    return Future.value(file.existsSync() ? file.readAsStringSync() : null);
   }
 }
 

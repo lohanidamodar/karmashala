@@ -440,7 +440,9 @@ String _stopKey(FocusNode node) {
 /// the list, and letting it stand in for every row would make every row the
 /// same stop.
 String? _valueKeyAt(BuildContext context) {
-  if (context.widget.key case final ValueKey<Object?> key) return '${key.value}';
+  if (context.widget.key case final ValueKey<Object?> key) {
+    return '${key.value}';
+  }
   String? found;
   context.visitAncestorElements((element) {
     if (element.widget is Scrollable) return false;

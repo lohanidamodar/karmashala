@@ -84,7 +84,9 @@ ProviderContainer harness(AppDatabase db) {
       // pieces poll the host on a real timer. Answered here for
       // `workbench_test.dart`'s reasons rather than reached for: a timer left
       // pending outlives the tree, and a unit test must never run `git`.
-      sessionTranscriptProvider.overrideWith((ref, id) => Stream.value(const [])),
+      sessionTranscriptProvider.overrideWith(
+        (ref, id) => Stream.value(const []),
+      ),
       sessionDeliveryProvider.overrideWith(
         (ref, _) async => SessionDelivery.unknown,
       ),
@@ -227,9 +229,14 @@ void main() {
         // Colour is never the only carrier: the tooltip and the semantic label
         // both name the state, and each state has its own glyph.
         expect(
-          tester.widget<Tooltip>(
-            find.descendant(of: dotIn(paneId), matching: find.byType(Tooltip)),
-          ).message,
+          tester
+              .widget<Tooltip>(
+                find.descendant(
+                  of: dotIn(paneId),
+                  matching: find.byType(Tooltip),
+                ),
+              )
+              .message,
           'Agent: $word',
         );
         expect(
@@ -263,10 +270,7 @@ void main() {
       expect(dotIn(paneId), findsNothing);
       // And the liveness marker keeps the slot — which for a live shell means
       // drawing nothing at all, exactly as it always did.
-      expect(
-        container.read(paneAgentActivityProvider(paneId)),
-        isNull,
-      );
+      expect(container.read(paneAgentActivityProvider(paneId)), isNull);
     });
 
     testWidgets('a pane whose process is gone falls back to liveness', (
@@ -283,8 +287,9 @@ void main() {
       expect(dotIn(paneId), findsOneWidget);
 
       (controllerOf(container).instanceFor(paneId)! as FakeTerminalInstance)
-          .livenessNotifier
-          .value = PaneLiveness.exited;
+              .livenessNotifier
+              .value =
+          PaneLiveness.exited;
       await tester.pump();
 
       // One slot, never two glyphs — and never a status read off a screen
@@ -306,9 +311,7 @@ void main() {
     ) async {
       final db = workspace();
       final container = harness(db);
-      final panes = [
-        for (var i = 0; i < 3; i++) openPane(container),
-      ];
+      final panes = [for (var i = 0; i < 3; i++) openPane(container)];
       for (final (index, paneId) in panes.indexed) {
         placeSession(db, 's$index', paneId);
       }
@@ -363,9 +366,7 @@ void main() {
       // its tab, so the fold is where an over-broad watch would hide.
       final db = workspace();
       final container = harness(db);
-      final panes = [
-        for (var i = 0; i < 3; i++) openPane(container),
-      ];
+      final panes = [for (var i = 0; i < 3; i++) openPane(container)];
       for (final (index, paneId) in panes.indexed) {
         placeSession(db, 's$index', paneId);
       }

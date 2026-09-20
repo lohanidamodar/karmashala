@@ -22,18 +22,23 @@ void main() {
 
   tearDown(() => database.close());
 
-  test('a host with no screen opens the same ceremony a desktop does', () async {
-    final session = await pairing.open(relay: Uri.parse('https://relay.test'));
+  test(
+    'a host with no screen opens the same ceremony a desktop does',
+    () async {
+      final session = await pairing.open(
+        relay: Uri.parse('https://relay.test'),
+      );
 
-    // The typed code is what a box prints instead of drawing a QR. It carries
-    // the whole secret, which is why an internet-exposed listener is safe.
-    expect(session.payload.typedSecret, isNotNull);
-    expect(
-      PairingCode.encode(session.payload.typedSecret!).replaceAll('-', ''),
-      hasLength(kPairingCodeChars),
-    );
-    expect(session.payload.hostId, DeviceId.parse('a' * 32));
-  });
+      // The typed code is what a box prints instead of drawing a QR. It carries
+      // the whole secret, which is why an internet-exposed listener is safe.
+      expect(session.payload.typedSecret, isNotNull);
+      expect(
+        PairingCode.encode(session.payload.typedSecret!).replaceAll('-', ''),
+        hasLength(kPairingCodeChars),
+      );
+      expect(session.payload.hostId, DeviceId.parse('a' * 32));
+    },
+  );
 
   test('nothing is paired until a phone completes the exchange', () async {
     await pairing.open(relay: Uri.parse('https://relay.test'));
@@ -74,7 +79,8 @@ void main() {
     expect(
       session.payload.capabilities.granted,
       isNot(CapabilitySet.all.granted),
-      reason: 'a host that widened the offer would be granting what nobody chose',
+      reason:
+          'a host that widened the offer would be granting what nobody chose',
     );
   });
 
@@ -83,6 +89,9 @@ void main() {
     final second = await pairing.open(relay: Uri.parse('https://relay.test'));
 
     expect(first.payload.secret, isNot(second.payload.secret));
-    expect(first.payload.rendezvous.toString(), isNot(second.payload.rendezvous.toString()));
+    expect(
+      first.payload.rendezvous.toString(),
+      isNot(second.payload.rendezvous.toString()),
+    );
   });
 }

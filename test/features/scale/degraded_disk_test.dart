@@ -77,9 +77,10 @@ void main() {
       expect(storedBefore, everyElement(isNotEmpty));
 
       for (final pane in panes) {
-        layout.controller.instanceFor(pane)!.terminal.write(
-          'work the user has not finished\r\n',
-        );
+        layout.controller
+            .instanceFor(pane)!
+            .terminal
+            .write('work the user has not finished\r\n');
       }
       // The second pane row is the one refused, so the first has already been
       // written inside the transaction when the disk says no — which is the
@@ -122,9 +123,10 @@ void main() {
       layout.settle();
 
       for (final pane in panes) {
-        layout.controller.instanceFor(pane)!.terminal.write(
-          'work the user has not finished\r\n',
-        );
+        layout.controller
+            .instanceFor(pane)!
+            .terminal
+            .write('work the user has not finished\r\n');
       }
       disk
         ..failing = 'INSERT INTO terminal_panes'

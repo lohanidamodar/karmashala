@@ -73,7 +73,10 @@ Future<TestGesture> dragFrom(
   Offset from,
   Offset to,
 ) async {
-  final gesture = await tester.startGesture(from, kind: PointerDeviceKind.mouse);
+  final gesture = await tester.startGesture(
+    from,
+    kind: PointerDeviceKind.mouse,
+  );
   await tester.pump();
   for (var step = 1; step <= 20; step++) {
     await gesture.moveTo(Offset.lerp(from, to, step / 20)!);
@@ -125,11 +128,11 @@ void main() {
     );
     await drop(tester, gesture);
 
-    expect(
-      tabOrder(container),
-      [third, first, second],
-      reason: 'the tab took the place it was dropped on',
-    );
+    expect(tabOrder(container), [
+      third,
+      first,
+      second,
+    ], reason: 'the tab took the place it was dropped on');
   });
 
   testWidgets('and dragging one onto the room after the last tab sends it '
@@ -241,7 +244,11 @@ void main() {
     );
     await drop(tester, gesture);
 
-    expect(tabOrder(container), before, reason: 'a cancelled drag moves nothing');
+    expect(
+      tabOrder(container),
+      before,
+      reason: 'a cancelled drag moves nothing',
+    );
     expect(
       container.read(terminalSessionsControllerProvider).tabs,
       hasLength(2),
@@ -249,7 +256,9 @@ void main() {
     );
   });
 
-  testWidgets('a tab dropped on a pane makes a group beside it', (tester) async {
+  testWidgets('a tab dropped on a pane makes a group beside it', (
+    tester,
+  ) async {
     // The verb that already existed, driven the way a mouse drives it rather
     // than with one synthetic jump — reordering must not have taken the drop
     // that divides the workspace away from it.

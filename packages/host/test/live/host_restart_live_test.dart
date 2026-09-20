@@ -3,7 +3,6 @@ library;
 
 import 'dart:io';
 
-
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
 
@@ -54,7 +53,8 @@ void main() {
     expect(
       second.greeting,
       contains('restored 1 session(s)'),
-      reason: 'a host that came back holding nothing and one holding a dead '
+      reason:
+          'a host that came back holding nothing and one holding a dead '
           'session are different situations',
     );
 
@@ -113,7 +113,11 @@ bool _stillRunning(int pid) {
     return Process.runSync('kill', ['-0', '$pid']).exitCode == 0;
   }
   final k = Kernel32.open();
-  final handle = k.openProcess(kProcessQueryLimitedInformation | kSynchronize, 0, pid);
+  final handle = k.openProcess(
+    kProcessQueryLimitedInformation | kSynchronize,
+    0,
+    pid,
+  );
   if (handle == 0) return false;
   try {
     return k.waitForSingleObject(handle, 0) != kWaitObject0;

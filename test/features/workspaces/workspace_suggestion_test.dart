@@ -32,12 +32,21 @@ void main() {
     // The owner's own layout: games under one folder, PopupBits under another,
     // both under `C:\Users\dlohani\projects`.
     final workspace = [
-      filed('g1', r'C:\Users\dlohani\projects\games\roguelike',
-          workspaceId: 'games'),
-      filed('g2', r'C:\Users\dlohani\projects\games\platformer',
-          workspaceId: 'games'),
-      filed('pb1', r'C:\Users\dlohani\projects\popupbits\projects\karmashala',
-          workspaceId: 'popupbits'),
+      filed(
+        'g1',
+        r'C:\Users\dlohani\projects\games\roguelike',
+        workspaceId: 'games',
+      ),
+      filed(
+        'g2',
+        r'C:\Users\dlohani\projects\games\platformer',
+        workspaceId: 'games',
+      ),
+      filed(
+        'pb1',
+        r'C:\Users\dlohani\projects\popupbits\projects\karmashala',
+        workspaceId: 'popupbits',
+      ),
     ];
 
     test('a new game is suggested the games context', () {
@@ -74,15 +83,18 @@ void main() {
     });
 
     test('a lone shared drive is not evidence', () {
+      expect(suggest(r'D:\elsewhere\thing', projects: workspace), isNull);
       expect(
-        suggest(r'D:\elsewhere\thing', projects: workspace),
-        isNull,
-      );
-      expect(
-        suggest(r'C:\somewhere\else', projects: [
-          filed('only', r'C:\Users\dlohani\projects\games\rl',
-              workspaceId: 'games'),
-        ]),
+        suggest(
+          r'C:\somewhere\else',
+          projects: [
+            filed(
+              'only',
+              r'C:\Users\dlohani\projects\games\rl',
+              workspaceId: 'games',
+            ),
+          ],
+        ),
         isNull,
         reason: 'sharing only the drive says nothing',
       );
@@ -90,16 +102,19 @@ void main() {
 
     test('unassigned projects vote for nothing', () {
       expect(
-        suggest(r'C:\Users\dlohani\projects\games\shmup', projects: [
-          filed('g1', r'C:\Users\dlohani\projects\games\roguelike'),
-        ]),
+        suggest(
+          r'C:\Users\dlohani\projects\games\shmup',
+          projects: [filed('g1', r'C:\Users\dlohani\projects\games\roguelike')],
+        ),
         isNull,
       );
     });
 
     test('an empty workspace suggests nothing', () {
-      expect(suggest(r'C:\Users\dlohani\projects\games\x', projects: const []),
-          isNull);
+      expect(
+        suggest(r'C:\Users\dlohani\projects\games\x', projects: const []),
+        isNull,
+      );
     });
   });
 
@@ -114,8 +129,11 @@ void main() {
           '/mnt/c/Users/dlohani/projects/games/shmup',
           environmentId: 'wsl:Ubuntu',
           projects: [
-            filed('g1', r'C:\Users\dlohani\projects\games\roguelike',
-                workspaceId: 'games'),
+            filed(
+              'g1',
+              r'C:\Users\dlohani\projects\games\roguelike',
+              workspaceId: 'games',
+            ),
           ],
         ),
         isNull,
@@ -128,10 +146,18 @@ void main() {
           '/home/dlohani/projects/games/shmup',
           environmentId: 'wsl:Ubuntu',
           projects: [
-            filed('g1', '/home/dlohani/projects/games/roguelike',
-                environmentId: 'wsl:Ubuntu', workspaceId: 'games'),
-            filed('pb', '/home/dlohani/popupbits/karmashala',
-                environmentId: 'wsl:Ubuntu', workspaceId: 'popupbits'),
+            filed(
+              'g1',
+              '/home/dlohani/projects/games/roguelike',
+              environmentId: 'wsl:Ubuntu',
+              workspaceId: 'games',
+            ),
+            filed(
+              'pb',
+              '/home/dlohani/popupbits/karmashala',
+              environmentId: 'wsl:Ubuntu',
+              workspaceId: 'popupbits',
+            ),
           ],
         ),
         'games',
@@ -144,8 +170,12 @@ void main() {
           '/srv/build/appwrite/functions',
           environmentId: 'ssh:build-box',
           projects: [
-            filed('a1', '/srv/build/appwrite/console',
-                environmentId: 'ssh:build-box', workspaceId: 'appwrite'),
+            filed(
+              'a1',
+              '/srv/build/appwrite/console',
+              environmentId: 'ssh:build-box',
+              workspaceId: 'appwrite',
+            ),
           ],
         ),
         'appwrite',
@@ -158,8 +188,12 @@ void main() {
           '/home/dlohani/Projects/games/shmup',
           environmentId: 'wsl:Ubuntu',
           projects: [
-            filed('g1', '/home/dlohani/projects/games/roguelike',
-                environmentId: 'wsl:Ubuntu', workspaceId: 'games'),
+            filed(
+              'g1',
+              '/home/dlohani/projects/games/roguelike',
+              environmentId: 'wsl:Ubuntu',
+              workspaceId: 'games',
+            ),
           ],
         ),
         isNull,

@@ -50,11 +50,10 @@ void main() {
 
     pending!();
     pending!();
-    expect(
-      delays.sublist(1),
-      [kScrollbackAutosaveCatchUp, kScrollbackAutosaveCatchUp],
-      reason: 'while work remains',
-    );
+    expect(delays.sublist(1), [
+      kScrollbackAutosaveCatchUp,
+      kScrollbackAutosaveCatchUp,
+    ], reason: 'while work remains');
 
     backlog = false;
     pending!();

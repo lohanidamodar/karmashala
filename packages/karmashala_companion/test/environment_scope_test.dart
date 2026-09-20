@@ -28,7 +28,12 @@ void main() {
       final machines = companionEnvironments(
         const [],
         projects: [
-          project('p1', environmentId: 'wsl:arch', badge: 'WSL · arch', kind: 'wsl'),
+          project(
+            'p1',
+            environmentId: 'wsl:arch',
+            badge: 'WSL · arch',
+            kind: 'wsl',
+          ),
         ],
       );
       expect(machines, hasLength(1));
@@ -69,7 +74,10 @@ void main() {
 
     test('keeps only the machine asked for', () {
       expect(
-        projectsOnEnvironment([onWsl, onWindows], 'wsl:arch').map((p) => p.projectId),
+        projectsOnEnvironment([
+          onWsl,
+          onWindows,
+        ], 'wsl:arch').map((p) => p.projectId),
         ['p1'],
       );
     });
@@ -81,7 +89,9 @@ void main() {
     test('falls back to the badge, the way the grouping key does', () {
       final badgeOnly = project('p3', badge: 'WSL · arch');
       expect(
-        projectsOnEnvironment([badgeOnly], 'WSL · arch').map((p) => p.projectId),
+        projectsOnEnvironment([
+          badgeOnly,
+        ], 'WSL · arch').map((p) => p.projectId),
         ['p3'],
       );
     });

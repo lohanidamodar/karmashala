@@ -83,9 +83,9 @@ void main() {
     // reason an app-level figure could not be right for both.
     db = seedUsageDatabase();
     ExecutionEnvironmentDao(db).upsert(wslEnv());
-    AgentInstallationDao(db).insert(
-      agentInstallation(id: 'a2', environmentId: wslEnv().id),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(id: 'a2', environmentId: wslEnv().id));
     SessionDao(db).insert(session(id: 's2', agentInstallationId: 'a2'));
     final container = containerFor(db);
 

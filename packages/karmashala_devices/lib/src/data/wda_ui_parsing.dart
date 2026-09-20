@@ -66,7 +66,9 @@ WdaUiRead parseWdaUiRead(String json) {
 }
 
 bool _looksLikeElement(UiNode node) =>
-    node.className.isNotEmpty || node.bounds != null || node.children.isNotEmpty;
+    node.className.isNotEmpty ||
+    node.bounds != null ||
+    node.children.isNotEmpty;
 
 DeviceScreenSize? _sizeOf(UiBounds? bounds) {
   if (bounds == null || bounds.isEmpty) return null;

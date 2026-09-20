@@ -107,9 +107,8 @@ class _WslPane {
   _WslPane(this.pty) {
     unawaited(pty.exitCode.then((_) => exited = true));
     pty.output.listen(
-      (bytes) => _buffer.write(
-        const Utf8Decoder(allowMalformed: true).convert(bytes),
-      ),
+      (bytes) =>
+          _buffer.write(const Utf8Decoder(allowMalformed: true).convert(bytes)),
     );
   }
 
@@ -167,11 +166,7 @@ class _WslPane {
 
   Future<void> close() async {
     if (exited) return;
-    await shutdownProcess(
-      kill: pty.kill,
-      exitCode: pty.exitCode,
-      pid: pty.pid,
-    );
+    await shutdownProcess(kill: pty.kill, exitCode: pty.exitCode, pid: pty.pid);
   }
 }
 

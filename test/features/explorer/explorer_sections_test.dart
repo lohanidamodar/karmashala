@@ -468,9 +468,9 @@ void main() {
       final container = await pump(tester, db);
       expect(find.text('Pinned'), findsNothing);
 
-      container.read(settingsControllerProvider.notifier).togglePinnedSession(
-        'r0',
-      );
+      container
+          .read(settingsControllerProvider.notifier)
+          .togglePinnedSession('r0');
       await tester.pumpAndSettle();
 
       expect(

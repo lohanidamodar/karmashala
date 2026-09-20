@@ -10,9 +10,8 @@ import 'package:karmashala_browser/browser.dart';
 
 /// The recorded browser-consent grants.
 final browserConsentStoreProvider = Provider<BrowserConsentStore>(
-  (ref) => BrowserConsentStore(
-    DatabaseConsentJournal(ref.watch(databaseProvider)),
-  ),
+  (ref) =>
+      BrowserConsentStore(DatabaseConsentJournal(ref.watch(databaseProvider))),
 );
 
 /// Bumped whenever a grant is made or taken back, so the settings list

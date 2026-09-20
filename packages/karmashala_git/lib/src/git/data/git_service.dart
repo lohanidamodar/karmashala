@@ -364,9 +364,7 @@ class GitService {
       path,
     ]);
     if (result.exitCode > 1) {
-      throw GitException(
-        'git diff --no-index failed: ${result.stderr.trim()}',
-      );
+      throw GitException('git diff --no-index failed: ${result.stderr.trim()}');
     }
     return result.stdout;
   }
@@ -447,7 +445,9 @@ class GitService {
     if (paths.isEmpty) return;
     final result = await _git(repo, ['restore', '--staged', '--', ...paths]);
     if (!result.ok) {
-      throw GitException('git restore --staged failed: ${result.stderr.trim()}');
+      throw GitException(
+        'git restore --staged failed: ${result.stderr.trim()}',
+      );
     }
   }
 
@@ -471,10 +471,7 @@ class GitService {
   /// Deletes untracked [paths] (`git clean -f --`), which is what "discard"
   /// means for a file git has never seen. Separate from [discard] because it
   /// removes a file rather than rewinding one, and nothing undoes it.
-  Future<void> deleteUntracked(
-    EnvironmentPath repo,
-    List<String> paths,
-  ) async {
+  Future<void> deleteUntracked(EnvironmentPath repo, List<String> paths) async {
     if (paths.isEmpty) return;
     final result = await _git(repo, ['clean', '-f', '-d', '--', ...paths]);
     if (!result.ok) {

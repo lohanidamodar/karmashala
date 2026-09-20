@@ -412,9 +412,7 @@ class _ViewToggleHalf extends StatelessWidget {
               horizontal: Insets.sm,
               vertical: kBarControlPad,
             ),
-            color: selected
-                ? StateLayers.selected(scheme)
-                : Colors.transparent,
+            color: selected ? StateLayers.selected(scheme) : Colors.transparent,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

@@ -195,7 +195,8 @@ void main() {
     // user has an unrecorded file sitting inside a merge they never reviewed.
     // The rule is "any change at all", so that the button behaves the same way
     // twice regardless of which files happen to be dirty.
-    statusOutput = '## work...origin/work [ahead 2, behind 3]\n?? scratch.txt\n';
+    statusOutput =
+        '## work...origin/work [ahead 2, behind 3]\n?? scratch.txt\n';
 
     expect((await update()).refusal, UpdateRefusal.uncommittedChanges);
     expect(mergeCall(), isNull);

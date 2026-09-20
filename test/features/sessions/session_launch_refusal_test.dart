@@ -49,8 +49,10 @@ const _refusedUntrusted = [
 
 /// The pattern the app ships, not a copy of it: a test with its own regular
 /// expression keeps passing on the one day the declared one stops matching.
-final _codexRules =
-    AgentRegistry.builtIn.byId(AgentIds.codex)!.launch.rejectedValue;
+final _codexRules = AgentRegistry.builtIn
+    .byId(AgentIds.codex)!
+    .launch
+    .rejectedValue;
 
 final _codex = AgentDescriptor(
   id: 'codex-under-test',
@@ -111,9 +113,10 @@ Future<({String id, String pane})> _launch(
           purpose: SessionPurpose.newSession,
         ),
       );
-  return (id: launched.session.id, pane: SessionDao(db).getById(
-    launched.session.id,
-  )!.paneId!);
+  return (
+    id: launched.session.id,
+    pane: SessionDao(db).getById(launched.session.id)!.paneId!,
+  );
 }
 
 void _writeToPane(ProviderContainer container, String paneId, String text) {

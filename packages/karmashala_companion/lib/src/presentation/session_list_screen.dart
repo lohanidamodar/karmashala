@@ -59,8 +59,14 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
         ref.watch(companionPairingProvider).asData?.value?.hostName ??
         'your desktop';
     final projects = ref.watch(companionProjectsProvider);
-    final canAdd = ref.watch(companionGatewayProvider).capabilities.has(Capability.addProject);
-    final canStart = ref.watch(companionGatewayProvider).capabilities.has(Capability.startSession);
+    final canAdd = ref
+        .watch(companionGatewayProvider)
+        .capabilities
+        .has(Capability.addProject);
+    final canStart = ref
+        .watch(companionGatewayProvider)
+        .capabilities
+        .has(Capability.startSession);
 
     // Offered only when there is something to search; over a phone that is
     // still connecting it could only ever answer "nothing".
@@ -138,10 +144,9 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
             ? null
             : _BackToMachines(
                 label: machine.label,
-                onBack: () =>
-                    ref.read(companionEnvironmentProvider.notifier).choose(
-                      null,
-                    ),
+                onBack: () => ref
+                    .read(companionEnvironmentProvider.notifier)
+                    .choose(null),
               );
         return switch (view) {
           EnvironmentPick(:final environments) => EnvironmentIndex(
@@ -276,13 +281,13 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
     );
     if (!context.mounted) return;
     if (action == 'add') {
-      await Navigator.of(context).push(
-        companionRoute<void>(context, (_) => const AddProjectScreen()),
-      );
+      await Navigator.of(
+        context,
+      ).push(companionRoute<void>(context, (_) => const AddProjectScreen()));
     } else if (action == 'session') {
-      await Navigator.of(context).push(
-        companionRoute<void>(context, (_) => const StartSessionScreen()),
-      );
+      await Navigator.of(
+        context,
+      ).push(companionRoute<void>(context, (_) => const StartSessionScreen()));
     }
   }
 
@@ -313,10 +318,18 @@ class _SessionListScreenState extends ConsumerState<SessionListScreen> {
       body:
           'Add a project from its desktop path, or start a session there — '
           'it shows up here as soon as it exists.',
-      actionLabel: ref.read(companionGatewayProvider).capabilities.has(Capability.addProject)
+      actionLabel:
+          ref
+              .read(companionGatewayProvider)
+              .capabilities
+              .has(Capability.addProject)
           ? 'Add project'
           : null,
-      onAction: ref.read(companionGatewayProvider).capabilities.has(Capability.addProject)
+      onAction:
+          ref
+              .read(companionGatewayProvider)
+              .capabilities
+              .has(Capability.addProject)
           ? () => Navigator.of(context).push(
               companionRoute<void>(context, (_) => const AddProjectScreen()),
             )
@@ -351,7 +364,6 @@ class ProjectHeaderCard extends StatelessWidget {
     showMenu: false,
   );
 }
-
 
 /// The row above a machine's projects that gets back to the machines.
 class _BackToMachines extends StatelessWidget {

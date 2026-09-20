@@ -81,13 +81,11 @@ void main() {
 
       final state = stateOf(container);
       expect(controller.isEmptyGroup(groupId), isFalse);
-      expect(
-        controller.tabsInGroup(groupId).map((tab) => tab.id),
-        [second],
-      );
+      expect(controller.tabsInGroup(groupId).map((tab) => tab.id), [second]);
       expect(state.activeTabId, second);
-      final other = state.workspace!.groups
-          .firstWhere((group) => group.id != groupId);
+      final other = state.workspace!.groups.firstWhere(
+        (group) => group.id != groupId,
+      );
       expect(other.panes, [first]);
     });
 
@@ -329,8 +327,9 @@ void main() {
 
       expect(controller.tabsInGroup(target).map((tab) => tab.id), [second]);
       expect(stateOf(container).activeTabId, second);
-      final origin = stateOf(container).workspace!.groups
-          .firstWhere((group) => group.id != target);
+      final origin = stateOf(
+        container,
+      ).workspace!.groups.firstWhere((group) => group.id != target);
       expect(origin.panes, [first]);
     });
 
@@ -399,8 +398,9 @@ void main() {
       final state = stateOf(container);
       expect(state.workspace!.groups, hasLength(2));
       expect(controller.tabsInGroup(hostGroup).map((tab) => tab.id), [host]);
-      final made = state.workspace!.groups
-          .firstWhere((group) => group.id != hostGroup);
+      final made = state.workspace!.groups.firstWhere(
+        (group) => group.id != hostGroup,
+      );
       expect(made.panes, [dropped]);
       expect(state.activeTabId, dropped);
       // The tab it divided is untouched: a *tab* split is not a pane split.
@@ -504,7 +504,10 @@ void main() {
       final controller = controllerOf(container);
       controller.openTab(TerminalProfile.powerShell);
 
-      expect(controller.closeGroup(stateOf(container).focusedGroupId!), isFalse);
+      expect(
+        controller.closeGroup(stateOf(container).focusedGroupId!),
+        isFalse,
+      );
     });
   });
 
@@ -523,11 +526,11 @@ void main() {
         rightB,
         rightA,
       ]);
-      expect(
-        stateOf(container).tabs.map((tab) => tab.id),
-        [left, rightB, rightA],
-        reason: 'the tab list reads left to right across the whole workspace',
-      );
+      expect(stateOf(container).tabs.map((tab) => tab.id), [
+        left,
+        rightB,
+        rightA,
+      ], reason: 'the tab list reads left to right across the whole workspace');
     });
   });
 
@@ -570,13 +573,10 @@ void main() {
       final groups = restored.workspace!.groups;
 
       expect(groups, hasLength(2), reason: 'the split itself came back');
-      expect(
-        groups.map((group) => group.panes),
-        [
-          [left],
-          [moved],
-        ],
-      );
+      expect(groups.map((group) => group.panes), [
+        [left],
+        [moved],
+      ]);
     });
 
     test('several empty groups come back where they were', () {

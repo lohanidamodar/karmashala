@@ -107,7 +107,8 @@ void main() {
         environmentId: 'ssh:h1',
         responder: (_) => const CommandResult(
           exitCode: 0,
-          stdout: '/srv/work/.git\n'
+          stdout:
+              '/srv/work/.git\n'
               '/srv/work/apps/client/.git\n'
               '/srv/work/node_modules/vendor/.git\n',
           stderr: '',
@@ -142,10 +143,7 @@ void main() {
 
       await expectLater(
         remoteService(runner).discover(
-          const EnvironmentPath(
-            environmentId: 'ssh:h1',
-            path: '/missing',
-          ),
+          const EnvironmentPath(environmentId: 'ssh:h1', path: '/missing'),
         ),
         throwsA(isA<RepositoryDiscoveryException>()),
       );

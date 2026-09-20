@@ -56,8 +56,7 @@ Future<void> main() async {
     );
     check(
       'the spawned browser uses a throwaway profile, not the real one',
-      session.endpoint.userDataDir?.contains('karmashala-cdp-profile') ??
-          false,
+      session.endpoint.userDataDir?.contains('karmashala-cdp-profile') ?? false,
       session.endpoint.userDataDir,
     );
 

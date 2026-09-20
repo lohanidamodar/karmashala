@@ -117,7 +117,8 @@ const int kErrorInsufficientBuffer = 122;
 
 typedef CreatePseudoConsoleNative =
     Int32 Function(Coord, IntPtr, IntPtr, Uint32, Pointer<IntPtr>);
-typedef CreatePseudoConsoleDart = int Function(Coord, int, int, int, Pointer<IntPtr>);
+typedef CreatePseudoConsoleDart =
+    int Function(Coord, int, int, int, Pointer<IntPtr>);
 
 typedef ResizePseudoConsoleNative = Int32 Function(IntPtr, Coord);
 typedef ResizePseudoConsoleDart = int Function(int, Coord);
@@ -125,12 +126,22 @@ typedef ResizePseudoConsoleDart = int Function(int, Coord);
 /// kernel32 as this process sees it, plus the three ConPTY entry points. One
 /// instance per isolate: a `DynamicLibrary` cannot travel over a `SendPort`.
 class Kernel32 {
-  Kernel32._(DynamicLibrary lib, this.createPseudoConsole, this.resizePseudoConsole,
-      this.closePseudoConsole)
-    : createPipe = lib
-          .lookup<NativeFunction<Int32 Function(Pointer<IntPtr>, Pointer<IntPtr>, Pointer<Void>, Uint32)>>(
-            'CreatePipe',
-          )
+  Kernel32._(
+    DynamicLibrary lib,
+    this.createPseudoConsole,
+    this.resizePseudoConsole,
+    this.closePseudoConsole,
+  ) : createPipe = lib
+          .lookup<
+            NativeFunction<
+              Int32 Function(
+                Pointer<IntPtr>,
+                Pointer<IntPtr>,
+                Pointer<Void>,
+                Uint32,
+              )
+            >
+          >('CreatePipe')
           .asFunction(),
       createProcessW = lib
           .lookup<
@@ -151,9 +162,11 @@ class Kernel32 {
           >('CreateProcessW')
           .asFunction(),
       initializeProcThreadAttributeList = lib
-          .lookup<NativeFunction<Int32 Function(Pointer<Void>, Uint32, Uint32, Pointer<IntPtr>)>>(
-            'InitializeProcThreadAttributeList',
-          )
+          .lookup<
+            NativeFunction<
+              Int32 Function(Pointer<Void>, Uint32, Uint32, Pointer<IntPtr>)
+            >
+          >('InitializeProcThreadAttributeList')
           .asFunction(),
       updateProcThreadAttribute = lib
           .lookup<
@@ -171,55 +184,93 @@ class Kernel32 {
           >('UpdateProcThreadAttribute')
           .asFunction(),
       deleteProcThreadAttributeList = lib
-          .lookup<NativeFunction<Void Function(Pointer<Void>)>>('DeleteProcThreadAttributeList')
+          .lookup<NativeFunction<Void Function(Pointer<Void>)>>(
+            'DeleteProcThreadAttributeList',
+          )
           .asFunction(),
       readFile = lib
           .lookup<
-            NativeFunction<Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<Void>)>
+            NativeFunction<
+              Int32 Function(
+                IntPtr,
+                Pointer<Uint8>,
+                Uint32,
+                Pointer<Uint32>,
+                Pointer<Void>,
+              )
+            >
           >('ReadFile')
           .asFunction(),
       writeFile = lib
           .lookup<
-            NativeFunction<Int32 Function(IntPtr, Pointer<Uint8>, Uint32, Pointer<Uint32>, Pointer<Void>)>
+            NativeFunction<
+              Int32 Function(
+                IntPtr,
+                Pointer<Uint8>,
+                Uint32,
+                Pointer<Uint32>,
+                Pointer<Void>,
+              )
+            >
           >('WriteFile')
           .asFunction(),
       closeHandle = lib
           .lookup<NativeFunction<Int32 Function(IntPtr)>>('CloseHandle')
           .asFunction(),
       terminateProcess = lib
-          .lookup<NativeFunction<Int32 Function(IntPtr, Uint32)>>('TerminateProcess')
+          .lookup<NativeFunction<Int32 Function(IntPtr, Uint32)>>(
+            'TerminateProcess',
+          )
           .asFunction(),
       waitForSingleObject = lib
-          .lookup<NativeFunction<Uint32 Function(IntPtr, Uint32)>>('WaitForSingleObject')
+          .lookup<NativeFunction<Uint32 Function(IntPtr, Uint32)>>(
+            'WaitForSingleObject',
+          )
           .asFunction(),
       getExitCodeProcess = lib
-          .lookup<NativeFunction<Int32 Function(IntPtr, Pointer<Uint32>)>>('GetExitCodeProcess')
+          .lookup<NativeFunction<Int32 Function(IntPtr, Pointer<Uint32>)>>(
+            'GetExitCodeProcess',
+          )
           .asFunction(),
       getLastError = lib
           .lookup<NativeFunction<Uint32 Function()>>('GetLastError')
           .asFunction(),
       openProcess = lib
-          .lookup<NativeFunction<IntPtr Function(Uint32, Int32, Uint32)>>('OpenProcess')
-          .asFunction(),
-      createToolhelp32Snapshot = lib
-          .lookup<NativeFunction<IntPtr Function(Uint32, Uint32)>>('CreateToolhelp32Snapshot')
-          .asFunction(),
-      process32FirstW = lib
-          .lookup<NativeFunction<Int32 Function(IntPtr, Pointer<ProcessEntry32W>)>>('Process32FirstW')
-          .asFunction(),
-      process32NextW = lib
-          .lookup<NativeFunction<Int32 Function(IntPtr, Pointer<ProcessEntry32W>)>>('Process32NextW')
-          .asFunction(),
-      createJobObjectW = lib
-          .lookup<NativeFunction<IntPtr Function(Pointer<Void>, Pointer<Utf16>)>>('CreateJobObjectW')
-          .asFunction(),
-      setInformationJobObject = lib
-          .lookup<NativeFunction<Int32 Function(IntPtr, Uint32, Pointer<Void>, Uint32)>>(
-            'SetInformationJobObject',
+          .lookup<NativeFunction<IntPtr Function(Uint32, Int32, Uint32)>>(
+            'OpenProcess',
           )
           .asFunction(),
+      createToolhelp32Snapshot = lib
+          .lookup<NativeFunction<IntPtr Function(Uint32, Uint32)>>(
+            'CreateToolhelp32Snapshot',
+          )
+          .asFunction(),
+      process32FirstW = lib
+          .lookup<
+            NativeFunction<Int32 Function(IntPtr, Pointer<ProcessEntry32W>)>
+          >('Process32FirstW')
+          .asFunction(),
+      process32NextW = lib
+          .lookup<
+            NativeFunction<Int32 Function(IntPtr, Pointer<ProcessEntry32W>)>
+          >('Process32NextW')
+          .asFunction(),
+      createJobObjectW = lib
+          .lookup<
+            NativeFunction<IntPtr Function(Pointer<Void>, Pointer<Utf16>)>
+          >('CreateJobObjectW')
+          .asFunction(),
+      setInformationJobObject = lib
+          .lookup<
+            NativeFunction<
+              Int32 Function(IntPtr, Uint32, Pointer<Void>, Uint32)
+            >
+          >('SetInformationJobObject')
+          .asFunction(),
       assignProcessToJobObject = lib
-          .lookup<NativeFunction<Int32 Function(IntPtr, IntPtr)>>('AssignProcessToJobObject')
+          .lookup<NativeFunction<Int32 Function(IntPtr, IntPtr)>>(
+            'AssignProcessToJobObject',
+          )
           .asFunction();
 
   /// Null on a Windows older than 10 1809, so the host can refuse with a
@@ -228,7 +279,8 @@ class Kernel32 {
   final ResizePseudoConsoleDart? resizePseudoConsole;
   final void Function(int)? closePseudoConsole;
 
-  final int Function(Pointer<IntPtr>, Pointer<IntPtr>, Pointer<Void>, int) createPipe;
+  final int Function(Pointer<IntPtr>, Pointer<IntPtr>, Pointer<Void>, int)
+  createPipe;
   final int Function(
     Pointer<Utf16>,
     Pointer<Utf16>,
@@ -242,12 +294,23 @@ class Kernel32 {
     Pointer<ProcessInformation>,
   )
   createProcessW;
-  final int Function(Pointer<Void>, int, int, Pointer<IntPtr>) initializeProcThreadAttributeList;
-  final int Function(Pointer<Void>, int, int, Pointer<Void>, int, Pointer<Void>, Pointer<IntPtr>)
+  final int Function(Pointer<Void>, int, int, Pointer<IntPtr>)
+  initializeProcThreadAttributeList;
+  final int Function(
+    Pointer<Void>,
+    int,
+    int,
+    Pointer<Void>,
+    int,
+    Pointer<Void>,
+    Pointer<IntPtr>,
+  )
   updateProcThreadAttribute;
   final void Function(Pointer<Void>) deleteProcThreadAttributeList;
-  final int Function(int, Pointer<Uint8>, int, Pointer<Uint32>, Pointer<Void>) readFile;
-  final int Function(int, Pointer<Uint8>, int, Pointer<Uint32>, Pointer<Void>) writeFile;
+  final int Function(int, Pointer<Uint8>, int, Pointer<Uint32>, Pointer<Void>)
+  readFile;
+  final int Function(int, Pointer<Uint8>, int, Pointer<Uint32>, Pointer<Void>)
+  writeFile;
   final int Function(int) closeHandle;
   final int Function(int, int) terminateProcess;
   final int Function(int, int) waitForSingleObject;
@@ -265,7 +328,8 @@ class Kernel32 {
   bool get providesPseudoConsole => createPseudoConsole != null;
 
   /// Which library carried the ConPTY entry points — measured, not assumed.
-  String get ptyLibrary => providesPseudoConsole ? 'kernel32.dll' : 'kernel32.dll (no ConPTY)';
+  String get ptyLibrary =>
+      providesPseudoConsole ? 'kernel32.dll' : 'kernel32.dll (no ConPTY)';
 
   static Kernel32 open() {
     final lib = DynamicLibrary.open('kernel32.dll');
@@ -274,10 +338,14 @@ class Kernel32 {
     void Function(int)? close;
     try {
       create = lib
-          .lookup<NativeFunction<CreatePseudoConsoleNative>>('CreatePseudoConsole')
+          .lookup<NativeFunction<CreatePseudoConsoleNative>>(
+            'CreatePseudoConsole',
+          )
           .asFunction();
       resize = lib
-          .lookup<NativeFunction<ResizePseudoConsoleNative>>('ResizePseudoConsole')
+          .lookup<NativeFunction<ResizePseudoConsoleNative>>(
+            'ResizePseudoConsole',
+          )
           .asFunction();
       close = lib
           .lookup<NativeFunction<Void Function(IntPtr)>>('ClosePseudoConsole')
@@ -315,4 +383,5 @@ String quoteWindowsArgument(String argument) {
   return out.toString();
 }
 
-String windowsCommandLine(List<String> argv) => argv.map(quoteWindowsArgument).join(' ');
+String windowsCommandLine(List<String> argv) =>
+    argv.map(quoteWindowsArgument).join(' ');

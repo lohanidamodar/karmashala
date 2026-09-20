@@ -102,23 +102,26 @@ void main() {
         req.arguments.last.split(' ').last,
   ];
 
-  test('an agent added by an upgrade is found without a manual rescan', () async {
-    seedPreAntigravityInstallations();
+  test(
+    'an agent added by an upgrade is found without a manual rescan',
+    () async {
+      seedPreAntigravityInstallations();
 
-    final found = await container
-        .read(agentInstallationsControllerProvider.notifier)
-        .discoverUnprobed();
+      final found = await container
+          .read(agentInstallationsControllerProvider.notifier)
+          .discoverUnprobed();
 
-    expect(found.map((i) => i.agentId), [AgentIds.antigravity]);
-    expect(found.single.environmentId, 'wsl:archlinux');
-    expect(found.single.executable.path, '/home/dlohani/.local/bin/agy');
-    expect(found.single.version, '1.1.22');
-    expect(
-      container.read(agentInstallationsControllerProvider).length,
-      5,
-      reason: 'the four seeded rows plus the one nobody had looked for',
-    );
-  });
+      expect(found.map((i) => i.agentId), [AgentIds.antigravity]);
+      expect(found.single.environmentId, 'wsl:archlinux');
+      expect(found.single.executable.path, '/home/dlohani/.local/bin/agy');
+      expect(found.single.version, '1.1.22');
+      expect(
+        container.read(agentInstallationsControllerProvider).length,
+        5,
+        reason: 'the four seeded rows plus the one nobody had looked for',
+      );
+    },
+  );
 
   test('an agent already installed here is never probed', () async {
     seedPreAntigravityInstallations();
@@ -153,32 +156,41 @@ void main() {
       isEmpty,
       reason: 'a miss is recorded, so the next launch spawns nothing at all',
     );
-    expect(AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'windows'), isTrue);
-  });
-
-  test('a remote host is not dialled, and is not recorded as searched', () async {
-    ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
-    seedPreAntigravityInstallations();
-
-    await container
-        .read(agentInstallationsControllerProvider.notifier)
-        .discoverUnprobed();
-
-    // Startup must not reach out to every saved machine. The pair stays
-    // unrecorded because it was skipped, not searched — "Discover agents" on
-    // that environment still has work to do.
     expect(
-      AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'ssh:h1'),
-      isFalse,
+      AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'windows'),
+      isTrue,
     );
   });
 
-  test('a workspace that has never discovered anything probes everything', () async {
-    final found = await container
-        .read(agentInstallationsControllerProvider.notifier)
-        .discoverUnprobed();
+  test(
+    'a remote host is not dialled, and is not recorded as searched',
+    () async {
+      ExecutionEnvironmentDao(db).upsert(sshEnvFixture());
+      seedPreAntigravityInstallations();
 
-    expect(located().toSet(), {'claude', 'codex', 'agy'});
-    expect(found.map((i) => i.agentId), [AgentIds.antigravity]);
-  });
+      await container
+          .read(agentInstallationsControllerProvider.notifier)
+          .discoverUnprobed();
+
+      // Startup must not reach out to every saved machine. The pair stays
+      // unrecorded because it was skipped, not searched — "Discover agents" on
+      // that environment still has work to do.
+      expect(
+        AgentProbeLog(db).hasProbed(AgentIds.antigravity, 'ssh:h1'),
+        isFalse,
+      );
+    },
+  );
+
+  test(
+    'a workspace that has never discovered anything probes everything',
+    () async {
+      final found = await container
+          .read(agentInstallationsControllerProvider.notifier)
+          .discoverUnprobed();
+
+      expect(located().toSet(), {'claude', 'codex', 'agy'});
+      expect(found.map((i) => i.agentId), [AgentIds.antigravity]);
+    },
+  );
 }

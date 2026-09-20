@@ -118,9 +118,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('nothing set here is passed'), findsWidgets);
-    final approvalRow = tester.widget<DesktopMenuDetailItem<PermissionAxisChoice>>(
-      find.widgetWithText(DesktopMenuDetailItem<PermissionAxisChoice>, 'Never ask'),
-    );
+    final approvalRow = tester
+        .widget<DesktopMenuDetailItem<PermissionAxisChoice>>(
+          find.widgetWithText(
+            DesktopMenuDetailItem<PermissionAxisChoice>,
+            'Never ask',
+          ),
+        );
     expect(approvalRow.enabled, isFalse);
   });
 

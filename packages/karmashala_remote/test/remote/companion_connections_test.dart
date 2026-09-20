@@ -78,7 +78,8 @@ void main() {
           'hostId',
           hostA,
         ),
-        reason: 'an old build reads the active desktop, not a set it cannot '
+        reason:
+            'an old build reads the active desktop, not a set it cannot '
             'parse',
       );
     });
@@ -180,21 +181,24 @@ void main() {
       expect(all.active?.hostName, 'Laptop');
     });
 
-    test('lastConnectedAt round-trips, and is omitted when never set', () async {
-      final at = DateTime.utc(2026, 8, 31, 9, 30);
-      await record(hostA).withLastConnected(at).save(store);
-      await record(hostB).save(store);
+    test(
+      'lastConnectedAt round-trips, and is omitted when never set',
+      () async {
+        final at = DateTime.utc(2026, 8, 31, 9, 30);
+        await record(hostA).withLastConnected(at).save(store);
+        await record(hostB).save(store);
 
-      final all = await CompanionConnections.load(store);
+        final all = await CompanionConnections.load(store);
 
-      expect(all.byHost(hostA)!.lastConnectedAt, at);
-      expect(all.byHost(hostB)!.lastConnectedAt, isNull);
-      expect(
-        record(hostB).toJson().containsKey('lastConnectedAt'),
-        isFalse,
-        reason: 'an unconnected record writes no timestamp key at all',
-      );
-    });
+        expect(all.byHost(hostA)!.lastConnectedAt, at);
+        expect(all.byHost(hostB)!.lastConnectedAt, isNull);
+        expect(
+          record(hostB).toJson().containsKey('lastConnectedAt'),
+          isFalse,
+          reason: 'an unconnected record writes no timestamp key at all',
+        );
+      },
+    );
 
     test('saving the same host again replaces that record only — which is '
         'what the generation bump does on every connect', () async {
@@ -207,7 +211,11 @@ void main() {
       expect(all.records, hasLength(2), reason: 're-saving never duplicates');
       expect(all.byHost(hostA)!.generation, 5);
       expect(all.byHost(hostA)!.hostName, 'Renamed');
-      expect(all.byHost(hostB)!.generation, 1, reason: 'the other is untouched');
+      expect(
+        all.byHost(hostB)!.generation,
+        1,
+        reason: 'the other is untouched',
+      );
     });
 
     test('the first record saved becomes active; later ones do not steal '

@@ -323,10 +323,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(
-        _widest(tester, find.byType(CompanionComposer)),
-        kPhoneSize.width,
-      );
+      expect(_widest(tester, find.byType(CompanionComposer)), kPhoneSize.width);
     });
   });
 

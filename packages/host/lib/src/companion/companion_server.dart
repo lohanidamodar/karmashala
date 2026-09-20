@@ -68,7 +68,9 @@ class CompanionServer {
       String? id,
       Map<String, Object?> payload = const {},
     }) async {
-      link.send(Envelope.of(type, seq: seq++, id: id, payload: payload).toBytes());
+      link.send(
+        Envelope.of(type, seq: seq++, id: id, payload: payload).toBytes(),
+      );
       return true;
     }
 

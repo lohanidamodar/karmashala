@@ -72,7 +72,9 @@ class RecordingControlTools {
       };
     }
     if (!_terminal.start(paneId)) {
-      throw StateError('Pane $paneId is not live, so there is nothing to record.');
+      throw StateError(
+        'Pane $paneId is not live, so there is nothing to record.',
+      );
     }
     return <String, Object?>{
       'recording': paneId,
@@ -155,12 +157,14 @@ class RecordingControlTools {
   Future<Object?> _deviceStart(String? format) async {
     final support = _container.read(videoSupportProvider);
     final container = switch ((format ?? '').toLowerCase()) {
-      '' => support.available
-          ? DeviceRecordingContainer.mp4
-          : DeviceRecordingContainer.transportStream,
+      '' =>
+        support.available
+            ? DeviceRecordingContainer.mp4
+            : DeviceRecordingContainer.transportStream,
       'mp4' => DeviceRecordingContainer.mp4,
-      'ts' || 'mpegts' || 'transportstream' =>
-        DeviceRecordingContainer.transportStream,
+      'ts' ||
+      'mpegts' ||
+      'transportstream' => DeviceRecordingContainer.transportStream,
       _ => throw ArgumentError('format must be "mp4" or "ts".'),
     };
     if (container == DeviceRecordingContainer.mp4 && !support.available) {

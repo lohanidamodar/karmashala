@@ -34,16 +34,19 @@ void main() {
       );
     });
 
-    test('WSL writes through the drive mount, so the Windows watcher fires', () {
-      expect(
-        vmServiceOutFileFor(
-          kind: EnvironmentKind.wsl,
-          directory: r'C:\Users\me\AppData\Roaming\karmashala\vmservice',
-          name: 'demo-1.uri',
-        ),
-        '/mnt/c/Users/me/AppData/Roaming/karmashala/vmservice/demo-1.uri',
-      );
-    });
+    test(
+      'WSL writes through the drive mount, so the Windows watcher fires',
+      () {
+        expect(
+          vmServiceOutFileFor(
+            kind: EnvironmentKind.wsl,
+            directory: r'C:\Users\me\AppData\Roaming\karmashala\vmservice',
+            name: 'demo-1.uri',
+          ),
+          '/mnt/c/Users/me/AppData/Roaming/karmashala/vmservice/demo-1.uri',
+        );
+      },
+    );
 
     test('a WSL run whose host directory is not on a drive gets no file', () {
       expect(

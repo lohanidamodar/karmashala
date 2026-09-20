@@ -40,7 +40,8 @@ class HostSessionApi {
   }) : _send = send,
        _starts = startLedger ?? SessionStartLedger<RemoteSessionStarted>(),
        _resumes = resumeLedger ?? SessionStartLedger<RemoteSessionStarted>(),
-       _projects = projectLedger ?? SessionStartLedger<RemoteWorkspaceProject>(),
+       _projects =
+           projectLedger ?? SessionStartLedger<RemoteWorkspaceProject>(),
        _prompts = promptLedger ?? SessionStartLedger<RemotePromptDelivery>();
 
   /// The device this api serves. **Not final**: permissions edited on the
@@ -425,13 +426,22 @@ class HostSessionApi {
         case FrameType.projectAdd:
           final key = _requireString(envelope, 'requestId');
           if (key.length > kMaxSessionStartKeyLength) {
-            throw const RemoteApiRefusal(ErrorCode.badRequest, 'requestId is too long');
+            throw const RemoteApiRefusal(
+              ErrorCode.badRequest,
+              'requestId is too long',
+            );
           }
           final name = _requireString(envelope, 'name');
           final path = _requireString(envelope, 'path');
           final replayed = _projects.holds(key);
-          final project = await _projects.once(key, () => bindings.addProject(name, path));
-          await _result(envelope.id, {...project.toJson(), if (replayed) 'replayed': true});
+          final project = await _projects.once(
+            key,
+            () => bindings.addProject(name, path),
+          );
+          await _result(envelope.id, {
+            ...project.toJson(),
+            if (replayed) 'replayed': true,
+          });
         case FrameType.sessionStart:
           // The idempotency key, first: a start that cannot be recognised on a
           // second delivery is the one request this api must not take on faith.
@@ -461,12 +471,21 @@ class HostSessionApi {
         case FrameType.sessionResume:
           final key = _requireString(envelope, 'requestId');
           if (key.length > kMaxSessionStartKeyLength) {
-            throw const RemoteApiRefusal(ErrorCode.badRequest, 'requestId is too long');
+            throw const RemoteApiRefusal(
+              ErrorCode.badRequest,
+              'requestId is too long',
+            );
           }
           final sessionId = _requireString(envelope, 'sessionId');
           final replayed = _resumes.holds(key);
-          final resumed = await _resumes.once(key, () => bindings.resumeSession(sessionId));
-          await _result(envelope.id, {...resumed.toJson(), if (replayed) 'replayed': true});
+          final resumed = await _resumes.once(
+            key,
+            () => bindings.resumeSession(sessionId),
+          );
+          await _result(envelope.id, {
+            ...resumed.toJson(),
+            if (replayed) 'replayed': true,
+          });
         // Host-only types cannot reach here: sentBy refused them above.
         case FrameType.sessionChanged:
         case FrameType.transcriptAppended:
@@ -616,9 +635,7 @@ class HostSessionApi {
         sessionId: sessionId,
         // The live path matters as much as the opening one: a subagent that
         // finishes while the phone is watching arrives here.
-        messages: collapseTaskNotifications(
-          page.messages.sublist(cursor, end),
-        ),
+        messages: collapseTaskNotifications(page.messages.sublist(cursor, end)),
         cursor: end,
         hasNewer: end < total,
       ).toJson(),
@@ -696,8 +713,7 @@ class HostSessionApi {
 
   /// What a request asks, and nothing that moves while it waits — the
   /// highlight, or the screen rows it is quoted with.
-  static String _askOf(RemoteApprovalRequest request) =>
-      request.menu != null
+  static String _askOf(RemoteApprovalRequest request) => request.menu != null
       ? 'menu:${request.menu!.menuId}'
       : request.question != null
       ? 'question:${request.question!.toolUseId}'

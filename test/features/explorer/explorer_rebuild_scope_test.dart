@@ -285,10 +285,7 @@ void main() {
       arm(harness.container, 'n2');
       await tester.pump();
 
-      await tester.tap(
-        find.text('Native 2'),
-        buttons: kSecondaryMouseButton,
-      );
+      await tester.tap(find.text('Native 2'), buttons: kSecondaryMouseButton);
       await tester.pumpAndSettle();
       expect(find.text('Change scheduled resume…'), findsOneWidget);
       expect(find.text('Resume when usage resets…'), findsNothing);
@@ -304,10 +301,7 @@ void main() {
           .firstWhere((card) => card.title == 'Native 2');
       expect(card.scheduled, isNull);
 
-      await tester.tap(
-        find.text('Native 3'),
-        buttons: kSecondaryMouseButton,
-      );
+      await tester.tap(find.text('Native 3'), buttons: kSecondaryMouseButton);
       await tester.pumpAndSettle();
       expect(find.text('Resume when usage resets…'), findsOneWidget);
     });

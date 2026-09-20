@@ -29,9 +29,7 @@ class AttentionInboxView extends ConsumerWidget {
       children: [
         PaneHeader(
           icon: AppIcons.warningCircle,
-          title: inbox.unseen == 0
-              ? 'Inbox'
-              : 'Inbox  ·  ${inbox.unseen} new',
+          title: inbox.unseen == 0 ? 'Inbox' : 'Inbox  ·  ${inbox.unseen} new',
           actions: [
             if (!inbox.isEmpty)
               TextButton(
@@ -86,7 +84,8 @@ class _ContinueAction extends StatelessWidget {
     return IconButton(
       // The accessible name, so Narrator reads the promise and not just
       // "button" — the tooltip is the only place this control can make it.
-      tooltip: 'Continue with… — hand this session to another agent, or fork '
+      tooltip:
+          'Continue with… — hand this session to another agent, or fork '
           'it. $kContinueWithPromise',
       iconSize: Chrome.iconAction,
       visualDensity: VisualDensity.compact,
@@ -147,9 +146,7 @@ class _InboxRow extends ConsumerWidget {
     // Read on follow-up rows and nowhere else; see [_ContinueAction].
     final canContinue =
         item.kind == InboxItemKind.followUp &&
-        ref
-            .watch(sessionContinuationProvider(item.session.openId))
-            .isPossible;
+        ref.watch(sessionContinuationProvider(item.session.openId)).isPossible;
 
     return RowContextMenu(
       menuLabel: 'Actions for “${item.label}”',
@@ -166,11 +163,7 @@ class _InboxRow extends ConsumerWidget {
             icon: AppIcons.arrowBendDownRight,
           ),
         const DesktopMenuDivider(),
-        DesktopMenuItem(
-          value: 'dismiss',
-          label: 'Dismiss',
-          icon: AppIcons.x,
-        ),
+        DesktopMenuItem(value: 'dismiss', label: 'Dismiss', icon: AppIcons.x),
       ],
       onSelected: (value) => switch (value) {
         'open' => onOpen(),

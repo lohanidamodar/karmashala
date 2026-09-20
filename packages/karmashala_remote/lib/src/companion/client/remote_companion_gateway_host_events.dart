@@ -16,18 +16,12 @@ extension _GatewayHostEvents on RemoteCompanionGateway {
       case ApprovalRequestedEvent(:final request):
         _applyApproval(request);
       case ApprovalResolvedEvent(:final resolution):
-        _retireApproval(
-          resolution.sessionId,
-          switch (resolution.outcome) {
-            RemoteApprovalOutcome.approved =>
-              CompanionApprovalOutcome.approved,
-            RemoteApprovalOutcome.denied => CompanionApprovalOutcome.denied,
-            RemoteApprovalOutcome.elsewhere =>
-              CompanionApprovalOutcome.elsewhere,
-            RemoteApprovalOutcome.answered =>
-              CompanionApprovalOutcome.answered,
-          },
-        );
+        _retireApproval(resolution.sessionId, switch (resolution.outcome) {
+          RemoteApprovalOutcome.approved => CompanionApprovalOutcome.approved,
+          RemoteApprovalOutcome.denied => CompanionApprovalOutcome.denied,
+          RemoteApprovalOutcome.elsewhere => CompanionApprovalOutcome.elsewhere,
+          RemoteApprovalOutcome.answered => CompanionApprovalOutcome.answered,
+        });
       case PairingRevokedEvent():
         // The one case where silence would have been read as a busy desktop.
         // Now it is a fact, so the link stops claiming anything else.

@@ -225,9 +225,7 @@ List<String> _alignLines(List<String> before, List<String> after) {
     endAfter--;
   }
 
-  final out = <String>[
-    for (var i = 0; i < start; i++) ' ${before[i]}',
-  ];
+  final out = <String>[for (var i = 0; i < start; i++) ' ${before[i]}'];
   final middleBefore = before.sublist(start, endBefore);
   final middleAfter = after.sublist(start, endAfter);
   if (middleBefore.isEmpty || middleAfter.isEmpty) {

@@ -96,7 +96,8 @@ extension TerminalSessionLifetime on TerminalSessionsController {
     final workingDirectory = existing.workingDirectory;
     // Taken before the release drops it: handing this on is what stops the save
     // below encoding the same history back out. See [_seedEncoding].
-    final carried = scrollback ?? _encoded[paneId] ?? _heldScrollbackOf(existing);
+    final carried =
+        scrollback ?? _encoded[paneId] ?? _heldScrollbackOf(existing);
 
     _releasePane(paneId);
     _adopt(
@@ -141,7 +142,8 @@ extension TerminalSessionLifetime on TerminalSessionsController {
         : _heldScrollbackOf(existing) ?? encodeScrollback(existing.terminal);
     // As in [startPane]: the history the resumed pane starts from is history
     // the store already holds.
-    final carried = scrollback ?? _encoded[paneId] ?? _heldScrollbackOf(existing);
+    final carried =
+        scrollback ?? _encoded[paneId] ?? _heldScrollbackOf(existing);
     _releasePane(paneId);
     _adopt(
       paneId,

@@ -309,11 +309,12 @@ void main() {
 
     test('stale staged jars are swept rather than accumulating', () async {
       final staging = _staging();
-      File aged(String name) => File(
-        '${staging.path}${Platform.pathSeparator}$name',
-      )
-        ..writeAsBytesSync(Uint8List(700))
-        ..setLastModifiedSync(DateTime.now().subtract(const Duration(days: 2)));
+      File aged(String name) =>
+          File('${staging.path}${Platform.pathSeparator}$name')
+            ..writeAsBytesSync(Uint8List(700))
+            ..setLastModifiedSync(
+              DateTime.now().subtract(const Duration(days: 2)),
+            );
 
       // A start killed before its cleanup ran — the app quitting mid-start, a
       // crash — leaves one of these behind every time.
@@ -322,11 +323,10 @@ void main() {
       final fixedPath = aged('karmashala-scrcpy-server-4.1.jar');
       final unrelated = aged('someone-elses-cache.jar');
       // Another start, still using its jar right now.
-      final inFlight =
-          File(
-            '${staging.path}${Platform.pathSeparator}'
-            'karmashala-scrcpy-server-4.1-inflight-0.jar',
-          )..writeAsBytesSync(Uint8List(700));
+      final inFlight = File(
+        '${staging.path}${Platform.pathSeparator}'
+        'karmashala-scrcpy-server-4.1-inflight-0.jar',
+      )..writeAsBytesSync(Uint8List(700));
 
       final pushes = <({String path, int length})>[];
       final runner = _pushRecorder(pushes);

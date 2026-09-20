@@ -248,31 +248,34 @@ void main() async {
       expect(access.url, startsWith('http://127.0.0.1:'));
     });
 
-    test('a macOS or Linux session keeps the loopback URL, bridge or not', () async {
-      // **The cross-platform guarantee, pinned.** There is no WSL on a Mac and
-      // none on a Linux desktop, so `localPosix` must be untouched by every
-      // part of this — no bridge, no spool, no share. It is asserted with a
-      // bridge present for the same reason as the Windows case above: the
-      // transport is chosen by `EnvironmentKind`, so a file appearing beside
-      // the app cannot move a POSIX host onto a Windows-only path.
-      final server = await startServer(
-        bridgeExecutable: () => bridgeAt('karmashala_mcp'),
-      );
+    test(
+      'a macOS or Linux session keeps the loopback URL, bridge or not',
+      () async {
+        // **The cross-platform guarantee, pinned.** There is no WSL on a Mac and
+        // none on a Linux desktop, so `localPosix` must be untouched by every
+        // part of this — no bridge, no spool, no share. It is asserted with a
+        // bridge present for the same reason as the Windows case above: the
+        // transport is chosen by `EnvironmentKind`, so a file appearing beside
+        // the app cannot move a POSIX host onto a Windows-only path.
+        final server = await startServer(
+          bridgeExecutable: () => bridgeAt('karmashala_mcp'),
+        );
 
-      final access = server.accessFor(
-        sessionId: 's1',
-        environment: posixEnv(),
-        withConfigFile: true,
-      )!;
+        final access = server.accessFor(
+          sessionId: 's1',
+          environment: posixEnv(),
+          withConfigFile: true,
+        )!;
 
-      final entry = entryIn(p.join(tmp.path, 'mcp', 'session-s1.json'));
-      expect(entry['type'], 'http');
-      expect(entry['url'], access.url);
-      expect(access.url, startsWith('http://127.0.0.1:'));
-      // And the file is named the way the agent already knows it: a POSIX host
-      // shares this filesystem, so there is nothing to translate.
-      expect(access.configPath, p.join(tmp.path, 'mcp', 'session-s1.json'));
-    });
+        final entry = entryIn(p.join(tmp.path, 'mcp', 'session-s1.json'));
+        expect(entry['type'], 'http');
+        expect(entry['url'], access.url);
+        expect(access.url, startsWith('http://127.0.0.1:'));
+        // And the file is named the way the agent already knows it: a POSIX host
+        // shares this filesystem, so there is nothing to translate.
+        expect(access.configPath, p.join(tmp.path, 'mcp', 'session-s1.json'));
+      },
+    );
   });
 
   group('the file an agent is asked to open', () {

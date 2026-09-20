@@ -13,7 +13,8 @@ enum AndroidSlimmingLayer {
     id: 'launch',
     displayName: 'Launch flags',
     persists: false,
-    note: 'Passed to the emulator when it starts. Nothing is written to the '
+    note:
+        'Passed to the emulator when it starts. Nothing is written to the '
         'AVD — start it without these and it is back to stock.',
   ),
 
@@ -23,7 +24,8 @@ enum AndroidSlimmingLayer {
     id: 'settings',
     displayName: 'Device settings',
     persists: true,
-    note: 'Written into the emulator and kept across restarts. Use Restore to '
+    note:
+        'Written into the emulator and kept across restarts. Use Restore to '
         'put them back — switching slimming off does not.',
   ),
 
@@ -33,7 +35,8 @@ enum AndroidSlimmingLayer {
     id: 'packages',
     displayName: 'Disabled packages',
     persists: true,
-    note: 'Disabled on the emulator and kept across restarts. Apps that depend '
+    note:
+        'Disabled on the emulator and kept across restarts. Apps that depend '
         'on them stop working until Restore re-enables them.',
   );
 
@@ -58,19 +61,37 @@ enum AndroidSlimmingLayer {
 /// the right answer depends on the host's GPU: [auto] passes **no flag at all**,
 /// the only option that cannot make a working emulator stop working.
 enum AndroidGpuMode {
-  auto(id: 'auto', displayName: 'Automatic', flag: null,
-      description: 'Let the emulator choose. The AVD\'s own setting applies.'),
-  host(id: 'host', displayName: 'Host GPU', flag: 'host',
-      description: 'Usually the fastest, and the one that fails on a machine '
-          'with no usable GPU driver — the preview goes black rather than '
-          'slow.'),
-  swiftshader(id: 'swiftshader', displayName: 'SwiftShader (software)',
-      flag: 'swiftshader',
-      description: 'Renders on the CPU. Slower, and works anywhere — the '
-          'fallback when Host GPU shows nothing.'),
-  software(id: 'software', displayName: 'Legacy software', flag: 'software',
-      description: 'The old software renderer. Slowest; only worth trying if '
-          'SwiftShader also fails.');
+  auto(
+    id: 'auto',
+    displayName: 'Automatic',
+    flag: null,
+    description: 'Let the emulator choose. The AVD\'s own setting applies.',
+  ),
+  host(
+    id: 'host',
+    displayName: 'Host GPU',
+    flag: 'host',
+    description:
+        'Usually the fastest, and the one that fails on a machine '
+        'with no usable GPU driver — the preview goes black rather than '
+        'slow.',
+  ),
+  swiftshader(
+    id: 'swiftshader',
+    displayName: 'SwiftShader (software)',
+    flag: 'swiftshader',
+    description:
+        'Renders on the CPU. Slower, and works anywhere — the '
+        'fallback when Host GPU shows nothing.',
+  ),
+  software(
+    id: 'software',
+    displayName: 'Legacy software',
+    flag: 'software',
+    description:
+        'The old software renderer. Slowest; only worth trying if '
+        'SwiftShader also fails.',
+  );
 
   const AndroidGpuMode({
     required this.id,

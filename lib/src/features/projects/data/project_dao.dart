@@ -54,10 +54,10 @@ class ProjectDao {
   /// picker's first row when null. Its own statement, for [setWorkspace]'s
   /// reason: choosing a checkout must not rewrite the name or the root.
   void setDefaultRepository(String id, String? repositoryId) {
-    _db.execute(
-      'UPDATE projects SET default_repository_id = ? WHERE id = ?;',
-      [repositoryId, id],
-    );
+    _db.execute('UPDATE projects SET default_repository_id = ? WHERE id = ?;', [
+      repositoryId,
+      id,
+    ]);
   }
 
   Project? getById(String id) {

@@ -210,7 +210,10 @@ Future<void> _bootstrap(AppLogger logger) async {
   );
 
   if (controlServer != null) {
-    lifecycle.installAgentHooks(controlServer, afterFirstFrame: afterFirstFrame);
+    lifecycle.installAgentHooks(
+      controlServer,
+      afterFirstFrame: afterFirstFrame,
+    );
   }
 
   // The skills, beside the hooks because it is the same act. Not behind

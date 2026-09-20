@@ -54,12 +54,10 @@ void main() {
       // read off beside it".
       expect(support.isKnown, isTrue);
       expect(support.evidence, contains('agy'));
-      expect([for (final value in support.axes.single.values) value.id], [
-        'plan',
-        'prompt',
-        'accept-edits',
-        'skip-permissions',
-      ]);
+      expect(
+        [for (final value in support.axes.single.values) value.id],
+        ['plan', 'prompt', 'accept-edits', 'skip-permissions'],
+      );
       for (final value in support.axes.single.values) {
         expect(value.evidence, contains('agy'), reason: value.id);
       }
@@ -83,7 +81,9 @@ void main() {
 
     test('accept-edits and bypass name the documented flags', () {
       expect(
-        support.argumentsFor(const PermissionSelection({'mode': 'accept-edits'})),
+        support.argumentsFor(
+          const PermissionSelection({'mode': 'accept-edits'}),
+        ),
         ['--mode', 'accept-edits'],
       );
       expect(

@@ -105,9 +105,9 @@ class _CompanionActivityStripState
     // A thumb reads the ramp one step up, as `UiDensity.muted` does.
     final mono = density.isTouch
         ? theme.textTheme.bodySmall?.copyWith(
-          fontFamily: kMonoFamily,
-          fontFamilyFallback: kMonoFallback,
-        )
+            fontFamily: kMonoFamily,
+            fontFamilyFallback: kMonoFallback,
+          )
         : MonoStyles.small;
     // The host's own reading plus what has passed here since, never one
     // machine's instant minus another's.

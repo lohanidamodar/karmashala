@@ -93,7 +93,8 @@ class LocalHostSessionAccess implements HostSessionAccess {
       _NoAnswer(:final reason) => HostDeployment(
         status: HostDeploymentStatus.unknown,
         observedAt: now,
-        reason: 'Could not finish the handshake on ${_paths.socketPath}: $reason',
+        reason:
+            'Could not finish the handshake on ${_paths.socketPath}: $reason',
         remotePath: binary?.path,
       ),
       _Silent() when binary == null => HostDeployment(
@@ -106,7 +107,8 @@ class LocalHostSessionAccess implements HostSessionAccess {
       _Silent() => HostDeployment(
         status: HostDeploymentStatus.unknown,
         observedAt: now,
-        reason: 'Nothing is listening on ${_paths.socketPath}; no host is running here.',
+        reason:
+            'Nothing is listening on ${_paths.socketPath}; no host is running here.',
         remotePath: binary?.path,
       ),
     };
@@ -266,7 +268,9 @@ class LocalHostSessionAccess implements HostSessionAccess {
       // that speaks another protocol and one that said nothing inside the bound
       // both mean a host IS there, and a second must not be started over it.
       if (e.timedOut) return _NoAnswer(e.message);
-      return e.message.contains('protocol') ? _Mismatched(e.message) : const _Silent();
+      return e.message.contains('protocol')
+          ? _Mismatched(e.message)
+          : const _Silent();
     }
   }
 
@@ -317,8 +321,12 @@ class LocalHostSessionAccess implements HostSessionAccess {
       );
     }
 
-    process.stdout.transform(utf8.decoder).listen(look, onError: (Object _) {}, onDone: closed);
-    process.stderr.transform(utf8.decoder).listen(look, onError: (Object _) {}, onDone: closed);
+    process.stdout
+        .transform(utf8.decoder)
+        .listen(look, onError: (Object _) {}, onDone: closed);
+    process.stderr
+        .transform(utf8.decoder)
+        .listen(look, onError: (Object _) {}, onDone: closed);
 
     return ready.future.timeout(
       const Duration(seconds: 20),
@@ -345,7 +353,8 @@ class LocalHostExecutable {
   /// Lazy on purpose: the last-but-one entry lists a directory, and an
   /// installed app matches the first and never pays for it.
   Iterable<String> _candidates() sync* {
-    final beside = executableDirectory ?? File(Platform.resolvedExecutable).parent.path;
+    final beside =
+        executableDirectory ?? File(Platform.resolvedExecutable).parent.path;
     final root = repositoryRoot ?? Directory.current.path;
     // The bundle `dart build cli` writes: the executable finds its SQLite at
     // `../lib`, so it cannot be flattened into the app's own directory.

@@ -114,7 +114,9 @@ void main() {
     expect(registry.cycles, 0, reason: 'nor make the registry do a pass');
   });
 
-  testWidgets('rendering $_rows badges does no work of its own', (tester) async {
+  testWidgets('rendering $_rows badges does no work of its own', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container(),

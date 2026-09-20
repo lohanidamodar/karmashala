@@ -61,16 +61,7 @@ void main() {
     final startsBefore = clock.debugTimerStarts;
     for (var i = 0; i < 10; i++) {
       // A new widget and a new painter each time, equal to the last.
-      await tester.pumpWidget(
-        _host(
-          Row(
-            children: [
-              Text('$i'),
-              glyph(11),
-            ],
-          ),
-        ),
-      );
+      await tester.pumpWidget(_host(Row(children: [Text('$i'), glyph(11)])));
       await tester.pump(Motion.statusPeriod ~/ Motion.statusSteps);
     }
     expect(clock.debugTimerStarts - startsBefore, 1);

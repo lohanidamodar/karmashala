@@ -75,8 +75,10 @@ class AgentPermissionAxisOptions {
   /// The row currently in force on this axis.
   final String selectedId;
 
-  AgentPermissionOption get selected =>
-      options.firstWhere((o) => o.id == selectedId, orElse: () => options.first);
+  AgentPermissionOption get selected => options.firstWhere(
+    (o) => o.id == selectedId,
+    orElse: () => options.first,
+  );
 }
 
 /// The agent's axes with every row, and the given [selection] marked.

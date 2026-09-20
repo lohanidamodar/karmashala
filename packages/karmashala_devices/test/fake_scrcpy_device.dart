@@ -78,8 +78,9 @@ class FakeScrcpyDevice {
     });
   }
 
-  static Future<FakeScrcpyDevice> bind() async =>
-      FakeScrcpyDevice._(await ServerSocket.bind(InternetAddress.loopbackIPv4, 0));
+  static Future<FakeScrcpyDevice> bind() async => FakeScrcpyDevice._(
+    await ServerSocket.bind(InternetAddress.loopbackIPv4, 0),
+  );
 
   final ServerSocket _server;
   final List<Socket> _sockets = [];

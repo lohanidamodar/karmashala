@@ -90,11 +90,16 @@ class AgentQuestionSet {
 
 /// What the user chose for one question: option indexes, or their own words.
 class AgentQuestionAnswer {
-  const AgentQuestionAnswer.option(int index) : selected = const [], text = null, _one = index;
+  const AgentQuestionAnswer.option(int index)
+    : selected = const [],
+      text = null,
+      _one = index;
 
   const AgentQuestionAnswer.options(this.selected) : text = null, _one = null;
 
-  const AgentQuestionAnswer.text(String this.text) : selected = const [], _one = null;
+  const AgentQuestionAnswer.text(String this.text)
+    : selected = const [],
+      _one = null;
 
   final List<int> selected;
   final String? text;
@@ -210,7 +215,9 @@ String claudeQuestionKeys(
 ) {
   final list = questions.questions;
   if (answers.length != list.length) {
-    throw ArgumentError('${answers.length} answers for ${list.length} questions');
+    throw ArgumentError(
+      '${answers.length} answers for ${list.length} questions',
+    );
   }
   final keys = StringBuffer();
   for (var i = 0; i < list.length; i++) {

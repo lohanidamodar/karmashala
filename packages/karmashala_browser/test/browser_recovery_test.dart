@@ -47,7 +47,10 @@ void main() {
     });
 
     test('a busy browser is safe to ask again', () {
-      expect(recoveryFor(BrowserFailure.timeout).retry, BrowserRetryAdvice.safe);
+      expect(
+        recoveryFor(BrowserFailure.timeout).retry,
+        BrowserRetryAdvice.safe,
+      );
       expect(
         recoveryFor(BrowserFailure.navigationTimeout).retry,
         BrowserRetryAdvice.safe,

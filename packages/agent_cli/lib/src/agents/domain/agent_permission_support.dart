@@ -221,7 +221,9 @@ class AgentPermissionSupport {
     if (!isKnown) return PermissionSelection.empty;
     // "Enforce nothing" stays itself. Only a *null* selection means "use the
     // declared default"; filling this one in would widen it.
-    if (selection != null && selection.isEmpty) return PermissionSelection.empty;
+    if (selection != null && selection.isEmpty) {
+      return PermissionSelection.empty;
+    }
     final chosen = <String, String>{
       for (final axis in axes)
         axis.id:
@@ -338,7 +340,9 @@ class AgentPermissionSupport {
   PermissionSelection resolveStored(String? stored) {
     if (!isKnown) return PermissionSelection.empty;
     if (stored == null || stored.isEmpty) return defaultSelection;
-    if (stored == PermissionSelection.noneToken) return PermissionSelection.empty;
+    if (stored == PermissionSelection.noneToken) {
+      return PermissionSelection.empty;
+    }
     final alias = legacyAliases[stored];
     if (alias != null) return normalise(PermissionSelection.parse(alias));
     return normalise(PermissionSelection.parse(stored));

@@ -23,7 +23,8 @@ String connectionRouteLine(
         : 'via ${activeRelay == null ? 'a relay' : describeRelay(activeRelay)}';
     return 'Route: Automatic · $now';
   }
-  final gone = pin.kind == CompanionRouteKind.relay && !_offers(connection, pin);
+  final gone =
+      pin.kind == CompanionRouteKind.relay && !_offers(connection, pin);
   return 'Route: ${describeRoutePin(pin)} (pinned)'
       '${gone ? ' · no longer offered by the desktop' : ''}';
 }
@@ -68,11 +69,7 @@ class ConnectionRouteLine extends ConsumerWidget {
             const SizedBox(width: Insets.xs),
             Flexible(
               child: Text(
-                connectionRouteLine(
-                  connection,
-                  path: path,
-                  activeRelay: relay,
-                ),
+                connectionRouteLine(connection, path: path, activeRelay: relay),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: density.muted(theme),
@@ -98,9 +95,9 @@ class ConnectionRouteLine extends ConsumerWidget {
           .setRoutePin(connection.hostId, chosen);
     } on Object catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(content: Text(companionErrorText(error))),
-      );
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(companionErrorText(error))));
     }
   }
 }
@@ -115,7 +112,8 @@ Future<CompanionRoutePin?> showRoutePicker(
   final current = connection.pin;
   final relays = [
     for (final url in connection.relays) CompanionRoutePin.relay(url),
-    if (current.kind == CompanionRouteKind.relay && !_offers(connection, current))
+    if (current.kind == CompanionRouteKind.relay &&
+        !_offers(connection, current))
       current,
   ];
   return companionSheet<CompanionRoutePin>(

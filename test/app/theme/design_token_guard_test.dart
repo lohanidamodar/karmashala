@@ -98,8 +98,10 @@ void main() {
       if (tokenLayer.contains(path) || familyOnly.contains(path)) return;
       final families = family.allMatches(source).length;
       if (families > fallback.allMatches(source).length) {
-        bare.add('$path: $families family, '
-            '${fallback.allMatches(source).length} fallback');
+        bare.add(
+          '$path: $families family, '
+          '${fallback.allMatches(source).length} fallback',
+        );
       }
     });
     expect(bare, isEmpty, reason: 'add fontFamilyFallback: kMonoFallback');

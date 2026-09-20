@@ -116,7 +116,13 @@ void main() {
     if (args.contains('status')) {
       return CommandResult(
         exitCode: 0,
-        stdout: porcelainV2(branch: 'work', upstream: 'origin/work', ahead: 2, behind: 0, modified: ['lib/a.dart']),
+        stdout: porcelainV2(
+          branch: 'work',
+          upstream: 'origin/work',
+          ahead: 2,
+          behind: 0,
+          modified: ['lib/a.dart'],
+        ),
         stderr: '',
       );
     }
@@ -128,7 +134,11 @@ void main() {
       );
     }
     if (args.contains('origin/HEAD')) {
-      return const CommandResult(exitCode: 0, stdout: 'origin/main\n', stderr: '');
+      return const CommandResult(
+        exitCode: 0,
+        stdout: 'origin/main\n',
+        stderr: '',
+      );
     }
     if (args.contains('rev-list')) {
       return const CommandResult(exitCode: 0, stdout: '0\t2\n', stderr: '');
@@ -171,9 +181,7 @@ void main() {
           ...fakeTerminalOverrides(database: db),
           clockProvider.overrideWithValue(clock),
           commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(
-              fallback: _SlowRunner(responder: respond),
-            ),
+            FakeCommandRunnerFactory(fallback: _SlowRunner(responder: respond)),
           ),
           sessionContinuationProvider.overrideWith((ref, _) => noContinuation),
         ],
@@ -195,7 +203,11 @@ void main() {
     final container = await pump(tester);
     final settled = tester.getSize(find.byType(DeliveryStrip));
     final before = ghCalls.length;
-    expect(find.text('work'), findsOneWidget, reason: 'the state line is drawn');
+    expect(
+      find.text('work'),
+      findsOneWidget,
+      reason: 'the state line is drawn',
+    );
 
     // Past the rate limit, so this is a real refresh and not a suppressed one:
     // the blink has to be gone even when the re-read genuinely happens.
@@ -212,7 +224,8 @@ void main() {
     expect(
       tester.getSize(find.byType(DeliveryStrip)).height,
       settled.height,
-      reason: 'the strip must not change height while it refreshes — '
+      reason:
+          'the strip must not change height while it refreshes — '
           'everything laid out around it moves when it does',
     );
     expect(

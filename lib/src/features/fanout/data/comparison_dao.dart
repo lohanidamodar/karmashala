@@ -270,8 +270,7 @@ class ComparisonDao {
               ),
               label: row['verdict_label'] as String?,
               runId: row['verdict_run_id'] as String?,
-              producerSessionId:
-                  row['verdict_producer_session_id'] as String?,
+              producerSessionId: row['verdict_producer_session_id'] as String?,
             ),
       notes: row['notes'] as String?,
     );

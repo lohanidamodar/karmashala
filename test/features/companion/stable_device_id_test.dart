@@ -16,8 +16,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala/src/features/companion/client/secure_companion_store.dart';
 import 'package:karmashala/src/features/remote/application/remote_host_service.dart';
-import 'package:karmashala_remote/client.dart'
-    as stored;
+import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_store/devices.dart';
 import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -109,141 +108,163 @@ void main() {
       .timeout(const Duration(seconds: 60));
 
   Future<void> pair(RemoteCompanionGateway gateway) async {
-    final session = await service!.beginPairing(capabilities: CapabilitySet.all);
+    final session = await service!.beginPairing(
+      capabilities: CapabilitySet.all,
+    );
     await gateway.pairWithQr(session.payload.encode());
     await session.done;
     await awaitLink(gateway, CompanionLinkState.connected);
   }
 
-  test('pairing the same phone twice refreshes its row instead of adding a '
-      'stranger', timeout: const Timeout(Duration(minutes: 2)), () async {
-    await startService();
-    final first = makeGateway();
-    await pair(first);
-    final before = dao.getAll().single;
-    await first.close();
+  test(
+    'pairing the same phone twice refreshes its row instead of adding a '
+    'stranger',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final first = makeGateway();
+      await pair(first);
+      final before = dao.getAll().single;
+      await first.close();
 
-    // The owner's exact move: pair again from the same phone.
-    final again = makeGateway();
-    await pair(again);
+      // The owner's exact move: pair again from the same phone.
+      final again = makeGateway();
+      await pair(again);
 
-    final rows = dao.getAll();
-    expect(rows, hasLength(1), reason: 'one phone is one device row');
-    final after = rows.single;
-    expect(after.id, before.id, reason: 'the same phone, the same identity');
-    expect(
-      after.deviceKey,
-      isNot(before.deviceKey),
-      reason: 'a re-pair replaces the key material',
-    );
-    expect(after.createdAt, before.createdAt, reason: 'the row is the same row');
-    expect(after.revoked, isFalse);
-    // And it works: a fresh key, a fresh channel, a live link.
-    expect((await again.listSessions()).single.id, 's1');
-  });
+      final rows = dao.getAll();
+      expect(rows, hasLength(1), reason: 'one phone is one device row');
+      final after = rows.single;
+      expect(after.id, before.id, reason: 'the same phone, the same identity');
+      expect(
+        after.deviceKey,
+        isNot(before.deviceKey),
+        reason: 'a re-pair replaces the key material',
+      );
+      expect(
+        after.createdAt,
+        before.createdAt,
+        reason: 'the row is the same row',
+      );
+      expect(after.revoked, isFalse);
+      // And it works: a fresh key, a fresh channel, a live link.
+      expect((await again.listSessions()).single.id, 's1');
+    },
+  );
 
-  test('a re-paired phone keeps working over a genuinely fresh channel — no '
-      'stale generation, no replay window', timeout: const Timeout(
-    Duration(minutes: 2),
-  ), () async {
-    await startService();
-    final first = makeGateway();
-    await pair(first);
-    // Run the link forward so the generation counter is well past its start.
-    await first.listSessions();
-    await first.close();
+  test(
+    'a re-paired phone keeps working over a genuinely fresh channel — no '
+    'stale generation, no replay window',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final first = makeGateway();
+      await pair(first);
+      // Run the link forward so the generation counter is well past its start.
+      await first.listSessions();
+      await first.close();
 
-    final again = makeGateway();
-    await pair(again);
+      final again = makeGateway();
+      await pair(again);
 
-    final row = dao.getAll().single;
-    expect(
-      row.generation,
-      kFirstSessionGeneration,
-      reason: 'a new key means a new rendezvous series, started from the top',
-    );
-    // The proof that nothing stale survived: real traffic, both ways.
-    expect((await again.listSessions()).single.id, 's1');
-    expect(
-      (await again.transcript('s1').first),
-      isA<List<CompanionChatMessage>>(),
-    );
-  });
+      final row = dao.getAll().single;
+      expect(
+        row.generation,
+        kFirstSessionGeneration,
+        reason: 'a new key means a new rendezvous series, started from the top',
+      );
+      // The proof that nothing stale survived: real traffic, both ways.
+      expect((await again.listSessions()).single.id, 's1');
+      expect(
+        (await again.transcript('s1').first),
+        isA<List<CompanionChatMessage>>(),
+      );
+    },
+  );
 
-  test('the phone keeps its identity across unpairing every desktop',
-      timeout: const Timeout(Duration(minutes: 2)), () async {
-    await startService();
-    final first = makeGateway();
-    await pair(first);
-    final id = dao.getAll().single.id;
+  test(
+    'the phone keeps its identity across unpairing every desktop',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final first = makeGateway();
+      await pair(first);
+      final id = dao.getAll().single.id;
 
-    await first.unpair();
-    expect(
-      phoneDisk[stored.CompanionPairing.storeKey],
-      isNull,
-      reason: 'the pairing is gone',
-    );
-    await first.close();
+      await first.unpair();
+      expect(
+        phoneDisk[stored.CompanionPairing.storeKey],
+        isNull,
+        reason: 'the pairing is gone',
+      );
+      await first.close();
 
-    final again = makeGateway();
-    await pair(again);
+      final again = makeGateway();
+      await pair(again);
 
-    expect(dao.getAll(), hasLength(1));
-    expect(
-      dao.getAll().single.id,
-      id,
-      reason: 'the identity outlives every pairing that used it',
-    );
-  });
+      expect(dao.getAll(), hasLength(1));
+      expect(
+        dao.getAll().single.id,
+        id,
+        reason: 'the identity outlives every pairing that used it',
+      );
+    },
+  );
 
-  test('a phone that paired before the id was stored adopts the id it '
-      'already had', timeout: const Timeout(Duration(minutes: 2)), () async {
-    await startService();
-    final first = makeGateway();
-    await pair(first);
-    final id = dao.getAll().single.id;
-    await first.close();
+  test(
+    'a phone that paired before the id was stored adopts the id it '
+    'already had',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final first = makeGateway();
+      await pair(first);
+      final id = dao.getAll().single.id;
+      await first.close();
 
-    // Exactly what an existing phone's keystore looks like: pairing records,
-    // and no device-id key at all.
-    phoneDisk.remove(RemoteCompanionGateway.kDeviceIdStoreKey);
+      // Exactly what an existing phone's keystore looks like: pairing records,
+      // and no device-id key at all.
+      phoneDisk.remove(RemoteCompanionGateway.kDeviceIdStoreKey);
 
-    final again = makeGateway();
-    await pair(again);
+      final again = makeGateway();
+      await pair(again);
 
-    expect(
-      dao.getAll(),
-      hasLength(1),
-      reason: 'no final duplicate for a phone that already has an identity',
-    );
-    expect(dao.getAll().single.id, id);
-    expect(phoneDisk[RemoteCompanionGateway.kDeviceIdStoreKey], id);
-  });
+      expect(
+        dao.getAll(),
+        hasLength(1),
+        reason: 'no final duplicate for a phone that already has an identity',
+      );
+      expect(dao.getAll().single.id, id);
+      expect(phoneDisk[RemoteCompanionGateway.kDeviceIdStoreKey], id);
+    },
+  );
 
-  test('two genuinely different phones are still two devices', timeout: const
-      Timeout(Duration(minutes: 2)), () async {
-    await startService();
-    final mine = makeGateway();
-    await pair(mine);
+  test(
+    'two genuinely different phones are still two devices',
+    timeout: const Timeout(Duration(minutes: 2)),
+    () async {
+      await startService();
+      final mine = makeGateway();
+      await pair(mine);
 
-    // A second phone: its own keystore, its own everything.
-    final otherDisk = <String, String>{
-      RemoteCompanionGateway.kPairingRelayStoreKey: relayUri.toString(),
-    };
-    final theirs = makeGateway(
-      over: SecureCompanionStore.withBackend(
-        read: (key) async => otherDisk[key],
-        write: (key, value) async => otherDisk[key] = value,
-        delete: (key) async => otherDisk.remove(key),
-      ),
-    );
-    await pair(theirs);
+      // A second phone: its own keystore, its own everything.
+      final otherDisk = <String, String>{
+        RemoteCompanionGateway.kPairingRelayStoreKey: relayUri.toString(),
+      };
+      final theirs = makeGateway(
+        over: SecureCompanionStore.withBackend(
+          read: (key) async => otherDisk[key],
+          write: (key, value) async => otherDisk[key] = value,
+          delete: (key) async => otherDisk.remove(key),
+        ),
+      );
+      await pair(theirs);
 
-    expect(dao.getAll(), hasLength(2));
-    expect(
-      {for (final row in dao.getAll()) row.id},
-      hasLength(2),
-      reason: 'two phones, two identities',
-    );
-  });
+      expect(dao.getAll(), hasLength(2));
+      expect(
+        {for (final row in dao.getAll()) row.id},
+        hasLength(2),
+        reason: 'two phones, two identities',
+      );
+    },
+  );
 }

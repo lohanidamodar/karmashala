@@ -123,7 +123,10 @@ void main() {
       'the only signal a new repository has', () async {
     expect(container.read(selectedProjectRepositoriesProvider), hasLength(1));
     var announced = 0;
-    container.listen(selectedProjectRepositoriesProvider, (_, _) => announced++);
+    container.listen(
+      selectedProjectRepositoriesProvider,
+      (_, _) => announced++,
+    );
 
     // What `ProjectService.rediscover` does: a repository joins an existing
     // project, and not one project row is touched.
@@ -155,14 +158,18 @@ void main() {
               Consumer(
                 builder: (context, ref, _) {
                   top++;
-                  return Text(ref.watch(selectedRepositoryProvider)?.name ?? '');
+                  return Text(
+                    ref.watch(selectedRepositoryProvider)?.name ?? '',
+                  );
                 },
               ),
               // Stands in for `ShellStatusBar`.
               Consumer(
                 builder: (context, ref, _) {
                   bottom++;
-                  return Text(ref.watch(selectedRepositoryProvider)?.name ?? '');
+                  return Text(
+                    ref.watch(selectedRepositoryProvider)?.name ?? '',
+                  );
                 },
               ),
             ],
@@ -178,7 +185,8 @@ void main() {
     expect(
       (top, bottom),
       (1, 1),
-      reason: 'a sibling that never rebuilds can never be marked dirty '
+      reason:
+          'a sibling that never rebuilds can never be marked dirty '
           'mid-build, which is the exception this guards',
     );
   });

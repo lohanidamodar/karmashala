@@ -123,7 +123,11 @@ extension TerminalLayoutRestore on TerminalSessionsController {
     } catch (error, stack) {
       // A host that cannot be asked leaves every pane as the history it
       // already is — the state before this step existed, not a worse one.
-      _log.warning('Could not ask the session host what survived.', error, stack);
+      _log.warning(
+        'Could not ask the session host what survived.',
+        error,
+        stack,
+      );
       return;
     } finally {
       await link?.close();

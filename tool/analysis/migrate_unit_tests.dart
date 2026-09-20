@@ -68,7 +68,9 @@ String rewriteRelatives(
 ) {
   return src.replaceAllMapped(_directiveRe, (m) {
     final uri = m.group(3)!;
-    if (uri.startsWith('package:') || uri.startsWith('dart:')) return m.group(0)!;
+    if (uri.startsWith('package:') || uri.startsWith('dart:')) {
+      return m.group(0)!;
+    }
     var target = resolveRelative(oldFile, uri);
     target = moved[target] ?? target;
     return '${m.group(1)}${m.group(2)}${relativeFrom(newFile, target)}${m.group(4)}';
@@ -78,7 +80,10 @@ String rewriteRelatives(
 /// Adds [tag], merging with an existing @Tags annotation.
 String addTag(String src, String tag) {
   if (tag.isEmpty) return src;
-  final existing = RegExp(r'^@Tags\(\[([^\]]*)\]\)', multiLine: true).firstMatch(src);
+  final existing = RegExp(
+    r'^@Tags\(\[([^\]]*)\]\)',
+    multiLine: true,
+  ).firstMatch(src);
   if (existing != null) {
     final inner = existing.group(1)!.trim();
     return src.replaceRange(
@@ -87,7 +92,10 @@ String addTag(String src, String tag) {
       "@Tags([${inner.isEmpty ? '' : '$inner, '}'$tag'])",
     );
   }
-  final testOn = RegExp(r'^@TestOn\([^)]*\)\s*$', multiLine: true).firstMatch(src);
+  final testOn = RegExp(
+    r'^@TestOn\([^)]*\)\s*$',
+    multiLine: true,
+  ).firstMatch(src);
   if (testOn != null) {
     return src.replaceRange(testOn.end, testOn.end, "\n@Tags(['$tag'])");
   }
@@ -156,16 +164,19 @@ void main(List<String> args) {
 
   // Anything left behind that pointed at a moved file needs the new path.
   var repaired = 0;
-  for (final entity in repair
-      ? Directory('test').listSync(recursive: true)
-      : const <FileSystemEntity>[]) {
+  for (final entity
+      in repair
+          ? Directory('test').listSync(recursive: true)
+          : const <FileSystemEntity>[]) {
     if (entity is! File || !entity.path.endsWith('.dart')) continue;
     final path = norm(entity.path);
     if (path.startsWith('$_dest/')) continue;
     final src = entity.readAsStringSync();
     final out = src.replaceAllMapped(_directiveRe, (m) {
       final uri = m.group(3)!;
-      if (uri.startsWith('package:') || uri.startsWith('dart:')) return m.group(0)!;
+      if (uri.startsWith('package:') || uri.startsWith('dart:')) {
+        return m.group(0)!;
+      }
       final target = resolveRelative(path, uri);
       final now = moved[target];
       if (now == null) return m.group(0)!;

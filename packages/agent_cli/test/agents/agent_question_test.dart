@@ -60,7 +60,11 @@ void main() {
           ],
         },
       ]) {
-        expect(AgentQuestionSet.fromToolInput('t', input), isNull, reason: '$input');
+        expect(
+          AgentQuestionSet.fromToolInput('t', input),
+          isNull,
+          reason: '$input',
+        );
       }
     });
   });
@@ -95,7 +99,10 @@ void main() {
 
     test('an asked question nobody answered is open', () {
       final tail = [
-        record({'type': 'user', 'message': {'content': 'hi'}}),
+        record({
+          'type': 'user',
+          'message': {'content': 'hi'},
+        }),
         ask('toolu_9'),
         record({'type': 'system', 'subtype': 'hook'}),
       ].join('\n');
@@ -134,23 +141,29 @@ void main() {
       q('Pick a speed', ['Slow', 'Fast']),
     ]);
 
-    test('one option of one question: down to it, Enter — and nothing more', () {
-      expect(support.keysFor(fruit, [const AgentQuestionAnswer.option(1)]), [
-        down,
-        enter,
-      ].join());
-      expect(support.keysFor(fruit, [const AgentQuestionAnswer.option(0)]), enter);
-    });
+    test(
+      'one option of one question: down to it, Enter — and nothing more',
+      () {
+        expect(
+          support.keysFor(fruit, [const AgentQuestionAnswer.option(1)]),
+          [down, enter].join(),
+        );
+        expect(
+          support.keysFor(fruit, [const AgentQuestionAnswer.option(0)]),
+          enter,
+        );
+      },
+    );
 
-    test('free text: down past the options to "Type something", type, Enter', () {
-      expect(support.keysFor(fruit, [const AgentQuestionAnswer.text('Durian')]), [
-        down,
-        down,
-        down,
-        'Durian',
-        enter,
-      ].join());
-    });
+    test(
+      'free text: down past the options to "Type something", type, Enter',
+      () {
+        expect(
+          support.keysFor(fruit, [const AgentQuestionAnswer.text('Durian')]),
+          [down, down, down, 'Durian', enter].join(),
+        );
+      },
+    );
 
     test('several boxes: Enter on each, down to Next, then Submit', () {
       expect(
@@ -178,7 +191,9 @@ void main() {
         [],
         [const AgentQuestionAnswer.option(3)],
         [const AgentQuestionAnswer.option(-1)],
-        [const AgentQuestionAnswer.options([0, 1])],
+        [
+          const AgentQuestionAnswer.options([0, 1]),
+        ],
         [const AgentQuestionAnswer.text('')],
         [const AgentQuestionAnswer.text('two\nlines')],
         [const AgentQuestionAnswer.text('esc\x1bape')],
@@ -194,7 +209,8 @@ void main() {
         throwsArgumentError,
       );
       expect(
-        () => support.keysFor(colours, [const AgentQuestionAnswer.text('Teal')]),
+        () =>
+            support.keysFor(colours, [const AgentQuestionAnswer.text('Teal')]),
         throwsArgumentError,
         reason: 'free text on a multi-select question was never measured',
       );

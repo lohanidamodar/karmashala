@@ -70,9 +70,9 @@ void main() {
       );
 
   testWidgets('says nothing has been checked before a check runs', (t) async {
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.codex, path: _stored),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
     await pumpSection(t);
 
     // §19: an unobserved state is not a healthy one.
@@ -82,9 +82,9 @@ void main() {
   testWidgets('an unreachable path reads differently from a missing one', (
     t,
   ) async {
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.codex, path: _stored),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
     await pumpSection(
       t,
       report: AgentPathRepairReport(
@@ -101,9 +101,9 @@ void main() {
   });
 
   testWidgets('a missing path says to install it or set the path', (t) async {
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.codex, path: _stored),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
     await pumpSection(
       t,
       report: AgentPathRepairReport(
@@ -199,9 +199,9 @@ void main() {
   });
 
   testWidgets('the field and its buttons fit a phone width', (t) async {
-    AgentInstallationDao(db).insert(
-      agentInstallation(agentId: AgentIds.codex, path: _stored),
-    );
+    AgentInstallationDao(
+      db,
+    ).insert(agentInstallation(agentId: AgentIds.codex, path: _stored));
     await pumpSection(t, size: const Size(390, 844));
 
     expect(t.takeException(), isNull);
@@ -233,7 +233,11 @@ void main() {
       // The owner's row. A bare "2.1.252" beside a binary answering 2.1.263 is
       // a confident false statement; the same number wearing its age is not.
       AgentInstallationDao(db).insert(
-        agentInstallation(path: _claude, version: '2.1.252', versionReadAt: testTime),
+        agentInstallation(
+          path: _claude,
+          version: '2.1.252',
+          versionReadAt: testTime,
+        ),
       );
 
       await pumpSection(t, now: testTime.add(const Duration(days: 2)));
@@ -249,9 +253,9 @@ void main() {
     ) async {
       // Every row written before v40, including the one whose binary is gone:
       // its version is kept and its age is admitted to be unknown.
-      AgentInstallationDao(db).insert(
-        agentInstallation(path: _claude, version: '2.1.245'),
-      );
+      AgentInstallationDao(
+        db,
+      ).insert(agentInstallation(path: _claude, version: '2.1.245'));
 
       await pumpSection(t);
 
@@ -263,7 +267,11 @@ void main() {
 
     testWidgets('a row with no version at all claims nothing', (t) async {
       AgentInstallationDao(db).insert(
-        agentInstallation(agentId: AgentIds.codex, path: _stored, version: null),
+        agentInstallation(
+          agentId: AgentIds.codex,
+          path: _stored,
+          version: null,
+        ),
       );
 
       await pumpSection(t);

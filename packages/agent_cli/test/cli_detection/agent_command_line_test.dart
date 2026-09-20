@@ -19,7 +19,10 @@ void main() {
   });
 
   test('arguments do not change the answer', () {
-    expect(id('claude --resume 0d1e --permission-mode plan'), AgentIds.claudeCode);
+    expect(
+      id('claude --resume 0d1e --permission-mode plan'),
+      AgentIds.claudeCode,
+    );
     expect(id('codex resume 01a0'), AgentIds.codex);
   });
 
@@ -27,7 +30,10 @@ void main() {
     expect(id(r'C:\Users\me\.bin\claude.exe'), AgentIds.claudeCode);
     expect(id('./claude'), AgentIds.claudeCode);
     expect(id('/usr/local/bin/codex --help'), AgentIds.codex);
-    expect(id(r'"C:\Program Files\bin\claude.cmd" --resume x'), AgentIds.claudeCode);
+    expect(
+      id(r'"C:\Program Files\bin\claude.cmd" --resume x'),
+      AgentIds.claudeCode,
+    );
   });
 
   test('leading whitespace and case do not change the answer', () {

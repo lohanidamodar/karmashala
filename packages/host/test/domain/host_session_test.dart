@@ -40,7 +40,9 @@ class _Record implements SessionRecorder {
   void close() => closed = true;
 }
 
-({SessionRegistry registry, FakePtyLauncher launcher}) build({int capacity = 64}) {
+({SessionRegistry registry, FakePtyLauncher launcher}) build({
+  int capacity = 64,
+}) {
   final launcher = FakePtyLauncher();
   return (
     registry: SessionRegistry(
@@ -54,29 +56,41 @@ class _Record implements SessionRecorder {
 
 void main() {
   group('HostSession output', () {
-    test('a late reader replays from an offset and then follows live', () async {
-      final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
-      final pty = env.launcher.handles.single;
+    test(
+      'a late reader replays from an offset and then follows live',
+      () async {
+        final env = build();
+        final session = env.registry.open(
+          'pane-1',
+          const PtySpawnRequest(argv: ['/bin/sh']),
+        );
+        final pty = env.launcher.handles.single;
 
-      pty.emit(ascii('first '));
-      pty.emit(ascii('second '));
-      await Future<void>.delayed(Duration.zero);
+        pty.emit(ascii('first '));
+        pty.emit(ascii('second '));
+        await Future<void>.delayed(Duration.zero);
 
-      final seen = <OutputChunk>[];
-      session.readFrom(6).listen(seen.add);
-      await Future<void>.delayed(Duration.zero);
-      pty.emit(ascii('third'));
-      await Future<void>.delayed(Duration.zero);
+        final seen = <OutputChunk>[];
+        session.readFrom(6).listen(seen.add);
+        await Future<void>.delayed(Duration.zero);
+        pty.emit(ascii('third'));
+        await Future<void>.delayed(Duration.zero);
 
-      expect(seen.map((c) => String.fromCharCodes(c.bytes)).join(), 'second third');
-      expect(seen.first.offset, 6);
-      expect(seen.last.nextOffset, 18);
-    });
+        expect(
+          seen.map((c) => String.fromCharCodes(c.bytes)).join(),
+          'second third',
+        );
+        expect(seen.first.offset, 6);
+        expect(seen.last.nextOffset, 18);
+      },
+    );
 
     test('replay and live do not overlap: every byte arrives once', () async {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
       final pty = env.launcher.handles.single;
 
       for (var i = 0; i < 5; i++) {
@@ -91,7 +105,11 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       final joined = seen.map((c) => String.fromCharCodes(c.bytes)).join();
-      expect(joined, 'ababababab' 'cd');
+      expect(
+        joined,
+        'ababababab'
+        'cd',
+      );
       expect(joined.length, session.backlog.totalBytes);
       var expected = 0;
       for (final chunk in seen) {
@@ -100,29 +118,42 @@ void main() {
       }
     });
 
-    test('a reader attaching from the current end gets only what comes next', () async {
-      final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
-      final pty = env.launcher.handles.single;
-      pty.emit(ascii('old'));
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'a reader attaching from the current end gets only what comes next',
+      () async {
+        final env = build();
+        final session = env.registry.open(
+          'pane-1',
+          const PtySpawnRequest(argv: ['/bin/sh']),
+        );
+        final pty = env.launcher.handles.single;
+        pty.emit(ascii('old'));
+        await Future<void>.delayed(Duration.zero);
 
-      final seen = <OutputChunk>[];
-      session.readFrom(session.backlog.totalBytes).listen(seen.add);
-      await Future<void>.delayed(Duration.zero);
-      pty.emit(ascii('new'));
-      await Future<void>.delayed(Duration.zero);
+        final seen = <OutputChunk>[];
+        session.readFrom(session.backlog.totalBytes).listen(seen.add);
+        await Future<void>.delayed(Duration.zero);
+        pty.emit(ascii('new'));
+        await Future<void>.delayed(Duration.zero);
 
-      expect(seen.single.offset, 3);
-      expect(String.fromCharCodes(seen.single.bytes), 'new');
-    });
+        expect(seen.single.offset, 3);
+        expect(String.fromCharCodes(seen.single.bytes), 'new');
+      },
+    );
   });
 
   group('HostSession writing', () {
     test('a write without the token is refused and names nobody holds it', () {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
-      final refusal = session.write('pane-1', ascii('ls\n'), DateTime.utc(2026));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
+      final refusal = session.write(
+        'pane-1',
+        ascii('ls\n'),
+        DateTime.utc(2026),
+      );
 
       expect(refusal, isNotNull);
       expect(refusal!.message, contains('nobody holds'));
@@ -131,13 +162,20 @@ void main() {
 
     test('the holder writes and resizes; an observer is refused by name', () {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
       final t0 = DateTime.utc(2026, 9, 8, 14, 0);
       session.token.claim('pane-1', t0);
 
       expect(session.write('pane-1', ascii('ls\n'), t0), isNull);
       expect(session.resize('pane-1', 100, 30, t0), isNull);
-      final refusal = session.write('pane-2', ascii('rm\n'), t0.add(const Duration(minutes: 7)));
+      final refusal = session.write(
+        'pane-2',
+        ascii('rm\n'),
+        t0.add(const Duration(minutes: 7)),
+      );
 
       expect(env.launcher.handles.single.writes.single, ascii('ls\n'));
       expect(env.launcher.handles.single.resizes.single, (100, 30));
@@ -151,7 +189,10 @@ void main() {
   group('HostSession lifecycle', () {
     test('a running session has no exit code, and that is not zero', () {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
       expect(session.lifecycle, isA<SessionRunning>());
       expect(session.lifecycle.exitCode, isNull);
       expect(session.lifecycle.describe(), 'running');
@@ -159,7 +200,10 @@ void main() {
 
     test('a real exit is recorded with its code', () async {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
       env.launcher.handles.single.finish(7);
       await session.ended;
 
@@ -170,7 +214,10 @@ void main() {
 
     test('an unreapable child ends with an unknown code, never zero', () async {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
       env.launcher.handles.single.finish(-1);
       await session.ended;
 
@@ -181,7 +228,10 @@ void main() {
 
     test('terminate prefers the real exit code over "terminated"', () async {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
       final pty = env.launcher.handles.single;
       final terminating = session.terminate();
       expect(pty.signals.single, 15);
@@ -191,28 +241,41 @@ void main() {
       expect(pty.closeCount, 1);
     });
 
-    test('a child that exits on its own gives its handles back, unasked', () async {
-      final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
-      final pty = env.launcher.handles.single;
+    test(
+      'a child that exits on its own gives its handles back, unasked',
+      () async {
+        final env = build();
+        final session = env.registry.open(
+          'pane-1',
+          const PtySpawnRequest(argv: ['/bin/sh']),
+        );
+        final pty = env.launcher.handles.single;
 
-      pty.emit(ascii('some work'));
-      await Future<void>.delayed(Duration.zero);
-      expect(pty.closeCount, 0, reason: 'a running session holds its pty');
+        pty.emit(ascii('some work'));
+        await Future<void>.delayed(Duration.zero);
+        expect(pty.closeCount, 0, reason: 'a running session holds its pty');
 
-      pty.finish(0);
-      await session.ended;
-      await Future<void>.delayed(Duration.zero);
+        pty.finish(0);
+        await session.ended;
+        await Future<void>.delayed(Duration.zero);
 
-      // Nobody called terminate: an ended session keeps its code for a late
-      // reconnect, but not the fd, the pipe and the job nothing would reach again.
-      expect(pty.closeCount, 1);
-      expect(session.backlog.totalBytes, 9, reason: 'and every byte it wrote is still readable');
-    });
+        // Nobody called terminate: an ended session keeps its code for a late
+        // reconnect, but not the fd, the pipe and the job nothing would reach again.
+        expect(pty.closeCount, 1);
+        expect(
+          session.backlog.totalBytes,
+          9,
+          reason: 'and every byte it wrote is still readable',
+        );
+      },
+    );
 
     test('a session that has ended is closed once, not twice', () async {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
       final pty = env.launcher.handles.single;
       pty.finish(3);
       await session.ended;
@@ -222,41 +285,72 @@ void main() {
       expect(pty.closeCount, 1);
     });
 
-    test('a child that will not be reaped is killed, then ends with a stated reason', () async {
-      final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
-      final end = await session.terminate(reapWithin: const Duration(milliseconds: 20));
+    test(
+      'a child that will not be reaped is killed, then ends with a stated reason',
+      () async {
+        final env = build();
+        final session = env.registry.open(
+          'pane-1',
+          const PtySpawnRequest(argv: ['/bin/sh']),
+        );
+        final end = await session.terminate(
+          reapWithin: const Duration(milliseconds: 20),
+        );
 
-      expect(env.launcher.handles.single.signals, [15, 9]);
-      expect(end, isA<SessionEndedWithoutCode>());
-      expect((end as SessionEndedWithoutCode).reason, contains('signalled 15, then 9'));
-      expect(end.exitCode, isNull);
-    });
+        expect(env.launcher.handles.single.signals, [15, 9]);
+        expect(end, isA<SessionEndedWithoutCode>());
+        expect(
+          (end as SessionEndedWithoutCode).reason,
+          contains('signalled 15, then 9'),
+        );
+        expect(end.exitCode, isNull);
+      },
+    );
 
-    test('a shell that ignores SIGTERM gets SIGKILL, and its real code is kept', () async {
-      final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh', '-l']));
-      final pty = env.launcher.handles.single;
-      final terminating = session.terminate(reapWithin: const Duration(milliseconds: 20));
-      expect(pty.signals, [15]);
+    test(
+      'a shell that ignores SIGTERM gets SIGKILL, and its real code is kept',
+      () async {
+        final env = build();
+        final session = env.registry.open(
+          'pane-1',
+          const PtySpawnRequest(argv: ['/bin/sh', '-l']),
+        );
+        final pty = env.launcher.handles.single;
+        final terminating = session.terminate(
+          reapWithin: const Duration(milliseconds: 20),
+        );
+        expect(pty.signals, [15]);
 
-      while (pty.signals.length < 2) {
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
-      expect(pty.signals, [15, 9]);
-      pty.finish(137);
+        while (pty.signals.length < 2) {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        }
+        expect(pty.signals, [15, 9]);
+        pty.finish(137);
 
-      expect((await terminating).exitCode, 137);
-    });
+        expect((await terminating).exitCode, 137);
+      },
+    );
 
-    test('asked for SIGKILL outright, there is nothing to escalate to', () async {
-      final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
-      final end = await session.terminate(signal: 9, reapWithin: const Duration(milliseconds: 20));
+    test(
+      'asked for SIGKILL outright, there is nothing to escalate to',
+      () async {
+        final env = build();
+        final session = env.registry.open(
+          'pane-1',
+          const PtySpawnRequest(argv: ['/bin/sh']),
+        );
+        final end = await session.terminate(
+          signal: 9,
+          reapWithin: const Duration(milliseconds: 20),
+        );
 
-      expect(env.launcher.handles.single.signals, [9]);
-      expect((end as SessionEndedWithoutCode).reason, contains('signalled 9 and'));
-    });
+        expect(env.launcher.handles.single.signals, [9]);
+        expect(
+          (end as SessionEndedWithoutCode).reason,
+          contains('signalled 9 and'),
+        );
+      },
+    );
   });
 
   group('SessionRegistry', () {
@@ -264,58 +358,86 @@ void main() {
       final env = build();
       env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
       expect(
-        () => env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh'])),
+        () => env.registry.open(
+          'pane-1',
+          const PtySpawnRequest(argv: ['/bin/sh']),
+        ),
         throwsA(isA<SessionAlreadyExists>()),
       );
-      expect(() => env.registry.require('pane-2'), throwsA(isA<UnknownSession>()));
+      expect(
+        () => env.registry.require('pane-2'),
+        throwsA(isA<UnknownSession>()),
+      );
     });
 
-    test('a summary carries when it was observed, not just what was seen', () async {
-      final env = build();
-      env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh', '-l'], columns: 90));
-      env.launcher.handles.single.emit(ascii('hello'));
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'a summary carries when it was observed, not just what was seen',
+      () async {
+        final env = build();
+        env.registry.open(
+          'pane-1',
+          const PtySpawnRequest(argv: ['/bin/sh', '-l'], columns: 90),
+        );
+        env.launcher.handles.single.emit(ascii('hello'));
+        await Future<void>.delayed(Duration.zero);
 
-      final summary = env.registry.list().single;
-      expect(summary.id, 'pane-1');
-      expect(summary.argv, ['/bin/sh', '-l']);
-      expect(summary.columns, 90);
-      expect(summary.observedAt, DateTime.utc(2026, 9, 8, 14, 0));
-      expect(summary.totalBytes, 5);
-      expect(summary.writeHolder, isNull);
-      expect(summary.lifecycle, isA<SessionRunning>());
-    });
+        final summary = env.registry.list().single;
+        expect(summary.id, 'pane-1');
+        expect(summary.argv, ['/bin/sh', '-l']);
+        expect(summary.columns, 90);
+        expect(summary.observedAt, DateTime.utc(2026, 9, 8, 14, 0));
+        expect(summary.totalBytes, 5);
+        expect(summary.writeHolder, isNull);
+        expect(summary.lifecycle, isA<SessionRunning>());
+      },
+    );
 
     test('a client going away frees its tokens and keeps its sessions', () {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
       session.token.claim('client-a', DateTime.utc(2026));
 
       env.registry.forgetClient('client-a');
 
       expect(session.token.isHeld, isFalse);
       expect(env.registry.find('pane-1'), isNotNull);
-      expect(env.launcher.handles.single.signals, isEmpty, reason: 'a disconnect kills nothing');
+      expect(
+        env.launcher.handles.single.signals,
+        isEmpty,
+        reason: 'a disconnect kills nothing',
+      );
     });
 
-    test('ended sessions are kept, so a late reconnect still reads the code', () async {
-      final launcher = FakePtyLauncher();
-      final registry = SessionRegistry(launcher: launcher, keepEndedSessions: 3);
-      for (var i = 0; i < 3; i++) {
-        registry.open('pane-$i', const PtySpawnRequest(argv: ['/bin/sh']));
-      }
-      for (final handle in launcher.handles) {
-        handle.finish(0);
-      }
-      await Future<void>.delayed(Duration.zero);
+    test(
+      'ended sessions are kept, so a late reconnect still reads the code',
+      () async {
+        final launcher = FakePtyLauncher();
+        final registry = SessionRegistry(
+          launcher: launcher,
+          keepEndedSessions: 3,
+        );
+        for (var i = 0; i < 3; i++) {
+          registry.open('pane-$i', const PtySpawnRequest(argv: ['/bin/sh']));
+        }
+        for (final handle in launcher.handles) {
+          handle.finish(0);
+        }
+        await Future<void>.delayed(Duration.zero);
 
-      expect(registry.endedCount, 3);
-      expect(registry.find('pane-0')!.lifecycle.exitCode, 0);
-    });
+        expect(registry.endedCount, 3);
+        expect(registry.find('pane-0')!.lifecycle.exitCode, 0);
+      },
+    );
 
     test('the oldest ended sessions are forgotten beyond the bound', () async {
       final launcher = FakePtyLauncher();
-      final registry = SessionRegistry(launcher: launcher, keepEndedSessions: 2);
+      final registry = SessionRegistry(
+        launcher: launcher,
+        keepEndedSessions: 2,
+      );
       for (var i = 0; i < 5; i++) {
         registry.open('pane-$i', const PtySpawnRequest(argv: ['/bin/sh']));
       }
@@ -332,7 +454,10 @@ void main() {
 
     test('running sessions are never pruned, however many there are', () async {
       final launcher = FakePtyLauncher();
-      final registry = SessionRegistry(launcher: launcher, keepEndedSessions: 1);
+      final registry = SessionRegistry(
+        launcher: launcher,
+        keepEndedSessions: 1,
+      );
       for (var i = 0; i < 6; i++) {
         registry.open('pane-$i', const PtySpawnRequest(argv: ['/bin/sh']));
       }
@@ -343,51 +468,75 @@ void main() {
       expect(registry.endedCount, 1);
     });
 
-    test('the record opens before the child is spawned, so a failed spawn leaves no orphan',
-        () {
-      final launcher = FakePtyLauncher()
-        ..failWith = const PtyException('posix_spawn failed', errno: 2);
-      final store = _RecordingStore();
-      final registry = SessionRegistry(launcher: launcher, store: store);
+    test(
+      'the record opens before the child is spawned, so a failed spawn leaves no orphan',
+      () {
+        final launcher = FakePtyLauncher()
+          ..failWith = const PtyException('posix_spawn failed', errno: 2);
+        final store = _RecordingStore();
+        final registry = SessionRegistry(launcher: launcher, store: store);
 
-      expect(
-        () => registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh'])),
-        throwsA(isA<PtyException>()),
-      );
-      expect(store.opened, ['pane-1']);
-      expect(store.forgotten, ['pane-1'], reason: 'the record of a session that never ran goes');
-      expect(store.records.single.closed, isTrue);
-      expect(registry.find('pane-1'), isNull);
-    });
+        expect(
+          () =>
+              registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh'])),
+          throwsA(isA<PtyException>()),
+        );
+        expect(store.opened, ['pane-1']);
+        expect(store.forgotten, [
+          'pane-1',
+        ], reason: 'the record of a session that never ran goes');
+        expect(store.records.single.closed, isTrue);
+        expect(registry.find('pane-1'), isNull);
+      },
+    );
 
     test('a store that refuses the record spawns nothing', () {
       final launcher = FakePtyLauncher();
-      final registry = SessionRegistry(launcher: launcher, store: _RecordingStore(refuse: true));
+      final registry = SessionRegistry(
+        launcher: launcher,
+        store: _RecordingStore(refuse: true),
+      );
 
       expect(
         () => registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh'])),
         throwsA(isA<StateError>()),
       );
-      expect(launcher.started, isEmpty, reason: 'a child with no session is unreachable');
+      expect(
+        launcher.started,
+        isEmpty,
+        reason: 'a child with no session is unreachable',
+      );
     });
 
-    test('a pty read fault is kept, and named when the code is unknown', () async {
-      final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
-      final pty = env.launcher.handles.single;
-      pty.emitError(const PtyException('read(pty) failed with errno 5'));
-      await Future<void>.delayed(Duration.zero);
-      pty.finish(-1);
-      final end = await session.ended;
+    test(
+      'a pty read fault is kept, and named when the code is unknown',
+      () async {
+        final env = build();
+        final session = env.registry.open(
+          'pane-1',
+          const PtySpawnRequest(argv: ['/bin/sh']),
+        );
+        final pty = env.launcher.handles.single;
+        pty.emitError(const PtyException('read(pty) failed with errno 5'));
+        await Future<void>.delayed(Duration.zero);
+        pty.finish(-1);
+        final end = await session.ended;
 
-      expect(end, isA<SessionEndedWithoutCode>());
-      expect((end as SessionEndedWithoutCode).reason, contains('could not be reaped'));
-      expect(end.reason, contains('errno 5'));
-    });
+        expect(end, isA<SessionEndedWithoutCode>());
+        expect(
+          (end as SessionEndedWithoutCode).reason,
+          contains('could not be reaped'),
+        );
+        expect(end.reason, contains('errno 5'));
+      },
+    );
 
     test('a read fault does not unseat a real exit code', () async {
       final env = build();
-      final session = env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+      final session = env.registry.open(
+        'pane-1',
+        const PtySpawnRequest(argv: ['/bin/sh']),
+      );
       final pty = env.launcher.handles.single;
       pty.emitError(const PtyException('read(pty) failed with errno 5'));
       pty.finish(0);
@@ -395,20 +544,26 @@ void main() {
       expect((await session.ended).exitCode, 0);
     });
 
-    test('shutdown signals every session at once and waits for them together', () async {
-      final env = build();
-      env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
-      env.registry.open('pane-2', const PtySpawnRequest(argv: ['/bin/sh']));
+    test(
+      'shutdown signals every session at once and waits for them together',
+      () async {
+        final env = build();
+        env.registry.open('pane-1', const PtySpawnRequest(argv: ['/bin/sh']));
+        env.registry.open('pane-2', const PtySpawnRequest(argv: ['/bin/sh']));
 
-      final stopping = env.registry.shutdown();
-      expect(env.launcher.handles.map((h) => h.signals.single), [15, 15]);
-      for (final handle in env.launcher.handles) {
-        handle.finish(0);
-      }
-      await stopping;
+        final stopping = env.registry.shutdown();
+        expect(env.launcher.handles.map((h) => h.signals.single), [15, 15]);
+        for (final handle in env.launcher.handles) {
+          handle.finish(0);
+        }
+        await stopping;
 
-      expect(env.registry.sessions.every((s) => s.lifecycle.hasEnded), isTrue);
-    });
+        expect(
+          env.registry.sessions.every((s) => s.lifecycle.hasEnded),
+          isTrue,
+        );
+      },
+    );
 
     test('close ends the session and drops it', () async {
       final env = build();

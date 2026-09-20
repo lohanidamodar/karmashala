@@ -132,8 +132,7 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 5)));
 }
 
-String _ms(int micros) =>
-    '${micros ~/ 1000}.${((micros % 1000) ~/ 100)}ms';
+String _ms(int micros) => '${micros ~/ 1000}.${((micros % 1000) ~/ 100)}ms';
 
 /// A discrete-event model of the Flutter frame pipeline, driving the real
 /// [PtyOutputCoalescer]. See the file header for the modelling assumptions.

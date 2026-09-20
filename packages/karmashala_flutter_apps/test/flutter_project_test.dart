@@ -188,7 +188,10 @@ workspace:
     });
 
     test('a pure Dart pubspec is not returned at all', () {
-      expect(find([(path: '/src/repo/pubspec.yaml', contents: _pureDart)]), isEmpty);
+      expect(
+        find([(path: '/src/repo/pubspec.yaml', contents: _pureDart)]),
+        isEmpty,
+      );
     });
 
     test('shallowest first, then by name', () {
@@ -197,36 +200,39 @@ workspace:
         (path: '/src/repo/packages/alpha/pubspec.yaml', contents: _package),
         (path: '/src/repo/pubspec.yaml', contents: _app),
       ]);
-      expect(
-        found.map((project) => project.name).toList(),
-        ['karmashala', 'my_plugin', 'my_plugin'],
-      );
+      expect(found.map((project) => project.name).toList(), [
+        'karmashala',
+        'my_plugin',
+        'my_plugin',
+      ]);
       expect(found.first.depth, 0);
-      expect(
-        found.map((project) => project.directory).skip(1).toList(),
-        ['/src/repo/packages/alpha', '/src/repo/packages/zulu'],
-      );
+      expect(found.map((project) => project.directory).skip(1).toList(), [
+        '/src/repo/packages/alpha',
+        '/src/repo/packages/zulu',
+      ]);
     });
 
     test('three directories down is past the bound and is dropped', () {
       final found = find([
-        (
-          path: '/src/repo/packages/a/example/pubspec.yaml',
-          contents: _app,
-        ),
+        (path: '/src/repo/packages/a/example/pubspec.yaml', contents: _app),
       ]);
       expect(found, isEmpty);
     });
 
-    test('a pubspec outside the root is dropped rather than measured as zero', () {
-      expect(find([(path: '/src/other/pubspec.yaml', contents: _app)]), isEmpty);
-    });
+    test(
+      'a pubspec outside the root is dropped rather than measured as zero',
+      () {
+        expect(
+          find([(path: '/src/other/pubspec.yaml', contents: _app)]),
+          isEmpty,
+        );
+      },
+    );
 
     test('the bound is a parameter, so a caller can widen it deliberately', () {
-      final found = find(
-        [(path: '/src/repo/a/b/c/pubspec.yaml', contents: _app)],
-        maxDepth: 3,
-      );
+      final found = find([
+        (path: '/src/repo/a/b/c/pubspec.yaml', contents: _app),
+      ], maxDepth: 3);
       expect(found, hasLength(1));
       expect(found.single.depth, 3);
     });

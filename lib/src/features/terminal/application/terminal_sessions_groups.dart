@@ -26,9 +26,7 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
   List<TerminalTab> tabsInGroup(String groupId) {
     final group = _workspace?.groupById(groupId);
     if (group == null) return const [];
-    return [
-      for (final id in group.panes) ?_tabById(id),
-    ];
+    return [for (final id in group.panes) ?_tabById(id)];
   }
 
   /// The tab group [groupId] is showing, or null while it is empty.
@@ -235,9 +233,9 @@ extension TerminalWorkspaceGroups on TerminalSessionsController {
     _syncTabOrder();
     // A collapsed group takes its face with it, or the map grows by one entry
     // per split for the life of the app.
-    ref
-        .read(terminalFacesProvider.notifier)
-        .forget({for (final group in _workspace?.groups ?? const []) group.id});
+    ref.read(terminalFacesProvider.notifier).forget({
+      for (final group in _workspace?.groups ?? const []) group.id,
+    });
   }
 
   /// [tree] with [tabId] in the focused group — filling the empty room a split

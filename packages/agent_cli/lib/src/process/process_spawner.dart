@@ -328,7 +328,10 @@ Future<void> _serve(_SpawnJob job, SendPort replies) async {
   } on CommandException catch (error) {
     // A timeout, already worded; the message crosses as itself.
     replies.send(
-      _SpawnFailed(job.id, CommandException(error.message, cause: error.cause?.toString())),
+      _SpawnFailed(
+        job.id,
+        CommandException(error.message, cause: error.cause?.toString()),
+      ),
     );
   } on Object catch (error) {
     // Anything else: reported as a CommandException rather than sent raw,

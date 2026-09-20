@@ -168,7 +168,8 @@ void main() {
     expect(
       subscriptions,
       1,
-      reason: 'one subscription serves the transcript and the strip — no '
+      reason:
+          'one subscription serves the transcript and the strip — no '
           'second read, no second poll',
     );
   });
@@ -177,7 +178,11 @@ void main() {
     tester,
   ) async {
     final clock = _MovingClock(issued.add(const Duration(seconds: 4)));
-    await pumpConversation(tester, messages: [call(id: 't1')], clock: clock);
+    await pumpConversation(
+      tester,
+      messages: [call(id: 't1')],
+      clock: clock,
+    );
 
     // The widget object itself: if the conversation had been rebuilt, its
     // parent would have handed `ChatTranscriptView` a freshly mapped message
@@ -213,7 +218,11 @@ void main() {
     // sites; the CLI store sweep renames sessions on its own timer, so waking
     // on `title` would mean waking on nothing the user did.
     final clock = _MovingClock(issued.add(const Duration(seconds: 4)));
-    await pumpConversation(tester, messages: [call(id: 't1')], clock: clock);
+    await pumpConversation(
+      tester,
+      messages: [call(id: 't1')],
+      clock: clock,
+    );
 
     final container = ProviderScope.containerOf(
       tester.element(find.byType(ActivityStrip)),
@@ -238,7 +247,9 @@ void main() {
       // count; its own cost is pinned in karmashala_ui's status_glyph_test.
       tester.platformDispatcher.accessibilityFeaturesTestValue =
           const FakeAccessibilityFeatures(disableAnimations: true);
-      addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
       var timers = 0;
       await runZoned(
         () async {
@@ -279,16 +290,15 @@ void main() {
     testWidgets('one outstanding call arms exactly one, and keeps it', (
       tester,
     ) async {
-      final timers = await periodicTimersFor(
-        tester,
-        [call(id: 't1')],
-        pumps: ticks,
-      );
+      final timers = await periodicTimersFor(tester, [
+        call(id: 't1'),
+      ], pumps: ticks);
 
       expect(
         timers,
         1,
-        reason: 'armed once, not once per rebuild — and `testWidgets` fails '
+        reason:
+            'armed once, not once per rebuild — and `testWidgets` fails '
             'this test if it is still pending after the tree comes down',
       );
     });

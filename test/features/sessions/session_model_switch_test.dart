@@ -104,46 +104,52 @@ Future<({String id, List<String> written})> launched(
 }
 
 void main() {
-  test('idle and slash-capable: the command is sent and the row is written', () async {
-    final h = harness();
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    final session = await launched(h.container);
+  test(
+    'idle and slash-capable: the command is sent and the row is written',
+    () async {
+      final h = harness();
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      final session = await launched(h.container);
 
-    final outcome = h.container
-        .read(sessionLauncherProvider)
-        .setModel(session.id, 'opus');
+      final outcome = h.container
+          .read(sessionLauncherProvider)
+          .setModel(session.id, 'opus');
 
-    expect(outcome.switchedNow, isTrue);
-    expect(outcome.command, '/model opus');
-    expect(outcome.deferral, isNull);
-    // The command, then the keypress and carriage return that submit it — a
-    // slash command goes through `sendTo` and is typed exactly like a message.
-    expect(session.written, ['/model opus', kEndOfLineKey, '\r']);
-    // And it persists, so the next launch agrees with what was just typed.
-    expect(SessionDao(h.db).getById(session.id)!.modelId, 'opus');
-  });
+      expect(outcome.switchedNow, isTrue);
+      expect(outcome.command, '/model opus');
+      expect(outcome.deferral, isNull);
+      // The command, then the keypress and carriage return that submit it — a
+      // slash command goes through `sendTo` and is typed exactly like a message.
+      expect(session.written, ['/model opus', kEndOfLineKey, '\r']);
+      // And it persists, so the next launch agrees with what was just typed.
+      expect(SessionDao(h.db).getById(session.id)!.modelId, 'opus');
+    },
+  );
 
-  test('working: nothing is typed, and the override is still recorded', () async {
-    final h = harness(status: AgentActivityStatus.working);
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    final session = await launched(h.container);
+  test(
+    'working: nothing is typed, and the override is still recorded',
+    () async {
+      final h = harness(status: AgentActivityStatus.working);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      final session = await launched(h.container);
 
-    final outcome = h.container
-        .read(sessionLauncherProvider)
-        .setModel(session.id, 'opus');
+      final outcome = h.container
+          .read(sessionLauncherProvider)
+          .setModel(session.id, 'opus');
 
-    expect(outcome.switchedNow, isFalse);
-    expect(outcome.deferral, ModelDeferral.busy);
-    expect(outcome.command, isNull);
-    expect(
-      session.written,
-      isEmpty,
-      reason: 'mid-turn the line lands in the user\'s own conversation',
-    );
-    expect(SessionDao(h.db).getById(session.id)!.modelId, 'opus');
-  });
+      expect(outcome.switchedNow, isFalse);
+      expect(outcome.deferral, ModelDeferral.busy);
+      expect(outcome.command, isNull);
+      expect(
+        session.written,
+        isEmpty,
+        reason: 'mid-turn the line lands in the user\'s own conversation',
+      );
+      expect(SessionDao(h.db).getById(session.id)!.modelId, 'opus');
+    },
+  );
 
   test('a state no source can vouch for counts as busy', () async {
     // `unknown` is the ordinary answer for a session with no hooks, and a key
@@ -174,21 +180,24 @@ void main() {
     expect(session.written, isEmpty);
   });
 
-  test('Codex is idle and still deferred: its /model takes no argument', () async {
-    final h = harness(agentId: AgentIds.codex);
-    addTearDown(h.db.close);
-    addTearDown(h.container.dispose);
-    final session = await launched(h.container, agentId: AgentIds.codex);
+  test(
+    'Codex is idle and still deferred: its /model takes no argument',
+    () async {
+      final h = harness(agentId: AgentIds.codex);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      final session = await launched(h.container, agentId: AgentIds.codex);
 
-    final outcome = h.container
-        .read(sessionLauncherProvider)
-        .setModel(session.id, 'gpt-5.5');
+      final outcome = h.container
+          .read(sessionLauncherProvider)
+          .setModel(session.id, 'gpt-5.5');
 
-    expect(outcome.switchedNow, isFalse);
-    expect(outcome.deferral, ModelDeferral.noCommand);
-    expect(session.written, isEmpty);
-    expect(SessionDao(h.db).getById(session.id)!.modelId, 'gpt-5.5');
-  });
+      expect(outcome.switchedNow, isFalse);
+      expect(outcome.deferral, ModelDeferral.noCommand);
+      expect(session.written, isEmpty);
+      expect(SessionDao(h.db).getById(session.id)!.modelId, 'gpt-5.5');
+    },
+  );
 
   test('a session nothing is running is deferred, not refused', () async {
     final h = harness();

@@ -126,9 +126,7 @@ class WorktreeBrowseNotice extends ConsumerWidget {
     }
 
     final home = ref.watch(selectedCheckoutPathProvider);
-    final fallback = home == null
-        ? 'the checkout'
-        : lastPathSegment(home.path);
+    final fallback = home == null ? 'the checkout' : lastPathSegment(home.path);
 
     return PaneNoticeBar(
       icon: AppIcons.warning,

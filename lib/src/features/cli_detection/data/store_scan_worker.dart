@@ -193,9 +193,7 @@ class IsolateStoreScanRunner implements StoreScanRunner {
     final orphaned = _open.values.toList(growable: false);
     _open.clear();
     for (final out in orphaned) {
-      out.addError(
-        StateError('The store-scan worker isolate exited mid-scan'),
-      );
+      out.addError(StateError('The store-scan worker isolate exited mid-scan'));
       unawaited(out.close());
     }
     if (ready != null && !ready.isCompleted) {

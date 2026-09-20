@@ -156,9 +156,8 @@ class WorktreeControlTools {
       }
       // Not in `added` is not the same as not recorded: a row for this path
       // could already have existed. Ask the table rather than assume.
-      for (final repository in _container
-          .read(repositoryDaoProvider)
-          .getByProject(projectId)) {
+      for (final repository
+          in _container.read(repositoryDaoProvider).getByProject(projectId)) {
         if (Checkout(repository.path) == Checkout(path)) {
           return repository.id;
         }
@@ -244,7 +243,7 @@ class WorktreeControlTools {
       throw StateError(
         'Whether ${worktree.name} is merged is not recorded — '
         '${base == null ? 'no base branch could be resolved' : 'git could not '
-            'count its commits against $base'}. Nothing is removed on a '
+                  'count its commits against $base'}. Nothing is removed on a '
         'reading Karmashala could not take.',
       );
     }

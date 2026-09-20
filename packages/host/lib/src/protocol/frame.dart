@@ -69,7 +69,8 @@ class Frame {
   }
 
   @override
-  String toString() => 'Frame(${type.name}, ref $sessionRef, ${payload.length}B)';
+  String toString() =>
+      'Frame(${type.name}, ref $sessionRef, ${payload.length}B)';
 }
 
 class FrameFormatException implements Exception {
@@ -101,10 +102,14 @@ class FrameParser {
       final ref = view.getUint16(2, Endian.big);
       final length = view.getUint32(4, Endian.big);
       if (type == null) {
-        throw FrameFormatException('unknown message type 0x${data[0].toRadixString(16)}');
+        throw FrameFormatException(
+          'unknown message type 0x${data[0].toRadixString(16)}',
+        );
       }
       if (length > Frame.maxPayloadBytes) {
-        throw FrameFormatException('payload of $length bytes exceeds the ${Frame.maxPayloadBytes} limit');
+        throw FrameFormatException(
+          'payload of $length bytes exceeds the ${Frame.maxPayloadBytes} limit',
+        );
       }
       final total = Frame.headerBytes + length;
       if (data.length < total) {
@@ -112,7 +117,12 @@ class FrameParser {
         return frames;
       }
       frames.add(
-        Frame(type, ref, Uint8List.sublistView(data, Frame.headerBytes, total), flags: flags),
+        Frame(
+          type,
+          ref,
+          Uint8List.sublistView(data, Frame.headerBytes, total),
+          flags: flags,
+        ),
       );
       _restore(Uint8List.sublistView(data, total));
     }

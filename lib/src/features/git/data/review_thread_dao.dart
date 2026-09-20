@@ -127,9 +127,9 @@ class ReviewThreadDao {
     final kept = [
       for (final row in rows)
         if (statuses == null ||
-            statuses.contains(ReviewThreadStatus.fromName(
-              row['status'] as String?,
-            )))
+            statuses.contains(
+              ReviewThreadStatus.fromName(row['status'] as String?),
+            ))
           row,
     ];
     final comments = _commentsForThreads([

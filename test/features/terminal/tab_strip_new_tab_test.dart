@@ -96,8 +96,10 @@ void main() {
     final first = controllerOf(container).openTab(TerminalProfile.powerShell);
     controllerOf(container).openTab(TerminalProfile.commandPrompt);
     await pumpWorkbench(tester, container);
-    expect(container.read(terminalSessionsControllerProvider).activeTabId,
-        isNot(first));
+    expect(
+      container.read(terminalSessionsControllerProvider).activeTabId,
+      isNot(first),
+    );
 
     // A single click activates *now*. If the gesture had been wrapped around
     // the rail this would still pass a frame later — after the 300 ms

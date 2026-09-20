@@ -61,7 +61,10 @@ void main() {
       (n) => n.text == 'Fitness',
     );
 
-    expect(fitness.bounds, const UiBounds(left: 28, top: 88, right: 97, bottom: 179));
+    expect(
+      fitness.bounds,
+      const UiBounds(left: 28, top: 88, right: 97, bottom: 179),
+    );
   });
 
   test('an element with no rect falls back to the frame string', () {
