@@ -6,6 +6,7 @@ library;
 
 export 'automations.dart';
 export 'checks.dart';
+export 'events.dart';
 export 'persistence.dart';
 export 'resumes.dart';
 export 'runs.dart';

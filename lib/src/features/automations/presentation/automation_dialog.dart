@@ -49,14 +49,20 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
   String? _installationId;
   PermissionSelection? _mode;
   late AutomationLatePolicy _latePolicy;
+  late AutomationEventKind _eventKind;
+  late AutomationEventAction _eventAction;
 
   @override
   void initState() {
     super.initState();
     final existing = widget.existing;
     final schedule = existing?.schedule;
+    final trigger = existing?.trigger;
+    _eventKind = trigger?.kind ?? AutomationEventKind.turnFinished;
+    _eventAction = trigger?.action ?? AutomationEventAction.messageSession;
     _name = TextEditingController(text: existing?.name ?? '');
     _kind = switch (schedule) {
+      _ when trigger != null => AutomationScheduleKind.event,
       null => AutomationScheduleKind.every,
       _ when schedule.isInterval => AutomationScheduleKind.every,
       _ when schedule.isOnce => AutomationScheduleKind.once,
@@ -72,7 +78,11 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
     );
     _once = schedule?.firesAt;
     _prompt = TextEditingController(text: existing?.prompt ?? '');
-    _installationId = existing?.agentInstallationId;
+    // A message rule stores no agent; '' is not one the picker can show.
+    final storedAgent = existing?.agentInstallationId;
+    _installationId = storedAgent == null || storedAgent.isEmpty
+        ? null
+        : storedAgent;
     _mode = existing?.permissionMode;
     _latePolicy = existing?.latePolicy ?? AutomationLatePolicy.ask;
   }
@@ -109,7 +119,20 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
           : null,
     AutomationScheduleKind.once =>
       _once == null ? null : AutomationSchedule.once(_once!.toUtc()),
+    // Inert: an event rule's schedule is never read, and none is stored.
+    AutomationScheduleKind.event => AutomationSchedule.once(
+      widget.existing?.armedAt ?? DateTime.now().toUtc(),
+    ),
   };
+
+  AutomationEventTrigger? get _trigger => _kind == AutomationScheduleKind.event
+      ? AutomationEventTrigger(kind: _eventKind, action: _eventAction)
+      : null;
+
+  /// Whether the form needs an agent: every rule but one that messages the
+  /// session its event came from.
+  bool get _needsAgent =>
+      _trigger?.action != AutomationEventAction.messageSession;
 
   /// Why the schedule as spelled cannot be armed, or null.
   String? get _scheduleRefusal => switch (_kind) {
@@ -123,13 +146,15 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
     AutomationScheduleKind.cron => cronRefusal(_cron.text),
     AutomationScheduleKind.once =>
       _once == null ? 'A one-shot needs a moment to fire at.' : null,
+    AutomationScheduleKind.event => null,
   };
 
   /// The automation this form would write, or null when a field is not filled
   /// in yet. Built so the gate can be asked about it *before* it exists.
   Automation? get _candidate {
     final schedule = _schedule;
-    final installationId = _installationId;
+    // A message rule borrows the target session's agent, so it names none.
+    final installationId = _needsAgent ? _installationId : '';
     if (schedule == null || installationId == null) return null;
     if (_name.text.trim().isEmpty || _prompt.text.trim().isEmpty) return null;
     final existing = widget.existing;
@@ -140,7 +165,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
       schedule: schedule,
       agentInstallationId: installationId,
       prompt: _prompt.text.trim(),
-      permissionMode: _mode,
+      permissionMode: _needsAgent ? _mode : null,
       enabled: existing?.enabled ?? true,
       armedAt: existing?.armedAt ?? DateTime.now().toUtc(),
       latePolicy: _latePolicy,
@@ -148,6 +173,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
           existing?.stopAfterFailures ?? kDefaultStopAfterFailures,
       consecutiveFailures: existing?.consecutiveFailures ?? 0,
       maxRuntime: existing?.maxRuntime,
+      trigger: _trigger,
     );
   }
 
@@ -160,7 +186,10 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
     final preflight = ref.watch(unattendedPreflightProvider);
     final installations = _installations;
     final candidate = _candidate;
-    final refusal = candidate == null ? null : preflight.refusalFor(candidate);
+    final refusal = candidate == null || !candidate.startsAgent
+        ? null
+        : preflight.refusalFor(candidate);
+    final isEvent = _kind == AutomationScheduleKind.event;
     final scheduleRefusal = _scheduleRefusal;
     final selected = installations
         .where((i) => i.id == _installationId)
@@ -207,22 +236,33 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
               onPickMoment: _pickMoment,
             ),
             const SizedBox(height: Insets.sm),
-            _LatePolicyField(
-              value: _latePolicy,
-              onChanged: (value) => setState(() => _latePolicy = value),
-            ),
+            if (isEvent)
+              _EventFields(
+                kind: _eventKind,
+                action: _eventAction,
+                onKindChanged: (value) => setState(() => _eventKind = value),
+                onActionChanged: (value) =>
+                    setState(() => _eventAction = value),
+              )
+            else
+              _LatePolicyField(
+                value: _latePolicy,
+                onChanged: (value) => setState(() => _latePolicy = value),
+              ),
             const SizedBox(height: Insets.sm),
-            _AgentField(
-              installations: installations,
-              selectedId: _installationId,
-              displayNameFor: registry.displayNameFor,
-              onChanged: (value) => setState(() {
-                _installationId = value;
-                _mode = null;
-              }),
-            ),
-            const SizedBox(height: Insets.sm),
-            if (selected != null)
+            if (_needsAgent) ...[
+              _AgentField(
+                installations: installations,
+                selectedId: _installationId,
+                displayNameFor: registry.displayNameFor,
+                onChanged: (value) => setState(() {
+                  _installationId = value;
+                  _mode = null;
+                }),
+              ),
+              const SizedBox(height: Insets.sm),
+            ],
+            if (selected != null && _needsAgent)
               _PermissionModeField(
                 agentName: descriptor?.displayName ?? selected.agentId,
                 support: descriptor?.launch.permission,
@@ -240,6 +280,20 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
                 hintText: 'Run the checks and fix what broke.',
               ),
             ),
+            if (_trigger case final trigger?) ...[
+              const SizedBox(height: Insets.sm),
+              // The whole rule, plainly, before it is armed.
+              Text(
+                trigger.describe(
+                  checkout: repository.name,
+                  prompt: _prompt.text.trim().isEmpty
+                      ? '…'
+                      : _prompt.text.trim(),
+                ),
+                key: const ValueKey('event-rule-sentence'),
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
             if (refusal != null) ...[
               const SizedBox(height: Insets.sm),
               Text(
@@ -302,6 +356,7 @@ class _AutomationDialogState extends ConsumerState<AutomationDialog> {
               // The authorisation, dated. Editing one re-dates it: changing
               // what an automation does is authorising the new thing.
               armedAt: controller.now(),
+              trigger: candidate.trigger,
             )
           : candidate.copyWith(armedAt: controller.now()),
     );
@@ -381,6 +436,10 @@ class _ScheduleFields extends StatelessWidget {
             ButtonSegment(
               value: AutomationScheduleKind.once,
               label: Text('Once'),
+            ),
+            ButtonSegment(
+              value: AutomationScheduleKind.event,
+              label: Text('When…'),
             ),
           ],
           selected: {kind},
@@ -467,7 +526,7 @@ class _ScheduleFields extends StatelessWidget {
                   'in this machine\'s own time',
             ),
           ),
-        ] else
+        ] else if (kind == AutomationScheduleKind.once)
           Row(
             children: [
               Expanded(
@@ -594,10 +653,71 @@ class _PermissionModeField extends StatelessWidget {
   }
 }
 
-/// Which of the three shapes a schedule is. The dialog's own axis, not the
-/// domain's: the domain has three constructors, and a segmented control needs
-/// one value to be selected.
-enum AutomationScheduleKind { every, cron, once }
+/// Which shape a trigger is. The dialog's own axis, not the domain's: the
+/// domain has three schedule constructors and a trigger beside them, and a
+/// segmented control needs one value to be selected.
+enum AutomationScheduleKind { every, cron, once, event }
+
+/// Which event, and what to do about it — with the two limits that make an
+/// event rule safe to leave armed said where it is armed.
+class _EventFields extends StatelessWidget {
+  const _EventFields({
+    required this.kind,
+    required this.action,
+    required this.onKindChanged,
+    required this.onActionChanged,
+  });
+
+  final AutomationEventKind kind;
+  final AutomationEventAction action;
+  final ValueChanged<AutomationEventKind> onKindChanged;
+  final ValueChanged<AutomationEventAction> onActionChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<AutomationEventKind>(
+          key: const ValueKey('event-kind'),
+          isExpanded: true,
+          initialValue: kind,
+          decoration: const InputDecoration(labelText: 'When'),
+          items: [
+            for (final value in AutomationEventKind.values)
+              DropdownMenuItem(value: value, child: Text(value.label)),
+          ],
+          onChanged: (value) => value == null ? null : onKindChanged(value),
+        ),
+        const SizedBox(height: Insets.sm),
+        DropdownButtonFormField<AutomationEventAction>(
+          key: const ValueKey('event-action'),
+          isExpanded: true,
+          initialValue: action,
+          decoration: const InputDecoration(labelText: 'Then'),
+          items: [
+            for (final value in AutomationEventAction.values)
+              DropdownMenuItem(value: value, child: Text(value.label)),
+          ],
+          onChanged: (value) => value == null ? null : onActionChanged(value),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: Insets.xs),
+          child: Text(
+            'Only sessions in this checkout. It never answers an event its '
+            'own action caused, fires at most once a second, and never moves '
+            'your focus.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// What this automation does about an occurrence the app slept through.
 ///

@@ -6,6 +6,7 @@ import 'package:karmashala_core/verdicts.dart';
 import 'automation.dart';
 import 'automation_check_verdict.dart';
 import 'automation_run.dart';
+import 'automation_trigger.dart';
 
 /// Data access for automations and their occurrences. Hand-written SQL.
 class AutomationDao {
@@ -20,17 +21,13 @@ class AutomationDao {
     '(id, repository_id, name, cron, fires_at, every_seconds, '
     'agent_installation_id, prompt, permission_mode, enabled, armed_at, '
     'late_policy, stop_after_failures, consecutive_failures, '
-    'disabled_reason, max_runtime_seconds) '
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    'disabled_reason, max_runtime_seconds, trigger_event, event_action) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       automation.id,
       automation.repositoryId,
       automation.name,
-      automation.schedule.cron,
-      automation.schedule.firesAt == null
-          ? null
-          : isoFromDate(automation.schedule.firesAt!),
-      automation.schedule.everySeconds,
+      ..._scheduleColumns(automation),
       automation.agentInstallationId,
       automation.prompt,
       automation.permissionMode?.canonical,
@@ -41,6 +38,8 @@ class AutomationDao {
       automation.consecutiveFailures,
       automation.disabledReason,
       automation.maxRuntime?.inSeconds,
+      automation.trigger?.kind.storedName,
+      automation.trigger?.action.storedName,
     ],
   );
 
@@ -51,14 +50,11 @@ class AutomationDao {
     'every_seconds = ?, agent_installation_id = ?, prompt = ?, '
     'permission_mode = ?, enabled = ?, armed_at = ?, late_policy = ?, '
     'stop_after_failures = ?, consecutive_failures = ?, disabled_reason = ?, '
-    'max_runtime_seconds = ? WHERE id = ?;',
+    'max_runtime_seconds = ?, trigger_event = ?, event_action = ? '
+    'WHERE id = ?;',
     [
       automation.name,
-      automation.schedule.cron,
-      automation.schedule.firesAt == null
-          ? null
-          : isoFromDate(automation.schedule.firesAt!),
-      automation.schedule.everySeconds,
+      ..._scheduleColumns(automation),
       automation.agentInstallationId,
       automation.prompt,
       automation.permissionMode?.canonical,
@@ -69,9 +65,23 @@ class AutomationDao {
       automation.consecutiveFailures,
       automation.disabledReason,
       automation.maxRuntime?.inSeconds,
+      automation.trigger?.kind.storedName,
+      automation.trigger?.action.storedName,
       automation.id,
     ],
   );
+
+  /// cron, fires_at, every_seconds — all null for an event rule, so a build
+  /// that predates triggers cannot read one as a schedule and fire it.
+  static List<Object?> _scheduleColumns(Automation automation) {
+    if (automation.isEventDriven) return const [null, null, null];
+    final schedule = automation.schedule;
+    return [
+      schedule.cron,
+      schedule.firesAt == null ? null : isoFromDate(schedule.firesAt!),
+      schedule.everySeconds,
+    ];
+  }
 
   /// Records the outcome of one run against its automation's failure budget.
   ///
@@ -134,13 +144,62 @@ class AutomationDao {
       .map(_automation)
       .toList();
 
+  /// Every event-triggered automation, paused ones included: a dry run has to
+  /// be able to say "paused" rather than leave one out.
+  List<Automation> eventRules() => _db
+      .query(
+        'SELECT * FROM automations WHERE trigger_event IS NOT NULL '
+        'ORDER BY name, id;',
+      )
+      .map(_automation)
+      .where((automation) => automation.isEventDriven)
+      .toList();
+
+  // --- origins: which automations led to a session's next event -------------
+
+  /// The chain behind every event of [sessionId] because an automation started
+  /// it, or empty. A time-based run's chain is just itself.
+  List<String> originOfSession(String sessionId) {
+    final run = runForSession(sessionId);
+    if (run == null) return const [];
+    return run.origin.isEmpty ? [run.automationId] : run.origin;
+  }
+
+  /// Records that an automation's message is going into [sessionId], so the
+  /// turn it causes is known to be the automation's. Written *before* the
+  /// message is typed: a fast turn must not finish ahead of the record.
+  void markMessaged(String sessionId, List<String> origin, DateTime at) =>
+      _db.execute(
+        'INSERT INTO automation_session_origins (session_id, origin, '
+        'recorded_at) VALUES (?, ?, ?) ON CONFLICT (session_id) DO UPDATE '
+        'SET origin = excluded.origin, recorded_at = excluded.recorded_at;',
+        [sessionId, jsonEncode(origin), isoFromDate(at)],
+      );
+
+  /// The chain a message left on [sessionId], or empty. [consume] clears it:
+  /// only the one turn the message caused is the automation's.
+  List<String> messagedOrigin(String sessionId, {bool consume = false}) {
+    final rows = _db.query(
+      'SELECT origin FROM automation_session_origins WHERE session_id = ?;',
+      [sessionId],
+    );
+    if (rows.isEmpty) return const [];
+    if (consume) clearMessaged(sessionId);
+    return _ids(rows.first['origin'] as String?);
+  }
+
+  void clearMessaged(String sessionId) => _db.execute(
+    'DELETE FROM automation_session_origins WHERE session_id = ?;',
+    [sessionId],
+  );
+
   // --- runs -----------------------------------------------------------------
 
   void insertRun(AutomationRun run) => _db.execute(
     'INSERT INTO automation_runs '
     '(id, automation_id, scheduled_for, fired_at, state, reason, '
-    'base_checkpoint_id, session_id, finished_at, commits_made) '
-    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
+    'base_checkpoint_id, session_id, finished_at, commits_made, origin, '
+    'event_session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);',
     [
       run.id,
       run.automationId,
@@ -152,6 +211,8 @@ class AutomationDao {
       run.sessionId,
       run.finishedAt == null ? null : isoFromDate(run.finishedAt!),
       run.commitsMade,
+      run.origin.isEmpty ? null : jsonEncode(run.origin),
+      run.eventSessionId,
     ],
   );
 
@@ -232,6 +293,21 @@ class AutomationDao {
       return [
         for (final part in decoded)
           if (part is String && part.isNotEmpty) part,
+      ];
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  /// Forgiving the same way: an unreadable chain reads as none.
+  static List<String> _ids(String? raw) {
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return [
+        for (final id in decoded)
+          if (id is String && id.isNotEmpty) id,
       ];
     } on FormatException {
       return const [];
@@ -360,6 +436,10 @@ class AutomationDao {
       maxRuntime: seconds == null || seconds <= 0
           ? null
           : Duration(seconds: seconds),
+      trigger: AutomationEventTrigger.fromRow(
+        event: row['trigger_event'] as String?,
+        action: row['event_action'] as String?,
+      ),
     );
   }
 
@@ -379,5 +459,7 @@ class AutomationDao {
     checksObservedAt: row['checks_observed_at'] == null
         ? null
         : dateFromIso(row['checks_observed_at']),
+    origin: _ids(row['origin'] as String?),
+    eventSessionId: row['event_session_id'] as String?,
   );
 }

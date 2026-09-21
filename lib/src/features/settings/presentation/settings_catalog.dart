@@ -322,6 +322,9 @@ enum SettingsAnchor {
     'cron',
     'nightly',
     'unattended',
+    'event',
+    'trigger',
+    'when a session finishes',
     'afk',
     'project check',
     'checks',
@@ -719,7 +722,7 @@ const settingsEntries = <SettingsEntry>[
     'Scheduled automations',
     anchor: SettingsAnchor.automations,
     description: 'Arm, pause and review agent runs on a schedule.',
-    keywords: ['cron', 'nightly', 'schedule', 'project check'],
+    keywords: ['cron', 'nightly', 'schedule', 'event', 'project check'],
   ),
   SettingsEntry(
     'Scheduled resumes',

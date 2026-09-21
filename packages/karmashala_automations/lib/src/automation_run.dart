@@ -56,6 +56,8 @@ class AutomationRun {
     this.finishedAt,
     this.commitsMade,
     this.checksObservedAt,
+    this.origin = const [],
+    this.eventSessionId,
   });
 
   final String id;
@@ -91,6 +93,14 @@ class AutomationRun {
   /// looked yet — a different fact from a checkout that configures none (§19).
   final DateTime? checksObservedAt;
 
+  /// The automations that led to this run, oldest first and ending with its
+  /// own. Empty for a run nothing chained — every time-based one.
+  final List<String> origin;
+
+  /// The session whose event fired this run, for an event-triggered one: the
+  /// session a message went to. Never [sessionId], which is the one it started.
+  final String? eventSessionId;
+
   Duration? get duration => finishedAt?.difference(firedAt);
 
   AutomationRun copyWith({
@@ -113,6 +123,8 @@ class AutomationRun {
     finishedAt: finishedAt ?? this.finishedAt,
     commitsMade: commitsMade ?? this.commitsMade,
     checksObservedAt: checksObservedAt ?? this.checksObservedAt,
+    origin: origin,
+    eventSessionId: eventSessionId,
   );
 
   @override

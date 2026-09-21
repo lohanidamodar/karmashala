@@ -88,6 +88,7 @@ class ActiveSchedulesSection extends ConsumerWidget {
 /// When [automation] next fires, UTC, or null when it will not: a one-off
 /// whose moment has passed, or a schedule this build cannot read.
 DateTime? nextFireOf(Automation automation, {required DateTime now}) {
+  if (automation.isEventDriven) return null;
   final schedule = automation.schedule;
   if (schedule.isOnce) {
     final at = schedule.firesAt!;
@@ -125,12 +126,18 @@ class _AutomationRow extends ConsumerWidget {
       title: automation.name,
       detail: [
         repository?.name ?? 'a checkout that is no longer here',
-        ?automation.schedule.cron,
-        if (automation.schedule.isInterval)
-          'every ${describeGap(automation.schedule.gap!)} after each run',
+        if (automation.trigger case final trigger?)
+          'when a session ${trigger.kind.phrase}'
+        else ...[
+          ?automation.schedule.cron,
+          if (automation.schedule.isInterval)
+            'every ${describeGap(automation.schedule.gap!)} after each run',
+        ],
       ].join(' · '),
       when: when == null
-          ? (automation.schedule.isInterval
+          ? (automation.isEventDriven
+                ? 'on event'
+                : automation.schedule.isInterval
                 ? 'after the next run'
                 : 'not due again')
           : _describeWhen(when, now),

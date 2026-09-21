@@ -13,6 +13,7 @@ import 'workbench.dart';
 
 import '../../core/database/database_providers.dart';
 import '../../core/lifecycle/before_quit.dart';
+import '../../features/automations/application/automation_event_router.dart';
 import '../../features/automations/application/automation_runner.dart';
 import '../../features/automations/application/automation_scheduler.dart';
 import '../../features/automations/application/scheduled_resume_observer.dart';
@@ -160,6 +161,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.watch(scheduledResumeObserverProvider);
     // And for the turn that ends on a usage limit, which offers one.
     ref.watch(usageLimitWatcherProvider);
+    // And for event automations, which hear status changes only while watched.
+    ref.watch(automationEventRouterProvider);
     // And for note tabs, which close with their note and flush on the way out.
     ref.watch(noteTabsObserverProvider);
     // And for file autosave, whose window-focus trigger has to be heard while

@@ -65,6 +65,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   54: _migrateToV54,
   55: _migrateToV55,
   56: _migrateToV56,
+  57: _migrateToV57,
 };
 
 /// Was this pane running when its row was written? `DEFAULT 0` is the honest
@@ -1471,4 +1472,41 @@ void _migrateToV56(Database db) {
     'CREATE VIRTUAL TABLE IF NOT EXISTS conversation_turns_vocab '
     "USING fts5vocab(conversation_turns_fts, 'row');",
   );
+}
+
+/// Automations that fire on an event rather than a clock, and the origin chain
+/// that stops one answering its own action.
+///
+/// `automations.trigger_event` / `event_action` are null for every existing
+/// row, which is exactly "time-based" — nothing armed changes. A run records
+/// the chain of automations that led to it (`origin`, JSON) and the session
+/// whose event fired it (`event_session_id`). `automation_session_origins`
+/// holds, per session, the chain of the automation message on its way in, so
+/// the one turn that message causes is known to be the automation's.
+void _migrateToV57(Database db) {
+  Set<String> columnsOf(String table) => db
+      .select('PRAGMA table_info($table);')
+      .map((row) => row['name'] as String)
+      .toSet();
+  void add(Set<String> existing, String table, String name, String type) {
+    if (existing.contains(name)) return;
+    db.execute('ALTER TABLE $table ADD COLUMN $name $type;');
+  }
+
+  final automations = columnsOf('automations');
+  add(automations, 'automations', 'trigger_event', 'TEXT');
+  add(automations, 'automations', 'event_action', 'TEXT');
+
+  final runs = columnsOf('automation_runs');
+  add(runs, 'automation_runs', 'origin', 'TEXT');
+  add(runs, 'automation_runs', 'event_session_id', 'TEXT');
+
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS automation_session_origins (
+      session_id  TEXT PRIMARY KEY
+        REFERENCES sessions (id) ON DELETE CASCADE,
+      origin      TEXT NOT NULL,
+      recorded_at TEXT NOT NULL
+    );
+  ''');
 }

@@ -23,6 +23,7 @@ import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala_automations/schedules.dart';
 import 'active_schedules_section.dart';
 import 'automation_dialog.dart';
+import 'automation_dry_run_dialog.dart';
 import 'automation_undo_dialog.dart';
 import 'project_checks_section.dart';
 
@@ -151,9 +152,12 @@ class AutomationCard extends ConsumerWidget {
     final installation = ref
         .watch(agentInstallationDaoProvider)
         .getById(automation.agentInstallationId);
-    final agentName = installation == null
+    final agentName = !automation.startsAgent
+        ? 'the agent already running in that session'
+        : installation == null
         ? 'an agent that is no longer installed'
         : ref.watch(agentRegistryProvider).displayNameFor(installation.agentId);
+    final trigger = automation.trigger;
 
     return ItemCard(
       title: Wrap(
@@ -176,10 +180,27 @@ class AutomationCard extends ConsumerWidget {
           overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: Insets.sm),
-        _Line(
-          label: 'Runs',
-          value: describeSchedule(automation, now: now),
-        ),
+        if (trigger == null)
+          _Line(
+            label: 'Runs',
+            value: describeSchedule(automation, now: now),
+          )
+        else ...[
+          _Line(
+            label: 'Fires',
+            value: trigger.describe(
+              checkout: repository?.name ?? 'that checkout',
+              prompt: automation.prompt,
+            ),
+          ),
+          _Line(
+            label: 'Limits',
+            value:
+                'Never answers an event its own action caused · at most once '
+                'a second · never moves your focus'
+                '${automation.enabled ? '' : ' — paused'}',
+          ),
+        ],
         _Line(label: 'Agent', value: agentName),
         _Line(label: 'Prompt', value: automation.prompt),
         if (refusal != null) ...[
@@ -195,6 +216,11 @@ class AutomationCard extends ConsumerWidget {
               .setEnabled(automation.id, enabled: !automation.enabled),
           child: Text(automation.enabled ? 'Pause' : 'Resume'),
         ),
+        if (trigger != null)
+          TextButton(
+            onPressed: () => AutomationDryRunDialog.show(context, automation),
+            child: const Text('Dry run'),
+          ),
         TextButton(
           onPressed: () => AutomationDialog.show(
             context,
@@ -313,13 +339,17 @@ class _RunLine extends ConsumerWidget {
               const SizedBox(width: Insets.sm),
               Expanded(
                 child: Text(
-                  'due ${run.scheduledFor.toLocal()} · $age',
+                  '${run.eventSessionId == null ? 'due' : 'on event at'} '
+                  '${run.scheduledFor.toLocal()} · $age',
                   style: theme.textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (run.state == AutomationRunState.finished ||
-                  run.state == AutomationRunState.failed)
+              // A message changed no files of its own, so there is no tree to
+              // restore; the session it went to has its own history.
+              if ((run.state == AutomationRunState.finished ||
+                      run.state == AutomationRunState.failed) &&
+                  !(run.sessionId == null && run.eventSessionId != null))
                 TextButton(
                   onPressed: () => AutomationUndoDialog.show(context, run: run),
                   child: const Text('Undo…'),

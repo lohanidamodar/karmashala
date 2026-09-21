@@ -148,6 +148,8 @@ final automationRefusalProvider = Provider.family<UnattendedRefusal?, String>((
 ) {
   ref.watch(automationsRevisionProvider);
   final automation = ref.read(automationDaoProvider).getById(automationId);
-  if (automation == null) return null;
+  // A message rule starts no agent; its gate is the target session's, asked
+  // at fire time, because the session is not known until the event names it.
+  if (automation == null || !automation.startsAgent) return null;
   return ref.read(unattendedPreflightProvider).refusalFor(automation);
 });

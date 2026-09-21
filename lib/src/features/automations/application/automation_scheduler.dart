@@ -76,11 +76,16 @@ class AutomationScheduler extends Notifier<int> {
   DateTime get _now => ref.read(clockProvider).nowUtc();
   String _newId() => ref.read(idGeneratorProvider).newId();
 
+  /// The enabled automations the clock fires. An event rule has no schedule,
+  /// and reading its placeholder as one would fire it on a timer.
+  Iterable<Automation> get _scheduled =>
+      _dao.enabled().where((automation) => !automation.isEventDriven);
+
   /// The soonest occurrence across every enabled automation, or null when
   /// nothing is due ever again.
   DateTime? nextOccurrence(DateTime after) {
     DateTime? soonest;
-    for (final automation in _dao.enabled()) {
+    for (final automation in _scheduled) {
       final next = _nextFor(automation, after);
       if (next == null) continue;
       if (soonest == null || next.isBefore(soonest)) soonest = next;
@@ -162,7 +167,7 @@ class AutomationScheduler extends Notifier<int> {
   Future<void> reconcile() async {
     final now = _now;
     var changed = _reapOverrunning(now);
-    for (final automation in _dao.enabled()) {
+    for (final automation in _scheduled) {
       final decision = missedFireDecision(
         schedule: automation.schedule,
         since: _floorFor(automation),
@@ -447,6 +452,37 @@ class AutomationScheduler extends Notifier<int> {
     if (automation.schedule.isOnce) {
       _dao.setEnabled(automation.id, enabled: false);
     }
+  }
+
+  /// Starts an event rule's session under the same rules a scheduled fire
+  /// keeps: one run of an automation at a time, one owner per checkout. [run]
+  /// is written before the fire so its origin chain survives a queue.
+  Future<void> startEventRun(Automation automation, AutomationRun run) async {
+    final live = _dao.liveRunOf(automation.id);
+    if (live != null) {
+      _dao.insertRun(
+        run.copyWith(
+          state: AutomationRunState.missed,
+          reason: _alreadyRunningReason(live),
+        ),
+      );
+      ref.read(automationsRevisionProvider.notifier).bump();
+      return;
+    }
+    final busy = _liveInCheckout(automation.repositoryId);
+    final queued = run.copyWith(
+      state: AutomationRunState.queued,
+      reason: busy == null ? run.reason : queuedReason(busy),
+    );
+    _dao.insertRun(queued);
+    if (busy != null) {
+      ref.read(automationsRevisionProvider.notifier).bump();
+      return;
+    }
+    await ref
+        .read(automationFiringProvider)
+        .fire(automation, run.scheduledFor, note: run.reason, queued: queued);
+    ref.read(automationsRevisionProvider.notifier).bump();
   }
 
   /// What a queued row says, in the words the page shows.

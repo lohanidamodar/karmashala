@@ -1,5 +1,7 @@
 import 'package:agent_cli/descriptors.dart';
 
+import 'automation_trigger.dart';
+
 /// The shortest interval an automation may repeat at.
 ///
 /// A run takes a checkout and an agent process; below this the next occurrence
@@ -152,6 +154,7 @@ class Automation {
     this.consecutiveFailures = 0,
     this.disabledReason,
     this.maxRuntime,
+    this.trigger,
   });
 
   final String id;
@@ -199,6 +202,17 @@ class Automation {
   /// drained. Null is no ceiling, which is what every automation had.
   final Duration? maxRuntime;
 
+  /// The event this fires on, or null for a time-based automation. When set,
+  /// [schedule] is inert: the scheduler never fires an event rule on a clock.
+  final AutomationEventTrigger? trigger;
+
+  bool get isEventDriven => trigger != null;
+
+  /// Whether a run needs an agent of its own. A message goes into a session
+  /// that already has one, so that rule names none.
+  bool get startsAgent =>
+      trigger?.action != AutomationEventAction.messageSession;
+
   /// Whether [consecutiveFailures] has reached the limit this was armed with.
   bool get hasFailedOut =>
       stopAfterFailures > 0 && consecutiveFailures >= stopAfterFailures;
@@ -218,6 +232,7 @@ class Automation {
     bool clearDisabledReason = false,
     Duration? maxRuntime,
     bool clearMaxRuntime = false,
+    AutomationEventTrigger? trigger,
   }) => Automation(
     id: id,
     repositoryId: repositoryId,
@@ -235,8 +250,10 @@ class Automation {
         ? null
         : disabledReason ?? this.disabledReason,
     maxRuntime: clearMaxRuntime ? null : maxRuntime ?? this.maxRuntime,
+    trigger: trigger ?? this.trigger,
   );
 
   @override
-  String toString() => 'Automation($id, $name, $schedule, enabled: $enabled)';
+  String toString() =>
+      'Automation($id, $name, ${trigger ?? schedule}, enabled: $enabled)';
 }
