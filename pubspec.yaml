@@ -172,7 +172,7 @@ dependencies:
   flutter:
     sdk: flutter
   # Companion mode only: attention notifications on the phone.
-  flutter_local_notifications: ^19.0.0
+  flutter_local_notifications: ^22.3.1
   flutter_markdown_plus: ^1.0.7
   # Vendored fork — see packages/flutter_pty/VENDORED.md.
   flutter_pty:
@@ -254,9 +254,12 @@ dependencies:
   marionette_flutter: ^0.6.0
 
 # Dart-only stand-ins for the two Windows plugin implementations, whose C++
-# needs ATL and /await — both gone from the VS 2026 toolchain (MSVC 14.51).
-# Desktop never invokes either plugin (companion mode is Android, where the
-# real implementations load); see the stub packages' pubspecs for details.
+# needs ATL and /await. Desktop never invokes either plugin (companion mode is
+# Android, where the real implementations load), so the native halves are a
+# toolchain dependency bought for nothing — which is why they stay overridden
+# even though MSVC 14.51 does now build the notifications one (measured
+# 2026-09-21; the secure-storage one was not re-tested). See the stub
+# packages' pubspecs, and docs/SETTLED.md.
 dependency_overrides:
   flutter_local_notifications_windows:
     path: packages/flutter_local_notifications_windows_stub

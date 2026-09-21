@@ -23,7 +23,7 @@ class CompanionNotifier {
     );
     _ready =
         await _plugin.initialize(
-          settings,
+          settings: settings,
           onDidReceiveNotificationResponse: (response) {
             final payload = response.payload;
             if (payload != null && payload.isNotEmpty) onOpenSession(payload);
@@ -51,10 +51,10 @@ class CompanionNotifier {
       iOS: DarwinNotificationDetails(),
     );
     await _plugin.show(
-      notification.id,
-      notification.title,
-      notification.body,
-      details,
+      id: notification.id,
+      title: notification.title,
+      body: notification.body,
+      notificationDetails: details,
       payload: notification.sessionId,
     );
   }

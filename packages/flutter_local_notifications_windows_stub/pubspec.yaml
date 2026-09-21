@@ -1,25 +1,28 @@
-# Dart-only stand-in for flutter_local_notifications_windows 1.0.3, wired via a
-# dependency_override. The real package's C++ needs ATL and /await, which the
-# VS 2026 toolchain (MSVC 14.51) no longer provides; the desktop app never uses
-# this plugin (companion mode is Android, where the real Android plugin loads).
-# lib/src is copied verbatim from upstream (BSD-3, see LICENSE) minus the FFI
+# Dart-only stand-in for flutter_local_notifications_windows 3.1.1, wired via a
+# dependency_override. Kept because the desktop app never drives this plugin
+# (desktop notifications are local_notifier; companion mode is Android), so its
+# native half — which needs the ATL workload and experimental coroutines — is a
+# toolchain dependency and a bundled DLL bought for nothing. The 1.0.3 stub was
+# written when that native half would not compile at all; it does compile on
+# MSVC 14.51 today (measured 2026-09-21, docs/SETTLED.md).
+# lib/ is copied verbatim from upstream (BSD-3, see LICENSE) minus the FFI
 # halves; the plugin below declares no native code, so nothing compiles.
 name: flutter_local_notifications_windows
 description: Dart-only local stub of the Windows implementation of flutter_local_notifications.
-version: 1.0.3+stub
+version: 3.1.1+stub
 publish_to: none
 homepage: https://github.com/MaikuB/flutter_local_notifications/tree/master/flutter_local_notifications_windows
 
 environment:
-  sdk: ^3.4.0
-  flutter: ">=3.22.0"
+  sdk: ^3.10.0
+  flutter: ">=3.38.1"
 
 dependencies:
   flutter:
     sdk: flutter
-  flutter_local_notifications_platform_interface: ^9.0.0
-  timezone: ^0.10.0
-  xml: ^6.5.0
+  flutter_local_notifications_platform_interface: ^12.0.0
+  timezone: ^0.11.0
+  xml: ">=6.5.0 <8.0.0"
 
 flutter:
   plugin:

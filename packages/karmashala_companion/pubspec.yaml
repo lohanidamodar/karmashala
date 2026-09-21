@@ -29,7 +29,7 @@ dependencies:
   # subsystems a phone does not have, so the phone calls `openFile` directly.
   file_selector: ^1.1.0
   # The notification an attention event becomes.
-  flutter_local_notifications: ^19.0.0
+  flutter_local_notifications: ^22.3.1
   flutter_riverpod: ^3.3.2
   # `Clock`, `IdGenerator` and `Diagnostics`, behind this package's own three
   # providers.
