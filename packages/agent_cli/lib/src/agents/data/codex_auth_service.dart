@@ -60,13 +60,21 @@ class CodexAuthLocator {
           store.codexHome == null) {
         continue;
       }
-      final kind = environments
+      final environment = environments
           .where((e) => e.id == store.environmentId)
-          .map((e) => e.kind)
           .firstOrNull;
       return (
-        path: storePathContextFor(kind).join(store.codexHome!, 'auth.json'),
-        io: const LocalAuthFileIo(),
+        path: storePathContextFor(
+          environment?.kind,
+        ).join(store.codexHome!, 'auth.json'),
+        io: environment == null
+            ? const LocalAuthFileIo()
+            : storeAuthFileIo(
+                environment: environment,
+                environments: environments,
+                runnerFor: _stores.runnerFor,
+                translator: _stores.translator,
+              ),
       );
     }
     return null;
@@ -112,7 +120,7 @@ class CodexAuthLocator {
 /// treated as proof because Codex, not Karmashala, authenticated the file.
 ///
 /// Every method takes the [AuthFileIo] its [CodexAuthLocator] resolved; the
-/// default is this host's filesystem, which the Windows host and WSL use.
+/// default, [LocalAuthFileIo], is what the Windows host uses.
 class CodexAuthService {
   const CodexAuthService({required this.ids, required this.clock});
 

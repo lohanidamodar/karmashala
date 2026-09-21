@@ -9,9 +9,17 @@ import './process_spawner.dart';
 /// A `wsl.exe` invocation: the Windows-side executable and arguments that run a
 /// command inside a specific WSL distribution.
 class WslInvocation {
-  const WslInvocation(this.executable, this.arguments, {this.stdinText});
+  const WslInvocation(
+    this.executable,
+    this.arguments, {
+    this.stdinText,
+    this.timeout,
+  });
   final String executable;
   final List<String> arguments;
+
+  /// Set only by an `exec` invocation; see [WslCommandRunner.exec].
+  final Duration? timeout;
 
   /// Written to `wsl.exe`'s stdin, which forwards it to the command, then
   /// closed so the command sees end-of-file. Null closes stdin at once.
@@ -27,6 +35,7 @@ class WslInvocation {
     executable: executable,
     arguments: arguments,
     stdinText: stdinText,
+    timeout: timeout,
   );
 }
 
@@ -41,7 +50,14 @@ class WslInvocation {
 /// here is always `wsl.exe`; the request's own executable is an argument that
 /// the distribution resolves on its own PATH. Wrapping this in `cmd.exe` would
 /// change which machine did the resolving, not fix anything.
-WslInvocation buildWslInvocation(String distribution, CommandRequest request) {
+///
+/// [exec] uses `--exec` instead of `--`: the command is started directly, not
+/// handed to the user's shell as one line to re-parse.
+WslInvocation buildWslInvocation(
+  String distribution,
+  CommandRequest request, {
+  bool exec = false,
+}) {
   final args = <String>['-d', distribution];
   final cwd = request.workingDirectory;
   if (cwd != null) {
@@ -50,10 +66,15 @@ WslInvocation buildWslInvocation(String distribution, CommandRequest request) {
       ..add(cwd.path);
   }
   args
-    ..add('--')
+    ..add(exec ? '--exec' : '--')
     ..add(request.executable)
     ..addAll(request.arguments);
-  return WslInvocation('wsl.exe', args, stdinText: request.stdinText);
+  return WslInvocation(
+    'wsl.exe',
+    args,
+    stdinText: request.stdinText,
+    timeout: exec ? request.timeout : null,
+  );
 }
 
 /// Runs commands inside a named WSL distribution by invoking `wsl.exe` on the
@@ -78,6 +99,7 @@ class WslCommandRunner implements CommandRunner {
     required this.environmentId,
     required this.distribution,
     this.spawner,
+    this.exec = false,
   });
 
   @override
@@ -88,9 +110,15 @@ class WslCommandRunner implements CommandRunner {
 
   final ProcessSpawner? spawner;
 
+  /// Start commands with `wsl.exe --exec`, so an argument reaches the command
+  /// byte for byte. The default `--` passes the line through the user's shell,
+  /// which expands `$…` and breaks on quotes, and it never carried a timeout;
+  /// this mode is new, so it honours the request's.
+  final bool exec;
+
   @override
   Future<CommandResult> run(CommandRequest request) async {
-    final invocation = buildWslInvocation(distribution, request);
+    final invocation = buildWslInvocation(distribution, request, exec: exec);
     try {
       return await (spawner ?? sharedProcessSpawner).run(
         invocation.hostRequest,
@@ -105,7 +133,7 @@ class WslCommandRunner implements CommandRunner {
 
   @override
   Future<ProcessHandle> start(CommandRequest request) async {
-    final invocation = buildWslInvocation(distribution, request);
+    final invocation = buildWslInvocation(distribution, request, exec: exec);
     try {
       return IoProcessHandle(await spawnStreaming(invocation.hostRequest));
     } on ProcessException catch (e) {

@@ -3,7 +3,12 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
+import '../../environments/environment_kind.dart';
+import '../../environments/environment_path.dart';
+import '../../environments/execution_environment.dart';
 import '../../process/command_runner.dart';
+import '../../process/path_translator.dart';
+import '../../process/wsl_command_runner.dart';
 import '../../util/json_file.dart';
 
 /// Raised when an agent's auth file cannot be read or written where it lives.
@@ -50,9 +55,8 @@ abstract interface class AuthFileIo {
   Future<void> writeAtomic(String path, String content, {required bool secret});
 }
 
-/// The files are on a filesystem this host can open: the Windows host itself,
-/// or a WSL distribution through its UNC path. What account switching always
-/// did, unchanged.
+/// The files are on the Windows host, opened with `dart:io`. Also the reader
+/// half of [ShellWrittenAuthFileIo].
 class LocalAuthFileIo implements AuthFileIo {
   const LocalAuthFileIo();
 
@@ -104,9 +108,9 @@ class LocalAuthFileIo implements AuthFileIo {
   }
 }
 
-/// The files are on a POSIX machine reached only by running commands there —
-/// an SSH host. Every operation is one short `sh` script run through that
-/// environment's [CommandRunner].
+/// The files are on a POSIX machine reached by running commands there — an SSH
+/// host, or the writer half of [ShellWrittenAuthFileIo]. Every operation is
+/// one short `sh` script run through that environment's [CommandRunner].
 ///
 /// Three rules hold for every write, because the file is an OAuth token bundle
 /// on a machine other people may log in to:
@@ -312,6 +316,116 @@ class RemoteAuthFileIo implements AuthFileIo {
   static String _detail(CommandResult result) {
     final err = result.stderr.trim();
     return err.isEmpty ? ' (exit ${result.exitCode})' : ' ($err)';
+  }
+}
+
+/// Files this host can read directly, written through a POSIX shell on the
+/// machine that owns them: a WSL distribution, or a local macOS or Linux host.
+///
+/// Reads go through [LocalAuthFileIo], as they always did. Backups and writes
+/// go through [RemoteAuthFileIo], because `dart:io` cannot create a file at
+/// mode 0600, and through `\\wsl.localhost` it cannot set a POSIX mode at all.
+/// [runnerPath] turns a path as this host spells it into the path the
+/// runner's shell sees.
+class ShellWrittenAuthFileIo implements AuthFileIo {
+  ShellWrittenAuthFileIo({
+    required CommandRunner runner,
+    required String environmentName,
+    required this.runnerPath,
+  }) : writer = RemoteAuthFileIo(
+         runner: runner,
+         environmentName: environmentName,
+       );
+
+  final RemoteAuthFileIo writer;
+  final String Function(String hostPath) runnerPath;
+
+  static const _reader = LocalAuthFileIo();
+
+  @override
+  String describe(String path) => path;
+
+  @override
+  Future<JsonFileRead> readJsonObject(String path) =>
+      _reader.readJsonObject(path);
+
+  @override
+  Future<String?> readText(String path) => _reader.readText(path);
+
+  @override
+  Future<void> backupOnce(String path, String backupPath) =>
+      writer.backupOnce(_mapped(path), _mapped(backupPath));
+
+  @override
+  Future<void> writeAtomic(
+    String path,
+    String content, {
+    required bool secret,
+  }) => writer.writeAtomic(_mapped(path), content, secret: secret);
+
+  String _mapped(String path) {
+    try {
+      return runnerPath(path);
+    } on Object catch (e) {
+      throw AuthFileIoException(
+        'Could not write $path: no path for it inside '
+        '${writer.environmentName} ($e).',
+      );
+    }
+  }
+}
+
+/// The [AuthFileIo] for an auth file in a store `CliStoreLocator` reaches:
+/// [environment] is the local host or a WSL distribution, and paths are
+/// spelled the way this host opens them.
+///
+/// Windows keeps [LocalAuthFileIo]: NTFS has no POSIX mode, and a file under
+/// the user's profile is already private to that user by its inherited ACL.
+AuthFileIo storeAuthFileIo({
+  required ExecutionEnvironment environment,
+  required List<ExecutionEnvironment> environments,
+  required CommandRunner Function(String environmentId) runnerFor,
+  PathTranslator translator = const PathTranslator(),
+}) {
+  switch (environment.kind) {
+    case EnvironmentKind.windowsNative:
+      return const LocalAuthFileIo();
+    case EnvironmentKind.ssh:
+      return RefusingAuthFileIo(
+        '${environment.name} is not a store this host opens directly.',
+      );
+    case EnvironmentKind.localPosix:
+      return ShellWrittenAuthFileIo(
+        runner: runnerFor(environment.id),
+        environmentName: environment.name,
+        runnerPath: (hostPath) => hostPath,
+      );
+    case EnvironmentKind.wsl:
+      final distribution = environment.wslDistribution;
+      final windows = environments
+          .where((e) => e.kind == EnvironmentKind.windowsNative)
+          .firstOrNull;
+      if (distribution == null || windows == null) {
+        return RefusingAuthFileIo(
+          'Karmashala cannot run commands in ${environment.name}, so its '
+          'credentials cannot be written safely.',
+        );
+      }
+      return ShellWrittenAuthFileIo(
+        runner: WslCommandRunner(
+          environmentId: environment.id,
+          distribution: distribution,
+          exec: true,
+        ),
+        environmentName: environment.name,
+        runnerPath: (hostPath) => translator
+            .translate(
+              EnvironmentPath(environmentId: windows.id, path: hostPath),
+              from: windows,
+              to: environment,
+            )
+            .path,
+      );
   }
 }
 

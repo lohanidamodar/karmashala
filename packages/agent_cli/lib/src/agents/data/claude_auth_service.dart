@@ -32,7 +32,8 @@ class ClaudeAuthPaths {
   });
 
   /// How [credentialsFile] and [configFile] are reached: opened directly on
-  /// this host and WSL, run through the environment's runner on SSH.
+  /// Windows, read directly and written through a shell on WSL and a local
+  /// POSIX host, run through the environment's runner on SSH.
   ///
   /// The paths are only meaningful to this — an SSH path is a path on the
   /// remote disk, and handing it to `dart:io` `File` is what made switching an
@@ -110,10 +111,10 @@ class ClaudeAuthLocator {
       if (store.environmentId != installation.environmentId) continue;
       final claudeHome = store.claudeHome;
       if (claudeHome == null) return null;
-      final kind = environments
+      final environment = environments
           .where((e) => e.id == store.environmentId)
-          .map((e) => e.kind)
           .firstOrNull;
+      final kind = environment?.kind;
       // The separator has to match the path the store locator produced, which
       // is the same choice `CliStoreLocator` itself makes. Joining with the
       // Windows context unconditionally turned `/Users/me/.claude` into
@@ -129,6 +130,14 @@ class ClaudeAuthLocator {
         // this host's Keychain has nothing to say about it.
         credentialsInKeychain:
             Platform.isMacOS && kind != null && isLocalHost(kind),
+        io: environment == null
+            ? const LocalAuthFileIo()
+            : storeAuthFileIo(
+                environment: environment,
+                environments: environments,
+                runnerFor: _storeLocator.runnerFor,
+                translator: _storeLocator.translator,
+              ),
       );
     }
     return null;
