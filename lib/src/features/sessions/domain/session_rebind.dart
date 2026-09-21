@@ -5,10 +5,6 @@
 /// `/clear`, a fork, a resume that mints a fresh id — and nothing re-checks.
 /// Everything downstream then reads a transcript that stopped: the session
 /// shows as finished while its agent is working.
-///
-/// Measured on the owner's machine 2026-09-13: the pane titled `karmashala-2`
-/// was bound to a conversation whose file had not been written for two and a
-/// half hours, while the conversation it was really on had never been seen.
 library;
 
 /// How long a conversation must have been silent before its pane is a
@@ -23,6 +19,7 @@ class BoundPane {
     required this.conversationId,
     this.startedHere = false,
     this.lastHeardFrom,
+    this.ended = false,
   });
 
   /// Our own row id — what a rebind rewrites the conversation on. The row
@@ -32,59 +29,86 @@ class BoundPane {
   /// The conversation the row names today.
   final String conversationId;
 
-  /// Whether this session was started in the directory the hook reports. A
-  /// tie-break, and false is not evidence against a pane: an agent's live
-  /// directory moves during a session.
+  /// Whether this session was started in the directory the hook reports. False
+  /// is not evidence against a pane: an agent's live directory moves.
   final bool startedHere;
 
   /// When [conversationId] last reported a hook, or null for one that has not
   /// reported since this launch. **Null is not "long ago"** — it is "we have
   /// not heard", which is why it counts as quiet rather than as fresh.
   final DateTime? lastHeardFrom;
+
+  /// Whether [conversationId]'s latest hook said the session ended — the
+  /// `SessionEnd` a `/clear` or `/resume` fires on the way out.
+  final bool ended;
 }
 
 /// **Which row a hook naming an unknown conversation belongs to**, or null when
 /// that cannot be told without guessing.
 ///
-/// Three rules, in order:
+/// [claimedBy] is the row the hook says it was fired from — the
+/// `KARMASHALA_SESSION_ID` its pane was launched with. When present it is the
+/// only candidate: that row takes the conversation once its own has ended or
+/// gone quiet, and no other row ever does. A child agent run inside the pane
+/// inherits the same id, which is why the pane's own conversation still being
+/// live refuses it.
 ///
-/// 1. A pane whose own conversation is still reporting is not it. That is the
-///    decisive one: two panes running the same agent in the same folder are
-///    told apart by which of them has gone quiet, which no directory or title
-///    comparison can do.
-/// 2. **A pane in the hook's own directory settles it, quiet or not.** When
-///    some live pane was started where the hook says it is running, only the
-///    quiet ones there may take it — and when none of those is quiet, nobody
-///    does. Without this a hook from one project could take a pane in another,
-///    which is what happened on 2026-09-20: a session that had been building
-///    for longer than the quiet window was re-pointed at a conversation from a
-///    folder it had never been in, and that in turn orphaned the conversation
-///    it had named, which the next hook handed to somebody else.
-/// 3. Otherwise the directory is only a tie-break: an agent's *live* directory
-///    moves during a session, so a mismatch against every pane is not evidence
-///    against any of them.
-/// 4. Exactly one survivor, or nothing. Re-pointing the wrong row would put
-///    one session's transcript under another's name, which is worse than the
-///    stale reading this fixes.
+/// Without it, by elimination from [panes]:
+///
+/// 1. A pane whose conversation reported **after** the unknown one first did
+///    ([firstHeardAt]) is not it: both are alive at once.
+/// 2. A pane in the hook's own directory settles it, quiet or not: when some
+///    pane was started there, only those may take it (2026-09-20).
+/// 3. A pane whose conversation ended is the one that moved.
+/// 4. A pane that was active moments ago and has been silent since may be the
+///    one that moved, so while one exists **no quiet pane is chosen** — that
+///    was the 2026-09-21 theft, where the pane that `/clear`ed was excluded for
+///    having been active and an idle neighbour took its conversation.
+/// 5. Exactly one survivor, or nothing.
 String? sessionToRebind({
   required List<BoundPane> panes,
   required DateTime now,
+  DateTime? firstHeardAt,
+  String? claimedBy,
   Duration quietFor = kRebindQuietFor,
 }) {
-  final quiet = [
+  bool quiet(BoundPane pane) =>
+      pane.lastHeardFrom == null ||
+      now.difference(pane.lastHeardFrom!) >= quietFor;
+
+  if (claimedBy != null) {
+    final claimed = [
+      for (final pane in panes)
+        if (pane.sessionId == claimedBy) pane,
+    ];
+    if (claimed.length != 1) return null;
+    final pane = claimed.single;
+    return pane.ended || quiet(pane) ? pane.sessionId : null;
+  }
+
+  final since = firstHeardAt ?? now;
+  final notConcurrent = [
     for (final pane in panes)
-      if (pane.lastHeardFrom == null ||
-          now.difference(pane.lastHeardFrom!) >= quietFor)
+      if (pane.ended ||
+          pane.lastHeardFrom == null ||
+          !pane.lastHeardFrom!.isAfter(since))
         pane,
   ];
-  if (quiet.isEmpty) return null;
-  final here = [
-    for (final pane in quiet)
-      if (pane.startedHere) pane,
+  final pool = panes.any((pane) => pane.startedHere)
+      ? [
+          for (final pane in notConcurrent)
+            if (pane.startedHere) pane,
+        ]
+      : notConcurrent;
+  if (pool.isEmpty) return null;
+
+  final ended = [
+    for (final pane in pool)
+      if (pane.ended) pane,
   ];
-  // The hook's folder has a pane of its own, and it is not one of the quiet
-  // ones: this conversation is that pane's business, not a stranger's.
-  if (here.isEmpty && panes.any((pane) => pane.startedHere)) return null;
-  final considered = here.isEmpty ? quiet : here;
-  return considered.length == 1 ? considered.single.sessionId : null;
+  if (ended.isNotEmpty) {
+    return ended.length == 1 ? ended.single.sessionId : null;
+  }
+  if (pool.any((pane) => !quiet(pane))) return null;
+  return pool.length == 1 ? pool.single.sessionId : null;
 }

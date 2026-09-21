@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:agent_cli/descriptors.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_core/util.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
+import 'package:karmashala/src/features/agents/application/agent_hook_intake.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -53,21 +55,25 @@ void main() {
     sessions.updatePaneId(id, paneId);
   }
 
-  void heardFrom(String conversationId, DateTime at) => reports.record(
-    AgentStatusReport(
-      agentId: AgentIds.claudeCode,
-      sessionId: conversationId,
-      status: AgentActivityStatus.working,
-      source: AgentStatusSource.hook,
-      observedAt: at,
-    ),
-  );
+  void heardFrom(String conversationId, DateTime at, {bool ended = false}) =>
+      reports.record(
+        AgentStatusReport(
+          agentId: AgentIds.claudeCode,
+          sessionId: conversationId,
+          status: ended
+              ? AgentActivityStatus.idle
+              : AgentActivityStatus.working,
+          source: AgentStatusSource.hook,
+          observedAt: at,
+          ending: ended ? AgentSessionEnding.completed : null,
+        ),
+      );
 
-  ProviderContainer containerWith(List<String> livePaneIds) {
+  ProviderContainer containerWith(List<String> livePaneIds, {Clock? clock}) {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
-        clockProvider.overrideWithValue(FixedClock(testTime)),
+        clockProvider.overrideWithValue(clock ?? FixedClock(testTime)),
         agentHookReportsProvider.overrideWithValue(reports),
         adoptablePanesProvider.overrideWithValue(
           () => [
@@ -86,16 +92,17 @@ void main() {
     return container;
   }
 
-  String? rebind(ProviderContainer container, String conversationId) =>
-      rebindSessionFromHook(
-        container,
-        agentId: AgentIds.claudeCode,
-        conversationId: conversationId,
-        body: jsonEncode({
-          'session_id': conversationId,
-          'cwd': r'C:\src\demo\app',
-        }),
-      );
+  String? rebind(
+    ProviderContainer container,
+    String conversationId, {
+    String? paneSessionId,
+  }) => rebindSessionFromHook(
+    container,
+    agentId: AgentIds.claudeCode,
+    conversationId: conversationId,
+    body: jsonEncode({'session_id': conversationId, 'cwd': r'C:\src\demo\app'}),
+    paneSessionId: paneSessionId,
+  );
 
   test('a hook from an unknown conversation re-points the quiet pane', () {
     launched('s1', paneId: 'pane-1');
@@ -153,9 +160,116 @@ void main() {
     launched('s1', paneId: 'pane-1');
     launched('s2', paneId: 'pane-2');
     heardFrom('cli-s1', testTime);
-    final container = containerWith(['pane-1', 'pane-2']);
+    final clock = MovableClock(testTime);
+    final container = containerWith(['pane-1', 'pane-2'], clock: clock);
 
+    // s1 was active a moment before the new conversation appeared, so it may
+    // be the pane that moved: nobody is chosen yet.
+    expect(rebind(container, 'cli-new'), isNull);
+    // Then s1 reports again, alive beside the new conversation — not it.
+    clock.advance(const Duration(seconds: 10));
+    heardFrom('cli-s1', clock.now);
     expect(rebind(container, 'cli-new'), 's2');
+  });
+
+  group('a /clear in one of two panes in one folder (2026-09-21)', () {
+    // s1 is the pane that /clear'ed: working until 12 s before the new
+    // conversation's first hook. s2 has been idle for fifteen minutes.
+    void twoPanes() {
+      launched('s1', paneId: 'pane-1');
+      launched('s2', paneId: 'pane-2');
+      heardFrom('cli-s2', testTime.subtract(const Duration(minutes: 15)));
+    }
+
+    test('the pane naming itself takes it, whatever the heuristic says', () {
+      twoPanes();
+      heardFrom('cli-s1', testTime.subtract(const Duration(seconds: 12)));
+      final clock = MovableClock(testTime);
+      final container = containerWith(['pane-1', 'pane-2'], clock: clock);
+
+      // Its old conversation has not said it ended yet: held, not guessed.
+      expect(rebind(container, 'cli-new', paneSessionId: 's1'), isNull);
+      clock.advance(const Duration(seconds: 6));
+      heardFrom(
+        'cli-s1',
+        testTime.subtract(const Duration(seconds: 11)),
+        ended: true,
+      );
+      expect(rebind(container, 'cli-new', paneSessionId: 's1'), 's1');
+      expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
+      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+    });
+
+    test('without an identity, the ending picks the pane that moved', () {
+      twoPanes();
+      heardFrom(
+        'cli-s1',
+        testTime.subtract(const Duration(seconds: 12)),
+        ended: true,
+      );
+      final container = containerWith(['pane-1', 'pane-2']);
+
+      expect(rebind(container, 'cli-new'), 's1');
+      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+    });
+
+    test('without an identity or an ending, the idle pane is never handed '
+        'it', () {
+      twoPanes();
+      heardFrom('cli-s1', testTime.subtract(const Duration(seconds: 12)));
+      final container = containerWith(['pane-1', 'pane-2']);
+
+      expect(rebind(container, 'cli-new'), isNull);
+      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+    });
+
+    test('a child agent that inherited the pane\'s id moves nothing', () {
+      // The pane's own agent is mid-turn, running `claude -p` in a shell.
+      twoPanes();
+      heardFrom('cli-s1', testTime.subtract(const Duration(seconds: 2)));
+      final container = containerWith(['pane-1', 'pane-2']);
+
+      expect(rebind(container, 'cli-child', paneSessionId: 's1'), isNull);
+      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+    });
+
+    test('an identity naming no candidate row is nobody, not a guess', () {
+      twoPanes();
+      final container = containerWith(['pane-1', 'pane-2']);
+
+      expect(rebind(container, 'cli-new', paneSessionId: 'gone'), isNull);
+      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+    });
+
+    test('the intake both transports share hands the identity through', () {
+      twoPanes();
+      heardFrom(
+        'cli-s1',
+        testTime.subtract(const Duration(seconds: 12)),
+        ended: true,
+      );
+      final container = containerWith(['pane-1', 'pane-2']);
+
+      applyAgentHookCallback(
+        container,
+        agentId: AgentIds.claudeCode,
+        event: 'UserPromptSubmit',
+        body: jsonEncode({'session_id': 'cli-new', 'cwd': r'C:\src\demo\app'}),
+        paneSessionId: 's1',
+      );
+
+      expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
+      expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+    });
+
+    test('a malformed identity is no identity', () {
+      launched('s1', paneId: 'pane-1');
+      final container = containerWith(['pane-1']);
+
+      expect(rebind(container, 'cli-new', paneSessionId: 'a b;c'), 's1');
+    });
   });
 
   test('a pane with no live session of ours is nothing to re-point', () {

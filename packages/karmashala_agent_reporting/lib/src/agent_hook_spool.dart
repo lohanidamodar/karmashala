@@ -10,10 +10,15 @@ class AgentHookSpoolEvent {
     required this.event,
     required this.body,
     required this.firedAt,
+    this.paneSessionId,
   });
 
   final String agentId;
   final String event;
+
+  /// The `KARMASHALA_SESSION_ID` of the pane the hook fired in, or null from a
+  /// script that predates it or a process Karmashala did not launch.
+  final String? paneSessionId;
 
   /// The agent's own JSON payload, exactly as it came off stdin.
   final String body;
@@ -189,11 +194,13 @@ exit 0
     return trimmed.isEmpty ? '/' : trimmed;
   }
 
-  /// `agent=` and `event=` headers, a blank line, then the payload verbatim —
-  /// the blank line terminates, so a payload starting `event=` is not one.
+  /// `agent=`, `event=` and an optional `session=` header, a blank line, then
+  /// the payload verbatim — the blank line terminates, so a payload starting
+  /// `event=` is not one.
   AgentHookSpoolEvent? parse(String raw, {required DateTime firedAt}) {
     var agentId = '';
     var event = '';
+    var session = '';
     var index = 0;
     while (true) {
       final end = raw.indexOf('\n', index);
@@ -205,6 +212,8 @@ exit 0
         agentId = line.substring('agent='.length);
       } else if (line.startsWith('event=')) {
         event = line.substring('event='.length);
+      } else if (line.startsWith('session=')) {
+        session = line.substring('session='.length);
       } else {
         return null;
       }
@@ -215,6 +224,7 @@ exit 0
       event: event,
       body: raw.substring(index),
       firedAt: firedAt,
+      paneSessionId: session.isEmpty ? null : session,
     );
   }
 }

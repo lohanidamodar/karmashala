@@ -15,6 +15,7 @@ import '../browser/application/browser_consent_providers.dart';
 import '../browser/application/browser_providers.dart';
 import 'package:karmashala_browser/tools.dart';
 import 'package:agent_cli/process.dart';
+import 'package:karmashala_agent_reporting/hooks.dart' show kPaneSessionHeader;
 import '../flutter_apps/application/flutter_app_tools.dart';
 import '../app_projects/application/project_build_tools.dart';
 import '../flutter_apps/application/flutter_run_tools.dart';
@@ -798,6 +799,7 @@ class LauncherControlServer implements SessionMcp {
         agentId: request.uri.queryParameters['agent'],
         event: request.uri.queryParameters['event'],
         body: body,
+        paneSessionId: request.headers.value(kPaneSessionHeader),
         logger: _logger,
       );
       // The one bounded hold: a tool about to write waits, at most

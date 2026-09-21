@@ -20,6 +20,10 @@ const List<String> legacyAgentHookMarkers = <String>['chitragupta-agent-hook'];
 /// block rather than moving it. Literals; see [legacyAgentHookMarkers].
 const List<String> legacyAgentHookConfigKeys = <String>['chitragupta'];
 
+/// The header an HTTP hook names its pane's `KARMASHALA_SESSION_ID` in; the
+/// spool carries the same value as a `session=` line.
+const String kPaneSessionHeader = 'X-Karmashala-Session';
+
 /// Everything before the base64 in a Windows hook command.
 const String _windowsHookPrefix =
     'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass '
@@ -544,6 +548,9 @@ class AgentHookInstaller {
       '    agent=*) agent="\${line#agent=}" ;;\n'
       '  esac\n'
       'done < "\$endpoint"\n'
+      '# The pane this agent was launched in, so a /clear is bound exactly.\n'
+      'sid="\${KARMASHALA_SESSION_ID:-}"\n'
+      "case \"\$sid\" in *[!A-Za-z0-9._-]*) sid='' ;; esac\n"
       'if [ -n "\$spool" ]; then\n'
       '  dir="\$here/\$spool"\n'
       '  [ -d "\$dir" ] || exit 0\n'
@@ -555,7 +562,8 @@ class AgentHookInstaller {
       '    n=\$((n+1))\n'
       '    [ "\$n" -lt 64 ] || exit 0\n'
       '  done\n'
-      "  { printf 'agent=%s\\nevent=%s\\n\\n' \"\$agent\" \"\$event\"; "
+      "  { printf 'agent=%s\\nevent=%s\\nsession=%s\\n\\n' \"\$agent\" "
+      '"\$event" "\$sid"; '
       'head -c $kAgentHookPayloadLimitBytes; } '
       '> "\$dir/\$\$-\$n.part" 2>/dev/null || exit 0\n'
       '  mv -f "\$dir/\$\$-\$n.part" "\$dir/\$\$-\$n.json" 2>/dev/null\n'
@@ -568,6 +576,7 @@ class AgentHookInstaller {
       'head -c $kAgentHookPayloadLimitBytes '
       '| curl -s -o /dev/null -m 2 -X POST \\\n'
       '  -H "Authorization: Bearer \$token" \\\n'
+      '  -H "$kPaneSessionHeader: \$sid" \\\n'
       '  --data-binary @- \\\n'
       '  "\$url\$event" 2>/dev/null\n'
       'exit 0\n';
@@ -612,6 +621,8 @@ class AgentHookInstaller {
       'if defined KS_SIZE if !KS_SIZE! LEQ $kAgentHookPayloadLimitBytes '
       'curl -s -o NUL -m 2 -X POST '
       '-H "Authorization: Bearer %KS_TOKEN%" '
+      // Delayed, so a value is never parsed as cmd syntax; unset reads empty.
+      '-H "$kPaneSessionHeader: !KARMASHALA_SESSION_ID!" '
       '--data-binary @"%KS_BODY%" "%KS_URL%%~1" 2>NUL\r\n'
       'del "%KS_BODY%" >NUL 2>NUL\r\n'
       'exit /b 0\r\n';

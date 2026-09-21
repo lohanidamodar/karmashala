@@ -498,6 +498,7 @@ void _runForReal(
             ),
             body: await utf8.decoder.bind(request).join(),
             query: request.uri.query,
+            session: request.headers.value(kPaneSessionHeader),
           ),
         );
         // The real `_handleAgentHook` answers 401 to a request with no
@@ -529,6 +530,8 @@ void _runForReal(
       int expectRequests = 0,
       void Function(File endpoint)? tamper,
       String payload = '{"session_id":"abc","cwd":"/tmp"}',
+      String? paneSessionId,
+      EnvironmentKind? installAs,
     }) async {
       wanted = expectRequests;
       quota = Completer<void>();
@@ -543,20 +546,33 @@ void _runForReal(
           port: port ?? server.port,
           token: 'secret-token-value',
         ),
-        environment: shell.environment,
+        environment: installAs ?? shell.environment,
       );
       final endpoint = File(p.join(scratch.path, '$agentHookMarker.endpoint'));
       tamper?.call(endpoint);
 
-      final process = await Process.start(shell.executable, [
-        ...shell.prefix,
-        // Spelled for the interpreter, not for Dart: the script locates the
-        // endpoint file relative to the path it was invoked by.
-        shell.spell(
-          p.join(scratch.path, '$agentHookMarker.${shell.extension}'),
-        ),
-        'Stop',
-      ]);
+      // This suite may itself run inside a Karmashala pane, so the variable is
+      // stripped and then set only when the case asks for it.
+      final environment = {
+        for (final entry in Platform.environment.entries)
+          if (entry.key.toUpperCase() != 'KARMASHALA_SESSION_ID')
+            entry.key: entry.value,
+        'KARMASHALA_SESSION_ID': ?paneSessionId,
+      };
+      final process = await Process.start(
+        shell.executable,
+        [
+          ...shell.prefix,
+          // Spelled for the interpreter, not for Dart: the script locates the
+          // endpoint file relative to the path it was invoked by.
+          shell.spell(
+            p.join(scratch.path, '$agentHookMarker.${shell.extension}'),
+          ),
+          'Stop',
+        ],
+        environment: environment,
+        includeParentEnvironment: false,
+      );
       process.stdin.add(utf8.encode(payload));
       await process.stdin.close();
       await process.stdout.drain<void>();
@@ -584,6 +600,64 @@ void _runForReal(
       expect(received.last.body, '{"session_id":"abc","cwd":"/tmp"}');
       expect(received.last.query, contains('event=Stop'));
     }, skip: skip);
+
+    test('names the pane it fired in, from KARMASHALA_SESSION_ID', () async {
+      await fire(
+        expectRequests: 2,
+        paneSessionId: 'f3976069-b8d7-4266-ad1a-5afa772b51e7',
+      );
+
+      expect(
+        received.last.session,
+        'f3976069-b8d7-4266-ad1a-5afa772b51e7',
+      );
+      expect(received.last.body, '{"session_id":"abc","cwd":"/tmp"}');
+    }, skip: skip);
+
+    test('outside a launched pane it names nothing', () async {
+      await fire(expectRequests: 2);
+
+      expect(received.last.authorization, 'Bearer secret-token-value');
+      expect(received.last.session ?? '', isEmpty);
+    }, skip: skip);
+
+    if (shell.extension == 'sh') {
+      test('a value that is not an id is not forwarded', () async {
+        await fire(expectRequests: 2, paneSessionId: r'x"; touch pwned; "');
+
+        expect(received.last.session ?? '', isEmpty);
+        expect(received.last.body, '{"session_id":"abc","cwd":"/tmp"}');
+      }, skip: skip);
+
+      test('the spool envelope carries it as a session header', () async {
+        // The WSL transport: the same script, writing a file instead.
+        await fire(
+          installAs: EnvironmentKind.wsl,
+          paneSessionId: 'e8b49ed3-c305-4d9c-b724-ae81e2cb587d',
+        );
+        final events = await const AgentHookSpool().drain(
+          Directory(p.join(scratch.path, '$agentHookMarker.spool')),
+        );
+
+        expect(events, hasLength(1));
+        expect(
+          events.single.paneSessionId,
+          'e8b49ed3-c305-4d9c-b724-ae81e2cb587d',
+        );
+        expect(events.single.event, 'Stop');
+        expect(events.single.body, '{"session_id":"abc","cwd":"/tmp"}');
+      }, skip: skip);
+
+      test('and a spooled hook outside a pane still parses', () async {
+        await fire(installAs: EnvironmentKind.wsl);
+        final events = await const AgentHookSpool().drain(
+          Directory(p.join(scratch.path, '$agentHookMarker.spool')),
+        );
+
+        expect(events, hasLength(1));
+        expect(events.single.paneSessionId, isNull);
+      }, skip: skip);
+    }
 
     test('nothing over the payload bound crosses the wire', () async {
       // The two shells stop differently and both stop: `sh` cuts with
@@ -673,11 +747,13 @@ class _Received {
     required this.authorization,
     required this.body,
     required this.query,
+    this.session,
   });
 
   final String? authorization;
   final String body;
   final String query;
+  final String? session;
 }
 
 /// Why [shell]'s cases cannot run here, or null when they can.

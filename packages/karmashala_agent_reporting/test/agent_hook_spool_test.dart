@@ -141,6 +141,29 @@ void main() {
     expect(parsed.body, 'event=not-a-header\n');
   });
 
+  test('the pane\'s session id rides in its own header', () {
+    final parsed = spool.parse(
+      'agent=claudeCode\nevent=Stop\nsession=row-1\n\n{}',
+      firedAt: DateTime.now(),
+    );
+
+    expect(parsed!.paneSessionId, 'row-1');
+    expect(parsed.body, '{}');
+  });
+
+  test('an empty or missing session header is no identity at all', () {
+    // Empty is what the script writes outside a pane Karmashala launched;
+    // missing is what a script installed before the header existed writes.
+    for (final raw in [
+      'agent=claudeCode\nevent=Stop\nsession=\n\n{}',
+      'agent=claudeCode\nevent=Stop\n\n{}',
+    ]) {
+      final parsed = spool.parse(raw, firedAt: DateTime.now());
+      expect(parsed, isNotNull, reason: raw);
+      expect(parsed!.paneSessionId, isNull, reason: raw);
+    }
+  });
+
   test('one drain is bounded, and the rest waits for the next', () async {
     // A launch that finds a backlog from an unclean exit must not hold the
     // isolate while it reads all of it over a 9p share.

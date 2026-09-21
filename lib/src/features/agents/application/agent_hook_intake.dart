@@ -28,6 +28,7 @@ final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
         event: event.event,
         body: event.body,
         observedAt: event.firedAt,
+        paneSessionId: event.paneSessionId,
         logger: logger,
       );
       // Where the HTTP route holds the tool, this route can only say it did
@@ -49,12 +50,16 @@ final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
 
 /// Everything one hook callback does, whichever transport carried it — a second
 /// copy of these steps is how the two would come to disagree. **Never throws.**
+///
+/// [paneSessionId] is the `KARMASHALA_SESSION_ID` the hook's pane carries, or
+/// null from a hook installed before it was forwarded.
 AgentStatusReport applyAgentHookCallback(
   ProviderContainer container, {
   required String? agentId,
   required String? event,
   required String body,
   DateTime? observedAt,
+  String? paneSessionId,
   AppLogger? logger,
 }) {
   final report = container
@@ -87,11 +92,14 @@ AgentStatusReport applyAgentHookCallback(
       agentId: report.agentId,
       conversationId: report.sessionId,
       body: body,
+      paneSessionId: paneSessionId,
+      observedAt: report.observedAt,
     );
     if (rebound != null) {
       logger?.info(
-        'Session $rebound is on conversation ${report.sessionId} now; its '
-        'pane is live and the one it named had gone quiet.',
+        'Session $rebound is on conversation ${report.sessionId} now; '
+        '${paneSessionId == null ? 'inferred: its pane is live and the one it '
+                  'named had ended or gone quiet' : 'its own pane said so'}.',
       );
     }
   } on Object catch (error) {

@@ -22,6 +22,7 @@ const Duration kRebindRetryFloor = Duration(seconds: 5);
 /// pane that should take one may only go quiet a minute from now.
 class SessionRebindAttempts {
   final Map<String, DateTime> _lastTried = {};
+  final Map<String, DateTime> _firstUnknown = {};
 
   bool mayTry(String conversationId, DateTime now) {
     final last = _lastTried[conversationId];
@@ -30,9 +31,28 @@ class SessionRebindAttempts {
     return true;
   }
 
+  /// When [conversationId] was first seen unowned. Recorded only once it is
+  /// known to be unowned: a stale earlier time would count every pane that
+  /// reported since as alive beside it, and exclude the one that moved.
+  DateTime firstSeenUnknown(String conversationId, DateTime at) =>
+      _firstUnknown.putIfAbsent(conversationId, () => at);
+
   /// Forgotten once it is bound, so a later move of the same id is looked at
   /// again rather than rationed against an answer we already used.
-  void forget(String conversationId) => _lastTried.remove(conversationId);
+  void forget(String conversationId) {
+    _lastTried.remove(conversationId);
+    _firstUnknown.remove(conversationId);
+  }
+}
+
+/// The shape a pane's own session id must have to be believed: what the app
+/// stamps is a UUID, and anything else is not ours.
+final RegExp _paneSessionIdShape = RegExp(r'^[A-Za-z0-9._-]{1,128}$');
+
+/// [raw] as a pane session id, or null when it is absent or malformed.
+String? paneSessionIdFrom(String? raw) {
+  final trimmed = raw?.trim() ?? '';
+  return _paneSessionIdShape.hasMatch(trimmed) ? trimmed : null;
 }
 
 final sessionRebindAttemptsProvider = Provider<SessionRebindAttempts>(
@@ -46,6 +66,9 @@ final sessionRebindAttemptsProvider = Provider<SessionRebindAttempts>(
 /// naming a transcript that has stopped, and the session then reads as finished
 /// while its agent works. This is the one thing that notices.
 ///
+/// [paneSessionId] is the row the hook's pane was launched as, when the hook
+/// carried it; [observedAt] is when the hook fired, defaulting to now.
+///
 /// Returns the row re-pointed, or null — which is the common answer, and the
 /// right one whenever two panes could equally be it. See [sessionToRebind].
 String? rebindSessionFromHook(
@@ -53,14 +76,13 @@ String? rebindSessionFromHook(
   required String agentId,
   required String conversationId,
   required String body,
+  String? paneSessionId,
+  DateTime? observedAt,
 }) {
   if (agentId.isEmpty || conversationId.isEmpty) return null;
   final now = container.read(clockProvider).nowUtc();
-  if (!container
-      .read(sessionRebindAttemptsProvider)
-      .mayTry(conversationId, now)) {
-    return null;
-  }
+  final attempts = container.read(sessionRebindAttemptsProvider);
+  if (!attempts.mayTry(conversationId, now)) return null;
 
   final sessions = container.read(sessionDaoProvider);
   // Already somebody's. The overwhelmingly common case, and one indexed read.
@@ -70,6 +92,10 @@ String? rebindSessionFromHook(
   // after that row has itself been re-pointed, and handing it to another pane
   // is how one bad rebind became a chain of them (2026-09-20).
   if (sessions.getById(conversationId) != null) return null;
+  final firstHeardAt = attempts.firstSeenUnknown(
+    conversationId,
+    observedAt ?? now,
+  );
 
   final live = <String>[
     for (final pane in container.read(adoptablePanesProvider)())
@@ -109,6 +135,7 @@ String? rebindSessionFromHook(
             .read(repositoryDaoProvider)
             .getById(session.repositoryId)
             ?.path;
+    final latest = reports.latest(agentId, bound);
     panes.add(
       BoundPane(
         sessionId: session.id,
@@ -117,15 +144,21 @@ String? rebindSessionFromHook(
             cwd.isNotEmpty &&
             directory != null &&
             _sameDirectory(directory, cwd, environments, translator),
-        lastHeardFrom: reports.latest(agentId, bound)?.observedAt,
+        lastHeardFrom: latest?.observedAt,
+        ended: latest?.ending != null,
       ),
     );
   }
 
-  final chosen = sessionToRebind(panes: panes, now: now);
+  final chosen = sessionToRebind(
+    panes: panes,
+    now: now,
+    firstHeardAt: firstHeardAt,
+    claimedBy: paneSessionIdFrom(paneSessionId),
+  );
   if (chosen == null) return null;
   sessions.updateExternalSessionId(chosen, conversationId);
-  container.read(sessionRebindAttemptsProvider).forget(conversationId);
+  attempts.forget(conversationId);
   return chosen;
 }
 

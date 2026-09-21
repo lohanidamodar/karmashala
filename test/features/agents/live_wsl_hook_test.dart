@@ -8,6 +8,7 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_hook_spool_drainer.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
+import 'package:karmashala_terminal_runtime/launch.dart' show withWslEnv;
 import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/features/mcp/launcher_control_server.dart';
@@ -193,6 +194,65 @@ void main() {
       spool.listSync(),
       isEmpty,
       reason: 'a drained payload is a deleted payload, or the spool grows',
+    );
+  });
+
+  test('a Windows-side KARMASHALA_SESSION_ID reaches the spool through '
+      'WSLENV', () async {
+    // The crossing an agent pane makes: the variable set on the `wsl.exe`
+    // process with the app's own `withWslEnv`, read by the hook inside.
+    final claude = AgentRegistry.builtIn.byId('claudeCode')!;
+    expect(
+      await const AgentHookInstaller().install(
+        descriptor: claude,
+        storeHome: uncHome,
+        endpoint: server.hookEndpoint!,
+        environment: EnvironmentKind.wsl,
+      ),
+      isTrue,
+    );
+    final config =
+        jsonDecode(File(p.join(uncHome, 'settings.json')).readAsStringSync())
+            as Map<String, Object?>;
+    final hook =
+        ((((((config['hooks']! as Map)['Stop']! as List).single
+                            as Map)['hooks']!
+                        as List)
+                    .single
+                as Map)['command']!
+            as String);
+    final spool = Directory(p.join(uncHome, '$agentHookMarker.spool'));
+
+    Future<String?> fireWith(Map<String, String> environment) async {
+      final result = await Process.run('wsl.exe', [
+        '-e',
+        'sh',
+        '-c',
+        'printf %s \'{"session_id":"live-pane"}\' | '
+            '${_underHome(wslHome, hook)}',
+      ], environment: environment);
+      expect(result.exitCode, 0, reason: '${result.stderr}');
+      final events = await const AgentHookSpool().drain(spool);
+      expect(events, hasLength(1));
+      return events.single.paneSessionId;
+    }
+
+    expect(
+      await fireWith(
+        withWslEnv({'KARMASHALA_SESSION_ID': 'e8b49ed3-live-crossing'}),
+      ),
+      'e8b49ed3-live-crossing',
+      reason:
+          'THE APP: the variable was named in WSLENV and still did not reach '
+          'the hook inside the distribution.',
+    );
+    // And WSLENV is what carried it: without it the distro never sees it.
+    expect(
+      await fireWith({
+        'KARMASHALA_SESSION_ID': 'e8b49ed3-live-crossing',
+        'WSLENV': '',
+      }),
+      isNull,
     );
   });
 
