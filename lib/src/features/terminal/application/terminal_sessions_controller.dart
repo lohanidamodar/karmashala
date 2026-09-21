@@ -404,12 +404,12 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
         // records, and doing so does not release the text.
         chars += dormant.restoredScrollback.length;
         if (dormant.bufferBuilt) {
-          rows += dormant.terminal.buffer.height;
+          rows += _rowsHeldBy(dormant.terminal);
         } else {
           unparsed++;
         }
       } else {
-        rows += instance.terminal.buffer.height;
+        rows += _rowsHeldBy(instance.terminal);
       }
       if (instance case ParkableTerminalInstance(:final parkedScrollback)) {
         chars += parkedScrollback?.length ?? 0;
@@ -426,6 +426,16 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
       heldChars: chars,
     );
   }
+
+  /// Every line a terminal is holding, both screens.
+  ///
+  /// **Not `terminal.buffer`.** That is the *active* buffer, and an agent TUI
+  /// runs on the alternate screen — so reading it reports the alt screen's
+  /// handful of rows and hides the main buffer's scrollback entirely, which is
+  /// the part that grows. Measured while this was wrong: the census said 354
+  /// rows against 6001 live `BufferLine`s, and 2800 against 8479.
+  static int _rowsHeldBy(Terminal terminal) =>
+      terminal.mainBuffer.lines.length + terminal.altBuffer.lines.length;
 
   String _newId() => ref.read(idGeneratorProvider).newId();
 

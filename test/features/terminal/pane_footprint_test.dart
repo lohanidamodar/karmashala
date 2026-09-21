@@ -113,4 +113,28 @@ void main() {
     expect(shown.unparsedPanes, 0);
     expect(shown.rows, greaterThan(0));
   });
+
+  test('scrollback still counts once the pane is on the alternate screen', () {
+    // The case the counter was blind to. An agent TUI runs on the alternate
+    // screen, so `terminal.buffer` — the *active* buffer — reports its handful
+    // of rows and hides the main buffer's history, which is the part that
+    // grows. Measured against a live app while this was wrong: the census
+    // claimed 354 rows while the heap held 6001 `BufferLine`s.
+    controller.openTab(TerminalProfile.powerShell);
+    final terminal = controller
+        .instanceFor(controller.state.tabs.single.focusedPaneId)!
+        .terminal;
+    terminal.write(List.filled(200, 'a line of output').join('\r\n'));
+    final onMainScreen = controller.paneFootprint.rows;
+    expect(onMainScreen, greaterThan(100));
+
+    // DECSET 1049: switch to the alternate screen, as a full-screen TUI does.
+    terminal.write('\x1b[?1049h');
+
+    expect(
+      controller.paneFootprint.rows,
+      greaterThanOrEqualTo(onMainScreen),
+      reason: 'the history did not go anywhere just because the screen did',
+    );
+  });
 }
