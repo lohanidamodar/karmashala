@@ -21,7 +21,7 @@ dependencies:
   xterm2:
     git:
       url: https://github.com/lohanidamodar/xterm2.git
-      ref: 728e89d5630e530bdf303afb72b0778fa2f9d307
+      ref: 924c6b0eb7979d9c4eb9bbd51864cad1c8db351b
   # `Color`, for the palette's hex-to-theme conversion.
   flutter:
     sdk: flutter
