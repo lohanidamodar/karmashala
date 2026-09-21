@@ -15,6 +15,7 @@ import '../application/explorer_tree_provider.dart';
 import '../application/explorer_tree_state.dart';
 import '../application/explorer_view_mode.dart';
 import '../application/session_selection.dart';
+import 'agents_lens.dart';
 import 'explorer_header_actions.dart';
 import 'explorer_keyboard.dart';
 import 'explorer_scope_bar.dart';
@@ -46,6 +47,7 @@ class ExplorerPanel extends ConsumerWidget {
       sessionSelectionProvider.select((s) => s.active),
     );
     final showingViews = ref.watch(explorerShowingViewsProvider);
+    final lens = ref.watch(explorerLensProvider);
     final search = ExplorerSearchField(
       onChanged: (query) =>
           ref.read(explorerSearchQueryProvider.notifier).set(query),
@@ -57,8 +59,36 @@ class ExplorerPanel extends ConsumerWidget {
       // the same column — see [PaneHeader.icon].
       focused: focused,
       actions: const [ExplorerHeaderActions()],
+      body: Column(
+        children: [
+          const AgentsEntryRow(),
+          Expanded(
+            child: ExplorerLensBody(
+              lens: lens,
+              projects: _projectsBody(
+                ref,
+                hasProjects: hasProjects,
+                selecting: selecting,
+                showingViews: showingViews,
+                search: search,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// The tree and its chrome — the Explorer as it was before any lens.
+  Widget _projectsBody(
+    WidgetRef ref, {
+    required bool hasProjects,
+    required bool selecting,
+    required bool showingViews,
+    required Widget search,
+  }) =>
       // The search field and the list are one column to the arrow keys.
-      body: ExplorerKeyboardScope(
+      ExplorerKeyboardScope(
         child: Column(
           children: [
             // The scope — which machine, which context — narrows the tree and
@@ -97,7 +127,41 @@ class ExplorerPanel extends ConsumerWidget {
             ),
           ],
         ),
-      ),
+      );
+}
+
+/// The Explorer's body under a [lens]. The tree stays mounted — offstage, its
+/// tickers paused and out of the focus order — so switching back finds it
+/// exactly as it was left, scroll position and all.
+class ExplorerLensBody extends StatelessWidget {
+  const ExplorerLensBody({
+    required this.lens,
+    required this.projects,
+    super.key,
+  });
+
+  final ExplorerLens lens;
+  final Widget projects;
+
+  @override
+  Widget build(BuildContext context) {
+    final onTree = lens == ExplorerLens.projects;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Offstage(
+          offstage: !onTree,
+          child: TickerMode(
+            enabled: onTree,
+            child: ExcludeFocus(excluding: !onTree, child: projects),
+          ),
+        ),
+        if (!onTree)
+          switch (lens) {
+            ExplorerLens.projects => const SizedBox.shrink(),
+            ExplorerLens.agents => const AgentsPage(),
+          },
+      ],
     );
   }
 }

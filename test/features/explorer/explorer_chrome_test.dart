@@ -14,6 +14,7 @@ import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/core/util/id_generator_provider.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/explorer/presentation/agents_lens.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_panel.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_scope_bar.dart';
 import 'package:karmashala/src/features/explorer/presentation/explorer_tree_rows.dart';
@@ -229,8 +230,22 @@ void main() {
       final list = heightOf(tester, find.byType(ListView));
       final chrome =
           heightOf(tester, find.byType(PaneHeader)) +
+          heightOf(tester, find.byType(AgentsEntryRow)) +
           heightOf(tester, searchBlock());
       expect(chrome + list, 900);
+    });
+
+    // The third row, argued for: the owner approved a global Agents entry
+    // (2026-09-21) because "who is blocked on me" is the first question across
+    // forty projects. It is held to one row, and its count costs no width
+    // until something is waiting.
+    testWidgets('the Agents entry is one row, and 27px', (tester) async {
+      await pumpPanel(tester, window: const Size(1440, 900), paneWidth: 304);
+      expect(
+        heightOf(tester, find.byType(AgentsEntryRow)),
+        lessThanOrEqualTo(Chrome.row + 1),
+      );
+      expect(find.byKey(const ValueKey('agents-needs-you-pill')), findsNothing);
     });
   });
 

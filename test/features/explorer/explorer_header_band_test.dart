@@ -352,7 +352,14 @@ void main() {
       await tester.tap(find.text('Colour…'));
       await tester.pumpAndSettle();
       expect(find.byType(ContextColorDialog), findsOneWidget);
-      expect(find.bySemanticsLabel('None'), findsOneWidget);
+      // The swatch itself: the pointer left from the hover above can rest on
+      // it, and its tooltip then says "None" as well.
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == 'None',
+        ),
+        findsOneWidget,
+      );
       for (final hue in ContextHue.values) {
         expect(find.byTooltip(hue.label), findsOneWidget);
       }
