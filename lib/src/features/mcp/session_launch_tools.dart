@@ -12,6 +12,7 @@ import '../checkpoints/domain/checkpoint.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
 import '../environments/application/environment_providers.dart';
 import '../explorer/application/checkout.dart';
+import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../sessions/application/session_handoff_service.dart';
@@ -135,9 +136,6 @@ class SessionLaunchTools {
     final repos = _container
         .read(repositoryDaoProvider)
         .getByProject(projectId);
-    if (repos.isEmpty) {
-      throw StateError('This project has no repositories to run in.');
-    }
     Repository repo;
     if (repositoryId != null) {
       repo = repos.firstWhere(
@@ -145,7 +143,13 @@ class SessionLaunchTools {
         orElse: () => throw StateError('Repository not found in this project.'),
       );
     } else {
-      repo = repos.first;
+      // Nothing recorded is not nowhere to run: a project runs in its own
+      // folder when no checkout was ever discovered under it, git or not.
+      repo =
+          repos.firstOrNull ??
+          _container
+              .read(projectsControllerProvider.notifier)
+              .ensureRunLocation(projectId);
     }
 
     final installs = _container

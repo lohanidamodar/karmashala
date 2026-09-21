@@ -892,6 +892,29 @@ void main() {
     });
   });
 
+  /// **An agent can start a session in any project that was added.**
+  ///
+  /// The tool used to answer "this project has no repositories to run in" for a
+  /// folder that simply is not a clone. Git is how checkouts are discovered,
+  /// not what makes a directory runnable, so the project's own folder is
+  /// recorded and the launch goes on from there.
+  group('open_new_session in a project with no checkouts', () {
+    test('runs in the project\'s own folder, which it records', () async {
+      final folder = Directory.systemTemp.createTempSync('ks-mcp-no-git');
+      addTearDown(() => folder.deleteSync(recursive: true));
+      db.execute('DELETE FROM repositories;');
+      ProjectDao(db).update(project(path: folder.path));
+
+      final result = await callTool('open_new_session', {'projectId': 'p1'});
+
+      expect(result.text, isNot(contains('no repositories to run in')));
+      expect(
+        RepositoryDao(db).getByProject('p1').single.path.path,
+        folder.path,
+      );
+    });
+  });
+
   group('open_new_session permission mode', () {
     test('an unknown mode is refused and the real ones named', () async {
       final result = await callTool('open_new_session', {
