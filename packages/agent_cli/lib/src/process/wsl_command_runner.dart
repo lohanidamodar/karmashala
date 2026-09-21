@@ -9,9 +9,13 @@ import './process_spawner.dart';
 /// A `wsl.exe` invocation: the Windows-side executable and arguments that run a
 /// command inside a specific WSL distribution.
 class WslInvocation {
-  const WslInvocation(this.executable, this.arguments);
+  const WslInvocation(this.executable, this.arguments, {this.stdinText});
   final String executable;
   final List<String> arguments;
+
+  /// Written to `wsl.exe`'s stdin, which forwards it to the command, then
+  /// closed so the command sees end-of-file. Null closes stdin at once.
+  final String? stdinText;
 
   /// The invocation as a request for the **Windows host** to create.
   ///
@@ -19,8 +23,11 @@ class WslInvocation {
   /// there is no `EnvironmentPath` left to carry: what remains is a plain
   /// `wsl.exe` command line, which is precisely what makes it something a
   /// spawner can be handed. No `runInShell` — see [buildWslInvocation].
-  CommandRequest get hostRequest =>
-      CommandRequest(executable: executable, arguments: arguments);
+  CommandRequest get hostRequest => CommandRequest(
+    executable: executable,
+    arguments: arguments,
+    stdinText: stdinText,
+  );
 }
 
 /// Builds the `wsl.exe` command line to run [request] inside [distribution].
@@ -46,7 +53,7 @@ WslInvocation buildWslInvocation(String distribution, CommandRequest request) {
     ..add('--')
     ..add(request.executable)
     ..addAll(request.arguments);
-  return WslInvocation('wsl.exe', args);
+  return WslInvocation('wsl.exe', args, stdinText: request.stdinText);
 }
 
 /// Runs commands inside a named WSL distribution by invoking `wsl.exe` on the
