@@ -253,18 +253,7 @@ dependencies:
   device_info_plus: ^13.2.0
   marionette_flutter: ^0.6.0
 
-# Dart-only stand-ins for the two Windows plugin implementations, whose C++
-# needs ATL and /await. Desktop never invokes either plugin (companion mode is
-# Android, where the real implementations load), so the native halves are a
-# toolchain dependency bought for nothing — which is why they stay overridden
-# even though MSVC 14.51 does now build the notifications one (measured
-# 2026-09-21; the secure-storage one was not re-tested). See the stub
-# packages' pubspecs, and docs/SETTLED.md.
 dependency_overrides:
-  flutter_local_notifications_windows:
-    path: packages/flutter_local_notifications_windows_stub
-  flutter_secure_storage_windows:
-    path: packages/flutter_secure_storage_windows_stub
   # launch_at_startup 0.5.1 is upstream's latest and pins
   # win32_registry ^2, which pinned win32 5.x for the whole app and
   # held back device_info_plus and wakelock_plus. The fork changes that

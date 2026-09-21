@@ -204,7 +204,7 @@ lib/
     core/                   # Database, logging, lifecycle, process
     features/               # 32 feature folders: sessions, terminal, agents, devices, …
 packages/mcp_bridge/        # The standalone stdio MCP bridge
-packages/                   # Vendored flutter_pty, the relay, local IPC, two Windows stubs
+packages/                   # Vendored flutter_pty and launch_at_startup, the relay, local IPC
 test/                       # Mirrors lib/; 727 files
 integration_test/           # Driver tests that need a real device or PTY
 tool/                       # Build, profiling, benchmark and manual-verification programs
