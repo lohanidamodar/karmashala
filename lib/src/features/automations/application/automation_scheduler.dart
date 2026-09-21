@@ -46,11 +46,16 @@ class AutomationScheduler extends Notifier<int> {
   /// notifier rather than in [state], because [build] re-runs on every change.
   bool _reconciled = false;
 
+  /// When this process started watching. Only an occurrence due before it was
+  /// missed to downtime; one due after it and seen late is scheduler latency.
+  DateTime? _availableSince;
+
   @override
   int build() {
     final revision = ref.watch(automationsRevisionProvider);
     final timer = ref.watch(automationTimerProvider);
     ref.onDispose(timer.cancel);
+    _availableSince ??= _now;
 
     arm();
 
@@ -153,6 +158,9 @@ class AutomationScheduler extends Notifier<int> {
         since: _floorFor(automation),
         now: now,
         grace: _graceFor(automation, now),
+        availableSince: automation.latePolicy == AutomationLatePolicy.skip
+            ? _availableSince
+            : null,
       );
       // An automation with one of its own occurrences already in flight is not
       // also due. Two of *one* automation stacked would run the same prompt
@@ -348,8 +356,8 @@ class AutomationScheduler extends Notifier<int> {
         AutomationLatePolicy.run =>
           now.difference(automation.armedAt).abs() + kMissedFireGrace,
         AutomationLatePolicy.ask => kMissedFireGrace,
-        // Nothing is ever fresh enough, so every miss is recorded as one.
-        AutomationLatePolicy.skip => Duration.zero,
+        // Only what the app was up for, and only as late as a tick can land.
+        AutomationLatePolicy.skip => kSchedulerLatencyTolerance,
       };
 
   /// Files an occurrence that was not run because this automation was already

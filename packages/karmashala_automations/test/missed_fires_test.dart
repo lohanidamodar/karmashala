@@ -174,4 +174,46 @@ void main() {
       expect(missedFireReason(missed), isNotEmpty);
     });
   });
+
+  group('latency is not downtime', () {
+    final tenMinutes = AutomationSchedule.every(const Duration(minutes: 10));
+
+    test('an occurrence the app was up for runs, though the tick is late', () {
+      final decision = missedFireDecision(
+        schedule: tenMinutes,
+        since: at(2026, 9, 9, 17),
+        now: at(2026, 9, 9, 17, 10).add(const Duration(milliseconds: 40)),
+        grace: kSchedulerLatencyTolerance,
+        availableSince: at(2026, 9, 9, 17),
+      );
+      expect(
+        (decision as CatchUpMissedFire).scheduledFor,
+        at(2026, 9, 9, 17, 10),
+      );
+    });
+
+    test('one due before the app was up is missed, however fresh', () {
+      final decision = missedFireDecision(
+        schedule: hourly,
+        since: at(2026, 9, 9, 8),
+        now: DateTime(2026, 9, 9, 9, 0, 30),
+        grace: kSchedulerLatencyTolerance,
+        availableSince: DateTime(2026, 9, 9, 9, 0, 20),
+      );
+      final missed = decision as MissedFires;
+      expect(missed.scheduledFor, at(2026, 9, 9, 9));
+      expect(missed.missedCount, 1);
+    });
+
+    test('a tick later than the tolerance is downtime — a suspend', () {
+      final decision = missedFireDecision(
+        schedule: AutomationSchedule.once(at(2026, 9, 9, 3)),
+        since: at(2026, 9, 9),
+        now: at(2026, 9, 9, 3, 2),
+        grace: kSchedulerLatencyTolerance,
+        availableSince: at(2026, 9, 9),
+      );
+      expect(decision, isA<MissedFires>());
+    });
+  });
 }

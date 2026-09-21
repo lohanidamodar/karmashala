@@ -13,6 +13,11 @@ const Duration kMissedFireGrace = Duration(minutes: 15);
 /// fortnight is 20,000 iterations; past this the reason says "at least N".
 const int kMaxCountedMisses = 500;
 
+/// How late a tick may land on an occurrence the app was up for and still be
+/// that occurrence on time. A timer is never exactly punctual; this is latency,
+/// not downtime — a suspend that outlasts it is downtime.
+const Duration kSchedulerLatencyTolerance = Duration(minutes: 1);
+
 /// What a boot should do about one automation.
 sealed class MissedFireDecision {
   const MissedFireDecision();
@@ -67,13 +72,19 @@ class MissedFires extends MissedFireDecision {
 
 /// What to do about [automation] on wake. [since] is floored at when it was
 /// armed, or a new automation would "discover" every occurrence since 1970.
+/// An occurrence due before [availableSince] — while the app was not running —
+/// is never caught up, however fresh.
 MissedFireDecision missedFireDecision({
   required AutomationSchedule schedule,
   required DateTime since,
   required DateTime now,
   Duration grace = kMissedFireGrace,
+  DateTime? availableSince,
 }) {
   if (!since.isBefore(now)) return const NoMissedFires();
+  bool runnable(DateTime due) =>
+      now.difference(due) <= grace &&
+      (availableSince == null || !due.isBefore(availableSince));
 
   if (schedule.isInterval) {
     // An interval has no calendar: its occurrences *are* "the gap after the
@@ -83,7 +94,7 @@ MissedFireDecision missedFireDecision({
     final due = since.add(schedule.gap!);
     if (due.isAfter(now)) return const NoMissedFires();
     final lateBy = now.difference(due);
-    return lateBy <= grace
+    return runnable(due)
         ? CatchUpMissedFire(scheduledFor: due, missedCount: 1, capped: false)
         : MissedFires(
             scheduledFor: due,
@@ -99,7 +110,7 @@ MissedFireDecision missedFireDecision({
     // not missed at all, it is simply not due.
     if (!at.isAfter(since) || at.isAfter(now)) return const NoMissedFires();
     final lateBy = now.difference(at);
-    return lateBy <= grace
+    return runnable(at)
         ? CatchUpMissedFire(scheduledFor: at, missedCount: 1, capped: false)
         : MissedFires(
             scheduledFor: at,
@@ -128,7 +139,7 @@ MissedFireDecision missedFireDecision({
   final capped = missedCount >= kMaxCountedMisses;
   final lateBy = now.difference(newest);
 
-  if (lateBy <= grace) {
+  if (runnable(newest)) {
     return CatchUpMissedFire(
       scheduledFor: newest,
       missedCount: missedCount,

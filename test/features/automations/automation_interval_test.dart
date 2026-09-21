@@ -260,27 +260,70 @@ void main() {
       expect(firing.fired, hasLength(1));
     });
 
-    test(
-      '"skip it" records the miss and runs nothing, however fresh',
-      () async {
+    test('"skip it" records one that fell due before the app was up, however '
+        'fresh', () async {
+      dao.insert(
+        every(
+          gap: const Duration(minutes: 10),
+          latePolicy: AutomationLatePolicy.skip,
+        ),
+      );
+      // Started 30 s after it fell due: inside any tick latency, but the app
+      // was not running at 17:10, so that occurrence was downtime.
+      clock.now = at(2026, 9, 8, 17, 10).add(const Duration(seconds: 30));
+      await scheduler().reconcile();
+      expect(firing.fired, isEmpty);
+      expect(dao.runsFor('auto1'), isNotEmpty);
+      expect(
+        dao.runsFor('auto1').every((r) => r.state == AutomationRunState.missed),
+        isTrue,
+      );
+    });
+
+    group('"skip it" does not charge tick latency as downtime', () {
+      Future<AutomationScheduler> awakeSince1700() async {
         dao.insert(
           every(
             gap: const Duration(minutes: 10),
             latePolicy: AutomationLatePolicy.skip,
           ),
         );
-        clock.now = at(2026, 9, 8, 17, 11);
-        await scheduler().reconcile();
-        expect(firing.fired, isEmpty);
-        expect(dao.runsFor('auto1'), isNotEmpty);
+        final s = scheduler();
+        await Future<void>.delayed(Duration.zero);
+        return s;
+      }
+
+      test('an occurrence the app was up for runs, though the tick lands '
+          'late', () async {
+        final s = await awakeSince1700();
+        clock.now = at(
+          2026,
+          9,
+          8,
+          17,
+          10,
+        ).add(const Duration(milliseconds: 40));
+        await s.reconcile();
+        expect(
+          firing.fired.single.isAtSameMomentAs(at(2026, 9, 8, 17, 10)),
+          isTrue,
+        );
         expect(
           dao
               .runsFor('auto1')
-              .every((r) => r.state == AutomationRunState.missed),
-          isTrue,
+              .where((r) => r.state == AutomationRunState.missed),
+          isEmpty,
         );
-      },
-    );
+      });
+
+      test('a tick hours late — a suspend — is still a miss', () async {
+        final s = await awakeSince1700();
+        clock.now = at(2026, 9, 9, 1);
+        await s.reconcile();
+        expect(firing.fired, isEmpty);
+        expect(dao.runsFor('auto1').single.state, AutomationRunState.missed);
+      });
+    });
   });
 
   group('a run that will not end', () {
