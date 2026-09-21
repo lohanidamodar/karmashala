@@ -10,6 +10,9 @@ import 'package:karmashala_ui/rows.dart' show compactAge;
 import 'package:agent_cli/stream.dart';
 import 'package:karmashala_ui/transcript.dart';
 import 'tool_activity_row.dart';
+import 'tool_run.dart';
+
+export 'tool_run.dart' show TranscriptTurn;
 
 /// The row the transcript view writes itself, saying a compaction happened
 /// here. Its own role, because an unknown role is read as the agent's.
@@ -24,6 +27,7 @@ class ChatMessage {
     this.tool,
     this.thinking,
     this.at,
+    this.pending = false,
   });
 
   /// `user`, `agent`, `tool`, or `error`.
@@ -39,6 +43,10 @@ class ChatMessage {
   /// When the message was written.
   final DateTime? at;
 
+  /// A tool call the source says is unanswered. Not `tool.output == null`: a
+  /// call answered with nothing has no output either.
+  final bool pending;
+
   /// By value: a live transcript is re-parsed whole on every poll, and an equal
   /// message is what lets its row skip the rebuild.
   @override
@@ -47,6 +55,7 @@ class ChatMessage {
       other is ChatMessage &&
           other.role == role &&
           other.at == at &&
+          other.pending == pending &&
           other.thinking == thinking &&
           _sameTool(other.tool, tool) &&
           other.text == text;
@@ -66,75 +75,6 @@ bool _sameTool(ToolActivity? a, ToolActivity? b) {
       a.outputTruncated == b.outputTruncated &&
       a.isError == b.isError &&
       a.plan == b.plan;
-}
-
-/// How many finished, uneventful tool calls in a row become one line. Three,
-/// because two read as a pair and twenty read as a wall.
-const int kToolBatchMinimum = 3;
-
-/// Whether this message may disappear into a batch. A failure, a call with no
-/// result yet, and a call the model reasoned its way to are each the row a
-/// reader is looking for — those never collapse.
-bool batchableToolMessage(ChatMessage message) {
-  final tool = message.tool;
-  return message.role == 'tool' &&
-      tool != null &&
-      !tool.isError &&
-      tool.output != null &&
-      (message.thinking == null || message.thinking!.trim().isEmpty);
-}
-
-/// One row of the transcript: a message at [from], or the run of batchable tool
-/// calls `[from, to)` when that run is at least [kToolBatchMinimum] long.
-class TranscriptRow {
-  const TranscriptRow(this.from, this.to);
-
-  final int from;
-  final int to;
-
-  bool get isBatch => to - from > 1;
-  int get length => to - from;
-}
-
-/// Groups runs of batchable tool calls, leaving every other message its own
-/// row. Pure, and indexed into whatever list it was given.
-List<TranscriptRow> transcriptRows(List<ChatMessage> messages) {
-  final rows = <TranscriptRow>[];
-  var i = 0;
-  while (i < messages.length) {
-    if (!batchableToolMessage(messages[i])) {
-      rows.add(TranscriptRow(i, i + 1));
-      i++;
-      continue;
-    }
-    var end = i;
-    while (end < messages.length && batchableToolMessage(messages[end])) {
-      end++;
-    }
-    if (end - i >= kToolBatchMinimum) {
-      rows.add(TranscriptRow(i, end));
-    } else {
-      for (var single = i; single < end; single++) {
-        rows.add(TranscriptRow(single, single + 1));
-      }
-    }
-    i = end;
-  }
-  return rows;
-}
-
-/// `Read ×9 · Bash ×3` — what the calls in a batch were, in the order
-/// they first appeared, so the line says what happened and not just how much.
-String describeToolBatch(Iterable<ChatMessage> messages) {
-  final counts = <String, int>{};
-  for (final message in messages) {
-    final name = message.tool?.name ?? 'Tool';
-    counts[name] = (counts[name] ?? 0) + 1;
-  }
-  return [
-    for (final entry in counts.entries)
-      entry.value == 1 ? entry.key : '${entry.key} ×${entry.value}',
-  ].join(' · ');
 }
 
 /// The most of [ChatTranscriptView]'s height its footer may take; the rest is
@@ -161,6 +101,7 @@ class ChatTranscriptView extends StatefulWidget {
     this.resolveHostPath,
     this.onPathTap,
     this.detailBuilder,
+    this.turn = TranscriptTurn.unknown,
     super.key,
   });
 
@@ -182,6 +123,10 @@ class ChatTranscriptView extends StatefulWidget {
 
   /// What, if anything, hangs under a given row — see [MessageDetailBuilder].
   final MessageDetailBuilder? detailBuilder;
+
+  /// Where the session's turn stands: whether the trailing run of tool calls
+  /// is drawn live, as the call in progress, or settled.
+  final TranscriptTurn turn;
 
   /// Builds of a message row, counted so a cost test can prove a new or
   /// streaming message redraws itself and not the rows above it.
@@ -244,12 +189,18 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
     final total = widget.messages.length;
     final start = math.max(0, total - _shown);
     final visible = widget.messages.sublist(start);
-    final rows = transcriptRows(visible);
+    // Only the loaded window: the window is a suffix, so its trailing run is
+    // the transcript's, and a tick costs the window rather than the whole list.
+    final rows = transcriptRows(visible, turn: widget.turn);
     final lead = start > 0 ? 1 : 0;
     // Rows are keyed by their ordinal in the whole transcript, so loading an
     // older page shifts indices without handing one row's element to another.
-    final indexOfOrdinal = <int, int>{
-      for (var i = 0; i < rows.length; i++) start + rows[i].from: i + lead,
+    // A live run has its own key, so its open state never outlives the turn.
+    Key keyOf(TranscriptRow row) => row.live
+        ? ValueKey<String>('${start + row.from}:live')
+        : ValueKey<int>(start + row.from);
+    final indexOfKey = <Key, int>{
+      for (var i = 0; i < rows.length; i++) keyOf(rows[i]): i + lead,
     };
 
     Widget rowAt(int offset) => _MessageRow(
@@ -289,10 +240,7 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                                 vertical: Insets.sm,
                               ),
                               itemCount: rows.length + lead,
-                              findChildIndexCallback: (key) =>
-                                  key is ValueKey<int>
-                                  ? indexOfOrdinal[key.value]
-                                  : null,
+                              findChildIndexCallback: (key) => indexOfKey[key],
                               itemBuilder: (context, index) {
                                 if (lead == 1 && index == 0) {
                                   return SelectionContainer.disabled(
@@ -316,11 +264,10 @@ class _ChatTranscriptViewState extends State<ChatTranscriptView> {
                                 final row = rows[index - lead];
                                 if (!row.isBatch) return rowAt(row.from);
                                 return _ToolBatchTile(
-                                  key: ValueKey<int>(start + row.from),
-                                  // The run itself, so the line can name the calls.
-                                  messages: visible.sublist(row.from, row.to),
+                                  key: keyOf(row),
+                                  messages: visible,
+                                  row: row,
                                   rowAt: rowAt,
-                                  from: row.from,
                                 );
                               },
                             ),
@@ -901,20 +848,21 @@ class _FailedBadge extends StatelessWidget {
   }
 }
 
-/// A run of finished tool calls as one line, opening into the rows it stands
-/// for. Collapsed by default: between two of the model's sentences, twenty file
-/// reads are one step.
+/// A run of tool calls as one line, opening into the rows it stands for.
+/// Settled, the line says what the run did; live, it names the newest call.
+/// Collapsed either way, with [TranscriptRow.pinned] drawn beneath it.
 class _ToolBatchTile extends StatefulWidget {
   const _ToolBatchTile({
     required this.messages,
+    required this.row,
     required this.rowAt,
-    required this.from,
     super.key,
   });
 
+  /// The whole loaded window; [row] indexes into it.
   final List<ChatMessage> messages;
+  final TranscriptRow row;
   final Widget Function(int offset) rowAt;
-  final int from;
 
   @override
   State<_ToolBatchTile> createState() => _ToolBatchTileState();
@@ -927,9 +875,31 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final count = widget.messages.length;
-    final summary = describeToolBatch(widget.messages);
-    final label = '$count tool calls';
+    final row = widget.row;
+    final run = widget.messages.sublist(row.from, row.to);
+    final style = theme.textTheme.labelSmall?.copyWith(
+      color: scheme.onSurfaceVariant,
+    );
+
+    final String label;
+    final String? detail;
+    final IconData? glyph;
+    if (row.live) {
+      final newest = run.last.tool!;
+      final subject = newest.subject?.split('\n').first;
+      label = 'Working';
+      detail = subject == null || subject.isEmpty
+          ? toolDisplayName(newest.name)
+          : '${toolDisplayName(newest.name)}  $subject';
+      glyph = _toolIcon(newest.name);
+    } else {
+      label = describeToolRun(run);
+      detail = null;
+      glyph = null;
+    }
+    final earlier = row.live && row.length > 1
+        ? '${row.length} calls so far'
+        : null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
@@ -940,7 +910,7 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
             child: Semantics(
               button: true,
               expanded: _open,
-              label: '$label. $summary',
+              label: [label, ?detail, ?earlier].join('. '),
               child: InkWell(
                 onTap: () => setState(() => _open = !_open),
                 borderRadius: BorderRadius.circular(Radii.sm),
@@ -957,24 +927,47 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
                         color: scheme.onSurfaceVariant,
                       ),
                       const SizedBox(width: Insets.xs),
-                      Text(
-                        label,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
+                      if (glyph != null) ...[
+                        Icon(
+                          glyph,
+                          size: Chrome.iconSmall,
+                          color: scheme.tertiary,
                         ),
-                      ),
-                      const SizedBox(width: Insets.xs),
-                      Expanded(
+                        const SizedBox(width: Insets.xs),
+                      ],
+                      Flexible(
+                        flex: detail == null ? 1 : 0,
                         child: Text(
-                          summary,
+                          label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
+                          style: style?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
+                      if (detail != null) ...[
+                        const SizedBox(width: Insets.xs),
+                        Expanded(
+                          child: Text(
+                            detail,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: MonoStyles.label.copyWith(
+                              color: scheme.onSurface,
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (earlier != null) ...[
+                        const SizedBox(width: Insets.xs),
+                        Flexible(
+                          child: Text(
+                            earlier,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: style,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -982,7 +975,9 @@ class _ToolBatchTileState extends State<_ToolBatchTile> {
             ),
           ),
           if (_open)
-            for (var i = 0; i < count; i++) widget.rowAt(widget.from + i),
+            for (var i = row.from; i < row.to; i++) widget.rowAt(i)
+          else
+            for (final i in row.pinned) widget.rowAt(i),
         ],
       ),
     );

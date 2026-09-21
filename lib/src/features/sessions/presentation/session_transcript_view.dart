@@ -30,6 +30,9 @@ import '../application/session_chat_source.dart';
 import '../application/session_chat_view_providers.dart';
 import '../application/session_engine_provider.dart';
 import '../application/session_providers.dart';
+import '../application/session_status_providers.dart';
+import 'package:agent_cli/descriptors.dart'
+    show AgentActivityStatus, AgentStatusReport;
 import '../application/session_ui_providers.dart';
 import 'package:karmashala_session/transcript.dart';
 import 'package:karmashala_session/events.dart';
@@ -374,6 +377,11 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
                           : const SessionChatView.unread(prior: true);
                       return _conversation(
                         transcript: transcript,
+                        turn: ref.watch(
+                          agentSessionStatusProvider(
+                            widget.sessionId,
+                          ).select((s) => transcriptTurnFor(s.asData?.value)),
+                        ),
                         resolveHostPath: _hostPathResolver(),
                         notesEnabled: notesEnabled,
                         active:
@@ -403,6 +411,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
 
   Widget _conversation({
     required AsyncValue<List<ChatMessage>> transcript,
+    required TranscriptTurn turn,
     required String? Function(String)? resolveHostPath,
     required bool notesEnabled,
     required bool active,
@@ -418,6 +427,7 @@ class _SessionTranscriptViewState extends ConsumerState<SessionTranscriptView> {
       error: (e, _) => Center(child: Text('$e')),
       data: (messages) => ChatTranscriptView(
         messages: messages,
+        turn: turn,
         resolveHostPath: resolveHostPath,
         // Paths in the conversation are clickable, and a click reveals
         // rather than opens — see [_openPath].
@@ -743,11 +753,23 @@ List<ChatMessage> chatMessagesFromTranscript(
         tool: message.tool,
         thinking: message.thinking,
         at: message.at,
+        pending: message.pendingToolUseId != null,
       ),
     );
   }
   return out;
 }
+
+/// The status badge's reading as the transcript needs it. A failed session's
+/// turn is over, so it is idle here.
+TranscriptTurn transcriptTurnFor(AgentStatusReport? report) =>
+    switch (report?.status) {
+      AgentActivityStatus.working => TranscriptTurn.working,
+      AgentActivityStatus.awaitingApproval => TranscriptTurn.awaitingUser,
+      AgentActivityStatus.idle ||
+      AgentActivityStatus.failed => TranscriptTurn.idle,
+      AgentActivityStatus.unknown || null => TranscriptTurn.unknown,
+    };
 
 /// **Whether a chat view can be built for this session**, as a reading rather
 /// than a fact about the agent. Watched, so the view redraws when it settles.
