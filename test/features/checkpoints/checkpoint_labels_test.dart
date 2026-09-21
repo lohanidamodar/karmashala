@@ -9,9 +9,11 @@ import 'package:karmashala/src/features/checkpoints/application/agent_rewind_poi
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
+import 'package:karmashala/src/features/checkpoints/domain/checkpoint_title.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/mcp/checkpoint_tools.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
@@ -33,6 +35,7 @@ void main() {
     CheckpointReason reason = CheckpointReason.turn,
     int? turn = 3,
     String? prompt,
+    String? label,
     EnvironmentPath repository = app,
     Map<String, FileDiffStat> lineStats = const {},
     List<String> files = const ['a.dart', 'b.dart'],
@@ -50,6 +53,7 @@ void main() {
     createdAt: testTime,
     turn: turn,
     prompt: prompt,
+    label: label,
     lineStats: lineStats,
     files: [
       for (final f in files)
@@ -63,27 +67,109 @@ void main() {
   );
 
   group('labels', () {
-    test('a turn checkpoint names its turn and which side of it', () {
+    test('a turn is titled by what it was asked, both sides of it', () {
+      const prompt = 'Fix the login redirect loop';
+      expect(
+        checkpointTitle(
+          checkpoint(reason: CheckpointReason.turnStart, prompt: prompt),
+        ),
+        'Before: Fix the login redirect loop',
+      );
+      expect(
+        checkpointTitle(checkpoint(prompt: prompt)),
+        'After: Fix the login redirect loop',
+      );
+    });
+
+    test('a prompt becomes one short line, not a paste', () {
+      String title(String prompt) =>
+          checkpointTitle(checkpoint(prompt: prompt));
+      // Fenced code is skipped, markdown noise stripped, and an unbroken run
+      // long enough to be a key or a blob never reaches the title.
+      expect(
+        title(
+          '```\nStackTrace at main.dart:12\n```\n'
+          '## Fix the crash when sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdef '
+          'is set\nand run the tests\n\nLogs follow: a b c',
+        ),
+        'After: Fix the crash when … is set and run the tests',
+      );
+      final long = title('word ' * 40);
+      expect(long.length, lessThanOrEqualTo('After: '.length + 72));
+      expect(long, endsWith('word…'));
+      expect(title('   \n```\nonly code\n```'), 'After: a.dart, b.dart');
+    });
+
+    test('with no prompt: the files after a turn, the number before one', () {
+      expect(checkpointTitle(checkpoint()), 'After: a.dart, b.dart');
+      expect(
+        checkpointTitle(
+          checkpoint(files: const ['lib/a.dart', 'b.dart', 'c.dart', 'd.dart']),
+        ),
+        'After: a.dart, b.dart and 2 more',
+      );
+      // A before-turn row's files changed *before* the turn: not its title.
       expect(
         checkpointTitle(checkpoint(reason: CheckpointReason.turnStart)),
         'Before turn 3',
       );
-      expect(checkpointTitle(checkpoint()), 'After turn 3');
-      expect(checkpointTitle(checkpoint(turn: null)), 'Turn #7');
+      expect(checkpointTitle(checkpoint(files: const [])), 'After turn 3');
+      expect(
+        checkpointTitle(checkpoint(turn: null, files: const [])),
+        'Turn #7',
+      );
     });
 
-    test('the summary carries files, lines, repository and age', () {
+    test('an unverified before-turn keeps its warning under any title', () {
+      // Old rows carry the whole old title as their label; new ones the same.
+      final marked = checkpoint(
+        reason: CheckpointReason.turnStart,
+        prompt: 'Change the app',
+        label: lateTurnStartLabel(3),
+      );
+      expect(
+        checkpointTitle(marked),
+        'Before: Change the app — may already include its first edit',
+      );
+      expect(
+        checkpointTitle(
+          checkpoint(reason: CheckpointReason.turnStart, label: 'anything'),
+        ),
+        'Before turn 3 — may already include its first edit',
+      );
+      // A long prompt is clipped; the warning is not.
+      expect(
+        checkpointTitle(
+          checkpoint(
+            reason: CheckpointReason.turnStart,
+            prompt: 'word ' * 40,
+            label: lateTurnStartLabel(3),
+          ),
+        ),
+        endsWith('… — may already include its first edit'),
+      );
+      // Only a before-turn row is ever marked: a label elsewhere is a name.
+      expect(
+        checkpointTitle(
+          checkpoint(reason: CheckpointReason.manual, label: 'Before deploy'),
+        ),
+        'Before deploy',
+      );
+    });
+
+    test('the summary carries turn, files, lines, repository and age', () {
       final c = checkpoint(
         lineStats: const {
           'a.dart': FileDiffStat(added: 10, removed: 2),
           'b.dart': FileDiffStat(added: 1, removed: 0),
         },
       );
-      expect(checkpointSummary(c, now), '2 files · +11 −2 · 2h ago');
+      expect(checkpointSummary(c, now), 'Turn 3 · 2 files · +11 −2 · 2h ago');
       expect(
         checkpointSummary(c, now, showRepository: true),
-        '2 files · +11 −2 · app · 2h ago',
+        'Turn 3 · 2 files · +11 −2 · app · 2h ago',
       );
+      // When the title is already the number, the summary does not repeat it.
       expect(
         checkpointSummary(checkpoint(files: const []), now),
         '0 files · 2h ago',
@@ -200,13 +286,41 @@ void main() {
       );
       await pumpPanel(tester);
 
-      expect(find.text('Before turn 3'), findsOneWidget);
-      expect(find.text('After turn 3'), findsOneWidget);
-      expect(find.text('“Fix the login redirect”'), findsNWidgets(2));
-      expect(find.text('2 files · +5 −1 · lib · 2h ago'), findsOneWidget);
+      expect(find.text('Before: Fix the login redirect'), findsOneWidget);
+      expect(find.text('After: Fix the login redirect'), findsOneWidget);
+      // The prompt is the title now, so it is not repeated beneath it.
+      expect(find.textContaining('login redirect'), findsNWidgets(2));
+      expect(
+        find.text('Turn 3 · 2 files · +5 −1 · lib · 2h ago'),
+        findsOneWidget,
+      );
       // A Claude Code session: its own undo is named beside ours.
       expect(find.textContaining('/rewind'), findsOneWidget);
     });
+
+    test(
+      'checkpoint_list gives an agent the panel\'s title, warning and all',
+      () async {
+        CheckpointDao(db).insert(
+          checkpoint(
+            reason: CheckpointReason.turnStart,
+            prompt: 'Change the app',
+            label: lateTurnStartLabel(3),
+          ),
+        );
+        final listed =
+            await CheckpointControlTools(
+                  container,
+                ).call('checkpoint_list', {'sessionId': 's1'})
+                as List;
+        final entry = listed.single as Map;
+        expect(
+          entry['title'],
+          'Before: Change the app — may already include its first edit',
+        );
+        expect(entry['turn'], 3);
+      },
+    );
 
     testWidgets('an empty panel gives the recorder\'s reason', (tester) async {
       container

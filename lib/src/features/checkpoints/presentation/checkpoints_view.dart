@@ -20,6 +20,7 @@ import '../application/checkpoint_providers.dart';
 import '../application/checkpoint_service.dart';
 import '../application/session_checkpoint_recorder.dart';
 import '../domain/checkpoint.dart';
+import '../domain/checkpoint_title.dart';
 
 /// Which session's checkpoints the panel is describing — the session **on
 /// screen**, not the one last clicked in the Explorer.
@@ -126,7 +127,6 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
             itemBuilder: (context, index) {
               final checkpoint = checkpoints[index];
               final expanded = _expandedId == checkpoint.id;
-              final prompt = checkpoint.prompt;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -138,28 +138,13 @@ class _CheckpointsViewState extends ConsumerState<CheckpointsView> {
                     ),
                     // §19 at the line the reading is on: a turn is only
                     // pickable if you can tell how long ago it was.
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (prompt != null)
-                          Text(
-                            '“${prompt.replaceAll(RegExp(r'\s+'), ' ')}'
-                            '”',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        Text(
-                          checkpointSummary(
-                            checkpoint,
-                            now,
-                            showRepository: repositories.length > 1,
-                          ),
-                          style: theme.textTheme.bodySmall,
-                        ),
-                      ],
+                    subtitle: Text(
+                      checkpointSummary(
+                        checkpoint,
+                        now,
+                        showRepository: repositories.length > 1,
+                      ),
+                      style: theme.textTheme.bodySmall,
                     ),
                     onTap: () => setState(
                       () => _expandedId = expanded ? null : checkpoint.id,
@@ -410,34 +395,19 @@ class _FileRow extends StatelessWidget {
   }
 }
 
-/// A row's title: which turn it stands beside, or why it was taken.
-String checkpointTitle(Checkpoint checkpoint) {
-  final turn = checkpoint.turn;
-  return switch (checkpoint.reason) {
-    // An automatic before-turn checkpoint carries a label only when the
-    // recorder could not verify it was taken before the turn's first edit, and
-    // that label says so in place of the title that would claim it was.
-    CheckpointReason.turnStart when checkpoint.label != null =>
-      checkpoint.label!,
-    CheckpointReason.turnStart when turn != null => 'Before turn $turn',
-    CheckpointReason.turn when turn != null => 'After turn $turn',
-    CheckpointReason.turnStart => 'Before turn #${checkpoint.sequence}',
-    CheckpointReason.turn => 'Turn #${checkpoint.sequence}',
-    CheckpointReason.safety =>
-      checkpoint.label ?? 'Before restore #${checkpoint.sequence}',
-    CheckpointReason.manual =>
-      checkpoint.label ?? 'Checkpoint #${checkpoint.sequence}',
-  };
-}
-
-/// A row's facts: files, lines, where (when a session spans repositories), age.
+/// A row's facts: its turn (when the title is words rather than the number),
+/// files, lines, where (when a session spans repositories), and age.
 String checkpointSummary(
   Checkpoint checkpoint,
   DateTime now, {
   bool showRepository = false,
 }) {
   final count = checkpoint.files.length;
-  final parts = <String>['$count file${count == 1 ? '' : 's'}'];
+  final turn = checkpoint.turn;
+  final parts = <String>[
+    if (turn != null && checkpointHeadline(checkpoint) != null) 'Turn $turn',
+    '$count file${count == 1 ? '' : 's'}',
+  ];
   final added = checkpoint.additions;
   final removed = checkpoint.deletions;
   if (count > 0 && (added != null || removed != null)) {

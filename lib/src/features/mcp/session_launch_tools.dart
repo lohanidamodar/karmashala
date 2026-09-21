@@ -9,6 +9,7 @@ import '../checkpoints/application/checkpoint_fork.dart';
 import '../checkpoints/application/checkpoint_providers.dart';
 import '../checkpoints/application/checkpoint_service.dart';
 import '../checkpoints/domain/checkpoint.dart';
+import '../checkpoints/domain/checkpoint_title.dart';
 import '../cli_detection/application/cli_detection_providers.dart';
 import '../environments/application/environment_providers.dart';
 import '../explorer/application/checkout.dart';
@@ -533,6 +534,7 @@ class SessionLaunchTools {
     'id': checkpoint.id,
     'sequence': checkpoint.sequence,
     'turn': checkpoint.turn,
+    'title': checkpointTitle(checkpoint),
     'reason': checkpoint.reason.name,
     'label': checkpoint.label,
     'prompt': checkpoint.prompt,

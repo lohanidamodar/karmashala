@@ -14,6 +14,7 @@ import 'package:karmashala/src/features/checkpoints/application/checkpoint_servi
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
+import 'package:karmashala/src/features/checkpoints/domain/checkpoint_title.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -220,6 +221,10 @@ void main() {
       expect(blobIn(app, nested.single.treeSha, 'main.txt'), edited);
       // The fix: it says so.
       expect(nested.single.label, lateTurnStartLabel(1));
+      expect(
+        checkpointTitle(nested.single),
+        'Before: Change the app — may already include its first edit',
+      );
 
       // The turn-start snapshot returned before any tool was announced: it is
       // genuinely before, and is not smeared with the warning.

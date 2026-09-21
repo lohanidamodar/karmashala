@@ -9,6 +9,7 @@ import '../../notifications/application/session_status_registry.dart';
 import '../../sessions/application/decision_recorder.dart';
 import '../data/checkpoint_dao.dart';
 import '../domain/checkpoint.dart';
+import '../domain/checkpoint_title.dart';
 import '../domain/turn_boundary.dart';
 import 'checkpoint_providers.dart';
 import 'checkpoint_settings.dart';
@@ -47,13 +48,11 @@ final checkpointSkipReasonsProvider =
 const String kAutomaticCheckpointsOff =
     'automatic checkpoints are off in Settings › Agents › Checkpoints';
 
-/// What a before-turn checkpoint is called when the tool it was taken for had
-/// already been released: the row's own words for the give-up
-/// [SessionCheckpointRecorder.noteHoldExpired] records. A whole title rather
-/// than a suffix, because it *replaces* "Before turn N" — the plain title
-/// asserts the one thing this checkpoint cannot be shown to be.
+/// The label that marks a before-turn checkpoint taken after its tool was
+/// released. Its presence is the mark `checkpointTitle` reads; its words are
+/// for a reader of the raw row.
 String lateTurnStartLabel(int turn) =>
-    'Before turn $turn — may already include its first edit';
+    'Before turn $turn — $kUnverifiedBeforeNote';
 
 /// How far past its limit a repository's chain may grow before it is pruned.
 int checkpointPruneSlack(int keep) => keep ~/ 10 < 10 ? 10 : keep ~/ 10;

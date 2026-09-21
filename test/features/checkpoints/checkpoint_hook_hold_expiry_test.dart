@@ -14,7 +14,7 @@ import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
 import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
-import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
+import 'package:karmashala/src/features/checkpoints/domain/checkpoint_title.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
@@ -350,13 +350,13 @@ void main() {
       expect(nested.single.label, lateTurnStartLabel(1));
       expect(
         checkpointTitle(nested.single),
-        'Before turn 1 — may already include its first edit',
+        'Before: Change the app — may already include its first edit',
         reason: 'the panel says so where the Restore button is',
       );
       // And the repository whose snapshot *was* taken in time is not marked:
       // one expired hold does not cast doubt on a row written before it.
       expect(ofRepo(hub).first.label, isNull);
-      expect(checkpointTitle(ofRepo(hub).first), 'Before turn 1');
+      expect(checkpointTitle(ofRepo(hub).first), 'Before: Change the app');
     },
     skip: hasGit ? false : 'git is not on PATH',
     timeout: const Timeout(Duration(minutes: 3)),

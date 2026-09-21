@@ -4,6 +4,7 @@ import '../checkpoints/application/checkpoint_providers.dart';
 import '../checkpoints/application/checkpoint_service.dart';
 import '../checkpoints/application/session_checkpoint_recorder.dart';
 import '../checkpoints/domain/checkpoint.dart';
+import '../checkpoints/domain/checkpoint_title.dart';
 import 'package:karmashala_git/git.dart';
 
 /// The per-turn record of a session's working tree. Like the session tools,
@@ -141,6 +142,7 @@ class CheckpointControlTools {
     'id': checkpoint.id,
     'sessionId': checkpoint.sessionId,
     'sequence': checkpoint.sequence,
+    'title': checkpointTitle(checkpoint),
     'reason': checkpoint.reason.name,
     'label': checkpoint.label,
     'createdAt': checkpoint.createdAt.toIso8601String(),
@@ -172,8 +174,10 @@ const List<Map<String, dynamic>> checkpointControlToolSchemas = [
     'description':
         'List the checkpoints of a session — taken as each agent turn '
         'starts and ends in every repository it changed, plus manual and '
-        'pre-restore safety checkpoints. Each entry says its turn, prompt '
-        'and what changed since the previous checkpoint of its repository. '
+        'pre-restore safety checkpoints. Each entry says its title (the '
+        'panel\'s words, including when a before-turn snapshot may already '
+        'hold the turn\'s first edit), turn, prompt and what changed since '
+        'the previous checkpoint of its repository. '
         'Defaults to the calling '
         "session's own checkpoints.",
     'inputSchema': {

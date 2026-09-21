@@ -3,7 +3,7 @@
   "served": [
     {
       "name": "checkpoint_list",
-      "description": "List the checkpoints of a session — taken as each agent turn starts and ends in every repository it changed, plus manual and pre-restore safety checkpoints. Each entry says its turn, prompt and what changed since the previous checkpoint of its repository. Defaults to the calling session's own checkpoints.",
+      "description": "List the checkpoints of a session — taken as each agent turn starts and ends in every repository it changed, plus manual and pre-restore safety checkpoints. Each entry says its title (the panel's words, including when a before-turn snapshot may already hold the turn's first edit), turn, prompt and what changed since the previous checkpoint of its repository. Defaults to the calling session's own checkpoints.",
       "inputSchema": {
         "type": "object",
         "properties": {
