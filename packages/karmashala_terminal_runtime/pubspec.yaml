@@ -58,7 +58,7 @@ dependencies:
   agent_cli:
     path: ../agent_cli
   # The SSH session and channel an ssh pane is a shell on.
-  dartssh2: ^3.3.1
+  dartssh2: ^4.1.0
   path: ^1.9.1
   # Warp themes are YAML.
   yaml: ^3.1.4

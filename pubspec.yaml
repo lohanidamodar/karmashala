@@ -167,7 +167,7 @@ dependencies:
     path: packages/relay
   # End-to-end sealing for the mobile companion (XChaCha20-Poly1305, HKDF).
   cryptography: ^2.9.0
-  dartssh2: ^3.3.1
+  dartssh2: ^4.1.0
   file_selector: ^1.1.0
   flutter:
     sdk: flutter

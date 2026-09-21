@@ -22,7 +22,7 @@ dependencies:
   agent_cli:
     path: ../agent_cli
   # The SSH client, its socket and channel types.
-  dartssh2: ^3.3.1
+  dartssh2: ^4.1.0
   # Logging and `Clock`.
   karmashala_core:
     path: ../karmashala_core
