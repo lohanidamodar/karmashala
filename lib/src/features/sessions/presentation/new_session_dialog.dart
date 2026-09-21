@@ -9,7 +9,9 @@ import 'package:karmashala_ui/primitives.dart';
 import '../../agents/application/agent_installations_controller.dart';
 import 'package:agent_cli/discovery.dart';
 import '../../environments/application/environments_controller.dart';
+import 'package:karmashala_git/git.dart';
 import '../../explorer/application/explorer_actions.dart';
+import '../../git/application/changes_providers.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -45,6 +47,12 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
 
   /// Null only while the workspace has no projects at all.
   SessionDestination? _destination;
+
+  /// Whether [_destination]'s checkout is under git, as far as the filesystem
+  /// could say. Starts — and stays, for an SSH checkout — at
+  /// [GitPresence.unknown], which offers a worktree: not having looked is not
+  /// the same as having found a plain folder.
+  GitPresence _presence = GitPresence.unknown;
   bool _useWorktree = false;
   bool _external = false;
   SystemTerminal? _terminal;
@@ -57,11 +65,55 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     // Taken once, never overwriting the picker's own choice — but still
     // listened to, so a project added from the empty state below is picked up.
     _destination = ref.read(defaultSessionDestinationProvider);
+    _afterDestinationChanged();
     ref.listenManual(defaultSessionDestinationProvider, (_, next) {
       if (_destination == null && next != null) {
         setState(() => _destination = next);
+        _afterDestinationChanged();
       }
     });
+  }
+
+  /// The two questions a destination raises that `build` may not ask: does its
+  /// project have anywhere recorded to run — *recording* one writes to a
+  /// provider, which a life-cycle may not do — and is that anywhere under git.
+  void _afterDestinationChanged() {
+    _presence = GitPresence.unknown;
+    Future(() {
+      if (!mounted) return;
+      setState(() => _destination = _runnable(_destination));
+      _readPresence();
+    });
+  }
+
+  /// Read once per destination rather than watched: the answer cannot change
+  /// while the dialog is open, and a `build` subscribed to an autoDispose
+  /// provider leaves its dispose timer behind when the dialog closes.
+  void _readPresence() {
+    final path = _destination?.checkout?.path;
+    if (path == null) return;
+    ref.read(checkoutGitPresenceProvider(path).future).then((presence) {
+      if (!mounted || _destination?.checkout?.path != path) return;
+      setState(() => _presence = presence);
+    });
+  }
+
+  /// [destination] with somewhere to run: the project's own folder, recorded so
+  /// every other surface sees the same row. Unchanged when there is a real
+  /// reason it cannot run there, which [_error] then carries.
+  SessionDestination? _runnable(SessionDestination? destination) {
+    if (destination == null || destination.isRunnable) return destination;
+    try {
+      return SessionDestination(
+        projectId: destination.projectId,
+        checkout: ref
+            .read(projectsControllerProvider.notifier)
+            .ensureRunLocation(destination.projectId),
+      );
+    } on StateError catch (error) {
+      _error = error.message;
+      return destination;
+    }
   }
 
   @override
@@ -106,7 +158,12 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     }
   }
 
-  Future<void> _create(AgentInstallation? installation) async {
+  /// [useWorktree] comes from the button, not the field: a checkbox that is
+  /// not on screen must not still be ticked underneath it.
+  Future<void> _create(
+    AgentInstallation? installation, {
+    required bool useWorktree,
+  }) async {
     final repo = _destination?.checkout;
     if (repo == null || installation == null) return;
     final terminal = _terminalFrom(
@@ -135,7 +192,7 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
               surface: _external
                   ? SessionSurface.external
                   : SessionSurface.pane,
-              useWorktree: _useWorktree,
+              useWorktree: useWorktree,
               targetPaneId: widget.targetPaneId,
             ),
             externalTerminal: terminal,
@@ -229,6 +286,11 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
           ];
     final installation = _agentFor(checkout, installations);
 
+    // A worktree is git's, so it is offered only where there is a repository to
+    // take one from. Only a positive [GitPresence.notARepository] withdraws it.
+    final worktreeOffered =
+        checkout != null && _presence != GitPresence.notARepository;
+
     return AlertDialog(
       title: const DesktopDialogTitle(
         icon: AppIcons.chatCircleDots,
@@ -249,12 +311,16 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   SessionDestinationPicker(
                     destination: destination,
                     enabled: !_busy,
-                    onChanged: (picked) => setState(() {
-                      _destination = picked;
-                      // The agent belongs to the environment we are leaving.
-                      // Cleared so `_agentFor` re-resolves the default.
-                      _installation = null;
-                    }),
+                    onChanged: (picked) {
+                      setState(() {
+                        _error = null;
+                        _destination = picked;
+                        // The agent belongs to the environment we are leaving.
+                        // Cleared so `_agentFor` re-resolves the default.
+                        _installation = null;
+                      });
+                      _afterDestinationChanged();
+                    },
                   ),
                   const SizedBox(height: Insets.md),
                   TextField(
@@ -332,12 +398,14 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                   if (_external) _terminalPicker(),
                   // Offered for both surfaces: the worktree is created before
                   // the agent starts, so its window makes no difference.
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _useWorktree,
-                    onChanged: (v) => setState(() => _useWorktree = v ?? false),
-                    title: const Text('Run in a dedicated Git worktree'),
-                  ),
+                  if (worktreeOffered)
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: _useWorktree,
+                      onChanged: (v) =>
+                          setState(() => _useWorktree = v ?? false),
+                      title: const Text('Run in a dedicated Git worktree'),
+                    ),
                   if (_error != null) ...[
                     const SizedBox(height: Insets.sm),
                     DesktopErrorBanner(_error!),
@@ -353,7 +421,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
         FilledButton(
           onPressed: (_busy || checkout == null || installation == null)
               ? null
-              : () => _create(installation),
+              : () => _create(
+                  installation,
+                  useWorktree: worktreeOffered && _useWorktree,
+                ),
           child: _busy
               ? const InlineSpinner(size: InlineSpinnerSize.medium)
               : const Text('Start'),

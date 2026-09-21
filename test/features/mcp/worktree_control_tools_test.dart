@@ -37,6 +37,11 @@ void main() {
   late LauncherControlServer server;
   late FakeCommandRunner git;
 
+  /// Checkouts the filesystem reports as ordinary folders with no `.git`, so
+  /// the presence probe can say "not a repository" rather than "could not
+  /// look". Empty by default: every fixture path then reads `unknown`.
+  late Set<String> plainFolders;
+
   /// The worktree `worktreePathFor` computes for `app` + `feature`, in both
   /// spellings that reach the app: git prints forward slashes on Windows, the
   /// `repositories` table holds backslashes, and both name one directory.
@@ -112,6 +117,7 @@ branch refs/heads/$worktreeBranch
       ),
     );
 
+    plainFolders = <String>{};
     worktreeListed = true;
     worktreeBranch = 'feature/login';
     existingBranches = {'main', 'feature/login'};
@@ -157,7 +163,10 @@ branch refs/heads/$worktreeBranch
 
     container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        ...fakeTerminalOverrides(
+          database: db,
+          gitFiles: PlainFolders(plainFolders),
+        ),
         clockProvider.overrideWithValue(FixedClock(testTime)),
         commandRunnerFactoryProvider.overrideWithValue(
           FakeCommandRunnerFactory(fallback: git),
@@ -249,6 +258,27 @@ branch refs/heads/$worktreeBranch
       expect(structured['path'], r'C:\src\demo\.karmashala-worktrees\app-mcp');
       expect(structured['branch'], 'feat/mcp');
       expect(structured['fromRepositoryId'], 'r1');
+    });
+
+    /// **A project with no git has no worktrees — that is absence, not error.**
+    ///
+    /// A checkout is a directory a session runs in, and Karmashala records a
+    /// project's own folder as one whether or not it is a clone. Asked for a
+    /// worktree of a plain folder, git would answer with a `.git` the caller
+    /// never mentioned; this says what was actually observed and what to do.
+    test('a checkout that is not a repository is refused in words', () async {
+      plainFolders.add(r'C:\src\demo\app');
+
+      final result = await callTool('worktree_create', {
+        'repositoryId': 'r1',
+        'name': 'mcp',
+        'branch': 'feat/mcp',
+      });
+
+      expect(result.isError, isTrue);
+      expect(result.text, contains('not a Git repository'));
+      expect(result.text, contains(r'C:\src\demo\app'));
+      expect(worktreeWrites(), isEmpty);
     });
 
     test('a base ref is passed on when one is given', () async {

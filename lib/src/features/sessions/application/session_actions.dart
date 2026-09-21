@@ -16,6 +16,7 @@ import '../../cli_detection/data/cli_session_mutator.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
+import '../../projects/application/projects_controller.dart';
 import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -598,10 +599,13 @@ class SessionActions {
   /// [projectId]'s first repository with the default agent.
   String newSessionShellCommand(String projectId) {
     final repos = _ref.read(repositoryDaoProvider).getByProject(projectId);
-    if (repos.isEmpty) {
-      throw StateError(kNowhereToRunIn);
-    }
-    final repo = repos.first;
+    // Nothing recorded is not nowhere to run: the project's own folder is, and
+    // recording it here is what the Explorer's own start does.
+    final repo =
+        repos.firstOrNull ??
+        _ref
+            .read(projectsControllerProvider.notifier)
+            .ensureRunLocation(projectId);
     final installs = _ref
         .read(agentInstallationDaoProvider)
         .getByEnvironment(repo.path.environmentId);

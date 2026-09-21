@@ -4,6 +4,7 @@ import 'package:karmashala_git/repositories.dart';
 import 'package:karmashala_core/paths.dart';
 import 'package:karmashala_core/util.dart';
 import 'package:karmashala_git/git.dart';
+import 'package:karmashala/src/features/explorer/application/checkout.dart';
 import 'package:karmashala/src/features/repositories/data/repository_discovery_service.dart';
 
 /// A [Clock] that always returns a fixed instant.
@@ -152,6 +153,37 @@ class NoGitFiles implements GitFiles {
 
 /// The one every test shares; see [NoGitFiles].
 const noGitFiles = NoGitFiles();
+
+/// A disk on which the [folders] are ordinary directories with no `.git`
+/// anywhere above them, and nothing else is there at all.
+///
+/// The one disk that lets `GitPresenceReader` answer `notARepository` rather
+/// than `unknown` — the difference between "this is a plain folder" and "we
+/// could not look", and only the first of those may take a worktree off a
+/// surface. Read live, so a test can describe the folder after the container.
+class PlainFolders implements GitFiles {
+  const PlainFolders(this.folders);
+
+  final Set<String> folders;
+
+  @override
+  Future<PathEntry> typeOf(String path) async =>
+      folders.any((folder) => samePath(path, folder))
+      ? PathEntry.directory
+      : PathEntry.none;
+
+  @override
+  Future<String?> readString(String path) async => null;
+
+  @override
+  Future<bool> exists(String path) async => false;
+
+  @override
+  Future<void> createDirectory(String path) async {}
+
+  @override
+  Future<void> writeString(String path, String contents) async {}
+}
 
 /// A disk on which every recorded path opens and nothing is a reparse point.
 ///

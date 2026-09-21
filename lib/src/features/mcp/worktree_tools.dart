@@ -82,6 +82,20 @@ class WorktreeControlTools {
       worktreeName,
     );
 
+    // Asked before git is: a plain folder has no worktrees at all, and git's
+    // own refusal names a `.git` the caller never mentioned. Only observed
+    // absence refuses — `unknown` (an SSH host, a stopped distro) still tries.
+    final presence = await _container.read(
+      checkoutGitPresenceProvider(repository.path).future,
+    );
+    if (presence == GitPresence.notARepository) {
+      throw StateError(
+        '${repository.path.path} is not a Git repository, so it has no '
+        'worktrees. A session runs perfectly well in the folder itself — '
+        'open_new_session without useWorktree.',
+      );
+    }
+
     final worktrees = _container.read(worktreeServiceProvider);
     final existing = await worktrees.list(repository.path);
     for (final worktree in existing) {

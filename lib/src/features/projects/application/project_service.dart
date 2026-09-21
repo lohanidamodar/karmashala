@@ -93,7 +93,7 @@ class ProjectService {
       repositories.add(repo);
     }
     if (repositories.isEmpty) {
-      repositories.add(_recordRoot(project, name: name, root: root, now: now));
+      repositories.add(recordRootAsCheckout(project, now: now));
     }
 
     return ProjectCreationResult(project: project, repositories: repositories);
@@ -105,18 +105,17 @@ class ProjectService {
   /// session at all — "this project has no Git repositories to run in" was the
   /// whole of what the New Session dialog could say about a folder that simply
   /// was not a clone.
-  Repository _recordRoot(
-    Project project, {
-    required String name,
-    required EnvironmentPath root,
-    required DateTime now,
-  }) {
+  ///
+  /// Public because discovery is not the only thing that asks: a project
+  /// recorded before this was true has no checkout at all, and the surface
+  /// that wants to start a session there asks the same question.
+  Repository recordRootAsCheckout(Project project, {DateTime? now}) {
     final repo = Repository(
       id: ids.newId(),
       projectId: project.id,
-      name: name,
-      path: root,
-      createdAt: now,
+      name: project.name,
+      path: project.root,
+      createdAt: now ?? clock.nowUtc(),
     );
     repositoryDao.insert(repo);
     return repo;
@@ -170,9 +169,7 @@ class ProjectService {
       repositories.add(repo);
     }
     if (repositories.isEmpty) {
-      repositories.add(
-        _recordRoot(project, name: name, root: project.root, now: now),
-      );
+      repositories.add(recordRootAsCheckout(project, now: now));
     }
     return ProjectCreationResult(project: project, repositories: repositories);
   }
@@ -300,7 +297,7 @@ cd "\$TARGET" && pwd
       // The folder itself, whether or not it is a clone: nothing here needs a
       // `.git` to be checked for — a session runs in a directory. The probe
       // this replaces cost an SSH round trip to decide the same thing.
-      repositories.add(_recordRoot(project, name: name, root: root, now: now));
+      repositories.add(recordRootAsCheckout(project, now: now));
     } else {
       for (final d in discovered) {
         final repo = Repository(
@@ -367,9 +364,7 @@ cd "\$TARGET" && pwd
     // what a rescan of a plain directory is asking for. Old projects, made
     // before a folder was enough, are repaired by the same rescan.
     if (existing.isEmpty && added.isEmpty) {
-      added.add(
-        _recordRoot(project, name: project.name, root: project.root, now: now),
-      );
+      added.add(recordRootAsCheckout(project, now: now));
     }
     return added;
   }

@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+
 import 'package:karmashala/src/features/git/application/changes_providers.dart';
+
 import 'package:karmashala/src/features/projects/application/projects_controller.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -22,6 +26,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
+import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
 
@@ -104,10 +109,16 @@ void main() {
   });
   tearDown(() => db.close());
 
-  ProviderContainer containerFor({String? selected}) {
+  ProviderContainer containerFor({String? selected, String? plainFolder}) {
     final container = ProviderContainer(
       overrides: [
-        ...fakeTerminalOverrides(database: db),
+        // The dialog asks whether the destination is under git before it offers
+        // a worktree, and [PlainFolders] is the only disk that can answer
+        // "not a repository" rather than "could not look".
+        ...fakeTerminalOverrides(
+          database: db,
+          gitFiles: plainFolder == null ? null : PlainFolders({plainFolder}),
+        ),
         // Nothing here may shell out: the picker classifies worktrees from
         // `git worktree list`, and a real one would run against paths that do
         // not exist on the machine running the suite.
@@ -353,14 +364,46 @@ void main() {
       );
     });
 
-    testWidgets('and a project with no checkouts says that instead', (
+    /// **A project with no checkout is not a project with nowhere to run.**
+    ///
+    /// Reported as "starting a session in a project without git fails". Git is
+    /// how checkouts are *discovered*, not what makes a directory runnable —
+    /// every agent CLI starts in a plain folder — so the project's own folder
+    /// is recorded and offered rather than refused.
+    testWidgets('a project with no checkouts runs in its own folder', (
+      tester,
+    ) async {
+      final folder = Directory.systemTemp.createTempSync('ks-no-git');
+      addTearDown(() => folder.deleteSync(recursive: true));
+      db.execute('DELETE FROM repositories;');
+      ProjectDao(
+        db,
+      ).update(project(id: 'p1', name: 'Alpha', path: folder.path));
+
+      final container = containerFor(plainFolder: folder.path);
+      await open(tester, container);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('nowhere recorded to run in'), findsNothing);
+      expect(
+        RepositoryDao(db).getByProject('p1').single.path.path,
+        folder.path,
+      );
+      expect(tester.widget<FilledButton>(startButton()).onPressed, isNotNull);
+      // Absent, not broken: there is no repository to take a worktree from.
+      expect(find.text('Run in a dedicated Git worktree'), findsNothing);
+    });
+
+    testWidgets('and one whose folder is gone says so, naming it', (
       tester,
     ) async {
       db.execute('DELETE FROM repositories;');
       final container = containerFor();
       await open(tester, container);
 
-      expect(find.textContaining('nowhere recorded to run in'), findsOneWidget);
+      // The blanket "nowhere recorded" is replaced by the reason there really
+      // is nowhere — a refusal the user can act on.
+      expect(find.textContaining(r'C:\src\alpha'), findsOneWidget);
       expect(tester.widget<FilledButton>(startButton()).onPressed, isNull);
     });
   });

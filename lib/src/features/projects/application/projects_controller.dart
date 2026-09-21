@@ -258,6 +258,62 @@ class ProjectsController extends Notifier<List<Project>> {
     return result;
   }
 
+  /// Where a session started at [projectId] runs, recording the project's own
+  /// folder when the workspace has no checkout for it at all.
+  ///
+  /// Git is not what makes a directory runnable — every agent CLI starts in a
+  /// plain one — so a project with nothing discovered under it still has
+  /// somewhere to run: itself. Creation and [rediscover] already say that; this
+  /// is the same sentence said at the moment a session is asked for, which is
+  /// what a project recorded before it was true never got.
+  ///
+  /// Throws, in words, for the two things that really do stop a start: the
+  /// project is gone, or its folder is.
+  Repository ensureRunLocation(String projectId) {
+    final project = ref.read(projectDaoProvider).getById(projectId);
+    if (project == null) {
+      throw StateError('This project is no longer in the workspace.');
+    }
+    final recorded = ref.read(repositoryDaoProvider).getByProject(projectId);
+    if (recorded.isNotEmpty) return recorded.first;
+    if (_rootProvablyMissing(project)) {
+      throw StateError(
+        '"${project.name}" has no folder at ${project.root.path}. Point the '
+        'project at where it lives — Edit project — or add it again.',
+      );
+    }
+    final checkout = ref
+        .read(projectServiceProvider)
+        .recordRootAsCheckout(project);
+    ref.read(sessionsRevisionProvider.notifier).bump();
+    _refresh();
+    return checkout;
+  }
+
+  /// Whether [project]'s root is **provably** not there, from one `stat` this
+  /// process can make cheaply. A WSL or SSH root is never called missing from
+  /// here: [projectPathMissingProvider] is the asynchronous form that can ask
+  /// those properly, and "we did not look" must not read as "it is gone".
+  bool _rootProvablyMissing(Project project) {
+    final env = ref
+        .read(executionEnvironmentDaoProvider)
+        .getById(project.environmentId);
+    if (env == null) return false;
+    if (env.kind != EnvironmentKind.windowsNative &&
+        env.kind != EnvironmentKind.localPosix) {
+      return false;
+    }
+    final path = project.root.path;
+    // A share, whoever it is filed under — the same exclusion the async probe
+    // makes, and for the same reason (docs/windows-antivirus.md).
+    if (path.startsWith(r'\\') || path.startsWith('//')) return false;
+    try {
+      return !Directory(path).existsSync();
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Points [projectId]'s one-click "New session" at [repositoryId], or back at
   /// the picker's first row when null.
   void setDefaultRepository(String projectId, String? repositoryId) {

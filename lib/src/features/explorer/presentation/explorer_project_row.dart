@@ -368,6 +368,22 @@ class ProjectRowActions {
     all: ref.read(repositoryDaoProvider).getByProject(project.id),
   );
 
+  /// [_defaultCheckout], falling back to the project's own folder for a project
+  /// that has no checkout recorded at all — a folder is enough to run in. Null
+  /// only once the real reason has been said.
+  Repository? _runLocation() {
+    final chosen = _defaultCheckout();
+    if (chosen != null) return chosen;
+    try {
+      return ref
+          .read(projectsControllerProvider.notifier)
+          .ensureRunLocation(project.id);
+    } on StateError catch (error) {
+      _say(error.message);
+      return null;
+    }
+  }
+
   Future<void> _startSession({
     required Repository repository,
     AgentInstallation? installation,
@@ -382,11 +398,12 @@ class ProjectRowActions {
   /// The `+`: starts a session with [SessionDefaults] and no dialog — unless a
   /// piece is missing, when the dialog opens to name it.
   Future<void> startWithDefaults() async {
-    final repository = _defaultCheckout();
-    final defaults = repository == null
-        ? null
-        : ref.read(sessionDefaultsProvider).forCheckout(repository);
-    if (defaults == null || !defaults.isComplete) {
+    final repository = _runLocation();
+    // Null only once `_runLocation` has said why; opening the dialog would ask
+    // the same question again and answer it with the same sentence.
+    if (repository == null) return;
+    final defaults = ref.read(sessionDefaultsProvider).forCheckout(repository);
+    if (!defaults.isComplete) {
       newSessionDialog(repository: repository);
       return;
     }
@@ -397,7 +414,7 @@ class ProjectRowActions {
     }
     ref.read(explorerExpandedProjectsProvider.notifier).open(project.id);
     await _startSession(
-      repository: repository!,
+      repository: repository,
       installation: defaults.installation,
     );
   }
@@ -405,13 +422,11 @@ class ProjectRowActions {
   void newSessionDialog({Repository? repository}) {
     ref.read(selectedProjectIdProvider.notifier).select(project.id);
     ref.read(explorerExpandedProjectsProvider.notifier).open(project.id);
-    final repo = repository ?? _defaultCheckout();
-    if (repo == null) {
-      // The dialog opens on the current selection, so opening it here would
-      // point it at whichever other project was last selected.
-      _say(kNowhereToRunIn);
-      return;
-    }
+    final repo = repository ?? _runLocation();
+    // The dialog opens on the current selection, so opening it with nowhere to
+    // run would point it at whichever other project was last selected.
+    // `_runLocation` has already said why there is nowhere.
+    if (repo == null) return;
     ref.read(selectedRepositoryIdProvider.notifier).select(repo.id);
     NewSessionDialog.show(context);
   }
@@ -560,13 +575,8 @@ class ProjectRowActions {
           .where((installation) => installation.id == id)
           .firstOrNull;
       if (installation == null) return;
-      final repo = ref
-          .read(repositoryDaoProvider)
-          .getByProject(project.id)
-          .firstOrNull;
-      if (repo == null) {
-        _say(kNowhereToRunIn);
-      } else {
+      final repo = _runLocation();
+      if (repo != null) {
         _startSession(repository: repo, installation: installation);
       }
       return;
