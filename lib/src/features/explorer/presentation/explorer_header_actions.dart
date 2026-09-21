@@ -106,6 +106,9 @@ class _ConnectedFilterButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(explorerAgentFilterProvider);
     final showingViews = ref.watch(explorerShowingViewsProvider);
+    final showingActivity = ref.watch(
+      explorerLensProvider.select((lens) => lens == ExplorerLens.activity),
+    );
     final hidingEmptySections = ref.watch(
       settingsControllerProvider.select((s) => s.hideEmptySections),
     );
@@ -119,11 +122,14 @@ class _ConnectedFilterButton extends ConsumerWidget {
       registry: ref.watch(agentRegistryProvider),
       filter: filter,
       showingViews: showingViews,
+      showingActivity: showingActivity,
       hidingEmptySections: hidingEmptySections,
       hiddenSections: layout?.hidden,
       sectionsOnScreen: layout != null,
       onToggleSavedViews: () =>
           ref.read(explorerShowingViewsProvider.notifier).toggle(),
+      onToggleActivity: () =>
+          ref.read(explorerLensProvider.notifier).toggle(ExplorerLens.activity),
       onToggleEmptySections: () =>
           settings.setHideEmptySections(!hidingEmptySections),
       onAgentFilter: (ids) => settings.setExplorerAgentFilter(ids),
@@ -144,6 +150,8 @@ class ExplorerFilterButton extends StatelessWidget {
     required this.onToggleSavedViews,
     required this.onToggleEmptySections,
     required this.onAgentFilter,
+    this.showingActivity = false,
+    this.onToggleActivity,
     super.key,
   });
 
@@ -151,6 +159,12 @@ class ExplorerFilterButton extends StatelessWidget {
   final AgentFilter filter;
   final bool showingViews;
   final bool hidingEmptySections;
+
+  /// Whether the by-day lens is what the Explorer's body shows.
+  final bool showingActivity;
+
+  /// Null leaves the lens off the menu.
+  final VoidCallback? onToggleActivity;
 
   /// How many sections the empty filter folded away, null when sections are
   /// not on screen at all.
@@ -166,6 +180,7 @@ class ExplorerFilterButton extends StatelessWidget {
   static const String _allAgents = 'agents:all';
   static const String _emptySections = 'sections:empty';
   static const String _savedViews = 'views:saved';
+  static const String _activity = 'lens:activity';
   static const String _agentPrefix = 'agent:';
 
   @override
@@ -177,7 +192,9 @@ class ExplorerFilterButton extends StatelessWidget {
       iconSize: Chrome.icon,
       icon: Icon(filter.isUnfiltered ? AppIcons.funnel : AppIcons.funnelFill),
       onSelected: (value) {
-        if (value == _savedViews) {
+        if (value == _activity) {
+          onToggleActivity?.call();
+        } else if (value == _savedViews) {
           onToggleSavedViews();
         } else if (value == _emptySections) {
           onToggleEmptySections();
@@ -198,6 +215,15 @@ class ExplorerFilterButton extends StatelessWidget {
           icon: AppIcons.listChecks,
           selected: showingViews,
         ),
+        // A lens over the whole body, not a filter of the tree; picked again,
+        // or Escape inside it, goes back to the tree unchanged.
+        if (onToggleActivity != null)
+          DesktopMenuItem(
+            value: _activity,
+            label: 'Activity by day',
+            icon: AppIcons.clock,
+            selected: showingActivity,
+          ),
         const PopupMenuDivider(),
         DesktopMenuItem(
           value: _allAgents,

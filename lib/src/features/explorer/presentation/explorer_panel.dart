@@ -15,6 +15,7 @@ import '../application/explorer_tree_provider.dart';
 import '../application/explorer_tree_state.dart';
 import '../application/explorer_view_mode.dart';
 import '../application/session_selection.dart';
+import 'activity_by_day_view.dart';
 import 'agents_lens.dart';
 import 'explorer_header_actions.dart';
 import 'explorer_keyboard.dart';
@@ -160,6 +161,7 @@ class ExplorerLensBody extends StatelessWidget {
           switch (lens) {
             ExplorerLens.projects => const SizedBox.shrink(),
             ExplorerLens.agents => const AgentsPage(),
+            ExplorerLens.activity => const ActivityByDayView(),
           },
       ],
     );

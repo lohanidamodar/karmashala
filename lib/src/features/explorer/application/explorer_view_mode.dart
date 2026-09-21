@@ -22,6 +22,9 @@ enum ExplorerLens {
 
   /// Every session across projects, grouped by what it needs.
   agents,
+
+  /// Every chat across projects, by the day it was last active.
+  activity,
 }
 
 /// Not persisted, like [ExplorerViewMode]: a lens is somewhere you look.
