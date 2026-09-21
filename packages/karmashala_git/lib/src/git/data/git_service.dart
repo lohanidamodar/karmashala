@@ -8,6 +8,7 @@ import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
 import '../domain/git_worktree.dart';
 import '../domain/working_tree_status.dart';
+import '../domain/worktree_contents.dart';
 import '../domain/worktree_creation.dart';
 import 'git_diff_parsing.dart';
 import 'git_files.dart';
@@ -794,6 +795,46 @@ class GitService {
     final result = await _git(repo, ['worktree', 'prune']);
     if (!result.ok) {
       throw GitException('git worktree prune failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// What a working tree holds beyond its commits, from one
+  /// `git status --porcelain=v1 --ignored`. Throws [GitException] when git
+  /// refused: "could not read" must never be mistaken for "clean".
+  Future<WorktreeContents> contents(EnvironmentPath worktree) async {
+    final result = await _git(worktree, [
+      'status',
+      '--porcelain=v1',
+      '--ignored',
+    ]);
+    if (!result.ok) {
+      throw GitException('git status failed: ${result.stderr.trim()}');
+    }
+    return parseWorktreeContents(result.stdout);
+  }
+
+  /// The newest [limit] entries of [ref]'s reflog in [repo], newest first.
+  /// Empty when git keeps none; null when git could not be asked.
+  Future<List<ReflogEntry>?> reflog(
+    EnvironmentPath repo,
+    String ref, {
+    int limit = 50,
+  }) async {
+    try {
+      final result = await _git(repo, [
+        'reflog',
+        'show',
+        '--date=unix',
+        '--format=%gd%x09%gs',
+        '-n',
+        '$limit',
+        ref,
+        '--',
+      ]);
+      if (!result.ok) return null;
+      return parseReflog(result.stdout);
+    } on CommandException {
+      return null;
     }
   }
 

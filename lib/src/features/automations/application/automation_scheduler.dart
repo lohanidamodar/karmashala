@@ -4,6 +4,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
+import '../../git/application/worktree_cleanup_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import 'package:karmashala_automations/persistence.dart';
@@ -53,6 +54,8 @@ class AutomationScheduler extends Notifier<int> {
   @override
   int build() {
     final revision = ref.watch(automationsRevisionProvider);
+    // Worktree cleanup rides this timer rather than keeping one of its own.
+    ref.watch(worktreeCleanupRevisionProvider);
     final timer = ref.watch(automationTimerProvider);
     ref.onDispose(timer.cancel);
     _availableSince ??= _now;
@@ -95,6 +98,13 @@ class AutomationScheduler extends Notifier<int> {
       if (ceiling == null) continue;
       final deadline = run.firedAt.add(ceiling);
       final next = deadline.isAfter(after) ? deadline : after;
+      if (soonest == null || next.isBefore(soonest)) soonest = next;
+    }
+    final cleanup = ref
+        .read(worktreeCleanupControllerProvider)
+        .nextDue(availableSince: _availableSince ?? after);
+    if (cleanup != null) {
+      final next = cleanup.isAfter(after) ? cleanup : after;
       if (soonest == null || next.isBefore(soonest)) soonest = next;
     }
     return soonest;
@@ -204,6 +214,9 @@ class AutomationScheduler extends Notifier<int> {
       }
     }
     if (await _reconcileResumes(now)) changed = true;
+    ref
+        .read(worktreeCleanupControllerProvider)
+        .startIfDue(now, availableSince: _availableSince ?? now);
     if (changed) ref.read(automationsRevisionProvider.notifier).bump();
   }
 

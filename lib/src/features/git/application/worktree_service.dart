@@ -63,6 +63,9 @@ class WorktreeService {
   GitService _gitFor(EnvironmentPath repo) =>
       GitService(runnerFactory.forEnvironment(_environmentOf(repo)));
 
+  /// Git on [repo]'s own runner, for a reader that needs more than [list].
+  GitService gitFor(EnvironmentPath repo) => _gitFor(repo);
+
   /// Lists the worktrees of [repo].
   Future<List<GitWorktree>> list(EnvironmentPath repo) =>
       _gitFor(repo).listWorktrees(repo);
@@ -133,6 +136,12 @@ class WorktreeService {
     // thrown away.
     onCheckoutMoved?.call(worktree);
   }
+
+  /// Removes [worktree] only if git agrees it is clean. No `force` parameter on
+  /// purpose: automatic cleanup must have no way to discard anything, so git's
+  /// own refusal of a dirty worktree is the last check, never an obstacle.
+  Future<void> removeIfClean(EnvironmentPath repo, EnvironmentPath worktree) =>
+      remove(repo, worktree);
 }
 
 /// One run of [WorktreeService.create]: the stages, in order, and what each

@@ -14,6 +14,7 @@ import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../settings/presentation/settings_section.dart';
 import '../application/worktree_setup_providers.dart';
 import 'package:karmashala_git/git.dart';
+import 'worktree_cleanup_section.dart';
 import 'worktree_creation_view.dart';
 import 'worktree_setup_dialog.dart';
 
@@ -106,6 +107,7 @@ class WorktreeSetupPage extends ConsumerWidget {
               ],
             ),
           ),
+        const WorktreeCleanupSection(),
       ],
     );
   }

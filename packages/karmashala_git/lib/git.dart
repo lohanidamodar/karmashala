@@ -31,5 +31,6 @@ export 'src/git/domain/repository_origin.dart';
 export 'src/git/domain/review_order.dart';
 export 'src/git/domain/review_thread.dart';
 export 'src/git/domain/working_tree_status.dart';
+export 'src/git/domain/worktree_contents.dart';
 export 'src/git/domain/worktree_creation.dart';
 export 'src/git/domain/worktree_setup.dart';
