@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:agent_cli/read.dart' show TranscriptResumePoint;
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/cli_detection/data/conversation_index_dao.dart';
 
@@ -144,15 +145,162 @@ void main() {
         for (var i = 0; i < 300; i++)
           ConversationTurn(ordinal: i, role: 'user', text: 'turn $i'),
       ]);
-      // One DELETE, ceil(300 / 128) INSERTs, one watermark.
-      expect(dao.statements, 1 + 3 + 1);
+      // One DELETE, ceil(300 / 128) INSERTs, one watermark, one generation.
+      expect(dao.statements, 1 + 3 + 1 + 1);
     });
 
     test('an empty transcript costs a delete and a watermark, no insert', () {
       dao.statements = 0;
       write('c1', const []);
-      expect(dao.statements, 2);
+      // And the generation bump that retires any cursor cut before it.
+      expect(dao.statements, 3);
       expect(dao.turnCountFor('c1'), 0);
+    });
+  });
+
+  group('the generation', () {
+    test('every write that changes what a search finds moves it', () {
+      final start = dao.generation;
+      write('c1', const [
+        ConversationTurn(ordinal: 0, role: 'user', text: 'one'),
+      ]);
+      final afterReplace = dao.generation;
+      dao.appendTurns(
+        sessionId: 'c1',
+        cli: 'claudeCode',
+        filePath: 'C:/store/c1.jsonl',
+        turns: const [ConversationTurn(ordinal: 1, role: 'user', text: 'two')],
+        fromOrdinal: 1,
+        heldTurns: 1,
+        indexedAt: at,
+        resumePoint: TranscriptResumePoint(end: 10, rows: 2),
+      );
+      final afterAppend = dao.generation;
+
+      expect(afterReplace, greaterThan(start));
+      expect(afterAppend, greaterThan(afterReplace));
+    });
+
+    test('an append that adds nothing, or a kept reading, does not', () {
+      write('c1', const [
+        ConversationTurn(ordinal: 0, role: 'user', text: 'one'),
+      ]);
+      final before = dao.generation;
+
+      dao.appendTurns(
+        sessionId: 'c1',
+        cli: 'claudeCode',
+        filePath: 'C:/store/c1.jsonl',
+        turns: const [],
+        fromOrdinal: 1,
+        heldTurns: 1,
+        indexedAt: at,
+        resumePoint: TranscriptResumePoint(end: 10, rows: 1),
+      );
+      dao.keepTurns(
+        sessionId: 'c1',
+        cli: 'claudeCode',
+        filePath: 'C:/store/c1.jsonl',
+        turns: 1,
+        indexedAt: at,
+      );
+
+      // A cursor cut before either still serves: nothing it pages over moved.
+      expect(dao.generation, before);
+    });
+  });
+
+  group('appendTurns', () {
+    test('adds after what is held and replaces a provisional tail', () {
+      write('c1', const [
+        ConversationTurn(ordinal: 0, role: 'user', text: 'kept'),
+        ConversationTurn(ordinal: 2, role: 'agent', text: 'provisional tail'),
+      ]);
+
+      // The tail was read before its newline landed; the append reads it
+      // again from ordinal 2 along with what came after.
+      dao.appendTurns(
+        sessionId: 'c1',
+        cli: 'claudeCode',
+        filePath: 'C:/store/c1.jsonl',
+        turns: const [
+          ConversationTurn(ordinal: 2, role: 'agent', text: 'provisional tail'),
+          ConversationTurn(ordinal: 3, role: 'user', text: 'new question'),
+        ],
+        fromOrdinal: 2,
+        heldTurns: 2,
+        indexedAt: at,
+        resumePoint: TranscriptResumePoint(end: 99, rows: 4),
+      );
+
+      expect(dao.turnCountFor('c1'), 3);
+      expect(dao.search('provisional'), hasLength(1), reason: 'not doubled');
+      expect(dao.search('kept'), hasLength(1));
+      final state = dao.stateFor('c1')!;
+      expect(state.turns, 3);
+      expect(state.resumePoint!.end, 99);
+      expect(state.resumePoint!.rows, 4);
+    });
+  });
+
+  group('what a ranking costs', () {
+    void named(String id) => db.execute(
+      'INSERT INTO imported_sessions (id, repository_id, source, external_id, '
+      'environment_id, preview, file_path, store_home, is_subagent, '
+      "created_at) VALUES ('i-$id', 'r1', 'claudeCode', '$id', 'windows', "
+      "'', '', '', 0, '2026-09-01T00:00:00.000Z');",
+    );
+
+    setUp(() {
+      db.execute(
+        "INSERT INTO execution_environments (id, kind, name, created_at) "
+        "VALUES ('windows', 'windows', 'Windows', '2026-09-01T00:00:00Z');",
+      );
+      db.execute(
+        "INSERT INTO projects (id, name, root_environment_id, root_path, "
+        "created_at) VALUES ('p1', 'P', 'windows', 'C:/p', "
+        "'2026-09-01T00:00:00Z');",
+      );
+      db.execute(
+        "INSERT INTO repositories (id, project_id, name, environment_id, "
+        "path, created_at) VALUES ('r1', 'p1', 'r', 'windows', 'C:/p/r', "
+        "'2026-09-01T00:00:00Z');",
+      );
+    });
+
+    test('scores only the newest matches past its candidate bound', () {
+      for (final id in ['oldest', 'middle', 'newest']) {
+        named(id);
+        write(id, const [
+          ConversationTurn(ordinal: 0, role: 'user', text: 'the webhook'),
+        ]);
+      }
+
+      final all = dao.rankConversations('"webhook"', limit: 10);
+      final bounded = dao.rankConversations(
+        '"webhook"',
+        limit: 10,
+        candidates: 2,
+      );
+
+      expect(all.map((r) => r.sessionId), hasLength(3));
+      expect(
+        bounded.map((r) => r.sessionId),
+        unorderedEquals(['middle', 'newest']),
+      );
+    });
+
+    test('an append asks for the newest row by a seek, not a scan', () {
+      final plan = db
+          .query(
+            'EXPLAIN QUERY PLAN SELECT ordinal FROM conversation_turns '
+            'WHERE session_id = ? ORDER BY id DESC LIMIT 1;',
+            ['c1'],
+          )
+          .map((row) => row['detail'] as String)
+          .join(' | ');
+      expect(plan, contains('idx_conversation_turns_session'));
+      expect(plan, isNot(contains('TEMP B-TREE')));
     });
   });
 

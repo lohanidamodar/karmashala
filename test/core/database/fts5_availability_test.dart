@@ -33,4 +33,35 @@ void main() {
     );
     expect(hits, hasLength(1));
   });
+
+  // Session search ranks with bm25(), cuts excerpts with snippet() and repairs
+  // typos from an fts5vocab table. All three are part of the FTS5 module, but
+  // a build could still leave any of them out — so each is exercised here.
+  test('bm25 ranks, snippet marks and fts5vocab lists terms', () {
+    final db = sqlite3.openInMemory();
+    addTearDown(db.close);
+    db.execute("CREATE VIRTUAL TABLE probe USING fts5(text);");
+    db.execute(
+      "INSERT INTO probe (text) VALUES "
+      "('a long note that mentions stripe once among many other words'), "
+      "('the stripe webhook and the stripe secret, stripe again');",
+    );
+    final ranked = db.select(
+      "SELECT rowid, snippet(probe, 0, '[', ']', '…', 4) AS s "
+      "FROM probe WHERE probe MATCH 'stripe' ORDER BY bm25(probe);",
+    );
+    // Three mentions in nine words outrank one in eleven — the opposite of
+    // rowid order, so it is ORDER BY bm25 that put it first.
+    expect(ranked.first['rowid'], 2);
+    expect(ranked.first['s'], contains('[stripe]'));
+
+    db.execute(
+      "CREATE VIRTUAL TABLE probe_vocab USING fts5vocab(probe, 'row');",
+    );
+    final terms = db.select(
+      "SELECT term, doc FROM probe_vocab WHERE term >= 'st' AND term < 'su';",
+    );
+    expect(terms.single['term'], 'stripe');
+    expect(terms.single['doc'], 2);
+  });
 }

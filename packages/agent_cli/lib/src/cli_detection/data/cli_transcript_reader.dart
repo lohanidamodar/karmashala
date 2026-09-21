@@ -15,6 +15,7 @@ import './antigravity_transcript.dart';
 import './subagent_transcript.dart';
 
 part 'cli_transcript_tail.dart';
+part 'cli_transcript_turns.dart';
 
 /// The compaction the CLI ran immediately before the row that carries this.
 ///

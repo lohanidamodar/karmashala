@@ -44,4 +44,61 @@ void main() {
   test('non-latin text is searchable', () {
     expect(conversationMatchExpression('निर्णय'), '"निर्णय"*');
   });
+
+  group('the cascade', () {
+    test('several words: phrase, then all, then any', () {
+      final steps = conversationMatchCascade('stripe webhook');
+      expect(
+        [for (final s in steps) s.tier],
+        [
+          ConversationMatchTier.phrase,
+          ConversationMatchTier.allWords,
+          ConversationMatchTier.anyWord,
+        ],
+      );
+      expect(steps[0].expression, '"stripe webhook"*');
+      expect(steps[1].expression, '"stripe" "webhook"*');
+      expect(steps[2].expression, '"stripe" OR "webhook"*');
+    });
+
+    test('one word has no phrase and no any-word tier of its own', () {
+      // Both would be the all-words expression again, run for nothing.
+      final steps = conversationMatchCascade('webhook');
+      expect([for (final s in steps) s.tier], [ConversationMatchTier.allWords]);
+    });
+
+    test('a repair adds a tier and widens the any-word one', () {
+      final steps = conversationMatchCascade(
+        'stirpe webhook',
+        repairs: {'stirpe': 'stripe'},
+      );
+      expect(
+        [for (final s in steps) s.tier],
+        [
+          ConversationMatchTier.phrase,
+          ConversationMatchTier.allWords,
+          ConversationMatchTier.repaired,
+          ConversationMatchTier.anyWord,
+        ],
+      );
+      expect(steps[2].expression, '"stripe" "webhook"*');
+      expect(steps[3].expression, '"stirpe" OR "webhook" OR "stripe"*');
+    });
+
+    test('an operator is still a word in every tier', () {
+      for (final step in conversationMatchCascade('NEAR( OR "x')) {
+        // Nothing unquoted but the OR this function itself joins with.
+        final outside = step.expression
+            .replaceAll(RegExp(r'"(?:[^"]|"")*"\*?'), '')
+            .replaceAll(' OR ', '')
+            .trim();
+        expect(outside, isEmpty, reason: step.expression);
+      }
+    });
+
+    test('nothing to search for is no steps at all', () {
+      expect(conversationMatchCascade('x'), isEmpty);
+      expect(conversationMatchCascade('... ->'), isEmpty);
+    });
+  });
 }

@@ -87,6 +87,14 @@ const _tabWeight = 18.0;
 /// are one destination, and the titled row is the thing the user named.
 const _conversationWeight = 22.0;
 
+/// How much the best-ranked conversation is worth over the last one shown, so
+/// the search's own order survives the palette's re-sort — and the best still
+/// sits no higher than the least recent session row.
+const _conversationRankSpread = 2.0;
+
+/// Conversations one search puts in the palette.
+const int kQuickOpenConversationLimit = 20;
+
 /// How much the most recent session is worth over the oldest.
 const _recencySpread = 12.0;
 
@@ -734,7 +742,8 @@ class QuickOpenSources {
 
     final items = <QuickOpenItem>[];
     final seen = <String>{};
-    for (final hit in hits) {
+    for (var rank = 0; rank < hits.length; rank++) {
+      final hit = hits[rank];
       if (!seen.add(hit.sessionId)) continue;
       final native = sessionDao.getByExternalSessionId(hit.sessionId);
       final imported = native == null
@@ -744,7 +753,10 @@ class QuickOpenSources {
       if (openId == null) continue;
       final title = native?.title ?? imported!.displayTitle;
       final agent = registry.displayNameFor(hit.cli);
-      final matches = hits.where((h) => h.sessionId == hit.sessionId).length;
+      // A ranked page carries its own count; a raw turn list counts itself.
+      final matches = hit.matches > 1
+          ? hit.matches
+          : hits.where((h) => h.sessionId == hit.sessionId).length;
       items.add(
         QuickOpenItem(
           id: 'conversation/${hit.sessionId}',
@@ -763,7 +775,9 @@ class QuickOpenSources {
           // FTS5 has already decided this row matches; carrying the query as a
           // keyword stops the fuzzy scorer dropping an excerpt that lacks it.
           keywords: [query, agent],
-          weight: _conversationWeight,
+          weight:
+              _conversationWeight +
+              _conversationRankSpread * (1 - rank / hits.length),
           onSelect: () =>
               dismiss(() => _focusSession(openId, imported: native == null)),
         ),

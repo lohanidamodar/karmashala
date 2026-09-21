@@ -228,32 +228,21 @@ void main() {
       expect(db.statements - middle, plain);
     });
 
-    test('a row that carries thinking is indexed by its text alone', () async {
+    test('a row that carries thinking is indexed by its text alone', () {
       // The rule with no CLI in it: whatever fills the field, the index takes
-      // `text`. Read through a stubbed reader so this cannot be satisfied by a
-      // parser that merely declines to fill it.
-      final stubbed = ConversationIndexer(
-        dao: dao,
-        clock: _FixedClock(DateTime.utc(2026, 9, 9, 12)),
-        read: (_, _) async => const [
-          TranscriptMessage(
-            role: 'agent',
-            text: 'the cake is done',
-            thinking: 'frangipane, or almond paste',
-          ),
-        ],
-        stat: (_) async => (modifiedAt: DateTime.utc(2026, 9, 9), size: 1),
-      );
+      // `text`. Asked of the filter the reader applies, with a row a parser
+      // has already filled, so this cannot be satisfied by a parser that merely
+      // declines to fill it.
+      final turns = transcriptTurnsOf(const [
+        TranscriptMessage(
+          role: 'agent',
+          text: 'the cake is done',
+          thinking: 'frangipane, or almond paste',
+        ),
+      ], kIndexedTranscriptRoles);
 
-      await stubbed.indexConversation(
-        conversationId: 'c-stub',
-        cli: AgentIds.claudeCode,
-        filePath: p.join(dir.path, 'anything.jsonl'),
-      );
-
-      expect(dao.search('frangipane'), isEmpty);
-      expect(dao.search('cake'), hasLength(1));
-      expect(dao.turnCountFor('c-stub'), 1);
+      expect(turns.single.text, 'the cake is done');
+      expect(turns.single.text, isNot(contains('frangipane')));
     });
   });
 }

@@ -98,6 +98,19 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
             ref.read(selectedRepositoryIdProvider),
           );
       setState(_rebuildItems);
+      _catchUpConversations();
+    });
+  }
+
+  /// Reads what the running sessions appended since their last index, then
+  /// searches again if that found anything — so today's turns are findable.
+  void _catchUpConversations() {
+    ref.read(sessionSearchServiceProvider).catchUp().then((changed) {
+      if (!mounted || changed == 0) return;
+      setState(() {
+        _searchConversations(force: true);
+        _rerank();
+      });
     });
   }
 
@@ -144,23 +157,24 @@ class _QuickOpenState extends ConsumerState<QuickOpen> {
     _rerank();
   }
 
-  /// Runs the conversation search for the query as typed: one indexed FTS5
-  /// statement, and no debounce — lagging the list would read as a bug.
-  void _searchConversations() {
+  /// Runs the conversation search for the query as typed: a ranked page from
+  /// the index, and no debounce — lagging the list would read as a bug.
+  void _searchConversations({bool force = false}) {
     final query = _query;
     final only = query.only;
     final text = only == null || only == QuickOpenGroup.conversations
         ? query.text
         : '';
-    if (text == _conversationQuery) return;
+    if (text == _conversationQuery && !force) return;
     _conversationQuery = text;
     if (text.isEmpty) {
       _conversationItems = const [];
       return;
     }
     final List<ConversationHit> hits = ref
-        .read(conversationIndexDaoProvider)
-        .search(text);
+        .read(sessionSearchServiceProvider)
+        .search(text, limit: kQuickOpenConversationLimit)
+        .hits;
     _conversationItems = _sources().conversations(hits, text);
   }
 

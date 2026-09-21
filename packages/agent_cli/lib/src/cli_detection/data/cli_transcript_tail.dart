@@ -178,15 +178,24 @@ Future<_TailStep> _advance(
 }
 
 /// Whether [path] still begins with what [state] parsed.
-Future<bool> _stillPrefixOf(String path, _TailState state, int length) async {
-  if (length < state.end) return false;
+Future<bool> _stillPrefixOf(String path, _TailState state, int length) =>
+    _isPrefixAt(path, state.head, state.anchor, state.end, length);
+
+/// Whether [path], [length] bytes long, still begins with [head] and still
+/// holds [anchor] ending at [end].
+Future<bool> _isPrefixAt(
+  String path,
+  Uint8List head,
+  Uint8List anchor,
+  int end,
+  int length,
+) async {
+  if (length < end) return false;
   final file = await File(path).open();
   try {
-    if (!_sameBytes(await file.read(state.head.length), state.head)) {
-      return false;
-    }
-    await file.setPosition(state.end - state.anchor.length);
-    return _sameBytes(await file.read(state.anchor.length), state.anchor);
+    if (!_sameBytes(await file.read(head.length), head)) return false;
+    await file.setPosition(end - anchor.length);
+    return _sameBytes(await file.read(anchor.length), anchor);
   } finally {
     await file.close();
   }

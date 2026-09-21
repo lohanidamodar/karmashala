@@ -253,7 +253,7 @@ void main() {
       expect(db.statements.single, startsWith('SELECT'));
     });
 
-    test('a transcript that grew is re-read, and the rows replace', () async {
+    test('a transcript that grew adds its new rows to the old', () async {
       final first = _line({
         'type': 'user',
         'message': {'role': 'user', 'content': 'the first thing'},
@@ -276,6 +276,8 @@ void main() {
 
       expect(dao.turnCountFor('c1'), 2);
       expect(dao.search('second'), hasLength(1));
+      expect(dao.search('first'), hasLength(1), reason: 'kept, not doubled');
+      expect(indexer.appends, 1);
     });
 
     test('a want is one map entry until it is drained', () async {
@@ -415,7 +417,8 @@ void main() {
       indexer = ConversationIndexer(
         dao: dao,
         clock: clock,
-        read: (path, cli) => Future.error(const FileSystemException('locked')),
+        read: (path, cli, {from}) =>
+            Future.error(const FileSystemException('locked')),
       );
 
       expect(
@@ -445,11 +448,155 @@ void main() {
       await index(path);
       await index(path);
 
-      // Both passes read the file: an unknown watermark is not a match, so a
-      // transcript we cannot measure is re-read rather than assumed unchanged.
-      expect(indexer.parses, 2);
+      // Both passes open the file: an unknown watermark is not a match, so a
+      // transcript we cannot measure is looked at rather than assumed
+      // unchanged. The second only from where the first stopped, though.
+      expect(indexer.parses, 1);
+      expect(indexer.appends, 1);
       expect(indexer.skips, 0);
       expect(dao.search('unstattable'), hasLength(1));
+    });
+  });
+
+  group('incremental', () {
+    String userLine(String text) => _line({
+      'type': 'user',
+      'message': {'role': 'user', 'content': text},
+    });
+    String toolLines(int i) =>
+        _line({
+          'type': 'assistant',
+          'message': {
+            'content': [
+              {
+                'type': 'tool_use',
+                'id': 't$i',
+                'name': 'Bash',
+                'input': {'command': 'cat big-$i.log'},
+              },
+            ],
+          },
+        }) +
+        _line({
+          'type': 'user',
+          'message': {
+            'content': [
+              {
+                'type': 'tool_result',
+                'tool_use_id': 't$i',
+                'content': 'x' * 4000,
+              },
+            ],
+          },
+        });
+
+    test('a grown transcript is read only past where it stopped', () async {
+      final history = [
+        for (var i = 0; i < 50; i++) userLine('turn $i') + toolLines(i),
+      ].join();
+      final path = claudeTranscript('c1.jsonl', [history]);
+      await index(path);
+      final before = indexer.bytesRead;
+      expect(before, File(path).lengthSync());
+
+      final appended = userLine('the stripe webhook decision');
+      File(path).writeAsStringSync(appended, mode: FileMode.append);
+      expect(await index(path), isTrue);
+
+      // The whole claim in one number: the second read cost the append, not
+      // the 200 KB of history before it.
+      expect(indexer.bytesRead - before, utf8.encode(appended).length);
+      expect(indexer.parses, 1);
+      expect(indexer.appends, 1);
+      expect(dao.search('stripe').single.ordinal, 100);
+      expect(dao.turnCountFor('c1'), 51);
+    });
+
+    test('the resume point outlives the indexer that wrote it', () async {
+      final path = claudeTranscript('c1.jsonl', [userLine('before restart')]);
+      await index(path);
+      File(
+        path,
+      ).writeAsStringSync(userLine('after restart'), mode: FileMode.append);
+
+      // A fresh indexer on the same database: what an app restart is.
+      final restarted = ConversationIndexer(dao: dao, clock: clock);
+      await restarted.indexConversation(
+        conversationId: 'c1',
+        cli: AgentIds.claudeCode,
+        filePath: path,
+      );
+
+      expect(restarted.parses, 0);
+      expect(restarted.appends, 1);
+      expect(dao.turnCountFor('c1'), 2);
+    });
+
+    test('a rewritten transcript is read whole and replaces', () async {
+      final path = claudeTranscript('c1.jsonl', [
+        userLine('the abandoned plan'),
+        userLine('more of it'),
+      ]);
+      await index(path);
+
+      // Longer than before and different from its first byte: only the
+      // identifying bytes can tell this from an append.
+      File(path).writeAsStringSync(
+        userLine('a completely different conversation') +
+            userLine('with its own history') +
+            userLine('and a third turn'),
+      );
+      expect(await index(path), isTrue);
+
+      expect(indexer.parses, 2);
+      expect(indexer.appends, 0);
+      expect(dao.search('abandoned'), isEmpty);
+      expect(dao.turnCountFor('c1'), 3);
+    });
+
+    test('a conversation read from a new path starts over', () async {
+      final old = claudeTranscript('old.jsonl', [
+        userLine('one'),
+        userLine('two'),
+      ]);
+      await index(old);
+      final moved = claudeTranscript('moved.jsonl', [
+        userLine('one'),
+        userLine('two'),
+        userLine('three'),
+      ]);
+
+      await index(moved);
+
+      // An offset into one file says nothing about another, even one that
+      // happens to begin the same way.
+      expect(indexer.parses, 2);
+      expect(indexer.appends, 0);
+      expect(dao.turnCountFor('c1'), 3);
+    });
+
+    test('each turn keeps the time its line was written', () async {
+      final path = claudeTranscript('c1.jsonl', [
+        _line({
+          'type': 'user',
+          'timestamp': '2026-09-20T08:30:00Z',
+          'message': {'role': 'user', 'content': 'dated turn'},
+        }),
+      ]);
+      await index(path);
+
+      final hits = dao.rankConversations(
+        '"dated"',
+        filter: SessionSearchFilter(after: DateTime.utc(2026, 9, 20)),
+        limit: 5,
+      );
+      // No session row names c1, so the rank query drops it; the stored time
+      // is read straight off the table instead.
+      expect(hits, isEmpty);
+      final at = db.query(
+        "SELECT at FROM conversation_turns WHERE session_id = 'c1';",
+      );
+      expect(at.single['at'], '2026-09-20T08:30:00.000Z');
     });
   });
 }

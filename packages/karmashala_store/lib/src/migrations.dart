@@ -64,6 +64,7 @@ final Map<int, MigrationStep> schemaMigrations = {
   53: _migrateToV53,
   54: _migrateToV54,
   55: _migrateToV55,
+  56: _migrateToV56,
 };
 
 /// Was this pane running when its row was written? `DEFAULT 0` is the honest
@@ -1407,4 +1408,67 @@ void _migrateToV55(Database db) {
   add('consecutive_failures', 'INTEGER NOT NULL DEFAULT 0');
   add('disabled_reason', 'TEXT');
   add('max_runtime_seconds', 'INTEGER');
+}
+
+/// Session search, second pass: a stored resume point per transcript so a
+/// re-index reads only appended bytes, each turn's own time for date filters,
+/// a prefix index so a half-typed word is one lookup, and a vocabulary view of
+/// the FTS index for typo repair.
+///
+/// The columns are metadata-only — `ADD COLUMN` with no default rewrites no
+/// rows — and old rows keep a null resume point and `at` until their
+/// transcript next moves and is read whole once. The one step that costs is
+/// the prefix index: FTS5 takes `prefix=` only at creation, so the index is
+/// recreated and rebuilt from `conversation_turns`, inside this migration's
+/// transaction. It reads no transcript, and runs once: a table that already
+/// has the option is left alone.
+void _migrateToV56(Database db) {
+  Set<String> columnsOf(String table) => db
+      .select('PRAGMA table_info($table);')
+      .map((row) => row['name'] as String)
+      .toSet();
+
+  final state = columnsOf('conversation_index_state');
+  void addState(String name, String type) {
+    if (state.contains(name)) return;
+    db.execute('ALTER TABLE conversation_index_state ADD COLUMN $name $type;');
+  }
+
+  addState('read_offset', 'INTEGER');
+  addState('read_rows', 'INTEGER');
+  addState('read_anchor', 'BLOB');
+  addState('read_head', 'BLOB');
+
+  if (!columnsOf('conversation_turns').contains('at')) {
+    db.execute('ALTER TABLE conversation_turns ADD COLUMN at TEXT;');
+  }
+
+  // Without it a last word of two or three letters expands to every term that
+  // starts with them, and FTS5 merges all their doclists before any LIMIT —
+  // measured at over half a second for one keystroke on 45,000 turns.
+  final fts = db.select(
+    "SELECT sql FROM sqlite_master WHERE name = 'conversation_turns_fts';",
+  );
+  final ftsSql = fts.isEmpty ? '' : fts.first['sql'] as String? ?? '';
+  if (!ftsSql.contains('prefix')) {
+    db.execute('DROP TABLE IF EXISTS conversation_turns_vocab;');
+    db.execute('DROP TABLE IF EXISTS conversation_turns_fts;');
+    db.execute('''
+      CREATE VIRTUAL TABLE conversation_turns_fts USING fts5(
+        text,
+        content = 'conversation_turns',
+        content_rowid = 'id',
+        prefix = '2 3'
+      );
+    ''');
+    db.execute(
+      'INSERT INTO conversation_turns_fts (conversation_turns_fts) '
+      "VALUES ('rebuild');",
+    );
+  }
+
+  db.execute(
+    'CREATE VIRTUAL TABLE IF NOT EXISTS conversation_turns_vocab '
+    "USING fts5vocab(conversation_turns_fts, 'row');",
+  );
 }

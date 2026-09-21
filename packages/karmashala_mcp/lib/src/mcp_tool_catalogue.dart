@@ -92,6 +92,8 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   // Sessions.
   'list_sessions': McpToolAnnotations.read,
   'list_agents': McpToolAnnotations.read,
+  // Brings the search index up to date first, which is a cache, not the world.
+  'session_search': McpToolAnnotations.read,
   'get_usage': McpToolAnnotations.read,
   // Lands in a pane, and `openAgentTab` makes that tab active and focused.
   'open_new_session': McpToolAnnotations(movesAttention: true),
@@ -482,6 +484,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   'list_agents': McpToolListing(
     McpToolCategory.sessions,
     'The installed agents a new session can be started with.',
+  ),
+  'session_search': McpToolListing(
+    McpToolCategory.sessions,
+    'Search what was said in every conversation; a session per result.',
   ),
   'open_new_session': McpToolListing(
     McpToolCategory.sessions,

@@ -28,6 +28,7 @@ import 'antigravity_attribution_service.dart';
 import 'cli_detection_service.dart';
 import 'conversation_index_backfill.dart';
 import 'conversation_indexer.dart';
+import 'session_search.dart';
 import 'detected_project_merger.dart';
 import 'launched_session_attribution_service.dart';
 import 'project_import_service.dart';
@@ -53,6 +54,16 @@ final conversationIndexerProvider = Provider<ConversationIndexer>(
   (ref) => ConversationIndexer(
     dao: ref.watch(conversationIndexDaoProvider),
     clock: ref.watch(clockProvider),
+  ),
+);
+
+/// Full-text search over every conversation — the service quick open and the
+/// `session_search` tool both call, and the one a command panel should too.
+final sessionSearchServiceProvider = Provider<SessionSearchService>(
+  (ref) => SessionSearchService(
+    dao: ref.watch(conversationIndexDaoProvider),
+    clock: ref.watch(clockProvider),
+    indexer: ref.watch(conversationIndexerProvider),
   ),
 );
 

@@ -247,6 +247,28 @@ void main() {
     expect(find.text('CONVERSATIONS'), findsNothing);
   });
 
+  testWidgets('conversations are listed in the order the search ranked them', (
+    tester,
+  ) async {
+    nativeSession(id: 's1', title: 'Aardvark ramble', conversation: 'conv-1');
+    nativeSession(id: 's2', title: 'Zebra retries', conversation: 'conv-2');
+    said(
+      'conv-1',
+      'a long ramble that touches the webhook once among many other words '
+          'about deployment, caching and the release train',
+    );
+    said('conv-2', 'webhook webhook: the webhook retries');
+    await open(tester);
+
+    await type(tester, '?webhook');
+
+    // The titles run the other way alphabetically, and the palette breaks a
+    // tie on the title — so only the search's rank can put this one first.
+    final strong = tester.getTopLeft(find.text('Zebra retries')).dy;
+    final weak = tester.getTopLeft(find.text('Aardvark ramble')).dy;
+    expect(strong, lessThan(weak));
+  });
+
   testWidgets('the ? sigil searches conversations and nothing else', (
     tester,
   ) async {
@@ -272,18 +294,21 @@ void main() {
     await type(tester, 'c');
     expect(db.searches, 0);
 
+    // One full-text statement: the ranking. The excerpt is cut from the turn
+    // by its key, and a single word the index holds needs no looser tier.
     await type(tester, 'caching');
-    expect(db.searches, 1);
+    final perSearch = db.searches;
+    expect(perSearch, 1);
 
     // Adding the group's own sigil narrows the *list*; the query behind it has
     // not changed, so nothing is asked again.
     await type(tester, '?caching');
-    expect(db.searches, 1);
+    expect(db.searches, perSearch);
 
     // And a sigil for another group means this group is not being asked at
     // all.
     await type(tester, '>caching');
-    expect(db.searches, 1);
+    expect(db.searches, perSearch);
     expect(find.text('CONVERSATIONS'), findsNothing);
   });
 }

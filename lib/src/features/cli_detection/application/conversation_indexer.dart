@@ -11,22 +11,42 @@ const Set<String> kIndexedTranscriptRoles = {'user', 'agent'};
 /// A transcript's mtime and length, or nulls when it could not be measured.
 typedef TranscriptWatermark = ({DateTime? modifiedAt, int? size});
 
-/// Reads a conversation's transcript. `readCliTranscript` in production.
+/// Reads a conversation's indexable turns, from [from] when it can resume.
+/// `readTranscriptTurns` in production.
 typedef TranscriptReader =
-    Future<List<TranscriptMessage>> Function(String filePath, String cli);
+    Future<TranscriptTurnsRead> Function(
+      String filePath,
+      String cli, {
+      TranscriptResumePoint? from,
+    });
 
 /// Measures a transcript without reading it.
 typedef TranscriptStat = Future<TranscriptWatermark> Function(String filePath);
 
+Future<TranscriptTurnsRead> _readIndexable(
+  String filePath,
+  String cli, {
+  TranscriptResumePoint? from,
+}) => readTranscriptTurns(
+  filePath,
+  cli,
+  roles: kIndexedTranscriptRoles,
+  from: from,
+);
+
 /// Keeps the conversation index in step with the transcripts on disk, on the
 /// app's existing triggers. Nothing polls: the index is as of its last trigger.
+///
+/// A transcript that grew is read from where the last read stopped, never
+/// again from the start; only a file that shrank or changed before that point
+/// is read whole — the rule `CliTranscriptTail` follows for the chat view.
 class ConversationIndexer {
   ConversationIndexer({
     required this.dao,
     required this.clock,
     TranscriptReader? read,
     TranscriptStat? stat,
-  }) : _read = read ?? readCliTranscript,
+  }) : _read = read ?? _readIndexable,
        _stat = stat ?? statTranscript;
 
   final ConversationIndexDao dao;
@@ -37,13 +57,19 @@ class ConversationIndexer {
   /// Conversations something has asked for and that have not been read yet.
   final Map<String, _Want> _wanted = {};
 
-  /// Transcripts actually parsed. The cost claim.
+  /// Transcripts read from the start. The cost claim.
   int parses = 0;
+
+  /// Transcripts read from a resume point: only their appended bytes.
+  int appends = 0;
+
+  /// Transcript bytes read, whole and appended together.
+  int bytesRead = 0;
 
   /// Wants the watermark answered without opening the file.
   int skips = 0;
 
-  /// Conversations whose rows were replaced.
+  /// Conversations whose rows were replaced or extended.
   int writes = 0;
 
   /// Whether [drain] has anything to do. False is the idle workspace.
@@ -103,8 +129,9 @@ class ConversationIndexer {
     return changed;
   }
 
-  /// Reads one conversation's transcript into the index if it has moved. A
-  /// parse that finds nothing keeps the old rows: it cannot be told from drift.
+  /// Brings one conversation's rows up to date with its transcript, reading
+  /// only what it appended when it can. A whole read that finds nothing keeps
+  /// the old rows: it cannot be told from format drift.
   Future<bool> indexConversation({
     required String conversationId,
     required String cli,
@@ -119,30 +146,53 @@ class ConversationIndexer {
       return false;
     }
 
-    List<TranscriptMessage> messages;
+    // Only the same file: a conversation that moved to another path is a
+    // different file, and an offset into one says nothing about the other.
+    final from = state != null && state.filePath == filePath
+        ? state.resumePoint
+        : null;
+    TranscriptTurnsRead read;
     try {
-      messages = await _read(filePath, cli);
+      read = await _read(filePath, cli, from: from);
     } on Object {
-      // `readCliTranscript` swallows malformed lines itself; this catches the
-      // layer below — an unopenable path, e.g. a vanished `\\wsl.localhost`.
-      messages = const [];
+      // The reader swallows malformed lines itself; this catches the layer
+      // below — an unopenable path, e.g. a vanished `\\wsl.localhost`.
+      read = TranscriptTurnsRead.nothing;
     }
-    parses++;
-
-    final turns = <ConversationTurn>[];
-    for (var i = 0; i < messages.length; i++) {
-      final message = messages[i];
-      if (!kIndexedTranscriptRoles.contains(message.role)) continue;
-      if (message.text.isEmpty) continue;
-      // The ordinal is the position as parsed, tool rows counted, so it lines
-      // up with the chat view. A hint, never a key.
-      turns.add(
-        ConversationTurn(ordinal: i, role: message.role, text: message.text),
-      );
-    }
-
+    bytesRead += read.bytesRead;
+    final turns = [
+      for (final turn in read.turns)
+        ConversationTurn(
+          ordinal: turn.ordinal,
+          role: turn.role,
+          text: turn.text,
+          at: turn.at,
+        ),
+    ];
     final now = clock.nowUtc();
+
+    if (read.appended && from != null && state != null) {
+      appends++;
+      dao.appendTurns(
+        sessionId: conversationId,
+        cli: cli,
+        filePath: filePath,
+        turns: turns,
+        fromOrdinal: from.rows,
+        heldTurns: state.turns,
+        indexedAt: now,
+        resumePoint: read.resumePoint!,
+        modifiedAt: watermark.modifiedAt,
+        size: watermark.size,
+      );
+      if (turns.isEmpty) return false;
+      writes++;
+      return true;
+    }
+
+    parses++;
     if (turns.isEmpty && (state?.turns ?? 0) > 0) {
+      // No resume point either: the rows kept were not read up to it.
       dao.keepTurns(
         sessionId: conversationId,
         cli: cli,
@@ -162,6 +212,7 @@ class ConversationIndexer {
       indexedAt: now,
       modifiedAt: watermark.modifiedAt,
       size: watermark.size,
+      resumePoint: read.resumePoint,
     );
     writes++;
     return true;

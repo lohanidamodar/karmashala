@@ -115,4 +115,140 @@ void main() {
     expect(row['size'], isNull);
     expect(row['turns'], 4);
   });
+
+  group('v56', () {
+    Database withV55Rows() {
+      final db = _migratedTo(55);
+      db.execute(
+        'INSERT INTO conversation_turns (session_id, cli, ordinal, role, text) '
+        "VALUES ('c1', 'claudeCode', 3, 'user', 'the stripe webhook secret');",
+      );
+      db.execute(
+        'INSERT INTO conversation_index_state '
+        '(session_id, cli, file_path, modified_at, size, turns, indexed_at) '
+        "VALUES ('c1', 'claudeCode', 'C:/s/c1.jsonl', "
+        "'2026-09-20T00:00:00.000Z', 900, 1, '2026-09-20T00:00:00.000Z');",
+      );
+      return db;
+    }
+
+    Set<String> columns(Database db, String table) => db
+        .select('PRAGMA table_info($table);')
+        .map((row) => row['name'] as String)
+        .toSet();
+
+    test('adds the resume point and the turn time, keeping every row', () {
+      final db = withV55Rows();
+      addTearDown(db.close);
+
+      schemaMigrations[56]!(db);
+
+      expect(
+        columns(db, 'conversation_index_state'),
+        containsAll(['read_offset', 'read_rows', 'read_anchor', 'read_head']),
+      );
+      expect(columns(db, 'conversation_turns'), contains('at'));
+      final state = db.select('SELECT * FROM conversation_index_state;').single;
+      // An old row has no resume point: its next change is read whole once,
+      // which is what fills one in. Never a guessed offset.
+      expect(state['read_offset'], isNull);
+      expect(state['size'], 900);
+      final hits = db.select(
+        "SELECT rowid FROM conversation_turns_fts WHERE conversation_turns_fts "
+        "MATCH 'webhook';",
+      );
+      expect(hits, hasLength(1), reason: 'the index still answers');
+    });
+
+    test('the vocabulary lists what the index already held', () {
+      final db = withV55Rows();
+      addTearDown(db.close);
+
+      schemaMigrations[56]!(db);
+
+      final terms = db
+          .select('SELECT term FROM conversation_turns_vocab;')
+          .map((row) => row['term'] as String);
+      expect(terms, containsAll(['stripe', 'webhook', 'secret']));
+    });
+
+    test('is idempotent', () {
+      final db = withV55Rows();
+      addTearDown(db.close);
+
+      schemaMigrations[56]!(db);
+      final built = db.select('PRAGMA page_count;').first.values.first;
+      schemaMigrations[56]!(db);
+
+      expect(db.select('SELECT * FROM conversation_turns;'), hasLength(1));
+      // The second run found the prefix option and rebuilt nothing.
+      expect(db.select('PRAGMA page_count;').first.values.first, built);
+      final vocab = db.select(
+        "SELECT name FROM sqlite_master WHERE name = 'conversation_turns_vocab';",
+      );
+      expect(vocab, hasLength(1));
+    });
+
+    test('rebuilds the index with prefixes, and every row still answers', () {
+      final db = _migratedTo(55);
+      addTearDown(db.close);
+      db.execute('BEGIN;');
+      final insert = db.prepare(
+        'INSERT INTO conversation_turns (session_id, cli, ordinal, role, text) '
+        'VALUES (?, ?, ?, ?, ?);',
+      );
+      for (var i = 0; i < 20000; i++) {
+        insert.execute(['c${i % 100}', 'claudeCode', i, 'user', 'turn $i']);
+      }
+      insert.close();
+      db.execute('COMMIT;');
+      schemaMigrations[56]!(db);
+
+      final sql =
+          db
+                  .select(
+                    'SELECT sql FROM sqlite_master '
+                    "WHERE name = 'conversation_turns_fts';",
+                  )
+                  .single['sql']
+              as String;
+      expect(sql, contains("prefix = '2 3'"));
+      expect(
+        db.select('SELECT COUNT(*) AS n FROM conversation_turns;').single['n'],
+        20000,
+      );
+      // Rebuilt from the table, not emptied: every turn is found again, by a
+      // whole word and by the two-letter prefix the new index serves.
+      expect(
+        db
+            .select(
+              "SELECT COUNT(*) AS n FROM conversation_turns_fts "
+              "WHERE conversation_turns_fts MATCH 'turn';",
+            )
+            .single['n'],
+        20000,
+      );
+      expect(
+        db
+            .select(
+              "SELECT COUNT(*) AS n FROM conversation_turns_fts "
+              "WHERE conversation_turns_fts MATCH 'tu*';",
+            )
+            .single['n'],
+        20000,
+      );
+      // And the triggers still feed it: a turn written after the swap is found.
+      db.execute(
+        'INSERT INTO conversation_turns (session_id, cli, ordinal, role, text) '
+        "VALUES ('c1', 'claudeCode', 99999, 'user', 'afterwards');",
+      );
+      expect(
+        db.select(
+          "SELECT rowid FROM conversation_turns_fts "
+          "WHERE conversation_turns_fts MATCH 'afterwards';",
+        ),
+        hasLength(1),
+      );
+    });
+  });
 }

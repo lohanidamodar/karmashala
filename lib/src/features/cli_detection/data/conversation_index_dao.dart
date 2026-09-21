@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/read.dart';
 
@@ -7,6 +9,7 @@ class ConversationTurn {
     required this.ordinal,
     required this.role,
     required this.text,
+    this.at,
   });
 
   /// The turn's position in the transcript as parsed, tool rows included. A
@@ -18,6 +21,10 @@ class ConversationTurn {
   final String role;
 
   final String text;
+
+  /// When the CLI wrote it, off the line's own timestamp. Null when the line
+  /// carried none, and for rows indexed before v56.
+  final DateTime? at;
 }
 
 /// What the index knows about one conversation, and when it knew it.
@@ -30,6 +37,7 @@ class ConversationIndexState {
     required this.indexedAt,
     this.modifiedAt,
     this.size,
+    this.resumePoint,
   });
 
   final String sessionId;
@@ -46,6 +54,10 @@ class ConversationIndexState {
   final int turns;
 
   final DateTime indexedAt;
+
+  /// Where the last read stopped, so the next reads only what was appended.
+  /// Null before v56 and after a read that could not reach a record boundary.
+  final TranscriptResumePoint? resumePoint;
 
   /// Whether a transcript at [modifiedAt]/[size] is the one already read.
   bool matches({DateTime? modifiedAt, int? size}) =>
@@ -66,6 +78,9 @@ class ConversationHit {
     required this.role,
     required this.excerpt,
     this.indexedAt,
+    this.at,
+    this.matches = 1,
+    this.tier,
   });
 
   final String sessionId;
@@ -79,15 +94,91 @@ class ConversationHit {
   /// When this conversation was last read off disk — the age of the reading,
   /// which the surface showing a hit has to be able to say (CLAUDE.md §19).
   final DateTime? indexedAt;
+
+  /// When the matching turn was said, where the transcript recorded it.
+  final DateTime? at;
+
+  /// Turns in this conversation that matched, the one shown included.
+  final int matches;
+
+  /// How strictly it matched. Null from [ConversationIndexDao.search], which
+  /// runs one expression.
+  final ConversationMatchTier? tier;
 }
 
+/// What a search may be narrowed to. Every field is optional and they AND.
+/// Structured on purpose: parsing `repo:` or `before:` out of typed text is
+/// the command palette's job, not the index's.
+class SessionSearchFilter {
+  const SessionSearchFilter({
+    this.conversationId,
+    this.cli,
+    this.projectId,
+    this.repositoryId,
+    this.after,
+    this.before,
+  });
+
+  /// One conversation — the CLI's own id — rather than all of them.
+  final String? conversationId;
+
+  /// One agent, by id (`claudeCode`, `codex`, …).
+  final String? cli;
+
+  /// Conversations a session or imported record files under this project or
+  /// repository.
+  final String? projectId;
+  final String? repositoryId;
+
+  /// Turns said at or after [after] and before [before]. A turn with no
+  /// recorded time never passes a date bound: unknown is not in range.
+  final DateTime? after;
+  final DateTime? before;
+
+  bool get isEmpty =>
+      conversationId == null &&
+      cli == null &&
+      projectId == null &&
+      repositoryId == null &&
+      after == null &&
+      before == null;
+
+  /// A stable spelling, for telling one search's cursor from another's.
+  String get fingerprint => [
+    conversationId,
+    cli,
+    projectId,
+    repositoryId,
+    after == null ? null : isoFromDate(after!),
+    before == null ? null : isoFromDate(before!),
+  ].map((v) => v ?? '').join('|');
+}
+
+/// One conversation's place in a ranked search, before its excerpt is cut.
+typedef RankedConversation = ({
+  String sessionId,
+  String cli,
+  int bestTurnId,
+  double score,
+  int matches,
+  DateTime? indexedAt,
+});
+
 /// How many turns go into one `INSERT`. `AppDatabase.execute` prepares per
-/// call; five columns a row caps this at 6 553 variables per statement.
+/// call; six columns a row caps this at 5 461 variables per statement.
 const int kConversationInsertBatch = 128;
 
-/// How many matching turns one search reads. Unranked: `ORDER BY rank` is one
-/// clause away, and no weighting is worth defending on day one.
+/// How many matching turns one [ConversationIndexDao.search] reads.
 const int kConversationSearchLimit = 50;
+
+/// The most matching turns one ranking scores, newest first. BM25 is computed
+/// per match, so a word said in every turn would otherwise cost a scan of the
+/// whole index on every keystroke; past this a query ranks its newest matches.
+const int kConversationRankCandidates = 2000;
+
+/// The `app_metadata` key counting writes to the index. A cursor carries the
+/// value it was cut at, so a write in between rejects the page it would tear.
+const String kConversationIndexGenerationKey = 'conversation_index_generation';
 
 /// Data-access for the conversation index. Keyed by the CLI's own conversation
 /// id, not our row id: a conversation moves between tables, the index must not.
@@ -110,6 +201,24 @@ class ConversationIndexDao {
     return rows.isEmpty ? null : _stateFromRow(rows.first);
   }
 
+  /// Bumped by every write that changes what a search can find.
+  int get generation {
+    statements++;
+    final value = _db.readMetadata(kConversationIndexGenerationKey);
+    return value == null ? 0 : int.tryParse(value) ?? 0;
+  }
+
+  void _bumpGeneration() {
+    statements++;
+    _db.execute(
+      'INSERT INTO app_metadata (key, value, updated_at) '
+      "VALUES (?, '1', ?) ON CONFLICT(key) DO UPDATE SET "
+      'value = CAST(CAST(value AS INTEGER) + 1 AS TEXT), '
+      'updated_at = excluded.updated_at;',
+      [kConversationIndexGenerationKey, isoFromDate(DateTime.now())],
+    );
+  }
+
   /// Replaces every indexed turn of [sessionId] with [turns]. One transaction:
   /// a half-written index cannot be told from a conversation that says less.
   void replaceTurns({
@@ -120,28 +229,14 @@ class ConversationIndexDao {
     required DateTime indexedAt,
     DateTime? modifiedAt,
     int? size,
+    TranscriptResumePoint? resumePoint,
   }) {
     _db.transaction(() {
       statements++;
       _db.execute('DELETE FROM conversation_turns WHERE session_id = ?;', [
         sessionId,
       ]);
-      const batch = kConversationInsertBatch;
-      for (var start = 0; start < turns.length; start += batch) {
-        final end = (start + batch).clamp(0, turns.length);
-        final chunk = turns.sublist(start, end);
-        final values = List.filled(chunk.length, '(?, ?, ?, ?, ?)').join(', ');
-        final params = <Object?>[];
-        for (final turn in chunk) {
-          params.addAll([sessionId, cli, turn.ordinal, turn.role, turn.text]);
-        }
-        statements++;
-        _db.execute(
-          'INSERT INTO conversation_turns '
-          '(session_id, cli, ordinal, role, text) VALUES $values;',
-          params,
-        );
-      }
+      _insert(sessionId, cli, turns);
       _writeState(
         sessionId: sessionId,
         cli: cli,
@@ -150,8 +245,95 @@ class ConversationIndexDao {
         indexedAt: indexedAt,
         modifiedAt: modifiedAt,
         size: size,
+        resumePoint: resumePoint,
       );
+      _bumpGeneration();
     });
+  }
+
+  /// Adds [turns] after what [sessionId] already holds — the append-only case,
+  /// where a transcript grew and nothing before the resume point changed.
+  /// Rows at [fromOrdinal] and past are replaced: they were read from a last
+  /// record that had no newline yet, and [turns] reads it again.
+  void appendTurns({
+    required String sessionId,
+    required String cli,
+    required String filePath,
+    required List<ConversationTurn> turns,
+    required int fromOrdinal,
+    required int heldTurns,
+    required DateTime indexedAt,
+    required TranscriptResumePoint resumePoint,
+    DateTime? modifiedAt,
+    int? size,
+  }) {
+    _db.transaction(() {
+      // Rows are inserted in ordinal order, so a provisional tail can only be
+      // the newest row: one seek down the session index answers whether there
+      // is one, where a filter on ordinal would read the whole conversation.
+      statements++;
+      final newest = _db.query(
+        'SELECT ordinal FROM conversation_turns WHERE session_id = ? '
+        'ORDER BY id DESC LIMIT 1;',
+        [sessionId],
+      );
+      var removed = 0;
+      if (newest.isNotEmpty &&
+          (newest.first['ordinal'] as int) >= fromOrdinal) {
+        statements++;
+        removed =
+            _db.query(
+                  'SELECT COUNT(*) AS n FROM conversation_turns '
+                  'WHERE session_id = ? AND ordinal >= ?;',
+                  [sessionId, fromOrdinal],
+                ).first['n']
+                as int;
+        statements++;
+        _db.execute(
+          'DELETE FROM conversation_turns '
+          'WHERE session_id = ? AND ordinal >= ?;',
+          [sessionId, fromOrdinal],
+        );
+      }
+      _insert(sessionId, cli, turns);
+      _writeState(
+        sessionId: sessionId,
+        cli: cli,
+        filePath: filePath,
+        turns: heldTurns - removed + turns.length,
+        indexedAt: indexedAt,
+        modifiedAt: modifiedAt,
+        size: size,
+        resumePoint: resumePoint,
+      );
+      if (turns.isNotEmpty || removed > 0) _bumpGeneration();
+    });
+  }
+
+  void _insert(String sessionId, String cli, List<ConversationTurn> turns) {
+    const batch = kConversationInsertBatch;
+    for (var start = 0; start < turns.length; start += batch) {
+      final end = (start + batch).clamp(0, turns.length);
+      final chunk = turns.sublist(start, end);
+      final values = List.filled(chunk.length, '(?, ?, ?, ?, ?, ?)').join(', ');
+      final params = <Object?>[];
+      for (final turn in chunk) {
+        params.addAll([
+          sessionId,
+          cli,
+          turn.ordinal,
+          turn.role,
+          turn.text,
+          turn.at == null ? null : isoFromDate(turn.at!),
+        ]);
+      }
+      statements++;
+      _db.execute(
+        'INSERT INTO conversation_turns '
+        '(session_id, cli, ordinal, role, text, at) VALUES $values;',
+        params,
+      );
+    }
   }
 
   /// Records the watermark without replacing what is indexed. A parse that found
@@ -164,6 +346,7 @@ class ConversationIndexDao {
     required DateTime indexedAt,
     DateTime? modifiedAt,
     int? size,
+    TranscriptResumePoint? resumePoint,
   }) => _writeState(
     sessionId: sessionId,
     cli: cli,
@@ -172,6 +355,7 @@ class ConversationIndexDao {
     indexedAt: indexedAt,
     modifiedAt: modifiedAt,
     size: size,
+    resumePoint: resumePoint,
   );
 
   void _writeState({
@@ -182,16 +366,20 @@ class ConversationIndexDao {
     required DateTime indexedAt,
     DateTime? modifiedAt,
     int? size,
+    TranscriptResumePoint? resumePoint,
   }) {
     statements++;
     _db.execute(
       'INSERT INTO conversation_index_state '
-      '(session_id, cli, file_path, modified_at, size, turns, indexed_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?) '
+      '(session_id, cli, file_path, modified_at, size, turns, indexed_at, '
+      'read_offset, read_rows, read_anchor, read_head) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) '
       'ON CONFLICT(session_id) DO UPDATE SET '
       'cli = excluded.cli, file_path = excluded.file_path, '
       'modified_at = excluded.modified_at, size = excluded.size, '
-      'turns = excluded.turns, indexed_at = excluded.indexed_at;',
+      'turns = excluded.turns, indexed_at = excluded.indexed_at, '
+      'read_offset = excluded.read_offset, read_rows = excluded.read_rows, '
+      'read_anchor = excluded.read_anchor, read_head = excluded.read_head;',
       [
         sessionId,
         cli,
@@ -200,12 +388,16 @@ class ConversationIndexDao {
         size,
         turns,
         isoFromDate(indexedAt),
+        resumePoint?.end,
+        resumePoint?.rows,
+        resumePoint?.anchor,
+        resumePoint?.head,
       ],
     );
   }
 
-  /// The turns matching [query], capped at [limit]. Never throws on user input:
-  /// [conversationMatchExpression] quotes it, so nothing reaches FTS5 as syntax.
+  /// The turns matching [query], capped at [limit], in FTS5's rowid order.
+  /// Never throws on user input: [conversationMatchExpression] quotes it.
   List<ConversationHit> search(
     String query, {
     int limit = kConversationSearchLimit,
@@ -213,8 +405,6 @@ class ConversationIndexDao {
     final match = conversationMatchExpression(query);
     if (match == null) return const [];
     statements++;
-    // No `ORDER BY`: unranked, which is FTS5's rowid order. See
-    // [kConversationSearchLimit] for why that is the day-one target.
     final rows = _db.query(
       'SELECT t.session_id AS session_id, t.cli AS cli, '
       't.ordinal AS ordinal, t.role AS role, '
@@ -242,6 +432,183 @@ class ConversationIndexDao {
     ];
   }
 
+  /// Conversations with a turn matching [match] — an FTS5 expression the
+  /// caller built, never user text — best BM25 first, one row each.
+  ///
+  /// Only conversations a session or imported record still names: a deleted
+  /// session's rows stay in the index, and a result nothing can open is not a
+  /// result. [exclude] drops conversations an earlier tier already returned.
+  List<RankedConversation> rankConversations(
+    String match, {
+    SessionSearchFilter filter = const SessionSearchFilter(),
+    Set<String> exclude = const {},
+    required int limit,
+    int candidates = kConversationRankCandidates,
+  }) {
+    final where = <String>['conversation_turns_fts MATCH ?'];
+    final params = <Object?>[match];
+    if (filter.conversationId != null) {
+      where.add('t.session_id = ?');
+      params.add(filter.conversationId);
+    }
+    if (filter.cli != null) {
+      where.add('t.cli = ?');
+      params.add(filter.cli);
+    }
+    if (filter.after != null) {
+      where.add('t.at >= ?');
+      params.add(isoFromDate(filter.after!));
+    }
+    if (filter.before != null) {
+      where.add('t.at < ?');
+      params.add(isoFromDate(filter.before!));
+    }
+    final repositories = filter.repositoryId != null
+        ? '(?)'
+        : filter.projectId != null
+        ? '(SELECT id FROM repositories WHERE project_id = ?)'
+        : null;
+    if (repositories != null) {
+      final scope = filter.repositoryId ?? filter.projectId;
+      where.add(
+        '(t.session_id IN (SELECT external_session_id FROM sessions '
+        'WHERE repository_id IN $repositories) '
+        'OR t.session_id IN (SELECT external_id FROM imported_sessions '
+        'WHERE repository_id IN $repositories))',
+      );
+      params.addAll([scope, scope]);
+    }
+    if (exclude.isNotEmpty) {
+      where.add(
+        't.session_id NOT IN (${List.filled(exclude.length, '?').join(', ')})',
+      );
+      params.addAll(exclude);
+    }
+    params.add(candidates);
+    final head = List.of(params);
+    // MATERIALIZED, because bm25() is only callable in the full-text query
+    // itself: flattened into the GROUP BY, SQLite refuses it. ORDER BY rowid is
+    // one FTS5 serves in index order, so the LIMIT stops the scan rather than
+    // sorting it. And the bare-column rule: with MIN() the other columns come
+    // from the row that holds the minimum, so best_id is the best turn's id.
+    final sql =
+        'WITH h AS MATERIALIZED ('
+        'SELECT t.session_id AS session_id, t.cli AS cli, t.id AS id, '
+        'bm25(conversation_turns_fts) AS score '
+        'FROM conversation_turns_fts '
+        'JOIN conversation_turns t ON t.id = conversation_turns_fts.rowid '
+        'WHERE ${where.join(' AND ')} '
+        'ORDER BY conversation_turns_fts.rowid DESC LIMIT ?) '
+        'SELECT g.session_id AS session_id, g.cli AS cli, '
+        'g.best_id AS best_id, g.score AS score, g.matches AS matches, '
+        'state.indexed_at AS indexed_at FROM ('
+        'SELECT h.session_id AS session_id, h.cli AS cli, h.id AS best_id, '
+        'MIN(h.score) AS score, COUNT(*) AS matches FROM h '
+        'GROUP BY h.session_id ORDER BY score, h.session_id LIMIT ?) g '
+        'LEFT JOIN conversation_index_state state '
+        'ON state.session_id = g.session_id '
+        'ORDER BY g.score, g.session_id;';
+    // Whether a conversation can still be opened is asked of the page, not of
+    // every group: a little over the page is read, and more only when deleted
+    // sessions ate into it.
+    var pool = limit + 32;
+    while (true) {
+      statements++;
+      final rows = _db.query(sql, [...head, pool]);
+      final named = _openable({
+        for (final row in rows) row['session_id'] as String,
+      });
+      final kept = [
+        for (final row in rows)
+          if (named.contains(row['session_id']))
+            (
+              sessionId: row['session_id'] as String,
+              cli: row['cli'] as String,
+              bestTurnId: row['best_id'] as int,
+              score: (row['score'] as num).toDouble(),
+              matches: row['matches'] as int,
+              indexedAt: row['indexed_at'] == null
+                  ? null
+                  : dateFromIso(row['indexed_at']),
+            ),
+      ];
+      if (kept.length >= limit || rows.length < pool) {
+        return kept.take(limit).toList();
+      }
+      pool *= 4;
+    }
+  }
+
+  /// Which of [conversationIds] a session or imported record still names.
+  Set<String> _openable(Set<String> conversationIds) {
+    if (conversationIds.isEmpty) return const {};
+    final marks = List.filled(conversationIds.length, '?').join(', ');
+    statements++;
+    return {
+      for (final row in _db.query(
+        'SELECT external_session_id AS id FROM sessions '
+        'WHERE external_session_id IN ($marks) '
+        'UNION SELECT external_id FROM imported_sessions '
+        'WHERE external_id IN ($marks);',
+        [...conversationIds, ...conversationIds],
+      ))
+        row['id'] as String,
+    };
+  }
+
+  /// The indexed turns [turnIds], by primary key — what an excerpt is cut
+  /// from. Not a full-text query: `snippet()` would redo a prefix expansion
+  /// for every row, which costs more than the ranking it serves.
+  Map<int, ({int ordinal, String role, DateTime? at, String text})> turnsById(
+    List<int> turnIds,
+  ) {
+    if (turnIds.isEmpty) return const {};
+    statements++;
+    return {
+      for (final row in _db.query(
+        'SELECT id, ordinal, role, at, text FROM conversation_turns '
+        'WHERE id IN (${List.filled(turnIds.length, '?').join(', ')});',
+        turnIds,
+      ))
+        row['id'] as int: (
+          ordinal: row['ordinal'] as int,
+          role: row['role'] as String,
+          at: row['at'] == null ? null : dateFromIso(row['at']),
+          text: row['text'] as String,
+        ),
+    };
+  }
+
+  /// How many indexed turns hold [term], or with [prefix] any term starting
+  /// with it. The vocabulary is FTS5's own, so it is already lower-cased.
+  int documentsWith(String term, {bool prefix = false}) {
+    statements++;
+    final rows = prefix
+        ? _db.query(
+            'SELECT doc FROM conversation_turns_vocab '
+            'WHERE term >= ? AND term < ? LIMIT 1;',
+            [term, '$term\u{10FFFF}'],
+          )
+        : _db.query(
+            'SELECT doc FROM conversation_turns_vocab WHERE term = ?;',
+            [term],
+          );
+    return rows.isEmpty ? 0 : rows.first['doc'] as int;
+  }
+
+  /// Every indexed term in [from, to), with how many turns hold it.
+  List<({String term, int docs})> termsBetween(String from, String to) {
+    statements++;
+    return [
+      for (final row in _db.query(
+        'SELECT term, doc FROM conversation_turns_vocab '
+        'WHERE term >= ? AND term < ?;',
+        [from, to],
+      ))
+        (term: row['term'] as String, docs: row['doc'] as int),
+    ];
+  }
+
   /// How many turns are indexed for [sessionId]. Diagnostics and tests.
   int turnCountFor(String sessionId) {
     statements++;
@@ -261,6 +628,26 @@ class ConversationIndexDao {
       ))
         row['session_id'] as String,
     };
+  }
+
+  /// The conversations a session row runs that the index has a path for —
+  /// what a search catches up on before it answers.
+  List<({String sessionId, String cli, String filePath})>
+  indexedSessionConversations() {
+    statements++;
+    return [
+      for (final row in _db.query(
+        'SELECT state.session_id AS session_id, state.cli AS cli, '
+        'state.file_path AS file_path FROM conversation_index_state state '
+        'WHERE EXISTS (SELECT 1 FROM sessions s '
+        'WHERE s.external_session_id = state.session_id);',
+      ))
+        (
+          sessionId: row['session_id'] as String,
+          cli: row['cli'] as String,
+          filePath: row['file_path'] as String,
+        ),
+    ];
   }
 
   /// Every conversation `imported_sessions` records a transcript path for. Read
@@ -296,16 +683,33 @@ class ConversationIndexDao {
     ];
   }
 
-  ConversationIndexState _stateFromRow(Map<String, Object?> row) =>
-      ConversationIndexState(
-        sessionId: row['session_id'] as String,
-        cli: row['cli'] as String,
-        filePath: row['file_path'] as String,
-        modifiedAt: row['modified_at'] == null
-            ? null
-            : dateFromIso(row['modified_at']),
-        size: row['size'] as int?,
-        turns: row['turns'] as int,
-        indexedAt: dateFromIso(row['indexed_at']),
-      );
+  ConversationIndexState _stateFromRow(Map<String, Object?> row) {
+    final offset = row['read_offset'] as int?;
+    final rows = row['read_rows'] as int?;
+    return ConversationIndexState(
+      sessionId: row['session_id'] as String,
+      cli: row['cli'] as String,
+      filePath: row['file_path'] as String,
+      modifiedAt: row['modified_at'] == null
+          ? null
+          : dateFromIso(row['modified_at']),
+      size: row['size'] as int?,
+      turns: row['turns'] as int,
+      indexedAt: dateFromIso(row['indexed_at']),
+      resumePoint: offset == null || rows == null
+          ? null
+          : TranscriptResumePoint(
+              end: offset,
+              rows: rows,
+              anchor: _bytes(row['read_anchor']),
+              head: _bytes(row['read_head']),
+            ),
+    );
+  }
+
+  static Uint8List? _bytes(Object? value) => switch (value) {
+    Uint8List bytes => bytes,
+    List<int> bytes => Uint8List.fromList(bytes),
+    _ => null,
+  };
 }
