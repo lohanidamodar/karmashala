@@ -354,6 +354,60 @@ void main() {
       expect(notice()!.message, contains('stops and asks'));
       expect(notice()!.action?.label, 'Options…');
     });
+
+    test('through real fires, each new limit re-arms it for the next reset — '
+        'cycle after cycle, never for now', () async {
+      h.scheduler();
+      var resume = h.controller.schedule(
+        ResumeRequest.atReset(
+          sessionId: 's1',
+          window: UsageWindow(
+            label: '5-hour',
+            percent: 100,
+            resetsAt: h.now.add(const Duration(hours: 1)),
+            span: kUsageFiveHourWindow,
+          ),
+          message: 'carry on',
+          scheduledBy: 'the user',
+        ),
+      );
+      for (var cycle = 1; cycle <= 3; cycle++) {
+        h.clock.now = resume.fireAt.add(const Duration(seconds: 1));
+        h.usage.answer = h.reading(
+          percent: 2,
+          resetsIn: const Duration(hours: 5),
+        );
+        h.timer.fire();
+        await h.settle();
+        expect(
+          h.dao.getById(resume.id)!.state,
+          ScheduledResumeState.done,
+          reason: 'cycle $cycle',
+        );
+
+        // The turn that resume started runs straight into the limit again.
+        h.clock.now = h.now.add(const Duration(minutes: 2));
+        rollout = limited(resetsIn: const Duration(hours: 3));
+        changes.add(entry());
+        await h.settle();
+
+        final again = h.live('s1');
+        expect(again, isNotNull, reason: 'cycle $cycle re-armed nothing');
+        expect(again!.id, isNot(resume.id));
+        expect(again.message, 'carry on');
+        expect(
+          again.fireAt,
+          h.now.add(const Duration(hours: 3)).add(kResumeResetMargin),
+        );
+        // Nothing is due now, so the next tick sends nothing.
+        final sent = h.launcher.requests.length;
+        h.timer.fire();
+        await h.settle();
+        expect(h.launcher.requests, hasLength(sent));
+        expect(h.live('s1')!.state, ScheduledResumeState.pending);
+        resume = again;
+      }
+    });
   });
 
   group('Claude Code, from StopFailure\'s own reason', () {
