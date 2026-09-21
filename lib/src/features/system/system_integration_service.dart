@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleListener;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../app/shell/quick_open/quick_open.dart';
@@ -463,43 +462,41 @@ class SystemIntegrationService with TrayListener, WindowListener {
     await _run(
       NativeSetting.trayMenu,
       () => _native.tray.setContextMenu(
-        Menu(
-          items: [
-            ..._attentionMenuItems(),
-            MenuItem.separator(),
-            MenuItem(key: _kMenuShow, label: 'Open Karmashala'),
-            MenuItem(key: _kMenuHide, label: 'Hide window'),
-            MenuItem.separator(),
-            MenuItem.checkbox(
-              key: _kMenuKeepAwake,
-              label: 'Keep system awake',
-              checked: settings.keepAwake,
-            ),
-            MenuItem.checkbox(
-              key: _kMenuNotifications,
-              label: 'Notify me about agents',
-              checked: notifications.enabled,
-            ),
-            MenuItem.checkbox(
-              key: _kMenuOnlyWhenUnfocused,
-              label: 'Only when the window is not focused',
-              checked: notifications.onlyWhenUnfocused,
-              disabled: !notifications.enabled,
-            ),
-            MenuItem.separator(),
-            MenuItem(key: _kMenuQuit, label: 'Quit'),
-          ],
-        ),
+        TrayMenu([
+          ..._attentionMenuItems(),
+          const TrayMenuItem.separator(),
+          const TrayMenuItem(key: _kMenuShow, label: 'Open Karmashala'),
+          const TrayMenuItem(key: _kMenuHide, label: 'Hide window'),
+          const TrayMenuItem.separator(),
+          TrayMenuItem.checkbox(
+            key: _kMenuKeepAwake,
+            label: 'Keep system awake',
+            checked: settings.keepAwake,
+          ),
+          TrayMenuItem.checkbox(
+            key: _kMenuNotifications,
+            label: 'Notify me about agents',
+            checked: notifications.enabled,
+          ),
+          TrayMenuItem.checkbox(
+            key: _kMenuOnlyWhenUnfocused,
+            label: 'Only when the window is not focused',
+            checked: notifications.onlyWhenUnfocused,
+            disabled: !notifications.enabled,
+          ),
+          const TrayMenuItem.separator(),
+          const TrayMenuItem(key: _kMenuQuit, label: 'Quit'),
+        ]),
       ),
     );
   }
 
   /// The "needs you" section: one clickable item per waiting session, or a
   /// disabled line when nothing does — an empty tray menu reads as broken.
-  List<MenuItem> _attentionMenuItems() {
+  List<TrayMenuItem> _attentionMenuItems() {
     if (_pending.isEmpty) {
-      return [
-        MenuItem(
+      return const [
+        TrayMenuItem(
           key: 'attention_none',
           label: 'Nothing needs you',
           disabled: true,
@@ -509,9 +506,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
     final shown = _pending.take(_kMaxAttentionItems).toList();
     return [
       for (var i = 0; i < shown.length; i++)
-        MenuItem(key: '$_kMenuAttentionPrefix$i', label: shown[i].menuLabel),
+        TrayMenuItem(key: '$_kMenuAttentionPrefix$i', label: shown[i].menuLabel),
       if (_pending.length > shown.length)
-        MenuItem(
+        TrayMenuItem(
           key: 'attention_more',
           label: '+${_pending.length - shown.length} more',
           disabled: true,
@@ -681,18 +678,17 @@ class SystemIntegrationService with TrayListener, WindowListener {
   // --- TrayListener ---
 
   @override
-  void onTrayIconMouseDown() {
+  void onTrayIconClicked() {
     _logger.info('system: tray icon clicked');
     unawaited(_toggleWindow());
   }
 
   @override
-  void onTrayIconRightMouseDown() => unawaited(_native.tray.popUpContextMenu());
+  void onTrayIconRightClicked() => unawaited(_native.tray.popUpContextMenu());
 
   @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    final key = menuItem.key;
-    if (key != null && key.startsWith(_kMenuAttentionPrefix)) {
+  void onTrayMenuItemClicked(String key) {
+    if (key.startsWith(_kMenuAttentionPrefix)) {
       final index = int.tryParse(key.substring(_kMenuAttentionPrefix.length));
       if (index != null) _openAttention(index);
       return;

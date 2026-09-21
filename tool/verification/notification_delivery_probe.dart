@@ -8,7 +8,7 @@ import 'package:karmashala_notifications/attention.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:local_notifier/local_notifier.dart';
-import 'package:tray_manager/tray_manager.dart';
+import 'package:karmashala/src/features/system/native_adapters.dart';
 
 /// Manual verification — raises a **real toast** and switches the **real tray
 /// icon** to its badged state with the attention menu the watcher would build.
@@ -157,32 +157,32 @@ void main() {
           kind: AttentionKind.failed,
         ),
       ];
+      // The app's own adapter, so what is looked at is the code that ships.
+      final tray = PluginTrayAdapter();
       addTearDown(() async {
         try {
-          await trayManager.destroy();
+          await tray.destroy();
         } catch (_) {}
       });
 
-      await trayManager.setIcon('assets/tray_icon.ico');
-      await trayManager.setToolTip('Karmashala');
+      await tray.setIcon('assets/tray_icon.ico');
+      await tray.setToolTip('Karmashala');
 
       // What `SystemIntegrationService._applyAttention` does, with the same
       // labels the watcher produces. Awaiting each call *is* the round trip to
       // `Shell_NotifyIcon`; there is no completion event to poll for, so
       // whether the badged icon is the one that appears has to be looked at.
-      await trayManager.setIcon('assets/tray_icon_attention.ico');
-      await trayManager.setToolTip(
+      await tray.setIcon('assets/tray_icon_attention.ico');
+      await tray.setToolTip(
         'Karmashala — ${waiting.length} sessions need you',
       );
-      await trayManager.setContextMenu(
-        Menu(
-          items: [
-            for (var i = 0; i < waiting.length; i++)
-              MenuItem(key: 'attention:$i', label: waiting[i].menuLabel),
-            MenuItem.separator(),
-            MenuItem(key: 'show', label: 'Open Karmashala'),
-          ],
-        ),
+      await tray.setContextMenu(
+        TrayMenu([
+          for (var i = 0; i < waiting.length; i++)
+            TrayMenuItem(key: 'attention:$i', label: waiting[i].menuLabel),
+          const TrayMenuItem.separator(),
+          const TrayMenuItem(key: 'show', label: 'Open Karmashala'),
+        ]),
       );
 
       await Future<void>.delayed(_lookDwell);

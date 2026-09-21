@@ -2,13 +2,12 @@ import 'dart:ui' show Size;
 
 import 'package:karmashala/src/features/system/native_adapters.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
-import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Stand-ins for the five desktop plugins, recording what they were asked to do
 /// and failing on demand.
 ///
-/// The point of the whole adapter layer: `windowManager`, `trayManager`,
+/// The point of the whole adapter layer: `windowManager`, the tray icon,
 /// `hotKeyManager`, `launchAtStartup` and `WakelockPlus` are singletons over
 /// platform channels. Nothing can substitute them, so before Loop 61 nothing
 /// could test what happened when one of them said no.
@@ -105,7 +104,7 @@ class FakeTrayAdapter implements TrayAdapter {
 
   String? icon;
   String? tooltip;
-  Menu? menu;
+  TrayMenu? menu;
   bool destroyed = false;
 
   Failure? setIconFailure;
@@ -134,7 +133,7 @@ class FakeTrayAdapter implements TrayAdapter {
   }
 
   @override
-  Future<void> setContextMenu(Menu value) async {
+  Future<void> setContextMenu(TrayMenu value) async {
     calls.add('setContextMenu');
     if (setContextMenuFailure?.shouldThrow() ?? false) {
       throw StateError('menu rejected');
