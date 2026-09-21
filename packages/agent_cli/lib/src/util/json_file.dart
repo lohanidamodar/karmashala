@@ -63,6 +63,12 @@ Future<JsonFileRead> readJsonObjectFile(String path) async {
   } on FileSystemException catch (e) {
     return JsonFileUnreadable(path, e);
   }
+  return jsonObjectReadOf(path, raw);
+}
+
+/// [raw], the text of the file at [path], as one of the outcomes a read has
+/// once the file has been read — wherever it was read from.
+JsonFileRead jsonObjectReadOf(String path, String raw) {
   final Object? decoded;
   try {
     decoded = jsonDecode(raw);

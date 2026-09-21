@@ -1,14 +1,16 @@
 import 'dart:convert';
-import 'dart:io';
 
 import '../../util/clock.dart';
 import '../../util/id_generator.dart';
-import '../../util/json_file.dart';
 import '../../cli_detection/data/cli_store.dart';
 import '../../environments/environment_kind.dart';
 import '../../environments/execution_environment.dart';
+import '../../process/command_runner.dart';
 import '../domain/agent_installation.dart';
 import '../domain/codex_account.dart';
+import 'auth_file_io.dart';
+
+export 'auth_file_io.dart';
 
 class CodexAuthException implements Exception {
   CodexAuthException(this.message);
@@ -18,14 +20,41 @@ class CodexAuthException implements Exception {
   String toString() => 'CodexAuthException: $message';
 }
 
+/// Where one installation's `auth.json` is, and how to reach it.
+typedef CodexAuthLocation = ({String path, AuthFileIo io});
+
 class CodexAuthLocator {
   CodexAuthLocator(this._stores);
   final CliStoreLocator _stores;
 
+  final Map<String, RemoteAgentHomes> _remoteHomes = {};
+
+  /// The path alone. See [locationFor], which also says how to reach it.
   Future<String?> authPathFor(
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
+  ) async => (await locationFor(installation, environments))?.path;
+
+  /// Where [installation]'s `auth.json` is and the [AuthFileIo] that reaches
+  /// it, or null when its environment has no Codex home.
+  ///
+  /// An SSH environment's file is on the remote disk, which [CliStoreLocator]
+  /// does not reach: it is asked of the host (`$CODEX_HOME`, or `~/.codex`)
+  /// and read and written over that environment's runner. A host that cannot
+  /// be asked still gets a location, whose [RefusingAuthFileIo] says why.
+  Future<CodexAuthLocation?> locationFor(
+    AgentInstallation installation,
+    List<ExecutionEnvironment> environments,
   ) async {
+    final remote = environments
+        .where(
+          (e) =>
+              e.id == installation.environmentId &&
+              e.kind == EnvironmentKind.ssh,
+        )
+        .firstOrNull;
+    if (remote != null) return _remoteLocation(remote);
+
     for (final store in await _stores.locate(environments)) {
       if (store.environmentId != installation.environmentId ||
           store.codexHome == null) {
@@ -35,15 +64,55 @@ class CodexAuthLocator {
           .where((e) => e.id == store.environmentId)
           .map((e) => e.kind)
           .firstOrNull;
-      return storePathContextFor(kind).join(store.codexHome!, 'auth.json');
+      return (
+        path: storePathContextFor(kind).join(store.codexHome!, 'auth.json'),
+        io: const LocalAuthFileIo(),
+      );
     }
     return null;
+  }
+
+  Future<CodexAuthLocation> _remoteLocation(
+    ExecutionEnvironment environment,
+  ) async {
+    const unresolved = '~/.codex/auth.json';
+    final CommandRunner runner;
+    try {
+      runner = _stores.runnerFor(environment.id);
+    } on Object catch (e) {
+      return (
+        path: unresolved,
+        io: RefusingAuthFileIo(
+          'Karmashala has no connection to ${environment.name} ($e).',
+        ),
+      );
+    }
+    var homes = _remoteHomes[environment.id];
+    if (homes == null) {
+      try {
+        homes = await resolveRemoteAgentHomes(
+          runner,
+          environmentName: environment.name,
+        );
+      } on AuthFileIoException catch (e) {
+        // Not cached, so a host that comes back is picked up on the next read.
+        return (path: unresolved, io: RefusingAuthFileIo(e.message));
+      }
+      _remoteHomes[environment.id] = homes;
+    }
+    return (
+      path: homes.codexAuthFile,
+      io: RemoteAuthFileIo(runner: runner, environmentName: environment.name),
+    );
   }
 }
 
 /// Reads and captures Codex's own credential file without making a network
 /// request. JWT payloads are decoded for display only; signatures are not
 /// treated as proof because Codex, not Karmashala, authenticated the file.
+///
+/// Every method takes the [AuthFileIo] its [CodexAuthLocator] resolved; the
+/// default is this host's filesystem, which the Windows host and WSL use.
 class CodexAuthService {
   const CodexAuthService({required this.ids, required this.clock});
 
@@ -51,13 +120,13 @@ class CodexAuthService {
   final Clock clock;
 
   static const _backupSuffix = '.karmashala.bak';
-  static const _tmpSuffix = '.karmashala.tmp';
 
   Future<CodexAuthSnapshot> readSnapshot(
     String path,
-    String environmentId,
-  ) async {
-    final read = await readJsonObjectFile(path);
+    String environmentId, {
+    AuthFileIo io = const LocalAuthFileIo(),
+  }) async {
+    final read = await io.readJsonObject(path);
     if (read.failure case final failure?) {
       return CodexAuthSnapshot.signedOut(environmentId, readFailure: failure);
     }
@@ -76,12 +145,18 @@ class CodexAuthService {
     );
   }
 
-  Future<CodexAccount> capture(String path, String environmentId) async {
-    final read = await readJsonObjectFile(path);
+  Future<CodexAccount> capture(
+    String path,
+    String environmentId, {
+    AuthFileIo io = const LocalAuthFileIo(),
+  }) async {
+    final read = await io.readJsonObject(path);
     if (read.failure case final failure?) throw CodexAuthException(failure);
     final auth = read.object;
     if (auth == null) {
-      throw CodexAuthException('No Codex credentials found at $path.');
+      throw CodexAuthException(
+        'No Codex credentials found at ${io.describe(path)}.',
+      );
     }
     final identity = _identity(auth);
     final accountId = identity.accountId;
@@ -105,45 +180,54 @@ class CodexAuthService {
   ///
   /// Codex owns `auth.json`; Karmashala owns none of its future keys. Only the
   /// token bundle captured for this account is replaced. The original is
-  /// backed up once and the new JSON is renamed into place atomically.
-  Future<void> switchTo(CodexAccount account, String path) async {
+  /// backed up once and the new JSON is renamed into place atomically — and,
+  /// on an SSH host, written owner-only (see [RemoteAuthFileIo]).
+  Future<void> switchTo(
+    CodexAccount account,
+    String path, {
+    AuthFileIo io = const LocalAuthFileIo(),
+  }) async {
     final tokens = account.auth['tokens'];
     if (tokens is! Map<String, dynamic>) {
       throw CodexAuthException(
         'The captured Codex account has no usable token bundle.',
       );
     }
-    final file = File(path);
-    final current = await _readForSwitch(file);
+    final current = await _readForSwitch(io, path);
     current['tokens'] = tokens;
 
-    final backup = File('$path$_backupSuffix');
-    if (!await backup.exists() && await file.exists()) {
-      await file.copy(backup.path);
-    }
-    final staged = File('$path$_tmpSuffix');
     try {
-      await staged.writeAsString('${jsonEncode(current)}\n', flush: true);
-      await staged.rename(path);
-    } catch (error) {
-      if (await staged.exists()) await staged.delete();
-      throw CodexAuthException('Could not switch Codex account: $error');
+      await io.backupOnce(path, '$path$_backupSuffix');
+      await io.writeAtomic(path, '${jsonEncode(current)}\n', secret: true);
+    } on AuthFileIoException catch (error) {
+      throw CodexAuthException(
+        'Could not switch Codex account: ${error.message}',
+      );
     }
   }
 
-  Future<Map<String, dynamic>> _readForSwitch(File file) async {
-    if (!await file.exists()) return <String, dynamic>{};
+  Future<Map<String, dynamic>> _readForSwitch(
+    AuthFileIo io,
+    String path,
+  ) async {
+    final String? raw;
     try {
-      final decoded = jsonDecode(await file.readAsString());
+      raw = await io.readText(path);
+    } on AuthFileIoException catch (error) {
+      throw CodexAuthException('Cannot switch accounts: ${error.message}');
+    }
+    if (raw == null) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) return decoded;
     } on FormatException catch (error) {
       throw CodexAuthException(
-        'Cannot switch accounts because ${file.path} is not valid JSON '
+        'Cannot switch accounts because $path is not valid JSON '
         '(${error.message}).',
       );
     }
     throw CodexAuthException(
-      'Cannot switch accounts because ${file.path} is not a JSON object.',
+      'Cannot switch accounts because $path is not a JSON object.',
     );
   }
 }

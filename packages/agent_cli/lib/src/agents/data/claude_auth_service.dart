@@ -8,14 +8,17 @@ import '../../util/clock.dart';
 import '../../util/json_object_splice.dart';
 import '../../util/describe_age.dart';
 import '../../util/id_generator.dart';
-import '../../util/json_file.dart';
 import '../../cli_detection/data/cli_store.dart';
 import '../../environments/environment_kind.dart';
+import '../../process/command_runner.dart';
 import '../../environments/execution_environment.dart';
 import '../domain/agent_installation.dart';
 import '../domain/agent_ids.dart';
 import '../domain/claude_account.dart';
 import '../domain/claude_auth_snapshot.dart';
+import 'auth_file_io.dart';
+
+export 'auth_file_io.dart';
 
 /// The two files Claude Code persists per installation: the OAuth token bundle
 /// and the identity/config record.
@@ -25,7 +28,16 @@ class ClaudeAuthPaths {
     required this.credentialsFile,
     required this.configFile,
     this.credentialsInKeychain = false,
+    this.io = const LocalAuthFileIo(),
   });
+
+  /// How [credentialsFile] and [configFile] are reached: opened directly on
+  /// this host and WSL, run through the environment's runner on SSH.
+  ///
+  /// The paths are only meaningful to this — an SSH path is a path on the
+  /// remote disk, and handing it to `dart:io` `File` is what made switching an
+  /// SSH account silently do nothing.
+  final AuthFileIo io;
 
   /// `<home>/.claude/.credentials.json` — holds `claudeAiOauth`.
   ///
@@ -61,17 +73,38 @@ class ClaudeAuthException implements Exception {
 /// home to a form this host can read — `%USERPROFILE%` for Windows, the
 /// `\\wsl.localhost\…` UNC form for WSL, and an ordinary POSIX path on macOS
 /// and Linux.
+///
+/// An SSH environment is not one of those: its `.claude` is on the remote disk,
+/// which [CliStoreLocator] deliberately does not reach. Its paths are asked of
+/// the host itself — its `$HOME`, or `CLAUDE_CONFIG_DIR` when set there — and
+/// come with a [RemoteAuthFileIo] that reads and writes them over that
+/// environment's runner.
 class ClaudeAuthLocator {
   ClaudeAuthLocator(this._storeLocator);
 
   final CliStoreLocator _storeLocator;
 
+  final Map<String, RemoteAgentHomes> _remoteHomes = {};
+
   /// Returns the paths for [installation], or `null` if the environment's
   /// `.claude` home could not be resolved.
+  ///
+  /// An SSH host that cannot be asked where its home is still gets paths, with
+  /// a [RefusingAuthFileIo] saying why — so the panel shows the reason rather
+  /// than a signed-out account, and a switch refuses in words.
   Future<ClaudeAuthPaths?> pathsFor(
     AgentInstallation installation,
     List<ExecutionEnvironment> environments,
   ) async {
+    final remote = environments
+        .where(
+          (e) =>
+              e.id == installation.environmentId &&
+              e.kind == EnvironmentKind.ssh,
+        )
+        .firstOrNull;
+    if (remote != null) return _remotePaths(remote);
+
     final stores = await _storeLocator.locate(environments);
     for (final store in stores) {
       if (store.environmentId != installation.environmentId) continue;
@@ -100,6 +133,48 @@ class ClaudeAuthLocator {
     }
     return null;
   }
+
+  Future<ClaudeAuthPaths> _remotePaths(ExecutionEnvironment environment) async {
+    final CommandRunner runner;
+    try {
+      runner = _storeLocator.runnerFor(environment.id);
+    } on Object catch (e) {
+      return _refused(
+        environment,
+        'Karmashala has no connection to ${environment.name} ($e).',
+      );
+    }
+    var homes = _remoteHomes[environment.id];
+    if (homes == null) {
+      try {
+        homes = await resolveRemoteAgentHomes(
+          runner,
+          environmentName: environment.name,
+        );
+      } on AuthFileIoException catch (e) {
+        // Not cached: the next read asks again, so a host that comes back is
+        // picked up without a restart.
+        return _refused(environment, e.message);
+      }
+      _remoteHomes[environment.id] = homes;
+    }
+    return ClaudeAuthPaths(
+      environmentId: environment.id,
+      credentialsFile: homes.claudeCredentialsFile,
+      configFile: homes.claudeConfigFile,
+      io: RemoteAuthFileIo(runner: runner, environmentName: environment.name),
+    );
+  }
+
+  static ClaudeAuthPaths _refused(
+    ExecutionEnvironment environment,
+    String reason,
+  ) => ClaudeAuthPaths(
+    environmentId: environment.id,
+    credentialsFile: '~/.claude/.credentials.json',
+    configFile: '~/.claude.json',
+    io: RefusingAuthFileIo(reason),
+  );
 }
 
 /// Reads, captures, and switches Claude Code accounts by manipulating the
@@ -137,7 +212,6 @@ class ClaudeAuthService {
       claudeKeychain.read();
 
   static const _backupSuffix = '.karmashala.bak';
-  static const _tmpSuffix = '.karmashala.tmp';
 
   /// Reads the live logged-in account for the installation at [paths].
   ///
@@ -161,9 +235,9 @@ class ClaudeAuthService {
       );
     }
     final credentialsRead = read == null
-        ? await readJsonObjectFile(paths.credentialsFile)
+        ? await paths.io.readJsonObject(paths.credentialsFile)
         : null;
-    final configRead = await readJsonObjectFile(paths.configFile);
+    final configRead = await paths.io.readJsonObject(paths.configFile);
     // A file that is there and cannot be used is not a signed-out account.
     final failure = credentialsRead?.failure ?? configRead.failure;
     if (failure != null) {
@@ -231,12 +305,12 @@ class ClaudeAuthService {
       );
     }
     final credentialsRead = read == null
-        ? await readJsonObjectFile(paths.credentialsFile)
+        ? await paths.io.readJsonObject(paths.credentialsFile)
         : null;
     if (credentialsRead?.failure case final failure?) {
       throw ClaudeAuthException(failure);
     }
-    final configRead = await readJsonObjectFile(paths.configFile);
+    final configRead = await paths.io.readJsonObject(paths.configFile);
     if (configRead.failure case final failure?) {
       throw ClaudeAuthException(failure);
     }
@@ -254,7 +328,8 @@ class ClaudeAuthService {
             ? 'Nothing is stored under "$keychainService" in the login '
                   'Keychain, so no Claude account is signed in here. Sign in '
                   'with `claude` once, then capture.'
-            : 'No Claude credentials found at ${paths.credentialsFile}.',
+            : 'No Claude credentials found at '
+                  '${paths.io.describe(paths.credentialsFile)}.',
       );
     }
     final account = config?['oauthAccount'];
@@ -264,7 +339,8 @@ class ClaudeAuthService {
     if (email == null || email.isEmpty) {
       throw ClaudeAuthException(
         'Could not determine the account email (no oauthAccount in '
-        '${paths.configFile}). Sign in with `claude` once, then capture.',
+        '${paths.io.describe(paths.configFile)}). Sign in with `claude` '
+        'once, then capture.',
       );
     }
 
@@ -300,20 +376,23 @@ class ClaudeAuthService {
         'rewrite. Use `claude /login` to change account.',
       );
     }
+    final io = paths.io;
     // Prepare every update before writing either file. In particular, a
     // malformed config must not leave the new token paired with the old
     // identity after the config splice fails.
-    final existingCreds = await _readJsonFileForSwitch(paths.credentialsFile);
+    final existingCreds = await _readJsonFileForSwitch(
+      io,
+      paths.credentialsFile,
+    );
     existingCreds['claudeAiOauth'] = account.claudeAiOauth;
 
     final oauthAccount = account.oauthAccount;
     String? updatedConfig;
     var configExists = false;
     if (oauthAccount != null) {
-      final configFile = File(paths.configFile);
-      configExists = await configFile.exists();
-      if (configExists) {
-        final raw = await configFile.readAsString();
+      final raw = await _readTextForSwitch(io, paths.configFile);
+      configExists = raw != null;
+      if (raw != null) {
         try {
           updatedConfig = replaceTopLevelJsonValue(
             raw,
@@ -332,13 +411,40 @@ class ClaudeAuthService {
     }
 
     // --- credentials: swap only claudeAiOauth ---
-    await _backupOnce(paths.credentialsFile);
-    await _writeAtomic(paths.credentialsFile, jsonEncode(existingCreds));
+    try {
+      await io.backupOnce(
+        paths.credentialsFile,
+        '${paths.credentialsFile}$_backupSuffix',
+      );
+      await io.writeAtomic(
+        paths.credentialsFile,
+        jsonEncode(existingCreds),
+        secret: true,
+      );
+    } on AuthFileIoException catch (e) {
+      throw ClaudeAuthException(
+        'Could not switch the Claude account: ${e.message}',
+      );
+    }
 
     // --- config: splice only oauthAccount, if we have one to write ---
     if (updatedConfig != null) {
-      if (configExists) await _backupOnce(paths.configFile);
-      await _writeAtomic(paths.configFile, updatedConfig);
+      try {
+        if (configExists) {
+          await io.backupOnce(
+            paths.configFile,
+            '${paths.configFile}$_backupSuffix',
+          );
+        }
+        await io.writeAtomic(paths.configFile, updatedConfig, secret: false);
+      } on AuthFileIoException catch (e) {
+        // The token is already in: say so, rather than "nothing changed".
+        throw ClaudeAuthException(
+          'The new Claude token was written but the account name was not: '
+          '${e.message} Claude Code may show the previous account name until '
+          'it signs in again.',
+        );
+      }
     }
 
     _logger.info(
@@ -346,11 +452,14 @@ class ClaudeAuthService {
     );
   }
 
-  Future<Map<String, dynamic>> _readJsonFileForSwitch(String path) async {
-    final file = File(path);
-    if (!await file.exists()) return <String, dynamic>{};
+  Future<Map<String, dynamic>> _readJsonFileForSwitch(
+    AuthFileIo io,
+    String path,
+  ) async {
+    final raw = await _readTextForSwitch(io, path);
+    if (raw == null) return <String, dynamic>{};
     try {
-      final decoded = jsonDecode(await file.readAsString());
+      final decoded = jsonDecode(raw);
       if (decoded is Map<String, dynamic>) return decoded;
     } on FormatException catch (e) {
       throw ClaudeAuthException(
@@ -362,19 +471,12 @@ class ClaudeAuthService {
     );
   }
 
-  // --- IO helpers ------------------------------------------------------------
-
-  Future<void> _backupOnce(String path) async {
-    final backup = File('$path$_backupSuffix');
-    if (await backup.exists()) return;
-    final original = File(path);
-    if (await original.exists()) await original.copy(backup.path);
-  }
-
-  Future<void> _writeAtomic(String path, String content) async {
-    final tmp = File('$path$_tmpSuffix');
-    await tmp.writeAsString(content, flush: true);
-    await tmp.rename(path);
+  Future<String?> _readTextForSwitch(AuthFileIo io, String path) async {
+    try {
+      return await io.readText(path);
+    } on AuthFileIoException catch (e) {
+      throw ClaudeAuthException('Cannot switch accounts: ${e.message}');
+    }
   }
 }
 

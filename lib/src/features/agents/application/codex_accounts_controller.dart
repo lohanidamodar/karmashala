@@ -29,15 +29,19 @@ final codexAuthSnapshotProvider =
       installation,
     ) async {
       final environments = ref.watch(executionEnvironmentDaoProvider).getAll();
-      final path = await ref
+      final location = await ref
           .watch(codexAuthLocatorProvider)
-          .authPathFor(installation, environments);
-      if (path == null) {
+          .locationFor(installation, environments);
+      if (location == null) {
         return CodexAuthSnapshot.signedOut(installation.environmentId);
       }
       return ref
           .watch(codexAuthServiceProvider)
-          .readSnapshot(path, installation.environmentId);
+          .readSnapshot(
+            location.path,
+            installation.environmentId,
+            io: location.io,
+          );
     });
 
 class CodexAccountsController extends Notifier<List<CodexAccount>> {
@@ -45,10 +49,10 @@ class CodexAccountsController extends Notifier<List<CodexAccount>> {
   List<CodexAccount> build() => ref.watch(codexAccountDaoProvider).getAll();
 
   Future<CodexAccount> captureCurrent(AgentInstallation installation) async {
-    final path = await _pathFor(installation);
+    final location = await _locationFor(installation);
     final account = await ref
         .read(codexAuthServiceProvider)
-        .capture(path, installation.environmentId);
+        .capture(location.path, installation.environmentId, io: location.io);
     final dao = ref.read(codexAccountDaoProvider);
     final saved = dao.upsert(account);
     state = dao.getAll();
@@ -62,14 +66,20 @@ class CodexAccountsController extends Notifier<List<CodexAccount>> {
   ) async {
     final service = ref.read(codexAuthServiceProvider);
     final dao = ref.read(codexAccountDaoProvider);
-    final path = await _pathFor(installation);
+    final location = await _locationFor(installation);
     try {
-      dao.upsert(await service.capture(path, installation.environmentId));
+      dao.upsert(
+        await service.capture(
+          location.path,
+          installation.environmentId,
+          io: location.io,
+        ),
+      );
     } on CodexAuthException {
       // A missing outgoing login is valid: the saved account can still be
       // restored into this installation.
     }
-    await service.switchTo(account, path);
+    await service.switchTo(account, location.path, io: location.io);
     state = dao.getAll();
     ref.invalidate(codexAuthSnapshotProvider(installation));
   }
@@ -80,17 +90,17 @@ class CodexAccountsController extends Notifier<List<CodexAccount>> {
     state = dao.getAll();
   }
 
-  Future<String> _pathFor(AgentInstallation installation) async {
+  Future<CodexAuthLocation> _locationFor(AgentInstallation installation) async {
     final environments = ref.read(executionEnvironmentDaoProvider).getAll();
-    final path = await ref
+    final location = await ref
         .read(codexAuthLocatorProvider)
-        .authPathFor(installation, environments);
-    if (path == null) {
+        .locationFor(installation, environments);
+    if (location == null) {
       throw CodexAuthException(
         'Could not locate Codex auth for ${installation.environmentId}.',
       );
     }
-    return path;
+    return location;
   }
 }
 

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:dartssh2/dartssh2.dart';
 
@@ -17,6 +19,57 @@ String buildRemoteCommandLine(CommandRequest request) {
   final cwd = request.workingDirectory;
   if (cwd == null) return 'exec $command';
   return 'cd ${posixQuote(cwd.path)} && exec $command';
+}
+
+/// `runWithResult`, but with [stdinText] written to the remote process's stdin
+/// and the channel's EOF sent after it.
+///
+/// `runWithResult` takes no stdin, and [SshCommandRunner.run] used to drop
+/// [CommandRequest.stdinText] on the floor — so a command that read its input
+/// from stdin got none on SSH and nothing said so. Stdin is where a payload
+/// that must not be on a command line travels (an OAuth token bundle, which an
+/// argument would put in the remote host's process list), so it has to arrive.
+Future<SSHRunResult> runWithStdin(
+  SSHClient client,
+  String command,
+  String stdinText,
+) async {
+  final session = await client.execute(command);
+  final stdout = BytesBuilder(copy: false);
+  final stderr = BytesBuilder(copy: false);
+  final stdoutDone = Completer<void>();
+  final stderrDone = Completer<void>();
+  final stdoutSub = session.stdout.listen(
+    stdout.add,
+    onDone: stdoutDone.complete,
+    onError: stdoutDone.completeError,
+    cancelOnError: true,
+  );
+  final stderrSub = session.stderr.listen(
+    stderr.add,
+    onDone: stderrDone.complete,
+    onError: stderrDone.completeError,
+    cancelOnError: true,
+  );
+  try {
+    session.write(Uint8List.fromList(utf8.encode(stdinText)));
+    await session.stdin.close();
+    await Future.wait([stdoutDone.future, stderrDone.future], eagerError: true);
+    await session.done;
+  } catch (_) {
+    await stdoutSub.cancel();
+    await stderrSub.cancel();
+    session.close();
+    rethrow;
+  }
+  final out = stdout.takeBytes();
+  return SSHRunResult(
+    output: out,
+    stdout: out,
+    stderr: stderr.takeBytes(),
+    exitCode: session.exitCode,
+    exitSignal: session.exitSignal,
+  );
 }
 
 /// Exit code for a remote process killed by a signal: shells use 128+signal,
@@ -40,8 +93,11 @@ class SshCommandRunner implements CommandRunner {
     try {
       // Through the connection's channel limiter: a fan-out of probes queues
       // rather than tripping the server's session limit.
+      final stdinText = request.stdinText;
       result = await connection.runOnChannel(
-        (client) => client.runWithResult(line),
+        (client) => stdinText == null
+            ? client.runWithResult(line)
+            : runWithStdin(client, line, stdinText),
       );
     } on SshConnectionException catch (e) {
       throw _unreachable(request, 'run', e);
