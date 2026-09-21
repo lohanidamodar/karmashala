@@ -87,11 +87,9 @@ void main() {
           host: {'ANTHROPIC_API_KEY': _key, 'CLAUDE_CODE_USE_BEDROCK': off},
         );
 
-        expect(
-          decision.removed,
-          {'ANTHROPIC_API_KEY'},
-          reason: 'CLAUDE_CODE_USE_BEDROCK=$off is not a Bedrock setup',
-        );
+        expect(decision.removed, {
+          'ANTHROPIC_API_KEY',
+        }, reason: 'CLAUDE_CODE_USE_BEDROCK=$off is not a Bedrock setup');
       }
     });
 
@@ -139,9 +137,10 @@ void main() {
         _decide(
           host: {'ANTHROPIC_API_KEY': _key, 'CLAUDE_CODE_USE_BEDROCK': '1'},
         ),
-        _decide(host: {'ANTHROPIC_API_KEY': _key}, settings: {
-          'ANTHROPIC_API_KEY': _key,
-        }),
+        _decide(
+          host: {'ANTHROPIC_API_KEY': _key},
+          settings: {'ANTHROPIC_API_KEY': _key},
+        ),
       ]) {
         expect(decision.logSummary, isNot(contains(_key)));
         expect(decision.logSummary, isNot(contains('sk-ant')));

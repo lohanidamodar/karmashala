@@ -24,10 +24,7 @@ void main() {
       'a POSIX pane': LaunchContext.posix(shell: '/bin/zsh'),
     }.entries) {
       test('${entry.key} carries the removal', () {
-        final launch = agentPtyLaunchFor(
-          _claudePane(),
-          context: entry.value,
-        );
+        final launch = agentPtyLaunchFor(_claudePane(), context: entry.value);
 
         expect(launch.removedEnvironment, _stripped);
       });
@@ -79,15 +76,18 @@ void main() {
       expect(env, isEmpty);
     });
 
-    test('strips only the exact name on POSIX, where they are two variables', () {
-      final env = ptyChildEnvironment(
-        host: const {'anthropic_api_key': _key, 'ANTHROPIC_API_KEY': _key},
-        removed: _stripped,
-        hostIsWindows: false,
-      );
+    test(
+      'strips only the exact name on POSIX, where they are two variables',
+      () {
+        final env = ptyChildEnvironment(
+          host: const {'anthropic_api_key': _key, 'ANTHROPIC_API_KEY': _key},
+          removed: _stripped,
+          hostIsWindows: false,
+        );
 
-      expect(env.keys, ['anthropic_api_key']);
-    });
+        expect(env.keys, ['anthropic_api_key']);
+      },
+    );
 
     test('a Karmashala setting wins over the removal', () {
       final env = ptyChildEnvironment(

@@ -89,7 +89,9 @@ class InheritedCredentialDecision {
     if (inherited.isEmpty) return 'none';
     final names = _ordered(inherited).join(',');
     if (removed.isNotEmpty) return 'stripped($names)';
-    if (keptForOverride != null) return 'kept($names, override=$keptForOverride)';
+    if (keptForOverride != null) {
+      return 'kept($names, override=$keptForOverride)';
+    }
     if (keptBySetting.isNotEmpty) {
       return 'kept($names, set by Karmashala)';
     }
@@ -122,7 +124,8 @@ InheritedCredentialDecision decideInheritedCredentials({
       if (settingsEnvironment.containsKey(name)) name,
   };
 
-  final override = _overrideIn(hostEnvironment) ?? _overrideIn(settingsEnvironment);
+  final override =
+      _overrideIn(hostEnvironment) ?? _overrideIn(settingsEnvironment);
   if (override != null) {
     return InheritedCredentialDecision(
       inherited: inherited,

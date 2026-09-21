@@ -86,8 +86,9 @@ FakeCommandRunner _runner(
       );
     }
     for (final entry in stats.entries) {
-      if (command.contains("ls -lad '${entry.key}'"))
-        {return _lsOut(entry.value);}
+      if (command.contains("ls -lad '${entry.key}'")) {
+        return _lsOut(entry.value);
+      }
     }
     if (command.startsWith('ls -lad ')) {
       return _lsOut('ls: x: No such file or directory');

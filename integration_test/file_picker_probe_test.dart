@@ -78,7 +78,10 @@ void main() {
       await step('MediaKit.ensureInitialized', () async {
         MediaKit.ensureInitialized();
       });
-      await step('windowManager.ensureInitialized', windowManager.ensureInitialized);
+      await step(
+        'windowManager.ensureInitialized',
+        windowManager.ensureInitialized,
+      );
       await step('waitUntilReadyToShow', () async {
         await windowManager.waitUntilReadyToShow(
           WindowOptions(
@@ -128,7 +131,9 @@ void main() {
     say('1: tapping Open');
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
-    say('1: dialog up, focus=${FocusManager.instance.primaryFocus?.debugLabel}');
+    say(
+      '1: dialog up, focus=${FocusManager.instance.primaryFocus?.debugLabel}',
+    );
 
     await tester.runAsync(() async {
       say('1: >>> calling openFile()');
