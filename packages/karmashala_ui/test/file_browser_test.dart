@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/picking.dart';
 
@@ -253,13 +254,13 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(InlineSpinner), findsOneWidget);
 
     await tester.pump(kListingPatience + const Duration(seconds: 1));
     await tester.pumpAndSettle();
     expect(find.textContaining('did not answer within'), findsOneWidget);
     expect(
-      find.byType(CircularProgressIndicator),
+      find.byType(InlineSpinner),
       findsNothing,
       reason: 'a dead share costs a sentence, not a spinner forever',
     );

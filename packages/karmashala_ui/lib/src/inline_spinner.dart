@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'design_tokens.dart';
+import 'stepped_ring.dart';
 
 /// Which slot an [InlineSpinner] stands in, and so how big it is drawn.
 enum InlineSpinnerSize {
@@ -28,6 +29,11 @@ enum InlineSpinnerSize {
 /// The house indeterminate spinner: a thin ring in a token-sized square. Use it
 /// wherever a `SizedBox` around `CircularProgressIndicator(strokeWidth: 2)`
 /// would otherwise be written by hand.
+///
+/// A [SteppedRing] rather than Material's ring: that one holds a vsync
+/// [Ticker], so one spinner anywhere on screen put the whole app at 60 full
+/// frames a second — measured as ~43 fps of GPU raster on an idle window
+/// (`docs/MEMORY-2026-09-20.md`, 2026-09-21).
 class InlineSpinner extends StatelessWidget {
   const InlineSpinner({
     this.size = InlineSpinnerSize.small,
@@ -51,12 +57,18 @@ class InlineSpinner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox.square(
-      dimension: size.dimensionFor(UiDensity.of(context)),
-      child: CircularProgressIndicator(
-        strokeWidth: strokeWidth,
-        color: color,
-        semanticsLabel: semanticsLabel,
+    final colour =
+        color ??
+        ProgressIndicatorTheme.of(context).color ??
+        Theme.of(context).colorScheme.primary;
+    return Semantics(
+      label: semanticsLabel,
+      child: ExcludeSemantics(
+        child: SteppedRing(
+          size: size.dimensionFor(UiDensity.of(context)),
+          color: colour,
+          stroke: strokeWidth,
+        ),
       ),
     );
   }

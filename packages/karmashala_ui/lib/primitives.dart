@@ -4,6 +4,7 @@
 library;
 
 export 'src/inline_spinner.dart';
+export 'src/stepped_ring.dart';
 export 'src/keyboard_capture.dart';
 export 'src/linkable_text.dart';
 export 'src/qr_painter.dart';

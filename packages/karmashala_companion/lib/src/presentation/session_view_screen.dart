@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/companion_runtime.dart';
 import 'package:karmashala_remote/remote.dart';
@@ -174,7 +175,9 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
         : companionAsync(
             transcript,
             loading: () => link == CompanionLinkState.connected
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: InlineSpinner(size: InlineSpinnerSize.large),
+                  )
                 // No link to carry anything, so a skeleton would be a promise
                 // the phone cannot keep.
                 : CompanionNotice(

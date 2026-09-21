@@ -22,6 +22,9 @@ void main() {
     },
   };
 
+  SteppedRing ringOf(WidgetTester tester) =>
+      tester.widget<SteppedRing>(find.byType(SteppedRing));
+
   for (final density in UiDensity.values) {
     for (final size in InlineSpinnerSize.values) {
       testWidgets('${size.name} is a ${expected[density]![size]}px square '
@@ -37,10 +40,7 @@ void main() {
           Size.square(expected[density]![size]!),
         );
         expect(size.dimensionFor(density), expected[density]![size]);
-        final ring = tester.widget<CircularProgressIndicator>(
-          find.byType(CircularProgressIndicator),
-        );
-        expect(ring.strokeWidth, 2);
+        expect(ringOf(tester).stroke, 2);
       });
     }
   }
@@ -60,11 +60,19 @@ void main() {
       ),
     );
     expect(tester.getSize(find.byType(InlineSpinner)).width, Chrome.iconAction);
-    final ring = tester.widget<CircularProgressIndicator>(
-      find.byType(CircularProgressIndicator),
-    );
-    expect(ring.color, Colors.pink);
+    expect(ringOf(tester).color, Colors.pink);
     expect(find.bySemanticsLabel('Loading branches'), findsOneWidget);
     semantics.dispose();
+  });
+
+  testWidgets('with no colour it takes the theme\'s progress colour', (
+    tester,
+  ) async {
+    await pumpInBox(
+      tester,
+      width: 200,
+      child: const Center(child: InlineSpinner()),
+    );
+    expect(ringOf(tester).color, isNotNull);
   });
 }

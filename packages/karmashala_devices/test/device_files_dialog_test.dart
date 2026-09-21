@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:path/path.dart' as p;
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/providers.dart';
@@ -337,7 +338,7 @@ void main() {
     await tester.tap(find.text('Download'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(InlineSpinner), findsNothing);
     expect(find.textContaining('adb could not be run'), findsOneWidget);
     expect(find.textContaining('Not permitted'), findsOneWidget);
     // The Up button is live again: the dialog is not wedged.
@@ -364,7 +365,7 @@ void main() {
     await tester.tap(find.byKey(const Key('device-files-paste')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(InlineSpinner), findsNothing);
     expect(find.textContaining('adb could not be run'), findsOneWidget);
   });
 

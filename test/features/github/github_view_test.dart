@@ -96,6 +96,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // Riverpod retries a failed provider over ~38 s, and the section draws the
+    // spinner until the attempts are spent. Spelled out, because
+    // `pumpAndSettle` used to spend that time by accident: against a spinner
+    // that asked for every vsync it never ran out of frames to pump.
+    await tester.pump(const Duration(minutes: 2));
+    await tester.pumpAndSettle();
 
     expect(find.textContaining('gh not authenticated'), findsOneWidget);
   });

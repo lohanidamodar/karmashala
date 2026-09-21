@@ -134,6 +134,12 @@ void main() {
       tester,
     ) async {
       await pump(tester, failed);
+      // The Changes pane draws the spinner while the retry is in flight, so
+      // the words only land once the backoff is spent. Spelled out, because
+      // `pumpAndSettle` used to spend it by accident: against a spinner that
+      // asked for every vsync it never ran out of frames to pump.
+      await pastTheRetries(tester);
+      await tester.pumpAndSettle();
 
       expect(find.textContaining('dubious ownership'), findsOneWidget);
       expect(find.byType(PanePlaceholder), findsNothing);

@@ -6,6 +6,7 @@ import 'package:karmashala_companion/screens.dart';
 import 'package:karmashala_companion/widgets.dart';
 import 'package:karmashala_companion/pairing.dart';
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 /// The phone shell: pairing until a host exists, then Projects, Inbox and
 /// Settings under a connection banner. Bottom navigation, no rail, no panes.
@@ -33,7 +34,9 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
     // A companion with no host is the first thing a user ever sees, so the
     // unpaired state is a real screen, not an empty tab.
     if (pairing.isLoading && !pairing.hasValue) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const Scaffold(
+        body: Center(child: InlineSpinner(size: InlineSpinnerSize.large)),
+      );
     }
     if (pairing.asData?.value == null) return const PairingScreen();
 

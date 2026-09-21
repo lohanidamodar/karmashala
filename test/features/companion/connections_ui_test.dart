@@ -15,6 +15,7 @@ import 'package:karmashala_remote/remote.dart' show CapabilitySet;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import 'companion_test_support.dart';
 
@@ -176,7 +177,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('Connecting…'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(InlineSpinner), findsOneWidget);
 
       // A second tap while the first is in flight must not queue another.
       await tester.tap(find.text('Laptop'), warnIfMissed: false);

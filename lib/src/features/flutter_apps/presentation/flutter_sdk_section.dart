@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_ui/picking.dart';
@@ -171,11 +172,7 @@ class _FlutterSdkRowState extends ConsumerState<_FlutterSdkRow> {
                 OutlinedButton.icon(
                   onPressed: _checking ? null : _check,
                   icon: _checking
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
+                      ? const InlineSpinner()
                       : const Icon(AppIcons.magnifyingGlass, size: Chrome.icon),
                   label: const Text('Check'),
                 ),

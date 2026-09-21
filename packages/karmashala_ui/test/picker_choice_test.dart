@@ -54,6 +54,12 @@ void main() {
     );
     await tester.tap(find.text('browse'));
     await tester.pumpAndSettle();
+    // The in-app browser arms a listing-patience timer as it opens, and it
+    // used to be drained by accident: `pumpAndSettle` against a spinner that
+    // asked for every vsync burned ten seconds of fake time before returning.
+    // The spinner settles now, so the wait is spelled out.
+    await tester.pump(kListingPatience + const Duration(seconds: 1));
+    await tester.pumpAndSettle();
     return asked;
   }
 

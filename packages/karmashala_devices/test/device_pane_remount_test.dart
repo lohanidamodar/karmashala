@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/primitives.dart';
 import 'package:karmashala_devices/providers.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala_devices/pane.dart';
@@ -154,7 +155,7 @@ void main() {
       expect(container.read(selectedDeviceSerialProvider), _serial);
       // What a remount shows until the stream is back: the spinner. The held
       // frame cannot survive — its player went with the old element.
-      expect(find.byType(CircularProgressIndicator), findsWidgets);
+      expect(find.byType(InlineSpinner), findsWidgets);
       expect(find.textContaining('Pick a device below'), findsNothing);
     });
 

@@ -8,8 +8,8 @@ library;
 
 import 'package:karmashala_remote/companion.dart';
 import 'package:karmashala_companion/screens.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import 'companion_test_support.dart';
 
@@ -45,7 +45,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Try again'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(InlineSpinner), findsNothing);
   });
 
   testWidgets('a session with no transcript gets an honest empty state, not a '
@@ -57,7 +57,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(InlineSpinner), findsNothing);
     // Some agents keep no transcript at all; the phone cannot tell that from
     // "nothing said yet", so it must not claim either.
     expect(find.textContaining('No transcript'), findsOneWidget);
@@ -77,7 +77,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
 
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(InlineSpinner), findsNothing);
     expect(find.textContaining('desktop'), findsWidgets);
   });
 
@@ -93,6 +93,6 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(InlineSpinner), findsOneWidget);
   });
 }

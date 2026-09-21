@@ -17,6 +17,7 @@ import 'package:karmashala_ui/rows.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala_ui/primitives.dart';
 
 import 'companion_test_support.dart';
 
@@ -321,7 +322,7 @@ void main() {
 
       expect(find.textContaining('No projects'), findsNothing);
       expect(find.bySemanticsLabel('Loading'), findsOneWidget);
-      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(InlineSpinner), findsNothing);
     });
 
     testWidgets('a connected host with nothing on it says what to do next', (
