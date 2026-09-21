@@ -137,3 +137,23 @@ Future<void> holdToolForCheckpoint(
         onTimeout: () => recorder.noteHoldExpired(session.id),
       );
 }
+
+/// The spool transport's counterpart to [holdToolForCheckpoint]: it has no
+/// reply, so the tool a `PreToolUse` announces has already run by the time it
+/// is read, and the turn's before-turn snapshots still to come are marked
+/// unverified. Called after the status step, so a turn this very hook starts
+/// has begun and does not clear the mark.
+void noteSpooledToolUnheld(
+  ProviderContainer container, {
+  required String agentSessionId,
+  required String? event,
+}) {
+  if (event != 'PreToolUse' || agentSessionId.isEmpty) return;
+  final session = container
+      .read(sessionDaoProvider)
+      .getByExternalSessionId(agentSessionId);
+  if (session == null) return;
+  container
+      .read(sessionCheckpointRecorderProvider.notifier)
+      .noteToolUnheld(session.id);
+}

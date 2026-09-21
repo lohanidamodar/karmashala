@@ -82,7 +82,7 @@ class SessionCheckpointRecorder extends Notifier<int> {
   final Map<String, Set<String>> _startedIn = {};
 
   /// The sessions whose tool was released this turn before their before-turn
-  /// snapshot was confirmed taken. See [noteHoldExpired].
+  /// snapshot was confirmed taken. See [noteHoldExpired], [noteToolUnheld].
   final Set<String> _released = {};
 
   /// The last message logged per session and repository, so a repeat is not.
@@ -179,12 +179,23 @@ class SessionCheckpointRecorder extends Notifier<int> {
   ///
   /// Reset as the next turn begins, so the mark belongs to the turn that
   /// earned it and no later one inherits it.
-  void noteHoldExpired(String sessionId) {
+  void noteHoldExpired(String sessionId) =>
+      _release(sessionId, 'its hold expired');
+
+  /// A `PreToolUse` came by spool, which has no reply to hold a tool with: the
+  /// hook script wrote a file and exited, so the tool ran before this was read.
+  /// The same mark as [noteHoldExpired], on every such hook — a before-turn
+  /// snapshot returning after it is unverified by construction, and one that
+  /// returned before it was read is left alone.
+  void noteToolUnheld(String sessionId) =>
+      _release(sessionId, 'its hook came by spool, which cannot hold a tool');
+
+  void _release(String sessionId, String why) {
     if (!_released.add(sessionId)) return;
     _log.warning(
       'Session $sessionId released a tool before its before-turn checkpoint '
-      'was taken: this turn may have no undo point taken before its first '
-      'edit.',
+      'was taken ($why): this turn may have no undo point taken before its '
+      'first edit.',
     );
   }
 

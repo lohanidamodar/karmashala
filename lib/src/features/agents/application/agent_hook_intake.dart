@@ -21,14 +21,27 @@ import '../../sessions/application/session_rebind_providers.dart';
 final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
   final logger = AppLogger.named('agent-hooks');
   final drainer = AgentHookSpoolDrainer(
-    onEvent: (event) => applyAgentHookCallback(
-      ref.container,
-      agentId: event.agentId,
-      event: event.event,
-      body: event.body,
-      observedAt: event.firedAt,
-      logger: logger,
-    ),
+    onEvent: (event) {
+      final report = applyAgentHookCallback(
+        ref.container,
+        agentId: event.agentId,
+        event: event.event,
+        body: event.body,
+        observedAt: event.firedAt,
+        logger: logger,
+      );
+      // Where the HTTP route holds the tool, this route can only say it did
+      // not: a spool write has no reply to wait on.
+      try {
+        noteSpooledToolUnheld(
+          ref.container,
+          agentSessionId: report.sessionId,
+          event: event.event,
+        );
+      } on Object catch (error) {
+        logger.warning('Marking a spooled tool as unheld failed: $error');
+      }
+    },
   );
   ref.onDispose(drainer.dispose);
   return drainer;
