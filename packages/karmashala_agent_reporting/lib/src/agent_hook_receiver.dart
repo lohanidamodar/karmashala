@@ -71,7 +71,18 @@ class AgentHookReceiver {
 
     // **What the agent said about the session, not about the turn.** A subtype
     // answers for itself; only an event without one falls back to the table.
-    final ending = kind.isEmpty ? spec?.eventEnding[name] : declared?.ending;
+    final declaredEnding = kind.isEmpty
+        ? spec?.eventEnding[name]
+        : declared?.ending;
+    // A `/clear` ends the conversation, not the pane's session.
+    final ending =
+        declaredEnding != null &&
+            spec!.endingReasonPath.isNotEmpty &&
+            spec.conversationOnlyEndReasons.contains(
+              _stringAt(spec.endingReasonPath, payload),
+            )
+        ? AgentSessionEnding.conversationOnly
+        : declaredEnding;
 
     // **A question opening.** The event that announces it is an ordinary tool
     // call to the table above, so it is recognised by the tool it names.

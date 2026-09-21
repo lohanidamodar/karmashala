@@ -63,7 +63,7 @@ enum AgentWaitKind {
 /// `SessionEnd` and `StopFailure`, Codex's `SessionEnd`, Antigravity's `Stop`
 /// with a failing `terminationReason` — reaches this type at all.
 ///
-/// Two values, and no `cancelled`: no CLI here distinguishes a run the user
+/// No `cancelled`: no CLI here distinguishes a run the user
 /// stopped from one that ended by itself in a hook, and the user's own stop is
 /// already written by whoever performed it.
 enum AgentSessionEnding {
@@ -72,6 +72,11 @@ enum AgentSessionEnding {
 
   /// The CLI named a failure — an API error, an exhausted budget.
   failed,
+
+  /// Only the **conversation** ended — Claude Code's `/clear` or `/resume` —
+  /// and the CLI carries on in the same pane with another. Still an ending to
+  /// whoever tracks conversations; never an ending of the session row.
+  conversationOnly,
 }
 
 /// One observation of an agent session's status.
@@ -380,6 +385,8 @@ class AgentHookSpec {
     this.inFlightPath = const {},
     this.eventEnding = const {},
     this.failureReasonPath = const [],
+    this.endingReasonPath = const [],
+    this.conversationOnlyEndReasons = const {},
     this.trustsCommandByHash = false,
     required this.eventStatus,
   });
@@ -518,6 +525,16 @@ class AgentHookSpec {
 
   /// Where a failing event's payload names its cause. Empty: it names none.
   final List<String> failureReasonPath;
+
+  /// Where an [eventEnding] event's payload names why it fired. Empty: it
+  /// names nothing, and every such ending stands as declared.
+  final List<String> endingReasonPath;
+
+  /// The reasons at [endingReasonPath] that end only the conversation while
+  /// the CLI stays running in its pane; they turn an ending into
+  /// [AgentSessionEnding.conversationOnly]. An absent or unlisted reason keeps
+  /// the declared ending, so an older CLI still finishes its row.
+  final Set<String> conversationOnlyEndReasons;
 
   /// Whether this agent gates each hook entry on a hash of the entry itself, so
   /// the installed **command string must not change between launches**.

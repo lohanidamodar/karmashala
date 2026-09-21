@@ -33,7 +33,10 @@ class SessionOutcomeWriter {
     final status = switch (ending) {
       AgentSessionEnding.completed => SessionStatus.completed,
       AgentSessionEnding.failed => SessionStatus.failed,
+      // A `/clear` or `/resume`: the pane lives on, and an ended row is final.
+      AgentSessionEnding.conversationOnly => null,
     };
+    if (status == null) return null;
     if (session.status == status) return null;
     sessionDao.updateStatus(session.id, status);
     written++;

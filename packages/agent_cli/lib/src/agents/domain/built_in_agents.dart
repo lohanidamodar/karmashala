@@ -571,6 +571,12 @@ const _claudeCode = AgentDescriptor(
     // is then `isEnded`, so nothing later can correct it, and a rate limit at
     // hour one filed an eight-hour session under "ended in failure".
     eventEnding: {'SessionEnd': AgentSessionEnding.completed},
+    // **Except that `SessionEnd` also fires for a `/clear` and a `/resume`**,
+    // for the conversation being left, and the CLI carries on in the pane.
+    // 2.1.274's schema: `reason` is one of `clear`, `resume`, `logout`,
+    // `prompt_input_exit`, `other`; the exit path defaults to `other`.
+    endingReasonPath: ['reason'],
+    conversationOnlyEndReasons: {'clear', 'resume'},
     // `StopFailure`'s own field; `rate_limit` is how a usage limit is told
     // from an overload, which both arrive as the one event.
     failureReasonPath: ['error'],

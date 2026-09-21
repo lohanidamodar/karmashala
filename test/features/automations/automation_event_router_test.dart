@@ -301,6 +301,17 @@ void main() {
       );
       await h.settle();
       expect(sends(), 0);
+      // A /clear's ending leaves the row running, and is still not a turn.
+      changes.add(entry('s1', AgentActivityStatus.working));
+      changes.add(
+        entry(
+          's1',
+          AgentActivityStatus.idle,
+          ending: AgentSessionEnding.conversationOnly,
+        ),
+      );
+      await h.settle();
+      expect(sends(), 0);
       // The negative: the same move without the ending is one.
       h.clock.now = h.now.add(const Duration(minutes: 1));
       await turn('s1');

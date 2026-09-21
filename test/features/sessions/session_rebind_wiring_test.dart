@@ -264,6 +264,52 @@ void main() {
       expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
     });
 
+    group('a real /clear through the intake', () {
+      void hook(
+        ProviderContainer container,
+        String event,
+        Map<String, Object?> payload, {
+        String? paneSessionId,
+      }) => applyAgentHookCallback(
+        container,
+        agentId: AgentIds.claudeCode,
+        event: event,
+        body: jsonEncode({'cwd': r'C:\src\demo\app', ...payload}),
+        paneSessionId: paneSessionId,
+      );
+
+      for (final identified in [true, false]) {
+        test('moves the conversation, keeps the row running '
+            '(${identified ? 'pane named' : 'no identity'})', () {
+          twoPanes();
+          heardFrom('cli-s1', testTime.subtract(const Duration(seconds: 12)));
+          final container = containerWith(['pane-1', 'pane-2']);
+          final pane = identified ? 's1' : null;
+
+          hook(container, 'SessionEnd', {
+            'session_id': 'cli-s1',
+            'reason': 'clear',
+          }, paneSessionId: pane);
+          expect(sessions.getById('s1')!.status, SessionStatus.running);
+
+          hook(container, 'UserPromptSubmit', {
+            'session_id': 'cli-new',
+          }, paneSessionId: pane);
+          expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
+          expect(sessions.getById('s1')!.status, SessionStatus.running);
+          expect(sessions.getById('s2')!.externalSessionId, 'cli-s2');
+          expect(sessions.getById('s2')!.status, SessionStatus.running);
+
+          // And quitting afterwards still ends the row it moved to.
+          hook(container, 'SessionEnd', {
+            'session_id': 'cli-new',
+            'reason': 'prompt_input_exit',
+          }, paneSessionId: pane);
+          expect(sessions.getById('s1')!.status, SessionStatus.completed);
+        });
+      }
+    });
+
     test('a malformed identity is no identity', () {
       launched('s1', paneId: 'pane-1');
       final container = containerWith(['pane-1']);

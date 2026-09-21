@@ -77,6 +77,41 @@ void main() {
       );
     });
 
+    test('Claude Code: a /clear or /resume ends only the conversation', () {
+      for (final reason in ['clear', 'resume']) {
+        expect(
+          endingOf(
+            AgentIds.claudeCode,
+            'SessionEnd',
+            payload: {'reason': reason},
+          ),
+          AgentSessionEnding.conversationOnly,
+          reason: reason,
+        );
+      }
+    });
+
+    test('Claude Code: every genuine exit still finishes the session', () {
+      for (final reason in ['prompt_input_exit', 'logout', 'other', 'new']) {
+        expect(
+          endingOf(
+            AgentIds.claudeCode,
+            'SessionEnd',
+            payload: {'reason': reason},
+          ),
+          AgentSessionEnding.completed,
+          reason: reason,
+        );
+      }
+    });
+
+    test('Codex: its hard-coded "other" is a real exit', () {
+      expect(
+        endingOf(AgentIds.codex, 'SessionEnd', payload: {'reason': 'other'}),
+        AgentSessionEnding.completed,
+      );
+    });
+
     test('Claude Code: a turn ending is not a session ending', () {
       // `Stop` fires once per turn and many times a session; the tool events
       // and `Notification` are mid-turn by construction. `StopFailure` fires
@@ -310,6 +345,68 @@ void main() {
 
       expect(report.ending, AgentSessionEnding.completed);
       expect(statusOf('s1'), SessionStatus.completed);
+    });
+
+    test('a conversation-only ending writes nothing', () {
+      live('s1');
+      expect(
+        writer.record(
+          agentSessionId: 'cli-s1',
+          ending: AgentSessionEnding.conversationOnly,
+        ),
+        isNull,
+      );
+      expect(statusOf('s1'), SessionStatus.running);
+      expect(writer.written, 0);
+    });
+
+    group('through the hook intake', () {
+      late ProviderContainer container;
+
+      setUp(() {
+        container = ProviderContainer(
+          overrides: [
+            ...fakeTerminalOverrides(database: db),
+            clockProvider.overrideWithValue(FixedClock(testTime)),
+          ],
+        );
+        addTearDown(container.dispose);
+      });
+
+      AgentStatusReport sessionEnd(String conversationId, String reason) =>
+          applyAgentHookCallback(
+            container,
+            agentId: AgentIds.claudeCode,
+            event: 'SessionEnd',
+            body: jsonEncode({
+              'session_id': conversationId,
+              'cwd': r'C:\src\demo',
+              'hook_event_name': 'SessionEnd',
+              'reason': reason,
+            }),
+          );
+
+      test('a /clear or /resume leaves the row running', () {
+        for (final reason in ['clear', 'resume']) {
+          live('s-$reason');
+          final report = sessionEnd('cli-s-$reason', reason);
+          // Still an ending to the rebind and to automations.
+          expect(report.ending, isNotNull, reason: reason);
+          expect(statusOf('s-$reason'), SessionStatus.running, reason: reason);
+        }
+      });
+
+      test('quitting the CLI still finishes the row', () {
+        for (final reason in ['prompt_input_exit', 'logout', 'other']) {
+          live('s-$reason');
+          sessionEnd('cli-s-$reason', reason);
+          expect(
+            statusOf('s-$reason'),
+            SessionStatus.completed,
+            reason: reason,
+          );
+        }
+      });
     });
   });
 
