@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/process.dart';
@@ -40,6 +42,10 @@ typedef WorktreeSetupPaneOpener =
 /// Files a finished report. See `WorktreeSetupDao.record`.
 typedef WorktreeSetupRecorder = void Function(WorktreeSetupReport report);
 
+/// Ends the process in a setup pane — a cancel reaching a script the agent was
+/// waiting on.
+typedef WorktreeSetupPaneCloser = void Function(String paneId);
+
 /// Does to a new worktree what its repository asked: the gitignored copies,
 /// then a pane on the setup command. Nothing throws; failures are recorded.
 class WorktreeSetupService {
@@ -48,6 +54,7 @@ class WorktreeSetupService {
     required this.lookup,
     required this.record,
     this.openPane,
+    this.closePane,
     Clock? clock,
   }) : clock = clock ?? const SystemClock();
 
@@ -58,6 +65,15 @@ class WorktreeSetupService {
   /// Null in a container with no terminal; a configured command is then refused
   /// in words rather than run where nobody can see it.
   final WorktreeSetupPaneOpener? openPane;
+
+  /// Null where panes cannot be ended from here; a cancel then says the script
+  /// was left running.
+  final WorktreeSetupPaneCloser? closePane;
+
+  final Map<String, Completer<int?>> _exitWaiters = {};
+
+  /// Exits heard before anybody waited on them — a script that ends at once.
+  final Map<String, int?> _exitedUnwaited = {};
 
   final Clock clock;
 
@@ -99,7 +115,7 @@ class WorktreeSetupService {
         worktree: worktree,
       ),
     );
-    record(report);
+    _record(report);
     final pane = report.command?.paneId;
     if (pane != null && (report.command?.result.isPending ?? false)) {
       _pending[pane] = report;
@@ -112,10 +128,60 @@ class WorktreeSetupService {
   /// every pane exit in the app, so this stays cheap and silent.
   WorktreeSetupReport? noteExit(String paneId, int? exitCode) {
     final pending = _pending.remove(paneId);
-    if (pending == null) return null;
+    final waiter = _exitWaiters.remove(paneId);
+    if (pending == null) {
+      if (waiter != null && !waiter.isCompleted) waiter.complete(exitCode);
+      return null;
+    }
     final corrected = pending.withCommand(pending.command?.afterExit(exitCode));
-    record(corrected);
+    _record(corrected);
+    if (waiter == null) _exitedUnwaited[paneId] = exitCode;
+    // After the record, so a creation waiting on this writes over it, not under.
+    if (waiter != null && !waiter.isCompleted) waiter.complete(exitCode);
     return corrected;
+  }
+
+  /// Completes with the exit code of the setup command in [paneId] — null when
+  /// it stopped without one — once [noteExit] hears of it.
+  Future<int?> waitForExit(String paneId) {
+    if (_exitedUnwaited.containsKey(paneId)) {
+      return Future.value(_exitedUnwaited.remove(paneId));
+    }
+    return (_exitWaiters[paneId] ??= Completer<int?>()).future;
+  }
+
+  /// Stores [creation] on the newest report of [base]'s worktree — which a pane
+  /// exit may have corrected since [base] was taken — and keeps the result as
+  /// the one a later [noteExit] corrects, so neither write loses the other.
+  WorktreeSetupReport saveCreation(
+    WorktreeSetupReport base,
+    WorktreeCreationRecord creation,
+  ) {
+    final latest = _latest[base.worktreePath] ?? base;
+    final merged = latest.withCreation(creation).withCommand(latest.command);
+    _record(merged);
+    final pane = merged.command?.paneId;
+    if (pane != null && _pending.containsKey(pane)) _pending[pane] = merged;
+    return merged;
+  }
+
+  /// The newest report written for each worktree, by path.
+  final Map<String, WorktreeSetupReport> _latest = {};
+
+  void _record(WorktreeSetupReport report) {
+    _latest[report.worktreePath] = report;
+    record(report);
+  }
+
+  /// Ends the setup command in [paneId] and stops tracking it. False when there
+  /// is no way to end a pane from here, and the command is still running.
+  bool stopCommand(String paneId) {
+    final closer = closePane;
+    if (closer == null) return false;
+    _pending.remove(paneId);
+    _exitWaiters.remove(paneId);
+    closer(paneId);
+    return true;
   }
 
   /// The copy half: one `git check-ignore` for the whole list, then one copy per

@@ -69,14 +69,16 @@ class SessionEngine {
 
     EnvironmentPath workingDirectory = repository.path;
     EnvironmentPath? worktree;
+    WorktreeCreated? created;
     if (useWorktree) {
-      final created = await worktreeService.createForSession(
+      created = await worktreeService.create(
         repo: repository.path,
         worktreeName: sessionWorktreeName(id),
         branch: sessionBranchName(id),
+        launchesAgent: true,
       );
-      workingDirectory = created.path;
-      worktree = created.path;
+      workingDirectory = created.worktree.path;
+      worktree = created.worktree.path;
     }
 
     final session = Session(
@@ -108,6 +110,7 @@ class SessionEngine {
       permission: permission,
       resumeSessionId: resumeSessionId,
     );
+    created?.tracker.agentStarted();
 
     return session;
   }

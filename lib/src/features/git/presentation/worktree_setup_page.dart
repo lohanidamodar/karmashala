@@ -14,6 +14,7 @@ import 'package:karmashala_session/resume.dart' show describeAge;
 import '../../settings/presentation/settings_section.dart';
 import '../application/worktree_setup_providers.dart';
 import 'package:karmashala_git/git.dart';
+import 'worktree_creation_view.dart';
 import 'worktree_setup_dialog.dart';
 
 /// Settings → Worktrees: what each checkout wants done to a new worktree, and
@@ -29,6 +30,12 @@ class WorktreeSetupPage extends ConsumerWidget {
     // Watched so a project added while this is open reaches the "add a
     // checkout" list without a reopen.
     ref.watch(projectsControllerProvider);
+    // A configured checkout's runs are on its card; these are the others'.
+    final recent = [
+      for (final run in ref.watch(recentWorktreeRunsProvider))
+        if (!(settings[run.repositoryId]?.isNotEmpty ?? false)) run,
+    ];
+    final now = ref.watch(clockProvider).nowUtc();
 
     final configured = [
       for (final repository in repositories)
@@ -84,6 +91,21 @@ class WorktreeSetupPage extends ConsumerWidget {
             ],
           ),
         ),
+        if (recent.isNotEmpty)
+          SettingsSection(
+            title: 'RECENT WORKTREES',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final run in recent)
+                  _RunLine(
+                    key: ValueKey('recent ${run.worktreePath}'),
+                    run: run,
+                    now: now,
+                  ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -222,6 +244,13 @@ class _CheckoutCard extends ConsumerWidget {
                 ? 'nothing'
                 : setup.copyPaths.join(', '),
           ),
+          if (setup.command.isNotEmpty)
+            _Line(
+              label: 'Agent',
+              value: setup.startAgentBeforeSetup
+                  ? 'starts at once'
+                  : 'waits for the command',
+            ),
           if (runs.isNotEmpty) ...[
             const SizedBox(height: Insets.sm),
             for (final run in runs.take(5))
@@ -290,11 +319,21 @@ class _RunLine extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final attention = run.verdict == WorktreeSetupVerdict.attention;
+    final creation = run.creation;
     final lines = [
       for (final copy in run.problems) '${copy.path}: ${copy.reason}',
       if (run.command != null && run.command!.result.needsAttention)
         run.command!.reason,
+      if (creation != null)
+        for (final stage in creation.problems)
+          // The setup script's own words are already above.
+          if (stage.stage != WorktreeStage.setupScript)
+            '${stage.stage.label}: ${stage.detail ?? stage.state.name}',
+      if (creation?.cleanup != null) creation!.cleanup!,
     ];
+    final status = creation == null
+        ? (attention ? 'needs attention' : 'set up')
+        : describeWorktreeOutcome(creation.outcome);
     return Padding(
       padding: const EdgeInsets.only(top: Insets.xs),
       child: Column(
@@ -311,7 +350,7 @@ class _RunLine extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${lastPathSegment(run.worktreePath)} — '
-                  '${attention ? 'needs attention' : 'set up'} · '
+                  '$status · '
                   '${describeAge(now.difference(run.ranAt))}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: attention ? scheme.error : null,

@@ -128,15 +128,16 @@ class WorktreeControlTools {
       );
     }
 
+    final WorktreeCreationRecord stages;
     try {
-      await worktrees.createForSession(
+      stages = (await worktrees.create(
         repo: repository.path,
         worktreeName: worktreeName,
         branch: branchName,
         baseRef: baseRef == null || baseRef.trim().isEmpty
             ? null
             : baseRef.trim(),
-      );
+      )).tracker.record;
     } on GitException catch (error) {
       // Git's own words, unedited: it knows the cases we cannot check from
       // here — a directory in the way, a base ref that resolves to nothing.
@@ -153,6 +154,9 @@ class WorktreeControlTools {
           ? 'not recorded — branched from the checkout\'s own HEAD'
           : baseRef.trim(),
       'repositoryId': await _recordCheckout(repository.projectId, path),
+      // Each stage's state and words: a submodule or setup that needs
+      // attention is here, not only in Settings.
+      'stages': stages.toJson(),
     };
   }
 

@@ -20,6 +20,7 @@ import 'package:path/path.dart' as p;
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
+import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
 
 /// Making a worktree and taking one away, over the endpoint an agent calls.
@@ -159,6 +160,7 @@ branch refs/heads/$worktreeBranch
         if (args.contains('diff')) return ok('1\t1\tfile.dart');
         return ok('');
       },
+      processFactory: (_) => finishedGit(),
     );
 
     container = ProviderContainer(
@@ -249,12 +251,15 @@ branch refs/heads/$worktreeBranch
           r'C:\src\demo\app',
           'worktree',
           'add',
+          '--no-checkout',
           '-b',
           'feat/mcp',
           r'C:\src\demo\.karmashala-worktrees\app-mcp',
         ],
       ]);
       final structured = result.structured! as Map<String, Object?>;
+      final stages = structured['stages']! as Map<String, Object?>;
+      expect(stages['outcome'], 'succeeded');
       expect(structured['path'], r'C:\src\demo\.karmashala-worktrees\app-mcp');
       expect(structured['branch'], 'feat/mcp');
       expect(structured['fromRepositoryId'], 'r1');

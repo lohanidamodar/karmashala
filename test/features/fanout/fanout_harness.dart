@@ -23,6 +23,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
+import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
 
 /// Parallel worktree fan-out: run one prompt on several agents at once, compare
@@ -101,6 +102,9 @@ Harness harness({
   final runner = FakeCommandRunner(
     responder:
         git ?? (_) => const CommandResult(exitCode: 0, stdout: '', stderr: ''),
+    // A worktree's checkout is streamed now; a git stream here finishes at once.
+    processFactory: (request) =>
+        request.executable == 'git' ? finishedGit() : FakeProcessHandle(),
   );
 
   final container = ProviderContainer(

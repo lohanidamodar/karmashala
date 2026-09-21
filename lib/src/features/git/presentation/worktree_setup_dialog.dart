@@ -35,6 +35,7 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
   late final _command = TextEditingController(
     text: joinCommandLine(widget.existing.command),
   );
+  late bool _agentFirst = widget.existing.startAgentBeforeSetup;
   late final _paths = TextEditingController(
     text: widget.existing.copyPaths.join('\n'),
   );
@@ -74,9 +75,13 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
 
   void _save() {
     if (_pathRefusal != null) return;
-    Navigator.of(
-      context,
-    ).pop(WorktreeSetup(command: _argv, copyPaths: _pathLines));
+    Navigator.of(context).pop(
+      WorktreeSetup(
+        command: _argv,
+        copyPaths: _pathLines,
+        startAgentBeforeSetup: _agentFirst,
+      ),
+    );
   }
 
   @override
@@ -126,6 +131,26 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: kMonoFamily,
                   fontFamilyFallback: kMonoFallback,
+                ),
+              ),
+              SwitchListTile(
+                key: const ValueKey('worktree-setup-agent-first'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: _agentFirst,
+                // Only a command can be waited on.
+                onChanged: argv.isEmpty
+                    ? null
+                    : (value) => setState(() => _agentFirst = value),
+                title: const Text(
+                  'Start the agent before the command finishes',
+                ),
+                subtitle: Text(
+                  _agentFirst
+                      ? 'A session\'s agent starts at once, beside the running '
+                            'command.'
+                      : 'A session waits for the command to exit before its '
+                            'agent starts, and can be cancelled while it waits.',
                 ),
               ),
               const SizedBox(height: Insets.lg),

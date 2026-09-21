@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'worktree_creation.dart';
+
 /// What a repository wants done to a worktree the moment git finishes making
 /// one: files git will not put there, and a command to run in it.
 ///
@@ -7,7 +9,11 @@ import 'dart:convert';
 /// worktrees pointing one `.dart_tool` at a shared directory corrupt each other
 /// under the concurrent builds this app runs by design.
 class WorktreeSetup {
-  const WorktreeSetup({this.command = const [], this.copyPaths = const []});
+  const WorktreeSetup({
+    this.command = const [],
+    this.copyPaths = const [],
+    this.startAgentBeforeSetup = true,
+  });
 
   /// The command as **argv**, not as a line: `['flutter', 'pub', 'get']`.
   ///
@@ -18,14 +24,23 @@ class WorktreeSetup {
   /// Repository-relative paths to copy into the new worktree, `/`-separated.
   final List<String> copyPaths;
 
+  /// Whether a session's agent starts while [command] is still running (the
+  /// default, and the only behaviour before this was a choice) or waits for it
+  /// to exit. Not part of [isEmpty]: on its own it asks for nothing to be done.
+  final bool startAgentBeforeSetup;
+
   bool get isEmpty => command.isEmpty && copyPaths.isEmpty;
   bool get isNotEmpty => !isEmpty;
 
-  WorktreeSetup copyWith({List<String>? command, List<String>? copyPaths}) =>
-      WorktreeSetup(
-        command: command ?? this.command,
-        copyPaths: copyPaths ?? this.copyPaths,
-      );
+  WorktreeSetup copyWith({
+    List<String>? command,
+    List<String>? copyPaths,
+    bool? startAgentBeforeSetup,
+  }) => WorktreeSetup(
+    command: command ?? this.command,
+    copyPaths: copyPaths ?? this.copyPaths,
+    startAgentBeforeSetup: startAgentBeforeSetup ?? this.startAgentBeforeSetup,
+  );
 
   String get commandJson => jsonEncode(command);
   String get copyPathsJson => jsonEncode(copyPaths);
@@ -55,11 +70,15 @@ class WorktreeSetup {
   bool operator ==(Object other) =>
       other is WorktreeSetup &&
       _listEquals(other.command, command) &&
-      _listEquals(other.copyPaths, copyPaths);
+      _listEquals(other.copyPaths, copyPaths) &&
+      other.startAgentBeforeSetup == startAgentBeforeSetup;
 
   @override
-  int get hashCode =>
-      Object.hash(Object.hashAll(command), Object.hashAll(copyPaths));
+  int get hashCode => Object.hash(
+    Object.hashAll(command),
+    Object.hashAll(copyPaths),
+    startAgentBeforeSetup,
+  );
 
   @override
   String toString() =>
@@ -310,10 +329,13 @@ enum WorktreeSetupVerdict {
 
   static WorktreeSetupVerdict of(
     Iterable<WorktreeCopyVerdict> copies,
-    WorktreeCommandVerdict? command,
-  ) =>
+    WorktreeCommandVerdict? command, [
+    WorktreeCreationRecord? creation,
+  ]) =>
       copies.any((verdict) => verdict.result.needsAttention) ||
-          (command?.result.needsAttention ?? false)
+          (command?.result.needsAttention ?? false) ||
+          (creation?.problems.isNotEmpty ?? false) ||
+          creation?.outcome == WorktreeCreationOutcome.cancelled
       ? WorktreeSetupVerdict.attention
       : WorktreeSetupVerdict.ok;
 }
@@ -331,6 +353,7 @@ class WorktreeSetupReport {
     required this.ranAt,
     required this.copies,
     this.command,
+    this.creation,
   });
 
   final String repositoryId;
@@ -348,25 +371,66 @@ class WorktreeSetupReport {
   /// Null when the setting names no command.
   final WorktreeCommandVerdict? command;
 
-  WorktreeSetupVerdict get verdict => WorktreeSetupVerdict.of(copies, command);
+  /// The staged creation this setup was part of. Null for a row written before
+  /// creation was staged, which is not recorded rather than fine.
+  final WorktreeCreationRecord? creation;
+
+  WorktreeSetupVerdict get verdict =>
+      WorktreeSetupVerdict.of(copies, command, creation);
 
   /// The rows that need looking at, for a surface with room for a few lines.
   Iterable<WorktreeCopyVerdict> get problems =>
       copies.where((verdict) => verdict.result.needsAttention);
 
-  WorktreeSetupReport withCommand(WorktreeCommandVerdict? verdict) =>
+  /// This report with [verdict] as its command; a creation still showing the
+  /// setup script as running learns how it ended too.
+  WorktreeSetupReport withCommand(WorktreeCommandVerdict? verdict) {
+    var staged = creation;
+    final script = staged?.stage(WorktreeStage.setupScript);
+    if (staged != null &&
+        script != null &&
+        script.state == WorktreeStageState.running &&
+        verdict != null &&
+        !verdict.result.isPending) {
+      staged = staged.withStage(
+        script.copyWith(
+          state: verdict.result == WorktreeCommandResult.succeeded
+              ? WorktreeStageState.done
+              : WorktreeStageState.failed,
+          detail: verdict.reason,
+        ),
+      );
+      if (staged.outcome.isFinished &&
+          staged.outcome != WorktreeCreationOutcome.cancelled) {
+        staged = staged.finish(staged.settledOutcome);
+      }
+    }
+    return WorktreeSetupReport(
+      repositoryId: repositoryId,
+      worktreePath: worktreePath,
+      environmentId: environmentId,
+      ranAt: ranAt,
+      copies: copies,
+      command: verdict,
+      creation: staged,
+    );
+  }
+
+  WorktreeSetupReport withCreation(WorktreeCreationRecord? record) =>
       WorktreeSetupReport(
         repositoryId: repositoryId,
         worktreePath: worktreePath,
         environmentId: environmentId,
         ranAt: ranAt,
         copies: copies,
-        command: verdict,
+        command: command,
+        creation: record,
       );
 
   String toJsonString() => jsonEncode({
     'copies': [for (final verdict in copies) verdict.toJson()],
     if (command != null) 'command': command!.toJson(),
+    if (creation != null) 'creation': creation!.toJson(),
   });
 
   /// Rebuilds the detail half of a report from its stored JSON. The keyed
@@ -399,6 +463,7 @@ class WorktreeSetupReport {
       command: command is Map<String, Object?>
           ? WorktreeCommandVerdict.fromJson(command)
           : null,
+      creation: WorktreeCreationRecord.fromJson(decoded['creation']),
     );
   }
 }

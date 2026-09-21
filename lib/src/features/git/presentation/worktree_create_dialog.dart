@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +7,8 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/process.dart';
 import '../application/changes_providers.dart';
 import '../application/git_providers.dart';
+import '../application/worktree_creation_tracker.dart';
+import 'worktree_creation_view.dart';
 
 /// What the dialog was asked for.
 class WorktreeRequest {
@@ -39,16 +43,28 @@ Future<void> showWorktreeCreateDialog(
     context: context,
     builder: (context) => const _WorktreeCreateDialog(),
   );
-  if (request == null) return;
+  if (request == null || !context.mounted) return;
+  final tracker = WorktreeCreationTracker(repo: repo);
+  final work = ref
+      .read(worktreeServiceProvider)
+      .createForSession(
+        repo: repo,
+        worktreeName: request.name,
+        branch: request.branch,
+        baseRef: request.baseRef,
+        tracker: tracker,
+      );
+  // Its stages while it runs, and the lever that stops it. Closes itself on
+  // success; a failure stays up with the stage output that explains it.
+  unawaited(
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => WorktreeCreationDialog(tracker: tracker, work: work),
+    ),
+  );
   try {
-    final worktree = await ref
-        .read(worktreeServiceProvider)
-        .createForSession(
-          repo: repo,
-          worktreeName: request.name,
-          branch: request.branch,
-          baseRef: request.baseRef,
-        );
+    final worktree = await work;
     // The list is read on demand, never on a tick, so a create has to say the
     // answer is stale.
     ref.invalidate(repoWorktreesProvider);
@@ -60,6 +76,64 @@ Future<void> showWorktreeCreateDialog(
     // worth reading.
     messenger?.showSnackBar(SnackBar(content: Text('$error')));
   }
+}
+
+/// A worktree creation's stages, with Cancel while it can still be stopped.
+class WorktreeCreationDialog extends StatefulWidget {
+  const WorktreeCreationDialog({
+    required this.tracker,
+    required this.work,
+    super.key,
+  });
+
+  final WorktreeCreationTracker tracker;
+  final Future<Object?> work;
+
+  @override
+  State<WorktreeCreationDialog> createState() => _WorktreeCreationDialogState();
+}
+
+class _WorktreeCreationDialogState extends State<WorktreeCreationDialog> {
+  bool _ended = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.work.then(
+      (_) {
+        if (mounted) Navigator.of(context).pop();
+      },
+      onError: (Object _) {
+        if (mounted) setState(() => _ended = true);
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Creating worktree'),
+    content: SizedBox(
+      width: 520,
+      child: SingleChildScrollView(
+        child: WorktreeCreationLiveView(tracker: widget.tracker),
+      ),
+    ),
+    actions: [
+      if (_ended)
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        )
+      else
+        TextButton(
+          onPressed: () {
+            widget.tracker.cancel();
+            setState(() {});
+          },
+          child: Text(widget.tracker.isCancelled ? 'Cancelling…' : 'Cancel'),
+        ),
+    ],
+  );
 }
 
 class _WorktreeCreateDialog extends StatefulWidget {

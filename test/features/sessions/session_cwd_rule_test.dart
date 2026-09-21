@@ -29,6 +29,7 @@ import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
+import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/temp_directory.dart';
 
@@ -413,7 +414,10 @@ void main() {
           ),
           // Nothing may shell out: worktree creation goes through a fake git.
           commandRunnerFactoryProvider.overrideWithValue(
-            FakeCommandRunnerFactory(fallback: FakeCommandRunner()),
+            FakeCommandRunnerFactory(
+              // A worktree's checkout is streamed; here it finishes at once.
+              fallback: FakeCommandRunner(processFactory: (_) => finishedGit()),
+            ),
           ),
           hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
         ],

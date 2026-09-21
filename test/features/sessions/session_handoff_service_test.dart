@@ -36,6 +36,7 @@ import 'package:logging/logging.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fakes.dart';
+import '../git/worktree_processes.dart';
 import '../terminal/fake_instance.dart';
 import '../../support/fixtures.dart';
 import '../../support/permission_fixtures.dart';
@@ -280,6 +281,8 @@ Harness harness({
       stdout: request.arguments.contains('status') ? gitStatus : '',
       stderr: '',
     ),
+    // A worktree's checkout is streamed; here it finishes at once.
+    processFactory: (_) => finishedGit(),
   );
 
   final container = ProviderContainer(

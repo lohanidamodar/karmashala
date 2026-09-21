@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:path/path.dart' as p;
 
 import 'package:agent_cli/process.dart';
@@ -6,6 +8,7 @@ import '../domain/file_change.dart';
 import '../domain/git_commit.dart';
 import '../domain/git_worktree.dart';
 import '../domain/working_tree_status.dart';
+import '../domain/worktree_creation.dart';
 import 'git_diff_parsing.dart';
 import 'git_files.dart';
 
@@ -15,6 +18,33 @@ class GitException implements Exception {
   final String message;
   @override
   String toString() => 'GitException: $message';
+}
+
+/// A streamed git command was stopped because it was cancelled.
+class GitCancelled implements Exception {
+  GitCancelled(this.outputTail);
+  final List<String> outputTail;
+  @override
+  String toString() => 'GitCancelled';
+}
+
+/// How a streamed git command ended.
+class GitStreamResult {
+  const GitStreamResult({
+    required this.exitCode,
+    required this.outputTail,
+    this.stalled = false,
+  });
+
+  final int exitCode;
+
+  /// The last lines it printed, ANSI-stripped, progress folded.
+  final List<String> outputTail;
+
+  /// It printed nothing for the idle bound and was killed.
+  final bool stalled;
+
+  bool get ok => exitCode == 0 && !stalled;
 }
 
 /// Parses `git worktree list --porcelain` into [GitWorktree]s bound to [environmentId].
@@ -630,15 +660,21 @@ class GitService {
 
   /// Adds a worktree at [worktreePath] checking out a new [branch] (optionally
   /// based on [baseRef]). Returns the created worktree.
+  ///
+  /// With [checkout] false the worktree is registered and its HEAD set, but no
+  /// file is written: the populate is then [streamGit]'s `checkout --progress`,
+  /// which is the only form that reports a percentage to a pipe.
   Future<GitWorktree> addWorktree(
     EnvironmentPath repo, {
     required EnvironmentPath worktreePath,
     required String branch,
     String? baseRef,
+    bool checkout = true,
   }) async {
     final result = await _git(repo, [
       'worktree',
       'add',
+      if (!checkout) '--no-checkout',
       '-b',
       branch,
       worktreePath.path,
@@ -648,6 +684,117 @@ class GitService {
       throw GitException('git worktree add failed: ${result.stderr.trim()}');
     }
     return GitWorktree(path: worktreePath, branch: branch);
+  }
+
+  /// Runs `git -C [directory] [args]` as a stream, handing each output line to
+  /// [onLine]. git ends progress lines with `\r`, which the line splitter reads
+  /// as a line end, so every percentage arrives on its own.
+  ///
+  /// Completing [cancel] kills the process and throws [GitCancelled]. Silence
+  /// for [idleTimeout] — a credential prompt nobody can see — kills it and is
+  /// reported as [GitStreamResult.stalled]; a command still printing progress
+  /// is never cut off by a wall clock.
+  Future<GitStreamResult> streamGit(
+    EnvironmentPath directory,
+    List<String> args, {
+    void Function(String line)? onLine,
+    Future<void>? cancel,
+    Duration idleTimeout = const Duration(minutes: 5),
+  }) async {
+    final handle = await runner.start(
+      CommandRequest(
+        executable: 'git',
+        arguments: ['-C', directory.path, ...args],
+      ),
+    );
+    final tail = OutputTail();
+    var finished = false;
+    var cancelled = false;
+    var stalled = false;
+    Timer? idle;
+    void armIdle() {
+      idle?.cancel();
+      idle = Timer(idleTimeout, () {
+        if (finished) return;
+        stalled = true;
+        handle.kill();
+      });
+    }
+
+    void line(String text) {
+      tail.add(text);
+      onLine?.call(text);
+      armIdle();
+    }
+
+    final outDone = Completer<void>();
+    final errDone = Completer<void>();
+    handle.stdoutLines.listen(
+      line,
+      onError: (Object _) {},
+      onDone: outDone.complete,
+    );
+    handle.stderrLines.listen(
+      line,
+      onError: (Object _) {},
+      onDone: errDone.complete,
+    );
+    unawaited(
+      cancel?.then((_) {
+        if (finished) return;
+        cancelled = true;
+        handle.kill();
+      }),
+    );
+    armIdle();
+
+    final code = await handle.exitCode;
+    finished = true;
+    idle?.cancel();
+    // The last lines — usually the error — can trail the exit; not forever.
+    await Future.wait([
+      outDone.future,
+      errDone.future,
+    ]).timeout(const Duration(seconds: 2), onTimeout: () => const []);
+    if (cancelled) throw GitCancelled(tail.lines);
+    return GitStreamResult(
+      exitCode: code,
+      outputTail: tail.lines,
+      stalled: stalled,
+    );
+  }
+
+  /// Whether [worktree] declares submodules — a tracked `.gitmodules`.
+  Future<bool> hasSubmodules(EnvironmentPath worktree) async {
+    final result = await _git(worktree, ['ls-files', '--', '.gitmodules']);
+    return result.ok && result.stdout.trim().isNotEmpty;
+  }
+
+  /// The names of [repo]'s remotes; empty when it has none or git refused.
+  Future<List<String>> remoteNames(EnvironmentPath repo) async {
+    final result = await _git(repo, ['remote']);
+    if (!result.ok) return const [];
+    return [
+      for (final line in result.stdout.split(RegExp(r'[\r\n]')))
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+  }
+
+  /// Deletes local [branch] whatever it holds (`branch -D`). Only for a branch
+  /// this app has just created and nothing has committed to.
+  Future<void> deleteBranch(EnvironmentPath repo, String branch) async {
+    final result = await _git(repo, ['branch', '-D', branch]);
+    if (!result.ok) {
+      throw GitException('git branch -D failed: ${result.stderr.trim()}');
+    }
+  }
+
+  /// Forgets worktrees whose directories are gone (`worktree prune`).
+  Future<void> pruneWorktrees(EnvironmentPath repo) async {
+    final result = await _git(repo, ['worktree', 'prune']);
+    if (!result.ok) {
+      throw GitException('git worktree prune failed: ${result.stderr.trim()}');
+    }
   }
 
   /// Removes the worktree at [worktreePath]. Pass [force] to discard changes.

@@ -12,6 +12,9 @@ import '../../environments/application/environments_controller.dart';
 import 'package:karmashala_git/git.dart';
 import '../../explorer/application/explorer_actions.dart';
 import '../../git/application/changes_providers.dart';
+import '../../git/application/git_providers.dart';
+import '../../git/application/worktree_creation_tracker.dart';
+import '../../git/presentation/worktree_creation_view.dart';
 import '../../projects/application/projects_controller.dart';
 import '../../projects/presentation/new_project_dialog.dart';
 import '../../terminal/application/system_terminal_providers.dart';
@@ -58,6 +61,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
   SystemTerminal? _terminal;
   bool _busy = false;
   String? _error;
+
+  /// The worktree this launch is creating; kept after it ends, so a failed
+  /// stage's output stays on screen beside the error.
+  WorktreeCreationTracker? _creation;
 
   @override
   void initState() {
@@ -173,7 +180,19 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
     setState(() {
       _busy = true;
       _error = null;
+      _creation = null;
     });
+    // The launcher makes the worktree; this only watches for it, to draw its
+    // stages and offer the cancel.
+    final creations = ref.read(worktreeCreationsProvider);
+    final watching = !useWorktree
+        ? null
+        : creations.changes.listen((_) {
+            final tracker = creations.latestFor(repo.path);
+            if (tracker != null && mounted && _creation != tracker) {
+              setState(() => _creation = tracker);
+            }
+          });
     try {
       if (_external && terminal == null) {
         setState(() => _error = 'Choose a terminal to launch in.');
@@ -204,9 +223,12 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       }
       ref.read(explorerActionsProvider).selectNative(launched.session);
       if (mounted) Navigator.of(context).pop();
+    } on WorktreeCreationCancelled catch (e) {
+      if (mounted) setState(() => _error = 'Cancelled. ${e.cleanup}');
     } catch (e) {
-      setState(() => _error = 'Could not start session: $e');
+      if (mounted) setState(() => _error = 'Could not start session: $e');
     } finally {
+      await watching?.cancel();
       if (mounted) setState(() => _busy = false);
     }
   }
@@ -406,6 +428,10 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
                           setState(() => _useWorktree = v ?? false),
                       title: const Text('Run in a dedicated Git worktree'),
                     ),
+                  if (_creation != null) ...[
+                    const SizedBox(height: Insets.sm),
+                    WorktreeCreationLiveView(tracker: _creation!),
+                  ],
                   if (_error != null) ...[
                     const SizedBox(height: Insets.sm),
                     DesktopErrorBanner(_error!),
@@ -415,7 +441,16 @@ class _NewSessionDialogState extends ConsumerState<NewSessionDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          // While a worktree is being made, Cancel stops that — and cleans up —
+          // rather than closing a dialog whose launch would carry on unseen.
+          onPressed: !_busy
+              ? () => Navigator.of(context).pop()
+              : (_creation?.canCancel ?? false)
+              ? () {
+                  _creation!.cancel();
+                  setState(() {});
+                }
+              : null,
           child: const Text('Cancel'),
         ),
         FilledButton(

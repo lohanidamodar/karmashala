@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import 'worktree_processes.dart';
 
 void main() {
   late AppDatabase db;
@@ -28,6 +29,7 @@ void main() {
     runner = FakeCommandRunner(
       responder: (_) =>
           const CommandResult(exitCode: 0, stdout: '', stderr: ''),
+      processFactory: (_) => finishedGit(),
     );
     service = WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
@@ -50,13 +52,13 @@ void main() {
       );
 
       expect(wt.path.path, '/home/me/.karmashala-worktrees/app-s1');
-      final add = runner.requests.single;
-      expect(add.executable, 'git');
-      expect(add.arguments, [
+      expect(runner.requests.first.executable, 'git');
+      expect(worktreeAddArgv(runner), [
         '-C',
         '/home/me/app',
         'worktree',
         'add',
+        '--no-checkout',
         '-b',
         'session/s1',
         '/home/me/.karmashala-worktrees/app-s1',
@@ -235,9 +237,10 @@ void main() {
           'setup',
           'moved /home/me/.karmashala-worktrees/app-s1',
         ], reason: 'the copied files are part of what has just appeared');
-        expect(recorded, hasLength(1));
+        // The setup's own report, then the same row with the stages on it.
+        expect(recorded.map((r) => r.worktreePath).toSet(), hasLength(1));
         expect(
-          recorded.single.worktreePath,
+          recorded.last.worktreePath,
           '/home/me/.karmashala-worktrees/app-s1',
         );
       },
@@ -256,25 +259,31 @@ void main() {
       expect(order, ['setup', 'moved /home/me/.karmashala-worktrees/app-s1']);
     });
 
-    test('a checkout with no setting spends nothing', () async {
+    test('a checkout with no setting copies nothing and opens no pane, '
+        'but still records how the creation went', () async {
       configured = const WorktreeSetup();
       await withSetup().createForSession(
         repo: repo,
         worktreeName: 's1',
         branch: 'session/s1',
       );
-      expect(recorded, isEmpty);
-      expect(runner.requests.map((r) => r.arguments), [
-        [
-          '-C',
-          '/home/me/app',
-          'worktree',
-          'add',
-          '-b',
-          'session/s1',
-          '/home/me/.karmashala-worktrees/app-s1',
-        ],
-      ], reason: 'one process: the worktree add, and nothing else');
+      expect(runner.requests.map((r) => r.arguments.skip(2).first), [
+        'worktree',
+        'ls-files',
+      ], reason: 'the add, and the submodule question; no check-ignore');
+      expect(runner.startRequests.single.arguments.skip(2), [
+        'checkout',
+        '--progress',
+      ]);
+      // The one outcome row: nothing copied, no command, every stage named.
+      final row = recorded.last;
+      expect(row.copies, isEmpty);
+      expect(row.command, isNull);
+      expect(
+        row.creation!.stage(WorktreeStage.setupScript).state,
+        WorktreeStageState.skipped,
+      );
+      expect(row.creation!.outcome, WorktreeCreationOutcome.succeeded);
     });
 
     test('git refusing to add a worktree runs no setup at all', () async {

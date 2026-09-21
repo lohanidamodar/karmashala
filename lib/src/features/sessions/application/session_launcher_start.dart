@@ -163,6 +163,7 @@ extension SessionStartVerbs on SessionLauncher {
     var recordDirectory = true;
     String? workingDirectoryNotice;
     EnvironmentPath? worktree;
+    void Function(Object? error)? settleAgent;
     if (request.existingWorktree != null) {
       // Joining, not creating: a handoff and a same-worktree fork continue the
       // work where it is, so the receiver sees the tree the recap describes.
@@ -171,13 +172,18 @@ extension SessionStartVerbs on SessionLauncher {
     } else if (request.useWorktree) {
       final created = await _ref
           .read(worktreeServiceProvider)
-          .createForSession(
+          .create(
             repo: request.repository.path,
             worktreeName: sessionWorktreeName(id),
             branch: sessionBranchName(id),
+            launchesAgent: true,
           );
-      workingDirectory = created.path;
-      worktree = created.path;
+      workingDirectory = created.worktree.path;
+      worktree = created.worktree.path;
+      // The agent stage is this launch's to settle, on either exit below.
+      settleAgent = (error) => error == null
+          ? created.tracker.agentStarted()
+          : created.tracker.agentFailed(error);
     } else {
       // Where this conversation was actually running: from the caller when it
       // knows (a handoff, a fork), otherwise from the row being resumed.
@@ -327,8 +333,10 @@ extension SessionStartVerbs on SessionLauncher {
         ),
       };
       _publish(_whatALaunchMoved(request, id, reused: reused != null));
+      settleAgent?.call(null);
       return result;
-    } catch (_) {
+    } catch (error) {
+      settleAgent?.call(error);
       // The row must not outlive a launch that never happened.
       dao.updateStatus(id, SessionStatus.failed);
       // The same word as the success path: the row still appeared, and a failed

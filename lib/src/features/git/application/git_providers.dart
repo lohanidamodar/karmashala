@@ -7,7 +7,9 @@ import '../../editor/application/code_editor_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../explorer/application/checkout.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
+import 'worktree_creation_tracker.dart';
 import 'worktree_service.dart';
 import 'worktree_setup_providers.dart';
 import 'worktree_setup_service.dart';
@@ -21,6 +23,7 @@ final worktreeServiceProvider = Provider<WorktreeService>(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
     environmentDao: ref.watch(executionEnvironmentDaoProvider),
     setup: ref.watch(worktreeSetupServiceProvider),
+    creations: ref.watch(worktreeCreationsProvider),
     // A worktree that has just appeared or vanished is the one change Quick
     // Open's OS watcher cannot see. Both reads are inside the callback, so
     // composing this service never builds an index.
@@ -56,6 +59,10 @@ final worktreeSetupServiceProvider = Provider<WorktreeSetupService>((ref) {
       ref.read(worktreeSetupDaoProvider).record(report);
       ref.read(worktreeSetupRevisionProvider.notifier).bump();
     },
+    // Ends the process, not just the pane: a cancel must stop the script.
+    closePane: (paneId) => ref
+        .read(terminalSessionsControllerProvider.notifier)
+        .endSession(paneId),
     // The one route both this and the Flutter loop take.
     openPane: (command) => ref.read(visibleCommandOpenerProvider)(
       VisibleCommand(
@@ -68,3 +75,8 @@ final worktreeSetupServiceProvider = Provider<WorktreeSetupService>((ref) {
     ),
   );
 });
+
+/// The worktree creations in flight, for a surface that did not start one.
+final worktreeCreationsProvider = Provider<WorktreeCreations>(
+  (ref) => WorktreeCreations(),
+);

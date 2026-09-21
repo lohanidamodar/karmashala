@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_store/database.dart';
@@ -5,7 +7,10 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/process/command_runner_providers.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/git/application/git_providers.dart';
+import 'package:karmashala/src/features/git/application/worktree_creation_tracker.dart';
+import 'package:karmashala/src/features/git/application/worktree_service.dart';
 import 'package:karmashala/src/features/git/application/worktree_setup_providers.dart';
+import 'package:karmashala/src/features/git/data/worktree_setup_dao.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -16,6 +21,7 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
+import 'worktree_processes.dart';
 
 /// The app's own wiring, end to end: a worktree created through
 /// `worktreeServiceProvider` reads the setting out of the database, opens a
@@ -44,6 +50,7 @@ void main() {
       responder: (request) => request.arguments.contains('check-ignore')
           ? const CommandResult(exitCode: 0, stdout: '.dart_tool', stderr: '')
           : const CommandResult(exitCode: 0, stdout: '', stderr: ''),
+      processFactory: (_) => finishedGit(),
     );
     container = ProviderContainer(
       overrides: [
@@ -76,14 +83,17 @@ void main() {
   }
 
   test(
-    'a checkout with no setting opens no pane and records nothing',
+    'a checkout with no setting opens no pane, and records only its stages',
     () async {
       await create();
       expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
+      final run = container.read(worktreeSetupDaoProvider).runsFor('r1').single;
+      expect(run.copies, isEmpty);
+      expect(run.command, isNull);
+      expect(run.creation!.outcome, WorktreeCreationOutcome.succeeded);
       expect(
-        container.read(worktreeSetupDaoProvider).runsFor('r1'),
-        isEmpty,
-        reason: 'nothing happened, so there is nothing to say about it',
+        run.creation!.stage(WorktreeStage.checkout).state,
+        WorktreeStageState.done,
       );
     },
   );
@@ -241,5 +251,141 @@ void main() {
     // `shouldRestartOnActivate` excludes agent panes, so a restored setup pane
     // replays its scrollback and runs nothing.
     expect(AgentPaneLaunch.isAgentProfileId(instance.profileId), isTrue);
+  });
+
+  group('an agent that waits for the setup command', () {
+    setUp(() {
+      container
+          .read(worktreeSetupDaoProvider)
+          .save(
+            'r1',
+            const WorktreeSetup(
+              command: ['make', 'setup'],
+              startAgentBeforeSetup: false,
+            ),
+            testTime,
+          );
+    });
+
+    String setupPane() => container
+        .read(terminalSessionsControllerProvider)
+        .tabs
+        .single
+        .focusedPaneId;
+
+    Future<WorktreeCreated> createForAgent() => container
+        .read(worktreeServiceProvider)
+        .create(
+          repo: wslRepo,
+          worktreeName: 's1',
+          branch: 'session/s1',
+          launchesAgent: true,
+        );
+
+    test('is not handed the worktree until the command exits', () async {
+      var returned = false;
+      final creating = createForAgent();
+      unawaited(creating.then((_) => returned = true));
+      await pumpEventQueue();
+      expect(returned, isFalse, reason: 'the setup command is still running');
+
+      container
+          .read(paneExitProvider.notifier)
+          .record(PaneExit(paneId: setupPane(), sessionId: null, exitCode: 0));
+      final created = await creating;
+      final record = created.tracker.record;
+      expect(
+        record.stage(WorktreeStage.setupScript).state,
+        WorktreeStageState.done,
+      );
+      expect(
+        record.stage(WorktreeStage.agent).state,
+        WorktreeStageState.running,
+      );
+
+      created.tracker.agentStarted();
+      // Read back from the database, as a reload or another surface would.
+      final run = WorktreeSetupDao(db).lastRun('r1', created.worktree.path)!;
+      expect(run.creation!.outcome, WorktreeCreationOutcome.succeeded);
+      expect(
+        run.creation!.stage(WorktreeStage.agent).state,
+        WorktreeStageState.done,
+      );
+      expect(run.command!.result, WorktreeCommandResult.succeeded);
+    });
+
+    test('a failing command is recorded, and the agent still starts', () async {
+      final creating = createForAgent();
+      await pumpEventQueue();
+      container
+          .read(paneExitProvider.notifier)
+          .record(PaneExit(paneId: setupPane(), sessionId: null, exitCode: 2));
+      final created = await creating;
+      expect(
+        created.tracker.record.stage(WorktreeStage.setupScript).state,
+        WorktreeStageState.failed,
+      );
+      created.tracker.agentStarted();
+      final run = WorktreeSetupDao(db).lastRun('r1', created.worktree.path)!;
+      expect(run.creation!.outcome, WorktreeCreationOutcome.warning);
+    });
+
+    test('a worktree made with no agent does not wait', () async {
+      // The same setting: waiting is about an agent, so without one the
+      // create returns while the command is still running.
+      final path = await create();
+      final run = WorktreeSetupDao(db).lastRun('r1', path)!;
+      expect(
+        run.creation!.stage(WorktreeStage.setupScript).state,
+        WorktreeStageState.running,
+      );
+    });
+
+    test('cancelled while waiting: the pane is ended and nothing is left '
+        'registered with git', () async {
+      final creating = createForAgent();
+      await pumpEventQueue();
+      expect(setupPane(), isNotEmpty);
+      final tracker = container
+          .read(worktreeCreationsProvider)
+          .latestFor(wslRepo)!;
+      expect(tracker.canCancel, isTrue);
+
+      tracker.cancel();
+      await expectLater(creating, throwsA(isA<WorktreeCreationCancelled>()));
+
+      expect(
+        container.read(terminalSessionsControllerProvider).tabs,
+        isEmpty,
+        reason: 'the setup command was ended, not left running',
+      );
+      final ran = runner.requests.map((r) => r.arguments.skip(2).toList());
+      expect(
+        ran,
+        contains(
+          equals([
+            'worktree',
+            'remove',
+            '--force',
+            '/home/me/.karmashala-worktrees/app-s1',
+          ]),
+        ),
+      );
+      expect(ran, contains(equals(['branch', '-D', 'session/s1'])));
+      final run = WorktreeSetupDao(
+        db,
+      ).lastRun('r1', worktreePathFor(EnvironmentKind.wsl, wslRepo, 's1'))!;
+      expect(run.creation!.outcome, WorktreeCreationOutcome.cancelled);
+      expect(
+        run.creation!.stage(WorktreeStage.setupScript).state,
+        WorktreeStageState.failed,
+      );
+      expect(
+        run.creation!.stage(WorktreeStage.agent).state,
+        WorktreeStageState.skipped,
+      );
+      expect(run.creation!.cleanup, contains('Removed the half-made worktree'));
+      expect(container.read(worktreeCreationsProvider).active, isEmpty);
+    });
   });
 }

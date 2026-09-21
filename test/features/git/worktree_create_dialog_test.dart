@@ -11,6 +11,7 @@ import 'package:karmashala/src/features/git/presentation/worktree_create_dialog.
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';
+import 'worktree_processes.dart';
 
 const _repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\app');
 
@@ -31,6 +32,7 @@ void main() {
     runner = FakeCommandRunner(
       responder: (_) =>
           const CommandResult(exitCode: 0, stdout: '', stderr: ''),
+      processFactory: (_) => finishedGit(),
     );
     service = WorktreeService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
@@ -61,8 +63,7 @@ void main() {
   }
 
   /// git's argv for the create, or null when nothing was run.
-  List<String>? gitArgv() =>
-      runner.requests.isEmpty ? null : runner.requests.last.arguments;
+  List<String>? gitArgv() => worktreeAddArgv(runner);
 
   testWidgets('a named worktree goes through the service the tool uses', (
     tester,
@@ -81,6 +82,7 @@ void main() {
       r'C:\src\app',
       'worktree',
       'add',
+      '--no-checkout',
       '-b',
       'spike',
       r'C:\src\.karmashala-worktrees\app-spike',
@@ -147,6 +149,69 @@ void main() {
     await tester.pumpAndSettle();
 
     // "Could not create worktree" would hide the one thing worth reading.
-    expect(find.textContaining('already exists'), findsOneWidget);
+    // On the failed stage, which stays up rather than closing on the error.
+    expect(
+      find.descendant(
+        of: find.byType(WorktreeCreationDialog),
+        matching: find.textContaining('already exists'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Checkout · failed'), findsOneWidget);
+  });
+
+  testWidgets('a checkout in progress can be cancelled from the dialog', (
+    tester,
+  ) async {
+    final checkout = FakeProcessHandle();
+    runner.processFactory = (_) => checkout;
+    await open(tester);
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'spike');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    // Not settled: a running stage spins for as long as it runs.
+    await tester.pump();
+    await tester.pump();
+    checkout.emitStderr('Updating files:  30% (3/10)');
+    await tester.pump();
+    expect(find.textContaining('Updating files 30%'), findsOneWidget);
+
+    await tester.tap(
+      find.descendant(
+        of: find.byType(WorktreeCreationDialog),
+        matching: find.widgetWithText(TextButton, 'Cancel'),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(checkout.killed, isTrue);
+    expect(find.text('Checkout · failed'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(WorktreeCreationDialog),
+        matching: find.textContaining('Removed the half-made worktree'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      runner.requests.map((r) => r.arguments.skip(2).take(3).toList()),
+      contains(equals(['worktree', 'remove', '--force'])),
+    );
+    expect(find.widgetWithText(TextButton, 'Close'), findsOneWidget);
+  });
+
+  testWidgets('a created worktree closes its progress on its own', (
+    tester,
+  ) async {
+    await open(tester);
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'spike');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(WorktreeCreationDialog), findsNothing);
+    expect(find.textContaining('Created'), findsOneWidget);
   });
 }

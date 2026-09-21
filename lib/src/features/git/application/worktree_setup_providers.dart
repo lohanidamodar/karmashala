@@ -59,6 +59,12 @@ final worktreeSetupRunsProvider =
       return ref.watch(worktreeSetupDaoProvider).runsFor(repositoryId);
     });
 
+/// The newest worktree creations across every checkout.
+final recentWorktreeRunsProvider = Provider<List<WorktreeSetupReport>>((ref) {
+  ref.watch(worktreeSetupRevisionProvider);
+  return ref.watch(worktreeSetupDaoProvider).recentRuns();
+});
+
 /// Writes the setting, and tells everything reading it.
 class WorktreeSetupController {
   WorktreeSetupController(this._ref);

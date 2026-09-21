@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/git.dart';
@@ -22,7 +24,7 @@ class WorktreeSetupDao {
     return WorktreeSetup.fromJson(
       rows.first['command'] as String?,
       rows.first['copy_paths'] as String?,
-    );
+    ).copyWith(startAgentBeforeSetup: !_waiting().contains(repositoryId));
   }
 
   /// Every checkout with something configured, by repository id — one query,
@@ -31,13 +33,45 @@ class WorktreeSetupDao {
     final rows = _db.query(
       'SELECT repository_id, command, copy_paths FROM worktree_setup;',
     );
+    final waiting = _waiting();
     return {
       for (final row in rows)
-        row['repository_id'] as String: WorktreeSetup.fromJson(
-          row['command'] as String?,
-          row['copy_paths'] as String?,
-        ),
+        row['repository_id'] as String:
+            WorktreeSetup.fromJson(
+              row['command'] as String?,
+              row['copy_paths'] as String?,
+            ).copyWith(
+              startAgentBeforeSetup: !waiting.contains(row['repository_id']),
+            ),
     };
+  }
+
+  // The agent-timing choice lives in `app_metadata`, not a column: it needed
+  // no migration, and an older build reading the table simply ignores it.
+  static const String _waitingKey = 'worktree_setup.agent_waits.v1';
+
+  /// The checkouts whose agent waits for the setup command to exit.
+  Set<String> _waiting() {
+    final raw = _db.readMetadata(_waitingKey);
+    if (raw == null) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const {};
+      return {
+        for (final id in decoded)
+          if (id is String) id,
+      };
+    } on FormatException {
+      return const {};
+    }
+  }
+
+  void _setWaiting(String repositoryId, bool waits) {
+    final current = _waiting();
+    if (current.contains(repositoryId) == waits) return;
+    final next = {...current};
+    waits ? next.add(repositoryId) : next.remove(repositoryId);
+    _db.writeMetadata(_waitingKey, jsonEncode(next.toList()..sort()));
   }
 
   /// Stores [setup] for [repositoryId], or deletes the row when it asks for
@@ -60,12 +94,15 @@ class WorktreeSetupDao {
         isoFromDate(now),
       ],
     );
+    _setWaiting(repositoryId, !setup.startAgentBeforeSetup);
   }
 
-  void clear(String repositoryId) => _db.execute(
-    'DELETE FROM worktree_setup WHERE repository_id = ?;',
-    [repositoryId],
-  );
+  void clear(String repositoryId) {
+    _db.execute('DELETE FROM worktree_setup WHERE repository_id = ?;', [
+      repositoryId,
+    ]);
+    _setWaiting(repositoryId, false);
+  }
 
   // --- what happened --------------------------------------------------------
 
@@ -108,6 +145,16 @@ class WorktreeSetupDao {
     );
     return rows.map(_report).toList();
   }
+
+  /// The newest [limit] runs across every checkout — including those with no
+  /// setup, whose row is only the creation's stages.
+  List<WorktreeSetupReport> recentRuns({int limit = 8}) => _db
+      .query(
+        'SELECT * FROM worktree_setup_runs ORDER BY ran_at DESC LIMIT ?;',
+        [limit],
+      )
+      .map(_report)
+      .toList();
 
   WorktreeSetupReport _report(Map<String, Object?> row) =>
       WorktreeSetupReport.fromStored(
