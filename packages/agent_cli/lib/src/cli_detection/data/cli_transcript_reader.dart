@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 
@@ -12,6 +13,8 @@ import '../../sessions/session_event_types.dart';
 import '../../sessions/tool_activity.dart';
 import './antigravity_transcript.dart';
 import './subagent_transcript.dart';
+
+part 'cli_transcript_tail.dart';
 
 /// The compaction the CLI ran immediately before the row that carries this.
 ///
@@ -178,79 +181,113 @@ Future<List<TranscriptMessage>> readCliTranscript(
   final file = File(path);
   if (!await file.exists()) return const [];
 
-  final messages = <TranscriptMessage>[];
-  // Correlates a result back to the call it answers: Claude Code echoes the
-  // `tool_use.id` as `tool_use_id`, Codex echoes `call_id`. Kept for the whole
-  // file because the pair is two lines apart at best and a whole turn apart at
-  // worst — and an id we never see again simply stays here, costing a string.
-  final pending = <String, int>{};
-  // Where each `Task` call landed, so the subagent index can be joined on
-  // afterwards rather than before. Only `Task` ids: it is the one tool that
-  // spawns an agent, and gating on it means a session that never delegated
-  // pays nothing at all — not even the `stat` on a directory that is not
-  // there.
-  final tasks = <String, int>{};
-  // The background-subagent ledger: agent id → the row of the `Agent` call
-  // that launched it. Two maps because a boundary holds every entry aside and
-  // takes back only the ones the CLI names again — see
-  // [TranscriptMessage.pendingBackgroundAgentId].
-  final background = <String, int>{};
-  final acrossBoundary = <String, int>{};
-  // The boundary whose summary has not been reached yet. Held here rather than
-  // returned from `_parseClaudeLine`, because the record that announces a
-  // compaction produces no row of its own — the row it belongs to is the next
-  // one the file yields, and only this loop can see that happen.
-  CompactionBoundary? pendingCompaction;
+  final parse = _TranscriptParse(cli);
   try {
     // Bounded rather than `LineSplitter`: a record is materialised whole and
     // `jsonDecode` has no streaming form, so the largest record — not the
     // file — is this reader's peak memory. See [kMaxTranscriptLineBytes].
     await for (final line in boundedLines(file)) {
-      if (line.isEmpty) continue;
-      final Object? decoded;
-      try {
-        decoded = jsonDecode(line);
-      } on FormatException {
-        continue;
-      }
-      if (decoded is! Map<String, dynamic>) continue;
-      // Read once per line and handed down: both CLIs carry it in the same
-      // place, and every message the line produces was written at that instant.
-      final at = _lineTimestamp(decoded);
-      // Claude's shape is the default: it is the least-wrong guess for an
-      // agent we have no reader for.
-      if (cli == AgentIds.codex) {
-        _parseCodexLine(decoded, messages, pending, at);
-      } else if (cli == AgentIds.antigravity) {
-        _parseAntigravityLine(decoded, messages, at);
-      } else {
-        pendingCompaction = _compactionBoundaryOf(decoded) ?? pendingCompaction;
-        final before = messages.length;
-        _parseClaudeLine(
-          decoded,
-          messages,
-          pending,
-          tasks,
-          background,
-          acrossBoundary,
-          at,
-        );
-        if (pendingCompaction != null && messages.length > before) {
-          messages[before] = _withCompaction(
-            messages[before],
-            pendingCompaction,
-          );
-          pendingCompaction = null;
-        }
-      }
+      parse.add(line);
     }
   } catch (_) {
     // Truncated/locked file — return whatever parsed.
   }
-  await _attachSubagents(messages, tasks, filePath, subagentsDirectory);
+  await _finish(parse.messages, parse, filePath, subagentsDirectory);
+  return parse.messages;
+}
+
+/// Everything one line of a transcript may need from the lines before it.
+///
+/// Held as an object rather than as locals of [readCliTranscript] so that a
+/// parse can be stopped at a record boundary and resumed when more is appended
+/// — see [CliTranscriptTail].
+class _TranscriptParse {
+  _TranscriptParse(this.cli);
+
+  final String cli;
+  final List<TranscriptMessage> messages = [];
+  // Correlates a result back to the call it answers: Claude Code echoes the
+  // `tool_use.id` as `tool_use_id`, Codex echoes `call_id`. Kept for the whole
+  // file because the pair is two lines apart at best and a whole turn apart at
+  // worst — and an id we never see again simply stays here, costing a string.
+  final Map<String, int> pending = {};
+  // Where each `Task` call landed, so the subagent index can be joined on
+  // afterwards rather than before. Only `Task` ids: it is the one tool that
+  // spawns an agent, and gating on it means a session that never delegated
+  // pays nothing at all — not even the `stat` on a directory that is not
+  // there.
+  final Map<String, int> tasks = {};
+  // The background-subagent ledger: agent id → the row of the `Agent` call
+  // that launched it. Two maps because a boundary holds every entry aside and
+  // takes back only the ones the CLI names again — see
+  // [TranscriptMessage.pendingBackgroundAgentId].
+  final Map<String, int> background = {};
+  final Map<String, int> acrossBoundary = {};
+  // The boundary whose summary has not been reached yet. Held here rather than
+  // returned from `_parseClaudeLine`, because the record that announces a
+  // compaction produces no row of its own — the row it belongs to is the next
+  // one the file yields, and only this loop can see that happen.
+  CompactionBoundary? pendingCompaction;
+
+  /// An independent copy, for a line that may yet be rewritten by the writer.
+  _TranscriptParse copy() => _TranscriptParse(cli)
+    ..messages.addAll(messages)
+    ..pending.addAll(pending)
+    ..tasks.addAll(tasks)
+    ..background.addAll(background)
+    ..acrossBoundary.addAll(acrossBoundary)
+    ..pendingCompaction = pendingCompaction;
+
+  void add(String line) {
+    if (line.isEmpty) return;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(line);
+    } on FormatException {
+      return;
+    }
+    if (decoded is! Map<String, dynamic>) return;
+    // Read once per line and handed down: both CLIs carry it in the same
+    // place, and every message the line produces was written at that instant.
+    final at = _lineTimestamp(decoded);
+    // Claude's shape is the default: it is the least-wrong guess for an
+    // agent we have no reader for.
+    if (cli == AgentIds.codex) {
+      _parseCodexLine(decoded, messages, pending, at);
+    } else if (cli == AgentIds.antigravity) {
+      _parseAntigravityLine(decoded, messages, at);
+    } else {
+      pendingCompaction = _compactionBoundaryOf(decoded) ?? pendingCompaction;
+      final before = messages.length;
+      _parseClaudeLine(
+        decoded,
+        messages,
+        pending,
+        tasks,
+        background,
+        acrossBoundary,
+        at,
+      );
+      final boundary = pendingCompaction;
+      if (boundary != null && messages.length > before) {
+        messages[before] = _withCompaction(messages[before], boundary);
+        pendingCompaction = null;
+      }
+    }
+  }
+}
+
+/// The joins that need the whole file: applied to [out], which is either
+/// [parse]'s own list or a copy of it that [parse] must not see changed.
+Future<void> _finish(
+  List<TranscriptMessage> out,
+  _TranscriptParse parse,
+  String filePath,
+  String? subagentsDirectory,
+) async {
+  await _attachSubagents(out, parse.tasks, filePath, subagentsDirectory);
   // After the join, because that one rebuilds the very rows this stamps.
-  _stampBackgroundAgents(messages, background);
-  return messages;
+  _stampBackgroundAgents(out, parse.background);
 }
 
 /// The compaction [json] announces, or null for every other line.

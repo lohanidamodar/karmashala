@@ -156,6 +156,9 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
       }
 
       final file = File(path);
+      // Parses only what was appended since the last read; a file that did
+      // anything but grow is read whole again, off this isolate.
+      final tail = CliTranscriptTail(path, agentId);
       DateTime? lastModified;
       int? lastSize;
       var first = true;
@@ -189,8 +192,7 @@ final sessionChatTranscriptProvider = StreamProvider.autoDispose
           lastModified = modified;
           lastSize = size;
           final parse = Stopwatch()..start();
-          // Off the UI isolate: this parse is seconds on a long conversation.
-          yield await readCliTranscriptOffThread(path, agentId);
+          yield await tail.read();
           spent = parse.elapsed;
         }
         // Rest at least as long as the last read took, so a transcript slower
