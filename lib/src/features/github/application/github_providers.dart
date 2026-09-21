@@ -27,7 +27,9 @@ class GitHubReviewService {
     ).resolveFor(repo);
     final env = resolved.environment;
     if (env == null) throw GitHubException(resolved.reason);
-    return GitHubService(runnerFactory.forEnvironment(env));
+    // The row travels with the runner so a `gh` that cannot be started can be
+    // refused by name — "not installed in Windows", not "gh failed".
+    return GitHubService(runnerFactory.forEnvironment(env), environment: env);
   }
 
   Future<GitHubRepo?> repository(EnvironmentPath repo) =>

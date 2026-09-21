@@ -585,4 +585,167 @@ void main() {
       );
     });
   });
+
+  /// **A `gh` that cannot answer is refused in words that name where it
+  /// looked.** Karmashala runs `gh` in the environment the repository belongs
+  /// to, so "gh failed" sends its reader to the wrong machine — and a missing
+  /// executable is a `CommandException` rather than an exit code, so without
+  /// this seam nothing in `GitHubService` ever sees it.
+  group('a gh that cannot answer', () {
+    ExecutionEnvironment env(
+      EnvironmentKind kind, {
+      String id = 'windows',
+      String name = 'Windows',
+      String? distro,
+    }) => ExecutionEnvironment(
+      id: id,
+      kind: kind,
+      name: name,
+      wslDistribution: distro,
+      createdAt: DateTime.utc(2026, 1, 1),
+    );
+
+    test('a gh that will not start names Windows and how to install it', () {
+      final runner = FakeCommandRunner(
+        throwError: CommandException('Failed to run "gh" on windows'),
+      );
+      expect(
+        () => GitHubService(
+          runner,
+          environment: env(EnvironmentKind.windowsNative),
+        ).getRepository(repo),
+        throwsA(
+          isA<GitHubException>()
+              .having(
+                (e) => e.refusal,
+                'refusal',
+                GitHubCliRefusal.notInstalled,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                allOf(
+                  contains('not installed in Windows'),
+                  contains('winget install --id GitHub.cli'),
+                ),
+              ),
+        ),
+      );
+    });
+
+    test('a WSL checkout is refused for WSL, and nothing else runs', () async {
+      // Exit 127: WSL and SSH hand the name to their own shell, so a missing
+      // gh there is an exit code and never a failure to start a process.
+      final runner = FakeCommandRunner(
+        environmentId: 'wsl:archlinux',
+        responder: (_) => const CommandResult(
+          exitCode: 127,
+          stdout: '',
+          stderr: 'zsh:1: command not found: gh',
+        ),
+      );
+      await expectLater(
+        GitHubService(
+          runner,
+          environment: env(
+            EnvironmentKind.wsl,
+            id: 'wsl:archlinux',
+            name: 'archlinux',
+            distro: 'archlinux',
+          ),
+        ).listPullRequests(repo),
+        throwsA(
+          isA<GitHubException>()
+              .having(
+                (e) => e.refusal,
+                'refusal',
+                GitHubCliRefusal.notInstalled,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                allOf(contains('WSL · archlinux'), isNot(contains('winget'))),
+              ),
+        ),
+      );
+      // One attempt, in the one environment the repository lives in: a retry
+      // anywhere else would be a different filesystem.
+      expect(runner.requests, hasLength(1));
+    });
+
+    test('an unauthenticated gh is its own refusal, with the fix', () {
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 4,
+          stdout: '',
+          stderr:
+              'To get started with GitHub CLI, please run:  gh auth login\n'
+              'Alternatively, populate the GH_TOKEN environment variable '
+              'with a GitHub API authentication token.',
+        ),
+      );
+      expect(
+        () => GitHubService(
+          runner,
+          environment: env(EnvironmentKind.windowsNative),
+        ).listIssues(repo),
+        throwsA(
+          isA<GitHubException>()
+              .having(
+                (e) => e.refusal,
+                'refusal',
+                GitHubCliRefusal.notAuthenticated,
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                allOf(
+                  contains('in Windows is not signed in'),
+                  contains('gh auth login'),
+                  isNot(contains('not installed')),
+                ),
+              ),
+        ),
+      );
+    });
+
+    test("a gh that ran and failed still answers in gh's own words", () {
+      final runner = FakeCommandRunner(
+        responder: (_) => const CommandResult(
+          exitCode: 1,
+          stdout: '',
+          stderr: 'could not resolve to a Repository with the name',
+        ),
+      );
+      expect(
+        () => GitHubService(runner).getRepository(repo),
+        throwsA(
+          isA<GitHubException>()
+              .having((e) => e.refusal, 'refusal', isNull)
+              .having(
+                (e) => e.message,
+                'message',
+                contains('gh repo view failed: could not resolve'),
+              ),
+        ),
+      );
+    });
+
+    test('with no row in hand the refusal still names the runner', () {
+      final runner = FakeCommandRunner(
+        environmentId: 'wsl:Ubuntu',
+        throwError: CommandException('Failed to run "gh" in WSL "Ubuntu"'),
+      );
+      expect(
+        () => GitHubService(runner).listIssues(repo),
+        throwsA(
+          isA<GitHubException>().having(
+            (e) => e.message,
+            'message',
+            contains('not installed in wsl:Ubuntu'),
+          ),
+        ),
+      );
+    });
+  });
 }
