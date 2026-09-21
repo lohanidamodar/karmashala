@@ -1,0 +1,47 @@
+import 'dart:convert';
+
+import 'package:riverpod/riverpod.dart';
+import 'package:karmashala_store/database.dart';
+
+import '../../../core/database/database_providers.dart';
+
+/// The last typed commands that ran, fully resolved, newest first. Kept in
+/// `app_metadata` — no migration, and an older build simply ignores the key.
+class TypedCommandHistory {
+  TypedCommandHistory(this._db);
+
+  final AppDatabase _db;
+
+  static const String key = 'quick_open.command_history.v1';
+
+  /// Commands kept; the oldest fall off.
+  static const int limit = 20;
+
+  /// Newest first. A value this build cannot read is no history, not an error.
+  List<String> list() {
+    final raw = _db.readMetadata(key);
+    if (raw == null) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return [
+        for (final entry in decoded)
+          if (entry is String && entry.trim().isNotEmpty) entry,
+      ];
+    } on FormatException {
+      return const [];
+    }
+  }
+
+  /// Puts [command] first, dropping an earlier copy of it.
+  void record(String command) {
+    final text = command.trim();
+    if (text.isEmpty) return;
+    final next = [text, ...list().where((c) => c != text)].take(limit);
+    _db.writeMetadata(key, jsonEncode(next.toList()));
+  }
+}
+
+final typedCommandHistoryProvider = Provider<TypedCommandHistory>(
+  (ref) => TypedCommandHistory(ref.watch(databaseProvider)),
+);

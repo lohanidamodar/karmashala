@@ -210,11 +210,15 @@ class QuickOpenRow extends StatelessWidget {
     this.subtitle,
     this.detail,
     this.trailing,
+    this.enabled = true,
     super.key,
   });
 
   final IconData icon;
   final String title;
+
+  /// False draws the row muted: it is listed to say why it cannot be used.
+  final bool enabled;
 
   /// Indices of the characters in [title] the query matched.
   final List<int> titlePositions;
@@ -239,10 +243,19 @@ class QuickOpenRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
+    final muted = scheme.onSurface.withValues(alpha: 0.45);
+    final foreground = !enabled
+        ? muted
+        : selected
+        ? scheme.primary
+        : scheme.onSurfaceVariant;
+    final titleStyle = enabled
+        ? theme.textTheme.bodyMedium!
+        : theme.textTheme.bodyMedium!.copyWith(color: muted);
     return Semantics(
       selected: selected,
       button: true,
+      enabled: enabled,
       child: InkWell(
         onTap: onTap,
         child: Container(
@@ -275,7 +288,7 @@ class QuickOpenRow extends StatelessWidget {
                       HighlightedText(
                         text: title,
                         positions: titlePositions,
-                        style: theme.textTheme.bodyMedium!,
+                        style: titleStyle,
                         accent: scheme.primary,
                       ),
                       if (subtitle != null)

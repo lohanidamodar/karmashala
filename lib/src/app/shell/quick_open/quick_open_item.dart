@@ -5,6 +5,11 @@ import 'fuzzy_match.dart';
 /// The kinds of thing quick open can find. Not a filter: results are ranked
 /// across all groups, and this order only breaks a tie between equal scores.
 enum QuickOpenGroup {
+  /// A typed verb command's preview and completions; never fuzzy-ranked.
+  command('Command'),
+
+  /// Typed commands that ran, offered on an empty box.
+  history('Recent commands'),
   attention('Needs you'),
   tabs('Open tabs'),
   sessions('Sessions'),

@@ -633,7 +633,7 @@ class QuickOpenSources {
               ],
               weight: _sessionWeight + here + recency,
               onSelect: () =>
-                  dismiss(() => _focusSession(session.id, imported: false)),
+                  dismiss(() => focusSession(session.id, imported: false)),
             ),
           ));
         }
@@ -661,7 +661,7 @@ class QuickOpenSources {
               keywords: [agent, 'imported', session.preview],
               weight: _sessionWeight + here + recency,
               onSelect: () =>
-                  dismiss(() => _focusSession(session.id, imported: true)),
+                  dismiss(() => focusSession(session.id, imported: true)),
             ),
           ));
         }
@@ -697,7 +697,7 @@ class QuickOpenSources {
 
   /// Selects a session and everything above it, through the one walk that
   /// already exists for a clicked toast and a clicked tray item.
-  Future<void> _focusSession(String openId, {required bool imported}) async {
+  Future<void> focusSession(String openId, {required bool imported}) async {
     focusWatchedSession(
       ProviderScope.containerOf(context, listen: false),
       openId: openId,
@@ -779,7 +779,7 @@ class QuickOpenSources {
               _conversationWeight +
               _conversationRankSpread * (1 - rank / hits.length),
           onSelect: () =>
-              dismiss(() => _focusSession(openId, imported: native == null)),
+              dismiss(() => focusSession(openId, imported: native == null)),
         ),
       );
     }

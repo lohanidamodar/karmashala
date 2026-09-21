@@ -1,0 +1,219 @@
+import 'package:agent_cli/discovery.dart';
+import 'package:agent_cli/process.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/app/shell/quick_open/quick_open.dart';
+import 'package:karmashala/src/app/shell/quick_open/typed_command_history.dart';
+import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
+import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
+import 'package:karmashala/src/features/explorer/application/explorer_actions.dart';
+import 'package:karmashala/src/features/git/application/changes_providers.dart';
+import 'package:karmashala/src/features/projects/application/projects_controller.dart';
+import 'package:karmashala/src/features/projects/data/project_dao.dart';
+import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
+import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_git/repositories.dart';
+import 'package:karmashala_store/database.dart';
+
+import '../../../features/terminal/fake_instance.dart';
+import '../../../support/fakes.dart';
+import '../../../support/fixtures.dart';
+
+/// Records the start instead of launching an agent: what is under test is that
+/// the command reaches the Explorer's own start, with the right arguments.
+class _RecordingExplorerActions extends ExplorerActions {
+  _RecordingExplorerActions(super.ref);
+
+  final starts = <({String repositoryId, String? installationId})>[];
+
+  @override
+  Future<ExplorerResult> startSession({
+    required Repository repository,
+    EnvironmentPath? existingWorktree,
+    AgentInstallation? installation,
+    String? title,
+  }) async {
+    starts.add((repositoryId: repository.id, installationId: installation?.id));
+    return const ExplorerResult(ExplorerOutcome.started);
+  }
+}
+
+void main() {
+  late AppDatabase db;
+
+  setUp(() {
+    db = AppDatabase.memory();
+    ensureLocalEnvironment(ExecutionEnvironmentDao(db), FixedClock(testTime));
+    ProjectDao(db).insert(project(name: 'Karmashala'));
+    RepositoryDao(db).insert(repository(name: 'app'));
+    AgentInstallationDao(db).insert(agentInstallation());
+    SessionDao(db)
+      ..insert(session(id: 's1', title: 'Fix login redirect'))
+      ..insert(session(id: 's2', title: 'Write the release notes'));
+  });
+  tearDown(() => db.close());
+
+  late _RecordingExplorerActions explorer;
+
+  Future<ProviderContainer> open(WidgetTester tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        ...fakeTerminalOverrides(database: db),
+        explorerActionsProvider.overrideWith(_RecordingExplorerActions.new),
+      ],
+    );
+    addTearDown(container.dispose);
+    // Read up front: a test that never starts anything must not see the last
+    // test's recorder.
+    explorer =
+        container.read(explorerActionsProvider) as _RecordingExplorerActions;
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => QuickOpen.show(context),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    container.read(selectedProjectIdProvider.notifier).select('p1');
+    container.read(selectedRepositoryIdProvider.notifier).select('r1');
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    return container;
+  }
+
+  Future<void> type(WidgetTester tester, String query) async {
+    await tester.enterText(find.byType(TextField), query);
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> press(WidgetTester tester, LogicalKeyboardKey key) async {
+    await tester.sendKeyEvent(key);
+    await tester.pumpAndSettle();
+  }
+
+  String boxText(WidgetTester tester) =>
+      tester.widget<TextField>(find.byType(TextField)).controller!.text;
+
+  testWidgets('Tab completes one argument at a time, and Enter runs the '
+      'resolved command through the Explorer start', (tester) async {
+    final container = await open(tester);
+
+    await type(tester, 'start ');
+    expect(find.text('COMMAND'), findsOneWidget);
+    expect(find.text('Karmashala'), findsWidgets);
+
+    await press(tester, LogicalKeyboardKey.tab);
+    expect(boxText(tester), 'start Karmashala ');
+    // Complete enough to run: the preview leads, with the default agent.
+    expect(
+      find.textContaining('Start Claude Code in Karmashala'),
+      findsOneWidget,
+    );
+    expect(find.text('Enter to run'), findsOneWidget);
+
+    // Tab from the preview takes the first usable agent.
+    await press(tester, LogicalKeyboardKey.tab);
+    expect(boxText(tester), 'start Karmashala claude ');
+
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(explorer.starts, [(repositoryId: 'r1', installationId: 'a1')]);
+    expect(find.byType(QuickOpen), findsNothing);
+    // Fully resolved, so it can be run again from an empty box.
+    expect(TypedCommandHistory(db).list(), ['start Karmashala claude']);
+    expect(container.read(selectedProjectIdProvider), 'p1');
+  });
+
+  testWidgets('a refused command is listed with its reason and Enter does '
+      'nothing', (tester) async {
+    await open(tester);
+
+    await type(tester, 'start Karmashala antigravity ');
+    expect(
+      find.textContaining('Start Antigravity in Karmashala'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('Antigravity is not installed in'),
+      findsOneWidget,
+    );
+
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(explorer.starts, isEmpty);
+    expect(find.byType(QuickOpen), findsOneWidget);
+    expect(TypedCommandHistory(db).list(), isEmpty);
+  });
+
+  testWidgets('an uninstalled agent is shown disabled, not hidden, and Tab '
+      'skips it', (tester) async {
+    await open(tester);
+
+    await type(tester, 'start Karmashala anti');
+    expect(find.text('antigravity'), findsOneWidget);
+    expect(find.textContaining('not installed in'), findsOneWidget);
+
+    await press(tester, LogicalKeyboardKey.tab);
+    expect(boxText(tester), 'start Karmashala anti');
+  });
+
+  testWidgets('resume by session name opens that session', (tester) async {
+    final container = await open(tester);
+
+    await type(tester, 'resume fix');
+    await press(tester, LogicalKeyboardKey.tab);
+    expect(boxText(tester), 'resume fix-login-redirect ');
+
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(container.read(selectedSessionIdProvider), 's1');
+    expect(find.byType(QuickOpen), findsNothing);
+    expect(TypedCommandHistory(db).list(), ['resume fix-login-redirect']);
+  });
+
+  testWidgets('an empty box offers history first; Enter runs it again', (
+    tester,
+  ) async {
+    TypedCommandHistory(db).record('resume write-the-release-notes');
+    final container = await open(tester);
+
+    expect(find.text('RECENT COMMANDS'), findsOneWidget);
+    expect(find.text('resume write-the-release-notes'), findsOneWidget);
+
+    await press(tester, LogicalKeyboardKey.enter);
+
+    expect(container.read(selectedSessionIdProvider), 's2');
+    expect(find.byType(QuickOpen), findsNothing);
+  });
+
+  testWidgets('plain search is unchanged: no command section, same first '
+      'result', (tester) async {
+    final container = await open(tester);
+
+    for (final query in ['login', 'open settings', 'start']) {
+      await type(tester, query);
+      expect(find.text('COMMAND'), findsNothing, reason: query);
+      expect(find.text('RECENT COMMANDS'), findsNothing, reason: query);
+    }
+    expect(find.text('Open Settings'), findsNothing);
+    await type(tester, 'open settings');
+    expect(find.text('Open Settings'), findsOneWidget);
+
+    await type(tester, 'login');
+    await press(tester, LogicalKeyboardKey.enter);
+    expect(container.read(selectedSessionIdProvider), 's1');
+    expect(explorer.starts, isEmpty);
+  });
+}
