@@ -101,6 +101,7 @@ class HostPaneLink {
     required List<String> argv,
     String? workingDirectory,
     Map<String, String> environment = const {},
+    Set<String> removedEnvironment = const {},
     required int columns,
     required int rows,
   }) => _attachment(
@@ -110,6 +111,7 @@ class HostPaneLink {
       argv: argv,
       workingDirectory: workingDirectory,
       environment: environment,
+      removedEnvironment: removedEnvironment,
       columns: columns,
       rows: rows,
     ),
@@ -279,6 +281,14 @@ class HostPaneLink {
             waiting.completeError(
               HostLinkException(message.message, code: message.code),
             );
+          } else if (message.requestId == 0 &&
+              message.code == ProtocolErrorCode.badRequest &&
+              _pending.isNotEmpty) {
+            // A frame the host could not read — an older host meeting a type
+            // it predates — answers id 0 and hangs up. That is the answer to
+            // what is waiting, not a generic "the channel closed".
+            _fail(HostLinkException(message.message, code: message.code));
+            return;
           } else if (!_notices.isClosed) {
             // Unsolicited: a refused write, most often.
             _notices.add(message.message);

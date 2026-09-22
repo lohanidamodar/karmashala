@@ -89,6 +89,7 @@ class OpenMessage extends HostMessage {
     required this.columns,
     required this.rows,
     this.workingDirectory,
+    this.removedEnvironment = const {},
   });
 
   final int requestId;
@@ -96,6 +97,10 @@ class OpenMessage extends HostMessage {
   final List<String> argv;
   final String? workingDirectory;
   final Map<String, String> environment;
+
+  /// Names the child must not inherit. Non-empty travels as
+  /// [MessageType.openWithout], which a host predating it refuses.
+  final Set<String> removedEnvironment;
   final int columns;
   final int rows;
 
@@ -109,7 +114,11 @@ class OpenMessage extends HostMessage {
       ..map(environment)
       ..u16(columns)
       ..u16(rows);
-    return Frame(MessageType.open, 0, w.take());
+    if (removedEnvironment.isEmpty) {
+      return Frame(MessageType.open, 0, w.take());
+    }
+    w.strings(removedEnvironment.toList());
+    return Frame(MessageType.openWithout, 0, w.take());
   }
 
   static OpenMessage decode(Frame frame) {
@@ -119,14 +128,19 @@ class OpenMessage extends HostMessage {
     final argv = r.strings();
     final cwd = r.str();
     final env = r.map();
+    final columns = r.u16();
+    final rows = r.u16();
     return OpenMessage(
       requestId: requestId,
       sessionId: sessionId,
       argv: argv,
       workingDirectory: cwd.isEmpty ? null : cwd,
       environment: env,
-      columns: r.u16(),
-      rows: r.u16(),
+      columns: columns,
+      rows: rows,
+      removedEnvironment: frame.type == MessageType.openWithout
+          ? r.strings().toSet()
+          : const {},
     );
   }
 }
@@ -754,7 +768,7 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.welcome => WelcomeMessage.decode(frame),
   MessageType.list => ListMessage.decode(frame),
   MessageType.sessions => SessionsMessage.decode(frame),
-  MessageType.open => OpenMessage.decode(frame),
+  MessageType.open || MessageType.openWithout => OpenMessage.decode(frame),
   MessageType.attach => AttachMessage.decode(frame),
   MessageType.attached => AttachedMessage.decode(frame),
   MessageType.output => OutputMessage.decode(frame),

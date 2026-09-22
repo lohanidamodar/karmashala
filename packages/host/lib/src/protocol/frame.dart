@@ -28,7 +28,12 @@ enum MessageType {
   // Bumping instead would make every already-deployed host a `protocolMismatch`
   // until it is replaced, which BACKLOG §1 says is the thing nothing does yet.
   pair(0x12),
-  paired(0x13);
+  paired(0x13),
+  // `open` plus the names to withhold, added 2026-09-22 the same way as
+  // `pair`. Its own type rather than a trailing field on `open`: an older host
+  // ignores trailing bytes and would spawn with the variables still set, while
+  // a type it does not know it refuses — loudly, before anything starts.
+  openWithout(0x14);
 
   const MessageType(this.code);
   final int code;

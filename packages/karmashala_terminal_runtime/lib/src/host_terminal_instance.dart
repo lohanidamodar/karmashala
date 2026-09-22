@@ -401,7 +401,9 @@ class HostTerminalInstance
       // Only the host saying there is no such session earns an open. A timeout
       // or any other refusal may mean the session is there and alive.
       if (e.code != ProtocolErrorCode.unknownSession) rethrow;
-      return link.openSession(
+    }
+    try {
+      return await link.openSession(
         sessionId: sessionId,
         // The host starts argv[0] once and quotes by CommandLineToArgvW rules,
         // so a WSL launch goes without the `cmd.exe /c` flutter_pty needs.
@@ -411,8 +413,18 @@ class HostTerminalInstance
         // CreateProcess would refuse as a process directory (errno 267).
         workingDirectory: launch.workingDirectory,
         environment: {'TERM': 'xterm-256color', ...launch.environment},
+        removedEnvironment: launch.removedEnvironment,
         columns: width,
         rows: height,
+      );
+    } on HostLinkException catch (e) {
+      if (e.code != ProtocolErrorCode.badRequest ||
+          launch.removedEnvironment.isEmpty) {
+        rethrow;
+      }
+      throw HostLinkException(
+        withholdingRefusal(launch.removedEnvironment, e.message),
+        code: e.code,
       );
     }
   }
@@ -567,3 +579,12 @@ TerminalInstance createHostTerminalInstance({
     shellIntegration: integrate && Platform.isWindows,
   );
 }
+
+/// Why a pane that had to withhold [names] did not start: the host predates
+/// withholding, and starting anyway would hand the child what it must not see.
+@visibleForTesting
+String withholdingRefusal(Set<String> names, String hostSaid) =>
+    'This session host is older than this app and cannot leave '
+    '${(names.toList()..sort()).join(', ')} out of a pane, so nothing was '
+    'started. Restart the session host from Settings › Terminal, then reopen '
+    'this pane. (The host said: $hostSaid)';

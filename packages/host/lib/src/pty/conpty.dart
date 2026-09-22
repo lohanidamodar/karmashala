@@ -141,7 +141,7 @@ class ConPtyLauncher implements PtyLauncher {
         nullptr,
         0,
         kExtendedStartupInfoPresent | kCreateUnicodeEnvironment,
-        _environmentBlock(arena, request.environment),
+        _environmentBlock(arena, request),
         (cwd == null || cwd.isEmpty)
             ? nullptr
             : cwd.toNativeUtf16(allocator: arena),
@@ -215,23 +215,12 @@ class ConPtyLauncher implements PtyLauncher {
     return job;
   }
 
-  /// `KEY=VALUE\0…\0\0`, UTF-16, layered over this process's own environment.
-  /// Keyed and sorted case-insensitively: `path` replaces `Path`, not joins it.
-  Pointer<Void> _environmentBlock(Arena arena, Map<String, String> overrides) {
-    final merged = <String, String>{};
-    final keys = <String, String>{}; // lower-case name -> the spelling in use
-    void put(String key, String value) {
-      final existing = keys[key.toLowerCase()];
-      if (existing != null) merged.remove(existing);
-      keys[key.toLowerCase()] = key;
-      merged[key] = value;
-    }
-
-    Platform.environment.forEach(put);
-    overrides.forEach(put);
-
-    final entries = merged.entries.map((e) => '${e.key}=${e.value}').toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+  /// `KEY=VALUE\0…\0\0`, UTF-16, from [conPtyEnvironmentEntries].
+  Pointer<Void> _environmentBlock(Arena arena, PtySpawnRequest request) {
+    final entries = conPtyEnvironmentEntries(
+      base: Platform.environment,
+      request: request,
+    );
     var units = 1; // the block's own terminator
     for (final entry in entries) {
       units += entry.length + 1;
@@ -566,3 +555,18 @@ void _writerMain(List<Object> args) {
     }
   });
 }
+
+/// The `KEY=VALUE` lines a ConPTY child is started with: [base] minus the
+/// request's removals, its overrides laid over that, case-insensitively and in
+/// the case-insensitive order `CreateProcessW` expects.
+List<String> conPtyEnvironmentEntries({
+  required Map<String, String> base,
+  required PtySpawnRequest request,
+}) =>
+    layeredEnvironment(
+        base: base,
+        overrides: request.environment,
+        removed: request.removedEnvironment,
+        caseInsensitive: true,
+      ).entries.map((e) => '${e.key}=${e.value}').toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));

@@ -13,7 +13,8 @@ const int _eintr = 4;
 const int _eio = 5;
 final int _eagain = Platform.isMacOS ? 35 : 11; // EAGAIN
 
-/// The child's environment: the host process's, with [overrides] laid over it.
+/// The child's environment: the host process's minus [removed], with
+/// [overrides] laid over it.
 ///
 /// Layered, not replaced. Until 2026-09-16 this was `overrides` alone, so a
 /// pane whose client sent `{'TERM': 'xterm-256color'}` — which is exactly what
@@ -29,7 +30,13 @@ final int _eagain = Platform.isMacOS ? 35 : 11; // EAGAIN
 Map<String, String> childEnvironment(
   Map<String, String> overrides, {
   Map<String, String>? base,
-}) => {...base ?? Platform.environment, ...overrides};
+  Set<String> removed = const {},
+}) => layeredEnvironment(
+  base: base ?? Platform.environment,
+  overrides: overrides,
+  removed: removed,
+  caseInsensitive: false,
+);
 
 /// A pty pair from `openpty`, a child from `posix_spawn`, never `forkpty`: its
 /// child returns into Dart after a fork in a multithreaded VM, where a malloc
@@ -132,7 +139,10 @@ class PosixPtyLauncher implements PtyLauncher {
       }
       argv[request.argv.length] = nullptr;
 
-      final entries = childEnvironment(request.environment).entries.toList();
+      final entries = childEnvironment(
+        request.environment,
+        removed: request.removedEnvironment,
+      ).entries.toList();
       final envp = arena<Pointer<Uint8>>(entries.length + 1);
       for (var i = 0; i < entries.length; i++) {
         envp[i] = cString(arena, '${entries[i].key}=${entries[i].value}');

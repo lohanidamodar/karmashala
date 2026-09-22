@@ -71,6 +71,54 @@ void main() {
     expect(pane.liveness.value, PaneLiveness.live);
   });
 
+  group('names the launch withholds', () {
+    const withholding = PtyLaunch(
+      executable: 'claude.exe',
+      workingDirectory: r'C:\work',
+      removedEnvironment: {'ANTHROPIC_API_KEY'},
+    );
+
+    HostTerminalInstance withholdingPaneOn(PaneAccess access) {
+      final instance = HostTerminalInstance(
+        id: 'p1',
+        title: 'Claude',
+        profileId: 'powershell',
+        access: access,
+        launch: withholding,
+        workingDirectory: r'C:\work',
+      );
+      instance.terminal.resize(120, 40);
+      addTearDown(instance.dispose);
+      return instance;
+    }
+
+    test('cross to the host with the open', () async {
+      final access = PaneAccess(readyDeployment());
+      withholdingPaneOn(access);
+      await settle();
+
+      final opened = access.channels.single.only<OpenMessage>();
+      expect(opened.removedEnvironment, {'ANTHROPIC_API_KEY'});
+    });
+
+    test(
+      'an older host that cannot withhold them refuses the pane in words',
+      () async {
+        final access = PaneAccess(readyDeployment())
+          ..predatesWithholding = true;
+        final pane = withholdingPaneOn(access);
+        await settle();
+
+        // Unwrapped: the sentence is longer than the pane is wide.
+        final screen = screenOf(pane).replaceAll('\n', '');
+        expect(screen, contains('cannot leave ANTHROPIC_API_KEY out'));
+        expect(screen, contains('Restart the session host'));
+        expect(screen, contains('0x14'), reason: 'what the host said, quoted');
+        expect(access.liveSessions, isEmpty, reason: 'nothing was started');
+      },
+    );
+  });
+
   test(
     'bytes from the host reach the buffer, and typing reaches the host',
     () async {

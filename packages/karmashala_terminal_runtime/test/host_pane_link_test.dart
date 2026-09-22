@@ -434,7 +434,61 @@ void main() {
       expect(open.workingDirectory, '/srv/app');
       expect(open.environment['TERM'], 'xterm-256color');
       expect(open.columns, 120);
+      expect(open.removedEnvironment, isEmpty);
     });
+
+    test('open carries the names the child must not inherit', () async {
+      final channel = ScriptedChannel();
+      final link = await connected(channel);
+      await link.openSession(
+        sessionId: 's',
+        argv: const ['claude.exe'],
+        removedEnvironment: const {'ANTHROPIC_API_KEY'},
+        columns: 80,
+        rows: 24,
+      );
+      expect(channel.only<OpenMessage>().removedEnvironment, {
+        'ANTHROPIC_API_KEY',
+      });
+    });
+
+    test(
+      'a host that cannot read the open fails it with its own words',
+      () async {
+        final channel = ScriptedChannel();
+        final link = await connected(channel);
+        // What an older host does with a frame type it predates: id 0,
+        // `badRequest`, and it hangs up.
+        channel.answer = (request) {
+          if (request is OpenMessage) {
+            channel.push(
+              const ErrorMessage(
+                0,
+                ProtocolErrorCode.badRequest,
+                'unknown message type 0x14',
+              ),
+            );
+            unawaited(channel.drop());
+          }
+          return null;
+        };
+
+        await expectLater(
+          link.openSession(
+            sessionId: 's',
+            argv: const ['claude.exe'],
+            removedEnvironment: const {'ANTHROPIC_API_KEY'},
+            columns: 80,
+            rows: 24,
+          ),
+          throwsA(
+            isA<HostLinkException>()
+                .having((e) => e.code, 'code', ProtocolErrorCode.badRequest)
+                .having((e) => e.message, 'message', contains('0x14')),
+          ),
+        );
+      },
+    );
   });
 
   group('ending', () {

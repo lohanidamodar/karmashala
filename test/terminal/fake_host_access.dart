@@ -28,6 +28,10 @@ class PaneAccess implements HostSessionAccess {
   /// What the host answers an attach with instead of looking the session up.
   ProtocolErrorCode? attachRefusal;
 
+  /// A host built before `openWithout`: it cannot read that frame, answers
+  /// request 0 with `badRequest` and hangs up, as an older `serve` does.
+  var predatesWithholding = false;
+
   /// What a *reattach* says the session has produced so far. Zero unless a test
   /// is about what a pane does with a session that already has history.
   int resumedTotalBytes = 0;
@@ -72,6 +76,7 @@ class PaneAccess implements HostSessionAccess {
       liveSessions,
       resumedTotalBytes: resumedTotalBytes,
       attachRefusal: attachRefusal,
+      predatesWithholding: predatesWithholding,
     );
     channels.add(channel);
     return channel;
@@ -91,9 +96,11 @@ class ScriptedHostChannel implements RemoteChannel {
     this.liveSessions, {
     this.resumedTotalBytes = 0,
     this.attachRefusal,
+    this.predatesWithholding = false,
   });
 
   final ProtocolErrorCode? attachRefusal;
+  final bool predatesWithholding;
 
   /// What a reattach reports as this session's absolute total.
   final int resumedTotalBytes;
@@ -156,6 +163,16 @@ class ScriptedHostChannel implements RemoteChannel {
             break;
           }
           push(_attached(requestId, sessionId));
+        case OpenMessage(:final removedEnvironment)
+            when predatesWithholding && removedEnvironment.isNotEmpty:
+          push(
+            const ErrorMessage(
+              0,
+              ProtocolErrorCode.badRequest,
+              'unknown message type 0x14',
+            ),
+          );
+          unawaited(close());
         case OpenMessage(
           :final requestId,
           :final sessionId,

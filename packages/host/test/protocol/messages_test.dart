@@ -74,6 +74,69 @@ void main() {
       },
     );
 
+    test('open carries the names to withhold, as its own frame type', () {
+      const open = OpenMessage(
+        requestId: 3,
+        sessionId: 'karmashala_s1',
+        argv: ['claude.exe'],
+        environment: {'TERM': 'xterm-256color'},
+        removedEnvironment: {'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'},
+        columns: 100,
+        rows: 30,
+      );
+      expect(open.toFrame().type, MessageType.openWithout);
+      final decoded = roundTrip(open);
+      expect(decoded.removedEnvironment, {
+        'ANTHROPIC_API_KEY',
+        'ANTHROPIC_AUTH_TOKEN',
+      });
+      expect(decoded.environment, {'TERM': 'xterm-256color'});
+      expect(decoded.columns, 100);
+      expect(decoded.rows, 30);
+    });
+
+    test('an open with nothing to withhold is the frame every host reads', () {
+      const open = OpenMessage(
+        requestId: 3,
+        sessionId: 's',
+        argv: ['sh'],
+        environment: {},
+        columns: 80,
+        rows: 24,
+      );
+      expect(open.toFrame().type, MessageType.open);
+      expect(roundTrip(open).removedEnvironment, isEmpty);
+    });
+
+    test(
+      'a withholding open cannot be read as a plain one by an older host',
+      () {
+        final frame = const OpenMessage(
+          requestId: 3,
+          sessionId: 's',
+          argv: ['sh'],
+          environment: {},
+          removedEnvironment: {'ANTHROPIC_API_KEY'},
+          columns: 80,
+          rows: 24,
+        ).toFrame();
+        // What an older host reads for `open`: every field it knows, then it
+        // stops. A trailing field would have been dropped without a word,
+        // which is why the removals ride a type it does not know instead.
+        final r = WireReader(frame.payload)
+          ..u32()
+          ..str()
+          ..strings()
+          ..str()
+          ..map()
+          ..u16()
+          ..u16();
+        expect(r.remaining, greaterThan(0));
+        expect(frame.type.code, isNot(MessageType.open.code));
+        expect(frame.type.code, 0x14);
+      },
+    );
+
     test('attach carries the exact offset the pane last rendered', () {
       final decoded = roundTrip(
         const AttachMessage(

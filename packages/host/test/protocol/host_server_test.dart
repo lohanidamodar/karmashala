@@ -435,6 +435,29 @@ void main() {
     expect(env.registry.require('pane-a').token.isHeldBy('pane-2'), isTrue);
   });
 
+  test('an open with names to withhold hands them to the spawn', () async {
+    final env = build();
+    final client = PipeConnection();
+    unawaited(env.server.serveConnection(client));
+    await client.send(const HelloMessage(requestId: 1, clientId: 'pane-1'));
+    await client.send(
+      const OpenMessage(
+        requestId: 2,
+        sessionId: 'pane-a',
+        argv: ['claude.exe'],
+        environment: {'TERM': 'xterm-256color'},
+        removedEnvironment: {'ANTHROPIC_API_KEY'},
+        columns: 80,
+        rows: 24,
+      ),
+    );
+
+    final started = env.launcher.started.single;
+    expect(started.removedEnvironment, {'ANTHROPIC_API_KEY'});
+    expect(started.environment, {'TERM': 'xterm-256color'});
+    expect(client.only<AttachedMessage>().sessionId, 'pane-a');
+  });
+
   test('opening the same id twice is refused rather than shadowing', () async {
     final env = build();
     final client = PipeConnection();

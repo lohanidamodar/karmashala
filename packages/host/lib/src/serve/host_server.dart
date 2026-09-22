@@ -333,6 +333,7 @@ class _ClientSession {
           argv: message.argv,
           workingDirectory: message.workingDirectory,
           environment: message.environment,
+          removedEnvironment: message.removedEnvironment,
           columns: message.columns,
           rows: message.rows,
         ),

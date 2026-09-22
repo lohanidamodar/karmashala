@@ -116,6 +116,10 @@ class SessionStore implements SessionBacklogStore {
             for (final entry in (meta['environment'] as Map).entries)
               entry.key as String: entry.value as String,
           },
+          removedEnvironment: {
+            for (final name in (meta['removedEnvironment'] as List?) ?? const [])
+              name as String,
+          },
           columns: (meta['columns'] as num).toInt(),
           rows: (meta['rows'] as num).toInt(),
         ),
@@ -332,6 +336,7 @@ class SessionRecord implements SessionRecorder {
       'argv': _request.argv,
       'workingDirectory': _request.workingDirectory,
       'environment': _request.environment,
+      'removedEnvironment': _request.removedEnvironment.toList(),
       'columns': _request.columns,
       'rows': _request.rows,
       'startedAt': _startedAt.toUtc().microsecondsSinceEpoch,

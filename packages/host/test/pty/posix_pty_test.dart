@@ -96,5 +96,34 @@ void main() {
       expect(merged['PATH'], '/usr/bin');
       expect(merged['path'], '/override');
     });
+
+    test('a removed name is withheld even when the host inherited it', () {
+      final merged = childEnvironment(
+        const {'TERM': 'xterm-256color'},
+        base: const {
+          'PATH': '/usr/bin',
+          'ANTHROPIC_API_KEY': 'from-serve',
+          'anthropic_api_key': 'another variable here',
+        },
+        removed: const {'ANTHROPIC_API_KEY'},
+      );
+      expect(merged.containsKey('ANTHROPIC_API_KEY'), isFalse);
+      expect(
+        merged['anthropic_api_key'],
+        'another variable here',
+        reason:
+            'POSIX names are case-sensitive, so this is not the one removed',
+      );
+      expect(merged['PATH'], '/usr/bin');
+    });
+
+    test('a name the client supplies wins over its removal', () {
+      final merged = childEnvironment(
+        const {'ANTHROPIC_API_KEY': 'set-by-karmashala'},
+        base: const {'ANTHROPIC_API_KEY': 'from-serve'},
+        removed: const {'ANTHROPIC_API_KEY'},
+      );
+      expect(merged['ANTHROPIC_API_KEY'], 'set-by-karmashala');
+    });
   });
 }
