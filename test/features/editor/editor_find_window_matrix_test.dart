@@ -34,8 +34,11 @@ class _Store extends DocumentStore {
   Future<FileStamp?> stamp(String hostPath) async => null;
 
   @override
-  Future<FileStamp> write(String hostPath, String text) async =>
-      FileStamp(length: text.length, modified: null);
+  Future<FileStamp> write(
+    String hostPath,
+    String text, {
+    WriteExpectation expect = const WriteExpectation.any(),
+  }) async => FileStamp(length: text.length, modified: null);
 }
 
 /// A file tab with find and replace open, in the smallest window the app

@@ -1,4 +1,4 @@
-import 'package:path/path.dart' as p;
+import 'document_id.dart';
 
 /// Over this a file opens read-only ([DocumentMode.view]): the editable field
 /// lays the whole buffer out as one paragraph — tool/benchmark/code_field_bench.dart.
@@ -11,10 +11,6 @@ const int kDocumentSizeLimit = 64 * 1024 * 1024;
 /// Over this the buffer is drawn in plain mono: one `highlight.parse` of the
 /// whole file is linear and runs on every change.
 const int kHighlightSizeLimit = 256 * 1024;
-
-/// Host paths are spelled for Windows, and a UNC share is one of them; asking
-/// the windows context keeps the answer right on a machine that is not.
-final p.Context _hostPaths = p.windows;
 
 /// Why a file will not open, or [none].
 enum DocumentRefusal { none, notFound, unreadable, binary, tooLarge }
@@ -91,8 +87,12 @@ class SourceDocument {
     this.mode = DocumentMode.edit,
     this.disk = DiskState.current,
     this.diskStamp,
+    this.unreachable,
   });
 
+  /// The document id (`document_id.dart`): the bare path for this machine's
+  /// files — the spelling every tab stored before ids named an environment —
+  /// and `<environment>␟<path>` for a file anywhere else.
   final String hostPath;
   final String text;
   final String savedText;
@@ -122,6 +122,13 @@ class SourceDocument {
   /// already shown, so the same one is not reported twice.
   final FileStamp? diskStamp;
 
+  /// Why the file's environment did not answer the last time it was asked — a
+  /// dropped SSH connection — or null when it did. The buffer is kept and a
+  /// save waits for it to answer again.
+  final String? unreachable;
+
+  bool get isReachable => unreachable == null;
+
   /// The version of the file this buffer has already answered for — null means
   /// "absent". A disk check that sees this again has nothing new to say.
   FileStamp? get knownDiskStamp => switch (disk) {
@@ -131,7 +138,7 @@ class SourceDocument {
   };
 
   /// The file's own name, for a tab title.
-  String get name => _hostPaths.basename(hostPath);
+  String get name => documentNameOf(hostPath);
 
   bool get isDirty => text != savedText;
 
@@ -151,8 +158,16 @@ class SourceDocument {
 
   SourceDocument withText(String next) => _copy(text: next);
 
-  SourceDocument asSaved(FileStamp stamp) =>
-      _copy(savedText: text, stamp: stamp, disk: DiskState.current);
+  SourceDocument asSaved(FileStamp stamp) => _copy(
+    savedText: text,
+    stamp: stamp,
+    disk: DiskState.current,
+    reachable: true,
+  );
+
+  SourceDocument markedUnreachable(String reason) => _copy(unreachable: reason);
+
+  SourceDocument markedReachable() => _copy(reachable: true);
 
   SourceDocument markedChanged(FileStamp onDisk) =>
       _copy(disk: DiskState.changed, diskStamp: onDisk);
@@ -175,6 +190,8 @@ class SourceDocument {
     FileStamp? stamp,
     DiskState? disk,
     FileStamp? diskStamp,
+    String? unreachable,
+    bool reachable = false,
   }) => SourceDocument(
     hostPath: hostPath,
     text: text ?? this.text,
@@ -188,5 +205,6 @@ class SourceDocument {
     mode: mode,
     disk: disk ?? this.disk,
     diskStamp: disk != null ? diskStamp : this.diskStamp,
+    unreachable: reachable ? null : unreachable ?? this.unreachable,
   );
 }

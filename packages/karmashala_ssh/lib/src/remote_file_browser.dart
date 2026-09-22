@@ -4,6 +4,7 @@ import 'package:dartssh2/dartssh2.dart';
 
 import 'package:agent_cli/process.dart';
 import 'remote_directory_entry.dart';
+import 'remote_document_files.dart';
 import 'ssh_connection.dart';
 
 /// Raised when a remote directory cannot be listed.
@@ -16,14 +17,21 @@ class RemoteBrowseException implements Exception {
       'RemoteBrowseException: $message${cause == null ? '' : ' ($cause)'}';
 }
 
+/// The connection is down, so nothing was learned about the file — distinct
+/// from the host refusing, which is an answer.
+class RemoteUnreachableException extends RemoteBrowseException {
+  RemoteUnreachableException(super.message, {super.cause});
+}
+
 /// Lists directories on a remote host over SFTP: structured entries rather than
 /// parsed `ls`, on the connection that is already open.
-class RemoteFileBrowser {
+class RemoteFileBrowser implements RemoteDocumentFiles {
   RemoteFileBrowser({required this.connection, required this.environmentId});
 
   final SshConnection connection;
 
   /// The environment every returned path belongs to (`ssh:<hostId>`).
+  @override
   final String environmentId;
 
   SftpClient? _sftp;
@@ -202,6 +210,121 @@ class RemoteFileBrowser {
     });
   }
 
+  @override
+  Future<RemoteFileStat?> statFile(EnvironmentPath path) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    return _call('read ${path.path}', () async {
+      final SftpFileAttrs attrs;
+      try {
+        attrs = await sftp.stat(path.path);
+      } on SftpStatusError catch (error) {
+        if (error.code == SftpStatusCode.noSuchFile) return null;
+        rethrow;
+      }
+      final mtime = attrs.modifyTime;
+      return RemoteFileStat(
+        isDirectory: attrs.isDirectory,
+        size: attrs.size ?? 0,
+        modifiedAt: mtime == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(mtime * 1000, isUtc: true),
+        permissions: attrs.mode == null ? null : attrs.mode!.value & 0xfff,
+        userId: attrs.userID,
+        groupId: attrs.groupID,
+      );
+    });
+  }
+
+  @override
+  Future<bool> isSymlink(EnvironmentPath path) async =>
+      await kindOf(path) == RemoteEntryKind.symlink;
+
+  @override
+  Future<Uint8List> readBytes(EnvironmentPath path, {int? length}) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    return _call('read ${path.path}', () async {
+      final file = await sftp.open(path.path);
+      try {
+        return await file.readBytes(length: length);
+      } finally {
+        await file.close();
+      }
+    });
+  }
+
+  @override
+  Future<void> writeNewFile(EnvironmentPath path, Uint8List bytes) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    await _call('write ${path.path}', () async {
+      final file = await sftp.open(
+        path.path,
+        mode:
+            SftpFileOpenMode.create |
+            SftpFileOpenMode.exclusive |
+            SftpFileOpenMode.write,
+      );
+      try {
+        await file.writeBytes(bytes);
+      } finally {
+        await file.close();
+      }
+    });
+  }
+
+  @override
+  Future<void> overwriteFile(EnvironmentPath path, Uint8List bytes) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    await _call('write ${path.path}', () async {
+      final file = await sftp.open(
+        path.path,
+        mode:
+            SftpFileOpenMode.create |
+            SftpFileOpenMode.truncate |
+            SftpFileOpenMode.write,
+      );
+      try {
+        await file.writeBytes(bytes);
+      } finally {
+        await file.close();
+      }
+    });
+  }
+
+  @override
+  Future<void> setPermissions(EnvironmentPath path, int permissions) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    await _call(
+      'set the mode of ${path.path}',
+      () => sftp.setStat(
+        path.path,
+        SftpFileAttrs(mode: SftpFileMode.value(permissions)),
+      ),
+    );
+  }
+
+  @override
+  Future<bool> replacesAtomically() async {
+    final sftp = await _client();
+    final handshake = await sftp.handshake;
+    return handshake.extensions['posix-rename@openssh.com'] == '1';
+  }
+
+  @override
+  Future<void> replace(EnvironmentPath from, EnvironmentPath to) =>
+      rename(from, to);
+
+  @override
+  Future<void> removeFile(EnvironmentPath path) async {
+    _requireOwnEnvironment(path);
+    final sftp = await _client();
+    await _call('delete ${path.path}', () => sftp.remove(path.path));
+  }
+
   /// Releases the SFTP channel. The SSH connection itself stays open.
   Future<void> close() async {
     final sftp = _sftp;
@@ -226,16 +349,43 @@ class RemoteFileBrowser {
 
   /// Runs one SFTP call, turning the server's status into a sentence that
   /// names what was being done — `SftpStatusError(3)` alone says nothing.
-  Future<void> _run(String what, Future<void> Function() body) async {
+  Future<void> _run(String what, Future<void> Function() body) =>
+      _call(what, body);
+
+  /// [_run] with a result. A channel that died under the call is
+  /// [RemoteUnreachableException], not the host saying no.
+  Future<T> _call<T>(String what, Future<T> Function() body) async {
     try {
-      await body();
+      return await body();
+    } on SftpStatusError catch (error) {
+      if (error.code == SftpStatusCode.noConnection ||
+          error.code == SftpStatusCode.connectionLost) {
+        throw _unreachable(what, error);
+      }
+      throw RemoteBrowseException(
+        'Cannot $what on ${connection.host.address}',
+        cause: error,
+      );
+    } on SftpAbortError catch (error) {
+      throw _unreachable(what, error);
     } on SftpError catch (error) {
       throw RemoteBrowseException(
         'Cannot $what on ${connection.host.address}',
         cause: error,
       );
+    } on RemoteBrowseException {
+      rethrow;
+    } on Object catch (error) {
+      if (!connection.isConnected) throw _unreachable(what, error);
+      rethrow;
     }
   }
+
+  RemoteUnreachableException _unreachable(String what, Object cause) =>
+      RemoteUnreachableException(
+        'Cannot $what: the connection to ${connection.host.address} was lost',
+        cause: cause,
+      );
 
   static String _baseName(String path) {
     final cut = path.lastIndexOf('/');
@@ -252,7 +402,7 @@ class RemoteFileBrowser {
       final client = await connection.client();
       return _sftp = await client.sftp();
     } on SshConnectionException catch (e) {
-      throw RemoteBrowseException(
+      throw RemoteUnreachableException(
         'Cannot browse ${connection.host.address}: ${e.message}',
         cause: e.cause ?? e,
       );

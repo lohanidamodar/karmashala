@@ -33,8 +33,11 @@ class _Stamps extends DocumentStore {
   }
 
   @override
-  Future<FileStamp> write(String hostPath, String text) =>
-      throw UnimplementedError();
+  Future<FileStamp> write(
+    String hostPath,
+    String text, {
+    WriteExpectation expect = const WriteExpectation.any(),
+  }) => throw UnimplementedError();
 }
 
 void main() {

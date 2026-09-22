@@ -31,8 +31,11 @@ class _HugeStore extends DocumentStore {
   Future<FileStamp?> stamp(String hostPath) async => null;
 
   @override
-  Future<FileStamp> write(String hostPath, String text) =>
-      throw UnimplementedError();
+  Future<FileStamp> write(
+    String hostPath,
+    String text, {
+    WriteExpectation expect = const WriteExpectation.any(),
+  }) => throw UnimplementedError();
 }
 
 /// The read-only notice sits above the viewer in a tab that can be a narrow

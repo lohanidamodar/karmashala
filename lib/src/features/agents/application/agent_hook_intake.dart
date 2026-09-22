@@ -140,6 +140,7 @@ AgentStatusReport applyAgentHookCallback(
       agentId: report.agentId,
       event: event,
       body: body,
+      agentSessionId: report.sessionId,
     );
   } on Object catch (error) {
     logger?.warning('Re-checking editor files from a hook failed: $error');

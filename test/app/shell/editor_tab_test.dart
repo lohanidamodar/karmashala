@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:agent_cli/process.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -108,7 +109,11 @@ class _FakeStore extends DocumentStore {
   }
 
   @override
-  Future<FileStamp> write(String hostPath, String text) async {
+  Future<FileStamp> write(
+    String hostPath,
+    String text, {
+    WriteExpectation expect = const WriteExpectation.any(),
+  }) async {
     disk[hostPath] = text;
     _tick(hostPath);
     return (await stamp(hostPath))!;
@@ -446,6 +451,39 @@ void main() {
     expect(editorTabsIn(container), hasLength(1));
     final field = tester.widget<AppCodeEditor>(find.byType(AppCodeEditor));
     expect(field.controller.text, 'after the restart\n');
+  });
+
+  testWidgets('a WSL tab stored by its share path comes back, and opening the '
+      'same file again reuses it', (tester) async {
+    const legacy = r'\\wsl.localhost\Ubuntu\home\me\app\main.dart';
+    store.disk[legacy] = 'from wsl\n';
+    final first = fakeTerminalContainer(database: db);
+    final terminals = first.read(terminalSessionsControllerProvider.notifier);
+    terminals.openTab(TerminalProfile.powerShell);
+    terminals.openEditorTab(legacy);
+    terminals.persistLayout();
+    first.dispose();
+
+    final container = await launch(tester);
+    await settle(tester);
+    expect(editorTabsIn(container), hasLength(1));
+    expect(
+      tester.widget<AppCodeEditor>(find.byType(AppCodeEditor)).controller.text,
+      'from wsl\n',
+    );
+
+    refOf(tester)
+        .read(editorTabActionsProvider)
+        .openAt(
+          const EnvironmentPath(
+            environmentId: 'wsl:Ubuntu',
+            path: '/home/me/app/main.dart',
+          ),
+        );
+    await settle(tester);
+
+    expect(editorTabsIn(container), hasLength(1));
+    expect(container.read(openDocumentsProvider).keys, [legacy]);
   });
 
   testWidgets('a file too big to edit opens read-only, and says so', (

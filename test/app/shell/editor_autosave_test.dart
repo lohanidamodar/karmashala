@@ -58,7 +58,11 @@ class _Store extends DocumentStore {
       FileStamp(length: disk[hostPath]!.length, modified: written[hostPath]);
 
   @override
-  Future<FileStamp> write(String hostPath, String text) async {
+  Future<FileStamp> write(
+    String hostPath,
+    String text, {
+    WriteExpectation expect = const WriteExpectation.any(),
+  }) async {
     attempts++;
     final failure = failWith;
     if (failure != null) throw DocumentWriteException(failure);

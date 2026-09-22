@@ -117,6 +117,7 @@ class FilePanelView extends StatelessWidget {
                       : _Listing(
                           entries: visible,
                           selected: state.selected,
+                          opensFiles: onOpenFile != null,
                           onTap: (entry) {
                             onFocus();
                             controller.select(entry);
@@ -339,10 +340,15 @@ class _Listing extends StatelessWidget {
     required this.onTap,
     required this.onToggle,
     required this.onOpen,
+    this.opensFiles = false,
   });
 
   final List<FileEntry> entries;
   final Set<String> selected;
+
+  /// Whether a file row offers "Open in editor" — the tab says whether its
+  /// machine's files can be opened.
+  final bool opensFiles;
   final ValueChanged<FileEntry> onTap;
   final ValueChanged<FileEntry> onToggle;
   final ValueChanged<FileEntry> onOpen;
@@ -384,6 +390,13 @@ class _Listing extends StatelessWidget {
                   tooltip: 'Open',
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(AppIcons.caretRight, size: Chrome.iconSmall),
+                  onPressed: () => onOpen(entry),
+                )
+              : opensFiles && entry.kind != FileEntryKind.other
+              ? IconButton(
+                  tooltip: 'Open in editor',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(AppIcons.fileCode, size: Chrome.iconSmall),
                   onPressed: () => onOpen(entry),
                 )
               : null,

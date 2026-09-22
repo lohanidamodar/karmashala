@@ -62,6 +62,13 @@ class EditorAutoSaver extends Notifier<Map<String, SaveOutcome>> {
     }
     for (final MapEntry(key: path, value: document) in next.entries) {
       if (!document.isDirty || !document.isEditable) continue;
+      // Back from a dropped connection: the write it held goes now.
+      if (previous?[path]?.isReachable == false &&
+          document.isReachable &&
+          isOn) {
+        unawaited(saveNow(path));
+        continue;
+      }
       // A save landing or a stamp moving is not an edit; only new text is.
       if (previous?[path]?.text == document.text) continue;
       _refused.remove(path);
@@ -92,9 +99,12 @@ class EditorAutoSaver extends Notifier<Map<String, SaveOutcome>> {
     final document = ref.read(openDocumentsProvider)[hostPath];
     // A change or deletion the disk check has shown waits for the reader's
     // answer: writing it over, or bringing a file back, is not autosave's call.
+    // An unreachable environment holds the write rather than refusing it: the
+    // buffer keeps its text and the write goes when the connection is back.
     if (document == null ||
         !document.isDirty ||
         !document.isEditable ||
+        !document.isReachable ||
         document.disk != DiskState.current ||
         _refused.contains(hostPath)) {
       return null;
@@ -115,9 +125,15 @@ class EditorAutoSaver extends Notifier<Map<String, SaveOutcome>> {
     }
     if (!ref.mounted) return outcome;
     final again = _again.remove(hostPath);
+    // A write lost to a dropped connection is held, not refused: the tab's
+    // connection notice says so, and the write retries on reconnect.
+    final held =
+        ref.read(openDocumentsProvider)[hostPath]?.isReachable == false;
     if (!outcome.ok) {
-      _refused.add(hostPath);
-      if (announce) state = {...state, hostPath: outcome};
+      if (!held) {
+        _refused.add(hostPath);
+        if (announce) state = {...state, hostPath: outcome};
+      }
     } else if (again) {
       await saveNow(hostPath);
     }

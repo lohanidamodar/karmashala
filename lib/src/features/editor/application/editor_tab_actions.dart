@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:agent_cli/process.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:riverpod/riverpod.dart';
 
 import '../../terminal/application/terminal_sessions_controller.dart';
+import '../domain/document_id.dart';
 import 'open_documents.dart';
 
 /// Opening a file in a tab of its own, and finding the unsaved work a close
@@ -13,17 +15,39 @@ class EditorTabActions {
 
   final Ref _ref;
 
-  /// Opens [hostPath] in an editor tab and starts reading it. The read is not
-  /// awaited — the tab is up at once and fills in. [line] is 1-based.
-  String open(String hostPath, {int? line}) {
+  /// Opens [documentId] — a document id, of which this machine's host path is
+  /// one — in an editor tab and starts reading it. The read is not awaited:
+  /// the tab is up at once and fills in. [line] is 1-based.
+  String open(String documentId, {int? line}) {
+    final id = _idForOpen(documentId);
     final tabId = _ref
         .read(terminalSessionsControllerProvider.notifier)
-        .openEditorTab(hostPath);
-    unawaited(_ref.read(openDocumentsProvider.notifier).open(hostPath));
+        .openEditorTab(id);
+    unawaited(_ref.read(openDocumentsProvider.notifier).open(id));
     if (line != null) {
-      _ref.read(editorRevealLineProvider.notifier).reveal(hostPath, line);
+      _ref.read(editorRevealLineProvider.notifier).reveal(id, line);
     }
     return tabId;
+  }
+
+  /// Opens the file at [path], in whichever environment it is.
+  String openAt(EnvironmentPath path, {int? line}) =>
+      open(documentIdOf(path), line: line);
+
+  /// The id a tab already showing the same file uses — one restored from
+  /// before ids named their environment keeps its `\\wsl.localhost` spelling —
+  /// or else the canonical one, so the same file never opens twice.
+  String _idForOpen(String documentId) {
+    final canonical = canonicalDocumentId(documentId);
+    for (final tab in _ref.read(terminalSessionsControllerProvider).tabs) {
+      for (final paneId in tab.layout.panes) {
+        final open = editorPanePath(paneId);
+        if (open != null && canonicalDocumentId(open) == canonical) {
+          return open;
+        }
+      }
+    }
+    return canonical;
   }
 
   /// The files with unsaved edits inside [tabIds], in tab order.

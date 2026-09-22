@@ -4,6 +4,10 @@ import 'dart:convert';
 import 'package:riverpod/riverpod.dart';
 
 import '../../agents/application/agent_providers.dart';
+import '../../repositories/application/repository_providers.dart';
+import '../../sessions/application/session_providers.dart';
+import '../data/local_document_source.dart';
+import '../domain/document_id.dart';
 import 'open_documents.dart';
 
 /// The argument keys a file tool names its file under: Claude Code's
@@ -61,14 +65,44 @@ String _normal(String path) {
   return normal;
 }
 
-/// The open host paths one hook callback should re-check. A tool that named
+/// Whether [agentPath], from a session in [sessionEnvironmentId] (null: not
+/// known), could name the open document [documentId].
+///
+/// A file this desktop can reach is matched by its host spelling, as
+/// [hostPathNamedBy] does. A file on an SSH host has none: it is named by its
+/// POSIX path — whole, or a relative tail — and only by a session on that same
+/// host when the session's environment is known.
+bool documentNamedBy(
+  String documentId,
+  String agentPath, {
+  String? sessionEnvironmentId,
+}) {
+  final host = hostPathOfDocument(documentId);
+  if (host != null) return hostPathNamedBy(host, agentPath);
+  final at = documentPathOf(documentId);
+  if (sessionEnvironmentId != null &&
+      sessionEnvironmentId != at.environmentId) {
+    return false;
+  }
+  var named = agentPath.trim();
+  while (named.startsWith('./')) {
+    named = named.substring(2);
+  }
+  if (named.isEmpty) return false;
+  if (named == at.path) return true;
+  return !named.startsWith('/') && at.path.endsWith('/$named');
+}
+
+/// The open documents one hook callback should re-check. A tool that named
 /// files re-checks the open ones among them; a tool that named none (a shell
 /// command that ran `sed -i`) and a finished turn re-check everything open.
+/// [sessionEnvironmentId] is where the hook's session runs, when known.
 List<String> openPathsToCheck({
   required String? event,
   required String body,
   required List<String> toolInputPath,
   required Iterable<String> openPaths,
+  String? sessionEnvironmentId,
 }) {
   final open = openPaths.toList();
   if (open.isEmpty) return const [];
@@ -86,8 +120,15 @@ List<String> openPathsToCheck({
   final named = toolInputPaths(input);
   if (named.isEmpty) return open;
   return [
-    for (final hostPath in open)
-      if (named.any((path) => hostPathNamedBy(hostPath, path))) hostPath,
+    for (final id in open)
+      if (named.any(
+        (path) => documentNamedBy(
+          id,
+          path,
+          sessionEnvironmentId: sessionEnvironmentId,
+        ),
+      ))
+        id,
   ];
 }
 
@@ -99,6 +140,7 @@ void checkEditorFilesFromHook(
   required String agentId,
   required String? event,
   required String body,
+  String? agentSessionId,
 }) {
   if (!container.exists(openDocumentsProvider)) return;
   final open = container.read(openDocumentsProvider).keys;
@@ -109,9 +151,36 @@ void checkEditorFilesFromHook(
     body: body,
     toolInputPath: spec?.toolInputPath ?? const ['tool_input'],
     openPaths: open,
+    sessionEnvironmentId: open.any((id) => hostPathOfDocument(id) == null)
+        ? _sessionEnvironment(container, agentSessionId)
+        : null,
   );
   final documents = container.read(openDocumentsProvider.notifier);
   for (final path in paths) {
     unawaited(documents.checkOnDisk(path));
+  }
+}
+
+/// The environment the session [agentSessionId] works in, from its checkout's
+/// row; null when there is no such session. Asked only when an SSH document
+/// is open, so a hook with no remote file open reads nothing.
+String? _sessionEnvironment(
+  ProviderContainer container,
+  String? agentSessionId,
+) {
+  if (agentSessionId == null || agentSessionId.isEmpty) return null;
+  try {
+    final session = container
+        .read(sessionDaoProvider)
+        .getByExternalSessionId(agentSessionId);
+    if (session == null) return null;
+    return container
+        .read(repositoryDaoProvider)
+        .getById(session.repositoryId)
+        ?.path
+        .environmentId;
+  } on Object {
+    // A guess costs one stat; failing to guess costs nothing.
+    return null;
   }
 }

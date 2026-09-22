@@ -67,6 +67,34 @@ class DiskChangeNotice extends StatelessWidget {
   }
 }
 
+/// The file's environment stopped answering — a dropped SSH connection. Said
+/// without a dialog: the buffer is kept, and a save waits for the connection.
+class ConnectionLostNotice extends StatelessWidget {
+  const ConnectionLostNotice({
+    required this.reason,
+    required this.onRetry,
+    super.key,
+  });
+
+  final String reason;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: reason,
+      child: PaneNoticeBar(
+        icon: AppIcons.warningCircle,
+        tone: NoticeTone.attention,
+        message:
+            'Connection lost. Your edits are kept; saving waits until it '
+            'reconnects.',
+        action: TextButton(onPressed: onRetry, child: const Text('Retry')),
+      ),
+    );
+  }
+}
+
 /// The disk's text against the buffer, drawn by the same rows as a Changes
 /// diff: `-` is on disk, `+` is yours.
 Future<void> showDiskCompareDialog(

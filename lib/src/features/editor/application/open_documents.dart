@@ -5,9 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../data/document_store.dart';
 import '../domain/source_document.dart';
+import 'document_sources.dart';
 
 final documentStoreProvider = Provider<DocumentStore>(
-  (ref) => const DocumentStore(),
+  (ref) => DocumentStore(sources: ref.watch(documentSourcesProvider)),
 );
 
 enum SaveResult { saved, unchanged, stale, failed }
@@ -22,7 +23,8 @@ class SaveOutcome {
   bool get ok => result == SaveResult.saved || result == SaveResult.unchanged;
 }
 
-/// Every open buffer, keyed by host path. Absence means "not loaded yet".
+/// Every open buffer, keyed by document id (`document_id.dart`) — a host path
+/// for this machine's files. Absence means "not loaded yet".
 /// A pane is built only while its tab is on screen, so the text cannot live
 /// in widget state: switching tabs would drop every unsaved edit.
 class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
@@ -62,8 +64,10 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
       if (state.containsKey(hostPath) || !_stillWanted(hostPath)) return;
       state = {...state, hostPath: document};
     } on Object catch (error) {
-      // `load` classifies rather than throws, so this is a contract break — but
-      // an escaped error here leaves the pane on a spinner for ever (§5).
+      // `load` classifies rather than throws, bar an environment that did not
+      // answer — and an escaped error leaves the pane on a spinner for ever
+      // (§5). A refusal keeps no stamp, so the next check that reaches the
+      // file reads it.
       if (!_stillWanted(hostPath)) return;
       state = {
         ...state,
@@ -72,7 +76,9 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
           text: '',
           savedText: '',
           refusal: DocumentRefusal.unreadable,
-          error: 'Could not read this file: $error',
+          error: error is DocumentUnreachableException
+              ? error.message
+              : 'Could not read this file: $error',
         ),
       };
     } finally {
@@ -103,9 +109,24 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
         '${document.name} was opened read-only because of its size.',
       );
     }
+    if (!document.isReachable) {
+      return SaveOutcome(SaveResult.failed, _heldMessage(document));
+    }
     final store = ref.read(documentStoreProvider);
+    var expect = const WriteExpectation.any();
     if (!force) {
-      final onDisk = await store.stamp(hostPath);
+      final FileStamp? onDisk;
+      try {
+        onDisk = await store.stamp(hostPath);
+      } on DocumentUnreachableException catch (error) {
+        _noteUnreachable(hostPath, error.message);
+        return SaveOutcome(SaveResult.failed, _heldMessage(document, error));
+      }
+      // What this check saw is what the write must still find: the gap
+      // between the two is the source's to close, not a stat's.
+      expect = onDisk == null
+          ? const WriteExpectation.absent()
+          : WriteExpectation.version(onDisk);
       // A deletion the tab already shows is the reader's to undo: saving puts
       // the file back rather than asking again.
       final shownDeleted = document.disk == DiskState.deleted;
@@ -135,7 +156,18 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
     final FileStamp stamp;
     _writing.add(hostPath);
     try {
-      stamp = await store.write(hostPath, document.diskText);
+      stamp = await store.write(hostPath, document.diskText, expect: expect);
+    } on DocumentStaleException catch (error) {
+      _noteStale(hostPath, error.current);
+      return SaveOutcome(
+        SaveResult.stale,
+        error.current == null
+            ? '${document.name} is no longer on disk.'
+            : '${document.name} changed on disk since it was opened.',
+      );
+    } on DocumentUnreachableException catch (error) {
+      _noteUnreachable(hostPath, error.message);
+      return SaveOutcome(SaveResult.failed, _heldMessage(document, error));
     } on DocumentWriteException catch (error) {
       // The buffer stays dirty: the dot clears only on a write that returned.
       return SaveOutcome(SaveResult.failed, error.message);
@@ -153,10 +185,33 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
 
   /// Re-reads from disk, discarding the buffer.
   Future<void> reload(String hostPath) async {
-    final document = await ref.read(documentStoreProvider).load(hostPath);
+    final SourceDocument document;
+    try {
+      document = await ref.read(documentStoreProvider).load(hostPath);
+    } on DocumentUnreachableException catch (error) {
+      // Discarding the buffer for bytes nobody could read would lose both.
+      _noteUnreachable(hostPath, error.message);
+      return;
+    }
     if (!_stillWanted(hostPath)) return;
     state = {...state, hostPath: document};
   }
+
+  /// The environment did not answer: the buffer says so and keeps its text.
+  void _noteUnreachable(String hostPath, String reason) {
+    final now = state[hostPath];
+    if (now == null || !_stillWanted(hostPath)) return;
+    if (now.unreachable == reason) return;
+    _put(hostPath, now.markedUnreachable(reason));
+  }
+
+  String _heldMessage(
+    SourceDocument document, [
+    DocumentUnreachableException? error,
+  ]) =>
+      '${error?.message ?? document.unreachable ?? 'The connection was lost'}. '
+      '${document.name} was not saved; your edits are kept until it '
+      'reconnects.';
 
   /// "Keep mine" on a change the bar reported: the buffer stays, and the next
   /// save overwrites that change without asking again.
@@ -184,14 +239,21 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
       final FileStamp? onDisk;
       try {
         onDisk = await ref.read(documentStoreProvider).stamp(hostPath);
+      } on DocumentUnreachableException catch (error) {
+        if (ref.mounted) _noteUnreachable(hostPath, error.message);
+        return;
       } on Object {
         // A share that did not answer is not evidence the file changed.
         return;
       }
       if (!ref.mounted || !_stillWanted(hostPath)) return;
       if (_writing.contains(hostPath)) return;
-      final document = state[hostPath];
+      var document = state[hostPath];
       if (document == null) return;
+      if (!document.isReachable) {
+        document = document.markedReachable();
+        _put(hostPath, document);
+      }
       if (_sameFile(document.knownDiskStamp, onDisk)) return;
       if (!document.isReadable) {
         // Nothing can be typed into a refused file, so re-reading loses
@@ -236,6 +298,9 @@ class OpenDocuments extends Notifier<Map<String, SourceDocument>> {
     final SourceDocument loaded;
     try {
       loaded = await ref.read(documentStoreProvider).load(hostPath);
+    } on DocumentUnreachableException catch (error) {
+      if (ref.mounted) _noteUnreachable(hostPath, error.message);
+      return;
     } on Object {
       return;
     }

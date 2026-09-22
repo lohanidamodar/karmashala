@@ -31,7 +31,11 @@ class _MemoryStore extends DocumentStore {
       FileStamp(length: disk[hostPath]!.length, modified: DateTime.utc(2026));
 
   @override
-  Future<FileStamp> write(String hostPath, String text) async {
+  Future<FileStamp> write(
+    String hostPath,
+    String text, {
+    WriteExpectation expect = const WriteExpectation.any(),
+  }) async {
     writes++;
     disk[hostPath] = text;
     return (await stamp(hostPath))!;

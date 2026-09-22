@@ -20,6 +20,9 @@ import '../application/code_editor_providers.dart';
 import '../application/editor_auto_save.dart';
 import '../application/editor_tab_actions.dart';
 import '../application/open_documents.dart';
+import '../data/local_document_source.dart';
+import '../domain/document_id.dart';
+import '../domain/document_source.dart';
 import '../domain/source_document.dart';
 import 'disk_change_notice.dart';
 import 'editor_menu_actions.dart';
@@ -30,6 +33,7 @@ import 'editor_menu_actions.dart';
 class EditorTabView extends ConsumerStatefulWidget {
   const EditorTabView({required this.hostPath, this.showing = true, super.key});
 
+  /// The document id — a host path for this machine's files.
   final String hostPath;
 
   /// Whether the stack is painting this pane. Only a showing editor polls the
@@ -250,7 +254,13 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   Future<void> _compare() async {
     final mine = ref.read(openDocumentProvider(widget.hostPath));
     if (mine == null) return;
-    final onDisk = await ref.read(documentStoreProvider).load(widget.hostPath);
+    final SourceDocument onDisk;
+    try {
+      onDisk = await ref.read(documentStoreProvider).load(widget.hostPath);
+    } on DocumentUnreachableException catch (error) {
+      _say(error.message);
+      return;
+    }
     if (!mounted) return;
     if (!onDisk.isReadable) {
       _say(onDisk.error ?? 'The file on disk cannot be read.');
@@ -264,22 +274,35 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
     );
   }
 
+  /// The file spelled for this desktop — null for one on an SSH host, which no
+  /// local editor or file manager can open.
+  String? get _hostFile => hostPathOfDocument(widget.hostPath);
+
+  /// What "Copy path" copies: the host spelling where there is one, as before
+  /// environments were part of an id, else the path on its own machine.
+  String get _shownPath => _hostFile ?? documentPathOf(widget.hostPath).path;
+
+  static const _notOnThisMachine =
+      'This file is on another machine; nothing here can open it outside the '
+      'editor.';
+
   Future<void> _openExternally() async {
+    final host = _hostFile;
+    if (host == null) return _say(_notOnThisMachine);
     try {
-      await ref.read(editorActionsProvider).openPath(widget.hostPath);
+      await ref.read(editorActionsProvider).openPath(host);
     } catch (error) {
       _say(error is StateError ? error.message : '$error');
     }
   }
 
   Future<void> _reveal() async {
+    final host = _hostFile;
+    if (host == null) return _say(_notOnThisMachine);
     final outcome = await ref
         .read(revealInFileManagerProvider)
         .reveal(
-          EnvironmentPath(
-            environmentId: localHostEnvironmentId,
-            path: widget.hostPath,
-          ),
+          EnvironmentPath(environmentId: localHostEnvironmentId, path: host),
           select: true,
         );
     if (!outcome.ok) _say(outcome.error!);
@@ -333,6 +356,8 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _header(document),
+        if (document?.unreachable case final reason?)
+          ConnectionLostNotice(reason: reason, onRetry: _checkDisk),
         if (document != null && document.isReadable)
           DiskChangeNotice(
             disk: document.disk,
@@ -342,7 +367,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
                 .reload(widget.hostPath),
             onKeepMine: _keepMine,
             onCompare: _compare,
-            onSave: document.isEditable ? _save : null,
+            onSave: document.isEditable && document.isReachable ? _save : null,
           ),
         Expanded(child: _body(document)),
         if (document != null && document.isReadable && document.isEditable)
@@ -356,6 +381,8 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
         document != null && document.isReadable && document.isEditable;
     final dirty = document?.isDirty ?? false;
     final deleted = document?.disk == DiskState.deleted;
+    final reachable = document?.isReachable ?? true;
+    final onThisMachine = _hostFile != null;
     return PaneHeader(
       icon: AppIcons.fileCode,
       title: switch (document) {
@@ -375,11 +402,13 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
           ),
         if (editable) ...[
           IconButton(
-            tooltip: 'Save (Ctrl+S)',
+            tooltip: reachable
+                ? 'Save (Ctrl+S)'
+                : 'Saving waits until the connection is back',
             visualDensity: VisualDensity.compact,
             iconSize: Chrome.iconAction,
             icon: const Icon(AppIcons.floppyDisk),
-            onPressed: dirty || deleted ? _save : null,
+            onPressed: (dirty || deleted) && reachable ? _save : null,
           ),
           IconButton(
             tooltip: 'Reload from disk',
@@ -396,11 +425,13 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
               value: 'external',
               label: 'Open in external editor',
               icon: AppIcons.arrowSquareOut,
+              enabled: onThisMachine,
             ),
             DesktopMenuItem(
               value: 'reveal',
               label: 'Reveal in File Explorer',
               icon: AppIcons.folderOpen,
+              enabled: onThisMachine,
             ),
             DesktopMenuItem(
               value: 'copy-path',
@@ -421,14 +452,20 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
       case 'reveal':
         await _reveal();
       case 'copy-path':
-        await Clipboard.setData(ClipboardData(text: widget.hostPath));
+        await Clipboard.setData(ClipboardData(text: _shownPath));
         _say('Path copied to clipboard');
     }
   }
 
+  String? get _panelRoot {
+    final host = _hostFile;
+    return host == null ? null : filesPanelRootFor(ref, host);
+  }
+
   List<PopupMenuEntry<String>> _menuItems(CodeEditorMenuContext menu) => [
     ...editorFileMenuItems(
-      relativeRoot: filesPanelRootFor(ref, widget.hostPath),
+      relativeRoot: _panelRoot,
+      onThisMachine: _hostFile != null,
     ),
     if (menu.hasSelection) const DesktopMenuDivider(),
     ...editorSelectionMenuItems(
@@ -440,12 +477,12 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   ];
 
   Future<void> _onMenuItem(String value, CodeEditorMenuContext menu) async {
-    final path = widget.hostPath;
+    final path = _shownPath;
     switch (value) {
       case EditorMenuValues.copyPath:
         await copyToClipboard(context, path, 'Path');
       case EditorMenuValues.copyRelativePath:
-        final root = filesPanelRootFor(ref, path);
+        final root = _panelRoot;
         if (root == null) return;
         await copyToClipboard(
           context,
@@ -455,6 +492,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
       case EditorMenuValues.copyPathLine:
         await copyToClipboard(context, '$path:${menu.line}', 'Path and line');
       case EditorMenuValues.revealInFiles:
+        if (_panelRoot == null) return;
         revealInFilesPanel(ref, path);
       case EditorMenuValues.openExternally:
         await _openExternally();
@@ -465,7 +503,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
           context,
           ref,
           text: menu.selectedText,
-          hostPath: path,
+          hostPath: _hostFile,
         );
       case EditorMenuValues.selectionToSession:
         sendSelectionToSession(context, ref, menu.selectedText);
@@ -484,7 +522,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
         icon: AppIcons.warningCircle,
         message: document.error ?? 'This file cannot be shown here.',
         action: TextButton.icon(
-          onPressed: _openExternally,
+          onPressed: _hostFile == null ? null : _openExternally,
           icon: const Icon(AppIcons.arrowSquareOut),
           label: const Text('Open in external editor'),
         ),

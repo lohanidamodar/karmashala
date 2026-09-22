@@ -10,7 +10,9 @@ import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/editor/application/editor_tab_actions.dart';
 import 'package:karmashala/src/features/files/application/file_space_providers.dart';
+import 'package:karmashala/src/features/files/domain/file_space.dart';
 import 'package:karmashala/src/features/files/data/local_file_space.dart';
 import 'package:karmashala/src/features/files/presentation/file_panel_view.dart';
 import 'package:karmashala/src/features/files/presentation/files_tab_view.dart';
@@ -29,6 +31,88 @@ Future<void> settle(WidgetTester tester) async {
     );
     await tester.pump(const Duration(milliseconds: 20));
   }
+}
+
+/// Records what the browser asked the editor to open, instead of opening it.
+class _OpenedFiles extends EditorTabActions {
+  _OpenedFiles(super.ref);
+
+  final List<String> ids = [];
+
+  @override
+  String open(String documentId, {int? line}) {
+    ids.add(documentId);
+    return 'tab';
+  }
+}
+
+/// A host reached only over a wire: one file, and no host path for it.
+class _RemoteSpace extends FileSpace {
+  @override
+  String get environmentId => 'ssh:box';
+
+  @override
+  String get label => 'box';
+
+  @override
+  p.Context get pathContext => p.posix;
+
+  EnvironmentPath _at(String path) =>
+      EnvironmentPath(environmentId: environmentId, path: path);
+
+  @override
+  Future<EnvironmentPath> home() async => _at('/home/me');
+
+  @override
+  Future<EnvironmentPath> resolve(EnvironmentPath path) async => path;
+
+  @override
+  Future<List<FileEntry>> list(EnvironmentPath directory) async => [
+    FileEntry(
+      name: 'main.dart',
+      path: _at('/home/me/main.dart'),
+      kind: FileEntryKind.file,
+      sizeBytes: 15,
+    ),
+  ];
+
+  @override
+  String? hostPathOf(EnvironmentPath path) => null;
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  Future<EnvironmentPath> createDirectory(
+    EnvironmentPath parent,
+    String name,
+  ) => throw UnimplementedError();
+
+  @override
+  Future<EnvironmentPath> createFile(EnvironmentPath parent, String name) =>
+      throw UnimplementedError();
+
+  @override
+  Future<EnvironmentPath> rename(EnvironmentPath target, String name) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> delete(EnvironmentPath target, {bool recursive = false}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> copyToLocal(
+    EnvironmentPath source,
+    String destination, {
+    void Function(int bytes)? onProgress,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> copyFromLocal(
+    String source,
+    EnvironmentPath destination, {
+    void Function(int bytes)? onProgress,
+  }) => throw UnimplementedError();
 }
 
 void main() {
@@ -203,6 +287,59 @@ void main() {
     await settle(tester);
 
     expect(File(p.join(left.path, 'gone.txt')).existsSync(), isFalse);
+  });
+
+  testWidgets('a file on an SSH host opens in the editor, named by its host '
+      'and its own path', (tester) async {
+    late _OpenedFiles opened;
+    container.dispose();
+    container = ProviderContainer(
+      overrides: [
+        browsableEnvironmentsProvider.overrideWithValue([
+          environment('ssh:box', 'box'),
+          environment('right', 'Right machine'),
+        ]),
+        fileSpaceProvider.overrideWith(
+          (ref, id) => id == 'ssh:box'
+              ? _RemoteSpace()
+              : LocalFileSpace(
+                  environmentId: id,
+                  label: 'Right machine',
+                  homeAt: () async =>
+                      EnvironmentPath(environmentId: id, path: right.path),
+                ),
+        ),
+        editorTabActionsProvider.overrideWith(
+          (ref) => opened = _OpenedFiles(ref),
+        ),
+      ],
+    );
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          home: Scaffold(
+            body: FilesTabView(
+              paneId: filesPaneId(
+                leftEnvironmentId: 'ssh:box',
+                rightEnvironmentId: 'right',
+                leftPath: '/home/me',
+                rightPath: right.path,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+
+    expect(find.text('main.dart'), findsOneWidget);
+    await tester.tap(find.byTooltip('Open in editor'));
+    await settle(tester);
+
+    expect(opened.ids, ['ssh:box␟/home/me/main.dart']);
   });
 
   testWidgets('a machine this build cannot browse leaves the panel saying so '

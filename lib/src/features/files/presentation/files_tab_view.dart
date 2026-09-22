@@ -155,23 +155,12 @@ class _FilesTabViewState extends ConsumerState<FilesTabView> {
       onCopy: otherSpace == null
           ? null
           : (entries) => _copy(from: side, to: other, entries: entries),
-      onOpenFile:
-          space.hostPathOf(
-                EnvironmentPath(
-                  environmentId: space.environmentId,
-                  path: controller.value.directory?.path ?? '',
-                ),
-              ) ==
-              null
-          ? null
-          : (entry) => _openInEditor(space, entry),
+      // Every machine the browser reaches, the editor reaches too: an SSH file
+      // is read and saved over SFTP, keyed by where it is rather than by a
+      // host path it does not have.
+      onOpenFile: (entry) =>
+          ref.read(editorTabActionsProvider).openAt(entry.path),
     );
-  }
-
-  void _openInEditor(FileSpace space, FileEntry entry) {
-    final hostPath = space.hostPathOf(entry.path);
-    if (hostPath == null) return;
-    ref.read(editorTabActionsProvider).open(hostPath);
   }
 
   /// Copies [entries] from one side to the other, one at a time, then lists

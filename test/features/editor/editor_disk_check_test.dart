@@ -95,7 +95,11 @@ class _Disk extends DocumentStore {
   }
 
   @override
-  Future<FileStamp> write(String hostPath, String text) async {
+  Future<FileStamp> write(
+    String hostPath,
+    String text, {
+    WriteExpectation expect = const WriteExpectation.any(),
+  }) async {
     writes.add(text);
     external(hostPath, text);
     return _stampOf(hostPath)!;

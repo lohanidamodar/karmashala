@@ -31,8 +31,11 @@ abstract final class EditorMenuValues {
 /// A file tab's entries. Pure, so what a state offers is testable without a
 /// tab. [relativeRoot] is the Files panel's root when the file is under it —
 /// the one place a relative path and a reveal in that panel mean anything.
+/// [onThisMachine] is false for a file on an SSH host: no local editor or
+/// file manager can open it.
 List<PopupMenuEntry<String>> editorFileMenuItems({
   required String? relativeRoot,
+  bool onThisMachine = true,
 }) => [
   DesktopMenuItem(
     value: EditorMenuValues.copyPath,
@@ -61,11 +64,13 @@ List<PopupMenuEntry<String>> editorFileMenuItems({
     value: EditorMenuValues.openExternally,
     label: 'Open in external editor',
     icon: AppIcons.arrowSquareOut,
+    enabled: onThisMachine,
   ),
   DesktopMenuItem(
     value: EditorMenuValues.openFolder,
     label: 'Open containing folder',
     icon: AppIcons.folderOpen,
+    enabled: onThisMachine,
   ),
 ];
 

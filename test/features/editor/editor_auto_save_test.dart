@@ -26,7 +26,11 @@ class _Store extends DocumentStore {
   Future<FileStamp?> stamp(String hostPath) async => null;
 
   @override
-  Future<FileStamp> write(String hostPath, String text) async {
+  Future<FileStamp> write(
+    String hostPath,
+    String text, {
+    WriteExpectation expect = const WriteExpectation.any(),
+  }) async {
     attempts++;
     return FileStamp(length: text.length, modified: null);
   }

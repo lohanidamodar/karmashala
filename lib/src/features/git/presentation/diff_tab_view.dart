@@ -7,8 +7,12 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
+import 'package:agent_cli/process.dart';
+
 import '../../editor/application/code_editor_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
+import '../../editor/domain/document_id.dart';
+import '../../environments/application/environment_providers.dart';
 import '../application/changes_providers.dart';
 import '../application/diff_tab_actions.dart';
 import '../application/parsed_diff.dart';
@@ -22,13 +26,26 @@ class DiffTabView extends ConsumerWidget {
 
   final DiffTarget target;
 
-  /// The file itself on this host, or null when the checkout has no spelling
-  /// here — an SSH checkout's files are on the other machine.
+  /// The file itself as a document id: its host path where the checkout has
+  /// one, else its POSIX path on the SSH host it is on, which the editor opens
+  /// over SFTP. Null when neither applies.
   String? _hostFile(WidgetRef ref) {
     final root = ref
         .read(editorActionsProvider)
         .windowsPathFor(target.checkout);
-    return root == null ? null : p.normalize(p.join(root, target.path));
+    if (root != null) return p.normalize(p.join(root, target.path));
+    final environment = ref
+        .read(executionEnvironmentDaoProvider)
+        .getById(target.checkout.environmentId);
+    if (environment?.kind != EnvironmentKind.ssh) return null;
+    return documentIdOf(
+      EnvironmentPath(
+        environmentId: target.checkout.environmentId,
+        path: p.posix.normalize(
+          p.posix.join(target.checkout.path, target.path),
+        ),
+      ),
+    );
   }
 
   @override
@@ -74,7 +91,7 @@ class DiffTabHeader extends ConsumerWidget {
   /// Null until the diff has loaded.
   final ({int added, int removed})? counts;
 
-  /// See [DiffTabView]; null disables Open.
+  /// The file's document id (see [DiffTabView]); null disables Open.
   final String? hostFile;
 
   @override

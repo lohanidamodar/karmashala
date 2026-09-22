@@ -63,7 +63,11 @@ class _FakeStore extends DocumentStore {
   }
 
   @override
-  Future<FileStamp> write(String hostPath, String text) async {
+  Future<FileStamp> write(
+    String hostPath,
+    String text, {
+    WriteExpectation expect = const WriteExpectation.any(),
+  }) async {
     final refusal = refuseWrite;
     if (refusal != null) throw DocumentWriteException(refusal);
     writes.add(text);
