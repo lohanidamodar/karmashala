@@ -192,7 +192,7 @@ class RemoteHostService {
     // listeners closes the very socket a connected phone is holding.
     await Future.wait([
       for (final runtime in _runtimes.values.toList())
-        runtime.run((api) => api.sendHostStatus()),
+        runtime.push((api) => api.sendHostStatus()),
     ]);
     for (final runtime in _runtimes.values.toList()) {
       await runtime.syncRelayListeners();
@@ -387,11 +387,12 @@ class RemoteHostService {
   }
 
   /// A session started waiting for approval; devices holding `approve` hear
-  /// about it.
+  /// about it. A device with no live link hears it as a sealed push instead —
+  /// see [pushAttentionNews] — so nothing is written into a dead one.
   Future<void> notifyApprovalRequested(String sessionId) async {
     await Future.wait([
       for (final runtime in _runtimes.values.toList())
-        runtime.run((api) => api.pushApprovalRequested(sessionId)),
+        runtime.push((api) => api.pushApprovalRequested(sessionId)),
     ]);
   }
 
@@ -575,14 +576,17 @@ class _DeviceRuntime {
   /// One transcript sweep for this device, never two at once: a sweep outlasts
   /// the poll interval, and queued ticks grew the chain faster than it drained.
   Future<void> sweepTranscripts() async {
-    if (_sweeping || _closed) return;
+    // Reading every subscribed session's transcript is the most expensive
+    // thing this host does, and a phone that is not there cannot be told what
+    // it found. It asks again when it comes back — see [push].
+    if (_sweeping || _closed || !peerLive) return;
     _sweeping = true;
     try {
       for (final sessionId
           in _active?.api.subscribedSessions ?? const <String>{}) {
-        if (_closed) return;
-        await run((api) => api.pollTranscript(sessionId));
-        await run((api) => api.recheckApproval(sessionId));
+        if (_closed || !peerLive) return;
+        await push((api) => api.pollTranscript(sessionId));
+        await push((api) => api.recheckApproval(sessionId));
       }
     } finally {
       _sweeping = false;
@@ -596,6 +600,9 @@ class _DeviceRuntime {
   /// has never been shown, coalescing bursts: one pass after a
   /// burst says everything N passes would, and no frame waits behind a queue.
   Future<void> sweepSessionsChanged() async {
+    // Nothing to say to a phone that is not listening, and saying it is what
+    // the desktop was paying for on every one of its own changes — see [push].
+    if (!peerLive) return;
     if (_pushing) {
       _pushAgain = true;
       return;
@@ -606,17 +613,36 @@ class _DeviceRuntime {
         _pushAgain = false;
         for (final sessionId
             in _active?.api.subscribedSessions ?? const <String>{}) {
-          if (_closed) return;
-          await run((api) => api.pushSessionChanged(sessionId));
+          if (_closed || !peerLive) return;
+          await push((api) => api.pushSessionChanged(sessionId));
         }
         // And any session this phone has never been shown, which no
         // subscription covers yet.
-        if (!_closed) await run((api) => api.pushNewSessions());
-      } while (_pushAgain && !_closed);
+        if (!_closed && peerLive) await push((api) => api.pushNewSessions());
+      } while (_pushAgain && !_closed && peerLive);
     } finally {
       _pushing = false;
       _pushAgain = false;
     }
+  }
+
+  /// Runs [action] only while the phone has proved it is there — for news it
+  /// did not ask for. An answer to a request goes through [run] instead: the
+  /// request itself is the proof.
+  ///
+  /// A link outlives the phone on purpose: [_active] carries the sealed
+  /// channel and its sequences across a reconnect, so it is not torn down when
+  /// the socket under it drops. Pushing through it anyway is what cost: every
+  /// desktop change — the attention sweep runs about every 1.2 s — rebuilt the
+  /// session list, sealed a frame and wrote it to a rendezvous with one socket
+  /// at it. The relay buffers eight such frames and then hangs up
+  /// (`kCloseImpatient`), the listener redials, and the next change does it
+  /// again: a reconnect per change, for as long as the app runs, for a phone
+  /// that is not there. [peerLive] is the same reading the push fan-out
+  /// already uses to decide between a live frame and a sealed push.
+  Future<void> push(Future<void> Function(HostSessionApi api) action) {
+    if (!peerLive) return Future<void>.value();
+    return run(action);
   }
 
   /// Runs [action] against the active api on the device's serial chain.
