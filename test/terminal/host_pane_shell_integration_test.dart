@@ -132,6 +132,41 @@ void main() {
     skip: _notWindows,
   );
 
+  // Measured on a probe (2026-09-22): the pane's Linux directory reached the
+  // host as the process's own working directory, and CreateProcess refused it
+  // with errno 267, so a WSL pane opened in a folder never started.
+  for (final integrated in [false, true]) {
+    test(
+      'a WSL pane gets its folder through --cd, never as the Windows '
+      'process directory (integration ${integrated ? 'on' : 'off'})',
+      () async {
+        const arch = TerminalProfile(
+          id: 'wsl:archlinux',
+          label: 'archlinux (WSL)',
+          shell: TerminalShell.wsl,
+          wslDistribution: 'archlinux',
+        );
+        final access = PaneAccess(readyDeployment());
+        final pane =
+            createHostTerminalInstance(
+                  id: 'p1',
+                  profile: arch,
+                  access: access,
+                  workingDirectory: '/home/me/project',
+                  shellIntegration: integrated,
+                )
+                as HostTerminalInstance;
+        addTearDown(pane.dispose);
+        await settle();
+
+        final opened = access.channels.single.only<OpenMessage>();
+        expect(opened.workingDirectory, isNull);
+        expect(opened.argv, containsAllInOrder(['--cd', '/home/me/project']));
+      },
+      skip: _notWindows,
+    );
+  }
+
   test(
     'with the setting off, the host pane has no recorder and no bootstrap',
     () async {

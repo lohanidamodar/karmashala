@@ -406,7 +406,10 @@ class HostTerminalInstance
         // The host starts argv[0] once and quotes by CommandLineToArgvW rules,
         // so a WSL launch goes without the `cmd.exe /c` flutter_pty needs.
         argv: launch.hostArgv,
-        workingDirectory: launch.workingDirectory ?? workingDirectory,
+        // The launch's own, never the pane's: a WSL launch leaves it null on
+        // purpose and carries the Linux folder as `--cd`, which Windows'
+        // CreateProcess would refuse as a process directory (errno 267).
+        workingDirectory: launch.workingDirectory,
         environment: {'TERM': 'xterm-256color', ...launch.environment},
         columns: width,
         rows: height,
