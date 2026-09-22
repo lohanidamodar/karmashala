@@ -1320,9 +1320,9 @@ $env:KARMASHALA_DATA_DIR = "$env:TEMP\karmashala-probe"
 C:\Users\<you>\flutter\bin\flutter.bat run -d windows --debug
 ```
 
-or `tooldebug_run.bat -Fresh`, which sets both (data in `builddebug-data`).
-A profile build for CPU or heap work is `toolprofile_run.bat`, which is always
-a probe (data in `buildprofile-data` unless `KARMASHALA_DATA_DIR` is set).
+or `tool\debug_run.bat -Fresh`, which sets both (data in `build\debug-data`).
+A profile build for CPU or heap work is `tool\profile_run.bat`, which is always
+a probe (data in `build\profile-data` unless `KARMASHALA_DATA_DIR` is set).
 `flutter run` does not build `karmashala_mcp.exe`; drive a profile probe with
 the Release one and `KARMASHALA_DATA_DIR` pointed at the probe.
 The variables are inherited by `flutter run`'s child and by every process the
