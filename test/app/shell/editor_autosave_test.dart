@@ -231,8 +231,8 @@ void main() {
     expect(store.disk[_path], 'window\n');
   });
 
-  testWidgets('a file changed on disk is not overwritten; the tab asks once, '
-      'and the next edit tries again', (tester) async {
+  testWidgets('a file changed on disk is not overwritten; the bar says so '
+      'without a dialog, and later edits wait for its answer', (tester) async {
     await openFile(tester);
     store.writeBehindOurBack('someone else\n');
     await type(tester, 'mine\n');
@@ -240,21 +240,23 @@ void main() {
     await settle(tester);
 
     expect(store.disk[_path], 'someone else\n');
-    expect(find.text('This file changed on disk'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await settle(tester);
-
-    await tester.pump(const Duration(seconds: 5));
-    await settle(tester);
-    expect(find.text('This file changed on disk'), findsNothing);
+    // Non-modal: typing goes on under it.
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.textContaining('Changed on disk'), findsOneWidget);
 
     await type(tester, 'mine, again\n');
+    await tester.pump(const Duration(seconds: 5));
+    await settle(tester);
+    expect(store.disk[_path], 'someone else\n');
+    expect(find.byType(AlertDialog), findsNothing);
+
+    // Keep mine is the answer, and the next autosave writes.
+    await tester.tap(find.text('Keep mine'));
+    await settle(tester);
+    await type(tester, 'mine, kept\n');
     await tester.pump(const Duration(milliseconds: 1100));
     await settle(tester);
-    expect(find.text('This file changed on disk'), findsOneWidget);
-    expect(store.disk[_path], 'someone else\n');
-    await tester.tap(find.text('Cancel'));
-    await settle(tester);
+    expect(store.disk[_path], 'mine, kept\n');
   });
 
   testWidgets('a failed write says why and waits for the next edit', (

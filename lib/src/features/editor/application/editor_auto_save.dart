@@ -13,7 +13,8 @@ import 'open_documents.dart';
 /// The state is the last autosave that did not land, by host path, for the tab
 /// to say so the way a Save would. A path whose autosave was refused — changed
 /// on disk, or a failed write — is not tried again until its next edit, so a
-/// conflict is asked about once rather than every second.
+/// conflict is asked about once rather than every second. A buffer the disk
+/// check marked changed or deleted is never autosaved until the reader answers.
 class EditorAutoSaver extends Notifier<Map<String, SaveOutcome>> {
   final Map<String, Timer> _timers = {};
   final Set<String> _refused = {};
@@ -89,9 +90,12 @@ class EditorAutoSaver extends Notifier<Map<String, SaveOutcome>> {
   Future<SaveOutcome?> saveNow(String hostPath, {bool announce = true}) async {
     _timers.remove(hostPath)?.cancel();
     final document = ref.read(openDocumentsProvider)[hostPath];
+    // A change or deletion the disk check has shown waits for the reader's
+    // answer: writing it over, or bringing a file back, is not autosave's call.
     if (document == null ||
         !document.isDirty ||
         !document.isEditable ||
+        document.disk != DiskState.current ||
         _refused.contains(hostPath)) {
       return null;
     }

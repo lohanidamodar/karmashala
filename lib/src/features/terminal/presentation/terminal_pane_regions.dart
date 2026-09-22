@@ -48,11 +48,16 @@ extension _TerminalPaneRegions on _TerminalPaneStackState {
       return showing ? const SettingsTabView() : const SizedBox.shrink();
     }
     // No `showing` gate: the stack keeps every mounted tab alive, and an
-    // editor rebuilt on every switch would lose the caret and the scroll.
+    // editor rebuilt on every switch would lose the caret and the scroll. It is
+    // told `showing` only so the painted one alone polls its file.
     // Keyed by the file: two editor panes can share one region, and without a
     // key the State of the one leaving is handed the other's path.
     if (editorPanePath(paneId) case final path?) {
-      return EditorTabView(key: ValueKey(paneId), hostPath: path);
+      return EditorTabView(
+        key: ValueKey(paneId),
+        hostPath: path,
+        showing: showing,
+      );
     }
     if (notePaneNoteId(paneId) case final noteId?) {
       return NoteTabView(key: ValueKey(paneId), noteId: noteId);

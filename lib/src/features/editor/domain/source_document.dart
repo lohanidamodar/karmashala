@@ -30,6 +30,19 @@ enum DocumentMode {
   view,
 }
 
+/// Whether the file on disk is still the one the buffer was read from — what
+/// the editor's disk check last saw, not a promise about now.
+enum DiskState {
+  /// Nothing seen since the read or the last save.
+  current,
+
+  /// Another writer changed the file under a buffer with unsaved edits.
+  changed,
+
+  /// The file is gone. The buffer keeps its text; a save puts the file back.
+  deleted,
+}
+
 /// What a file looked like when it was read — what a save checks before it
 /// overwrites. Null [modified] means the filesystem did not say.
 class FileStamp {
@@ -76,6 +89,8 @@ class SourceDocument {
     this.crlf = false,
     this.bom = false,
     this.mode = DocumentMode.edit,
+    this.disk = DiskState.current,
+    this.diskStamp,
   });
 
   final String hostPath;
@@ -101,6 +116,20 @@ class SourceDocument {
 
   final DocumentMode mode;
 
+  final DiskState disk;
+
+  /// The stamp seen on disk when [disk] became [DiskState.changed]: the change
+  /// already shown, so the same one is not reported twice.
+  final FileStamp? diskStamp;
+
+  /// The version of the file this buffer has already answered for — null means
+  /// "absent". A disk check that sees this again has nothing new to say.
+  FileStamp? get knownDiskStamp => switch (disk) {
+    DiskState.current => stamp,
+    DiskState.changed => diskStamp,
+    DiskState.deleted => null,
+  };
+
   /// The file's own name, for a tab title.
   String get name => _hostPaths.basename(hostPath);
 
@@ -123,19 +152,41 @@ class SourceDocument {
   SourceDocument withText(String next) => _copy(text: next);
 
   SourceDocument asSaved(FileStamp stamp) =>
-      _copy(savedText: text, stamp: stamp);
+      _copy(savedText: text, stamp: stamp, disk: DiskState.current);
 
-  SourceDocument _copy({String? text, String? savedText, FileStamp? stamp}) =>
-      SourceDocument(
-        hostPath: hostPath,
-        text: text ?? this.text,
-        savedText: savedText ?? this.savedText,
-        language: language,
-        stamp: stamp ?? this.stamp,
-        refusal: refusal,
-        error: error,
-        crlf: crlf,
-        bom: bom,
-        mode: mode,
-      );
+  SourceDocument markedChanged(FileStamp onDisk) =>
+      _copy(disk: DiskState.changed, diskStamp: onDisk);
+
+  SourceDocument markedDeleted() => _copy(disk: DiskState.deleted);
+
+  /// The disk came back to the version this buffer was read from.
+  SourceDocument markedCurrent() => _copy(disk: DiskState.current);
+
+  /// "Keep mine": the change on disk is acknowledged, so a save compares
+  /// against it and overwrites it knowingly.
+  SourceDocument keepingMine() => disk == DiskState.changed
+      ? _copy(stamp: diskStamp, disk: DiskState.current)
+      : this;
+
+  /// [disk], when given, also sets [diskStamp] — to null unless one is passed.
+  SourceDocument _copy({
+    String? text,
+    String? savedText,
+    FileStamp? stamp,
+    DiskState? disk,
+    FileStamp? diskStamp,
+  }) => SourceDocument(
+    hostPath: hostPath,
+    text: text ?? this.text,
+    savedText: savedText ?? this.savedText,
+    language: language,
+    stamp: stamp ?? this.stamp,
+    refusal: refusal,
+    error: error,
+    crlf: crlf,
+    bom: bom,
+    mode: mode,
+    disk: disk ?? this.disk,
+    diskStamp: disk != null ? diskStamp : this.diskStamp,
+  );
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,21 +14,31 @@ import 'package:karmashala_ui/panes.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../../app/shell/reveal_in_file_manager.dart';
+import '../../notifications/application/notification_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/code_editor_providers.dart';
 import '../application/editor_auto_save.dart';
 import '../application/editor_tab_actions.dart';
 import '../application/open_documents.dart';
 import '../domain/source_document.dart';
+import 'disk_change_notice.dart';
 import 'editor_menu_actions.dart';
 
 /// One open file, as the content of a workbench tab. The buffer lives in
 /// [openDocumentsProvider], not here: this widget is dropped whenever its tab
 /// is evicted from the stack, and unsaved edits must not go with it.
 class EditorTabView extends ConsumerStatefulWidget {
-  const EditorTabView({required this.hostPath, super.key});
+  const EditorTabView({required this.hostPath, this.showing = true, super.key});
 
   final String hostPath;
+
+  /// Whether the stack is painting this pane. Only a showing editor polls the
+  /// disk, and becoming shown is itself a reason to look.
+  final bool showing;
+
+  /// How often the showing editor stats its file. One stat, never a read, and
+  /// never a second while one is still out.
+  static const Duration diskPollInterval = Duration(seconds: 2);
 
   @override
   ConsumerState<EditorTabView> createState() => _EditorTabViewState();
@@ -68,6 +80,8 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   /// mistaken for a reload and a reload is not mistaken for a keystroke.
   String? _mirrored;
 
+  Timer? _diskPoll;
+
   @override
   void initState() {
     super.initState();
@@ -75,15 +89,43 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
     _focus.addListener(_onFocusChanged);
     // A restored tab reaches this widget with nothing loaded; opening from the
     // Files panel has already asked. `open` is idempotent, so both paths call.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        ref.read(openDocumentsProvider.notifier).open(widget.hostPath);
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final documents = ref.read(openDocumentsProvider.notifier);
+      await documents.open(widget.hostPath);
+      if (mounted && widget.showing) _checkDisk();
     });
+    _syncDiskPoll();
+  }
+
+  @override
+  void didUpdateWidget(EditorTabView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.showing == oldWidget.showing) return;
+    _syncDiskPoll();
+    // Switched back to: whatever happened while it was hidden shows now.
+    if (widget.showing) _checkDisk();
+  }
+
+  void _syncDiskPoll() {
+    _diskPoll?.cancel();
+    _diskPoll = widget.showing
+        ? Timer.periodic(EditorTabView.diskPollInterval, (_) {
+            // Unfocused, nobody is looking; the regain checks every buffer.
+            if (mounted && ref.read(windowFocusedProvider)) _checkDisk();
+          })
+        : null;
+  }
+
+  void _checkDisk() {
+    unawaited(
+      ref.read(openDocumentsProvider.notifier).checkOnDisk(widget.hostPath),
+    );
   }
 
   @override
   void dispose() {
+    _diskPoll?.cancel();
     _controller.removeListener(_onEdited);
     _focus.removeListener(_onFocusChanged);
     _controller.dispose();
@@ -96,12 +138,13 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
     ref.read(editorAutoSaveProvider.notifier).focusLeft(widget.hostPath);
   }
 
-  /// An autosave that did not land is said the way a Save's refusal is.
+  /// An autosave that did not land. A conflict is the bar's to say — the
+  /// refusal marked the buffer — rather than a dialog over the reader's typing.
   void _onAutoSaveRefused(SaveOutcome? outcome) {
     if (outcome == null || !mounted) return;
     switch (outcome.result) {
       case SaveResult.stale:
-        _askAboutStale(outcome.message);
+        break;
       case SaveResult.failed:
         _say(outcome.message ?? 'Could not save this file.');
       case SaveResult.saved:
@@ -118,17 +161,18 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
   }
 
   /// Pushes a document the *store* changed — a first load, a reload — into the
-  /// field, keeping the caret where it still fits.
+  /// field, keeping the caret and selection where they still fit.
   void _adopt(SourceDocument document) {
     if (document.text == _mirrored) return;
     _mirrored = document.text;
-    // The controller re-derives its own lines from the text, so the caret is
-    // put back afterwards and only when the line it sat on is still there.
+    // The controller re-derives its own lines from the text, so the selection
+    // is put back afterwards, pulled inside the new text where it overhangs.
     final selection = _controller.selection;
     _controller.text = document.text;
-    if (selection.baseIndex < _controller.lineCount) {
-      _controller.selection = selection;
-    }
+    _controller.selection = clampSelection(selection, [
+      for (var i = 0; i < _controller.lineCount; i++)
+        _controller.codeLines[i].length,
+    ]);
   }
 
   void _say(String message) {
@@ -197,6 +241,27 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
       case 'overwrite':
         await _save(force: true);
     }
+  }
+
+  Future<void> _keepMine() async {
+    ref.read(openDocumentsProvider.notifier).keepMine(widget.hostPath);
+  }
+
+  Future<void> _compare() async {
+    final mine = ref.read(openDocumentProvider(widget.hostPath));
+    if (mine == null) return;
+    final onDisk = await ref.read(documentStoreProvider).load(widget.hostPath);
+    if (!mounted) return;
+    if (!onDisk.isReadable) {
+      _say(onDisk.error ?? 'The file on disk cannot be read.');
+      return;
+    }
+    await showDiskCompareDialog(
+      context,
+      name: mine.name,
+      onDisk: onDisk.text,
+      mine: mine.text,
+    );
   }
 
   Future<void> _openExternally() async {
@@ -268,6 +333,17 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _header(document),
+        if (document != null && document.isReadable)
+          DiskChangeNotice(
+            disk: document.disk,
+            // The bar is the question already, so this reload does not ask.
+            onReload: () => ref
+                .read(openDocumentsProvider.notifier)
+                .reload(widget.hostPath),
+            onKeepMine: _keepMine,
+            onCompare: _compare,
+            onSave: document.isEditable ? _save : null,
+          ),
         Expanded(child: _body(document)),
         if (document != null && document.isReadable && document.isEditable)
           _footer(document),
@@ -279,9 +355,14 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
     final editable =
         document != null && document.isReadable && document.isEditable;
     final dirty = document?.isDirty ?? false;
+    final deleted = document?.disk == DiskState.deleted;
     return PaneHeader(
       icon: AppIcons.fileCode,
-      title: document?.name ?? 'Opening…',
+      title: switch (document) {
+        null => 'Opening…',
+        final open when deleted => '${open.name} (deleted on disk)',
+        final open => open.name,
+      },
       actions: [
         if (dirty)
           Padding(
@@ -298,7 +379,7 @@ class _EditorTabViewState extends ConsumerState<EditorTabView> {
             visualDensity: VisualDensity.compact,
             iconSize: Chrome.iconAction,
             icon: const Icon(AppIcons.floppyDisk),
-            onPressed: dirty ? _save : null,
+            onPressed: dirty || deleted ? _save : null,
           ),
           IconButton(
             tooltip: 'Reload from disk',

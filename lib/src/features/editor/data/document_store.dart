@@ -30,6 +30,9 @@ class DocumentStore {
   /// with the words to say it, because a blank pane explains nothing.
   Future<SourceDocument> load(String hostPath) async {
     final name = _hostPaths.basename(hostPath);
+    // Kept on a refusal too, so the disk check can tell "still binary" from
+    // "rewritten as text" without reading it again.
+    FileStamp? seen;
     try {
       final type = await FileSystemEntity.type(hostPath);
       if (type == FileSystemEntityType.notFound) {
@@ -48,24 +51,36 @@ class DocumentStore {
       }
       final file = File(hostPath);
       final stat = await file.stat();
+      seen = FileStamp(length: stat.size, modified: stat.modified);
       if (stat.size > kDocumentSizeLimit) {
         return _refused(
           hostPath,
           DocumentRefusal.tooLarge,
           '$name is ${_describeSize(stat.size)}, over the '
           '${_describeSize(kDocumentSizeLimit)} this editor opens.',
+          seen,
         );
       }
       // The head alone answers "is this text?", so a 64 MB binary never
       // reaches memory.
       final head = await _readHead(file);
       if (_startsWith(head, _utf16LeBom) || _startsWith(head, _utf16BeBom)) {
-        return _refused(hostPath, DocumentRefusal.binary, _binaryFileMessage);
+        return _refused(
+          hostPath,
+          DocumentRefusal.binary,
+          _binaryFileMessage,
+          seen,
+        );
       }
       final bom = _startsWith(head, _utf8Bom);
       for (final byte in head) {
         if (byte == 0) {
-          return _refused(hostPath, DocumentRefusal.binary, _binaryFileMessage);
+          return _refused(
+            hostPath,
+            DocumentRefusal.binary,
+            _binaryFileMessage,
+            seen,
+          );
         }
       }
       var bytes = await file.readAsBytes();
@@ -74,7 +89,12 @@ class DocumentStore {
       try {
         decoded = utf8.decode(bytes);
       } on FormatException {
-        return _refused(hostPath, DocumentRefusal.binary, _binaryFileMessage);
+        return _refused(
+          hostPath,
+          DocumentRefusal.binary,
+          _binaryFileMessage,
+          seen,
+        );
       }
       final crlf = decoded
           .substring(
@@ -88,7 +108,7 @@ class DocumentStore {
         text: text,
         savedText: text,
         language: highlightLanguageFor(hostPath),
-        stamp: FileStamp(length: stat.size, modified: stat.modified),
+        stamp: seen,
         crlf: crlf,
         bom: bom,
         mode: stat.size > kEditableSizeLimit
@@ -100,6 +120,7 @@ class DocumentStore {
         hostPath,
         DocumentRefusal.unreadable,
         '$name could not be read: ${_reason(error)}',
+        seen,
       );
     }
   }
@@ -159,11 +180,13 @@ class DocumentStore {
   SourceDocument _refused(
     String hostPath,
     DocumentRefusal refusal,
-    String error,
-  ) => SourceDocument(
+    String error, [
+    FileStamp? stamp,
+  ]) => SourceDocument(
     hostPath: hostPath,
     text: '',
     savedText: '',
+    stamp: stamp,
     refusal: refusal,
     error: error,
   );
