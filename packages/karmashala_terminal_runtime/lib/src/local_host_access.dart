@@ -19,6 +19,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
     AppLogger? logger,
     this.startServe,
     this.helloBound = const Duration(seconds: 5),
+    this.serveEnvironment,
   }) : _paths = paths ?? HostPaths.resolve(),
        _logger = logger ?? AppLogger.named('host.local');
 
@@ -34,6 +35,15 @@ class LocalHostSessionAccess implements HostSessionAccess {
 
   /// How long the handshake is given before the answer is called missing.
   final Duration helloBound;
+
+  /// Variables layered over this app's own for the `serve` it starts. A probe
+  /// names its own host directory here, so the host it starts binds *its*
+  /// socket and keeps *its* sessions — [HostPaths.resolve] reads the same name
+  /// in `serve`, `attach` and `list`. Null for the real app: nothing changes.
+  final Map<String, String>? serveEnvironment;
+
+  /// Where this access looks for its host — its socket, lock and sessions.
+  HostPaths get paths => _paths;
 
   final AppLogger _logger;
 
@@ -285,6 +295,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
               Process.start(
                 binary.path,
                 const ['serve'],
+                environment: serveEnvironment,
                 // Detached, so it outlives this app — which is the entire
                 // point — but with stdio, so the banner is readable.
                 mode: ProcessStartMode.detachedWithStdio,

@@ -2,7 +2,13 @@ import 'dart:io';
 
 import 'package:karmashala_local_ipc/socket_location.dart';
 
-/// `$XDG_RUNTIME_DIR` first — per-user, 0700, tmpfs — then `~/.karmashala`,
+/// Names the host's whole directory — socket, lock, log, sessions and store —
+/// in place of the per-user default. Set by a probe of the desktop app when it
+/// starts its own `serve`, so the probe's host never meets the owner's (§23).
+const String kHostDirectoryEnvironmentVariable = 'KARMASHALA_HOST_DIR';
+
+/// [kHostDirectoryEnvironmentVariable] when it is set, else
+/// `$XDG_RUNTIME_DIR` — per-user, 0700, tmpfs — then `~/.karmashala`,
 /// because plenty of SSH hosts have no runtime dir for a non-login session.
 /// Windows roots at `%USERPROFILE%`: a stray inherited `HOME` must not move it.
 class HostPaths {
@@ -12,6 +18,10 @@ class HostPaths {
 
   static HostPaths resolve({Map<String, String>? environment}) {
     final env = environment ?? Platform.environment;
+    final scoped = env[kHostDirectoryEnvironmentVariable]?.trim();
+    if (scoped != null && scoped.isNotEmpty) {
+      return HostPaths(Directory(scoped));
+    }
     if (!Platform.isWindows) {
       final runtimeDir = env['XDG_RUNTIME_DIR'];
       if (runtimeDir != null &&

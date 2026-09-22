@@ -1328,7 +1328,14 @@ the Release one and `KARMASHALA_DATA_DIR` pointed at the probe.
 The variables are inherited by `flutter run`'s child and by every process the
 probe starts, which is what points an agent's MCP bridge inside the probe at
 the probe's handshake rather than the real app's. Delete the data folder for a
-clean slate; nothing else on the machine needs cleaning up after a probe.
+clean slate. The one thing that outlives a probe is its own session host, if
+it started one (host-backed panes): a detached `karmashala_host serve` holding
+`<data>\host`. Stop it first, or the folder will not delete:
+
+```powershell
+$env:KARMASHALA_HOST_DIR = "$env:KARMASHALA_DATA_DIR\host"
+& .\build\windows\x64\runner\Release\host\bin\karmashala_host.exe stop --force
+```
 
 ### The rules it is built to
 
@@ -1356,8 +1363,13 @@ clean slate; nothing else on the machine needs cleaning up after a probe.
 | OS toasts (the first rewrites the Start Menu shortcut toasts are delivered through) | `notificationPresenterProvider` |
 | The preferred control port 47821 | `LauncherControlServer.start` binds an ephemeral port |
 | The env-vault key in the per-user cache folder | `EnvVault.open` keeps a probe's key in `<data>/probe-key` |
+| The owner's local session host (`~/.karmashala`: its socket, lock, log, sessions and store) — attaching to, listing, ending or starting it | `localHostSessionAccessProvider` gives a probe its own host in `<data>/host`, and the `serve` it starts from the same binary is handed `KARMASHALA_HOST_DIR` naming it, which `HostPaths.resolve` reads first |
+| The session host on SSH machines, which holds the owner's remote sessions | `_hostSessionAccessFor` answers null and `HostSessionsService` refuses, so a probe's SSH panes take the tmux path and its session lists stay empty |
 
-Already scoped and left alone: the database, logs, `mcp_bridge.json`, the
+A probe's local host socket is `<data>\host\host.sock`; when that is too long
+to bind it falls back to a name hashed from that path, exactly as the `ipc/`
+socket does, so it never lands on the owner's. Already scoped and left alone:
+the database, logs, `mcp_bridge.json`, the
 `ipc/` socket (its long-path fallback is hashed per data folder), `mcp/`
 session configs, the vault, recordings and verification artifacts all live
 under the data folder. The tray icon and keep-awake are per process.
@@ -1369,8 +1381,10 @@ as the real app does.
 test these and each is an explicit action: switching a Claude/Codex account
 (writes the real credential files), renaming or deleting a CLI session (edits
 the real agent store), the browser pane (Chrome on the fixed CDP port 9222),
-devices (the shared adb server), and "Browse…" (prunes WSL rows from the
-shared file-dialog MRU in the registry).
+devices (the shared adb server), "Browse…" (prunes WSL rows from the
+shared file-dialog MRU in the registry), and on an SSH machine the install
+panel's install, start, stop and remove, pairing a phone to it, and using it as
+the relay — each works on the one per-user host there, the owner's included.
 
 ### What degrades
 
@@ -1381,6 +1395,12 @@ shared file-dialog MRU in the registry).
   agent run outside it.
 - No OS toasts (the in-app inbox still fills), no launcher hotkey, no remote
   access or pairing, no launch at login. The banner's tooltip lists them.
+- **SSH panes run on tmux, not the session host.** A remote host is per user
+  and holds the owner's sessions, and namespacing it would need every deployed
+  binary to honour `KARMASHALA_HOST_DIR` — an older one ignoring it would
+  attach the probe to the owner's host without a word. So a probe cannot test
+  SSH host panes; the real app can. Local host-backed panes work in full,
+  against the probe's own host.
 - **Not yet measured:** whether the bridge a *WSL* session in the probe spawns
   over interop inherits `KARMASHALA_DATA_DIR`. If it does not, that session's
   Karmashala tools reach the real app. Check `list_sessions` from such a

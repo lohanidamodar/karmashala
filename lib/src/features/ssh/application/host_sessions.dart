@@ -4,6 +4,7 @@ import 'package:karmashala_ssh/host.dart';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_terminal_runtime/host_link.dart';
+import '../../../core/probe/probe_mode.dart';
 import 'host_session_providers.dart';
 import 'ssh_failure.dart';
 
@@ -11,9 +12,13 @@ import 'ssh_failure.dart';
 /// do about it from here. The host outlives this app by design, so a session it
 /// holds may have been opened by a Karmashala that is long gone.
 class HostSessionsService {
-  const HostSessionsService(this._access);
+  const HostSessionsService(this._access, [this._refusal]);
 
   final HostSessionAccess? Function(SshHost host) _access;
+
+  /// Why nothing here is asked at all — a probe, which must not see the
+  /// owner's sessions on a machine they share. Null when it may ask.
+  final String? _refusal;
 
   /// The sessions on [host]. Throws [HostSessionsUnavailable] with a sentence
   /// worth showing when the host cannot be reached or refuses.
@@ -29,6 +34,7 @@ class HostSessionsService {
     SshHost host,
     Future<T> Function(HostPaneLink link) use,
   ) async {
+    if (_refusal case final reason?) throw HostSessionsUnavailable(reason);
     final access = _access(host);
     if (access == null) {
       throw const HostSessionsUnavailable('This host is not reachable.');
@@ -76,7 +82,14 @@ class HostSessionsUnavailable implements Exception {
 }
 
 final hostSessionsServiceProvider = Provider<HostSessionsService>(
-  (ref) => HostSessionsService(ref.read(hostSessionAccessLookupProvider)),
+  (ref) => HostSessionsService(
+    ref.read(hostSessionAccessLookupProvider),
+    ref.read(probeModeProvider).enabled
+        ? 'A probe does not use the session host on SSH machines: the '
+              "owner's sessions are there, and it could end them. Its panes "
+              'use tmux instead.'
+        : null,
+  ),
 );
 
 /// The pane a host session was opened by, when it was opened by one. A shell

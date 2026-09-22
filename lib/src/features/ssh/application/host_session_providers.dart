@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/probe/probe_mode.dart';
 import '../../environments/application/environment_providers.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
@@ -45,6 +46,10 @@ HostSessionAccess? _hostSessionAccessFor(Ref ref, SshHost host) {
   if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
     return null;
   }
+  // A machine's session host is per user there, and the owner's sessions are
+  // in it: a probe that used it could list, end or take over any of them. So a
+  // probe's SSH panes take the tmux path instead (§23).
+  if (ref.read(probeModeProvider).enabled) return null;
 
   final environments = ref.read(executionEnvironmentDaoProvider).getAll();
   final match = environments

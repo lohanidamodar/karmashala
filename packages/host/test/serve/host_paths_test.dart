@@ -51,6 +51,42 @@ void main() {
           : null,
     );
 
+    test(
+      'KARMASHALA_HOST_DIR moves the whole host, and wins over the rest',
+      () {
+        // What a probe of the desktop app hands the `serve` it starts, so the
+        // probe's host binds its own socket and keeps its own sessions (§23).
+        final scoped = HostPaths.resolve(
+          environment: {
+            kHostDirectoryEnvironmentVariable: r'C:\probe-data\host',
+            'USERPROFILE': r'C:\Users\dlohani',
+            'HOME': '/home/dlohani',
+            'XDG_RUNTIME_DIR': Directory.systemTemp.path,
+          },
+        );
+        expect(scoped.directory.path, r'C:\probe-data\host');
+        expect(scoped.lockPath, startsWith(r'C:\probe-data\host'));
+        expect(scoped.sessionsDirectory, startsWith(r'C:\probe-data\host'));
+        expect(scoped.storeDirectory.path, r'C:\probe-data\host');
+      },
+    );
+
+    test('an empty KARMASHALA_HOST_DIR changes nothing', () {
+      final paths = HostPaths.resolve(
+        environment: {
+          kHostDirectoryEnvironmentVariable: '  ',
+          'USERPROFILE': r'C:\Users\dlohani',
+          'HOME': '/home/dlohani',
+        },
+      );
+      expect(
+        paths.directory.path,
+        Platform.isWindows
+            ? r'C:\Users\dlohani/.karmashala'
+            : '/home/dlohani/.karmashala',
+      );
+    });
+
     test('nothing in the directory is named without the directory', () {
       final paths = HostPaths(Directory('/tmp/karmashala-test'));
       expect(paths.socketPath, startsWith(paths.directory.path));
