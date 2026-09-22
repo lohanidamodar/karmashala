@@ -13,6 +13,7 @@ import '../../sessions/application/session_chat_source.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_notifications/toasts.dart';
 import 'package:karmashala_notifications/persistence.dart';
 import '../data/desktop_notification_presenter.dart';
@@ -141,13 +142,30 @@ final notificationDispatcherProvider = Provider<NotificationDispatcher>((ref) {
   return dispatcher;
 });
 
-final watchedSessionLoaderProvider = Provider<WatchedSessionLoader>(
+final Provider<WatchedSessionLoader>
+watchedSessionLoaderProvider = Provider<WatchedSessionLoader>(
   (ref) => WatchedSessionLoader(
     sessionDao: ref.watch(sessionDaoProvider),
     importedSessionDao: ref.watch(importedSessionDaoProvider),
     installationDao: ref.watch(agentInstallationDaoProvider),
     hookReports: ref.watch(agentHookReportsProvider),
     clock: ref.watch(clockProvider),
+    // Asked through `exists`, never built: building the controller starts the
+    // scrollback autosave timer. No controller means no pane of ours is live.
+    isPaneLive: (paneId) =>
+        ref.exists(terminalSessionsControllerProvider) &&
+        (ref
+                .read(terminalSessionsControllerProvider.notifier)
+                .instanceFor(paneId)
+                ?.liveness
+                .value
+                .isLive ??
+            false),
+    transcriptPathFor: (sessionId) => ref.exists(sessionStatusRegistryProvider)
+        ? ref
+              .read(sessionStatusRegistryProvider)
+              .transcriptPathForOpenId(sessionId)
+        : null,
   ),
 );
 

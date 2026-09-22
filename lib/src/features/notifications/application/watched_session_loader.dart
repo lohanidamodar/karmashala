@@ -8,6 +8,7 @@ import 'package:karmashala_agent_reporting/hooks.dart';
 import '../../agents/data/agent_installation_dao.dart';
 import '../../cli_detection/data/imported_session_dao.dart';
 import '../../sessions/data/session_dao.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_notifications/watched.dart';
 
@@ -20,6 +21,8 @@ class WatchedSessionLoader {
     required this.installationDao,
     required this.hookReports,
     required this.clock,
+    this.isPaneLive,
+    this.transcriptPathFor,
     this.activeWindow = const Duration(minutes: 30),
     this.coldRecheck = const Duration(minutes: 1),
   });
@@ -29,6 +32,15 @@ class WatchedSessionLoader {
   final AgentInstallationDao installationDao;
   final AgentHookReports hookReports;
   final Clock clock;
+
+  /// Whether a pane of this app instance is running a process. Null counts no
+  /// pane as live — a row's `pane_id` outlives the pane it names.
+  final bool Function(String paneId)? isPaneLive;
+
+  /// The transcript the status registry resolved for a native row, while it
+  /// watches it. Remembered here so a row that lost its pane is still watched
+  /// while that file keeps changing.
+  final String? Function(String sessionId)? transcriptPathFor;
 
   /// How recently a transcript must have changed for its session to count as
   /// live. Anything colder is history, and history does not raise toasts.
@@ -44,6 +56,9 @@ class WatchedSessionLoader {
   /// What the sampler last saw for each transcript — [load] reads this and
   /// nothing else.
   final Map<String, _Sample> _samples = {};
+
+  /// Native row id → the transcript [transcriptPathFor] once answered.
+  final Map<String, String> _nativeTranscripts = {};
 
   /// The sampling pass in flight, so a cycle cannot start a second one over the
   /// same files and [settle] has something to wait for.
@@ -62,6 +77,9 @@ class WatchedSessionLoader {
 
     // (session, recency) pairs, so the cap keeps the most recently active.
     final candidates = <(WatchedSession, DateTime)>[];
+    final known = <String>{};
+    final due = <String>[];
+    final nativeIds = <String>{};
 
     for (final session in sessionDao.getAll()) {
       final agentId = agentIdByInstallation[session.agentInstallationId];
@@ -70,12 +88,15 @@ class WatchedSessionLoader {
       // The CLI's own id when it has announced one — the key hooks and state
       // files share — and our row id when it has not, which still has a screen.
       final externalId = session.externalSessionId;
+      final key = AgentSessionKey(
+        agentId,
+        externalId == null || externalId.isEmpty ? session.id : externalId,
+      );
+      nativeIds.add(session.id);
+      if (!_nativeIsLive(session, key, now, known, due)) continue;
       candidates.add((
         WatchedSession(
-          key: AgentSessionKey(
-            agentId,
-            externalId == null || externalId.isEmpty ? session.id : externalId,
-          ),
+          key: key,
           label: session.title,
           openId: session.id,
           imported: false,
@@ -85,8 +106,8 @@ class WatchedSessionLoader {
       ));
     }
 
-    final known = <String>{};
-    final due = <String>[];
+    _nativeTranscripts.removeWhere((id, _) => !nativeIds.contains(id));
+
     for (final session in importedSessionDao.getAll()) {
       final key = AgentSessionKey(session.cli, session.externalId);
       // A hook report is proof the session is live, and costs a map lookup, so
@@ -124,6 +145,40 @@ class WatchedSessionLoader {
     // the tray names first.
     candidates.sort((a, b) => b.$2.compareTo(a.$2));
     return [for (final candidate in candidates) candidate.$1];
+  }
+
+  /// Whether a native row has any evidence of running. Its status cannot say:
+  /// `unknown` is what a row whose pane died is left as, and it lasts forever.
+  bool _nativeIsLive(
+    Session session,
+    AgentSessionKey key,
+    DateTime now,
+    Set<String> known,
+    List<String> due,
+  ) {
+    // Learned while the row is watched and sampled from then on, so the cycle
+    // its pane dies already knows whether the transcript is still moving.
+    final resolved = transcriptPathFor?.call(session.id);
+    if (resolved != null) _nativeTranscripts[session.id] = resolved;
+    final path = _nativeTranscripts[session.id];
+    DateTime? modified;
+    if (path != null) {
+      known.add(path);
+      final sample = _samples[path];
+      if (sample == null || !now.isBefore(sample.dueAt)) due.add(path);
+      modified = sample?.modified;
+    }
+
+    final paneId = session.paneId;
+    if (paneId != null && (isPaneLive?.call(paneId) ?? false)) return true;
+    if (hookReports.latest(key.agentId, key.sessionId) != null) return true;
+    // Launched into a terminal we cannot see: its hooks or its transcript are
+    // all it will ever show, and neither exists for its first moments.
+    if (session.surface == SessionSurface.external &&
+        now.difference(session.createdAt) <= activeWindow) {
+      return true;
+    }
+    return modified != null && now.difference(modified) <= activeWindow;
   }
 
   /// A workspace session in a terminal state can no longer produce status.

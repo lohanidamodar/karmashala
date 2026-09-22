@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
-import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
@@ -11,7 +10,7 @@ import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.
 import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:agent_cli/process.dart';
-import 'package:karmashala/src/features/notifications/application/watched_session_loader.dart';
+import 'package:karmashala/src/features/notifications/application/notification_providers.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
@@ -242,13 +241,9 @@ void main() {
 
       // What the inbox is offered: one watched session, and it is the row with
       // the pane — not the read-only history the notification used to open.
-      final watched = WatchedSessionLoader(
-        sessionDao: SessionDao(db),
-        importedSessionDao: ImportedSessionDao(db),
-        installationDao: AgentInstallationDao(db),
-        hookReports: AgentHookReports(),
-        clock: FixedClock(testTime),
-      ).load();
+      // The app's own loader, so the pane's liveness is read the way the app
+      // reads it: a row is watched because its pane runs.
+      final watched = ref.read(watchedSessionLoaderProvider).load();
       expect(watched, hasLength(1));
       expect(watched.single.imported, isFalse);
       expect(watched.single.openId, 's1');

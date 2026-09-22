@@ -13,6 +13,7 @@ import 'package:karmashala_notifications/watched.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -55,12 +56,31 @@ void main() {
     });
   });
 
-  WatchedSessionLoader loader() => WatchedSessionLoader(
+  /// Pane ids a test says are running in this app instance.
+  final livePanes = <String>{};
+  setUp(livePanes.clear);
+
+  WatchedSessionLoader loader({
+    Clock? clock,
+    String? Function(String sessionId)? transcriptPathFor,
+  }) => WatchedSessionLoader(
     sessionDao: sessions,
     importedSessionDao: imported,
     installationDao: installations,
     hookReports: reports,
-    clock: FixedClock(testTime),
+    clock: clock ?? FixedClock(testTime),
+    isPaneLive: livePanes.contains,
+    transcriptPathFor: transcriptPathFor,
+  );
+
+  void hook(String sessionId) => reports.record(
+    AgentStatusReport(
+      agentId: AgentIds.claudeCode,
+      sessionId: sessionId,
+      status: AgentActivityStatus.working,
+      source: AgentStatusSource.hook,
+      observedAt: testTime,
+    ),
   );
 
   /// The workspace, once the sampler has read the transcripts.
@@ -233,10 +253,11 @@ void main() {
     expect(await settled(loader()), isEmpty);
   });
 
-  test('a native session with a CLI id is watched', () async {
+  test('a native session with a CLI id in a live pane is watched', () async {
     sessions.insert(
       session(id: 's1').copyWith(externalSessionId: 'cli-9', paneId: 'pane-9'),
     );
+    livePanes.add('pane-9');
 
     final watched = await settled(loader());
 
@@ -260,7 +281,8 @@ void main() {
     // the user, and the visible badge has been reading it all along — keyed by
     // the row id, exactly as here. Skipping it was how the ambient pipeline
     // ended up reporting `unknown` for a session the badge beside it could read.
-    sessions.insert(session(id: 's1'));
+    sessions.insert(session(id: 's1').copyWith(paneId: 'pane-1'));
+    livePanes.add('pane-1');
 
     final watched = await settled(loader());
 
@@ -343,6 +365,138 @@ void main() {
     ]);
   });
 
+  group('a native row is watched only on evidence it runs', () {
+    // The owner's app on 2026-09-22: 26 watched with two panes open. 24 rows
+    // sat at `unknown` — the status a row is left at when its pane dies — each
+    // naming a pane that no longer existed, and all were watched for ever
+    // because `unknown` is not an ending.
+    Session lost(String id, {String? externalId}) => session(
+      id: id,
+      status: SessionStatus.unknown,
+    ).copyWith(externalSessionId: externalId, paneId: 'gone-$id');
+
+    test(
+      'a row whose pane is gone, with nothing else, is not watched',
+      () async {
+        sessions.insert(lost('s1', externalId: 'cli-1'));
+
+        expect(await settled(loader()), isEmpty);
+      },
+    );
+
+    test('a row whose pane is live is watched', () async {
+      sessions.insert(
+        session(
+          id: 's1',
+          status: SessionStatus.running,
+        ).copyWith(externalSessionId: 'cli-1', paneId: 'p1'),
+      );
+      livePanes.add('p1');
+
+      expect((await settled(loader())).single.openId, 's1');
+    });
+
+    test('a row whose pane is open but not running is not watched', () async {
+      sessions.insert(
+        session(id: 's1').copyWith(externalSessionId: 'cli-1', paneId: 'p1'),
+      );
+
+      expect(await settled(loader()), isEmpty);
+    });
+
+    test('a row a hook has reported is watched without a pane', () async {
+      sessions.insert(lost('s1', externalId: 'cli-1'));
+      hook('cli-1');
+
+      expect((await settled(loader())).single.key.sessionId, 'cli-1');
+    });
+
+    test('two live rows among 24 lost ones watch two', () async {
+      for (var i = 0; i < 24; i++) {
+        // Four of the owner's 24 never learned a CLI id.
+        sessions.insert(lost('dead-$i', externalId: i < 20 ? 'old-$i' : null));
+      }
+      for (final id in ['live-a', 'live-b']) {
+        sessions.insert(
+          session(
+            id: id,
+            status: SessionStatus.running,
+          ).copyWith(externalSessionId: 'cli-$id', paneId: 'pane-$id'),
+        );
+        livePanes.add('pane-$id');
+      }
+
+      final watched = await settled(loader());
+
+      expect(watched.map((s) => s.openId).toSet(), {'live-a', 'live-b'});
+    });
+
+    test(
+      'a row launched into an outside terminal is watched while new',
+      () async {
+        // No pane of ours, and no hook until the agent's first event.
+        final clock = _MovableClock(testTime);
+        sessions.insert(
+          session(id: 's1', status: SessionStatus.unknown).copyWith(
+            externalSessionId: 'cli-1',
+            surface: SessionSurface.external,
+          ),
+        );
+        final subject = loader(clock: clock);
+
+        expect(await settled(subject), hasLength(1));
+
+        clock.now = testTime.add(const Duration(hours: 1));
+        expect(await settled(subject), isEmpty);
+      },
+    );
+
+    test(
+      'a row that lost its pane is watched while its transcript still moves',
+      () async {
+        final clock = _MovableClock(testTime);
+        final path = transcript('native', age: const Duration(minutes: 1));
+        sessions.insert(
+          session(
+            id: 's1',
+            status: SessionStatus.running,
+          ).copyWith(externalSessionId: 'cli-1', paneId: 'p1'),
+        );
+        livePanes.add('p1');
+        // The registry answers only while it watches the row.
+        String? resolved(String id) =>
+            livePanes.contains('p1') && id == 's1' ? path : null;
+        final subject = loader(clock: clock, transcriptPathFor: resolved);
+
+        expect(await settled(subject), hasLength(1));
+
+        livePanes.remove('p1');
+        expect(
+          await settled(subject),
+          hasLength(1),
+          reason: 'the transcript changed a minute ago',
+        );
+
+        clock.now = testTime.add(const Duration(hours: 2));
+        expect(await settled(subject), isEmpty);
+      },
+    );
+
+    test('a lost row the registry never resolved costs no stat', () async {
+      sessions.insert(lost('s1', externalId: 'cli-1'));
+      final tally = _Tally();
+      final subject = loader(transcriptPathFor: (_) => null);
+
+      await IOOverrides.runZoned(() async {
+        subject.load();
+        await subject.settle();
+        subject.load();
+      }, createFile: (path) => _CountingFile(path, tally));
+
+      expect(tally.async + tally.sync, 0);
+    });
+  });
+
   for (final count in [100, 500]) {
     test('all $count live sessions are watched, not the first 60', () async {
       for (var i = 0; i < count; i++) {
@@ -363,9 +517,14 @@ void main() {
     });
   }
 
-  test('every native session is watched however many there are', () async {
+  test('every live native session is watched however many there are', () async {
     for (var i = 0; i < 200; i++) {
-      sessions.insert(session(id: 's$i').copyWith(externalSessionId: 'cli-$i'));
+      sessions.insert(
+        session(
+          id: 's$i',
+        ).copyWith(externalSessionId: 'cli-$i', paneId: 'pane-$i'),
+      );
+      livePanes.add('pane-$i');
     }
 
     final watched = await settled(loader());
