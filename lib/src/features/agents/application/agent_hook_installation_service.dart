@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../../core/probe/probe_mode.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
@@ -197,6 +198,13 @@ class AgentHookInstallationService {
     )
     act,
   }) async {
+    // Every direction funnels through here. The stores are the real app's: a
+    // probe that installed would point its agents here, one that retired would
+    // cut them off, and one that uninstalled would remove their hooks.
+    if (_ref.read(probeModeProvider).enabled) {
+      _log.info('Probe: not touching agent hooks (would $verb).');
+      return const [];
+    }
     final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
     if (environments.isEmpty) return const [];
 

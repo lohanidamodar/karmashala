@@ -184,6 +184,7 @@ real install.
 | Variable | Read by | Effect |
 | --- | --- | --- |
 | `KARMASHALA_DATA_DIR` | the app and the MCP bridge, at launch | Puts the whole per-user data directory somewhere else, created if absent. For screenshots, demos and running a release build against data nobody minds losing. **Not a user setting** — nothing in the app writes it. |
+| `KARMASHALA_PROBE` | the app, once at launch | `1` makes the instance a **probe**: a second copy for testing a change beside the real app, with no global side effects (agent hooks, skills, launch at login, hotkey, remote access, toasts, the fixed control port) and a PROBE banner. Requires `KARMASHALA_DATA_DIR` pointing somewhere other than the real folder, or it refuses to start. See PROJECT.md §23. |
 | `KARMASHALA_SESSION_ID` | stamped on agent panes; read by the MCP bridge | Which session a process belongs to. The bridge forwards it as `callerSessionId`, which is how agent-spawns-agent depth is capped from the real process tree. |
 | `KARMASHALA_PORT_BASE` | stamped on agent panes | A deterministic per-session port base in `[20000, 32760)`. A namespace a repo's own scripts may read — not a lock or a reservation. |
 | `KARMASHALA_BRIDGE_HANDSHAKE` | `karmashala_mcp` | Full path to `mcp_bridge.json`, for pointing a bridge at a second install without guessing. Wins over `KARMASHALA_DATA_DIR`, because it names a file rather than a directory. |

@@ -1,6 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
+import '../../../core/probe/probe_mode.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import '../../agents/application/agent_status_providers.dart';
@@ -112,7 +113,10 @@ final windowRaiseRequestProvider =
 /// Where a notification is actually delivered. Verified on Windows only; macOS
 /// and Linux share the path untested, and anywhere else falls back to silence.
 final notificationPresenterProvider = Provider<NotificationPresenter>((ref) {
-  if (!DesktopNotificationPresenter.isSupportedHere) {
+  // A probe shows no toasts: on Windows the first one rewrites the Start Menu
+  // shortcut the real app's toasts are delivered through.
+  if (!DesktopNotificationPresenter.isSupportedHere ||
+      ref.read(probeModeProvider).enabled) {
     return const NoopNotificationPresenter();
   }
   final presenter = DesktopNotificationPresenter(

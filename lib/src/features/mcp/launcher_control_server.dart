@@ -50,6 +50,7 @@ import 'todo_tools.dart';
 import 'workspace_tools.dart';
 import 'worktree_tools.dart';
 import '../../core/paths/app_support_directory.dart';
+import '../../core/probe/probe_mode.dart';
 
 /// The port asked for before falling back to an ephemeral one. Fixed because a
 /// Hyper-V firewall rule can name a port, never a program.
@@ -288,7 +289,11 @@ class LauncherControlServer implements SessionMcp {
     if (_server != null) return;
     _stopped = false;
     _wslRetryEvery = retryWslEvery;
-    final server = await _bindControlPort(preferredPort);
+    // A probe takes an ephemeral port: holding the preferred one would push the
+    // real app off it when it next starts.
+    final server = await _bindControlPort(
+      _container.read(probeModeProvider).enabled ? 0 : preferredPort,
+    );
     _server = server;
     if (await _abandonedMidStart()) return;
     // A *separate* token for /agent-hook: it is pasted verbatim into a curl

@@ -108,7 +108,12 @@ class AgentHookSpoolDrainer {
     this.wslDrain = wslSpoolDrain,
     this.schedule = _defaultSchedule,
     this.cancelSchedule = _defaultCancel,
+    this.enabled = true,
   });
+
+  /// False in a probe: the spools belong to the real app, and draining one
+  /// would take its payloads.
+  final bool enabled;
 
   /// What one drained payload does. Wired to `applyAgentHookCallback` in the
   /// provider; injected here so the loop can be driven with no container.
@@ -156,7 +161,7 @@ class AgentHookSpoolDrainer {
   void watch(List<AgentHookSpoolSource> sources) {
     // A disposed drainer stays disposed: `dispose` is what shutdown calls, and
     // a late `watch` must not put the loop back on a share that is going away.
-    if (_disposed) return;
+    if (_disposed || !enabled) return;
     _sources = List.unmodifiable(sources);
     _cancel();
     if (_sources.isEmpty) return;
@@ -170,7 +175,7 @@ class AgentHookSpoolDrainer {
   /// One pass over every source; public so a test can step the loop. Re-entrant
   /// calls are dropped, since the files will still be there next tick.
   Future<void> drainOnce() async {
-    if (_draining || _disposed) return;
+    if (_draining || _disposed || !enabled) return;
     _draining = true;
     try {
       final running = await _runningSet();

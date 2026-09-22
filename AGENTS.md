@@ -46,4 +46,8 @@ commit only the paths you changed, with `git commit -- <path>`, never
 `git add -A` — other sessions work in this checkout and leave uncommitted
 changes that are not yours. **Pushing is still only when asked.**
 
+**A second copy of this app runs only as a probe** — `KARMASHALA_PROBE=1` plus
+its own `KARMASHALA_DATA_DIR` (PROJECT.md §23). An ordinary second instance
+takes over the real app's agent hooks.
+
 **Read [PROJECT.md](PROJECT.md) before changing anything** — it is the full guide for this repository.

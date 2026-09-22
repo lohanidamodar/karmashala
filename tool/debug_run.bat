@@ -15,8 +15,10 @@ rem
 rem is the way out: it sets KARMASHALA_DATA_DIR, which is the one thing that
 rem does move it (core\paths\app_support_directory.dart), to build\debug-data.
 rem Database, logs, IPC socket, MCP handshake and vault all go there and the
-rem live data is never opened. The default is unchanged, because a debug run is
-rem usually meant to see the real workspace.
+rem live data is never opened. It also sets KARMASHALA_PROBE=1, so the instance
+rem leaves the agents' hooks, skills, autostart and relay alone (PROJECT.md 23).
+rem The default is unchanged, because a debug run is usually meant to see the
+rem real workspace — and is therefore never to be run beside the installed app.
 setlocal enabledelayedexpansion
 cd /d "%~dp0.."
 
@@ -35,6 +37,7 @@ echo === DEBUG RUN !APPVER! === > "%LOG%"
 
 if defined FRESH (
   set KARMASHALA_DATA_DIR=!CD!\build\debug-data
+  set KARMASHALA_PROBE=1
   if not exist "!KARMASHALA_DATA_DIR!" mkdir "!KARMASHALA_DATA_DIR!"
   echo === FRESH DATA !KARMASHALA_DATA_DIR! === >> "%LOG%"
 )

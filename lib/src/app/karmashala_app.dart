@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/probe/probe_mode.dart';
 import '../features/settings/application/settings_controller.dart';
+import 'probe_banner.dart';
 import '../features/settings/domain/app_theme_mode.dart';
 import '../features/ssh/presentation/ssh_prompt_host.dart';
 import 'shell/app_shell.dart';
@@ -24,13 +26,16 @@ class KarmashalaApp extends ConsumerWidget {
     final uiTextScale = ref.watch(
       settingsControllerProvider.select((s) => s.uiTextScale),
     );
+    final probe = ref.watch(probeModeProvider);
     return MaterialApp(
-      title: 'Karmashala',
+      title: probe.enabled ? 'Karmashala — PROBE' : 'Karmashala',
       debugShowCheckedModeBanner: false,
       // Above the Navigator, so menus, dialogs and tooltips scale too — not
-      // just the routes.
-      builder: (context, child) =>
-          UiTextScale(scale: uiTextScale, child: child!),
+      // just the routes. The probe banner is outside it so no route covers it.
+      builder: (context, child) => ProbeBanner(
+        probe: probe,
+        child: UiTextScale(scale: uiTextScale, child: child!),
+      ),
       theme: AppTheme.light().copyWith(visualDensity: density),
       darkTheme: AppTheme.dark().copyWith(visualDensity: density),
       themeMode: switch (themeMode) {

@@ -18,6 +18,7 @@ import 'src/core/lifecycle/uncaught_errors.dart';
 import 'package:karmashala_core/logging.dart';
 import 'src/core/logging/diagnostics_bootstrap.dart';
 import 'src/core/paths/app_support_directory.dart';
+import 'src/core/probe/probe_mode.dart';
 import 'src/core/util/agent_cli_bridge.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
@@ -87,6 +88,17 @@ Future<void> _bootstrap(AppLogger logger) async {
   // Which build, on what OS — first line of the buffer, so it is the first line
   // of anything copied out. A log that cannot say its version answers nothing.
   logger.info('Starting ${buildIdentity()}');
+  // Read once and handed to the container below, so every side-effect site
+  // asks one provider. A probe without its own data folder is refused here,
+  // before the log file or the database is opened.
+  final probe = ProbeMode.current;
+  if (probe.enabled) {
+    logger.info(
+      'PROBE instance; data folder ${probe.dataDirectory ?? '(none)'}. '
+      'Disabled: ${ProbeMode.disabledEffects.join(', ')}.',
+    );
+    await appSupportDirectory();
+  }
   // Opening the file needs `path_provider`, hundreds of milliseconds in, so it
   // backfills the buffer. Awaited: the directory below asks the same question.
   await attachDefaultLogFile(Diagnostics.instance);
@@ -134,6 +146,7 @@ Future<void> _bootstrap(AppLogger logger) async {
     overrides: [
       databaseProvider.overrideWithValue(database),
       envVaultProvider.overrideWithValue(envVault),
+      probeModeProvider.overrideWithValue(probe),
       // What `karmashala_devices` cannot know: this app's clock, its SSH-aware
       // runner factory, where it keeps data, its settings and its shell.
       ...deviceBindings,
@@ -184,7 +197,7 @@ Future<void> _bootstrap(AppLogger logger) async {
         size: restoredSize,
         minimumSize: const Size(720, 560),
         center: true,
-        title: 'Karmashala',
+        title: probe.enabled ? 'Karmashala — PROBE' : 'Karmashala',
       );
       await windowManager.waitUntilReadyToShow(windowOptions, () async {
         await windowManager.show();

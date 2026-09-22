@@ -1,6 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../../core/probe/probe_mode.dart';
 import '../../checkpoints/application/checkpoint_turn_hints.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../notifications/application/notification_providers.dart';
@@ -21,6 +22,7 @@ import '../../sessions/application/session_rebind_providers.dart';
 final agentHookSpoolDrainerProvider = Provider<AgentHookSpoolDrainer>((ref) {
   final logger = AppLogger.named('agent-hooks');
   final drainer = AgentHookSpoolDrainer(
+    enabled: !ref.read(probeModeProvider).enabled,
     onEvent: (event) {
       final report = applyAgentHookCallback(
         ref.container,

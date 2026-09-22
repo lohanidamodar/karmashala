@@ -1,6 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../../core/probe/probe_mode.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../cli_detection/application/cli_detection_providers.dart';
 import '../../environments/application/environment_providers.dart';
@@ -168,6 +169,11 @@ class AgentSkillInstallationService {
     )
     act,
   }) async {
+    // The skill roots are the real app's stores; a probe leaves them alone.
+    if (_ref.read(probeModeProvider).enabled) {
+      _log.info('Probe: not touching agent skills (would $verb).');
+      return const [];
+    }
     final environments = _ref.read(executionEnvironmentDaoProvider).getAll();
     if (environments.isEmpty) return const [];
 

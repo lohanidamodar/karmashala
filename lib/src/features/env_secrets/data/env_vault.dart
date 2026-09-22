@@ -16,6 +16,7 @@ import '../domain/env_variable.dart';
 import 'env_value_cipher.dart';
 import 'local_key_cipher.dart';
 import '../../../core/paths/app_support_directory.dart';
+import '../../../core/probe/probe_mode.dart';
 
 /// Raised when the vault refuses to store something rather than storing it
 /// less well than promised.
@@ -80,7 +81,14 @@ class EnvVault {
     final support = await appSupportDirectory();
     EnvValueCipher cipher;
     try {
-      cipher = await LocalKeyEnvValueCipher.open(logger: logger);
+      cipher = await LocalKeyEnvValueCipher.open(
+        logger: logger,
+        // The default key folder is per user, not per data folder: a probe
+        // would read the real key, or mint the one the real app then adopts.
+        directory: ProbeMode.current.enabled
+            ? Directory(p.join(support.path, 'probe-key'))
+            : null,
+      );
     } on Object catch (error) {
       logger?.warning(
         'Environment vault will use file permissions only: $error',

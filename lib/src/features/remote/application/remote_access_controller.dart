@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:riverpod/riverpod.dart';
 
 import 'package:karmashala_core/logging.dart';
+import '../../../core/probe/probe_mode.dart';
 import '../../notifications/application/attention_inbox.dart';
 import '../../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -57,6 +58,9 @@ class RemoteAccessController {
 
   bool get isRunning => _service?.isRunning ?? false;
 
+  /// Whether this instance is a probe, where remote access never starts.
+  bool get isDisabledByProbe => _ref.read(probeModeProvider).enabled;
+
   /// Brings the service in line with the settings: started when enabled (and
   /// restarted when the relay URL moved), stopped when disabled.
   Future<void> sync() {
@@ -78,7 +82,9 @@ class RemoteAccessController {
 
   Future<void> _sync() async {
     final settings = _ref.read(settingsControllerProvider);
-    if (!settings.remoteAccessEnabled) {
+    // A probe binds no relay port, opens no firewall rule and dials no relay:
+    // the phone is paired to the real app, and 8787 is its port.
+    if (!settings.remoteAccessEnabled || isDisabledByProbe) {
       await _stopService();
       await _stopLocalRelay();
       return;
@@ -158,6 +164,9 @@ class RemoteAccessController {
     Uri? relay,
     bool relayIsLocal = false,
   }) {
+    if (isDisabledByProbe) {
+      throw StateError('Remote access is disabled in a probe instance.');
+    }
     final service = _service;
     if (service == null || !service.isRunning) {
       throw StateError('Turn on remote access first.');

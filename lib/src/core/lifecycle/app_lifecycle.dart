@@ -23,6 +23,7 @@ import '../../features/system/system_integration_service.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../database/database_providers.dart';
 import '../logging/memory_census_source.dart';
+import '../probe/probe_mode.dart';
 import 'package:karmashala_core/logging.dart';
 import 'package:karmashala_store/database.dart';
 
@@ -104,6 +105,9 @@ class AppLifecycle {
   SystemIntegrationService? get systemIntegration => _systemIntegration;
   LauncherControlServer? get controlServer => _controlServer;
 
+  /// Whether this instance is a probe, which leaves every global store alone.
+  bool get isProbe => _container.read(probeModeProvider).enabled;
+
   /// Whether [shutdown] has been started. Nothing new should be adopted after.
   bool get isShuttingDown => _shutdown != null;
 
@@ -157,6 +161,12 @@ class AppLifecycle {
     LauncherControlServer server, {
     Future<void> Function()? afterFirstFrame,
   }) {
+    if (isProbe) {
+      _logger.info(
+        'Probe: agent hooks are not installed; the real app owns them.',
+      );
+      return;
+    }
     // The WSL switch usually does not exist yet when the app launches, so the
     // first sweep skips WSL; the server says when it binds and a re-sweep is free.
     server.onWslInterfaceBound = () {
@@ -233,6 +243,10 @@ class AppLifecycle {
   /// Installs Karmashala's skills into every agent CLI that declares a root,
   /// behind the hooks' gate. Each file is staged and renamed, so a quit is safe.
   void installAgentSkills({Future<void> Function()? afterFirstFrame}) {
+    if (isProbe) {
+      _logger.info('Probe: agent skills are not installed.');
+      return;
+    }
     unawaited(_sweepAgentSkills(afterFirstFrame));
   }
 
@@ -445,6 +459,8 @@ class AppLifecycle {
     // 1b. Retire the callback endpoint: delete the generated per-agent endpoint
     //     files, leaving the config entries — removing those raced the installer.
     await _step('agent hook endpoint retirement', watch, () async {
+      // A probe wrote no endpoint, so the files there are the real app's.
+      if (isProbe) return;
       // Stop draining first. `retireEndpoints` deletes the spool directories,
       // and a tick that ran into a directory being removed underneath it would
       // do no harm but would spend the shutdown budget finding that out.

@@ -446,10 +446,11 @@ dart run build_runner build --delete-conflicting-outputs
 ```
 
 Driving the running app — the widget tree, taps, typing and screenshots of a
-debug build over the VM service. **A second instance on a throwaway data
-directory**, never the one you are working in. See [docs/marionette.md](docs/marionette.md):
+debug build over the VM service. **A probe instance (§23)**, never the one you
+are working in. See [docs/marionette.md](docs/marionette.md):
 
 ```powershell
+$env:KARMASHALA_PROBE = "1"
 $env:KARMASHALA_DATA_DIR = "$env:TEMP\ks-marionette-data"
 flutter run -d windows --debug          # prints the VM service URI
 & "$env:LOCALAPPDATA\Pub\Cache\bin\marionette.bat" --uri <ws://…/ws> get-interactive-elements
@@ -1284,3 +1285,103 @@ harnesses build once per isolate instead.
 
 The full reasoning, and what was measured, is in `docs/SETTLED.md` under *"The
 store became a package and the host stopped being one file"*.
+
+## 23. Probe mode — building Karmashala inside Karmashala
+
+Karmashala is developed from sessions running **inside** the installed app. To
+test a change you run a second copy beside it, and **that copy must be a
+probe.** An ordinary second instance is not isolated by `KARMASHALA_DATA_DIR`
+alone: on launch it rewrites the hook endpoint in `~/.claude`, `~/.codex`,
+`~/.gemini` and every WSL home with *its* port and token, so the real app's
+agents report their status to it; on quit it deletes those endpoint files; and
+its first settings pass deletes the real app's launch-at-login entry. That
+happened on 2026-09-21 (`Agent hooks: 6 installed … 3 reporting by spool` in a
+debug instance's log).
+
+**Every agent that runs a second instance of this app runs it as a probe.**
+Never run a bare `flutter run`, `debug_run.bat` without `-Fresh`, or a built
+exe beside the installed app.
+
+### Running one
+
+A release build (built by the usual route; do not install it):
+
+```powershell
+$env:KARMASHALA_PROBE = "1"
+$env:KARMASHALA_DATA_DIR = "$env:TEMP\karmashala-probe"
+& .\build\windows\x64\runner\Release\karmashala.exe
+```
+
+A debug build, from PowerShell with the Windows toolchain (§17):
+
+```powershell
+$env:KARMASHALA_PROBE = "1"
+$env:KARMASHALA_DATA_DIR = "$env:TEMP\karmashala-probe"
+C:\Users\<you>\flutter\bin\flutter.bat run -d windows --debug
+```
+
+or `tool\debug_run.bat -Fresh`, which sets both (data in `build\debug-data`).
+The variables are inherited by `flutter run`'s child and by every process the
+probe starts, which is what points an agent's MCP bridge inside the probe at
+the probe's handshake rather than the real app's. Delete the data folder for a
+clean slate; nothing else on the machine needs cleaning up after a probe.
+
+### The rules it is built to
+
+- **One switch, read once.** `KARMASHALA_PROBE` (`1`/`true`/`yes`/`on`) is read
+  into `ProbeMode.current` (`lib/src/core/probe/probe_mode.dart`) and handed to
+  the container as `probeModeProvider`; every guarded site asks that provider.
+- **A probe needs its own data folder, and is refused without one.**
+  `resolveDataDirectory` throws — shown on the bootstrap failure screen before
+  any file is opened — when `KARMASHALA_DATA_DIR` is unset, or when it names
+  the real folder. It does not invent a scratch folder: the bridge an agent in
+  the probe spawns finds its handshake through that variable, so a folder the
+  app chose itself would send those agents' tool calls to the real app.
+- **Unmistakable.** Window title `Karmashala — PROBE`, a red banner above every
+  route naming the data folder, and tray tooltip `Karmashala PROBE`.
+
+### What a probe does not do
+
+| Side effect | Where it is stopped |
+| --- | --- |
+| Hook scripts, config entries and endpoint files in every agent store (install, the WSL late re-sweep, retire on quit, uninstall) | `AgentHookInstallationService._forEachStore`, and `AppLifecycle.installAgentHooks` / the shutdown retirement step |
+| Draining the spool directories in agent stores | `AgentHookSpoolDrainer(enabled: false)` |
+| Skills in agent skill roots (install and removal) | `AgentSkillInstallationService._forEachStore`, `AppLifecycle.installAgentSkills` |
+| Launch at login (the shared `Karmashala` Run value) and the global launcher hotkey | `SystemIntegrationService.init` / `_reconcile` |
+| Remote access: LAN listener on 47653, the multicast beacon, the local relay on 8787, its `netsh` rule, relay dials, pairing | `RemoteAccessController._sync` / `beginPairing` |
+| OS toasts (the first rewrites the Start Menu shortcut toasts are delivered through) | `notificationPresenterProvider` |
+| The preferred control port 47821 | `LauncherControlServer.start` binds an ephemeral port |
+| The env-vault key in the per-user cache folder | `EnvVault.open` keeps a probe's key in `<data>/probe-key` |
+
+Already scoped and left alone: the database, logs, `mcp_bridge.json`, the
+`ipc/` socket (its long-path fallback is hashed per data folder), `mcp/`
+session configs, the vault, recordings and verification artifacts all live
+under the data folder. The tray icon and keep-awake are per process.
+Read-only work — environment discovery, CLI session import, the conversation
+index, agent path and version checks — still runs; it boots WSL distributions
+as the real app does.
+
+**Still acts on shared state when you ask it to**, because the point is to
+test these and each is an explicit action: switching a Claude/Codex account
+(writes the real credential files), renaming or deleting a CLI session (edits
+the real agent store), the browser pane (Chrome on the fixed CDP port 9222),
+devices (the shared adb server), and "Browse…" (prunes WSL rows from the
+shared file-dialog MRU in the registry).
+
+### What degrades
+
+- **Hook-based agent status.** Agents launched in the probe still fire the
+  hooks the *real* app installed, so their live status goes to the real app and
+  not to the probe; the probe falls back to its screen and state-file readers.
+  The real app sees payloads for sessions it has no row for, as it does for any
+  agent run outside it.
+- No OS toasts (the in-app inbox still fills), no launcher hotkey, no remote
+  access or pairing, no launch at login. The banner's tooltip lists them.
+- **Not yet measured:** whether the bridge a *WSL* session in the probe spawns
+  over interop inherits `KARMASHALA_DATA_DIR`. If it does not, that session's
+  Karmashala tools reach the real app. Check `list_sessions` from such a
+  session before relying on it. The switch-address `/mcp` listener, when it
+  binds, is on the probe's own ephemeral port.
+
+The tests are `test/core/probe/`. Each guarded seam has a non-probe twin that
+proves the fixture can observe the write, so a green run is not an empty one.

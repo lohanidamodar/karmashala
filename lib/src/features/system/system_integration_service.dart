@@ -12,6 +12,7 @@ import '../../app/shell/quick_open/quick_open.dart';
 import 'package:karmashala_core/logging.dart';
 import '../../core/lifecycle/app_lifecycle.dart';
 import '../../core/lifecycle/before_quit.dart';
+import '../../core/probe/probe_mode.dart';
 import '../notifications/application/attention_inbox.dart';
 import '../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
@@ -176,6 +177,12 @@ class SystemIntegrationService with TrayListener, WindowListener {
   static bool get isSupported =>
       !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
 
+  /// A probe registers nothing machine-wide: launch-at-login is one registry
+  /// value named `Karmashala`, shared with the real app, and so is the chord.
+  bool get _probe => _container.read(probeModeProvider).enabled;
+
+  String get _appLabel => _probe ? 'Karmashala PROBE' : 'Karmashala';
+
   Settings get _settings => _container.read(settingsControllerProvider);
   SettingsController get _controller =>
       _container.read(settingsControllerProvider.notifier);
@@ -185,17 +192,21 @@ class SystemIntegrationService with TrayListener, WindowListener {
   Future<void> init() async {
     if (!isSupported) return;
 
-    try {
-      _native.autoStart.setup(
-        appName: 'Karmashala',
-        appPath: Platform.resolvedExecutable,
-      );
-    } on Object catch (error, stack) {
-      _logger.warning(
-        'system: launch-at-startup setup failed reason=$error',
-        error,
-        stack,
-      );
+    if (_probe) {
+      _logger.info('system: probe — no launch-at-login, no global hotkey.');
+    } else {
+      try {
+        _native.autoStart.setup(
+          appName: 'Karmashala',
+          appPath: Platform.resolvedExecutable,
+        );
+      } on Object catch (error, stack) {
+        _logger.warning(
+          'system: launch-at-startup setup failed reason=$error',
+          error,
+          stack,
+        );
+      }
     }
 
     _native.window.addListener(this);
@@ -203,14 +214,16 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
     // Clear any stale system hotkeys left registered by a previous run/crash
     // before we register ours (recommended by hotkey_manager).
-    try {
-      await _native.hotkey.unregisterAll();
-    } on Object catch (error, stack) {
-      _logger.warning(
-        'system: clearing stale hotkeys failed reason=$error',
-        error,
-        stack,
-      );
+    if (!_probe) {
+      try {
+        await _native.hotkey.unregisterAll();
+      } on Object catch (error, stack) {
+        _logger.warning(
+          'system: clearing stale hotkeys failed reason=$error',
+          error,
+          stack,
+        );
+      }
     }
 
     // macOS routes Cmd+Q here rather than terminating, so the same ordered
@@ -219,7 +232,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
     _trayIconApplied = await _run(NativeSetting.trayIcon, () async {
       await _native.tray.setIcon(_kIdleTrayIcon);
-      await _native.tray.setToolTip('Karmashala');
+      await _native.tray.setToolTip(_appLabel);
     });
 
     await apply(_settings);
@@ -303,6 +316,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
         _appliedPreventClose = want;
       }
     }
+
+    // Never reconciled in a probe: a fresh probe database says "off", and
+    // applying that would delete the real app's launch-at-login entry.
+    if (_probe) return;
 
     if (_desiredAutoStart != _appliedAutoStart &&
         _hasBudget(NativeSetting.autoStart)) {
@@ -449,9 +466,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
   }
 
   String _toolTip(int count) => switch (count) {
-    0 => 'Karmashala',
-    1 => 'Karmashala — 1 thing needs you',
-    _ => 'Karmashala — $count things need you',
+    0 => _appLabel,
+    1 => '$_appLabel — 1 thing needs you',
+    _ => '$_appLabel — $count things need you',
   };
 
   Future<void> _refreshMenu(Settings settings) async {
@@ -506,7 +523,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
     final shown = _pending.take(_kMaxAttentionItems).toList();
     return [
       for (var i = 0; i < shown.length; i++)
-        TrayMenuItem(key: '$_kMenuAttentionPrefix$i', label: shown[i].menuLabel),
+        TrayMenuItem(
+          key: '$_kMenuAttentionPrefix$i',
+          label: shown[i].menuLabel,
+        ),
       if (_pending.length > shown.length)
         TrayMenuItem(
           key: 'attention_more',
