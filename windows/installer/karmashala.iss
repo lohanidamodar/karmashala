@@ -103,3 +103,93 @@ Filename: "{win}\explorer.exe"; Parameters: """{app}\{#MyAppExeName}"""; Descrip
 ; are exactly the litter an uninstall is for.
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""try {{ Remove-NetFirewallHyperVRule -Name 'Karmashala-WSL' -ErrorAction SilentlyContinue } catch {{ }"""; Flags: runhidden
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Karmashala"""; Flags: runhidden
+
+[UninstallDelete]
+Type: files; Name: "{app}\*.karmashala-old"
+Type: files; Name: "{app}\host\bin\*.karmashala-old"
+Type: files; Name: "{app}\host\lib\*.karmashala-old"
+
+[Code]
+// --- A session host that outlives the app --------------------------------
+// A detached `karmashala_host.exe serve` keeps its sessions across app
+// restarts on purpose, and every agent in one holds a `karmashala_mcp.exe`
+// bridge open. Windows will not overwrite or delete a running image
+// (measured 2026-09-22: sharing violation), so Restart Manager listed them
+// on the Preparing page and offered to close them — ending every session —
+// and "don't close" failed the copy. Windows does let a running image be
+// renamed, so they are moved aside here, which runs BEFORE the in-use check:
+// nothing holds the installed paths any more, the new files land, and the
+// running host carries on from the renamed copy until it is restarted. The
+// app notices it is an older build (LocalHostSessionAccess) and replaces it
+// once it holds no sessions. Put back if Setup ends without installing.
+var
+  MovedFrom: TArrayOfString;
+  MovedTo: TArrayOfString;
+  Installed: Boolean;
+
+procedure MoveAside(const Path: String);
+var
+  Aside: String;
+  N: Integer;
+begin
+  if not FileExists(Path) then
+    Exit;
+  Aside := Path + '.' + GetDateTimeString('yyyymmddhhnnss', #0, #0) + '.karmashala-old';
+  if RenameFile(Path, Aside) then
+  begin
+    N := GetArrayLength(MovedFrom);
+    SetArrayLength(MovedFrom, N + 1);
+    SetArrayLength(MovedTo, N + 1);
+    MovedFrom[N] := Path;
+    MovedTo[N] := Aside;
+  end
+  else
+    Log('Could not move aside ' + Path);
+end;
+
+// Deletes what nothing holds; a copy a running host still uses stays until
+// the next install or the uninstall.
+procedure SweepAside(const Directory: String);
+var
+  Found: TFindRec;
+begin
+  if FindFirst(Directory + '\*.karmashala-old', Found) then
+  try
+    repeat
+      DeleteFile(Directory + '\' + Found.Name);
+    until not FindNext(Found);
+  finally
+    FindClose(Found);
+  end;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  MoveAside(ExpandConstant('{app}\host\bin\karmashala_host.exe'));
+  MoveAside(ExpandConstant('{app}\host\lib\sqlite3.dll'));
+  MoveAside(ExpandConstant('{app}\karmashala_host.exe'));
+  MoveAside(ExpandConstant('{app}\karmashala_mcp.exe'));
+  Result := '';
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+  begin
+    Installed := True;
+    SweepAside(ExpandConstant('{app}'));
+    SweepAside(ExpandConstant('{app}\host\bin'));
+    SweepAside(ExpandConstant('{app}\host\lib'));
+  end;
+end;
+
+procedure DeinitializeSetup();
+var
+  I: Integer;
+begin
+  if Installed then
+    Exit;
+  for I := 0 to GetArrayLength(MovedFrom) - 1 do
+    if not FileExists(MovedFrom[I]) then
+      RenameFile(MovedTo[I], MovedFrom[I]);
+end;

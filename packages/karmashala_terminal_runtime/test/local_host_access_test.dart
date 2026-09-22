@@ -32,15 +32,37 @@ void main() {
     }
   });
 
-  /// A host listening on [paths], with no operating system behind its pty.
-  Future<UnixSocketHostListener> serve() async {
-    final registry = SessionRegistry(launcher: FakePtyLauncher());
-    final server = HostServer(registry: registry, ptyLibrary: 'fake');
+  /// The binary this app would start. Written once: its size and time are the
+  /// build a host is compared against, so rewriting it would change the build.
+  File anExecutable() {
+    final file = File('${home.path}/${LocalHostExecutable.fileName}');
+    if (!file.existsSync()) file.writeAsStringSync('not really a binary');
+    return file;
+  }
+
+  late SessionRegistry lastRegistry;
+  late FakePtyLauncher lastLauncher;
+
+  /// A host listening on [paths], with no operating system behind its pty —
+  /// of this app's own build unless [build] names another.
+  Future<UnixSocketHostListener> serve({String? build}) async {
+    final binary = anExecutable();
+    final launcher = lastLauncher = FakePtyLauncher();
+    final registry = lastRegistry = SessionRegistry(launcher: launcher);
+    final server = HostServer(
+      registry: registry,
+      ptyLibrary: 'fake',
+      build: build ?? hostBuildOf(binary.path),
+    );
     final listener = await UnixSocketHostListener.bind(paths.socketPath);
     final subscription = server.listen(listener);
     addTearDown(() async {
       await subscription.cancel();
       await listener.close();
+      // A fake child ignores a signal, so it is ended here rather than waited out.
+      for (final handle in launcher.handles) {
+        handle.finish(0);
+      }
       await registry.shutdown();
     });
     return listener;
@@ -66,12 +88,6 @@ void main() {
       }
       await server.close();
     });
-  }
-
-  File anExecutable() {
-    final file = File('${home.path}/${LocalHostExecutable.fileName}')
-      ..writeAsStringSync('not really a binary');
-    return file;
   }
 
   test(
@@ -385,6 +401,175 @@ void main() {
       expect(measuredAgain, isTrue);
     },
   );
+
+  group('a host an earlier app left running', () {
+    PtySpawnRequest shell() => const PtySpawnRequest(argv: ['cmd.exe']);
+
+    test('holding no sessions, it is stopped politely and replaced', () async {
+      final old = await serve(build: 'an-earlier-build');
+      final oldRegistry = lastRegistry;
+      final oldLauncher = lastLauncher;
+      final stops = <bool>[];
+      final access = LocalHostSessionAccess(
+        paths: paths,
+        executable: LocalHostExecutable(executableDirectory: home.path),
+        stopServe: (_, {required force}) async {
+          stops.add(force);
+          await old.close();
+          for (final handle in oldLauncher.handles) {
+            handle.finish(0);
+          }
+          await oldRegistry.shutdown();
+          return null;
+        },
+        startServe: (_) async {
+          await serve();
+          return _FakeProcess(
+            'karmashala_host serving on ${paths.socketPath}\n',
+          );
+        },
+      );
+
+      final reading = await access.deployment();
+      expect(
+        reading.status,
+        HostDeploymentStatus.ready,
+        reason: reading.reason,
+      );
+      expect(reading.hostOutdated, isFalse);
+      expect(reading.restartedByUs, isTrue);
+      expect(reading.reason, contains('Replaced an older session host'));
+      // Without --force: `stop` refuses by itself if a session opened since.
+      expect(stops, [false]);
+    });
+
+    test(
+      'holding a running session, it is left alone: that pane reattaches, a new one does not go in',
+      () async {
+        await serve(build: 'an-earlier-build');
+        lastRegistry.open('karmashala_local_p1', shell());
+        final access = LocalHostSessionAccess(
+          paths: paths,
+          executable: LocalHostExecutable(executableDirectory: home.path),
+          stopServe: (_, {required force}) async =>
+              throw StateError('a host with a running session was stopped'),
+          startServe: (_) async =>
+              throw StateError('a second host was started over a live one'),
+        );
+
+        final reading = await access.deployment();
+        expect(reading.status, HostDeploymentStatus.ready);
+        expect(reading.hostOutdated, isTrue);
+        expect(reading.liveSessionIds, ['karmashala_local_p1']);
+        expect(reading.reason, contains('1 running session(s)'));
+        expect(access.acceptsPane('karmashala_local_p1'), isTrue);
+        expect(access.acceptsPane('karmashala_local_p2'), isFalse);
+        // Asked again by the next pane, so the host is replaced once its
+        // sessions have ended rather than never.
+        expect(identical(await access.deployment(), reading), isFalse);
+      },
+    );
+
+    test('an ended session does not keep it running', () async {
+      final old = await serve(build: 'an-earlier-build');
+      final oldRegistry = lastRegistry;
+      final oldLauncher = lastLauncher;
+      oldRegistry.open('karmashala_local_p1', shell());
+      var stopped = false;
+      final access = LocalHostSessionAccess(
+        paths: paths,
+        executable: LocalHostExecutable(executableDirectory: home.path),
+        stopServe: (_, {required force}) async {
+          stopped = true;
+          await old.close();
+          for (final handle in oldLauncher.handles) {
+            handle.finish(0);
+          }
+          await oldRegistry.shutdown();
+          return null;
+        },
+        startServe: (_) async {
+          await serve();
+          return _FakeProcess(
+            'karmashala_host serving on ${paths.socketPath}\n',
+          );
+        },
+      );
+
+      expect((await access.deployment()).hostOutdated, isTrue);
+      expect(stopped, isFalse);
+      lastLauncher.handles.single.finish(0);
+      await oldRegistry.require('karmashala_local_p1').ended;
+
+      final next = await access.deployment();
+      expect(stopped, isTrue);
+      expect(next.hostOutdated, isFalse);
+      expect(access.acceptsPane('karmashala_local_p2'), isTrue);
+    });
+
+    test('observe says it is outdated and stops nothing', () async {
+      await serve(build: 'an-earlier-build');
+      final access = LocalHostSessionAccess(
+        paths: paths,
+        executable: LocalHostExecutable(executableDirectory: home.path),
+        stopServe: (_, {required force}) async =>
+            throw StateError('a status row must not stop a host'),
+        startServe: (_) async =>
+            throw StateError('a status row must not launch a daemon'),
+      );
+
+      final reading = await access.observe();
+      expect(reading.hostOutdated, isTrue);
+      expect(reading.liveSessionIds, isEmpty);
+      expect(access.lastReading?.hostOutdated, isTrue);
+    });
+
+    test('a host of this app\'s own build is not outdated', () async {
+      await serve();
+      final access = LocalHostSessionAccess(
+        paths: paths,
+        executable: LocalHostExecutable(executableDirectory: home.path),
+        stopServe: (_, {required force}) async =>
+            throw StateError('a current host was stopped'),
+      );
+      final reading = await access.deployment();
+      expect(reading.hostOutdated, isFalse);
+      expect(access.acceptsPane('anything'), isTrue);
+    });
+
+    test('a restart the person asked for passes force through', () async {
+      final old = await serve(build: 'an-earlier-build');
+      final oldRegistry = lastRegistry;
+      final oldLauncher = lastLauncher;
+      oldRegistry.open('karmashala_local_p1', shell());
+      final stops = <bool>[];
+      final access = LocalHostSessionAccess(
+        paths: paths,
+        executable: LocalHostExecutable(executableDirectory: home.path),
+        stopServe: (_, {required force}) async {
+          stops.add(force);
+          await old.close();
+          for (final handle in oldLauncher.handles) {
+            handle.finish(0);
+          }
+          await oldRegistry.shutdown();
+          return null;
+        },
+        startServe: (_) async {
+          await serve();
+          return _FakeProcess(
+            'karmashala_host serving on ${paths.socketPath}\n',
+          );
+        },
+      );
+
+      final reading = await access.restartHost(force: true);
+      expect(stops, [true]);
+      expect(reading.status, HostDeploymentStatus.ready);
+      expect(reading.hostOutdated, isFalse);
+      expect(reading.restartedByUs, isTrue);
+    });
+  });
 }
 
 /// A process that says what a test wants it to say. Not a real one on purpose:

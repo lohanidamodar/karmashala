@@ -119,6 +119,42 @@ void main() {
     );
   });
 
+  group('an outdated host an earlier app left running', () {
+    HostDeployment outdated(List<String> live) => HostDeployment(
+      status: HostDeploymentStatus.ready,
+      observedAt: DateTime.utc(2026, 9, 22),
+      reason: 'older',
+      remotePath: r'C:\Program Files\Karmashala\host\bin\karmashala_host.exe',
+      hostVersion: '0.1.0',
+      protocolVersion: kProtocolVersion,
+      hostOutdated: true,
+      liveSessionIds: live,
+    );
+
+    test('a new pane is not started in it, and says why', () async {
+      final access = PaneAccess(outdated(const ['karmashala_local_other']));
+      final pane = paneOn(access);
+      await settle();
+
+      expect(access.channels.single.all<OpenMessage>(), isEmpty);
+      final screen = screenOf(pane).replaceAll('\n', '');
+      expect(screen, contains('An older session host'));
+      expect(screen, contains('Reopen this pane to run it inside the app'));
+    });
+
+    test('a pane whose session it holds still reattaches', () async {
+      final access = PaneAccess(outdated(const ['karmashala_local_p1']));
+      access.liveSessions.add('karmashala_local_p1');
+      final pane = paneOn(access);
+      await settle();
+
+      expect(access.channels.single.all<AttachMessage>(), hasLength(1));
+      expect(access.channels.single.all<OpenMessage>(), isEmpty);
+      expect(pane.liveness.value, PaneLiveness.live);
+      expect(screenOf(pane), isNot(contains('An older session host')));
+    });
+  });
+
   test(
     'bytes from the host reach the buffer, and typing reaches the host',
     () async {

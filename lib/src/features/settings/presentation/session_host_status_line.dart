@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ssh/host.dart';
@@ -35,28 +36,66 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
     final available = ref.watch(localHostSessionAccessProvider) != null;
     if (!available) return const SizedBox.shrink();
 
+    final check = TextButton(
+      onPressed: () => ref.read(localHostStatusProvider.notifier).refresh(),
+      child: const Text('Check'),
+    );
     return Padding(
       padding: const EdgeInsets.only(top: Insets.xs, bottom: Insets.sm),
       child: SettingsNotice(
         tone: _toneFor(reading),
         icon: _iconFor(reading),
         message: sessionHostStatusText(reading),
-        action: TextButton(
-          onPressed: () => ref.read(localHostStatusProvider.notifier).refresh(),
-          child: const Text('Check'),
-        ),
+        action: reading?.hostOutdated ?? false
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    key: const ValueKey('session-host-restart'),
+                    onPressed: () => _restart(reading!),
+                    child: const Text('Restart'),
+                  ),
+                  check,
+                ],
+              )
+            : check,
       ),
     );
   }
 
+  /// Ends what the old host holds only when the person says so, by name.
+  Future<void> _restart(HostDeployment reading) async {
+    final held = reading.liveSessionIds;
+    final holdsSome = held == null || held.isNotEmpty;
+    if (holdsSome) {
+      final confirmed = await showConfirmDialog(
+        context,
+        title: 'Restart the session host?',
+        message: held == null
+            ? 'The running host would not say what it holds. Restarting it '
+                  'ends every session it is running.'
+            : 'This ends the ${held.length} session(s) it is running. Their '
+                  'panes keep what they showed, but the processes stop.',
+        confirmLabel: 'Restart',
+        destructive: true,
+      );
+      if (!confirmed || !mounted) return;
+    }
+    await ref.read(localHostStatusProvider.notifier).restart(force: holdsSome);
+  }
+
   IconData _iconFor(HostDeployment? reading) => switch (reading?.status) {
     null => AppIcons.question,
+    HostDeploymentStatus.ready when reading!.hostOutdated =>
+      AppIcons.warningCircle,
     HostDeploymentStatus.ready => AppIcons.checkCircle,
     _ => AppIcons.warningCircle,
   };
 
   SettingsNoticeTone _toneFor(HostDeployment? reading) =>
       switch (reading?.status) {
+        HostDeploymentStatus.ready when reading!.hostOutdated =>
+          SettingsNoticeTone.attention,
         HostDeploymentStatus.ready => SettingsNoticeTone.positive,
         null || HostDeploymentStatus.unknown => SettingsNoticeTone.neutral,
         _ => SettingsNoticeTone.danger,
@@ -72,6 +111,15 @@ String sessionHostStatusText(HostDeployment? reading, {DateTime? now}) {
   final started = reading.restartedByUs
       ? 'started by this app'
       : 'not started by this app';
+  if (reading.isReady && reading.hostOutdated) {
+    final held = reading.liveSessionIds;
+    final holds = held == null
+        ? 'it would not say how many sessions it holds'
+        : 'it holds ${held.length} running session(s)';
+    return 'An older session host, left by an earlier Karmashala, is running · '
+        '$holds, which keep working · new terminals run inside the app until '
+        'it is restarted · checked $age';
+  }
   return switch (reading.status) {
     HostDeploymentStatus.ready =>
       'karmashala_host ${reading.hostVersion ?? 'unknown version'} is running · '

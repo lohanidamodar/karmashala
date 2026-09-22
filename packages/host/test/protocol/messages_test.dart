@@ -175,6 +175,54 @@ void main() {
   });
 
   group('host to client', () {
+    WelcomeMessage welcome({String? build}) => WelcomeMessage(
+      requestId: 1,
+      protocolVersion: kProtocolVersion,
+      hostVersion: kHostVersion,
+      operatingSystem: 'windows',
+      architecture: 'x64',
+      ptyLibrary: 'kernel32',
+      pid: 4,
+      startedAt: t0,
+      observedAt: t0,
+      build: build,
+    );
+
+    test('welcome carries the build the host runs', () {
+      expect(
+        roundTrip(welcome(build: '8605696-1790000000000')).build,
+        '8605696-1790000000000',
+      );
+    });
+
+    test('a welcome from a host that predates builds reads as no build', () {
+      // What an older host sends: every field up to `observedAt`, then nothing.
+      final full = welcome(build: 'x').toFrame().payload;
+      final older = Frame(
+        MessageType.welcome,
+        0,
+        Uint8List.sublistView(full, 0, full.length - 4 - 1),
+      );
+      final decoded = WelcomeMessage.decode(older);
+      expect(decoded.build, isNull);
+      expect(decoded.hostVersion, kHostVersion);
+    });
+
+    test('an older app reading a newer welcome stops before the build', () {
+      final r = WireReader(welcome(build: 'b').toFrame().payload)
+        ..u32()
+        ..u32()
+        ..str()
+        ..str()
+        ..str()
+        ..str()
+        ..u32()
+        ..u64()
+        ..u64();
+      // No released decoder calls `expectEnd`, so these are left unread.
+      expect(r.remaining, greaterThan(0));
+    });
+
     test(
       'welcome reports what the host measured about itself, with an age',
       () {

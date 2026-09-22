@@ -4,3 +4,4 @@
 library;
 
 export 'src/serve/host_paths.dart';
+export 'src/serve/host_build.dart';

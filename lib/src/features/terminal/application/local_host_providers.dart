@@ -68,6 +68,19 @@ class LocalHostStatusController extends Notifier<HostDeployment?> {
       _busy = false;
     }
   }
+
+  /// Replaces the running host with this app's. [force] ends the sessions it
+  /// holds, so the caller asks the person first.
+  Future<void> restart({required bool force}) async {
+    final access = ref.read(localHostSessionAccessProvider);
+    if (access == null || _busy) return;
+    _busy = true;
+    try {
+      state = await access.restartHost(force: force);
+    } finally {
+      _busy = false;
+    }
+  }
 }
 
 final localHostStatusProvider =

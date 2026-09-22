@@ -1,4 +1,11 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
+import 'package:karmashala_host/host_paths.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala/src/features/settings/presentation/session_host_status_line.dart';
 import 'package:karmashala_ssh/host.dart';
 
@@ -54,6 +61,38 @@ void main() {
     },
   );
 
+  test('an outdated host says so, what it holds, and where new panes go', () {
+    final line = sessionHostStatusText(
+      HostDeployment(
+        status: HostDeploymentStatus.ready,
+        observedAt: DateTime.utc(2026, 9, 9, 11, 59),
+        reason: 'older',
+        hostVersion: '0.1.0',
+        hostOutdated: true,
+        liveSessionIds: const ['a', 'b'],
+      ),
+      now: now,
+    );
+    expect(line, contains('An older session host'));
+    expect(line, contains('2 running session(s)'));
+    expect(line, contains('new terminals run inside the app'));
+    expect(line, isNot(contains('0.1.0 is running')));
+    expect(line, contains('checked 1m ago'));
+  });
+
+  test('an outdated host that would not say what it holds says that', () {
+    final line = sessionHostStatusText(
+      HostDeployment(
+        status: HostDeploymentStatus.ready,
+        observedAt: now,
+        reason: 'older',
+        hostOutdated: true,
+      ),
+      now: now,
+    );
+    expect(line, contains('would not say how many sessions it holds'));
+  });
+
   test('nothing listening is "no host is running", with its age', () {
     final line = sessionHostStatusText(
       HostDeployment(
@@ -79,4 +118,101 @@ void main() {
     expect(line, startsWith('No karmashala_host.exe beside this app.'));
     expect(line, contains('checked 1d ago'));
   });
+
+  group('the restart button', () {
+    HostDeployment outdated(List<String> live) => HostDeployment(
+      status: HostDeploymentStatus.ready,
+      observedAt: DateTime.now(),
+      reason: 'older',
+      hostOutdated: true,
+      liveSessionIds: live,
+    );
+
+    Future<_FakeAccess> pumpLine(WidgetTester tester, HostDeployment r) async {
+      final access = _FakeAccess(r);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [localHostSessionAccessProvider.overrideWithValue(access)],
+          child: const MaterialApp(
+            home: Scaffold(body: SessionHostStatusLine()),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return access;
+    }
+
+    final restart = find.byKey(const ValueKey('session-host-restart'));
+    final confirm = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.text('Restart'),
+    );
+
+    testWidgets('is not offered for a current host', (tester) async {
+      await pumpLine(
+        tester,
+        HostDeployment(
+          status: HostDeploymentStatus.ready,
+          observedAt: DateTime.now(),
+          reason: 'current',
+        ),
+      );
+      expect(restart, findsNothing);
+      expect(find.text('Check'), findsOneWidget);
+    });
+
+    testWidgets('ends running sessions only after the person confirms', (
+      tester,
+    ) async {
+      final access = await pumpLine(tester, outdated(const ['a', 'b']));
+      await tester.tap(restart);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('ends the 2 session(s)'), findsOneWidget);
+      expect(access.restarts, isEmpty, reason: 'nothing before the answer');
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(access.restarts, isEmpty);
+
+      await tester.tap(restart);
+      await tester.pumpAndSettle();
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      expect(access.restarts, [true]);
+      expect(restart, findsNothing, reason: 'the new host is current');
+    });
+
+    testWidgets('replaces a host holding nothing without asking or force', (
+      tester,
+    ) async {
+      final access = await pumpLine(tester, outdated(const []));
+      await tester.tap(restart);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(access.restarts, [false]);
+    });
+  });
+}
+
+/// Answers the readings a test chooses; starts and stops nothing.
+class _FakeAccess extends LocalHostSessionAccess {
+  _FakeAccess(this.reading)
+    : super(paths: HostPaths(Directory.systemTemp.createTempSync('ks-status')));
+
+  HostDeployment reading;
+  final restarts = <bool>[];
+
+  @override
+  Future<HostDeployment> observe() async => reading;
+
+  @override
+  Future<HostDeployment> restartHost({required bool force}) async {
+    restarts.add(force);
+    return reading = HostDeployment(
+      status: HostDeploymentStatus.ready,
+      observedAt: DateTime.now(),
+      reason: 'replaced',
+      restartedByUs: true,
+    );
+  }
 }

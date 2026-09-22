@@ -286,11 +286,17 @@ class WelcomeMessage extends HostMessage {
     required this.pid,
     required this.startedAt,
     required this.observedAt,
+    this.build,
   });
 
   final int requestId;
   final int protocolVersion;
   final String hostVersion;
+
+  /// Which build of the host this is (`hostBuildOf`), trailing and optional:
+  /// an older app stops reading before it, and an older host sends none, which
+  /// reads as null — a host from before builds were told apart.
+  final String? build;
   final String operatingSystem;
   final String architecture;
 
@@ -315,22 +321,37 @@ class WelcomeMessage extends HostMessage {
       ..str(ptyLibrary)
       ..u32(pid)
       ..u64(startedAt.microsecondsSinceEpoch)
-      ..u64(observedAt.microsecondsSinceEpoch);
+      ..u64(observedAt.microsecondsSinceEpoch)
+      ..str(build ?? '');
     return Frame(MessageType.welcome, 0, w.take());
   }
 
   static WelcomeMessage decode(Frame frame) {
     final r = WireReader(frame.payload);
+    final requestId = r.u32();
+    final protocolVersion = r.u32();
+    final hostVersion = r.str();
+    final operatingSystem = r.str();
+    final architecture = r.str();
+    final ptyLibrary = r.str();
+    final pid = r.u32();
+    final startedAt = DateTime.fromMicrosecondsSinceEpoch(r.u64(), isUtc: true);
+    final observedAt = DateTime.fromMicrosecondsSinceEpoch(
+      r.u64(),
+      isUtc: true,
+    );
+    final build = r.remaining > 0 ? r.str() : '';
     return WelcomeMessage(
-      requestId: r.u32(),
-      protocolVersion: r.u32(),
-      hostVersion: r.str(),
-      operatingSystem: r.str(),
-      architecture: r.str(),
-      ptyLibrary: r.str(),
-      pid: r.u32(),
-      startedAt: DateTime.fromMicrosecondsSinceEpoch(r.u64(), isUtc: true),
-      observedAt: DateTime.fromMicrosecondsSinceEpoch(r.u64(), isUtc: true),
+      requestId: requestId,
+      protocolVersion: protocolVersion,
+      hostVersion: hostVersion,
+      operatingSystem: operatingSystem,
+      architecture: architecture,
+      ptyLibrary: ptyLibrary,
+      pid: pid,
+      startedAt: startedAt,
+      observedAt: observedAt,
+      build: build.isEmpty ? null : build,
     );
   }
 }

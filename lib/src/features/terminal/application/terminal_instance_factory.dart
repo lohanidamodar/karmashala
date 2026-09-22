@@ -64,7 +64,15 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
         final hostAccess = ref.read(hostBackedLocalPanesProvider)
             ? ref.read(localHostSessionAccessProvider)
             : null;
-        if (hostAccess != null) {
+        // An older host an earlier app left running keeps its own sessions; a
+        // new pane runs in the app rather than with that build's behaviour.
+        if (hostAccess != null &&
+            hostAccess.acceptsPane(
+              hostSessionIdFor(
+                paneId: id,
+                agentSessionId: agentLaunch?.sessionId,
+              ),
+            )) {
           return createHostTerminalInstance(
             id: id,
             profile: profile,

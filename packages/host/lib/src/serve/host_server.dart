@@ -21,6 +21,7 @@ class HostServer {
     DateTime Function()? clock,
     this.hostVersion = kHostVersion,
     this.openPairing,
+    this.build,
   }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)();
 
@@ -38,6 +39,10 @@ class HostServer {
   )?
   openPairing;
   final String hostVersion;
+
+  /// This executable's `hostBuildOf`, read once at start, so a binary
+  /// replaced under a running `serve` still reports the build it runs.
+  final String? build;
   final DateTime Function() _now;
   final DateTime startedAt;
 
@@ -321,6 +326,7 @@ class _ClientSession {
         pid: pid,
         startedAt: _server.startedAt,
         observedAt: _server.now(),
+        build: _server.build,
       ),
     );
   }

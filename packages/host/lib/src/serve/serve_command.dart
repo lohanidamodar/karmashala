@@ -12,6 +12,7 @@ import '../pty/pty.dart';
 import '../pty/pty_platform.dart';
 import '../transport/socket_transport.dart';
 import 'package:karmashala_local_ipc/socket_location.dart';
+import 'host_build.dart';
 import 'host_paths.dart';
 import 'host_server.dart';
 import 'session_store.dart';
@@ -107,6 +108,7 @@ Future<int> runServe(List<String> args, {IOSink? out, IOSink? err}) async {
     registry: registry,
     ptyLibrary: pty.library,
     openPairing: companion?.openPairing,
+    build: hostBuildOf(Platform.resolvedExecutable),
   );
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);

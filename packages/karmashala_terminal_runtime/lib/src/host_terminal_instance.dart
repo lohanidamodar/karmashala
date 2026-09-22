@@ -339,7 +339,13 @@ class HostTerminalInstance
       }
       _link = link;
 
-      final attachment = await _attachOrOpen(link, width, height, resumeFrom);
+      final attachment = await _attachOrOpen(
+        link,
+        width,
+        height,
+        resumeFrom,
+        deployment,
+      );
       // Read now, not from `width`: the layout can land while the attach is out.
       link.matchGrid(attachment, terminal.viewWidth, terminal.viewHeight);
       if (_resumed && _hasStoredHistory && attachment.totalBytes > 0) {
@@ -388,6 +394,7 @@ class HostTerminalInstance
     int width,
     int height,
     int sinceOffset,
+    HostDeployment deployment,
   ) async {
     final sessionId = hostSessionId;
     try {
@@ -401,6 +408,11 @@ class HostTerminalInstance
       // Only the host saying there is no such session earns an open. A timeout
       // or any other refusal may mean the session is there and alive.
       if (e.code != ProtocolErrorCode.unknownSession) rethrow;
+    }
+    // An older host still serves the sessions it holds, but a new one started
+    // in it would run with that build's behaviour.
+    if (deployment.hostOutdated) {
+      throw const HostLinkException(outdatedHostRefusal);
     }
     try {
       return await link.openSession(
@@ -588,3 +600,11 @@ String withholdingRefusal(Set<String> names, String hostSaid) =>
     '${(names.toList()..sort()).join(', ')} out of a pane, so nothing was '
     'started. Restart the session host from Settings › Terminal, then reopen '
     'this pane. (The host said: $hostSaid)';
+
+/// Why a new pane did not start in an outdated host.
+const String outdatedHostRefusal =
+    'An older session host, started by an earlier Karmashala, is still '
+    'running the sessions it holds, so this pane was not started in it: it '
+    'would have run with that version\'s behaviour. Reopen this pane to run it '
+    'inside the app, or restart the session host from Settings › Terminal '
+    '(that ends the sessions it holds).';

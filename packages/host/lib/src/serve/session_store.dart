@@ -117,7 +117,8 @@ class SessionStore implements SessionBacklogStore {
               entry.key as String: entry.value as String,
           },
           removedEnvironment: {
-            for (final name in (meta['removedEnvironment'] as List?) ?? const [])
+            for (final name
+                in (meta['removedEnvironment'] as List?) ?? const [])
               name as String,
           },
           columns: (meta['columns'] as num).toInt(),

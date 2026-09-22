@@ -83,6 +83,8 @@ class HostDeployment {
     this.restartedByUs = false,
     this.availableTargets = const [],
     this.privileged,
+    this.hostOutdated = false,
+    this.liveSessionIds,
   });
 
   factory HostDeployment.unknown(String reason, DateTime observedAt) =>
@@ -114,6 +116,15 @@ class HostDeployment {
   /// A step only root can take before this deploy can succeed — a missing
   /// `tar`, say — for a terminal on the machine. Never run from here.
   final PrivilegedCommand? privileged;
+
+  /// The running host is not the build this app ships — an earlier app
+  /// started it — and it was left running because it holds [liveSessionIds].
+  /// It still serves those; a new pane must not start in it.
+  final bool hostOutdated;
+
+  /// The sessions still running in an outdated host, by id. Null when it
+  /// would not say, which must be treated as holding some.
+  final List<String>? liveSessionIds;
 
   bool get isReady => status == HostDeploymentStatus.ready;
 

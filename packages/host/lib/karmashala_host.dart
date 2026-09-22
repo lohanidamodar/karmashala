@@ -28,3 +28,4 @@ export 'src/companion/sealed_link.dart';
 export 'src/store/store_probe.dart';
 export 'src/transport/socket_transport.dart';
 export 'src/transport/transport.dart';
+export 'src/serve/host_build.dart';
