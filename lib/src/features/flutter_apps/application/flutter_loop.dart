@@ -13,6 +13,8 @@ import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
+import 'package:karmashala_terminal_runtime/instances.dart'
+    show TerminalOutputListeners;
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_flutter_apps/flutter_apps.dart';
@@ -467,8 +469,9 @@ class FlutterLoopController extends Notifier<List<FlutterCommandRun>> {
       unawaited(_attachTo(current, uri));
     }
 
-    instance.terminal.addListener(onPainted);
-    _watchers[run.paneId] = () => instance.terminal.removeListener(onPainted);
+    instance.terminal.addOutputListener(onPainted);
+    _watchers[run.paneId] = () =>
+        instance.terminal.removeOutputListener(onPainted);
   }
 
   void _detachWatcher(String paneId) => _watchers.remove(paneId)?.call();

@@ -132,7 +132,7 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     if (instance is! DormantTerminalInstance) {
       void markDirty() => _markDirty(paneId);
       _dirtyListeners[paneId] = markDirty;
-      instance.terminal.addListener(markDirty);
+      instance.terminal.addOutputListener(markDirty);
     }
     // Republish on exit so the pane, its tab and the background-session list
     // stop presenting it as live. One rebuild per death, not per frame.
@@ -288,7 +288,7 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     }
     _oscTitles.remove(paneId);
     final dirty = _dirtyListeners.remove(paneId);
-    if (dirty != null) instance.terminal.removeListener(dirty);
+    if (dirty != null) instance.terminal.removeOutputListener(dirty);
     final liveness = _livenessListeners.remove(paneId);
     if (liveness != null) instance.liveness.removeListener(liveness);
     final directory = _directoryListeners.remove(paneId);

@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
+import 'pane_terminal.dart' show TerminalViewGate, terminalViewGate;
 import 'terminal_ingest_budget.dart';
 
 /// Most bytes decoded and handed to the terminal in a single flush. Anything
@@ -44,6 +45,7 @@ class PtyOutputCoalescer {
     WatchdogCanceller? cancelWatchdog,
     MonotonicClock? monotonicClock,
     TerminalIngestBudget? budget,
+    TerminalViewGate? viewGate,
     IngestTier tier = IngestTier.hot,
     this.maxFlushBytes = kMaxFlushBytes,
     this.maxPendingBytes = kMaxPendingBytes,
@@ -51,6 +53,7 @@ class PtyOutputCoalescer {
     this.hiddenWatchdogDelay = kHiddenCoalescerWatchdog,
     this.idleThreshold = kCoalescerIdleThreshold,
   }) : _budget = budget ?? terminalIngestBudget,
+       _viewGate = viewGate ?? terminalViewGate,
        // The field is private and has a setter that does work, so there is no
        // initialising formal to use here.
        // ignore: prefer_initializing_formals
@@ -88,6 +91,11 @@ class PtyOutputCoalescer {
 
   /// The frame budget every pane shares. See [TerminalIngestBudget].
   final TerminalIngestBudget _budget;
+
+  /// While suspended no frame is coming for this output, so only the watchdog
+  /// drains it; a post-frame callback would wait, piling up, until the window
+  /// is shown.
+  final TerminalViewGate _viewGate;
 
   IngestTier _tier;
 
@@ -184,7 +192,7 @@ class PtyOutputCoalescer {
     // A visible terminal already schedules frames, so the post-frame callback
     // lands this output in the frame it would have appeared in anyway; a hidden
     // one produces none, so the watchdog drains it. First to fire wins.
-    _scheduleFrameCallback(flush);
+    if (!_viewGate.isSuspended) _scheduleFrameCallback(flush);
     _watchdogHandle = _scheduleWatchdog(
       _tier == IngestTier.hot ? watchdogDelay : hiddenWatchdogDelay,
       flush,

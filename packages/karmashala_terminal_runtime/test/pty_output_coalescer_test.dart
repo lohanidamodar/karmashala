@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:karmashala_terminal_runtime/ingest.dart';
+import 'package:karmashala_terminal_runtime/instances.dart'
+    show TerminalViewGate;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,6 +12,7 @@ class _Harness {
   _Harness({
     int maxFlushBytes = kMaxFlushBytes,
     Duration idleThreshold = kCoalescerIdleThreshold,
+    TerminalViewGate? viewGate,
   }) {
     coalescer = PtyOutputCoalescer(
       onData: writes.add,
@@ -23,6 +26,7 @@ class _Harness {
       maxFlushBytes: maxFlushBytes,
       idleThreshold: idleThreshold,
       monotonicClock: () => now,
+      viewGate: viewGate ?? TerminalViewGate(),
     );
   }
 
@@ -55,6 +59,25 @@ class _Harness {
 }
 
 void main() {
+  test('while the views are suspended only the watchdog is armed', () {
+    final gate = TerminalViewGate()..suspend();
+    final harness = _Harness(viewGate: gate);
+    for (var i = 0; i < 100; i++) {
+      harness.coalescer.add(utf8.encode('chunk$i '));
+    }
+    expect(
+      harness.frameCallbacks,
+      isEmpty,
+      reason: 'no frame is coming; a callback would wait for the window',
+    );
+    harness.fireWatchdogs();
+    expect(harness.writes.join(), endsWith('chunk99 '));
+
+    gate.resume();
+    harness.coalescer.add(utf8.encode('shown'));
+    expect(harness.frameCallbacks, hasLength(1));
+  });
+
   test('coalesces many chunks into a single write per frame', () {
     final harness = _Harness();
     for (var i = 0; i < 100; i++) {

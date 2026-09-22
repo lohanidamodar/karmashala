@@ -8,6 +8,8 @@ import 'package:flutter/widgets.dart' show Size;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 
+import 'package:karmashala_terminal_runtime/instances.dart'
+    show TerminalViewGate;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fake_native_adapters.dart';
@@ -30,6 +32,7 @@ void main() {
   late FakeNatives natives;
   late SystemIntegrationService service;
   late List<String> quitCalls;
+  late TerminalViewGate terminalViews;
 
   SettingsController settings() =>
       container.read(settingsControllerProvider.notifier);
@@ -44,6 +47,7 @@ void main() {
       container,
       adapters: natives.adapters,
       onQuitRequested: () async => quitCalls.add('shutdown'),
+      terminalViews: terminalViews,
     );
     await service.init();
   }
@@ -55,6 +59,7 @@ void main() {
     );
     natives = FakeNatives();
     quitCalls = [];
+    terminalViews = TerminalViewGate();
   });
 
   tearDown(() {
@@ -493,6 +498,41 @@ void main() {
       await pumpEventQueue();
 
       expect(container.read(settingsControllerProvider).windowWidth, isNull);
+    });
+  });
+
+  group('terminal views', () {
+    test(
+      'are suspended while minimized, and a focus meanwhile keeps them so',
+      () async {
+        await build();
+        expect(terminalViews.isSuspended, isFalse);
+
+        service.onWindowEvent('minimize');
+        expect(terminalViews.isSuspended, isTrue);
+        service.onWindowEvent('focus');
+        service.onWindowEvent('blur');
+        expect(terminalViews.isSuspended, isTrue);
+
+        service.onWindowEvent('restore');
+        expect(terminalViews.isSuspended, isFalse);
+
+        service.onWindowEvent('minimize');
+        service.onWindowEvent('maximize');
+        expect(terminalViews.isSuspended, isFalse);
+      },
+    );
+
+    test('are suspended while hidden to the tray', () async {
+      await build();
+      service.onWindowEvent('hide');
+      expect(terminalViews.isSuspended, isTrue);
+      service.onWindowEvent('show');
+      expect(terminalViews.isSuspended, isFalse);
+
+      service.onWindowEvent('hide');
+      await service.dispose();
+      expect(terminalViews.isSuspended, isFalse, reason: 'never left shut');
     });
   });
 }

@@ -17,6 +17,8 @@ import '../notifications/application/attention_inbox.dart';
 import '../notifications/application/notification_providers.dart';
 import 'package:karmashala_notifications/attention.dart';
 import 'package:karmashala_notifications/policy.dart';
+import 'package:karmashala_terminal_runtime/instances.dart'
+    show TerminalViewGate, terminalViewGate;
 import '../settings/application/settings_controller.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
 import '../settings/domain/settings.dart';
@@ -108,7 +110,9 @@ class SystemIntegrationService with TrayListener, WindowListener {
     Future<void> Function()? onQuitRequested,
     OsQuitRegistrar? registerOsQuit,
     void Function()? endProcess,
+    TerminalViewGate? terminalViews,
   }) : _native = adapters ?? NativeAdapters.platform(),
+       _terminalViews = terminalViews ?? terminalViewGate,
        _logger = logger ?? AppLogger.named('system'),
        _onQuitRequested = onQuitRequested ?? _noShutdown,
        _registerOsQuit = registerOsQuit ?? registerOsQuitOverChannel,
@@ -127,6 +131,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
 
   final ProviderContainer _container;
   final NativeAdapters _native;
+  final TerminalViewGate _terminalViews;
   final AppLogger _logger;
 
   /// Runs before the window is destroyed, so the lifecycle owner can shut the
@@ -141,6 +146,10 @@ class SystemIntegrationService with TrayListener, WindowListener {
   /// is a window the user cannot get back — stock GNOME, or Wayland.
   bool _trayIconApplied = false;
   bool _disposed = false;
+
+  /// What the window events last said; either one suspends [_terminalViews].
+  bool _minimized = false;
+  bool _hiddenToTray = false;
 
   /// Set the moment quitting begins, and never cleared. Quitting is re-entrant
   /// on macOS, and the two passes bounce off each other forever without this.
@@ -670,6 +679,7 @@ class SystemIntegrationService with TrayListener, WindowListener {
   Future<void> dispose() async {
     if (_disposed) return;
     _disposed = true;
+    _terminalViews.resume();
     if (!isSupported) return;
 
     try {
@@ -758,6 +768,34 @@ class SystemIntegrationService with TrayListener, WindowListener {
       unawaited(_native.window.hide());
     } else {
       unawaited(_quit());
+    }
+  }
+
+  /// Terminals stop repainting while nobody can see them. Flutter reports only
+  /// `inactive` when minimized here, so the window events decide. A focus while
+  /// minimized reopens nothing.
+  @override
+  void onWindowEvent(String eventName) {
+    switch (eventName) {
+      case kWindowEventMinimize:
+        _minimized = true;
+      case kWindowEventRestore ||
+          kWindowEventMaximize ||
+          kWindowEventUnmaximize:
+        _minimized = false;
+      case 'hide':
+        _hiddenToTray = true;
+      case 'show':
+        _hiddenToTray = false;
+      case kWindowEventFocus when !_minimized:
+        _hiddenToTray = false;
+      default:
+        return;
+    }
+    if (_minimized || _hiddenToTray) {
+      _terminalViews.suspend();
+    } else {
+      _terminalViews.resume();
     }
   }
 
