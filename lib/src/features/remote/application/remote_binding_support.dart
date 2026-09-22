@@ -67,15 +67,21 @@ final remoteFolderMissingProvider =
 
 /// The branch at a directory **only if the desktop already measured it**: the
 /// cached stat, never a git of our own. Null means "not measured yet".
+///
+/// The `exists` check is what makes that true. `checkoutStatProvider` is
+/// `autoDispose`, and reading one nothing is holding **creates it and runs its
+/// body** — a `git status` — before answering `AsyncLoading`, which reads here
+/// as "not measured yet". So the answer was always null and the measurement
+/// was always started, once per checkout per call, and the remote session list
+/// calls this per session on every sweep. `remoteDeliveryStageProvider` guards
+/// its own lookup exactly this way.
 final remoteCheckoutBranchProvider =
     Provider<String? Function(EnvironmentPath path)>((ref) {
       return (path) {
         try {
-          return ref
-              .read(checkoutStatProvider(Checkout(path)))
-              .asData
-              ?.value
-              .branch;
+          final provider = checkoutStatProvider(Checkout(path));
+          if (!ref.exists(provider)) return null;
+          return ref.read(provider).asData?.value.branch;
         } on Object {
           return null;
         }
