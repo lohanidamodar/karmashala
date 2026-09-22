@@ -58,6 +58,7 @@ class HostTerminalInstance
     String? restoredScrollback,
     TerminalIngestBudget? ingestBudget,
     AppLogger? logger,
+    bool shellIntegration = false,
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
        _cwd = WorkingDirectoryTracker(workingDirectory) {
     terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
@@ -66,6 +67,10 @@ class HostTerminalInstance
       ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);
 
     _osc.add(_cwd.handleOsc);
+    // Before any byte arrives, as on the PTY path, so no marker is missed.
+    if (shellIntegration) {
+      commandBlocks = CommandBlockRecorder(terminal)..attach(_osc);
+    }
 
     if (adoptTerminal == null) {
       _hasStoredHistory =
@@ -130,9 +135,9 @@ class HostTerminalInstance
   @override
   final ScrollController scrollController = ScrollController();
 
-  /// Null, always: OSC 133 markers come from a shell's prompt hooks and the
-  /// host path does not install them, which is what makes `terminal_run` refuse
-  /// to claim an exit code for a command in this pane.
+  /// The OSC 133 blocks, when the pane was launched with shell integration —
+  /// the same bootstrap the PTY path uses, handed to the host. Null otherwise,
+  /// which is what makes `terminal_run` refuse to claim an exit code here.
   @override
   CommandBlockRecorder? commandBlocks;
 
@@ -237,6 +242,49 @@ class HostTerminalInstance
     _coalescer.add(uint8);
   }
 
+  /// The absolute offset a reattach's replay ends at while its bytes are still
+  /// arriving, and null once the pane is live. See [_onLinkBytes].
+  int? _replayEndsAt;
+  int _receivedOffset = 0;
+
+  /// The link's bytes, with the end of a reattach's replay marked in the
+  /// ingest itself: the recorder reads the replay for state only, and the mark
+  /// has to reach it in order with the bytes however the ingest batches them.
+  void _onLinkBytes(Uint8List bytes) {
+    final end = _replayEndsAt;
+    if (end == null) {
+      _onDataBytes(bytes);
+      return;
+    }
+    final remaining = end - _receivedOffset;
+    if (bytes.length < remaining) {
+      _receivedOffset += bytes.length;
+      _onDataBytes(bytes);
+      return;
+    }
+    if (remaining > 0) _onDataBytes(Uint8List.sublistView(bytes, 0, remaining));
+    _markReplayEnd();
+    if (bytes.length > remaining) {
+      _onDataBytes(Uint8List.sublistView(bytes, remaining));
+    }
+  }
+
+  /// Through the same queue as the process's bytes — never straight into the
+  /// terminal, which would overtake whatever the coalescer still holds — and
+  /// never into a recording, since the process did not write it.
+  void _markReplayEnd() {
+    _replayEndsAt = null;
+    if (_disposed) return;
+    final mark = Uint8List.fromList(
+      utf8.encode(CommandBlockRecorder.replayEndSequence),
+    );
+    if (_tier == IngestTier.cold) {
+      _cold.add(mark);
+    } else {
+      _coalescer.add(mark);
+    }
+  }
+
   void _emit(String text) {
     _recorder?.addText(text);
     if (_tier == IngestTier.cold) {
@@ -306,7 +354,21 @@ class HostTerminalInstance
         'far]\x1b[0m\r\n',
       );
 
-      _output = link.output.listen(_onDataBytes, onDone: _onLinkClosed);
+      // A session found rather than opened replays output no pane watched: its
+      // markers say where the shell is now, but its blocks would carry this
+      // moment's timestamps, so they are read for state only.
+      final recorder = commandBlocks;
+      if (_resumed && recorder != null) {
+        recorder.beginReplay();
+        if (attachment.totalBytes > attachment.replayFromOffset) {
+          _replayEndsAt = attachment.totalBytes;
+          _receivedOffset = attachment.replayFromOffset;
+        } else {
+          _markReplayEnd();
+        }
+      }
+
+      _output = link.output.listen(_onLinkBytes, onDone: _onLinkClosed);
       _notices = link.notices.listen(
         (n) => _emit('\r\n\x1b[33m[$n]\x1b[0m\r\n'),
       );
@@ -341,7 +403,9 @@ class HostTerminalInstance
       if (e.code != ProtocolErrorCode.unknownSession) rethrow;
       return link.openSession(
         sessionId: sessionId,
-        argv: [launch.executable, ...launch.arguments],
+        // The host starts argv[0] once and quotes by CommandLineToArgvW rules,
+        // so a WSL launch goes without the `cmd.exe /c` flutter_pty needs.
+        argv: launch.hostArgv,
         workingDirectory: launch.workingDirectory ?? workingDirectory,
         environment: {'TERM': 'xterm-256color', ...launch.environment},
         columns: width,
@@ -365,6 +429,9 @@ class HostTerminalInstance
   void _onLinkClosed() {
     _lastOffset = _link?.lastOffset ?? _lastOffset;
     _link = null;
+    // A replay cut short still ends: a recorder left reading for state only
+    // would ignore every marker after it.
+    if (_replayEndsAt != null) _markReplayEnd();
     if (_disposed || _exited) return;
     // The link went away, not the session. There is no reconnect event on a
     // local socket, so the honest thing is to say what happened and what
@@ -434,7 +501,8 @@ class HostTerminalInstance
 }
 
 /// Builds the launch for [profile] and hands it to the session host: the same
-/// command line, minus shell integration, which nothing here has measured.
+/// command line the PTY path builds, shell integration included, decided by
+/// the same [shellIntegrationApplies] — so an agent pane never gets it.
 TerminalInstance createHostTerminalInstance({
   required String id,
   required TerminalProfile profile,
@@ -444,10 +512,16 @@ TerminalInstance createHostTerminalInstance({
   AgentPaneLaunch? agentLaunch,
   Terminal? adoptTerminal,
   Map<String, String> environmentOverlay = const {},
+  bool shellIntegration = false,
 }) {
   final PtyLaunch launch;
   final String title;
   final String profileId;
+  final integrate = shellIntegrationApplies(
+    profile: profile,
+    shellIntegration: shellIntegration,
+    agentLaunch: agentLaunch,
+  );
   if (agentLaunch != null) {
     launch = agentPtyLaunchFor(
       agentLaunch,
@@ -468,6 +542,7 @@ TerminalInstance createHostTerminalInstance({
         posixShell: Platform.environment['SHELL'],
       ),
       workingDirectory: workingDirectory,
+      shellIntegration: integrate,
       environment: environmentOverlay,
     );
     title = profile.label;
@@ -484,5 +559,8 @@ TerminalInstance createHostTerminalInstance({
     agentLaunch: agentLaunch,
     adoptTerminal: adoptTerminal,
     restoredScrollback: restoredScrollback,
+    // Windows only, as on the PTY path: elsewhere the launch carries no
+    // bootstrap, so there would be no markers to record.
+    shellIntegration: integrate && Platform.isWindows,
   );
 }

@@ -44,13 +44,65 @@ class CommandBlockRecorder {
   /// through the pane's [OscRouter], since that slot is single-occupancy.
   void attach(OscRouter router) => router.add(handleOsc);
 
+  /// Written into the pane's own ingest where a reattach's replay ends, so the
+  /// boundary reaches this recorder in order with the bytes around it however
+  /// the ingest batches, parks or delays them. Never sent to the process; an
+  /// OSC 133 sub-code no shell emits, which every other reader ignores.
+  static const String replayEndSequence = '\x1b]133;karmashala-replay-end\x07';
+  static const String _replayEndArgument = 'karmashala-replay-end';
+
+  bool _replaying = false;
+  ShellMarker? _replayLast;
+  CellAnchorLineRef? _replayPrompt;
+  CellAnchorLineRef? _replayInput;
+  CellAnchorLineRef? _replayOutput;
+
+  /// Whether markers are being read for state only — see [beginReplay].
+  bool get isReplaying => _replaying;
+
+  /// Starts reading a reattached session's replay **for state, not blocks**.
+  ///
+  /// The replay is output the session produced while no pane watched it, so
+  /// every block made from it would be stamped with the reattach's time and a
+  /// zero duration, and one begun before the replay window would lose its
+  /// start. So its markers only decide where the shell is when the replay ends
+  /// — at a prompt, or running a command — and [endReplay] hands that on.
+  void beginReplay() {
+    _replaying = true;
+    _replayLast = null;
+    _replayPrompt = _replayInput = _replayOutput = null;
+  }
+
+  /// Ends the replay and resumes live tracking from the state it left.
+  void endReplay() {
+    if (!_replaying) return;
+    _replaying = false;
+    tracker.resume(
+      last: _replayLast,
+      prompt: _replayPrompt,
+      input: _replayInput,
+      output: _replayOutput,
+    );
+    // The command about to be typed is read back from here when its C comes.
+    _inputRef = _replayLast == ShellMarker.commandStart ? _replayInput : null;
+    _replayPrompt = _replayInput = _replayOutput = null;
+  }
+
   /// Handles one OSC dispatched by xterm. Anything that is not an OSC 133
   /// command boundary is ignored.
   void handleOsc(String code, List<String> args) {
+    if (code == '133' && args.isNotEmpty && args.first == _replayEndArgument) {
+      endReplay();
+      return;
+    }
     final marker = shellMarkerFromOsc(code, args);
     if (marker == null) return;
 
     final ref = CellAnchorLineRef(terminal.buffer.createAnchorFromCursor());
+    if (_replaying) {
+      _noteReplayed(marker, ref);
+      return;
+    }
     if (marker == ShellMarker.commandStart) _inputRef = ref;
 
     tracker.onMarker(
@@ -63,6 +115,21 @@ class CommandBlockRecorder {
 
     if (marker == ShellMarker.commandEnd || marker == ShellMarker.promptStart) {
       _inputRef = null;
+    }
+  }
+
+  void _noteReplayed(ShellMarker marker, CellAnchorLineRef ref) {
+    _replayLast = marker;
+    switch (marker) {
+      case ShellMarker.promptStart:
+        _replayPrompt = ref;
+        _replayInput = _replayOutput = null;
+      case ShellMarker.commandStart:
+        _replayInput = ref;
+      case ShellMarker.outputStart:
+        _replayOutput = ref;
+      case ShellMarker.commandEnd:
+        _replayPrompt = _replayInput = _replayOutput = null;
     }
   }
 

@@ -238,6 +238,9 @@ class CommandRunWatch {
       _skip = null;
       return;
     }
+    // Running before the pane saw it start — a reattached session's command.
+    // Whatever it was, it is not the one the caller has only just typed.
+    if (block.resumed) return;
     if (_settled.isCompleted) return;
     // Read the output *here*, inside the `D` marker's own callback, while the
     // buffer still ends at this command's last line: the next prompt is drawn a
@@ -260,7 +263,10 @@ class CommandRunWatch {
   CommandRunOutcome _unfinished(CommandRunEnd end) {
     final running = _tracker.pending;
     final ours =
-        running != null && running.hasStarted && !identical(running, _skip);
+        running != null &&
+        running.hasStarted &&
+        !running.resumed &&
+        !identical(running, _skip);
     return CommandRunOutcome(
       end: end,
       output: ours

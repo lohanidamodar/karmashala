@@ -51,6 +51,7 @@ class CommandBlock {
     this.command,
     this.exitCode,
     this.endedAt,
+    this.resumed = false,
   });
 
   /// Stable within one terminal session; used as a widget key and as the
@@ -75,8 +76,16 @@ class CommandBlock {
   /// The reported exit code, or `null` when the shell reported none.
   int? exitCode;
 
-  /// When the prompt was drawn (the `A` marker).
-  final DateTime promptAt;
+  /// When the prompt was drawn (the `A` marker), or null when it was drawn
+  /// before this pane could see it — a reattached session's replay. Never the
+  /// moment of the reattach, which would be a time nobody measured.
+  final DateTime? promptAt;
+
+  /// Whether this command was already running when the pane first saw it: a
+  /// session reattached mid-command. Its start time is unknown and stays null,
+  /// so it has no duration — and it can never be the command a caller has only
+  /// just typed.
+  final bool resumed;
 
   /// When the command started running (the `C` marker), or `null` if it never
   /// did. Duration is measured from here, not from [promptAt] — the time the
@@ -91,8 +100,9 @@ class CommandBlock {
 
   bool get isRunning => endedAt == null;
 
-  /// True once the shell said the command is actually running.
-  bool get hasStarted => startedAt != null;
+  /// True once the shell said the command is actually running — including one
+  /// that was running before the pane saw it start ([resumed]).
+  bool get hasStarted => startedAt != null || outputRef != null;
 
   /// True only for a *known* non-zero exit code. An unknown code is not a
   /// failure.
@@ -116,6 +126,11 @@ class CommandBlockTracker {
   final List<void Function(CommandBlock)> _completionListeners = [];
   CommandBlock? _pending;
   int _nextId = 0;
+
+  /// Set by [resume] when the replay carried no marker at all: the shell may be
+  /// at a prompt or deep in a command, and nothing says which. Cleared by the
+  /// first prompt.
+  bool _midStream = false;
 
   /// Completed commands, oldest first.
   List<CommandBlock> get blocks => List.unmodifiable(_blocks);
@@ -144,6 +159,7 @@ class CommandBlockTracker {
   }) {
     switch (marker) {
       case ShellMarker.promptStart:
+        _midStream = false;
         // A command that was already running is finished by the next prompt
         // even without a D — an interrupt does that. One that never started is
         // just an abandoned prompt line.
@@ -168,6 +184,23 @@ class CommandBlockTracker {
           ..command = command ?? block.command;
       case ShellMarker.commandEnd:
         final block = _pending;
+        if (block == null && _midStream) {
+          // The end of a command that started before the pane could see it:
+          // its exit code is real, its start is not known and is not made up.
+          _midStream = false;
+          _complete(
+            CommandBlock(
+              id: 'cmd-${_nextId++}',
+              promptRef: ref,
+              promptAt: null,
+              endRef: ref,
+              endedAt: at,
+              exitCode: exitCode,
+              resumed: true,
+            ),
+          );
+          return;
+        }
         // No C means nothing ran; drop the block rather than inventing one.
         if (block == null || block.outputRef == null) {
           _pending = null;
@@ -178,6 +211,57 @@ class CommandBlockTracker {
           ..endedAt = at
           ..exitCode = exitCode;
         _complete(block);
+    }
+  }
+
+  /// Picks the state back up after a reattach whose replay was read **for state
+  /// only**: [last] is the last marker the replay carried, and the refs are
+  /// where that replay's latest prompt, input and output began.
+  ///
+  /// No block is completed here — the replay's finished commands would carry
+  /// the reattach's timestamps and a zero duration. What survives is what the
+  /// next live marker needs: whether a prompt is up, or a command is running.
+  void resume({
+    required ShellMarker? last,
+    TerminalLineRef? prompt,
+    TerminalLineRef? input,
+    TerminalLineRef? output,
+  }) {
+    _pending = null;
+    _midStream = false;
+    switch (last) {
+      case null:
+        _midStream = true;
+      case ShellMarker.promptStart || ShellMarker.commandStart:
+        // At a prompt: the next command is typed live, so its C is a real time.
+        final at = prompt ?? input;
+        if (at == null) {
+          _midStream = true;
+          return;
+        }
+        _pending = CommandBlock(
+          id: 'cmd-${_nextId++}',
+          promptRef: at,
+          promptAt: null,
+          inputRef: input,
+        );
+      case ShellMarker.outputStart:
+        final ran = output;
+        if (ran == null) {
+          _midStream = true;
+          return;
+        }
+        _pending = CommandBlock(
+          id: 'cmd-${_nextId++}',
+          promptRef: prompt ?? ran,
+          promptAt: null,
+          inputRef: input,
+          outputRef: ran,
+          resumed: true,
+        );
+      case ShellMarker.commandEnd:
+        // Between a command's end and the next prompt: nothing is running.
+        break;
     }
   }
 

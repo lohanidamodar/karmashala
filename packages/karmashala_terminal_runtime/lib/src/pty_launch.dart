@@ -13,6 +13,7 @@ class PtyLaunch {
     this.environment = const {},
     this.removedEnvironment = const {},
     this.exactArgv = false,
+    this.directArgv,
   });
 
   final String executable;
@@ -36,11 +37,24 @@ class PtyLaunch {
   /// unquoted concatenation — the `cmd.exe /c <line>` family — left as shipped.
   final bool exactArgv;
 
+  /// The argv to start instead when the spawner runs argv[0] **once** and
+  /// quotes by `CommandLineToArgvW` rules — the session host. Set where the
+  /// `cmd.exe /c` wrapper exists only to survive `flutter_pty` repeating the
+  /// executable: a WSL pane. Through the host that wrapper is harmful, because
+  /// the line it carries is quoted a second time and `cmd.exe` does not read
+  /// backslash escapes, so the integrated WSL bootstrap never started.
+  final List<String>? directArgv;
+
+  /// What the session host is asked to start: [directArgv] when there is one,
+  /// otherwise the executable and its arguments as they are.
+  List<String> get hostArgv => directArgv ?? [executable, ...arguments];
+
   @override
   bool operator ==(Object other) =>
       other is PtyLaunch &&
       other.executable == executable &&
       other.exactArgv == exactArgv &&
+      _nullableListEquals(other.directArgv, directArgv) &&
       other.workingDirectory == workingDirectory &&
       _mapEquals(other.environment, environment) &&
       _setEquals(other.removedEnvironment, removedEnvironment) &&
@@ -52,6 +66,7 @@ class PtyLaunch {
     workingDirectory,
     exactArgv,
     Object.hashAll(arguments),
+    directArgv == null ? null : Object.hashAll(directArgv!),
     Object.hashAllUnordered(
       environment.entries.map((e) => '${e.key}=${e.value}'),
     ),
@@ -76,6 +91,9 @@ class PtyLaunch {
     }
     return true;
   }
+
+  static bool _nullableListEquals(List<String>? a, List<String>? b) =>
+      a == null || b == null ? a == b : _listEquals(a, b);
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
@@ -164,12 +182,16 @@ PtyLaunch ptyLaunchFor(
       }
       // No host working directory: `wsl.exe` sets the child's own with `--cd`,
       // so `cmd.exe` is not pointed at a Linux path Windows cannot resolve.
-      return throughCommandPrompt([
-        'wsl.exe',
-        '-d',
-        distro,
-        if (workingDirectory != null) ...['--cd', workingDirectory],
-      ], environment: withWslEnv(environment));
+      return throughCommandPrompt(
+        [
+          'wsl.exe',
+          '-d',
+          distro,
+          if (workingDirectory != null) ...['--cd', workingDirectory],
+        ],
+        environment: withWslEnv(environment),
+        direct: true,
+      );
   }
 }
 
@@ -242,12 +264,16 @@ PtyLaunch throughCommandPrompt(
   String? workingDirectory,
   Map<String, String> environment = const {},
   Set<String> removedEnvironment = const {},
+  bool direct = false,
 }) => PtyLaunch(
   executable: 'cmd.exe',
   arguments: ['/c', parts.map(quoteWindowsCommandArgument).join(' ')],
   workingDirectory: workingDirectory,
   environment: environment,
   removedEnvironment: removedEnvironment,
+  // Only where [parts] name a real executable: `cmd.exe` is also what finds a
+  // `.cmd` shim, and that job is not the flutter_pty workaround.
+  directArgv: direct ? List.unmodifiable(parts) : null,
 );
 
 /// Builds the ConPTY launch that runs an agent CLI in a pane. The session id
@@ -354,6 +380,7 @@ PtyLaunch wrapForPty(
         // Applied to the `wsl.exe` process, which is all this host owns: a
         // variable the distribution's own profile exports is out of reach.
         removedEnvironment: removedEnvironment,
+        direct: true,
       );
   }
 }

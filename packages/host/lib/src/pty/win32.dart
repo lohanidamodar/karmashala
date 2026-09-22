@@ -359,7 +359,15 @@ class Kernel32 {
 
 /// Windows' quoting rules are the *callee's*, not a shell's: `CreateProcessW`
 /// takes one string. Ported from `flutter_pty`'s `append_quoted_argument`.
+///
+/// Quoted only when it has to be. A C runtime reads `"-d"` and `-d` alike, but
+/// `wsl.exe` and `cmd.exe` read their command line raw: quoting every argument
+/// made `wsl.exe` take `"-d"` for the command to run (measured 2026-09-22,
+/// `zsh:1: command not found: -d`), so no WSL pane could start in the host.
 String quoteWindowsArgument(String argument) {
+  if (argument.isNotEmpty && !argument.contains(RegExp(r'[ \t\n\v"]'))) {
+    return argument;
+  }
   final out = StringBuffer('"');
   var backslashes = 0;
   for (final rune in argument.runes) {

@@ -267,4 +267,86 @@ void main() {
       expect(tracker.blocks.map((b) => b.id).toSet(), hasLength(3));
     });
   });
+
+  group('resuming after a reattach', () {
+    test('a replay with no marker leaves the state unknown, and the first end '
+        'is a command whose start nobody saw', () {
+      final tracker = CommandBlockTracker()..resume(last: null);
+      expect(tracker.pending, isNull);
+
+      tracker.onMarker(
+        ShellMarker.commandEnd,
+        ref: _Ref(40),
+        at: _at(9),
+        exitCode: 2,
+      );
+      final block = tracker.blocks.single;
+      expect(block.resumed, isTrue);
+      expect(block.exitCode, 2);
+      expect(block.startedAt, isNull, reason: 'never the reattach moment');
+      expect(block.promptAt, isNull);
+      expect(block.duration, isNull);
+    });
+
+    test('an end after the next prompt is not stretched back into a block', () {
+      final tracker = CommandBlockTracker()..resume(last: null);
+      tracker
+        ..onMarker(ShellMarker.promptStart, ref: _Ref(1), at: _at(1))
+        ..onMarker(ShellMarker.commandEnd, ref: _Ref(1), at: _at(2));
+      expect(tracker.blocks, isEmpty);
+    });
+
+    test('a replay that ended mid-command resumes it as running', () {
+      final tracker = CommandBlockTracker()
+        ..resume(
+          last: ShellMarker.outputStart,
+          prompt: _Ref(10),
+          output: _Ref(11),
+        );
+      final running = tracker.pending!;
+      expect(running.resumed, isTrue);
+      expect(running.hasStarted, isTrue, reason: 'it is executing');
+      expect(running.startedAt, isNull);
+
+      tracker.onMarker(
+        ShellMarker.commandEnd,
+        ref: _Ref(20),
+        at: _at(5),
+        exitCode: 1,
+      );
+      expect(tracker.blocks.single.exitCode, 1);
+      expect(tracker.blocks.single.duration, isNull);
+    });
+
+    test('a replay that ended at a prompt times the next command for real', () {
+      final tracker = CommandBlockTracker()
+        ..resume(
+          last: ShellMarker.commandStart,
+          prompt: _Ref(3),
+          input: _Ref(3),
+        );
+      expect(tracker.pending!.resumed, isFalse);
+
+      tracker
+        ..onMarker(ShellMarker.outputStart, ref: _Ref(4), at: _at(10))
+        ..onMarker(
+          ShellMarker.commandEnd,
+          ref: _Ref(6),
+          at: _at(13),
+          exitCode: 0,
+        );
+      final block = tracker.blocks.single;
+      expect(block.resumed, isFalse);
+      expect(block.duration, const Duration(seconds: 3));
+      expect(block.promptLine, 3);
+    });
+
+    test('a replay that ended between commands has nothing pending', () {
+      final tracker = CommandBlockTracker()
+        ..resume(last: ShellMarker.commandEnd);
+      expect(tracker.pending, isNull);
+      tracker.onMarker(ShellMarker.commandEnd, ref: _Ref(1), at: _at(1));
+      expect(tracker.blocks, isEmpty, reason: 'not an unknown state');
+    });
+  });
 }

@@ -101,9 +101,9 @@ class TerminalAdvancedSection extends ConsumerWidget {
                 'A pane\'s shell is started by karmashala_host instead of '
                 'by this app, so it survives a crash or a restart and '
                 'reopening the pane resumes it where it left off. Applies '
-                'to new terminals. Off by default: the host path carries no '
-                'shell integration, so command blocks and terminal_run exit '
-                'codes are not available in a pane that uses it.',
+                'to new terminals. Shell integration works here as it does '
+                'in any other pane; a pane that resumes a session keeps the '
+                'integration it was started with.',
             value: settings.hostBackedLocalPanes,
             onChanged: controller.setHostBackedLocalPanes,
           ),

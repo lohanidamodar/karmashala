@@ -107,6 +107,78 @@ void main() {
     },
   );
 
+  test(
+    'a -Command script with quotes, spaces and lines arrives as one argument',
+    () async {
+      // The shape of a shell-integrated PowerShell pane's launch: its whole
+      // bootstrap rides as one `-Command` argument on an exact argv.
+      final pty = launcher.start(
+        PtySpawnRequest(
+          argv: const [
+            'powershell.exe',
+            '-NoLogo',
+            '-NoProfile',
+            '-Command',
+            '\$a = "kar" + "ma"\nWrite-Output ("[" + \$a + "shala  two]")',
+          ],
+          workingDirectory: Directory.systemTemp.path,
+          columns: 80,
+          rows: 24,
+        ),
+      );
+      addTearDown(pty.close);
+      final seen = _Transcript(pty.output);
+      expect(
+        await seen.contains('[karmashala  two]'),
+        isTrue,
+        reason: seen.tail(400),
+      );
+      await pty.exitCode.timeout(const Duration(seconds: 30));
+    },
+  );
+
+  test(
+    'wsl.exe reads its options, which it would not if they were quoted',
+    () async {
+      final listed = await Process.run('wsl.exe', const [
+        '-l',
+        '-q',
+      ], stdoutEncoding: const SystemEncoding());
+      final distros = '${listed.stdout}'
+          .replaceAll('\x00', '')
+          .split(RegExp(r'\s+'))
+          .where((d) => d.isNotEmpty)
+          .toList();
+      if (listed.exitCode != 0 || distros.isEmpty) {
+        markTestSkipped('no WSL distribution on this machine');
+        return;
+      }
+      final pty = launcher.start(
+        PtySpawnRequest(
+          argv: [
+            'wsl.exe',
+            '-d',
+            distros.first,
+            '--cd',
+            Directory.systemTemp.path,
+            '--',
+            'echo',
+            'KARMA\$((40+2))',
+          ],
+          columns: 80,
+          rows: 24,
+        ),
+      );
+      addTearDown(pty.close);
+      final seen = _Transcript(pty.output);
+      expect(
+        await seen.contains('KARMA42', within: const Duration(seconds: 60)),
+        isTrue,
+        reason: seen.tail(400),
+      );
+    },
+  );
+
   test('kill ends the shell and the child it started', () async {
     final pty = launcher.start(
       PtySpawnRequest(

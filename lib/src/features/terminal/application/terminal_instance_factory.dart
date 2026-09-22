@@ -74,6 +74,7 @@ final terminalInstanceFactoryProvider = Provider<TerminalInstanceFactory>(
             agentLaunch: agentLaunch,
             adoptTerminal: adoptTerminal,
             environmentOverlay: ref.read(terminalEnvOverlayProvider),
+            shellIntegration: shellIntegration,
           );
         }
 
