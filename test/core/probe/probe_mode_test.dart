@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/app/probe_banner.dart';
@@ -135,12 +136,54 @@ void main() {
   });
 
   group('the banner', () {
+    // Mounted the way the app mounts it: from MaterialApp.builder, above the
+    // Navigator and so above the only Overlay. A banner placed as `home:`
+    // would sit inside the Navigator and hide anything that needs an Overlay.
     Future<void> pump(WidgetTester tester, ProbeMode probe) =>
         tester.pumpWidget(
           MaterialApp(
-            home: ProbeBanner(probe: probe, child: const Text('app')),
+            builder: (context, child) =>
+                ProbeBanner(probe: probe, child: child!),
+            home: const Text('app'),
           ),
         );
+
+    testWidgets('hovering it does not blank the window', (tester) async {
+      // A Tooltip in the banner threw "No Overlay widget found" on hover and
+      // left the probe's release window white.
+      await pump(
+        tester,
+        const ProbeMode(enabled: true, dataDirectory: r'C:\scratch\probe'),
+      );
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: Offset.zero);
+      await mouse.moveTo(tester.getCenter(find.text('PROBE')));
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+      await tester.longPress(find.text('PROBE'));
+      await tester.pumpAndSettle(const Duration(seconds: 2));
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('app'), findsOneWidget);
+    });
+
+    testWidgets('what a probe leaves off is readable without hovering', (
+      tester,
+    ) async {
+      await pump(
+        tester,
+        const ProbeMode(enabled: true, dataDirectory: r'C:\scratch\probe'),
+      );
+
+      final label = tester
+          .widgetList<Semantics>(find.byType(Semantics))
+          .map((s) => s.properties.label ?? '')
+          .firstWhere((l) => l.startsWith('Probe instance'), orElse: () => '');
+      for (final effect in ProbeMode.disabledEffects) {
+        expect(label, contains(effect));
+      }
+      expect(find.textContaining('hooks'), findsOneWidget);
+    });
 
     testWidgets('a probe says so above the app', (tester) async {
       await pump(
