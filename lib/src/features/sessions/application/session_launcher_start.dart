@@ -98,7 +98,7 @@ extension SessionStartVerbs on SessionLauncher {
 
     // Every surface that continues a session comes through here, so none of
     // them has to remember to ask.
-    await refuseIfConversationMissing(request);
+    request = await conversationToResume(request);
 
     // Resume and fork produce different command lines, so honouring either
     // silently would give the user the other thing.

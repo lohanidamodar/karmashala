@@ -141,28 +141,39 @@ class SessionLaunchRequest {
   /// The same request against a re-read [installation]. The launch-time path
   /// check hands back the row a repair moved, and the spawn must use that one.
   SessionLaunchRequest withInstallation(AgentInstallation installation) =>
-      SessionLaunchRequest(
-        repository: repository,
-        installation: installation,
-        title: title,
-        purpose: purpose,
-        surface: surface,
-        useWorktree: useWorktree,
-        existingWorktree: existingWorktree,
-        workingDirectory: workingDirectory,
-        additionalRepositories: additionalRepositories,
-        resumeExternalSessionId: resumeExternalSessionId,
-        restartSessionId: restartSessionId,
-        firstMessage: firstMessage,
-        systemPromptFile: systemPromptFile,
-        parentSessionId: parentSessionId,
-        parentLink: parentLink,
-        forkExternalSessionId: forkExternalSessionId,
-        permissionOverride: permissionOverride,
-        modelOverride: modelOverride,
-        view: view,
-        targetPaneId: targetPaneId,
-      );
+      _copy(installation: installation);
+
+  /// The same request resuming [conversationId] instead — a row whose recorded
+  /// conversation was never written, continuing the one it started on.
+  SessionLaunchRequest withResumeExternalSessionId(String conversationId) =>
+      _copy(resumeExternalSessionId: conversationId);
+
+  SessionLaunchRequest _copy({
+    AgentInstallation? installation,
+    String? resumeExternalSessionId,
+  }) => SessionLaunchRequest(
+    repository: repository,
+    installation: installation ?? this.installation,
+    title: title,
+    purpose: purpose,
+    surface: surface,
+    useWorktree: useWorktree,
+    existingWorktree: existingWorktree,
+    workingDirectory: workingDirectory,
+    additionalRepositories: additionalRepositories,
+    resumeExternalSessionId:
+        resumeExternalSessionId ?? this.resumeExternalSessionId,
+    restartSessionId: restartSessionId,
+    firstMessage: firstMessage,
+    systemPromptFile: systemPromptFile,
+    parentSessionId: parentSessionId,
+    parentLink: parentLink,
+    forkExternalSessionId: forkExternalSessionId,
+    permissionOverride: permissionOverride,
+    modelOverride: modelOverride,
+    view: view,
+    targetPaneId: targetPaneId,
+  );
 }
 
 /// The plain words for a launch whose agent executable no longer opens: which

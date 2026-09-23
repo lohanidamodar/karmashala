@@ -19,7 +19,9 @@ import 'package:karmashala/src/features/settings/application/settings_controller
 import 'package:karmashala/src/features/settings/domain/settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:agent_cli/read.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/cli_detection/application/cli_detection_providers.dart';
 
 import '../../support/fixtures.dart';
 import '../terminal/fake_instance.dart';
@@ -85,6 +87,14 @@ const _bypassLabel = 'Bypass (full autonomy)';
       overrides: [
         // Already overrides `databaseProvider`; a second one asserts.
         ...fakeTerminalOverrides(database: db),
+        // Hermetic: the real probe would read this machine's own agent store.
+        conversationPresenceProvider.overrideWithValue(
+          ({
+            required descriptor,
+            required environmentId,
+            required conversationId,
+          }) async => ConversationPresence.unknown,
+        ),
         agentRegistryProvider.overrideWithValue(registry),
         settingsControllerProvider.overrideWith(
           () => _StaticSettings(settings),

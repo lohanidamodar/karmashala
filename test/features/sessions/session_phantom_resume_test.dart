@@ -267,26 +267,116 @@ void main() {
     );
   });
 
-  test('an id we read back from the agent is not second-guessed', () async {
-    // Only an id we *handed* the agent is a promise. One discovered from a hook
-    // payload, an imported store entry or a Codex rollout is evidence the
-    // conversation existed, and the store is not asked to retract it.
-    final db = seededDatabase();
-    addTearDown(db.close);
-    emptyStore();
+  test(
+    'an id we read back from the agent resumes when the store has it',
+    () async {
+      // One discovered from a hook payload or an imported store entry is resumed
+      // as it is whenever the store holds it.
+      final db = seededDatabase();
+      addTearDown(db.close);
+      emptyStore();
+      writeConversation('observed-elsewhere');
 
-    final first = containerOver(db);
-    final sessionId = await startSession(first);
-    first
-        .read(sessionDaoProvider)
-        .updateExternalSessionId(sessionId, 'observed-elsewhere');
-    final next = restart(first, db);
+      final first = containerOver(db);
+      final sessionId = await startSession(first);
+      first
+          .read(sessionDaoProvider)
+          .updateExternalSessionId(sessionId, 'observed-elsewhere');
+      final next = restart(first, db);
 
-    final result = await next
-        .read(explorerActionsProvider)
-        .openNative(sessionId);
+      final result = await next
+          .read(explorerActionsProvider)
+          .openNative(sessionId);
 
-    expect(result.outcome, ExplorerOutcome.resumed);
+      expect(result.outcome, ExplorerOutcome.resumed);
+    },
+  );
+
+  group('a row pointed at a conversation never written (2026-09-23)', () {
+    // A hook from a `claude` run by hand in a plain terminal re-pointed the
+    // row; that conversation was never written, so every resume ran
+    // `claude --resume <ghost>` into "No conversation found".
+    Future<(ProviderContainer, String, String)> pointedAtGhost({
+      bool ownWritten = true,
+      bool locatable = true,
+    }) async {
+      final db = seededDatabase();
+      addTearDown(db.close);
+      emptyStore();
+      final first = containerOver(db);
+      final sessionId = await startSession(first);
+      final paneId = first.read(sessionDaoProvider).getById(sessionId)!.paneId!;
+      if (ownWritten) writeConversation(sessionId);
+      first
+          .read(sessionDaoProvider)
+          .updateExternalSessionId(sessionId, 'ghost');
+      return (restart(first, db, locatable: locatable), sessionId, paneId);
+    }
+
+    test(
+      'resumes the conversation named after the row, and repairs the row',
+      () async {
+        final (next, sessionId, paneId) = await pointedAtGhost();
+
+        final result = await next
+            .read(explorerActionsProvider)
+            .openNative(sessionId);
+
+        expect(result.outcome, ExplorerOutcome.resumed);
+        final launch = next
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(paneId)!
+            .agentLaunch!;
+        expect(launch.arguments, containsAllInOrder(['--resume', sessionId]));
+        expect(launch.arguments, isNot(contains('ghost')));
+        final row = next.read(sessionDaoProvider).getById(sessionId)!;
+        expect(row.externalSessionId, sessionId);
+        expect(row.status, SessionStatus.running);
+        expect(next.read(sessionDaoProvider).getAll(), hasLength(1));
+      },
+    );
+
+    test('with nothing to fall back to, nothing is launched and the message '
+        'names the missing conversation', () async {
+      final (next, sessionId, paneId) = await pointedAtGhost(ownWritten: false);
+
+      final result = await next
+          .read(explorerActionsProvider)
+          .openNative(sessionId);
+
+      expect(result.outcome, ExplorerOutcome.failed);
+      expect(result.message, contains('ghost'));
+      expect(result.message, contains('pointed at a conversation'));
+      expect(result.message, contains('Start a new session'));
+      expect(
+        next.read(terminalSessionsControllerProvider).livenessOf(paneId),
+        PaneLiveness.restored,
+      );
+      expect(next.read(sessionDaoProvider).getAll(), hasLength(1));
+      expect(
+        next.read(sessionDaoProvider).getById(sessionId)!.externalSessionId,
+        'ghost',
+      );
+    });
+
+    test('a store we cannot read (a stopped WSL distribution, SSH) launches '
+        'as before', () async {
+      final (next, sessionId, paneId) = await pointedAtGhost(
+        ownWritten: false,
+        locatable: false,
+      );
+
+      final result = await next
+          .read(explorerActionsProvider)
+          .openNative(sessionId);
+
+      expect(result.outcome, ExplorerOutcome.resumed);
+      final launch = next
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(paneId)!
+          .agentLaunch!;
+      expect(launch.arguments, containsAllInOrder(['--resume', 'ghost']));
+    });
   });
 
   test(

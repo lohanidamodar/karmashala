@@ -140,35 +140,71 @@ extension SessionResumeGuards on SessionLauncher {
         : null;
   }
 
-  /// Throws [SessionConversationMissing] when the agent's store has read to the
-  /// end without finding the conversation; "could not tell" returns normally.
-  Future<void> refuseIfConversationMissing(SessionLaunchRequest request) async {
+  /// [request] with the conversation it can actually resume. A row pointed at a
+  /// conversation its agent never wrote goes back to the one named after it —
+  /// its own, from launch — and the row is repaired. Throws
+  /// [SessionConversationMissing] when the store was read to the end and holds
+  /// neither; "could not tell" returns [request] unchanged.
+  Future<SessionLaunchRequest> conversationToResume(
+    SessionLaunchRequest request,
+  ) async {
     final externalId = request.resumeExternalSessionId;
-    if (externalId == null || externalId.isEmpty) return;
-    final minted = rowThatMinted(externalId);
-    if (minted == null || minted.isArchived) return;
+    if (externalId == null || externalId.isEmpty) return request;
     final descriptor = _ref
         .read(agentRegistryProvider)
         .byId(request.installation.agentId);
-    // Expressed through the descriptor, never through an agent's name: an agent
-    // that does not take an id from us cannot have made this promise.
+    // Expressed through the descriptor, never through an agent's name: only an
+    // agent that takes an id from us has a row id to fall back to, and its
+    // store is one whose "absent" is read to the end (not Codex's archive).
     if (descriptor == null ||
         !descriptor.launch.sessionIdAssignment.isSupported) {
-      return;
+      return request;
     }
-    final presence = await _ref.read(conversationPresenceProvider)(
-      descriptor: descriptor,
-      // Where the agent would have written it: the directory the session runs
-      // in decides which environment's store holds the transcript.
-      environmentId:
-          (minted.workingDirectory ??
-                  minted.worktree ??
-                  request.repository.path)
-              .environmentId,
-      conversationId: externalId,
-    );
-    if (presence != ConversationPresence.absent) return;
-    _ref.read(sessionDaoProvider).updateStatus(minted.id, SessionStatus.failed);
+    final minted = rowThatMinted(externalId);
+    final row = minted ?? _reusableRowForResume(request);
+    if (row == null || row.isArchived) return request;
+    // Where the agent would have written it: the directory the session runs
+    // in decides which environment's store holds the transcript.
+    final environmentId =
+        (row.workingDirectory ?? row.worktree ?? request.repository.path)
+            .environmentId;
+    Future<ConversationPresence> presenceOf(String id) => _ref.read(
+      conversationPresenceProvider,
+    )(descriptor: descriptor, environmentId: environmentId, conversationId: id);
+    if (await presenceOf(externalId) != ConversationPresence.absent) {
+      return request;
+    }
+    final dao = _ref.read(sessionDaoProvider);
+    if (minted == null) {
+      final holder = dao.getByExternalSessionId(row.id);
+      if ((holder == null || holder.id == row.id) &&
+          await presenceOf(row.id) == ConversationPresence.present) {
+        refuseIfForbidden(
+          agentId: request.installation.agentId,
+          externalSessionId: row.id,
+        );
+        dao.updateExternalSessionId(row.id, row.id);
+        _log.warning(
+          'Session ${row.id} named conversation $externalId, which '
+          '${descriptor.displayName} has no record of; resuming its own '
+          'conversation ${row.id} instead and repairing the row.',
+        );
+        return request.withResumeExternalSessionId(row.id);
+      }
+      _log.warning(
+        'Session ${row.id} names conversation $externalId, which '
+        '${descriptor.displayName} has no record of, and its own conversation '
+        'is not in the store either; not launching.',
+      );
+      throw SessionConversationMissing(
+        agentName: agentDisplayName(request.installation.agentId),
+        conversationId: externalId,
+        sessionId: row.id,
+        title: row.title,
+        pointedElsewhere: true,
+      );
+    }
+    dao.updateStatus(minted.id, SessionStatus.failed);
     _publish(SessionChange.statusChanged(minted.id));
     throw SessionConversationMissing(
       agentName: agentDisplayName(request.installation.agentId),

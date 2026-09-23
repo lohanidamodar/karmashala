@@ -136,6 +136,14 @@ String resumeMissingConversationMessage(String agentName) =>
     'in looks like, and what a launch that failed leaves behind. No work has '
     'been lost. Start a new session in this repository.';
 
+/// The plain words for a row that was later pointed at a conversation its
+/// agent never wrote, with none of its own to fall back to.
+String resumeLostConversationMessage(String agentName) =>
+    'This session was pointed at a conversation $agentName has no record of, '
+    'and its own original conversation is not in the store either, so nothing '
+    'was started. Start a new session in this repository, or resume the '
+    'conversation you meant from its imported row in the sidebar.';
+
 /// The plain words for a launch the CLI refused while reading its command line.
 /// Names which of *their* choices was refused and what this build has instead.
 String rejectedValueMessage(RejectedValue rejected) =>

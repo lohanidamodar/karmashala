@@ -571,7 +571,7 @@ void main() {
       'refused on the shape of the request, before any store is read',
       () async {
         // The case the ordering matters for. With no readable store,
-        // `refuseIfConversationMissing` answers "we cannot tell" and returns
+        // `conversationToResume` answers "we cannot tell" and returns
         // normally — so if the guard ran after it, this launch would proceed and
         // the reuse would silently prefer the resume, giving the user a resume of
         // a conversation they asked to replace.

@@ -62,7 +62,12 @@ class SessionConversationMissing implements Exception {
     required this.conversationId,
     this.sessionId,
     this.title,
+    this.pointedElsewhere = false,
   });
+
+  /// Whether the row was moved onto [conversationId] after it started, rather
+  /// than having minted it — a different story for the user.
+  final bool pointedElsewhere;
 
   /// The CLI id that names nothing. Included in [toString] because a user whose
   /// store is configured somewhere unusual needs to be able to go and look.
@@ -80,8 +85,10 @@ class SessionConversationMissing implements Exception {
   @override
   String toString() {
     final what = title == null ? 'This session' : '"$title"';
-    return '$what cannot be resumed: '
-        '${resumeMissingConversationMessage(agentName)} '
+    final why = pointedElsewhere
+        ? resumeLostConversationMessage(agentName)
+        : resumeMissingConversationMessage(agentName);
+    return '$what cannot be resumed: $why '
         '(conversation id $conversationId)';
   }
 }

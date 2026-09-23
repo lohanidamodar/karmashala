@@ -257,7 +257,7 @@ class UnresumableSessionsController extends Notifier<UnresumableReview> {
       );
       if (screening != PromiseScreening.candidate) continue;
       // Where the agent would have written it — the resolution
-      // `refuseIfConversationMissing` uses, so the sweep is asked the same thing.
+      // `conversationToResume` uses, so the sweep is asked the same thing.
       final directory =
           session.workingDirectory ??
           session.worktree ??

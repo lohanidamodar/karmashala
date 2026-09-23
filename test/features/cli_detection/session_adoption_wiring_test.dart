@@ -73,6 +73,14 @@ Harness harness() {
   final container = ProviderContainer(
     overrides: [
       ...fakeTerminalOverrides(database: db),
+      // Hermetic: the real probe would read this machine's own agent store.
+      conversationPresenceProvider.overrideWithValue(
+        ({
+          required descriptor,
+          required environmentId,
+          required conversationId,
+        }) async => ConversationPresence.unknown,
+      ),
       clockProvider.overrideWithValue(FixedClock(testTime)),
       hostCommandRunnerProvider.overrideWithValue(FakeCommandRunner()),
       commandRunnerFactoryProvider.overrideWithValue(
