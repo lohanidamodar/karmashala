@@ -333,6 +333,11 @@ class HostTerminalInstance
     await _dial(deployment);
   }
 
+  void _sayAdopted() => _emit(
+    '\x1b[90m[the host had already started this session; attached to it '
+    'rather than starting a second]\x1b[0m\r\n',
+  );
+
   void _sayRestarted() => _emit(
     '\x1b[33m[the session host was not running and has been started; any '
     'session it held before is no longer running]\x1b[0m\r\n',
@@ -474,19 +479,23 @@ class HostTerminalInstance
       throw const HostLinkException(outdatedHostRefusal);
     }
     try {
-      return await link.openSession(
-        sessionId: sessionId,
-        // The host starts argv[0] once and quotes by CommandLineToArgvW rules,
-        // so a WSL launch goes without the `cmd.exe /c` flutter_pty needs.
-        argv: launch.hostArgv,
-        // The launch's own, never the pane's: a WSL launch leaves it null on
-        // purpose and carries the Linux folder as `--cd`, which Windows'
-        // CreateProcess would refuse as a process directory (errno 267).
-        workingDirectory: launch.workingDirectory,
-        environment: {'TERM': 'xterm-256color', ...launch.environment},
-        removedEnvironment: launch.removedEnvironment,
-        columns: width,
-        rows: height,
+      return await link.openOrAdopt(
+        sessionId,
+        adopted: _sayAdopted,
+        () => link.openSession(
+          sessionId: sessionId,
+          // The host starts argv[0] once and quotes by CommandLineToArgvW rules,
+          // so a WSL launch goes without the `cmd.exe /c` flutter_pty needs.
+          argv: launch.hostArgv,
+          // The launch's own, never the pane's: a WSL launch leaves it null on
+          // purpose and carries the Linux folder as `--cd`, which Windows'
+          // CreateProcess would refuse as a process directory (errno 267).
+          workingDirectory: launch.workingDirectory,
+          environment: {'TERM': 'xterm-256color', ...launch.environment},
+          removedEnvironment: launch.removedEnvironment,
+          columns: width,
+          rows: height,
+        ),
       );
     } on HostLinkException catch (e) {
       if (e.code != ProtocolErrorCode.badRequest ||

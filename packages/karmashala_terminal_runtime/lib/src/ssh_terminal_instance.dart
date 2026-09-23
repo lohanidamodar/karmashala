@@ -574,15 +574,22 @@ class SshTerminalInstance
       // The host spawns exactly this argv, so a shell pane has to name the
       // user's own shell: `/bin/sh` is what tmux never gave them.
       final shell = launch == null ? await hostAccess?.loginShell() : null;
-      return link.openSession(
-        sessionId: sessionId,
-        argv: launch == null
-            ? [shell ?? '/bin/sh', '-l']
-            : [launch.executable, ...launch.commandArguments],
-        workingDirectory: workingDirectory,
-        environment: const {'TERM': 'xterm-256color'},
-        columns: width,
-        rows: height,
+      return link.openOrAdopt(
+        sessionId,
+        adopted: () => _emit(
+          '\x1b[90m[the host had already started this session; attached to '
+          'it rather than starting a second]\x1b[0m\r\n',
+        ),
+        () => link.openSession(
+          sessionId: sessionId,
+          argv: launch == null
+              ? [shell ?? '/bin/sh', '-l']
+              : [launch.executable, ...launch.commandArguments],
+          workingDirectory: workingDirectory,
+          environment: const {'TERM': 'xterm-256color'},
+          columns: width,
+          rows: height,
+        ),
       );
     }
   }

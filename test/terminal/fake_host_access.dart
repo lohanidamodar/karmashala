@@ -102,6 +102,9 @@ class ScriptedHostChannel implements RemoteChannel {
   final ProtocolErrorCode? attachRefusal;
   final bool predatesWithholding;
 
+  /// The host starts an opened session but its reply never arrives.
+  var loseOpenReply = false;
+
   /// What a reattach reports as this session's absolute total.
   final int resumedTotalBytes;
 
@@ -173,6 +176,15 @@ class ScriptedHostChannel implements RemoteChannel {
             ),
           );
           unawaited(close());
+        case OpenMessage(:final requestId, :final sessionId)
+            when liveSessions.contains(sessionId):
+          push(
+            ErrorMessage(
+              requestId,
+              ProtocolErrorCode.sessionExists,
+              'session "$sessionId" already exists',
+            ),
+          );
         case OpenMessage(
           :final requestId,
           :final sessionId,
@@ -180,6 +192,7 @@ class ScriptedHostChannel implements RemoteChannel {
           :final rows,
         ):
           liveSessions.add(sessionId);
+          if (loseOpenReply) break;
           push(
             AttachedMessage(
               requestId: requestId,

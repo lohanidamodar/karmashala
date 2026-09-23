@@ -40,10 +40,13 @@ class HostAttachment {
 /// The app's end of the host protocol, over one channel. It relays bytes and
 /// normalises nothing — the entire reason the host exists rather than tmux.
 class HostPaneLink {
-  HostPaneLink._(this._channel, this.clientId);
+  HostPaneLink._(this._channel, this.clientId, this._attachBound);
 
   final RemoteChannel _channel;
   final String clientId;
+
+  /// How long an open or attach is given before its reply counts as lost.
+  final Duration _attachBound;
 
   final _parser = FrameParser();
   final _output = StreamController<Uint8List>();
@@ -78,8 +81,9 @@ class HostPaneLink {
     RemoteChannel channel, {
     required String clientId,
     Duration bound = const Duration(seconds: 20),
+    Duration attachBound = const Duration(seconds: 20),
   }) async {
-    final link = HostPaneLink._(channel, clientId);
+    final link = HostPaneLink._(channel, clientId, attachBound);
     link._listen();
     final welcome = await link._request<WelcomeMessage>(
       (id) => HelloMessage(requestId: id, clientId: clientId),
@@ -117,6 +121,32 @@ class HostPaneLink {
     ),
   );
 
+  /// [open], or — when its answer was lost or the host says the session already
+  /// exists — the session that is there, adopted. The host's record of the id
+  /// is the receipt: asking for it is how a lost reply is checked, so a second
+  /// process is never started for the same pane. [adopted] is told when it was.
+  Future<HostAttachment> openOrAdopt(
+    String sessionId,
+    Future<HostAttachment> Function() open, {
+    void Function()? adopted,
+  }) async {
+    try {
+      return await open();
+    } on HostLinkException catch (e) {
+      final lostReply = e.timedOut;
+      if (!lostReply && e.code != ProtocolErrorCode.sessionExists) rethrow;
+      try {
+        final found = await attachSession(sessionId: sessionId, sinceOffset: 0);
+        adopted?.call();
+        return found;
+      } on HostLinkException catch (check) {
+        // Checked, and not there: the open never happened, so say what it met.
+        if (check.code == ProtocolErrorCode.unknownSession) throw e;
+        rethrow;
+      }
+    }
+  }
+
   /// Reattaches from [sinceOffset] — the last offset this pane rendered.
   Future<HostAttachment> attachSession({
     required String sessionId,
@@ -132,10 +162,7 @@ class HostPaneLink {
   );
 
   Future<HostAttachment> _attachment(HostMessage Function(int) build) async {
-    final attached = await _request<AttachedMessage>(
-      build,
-      const Duration(seconds: 20),
-    );
+    final attached = await _request<AttachedMessage>(build, _attachBound);
     _sessionRef = attached.sessionRef;
     lastOffset = attached.replayFromOffset;
     if (attached.droppedBytes > 0) {
