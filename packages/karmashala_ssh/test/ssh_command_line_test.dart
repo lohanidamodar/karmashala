@@ -78,4 +78,19 @@ void main() {
       expect(line, "exec 'echo' '; rm -rf /'");
     });
   });
+
+  test('a request environment runs on the far machine, quoted', () {
+    final line = buildRemoteCommandLine(
+      const CommandRequest(
+        executable: 'git',
+        arguments: ['status'],
+        environment: {'GIT_TERMINAL_PROMPT': '0'},
+        removedEnvironment: {'GIT_DIR'},
+      ),
+    );
+    expect(
+      line,
+      "exec 'env' '-u' 'GIT_DIR' 'GIT_TERMINAL_PROMPT=0' 'git' 'status'",
+    );
+  });
 }

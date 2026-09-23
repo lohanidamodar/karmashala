@@ -47,6 +47,28 @@ int _spawnsHere = 0;
 /// into the [CommandException] its own callers already expect, and it names the
 /// environment — "on windows", "in WSL \"Ubuntu\"" — which this function has no
 /// business knowing.
+/// The environment [Process] is handed for [request], or null to inherit this
+/// process's own untouched. A removal needs the whole map built here, because
+/// `Process` can add to what a child inherits but not take away from it.
+Map<String, String>? _environmentOf(CommandRequest request) {
+  if (request.removedEnvironment.isEmpty) {
+    return request.environment.isEmpty ? null : request.environment;
+  }
+  // Windows names are case-insensitive, so `Git_Dir` is the same variable.
+  bool removed(String name) => Platform.isWindows
+      ? request.removedEnvironment.any(
+          (r) => r.toUpperCase() == name.toUpperCase(),
+        )
+      : request.removedEnvironment.contains(name);
+  return {
+    for (final entry in Platform.environment.entries)
+      if (!removed(entry.key)) entry.key: entry.value,
+    ...request.environment,
+  };
+}
+
+bool _inherits(CommandRequest request) => request.removedEnvironment.isEmpty;
+
 Future<CommandResult> spawnToCompletion(CommandRequest request) async {
   _spawnsHere++;
   if (request.stdinText != null || request.timeout != null) {
@@ -56,6 +78,8 @@ Future<CommandResult> spawnToCompletion(CommandRequest request) async {
     request.executable,
     request.arguments,
     workingDirectory: request.workingDirectory?.path,
+    environment: _environmentOf(request),
+    includeParentEnvironment: _inherits(request),
     // Honoured for `run` as well as `start`: dropping it meant an executable
     // only the shell can resolve — an app-execution alias, or a `.cmd` shim
     // such as an npm-global `claude.cmd` — could be started but never probed,
@@ -94,6 +118,8 @@ Future<CommandResult> _spawnAttended(CommandRequest request) async {
     request.executable,
     request.arguments,
     workingDirectory: request.workingDirectory?.path,
+    environment: _environmentOf(request),
+    includeParentEnvironment: _inherits(request),
     runInShell: request.runInShell,
   );
   // A payload this app composed comes back as UTF-8, leniently: a stray byte
@@ -151,6 +177,8 @@ Future<Process> spawnStreaming(CommandRequest request) {
     request.executable,
     request.arguments,
     workingDirectory: request.workingDirectory?.path,
+    environment: _environmentOf(request),
+    includeParentEnvironment: _inherits(request),
     runInShell: request.runInShell,
   );
 }

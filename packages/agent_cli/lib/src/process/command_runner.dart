@@ -13,6 +13,8 @@ class CommandRequest {
     this.runInShell = false,
     this.stdinText,
     this.timeout,
+    this.environment = const {},
+    this.removedEnvironment = const {},
   });
 
   final String executable;
@@ -40,6 +42,14 @@ class CommandRequest {
   /// happens to be on is not it.
   final String? stdinText;
 
+  /// Variables set for this process, over the environment it would inherit.
+  /// Every runner honours them where the process runs: in WSL or over SSH they
+  /// are an `env` prefix, because this app's own environment never gets there.
+  final Map<String, String> environment;
+
+  /// Variables this process must not inherit, applied before [environment].
+  final Set<String> removedEnvironment;
+
   /// Run via the system shell. Needed to launch Windows **app-execution
   /// aliases** (e.g. `wt.exe`, Windows Terminal), which `Process.start` cannot
   /// resolve on its own.
@@ -51,6 +61,20 @@ class CommandRequest {
       '${workingDirectory == null ? '' : ' @${workingDirectory!.path}'}'
       '${stdinText == null ? '' : ' <${stdinText!.length} chars'}'
       '${timeout == null ? '' : ' within ${timeout!.inSeconds}s'})';
+}
+
+/// `env -u NAME … NAME=value …`, the words that give a POSIX command [request]'s
+/// environment wherever it runs; empty when the request names none.
+List<String> posixEnvironmentPrefix(CommandRequest request) {
+  if (request.environment.isEmpty && request.removedEnvironment.isEmpty) {
+    return const [];
+  }
+  return [
+    'env',
+    for (final name in request.removedEnvironment) ...['-u', name],
+    for (final entry in request.environment.entries)
+      '${entry.key}=${entry.value}',
+  ];
 }
 
 /// The bound on a probe that only discovers — `where`, `command -v`,

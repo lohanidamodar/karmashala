@@ -7,6 +7,8 @@ import 'package:karmashala_core/util.dart';
 import '../../explorer/application/checkout.dart';
 import '../../repositories/data/repository_discovery_service.dart';
 import '../../repositories/data/repository_dao.dart';
+import 'package:karmashala_git/git.dart'
+    show kGitChildEnvironment, kGitRemovedEnvironment;
 import 'package:karmashala_git/repositories.dart';
 import '../data/project_dao.dart';
 import '../domain/project.dart';
@@ -250,7 +252,12 @@ cd "\$TARGET" && pwd
             dir.parent.createSync(recursive: true);
           }
           final result = await runner.run(
-            CommandRequest(executable: 'git', arguments: ['clone', url, path]),
+            CommandRequest(
+              executable: 'git',
+              arguments: ['clone', url, path],
+              environment: kGitChildEnvironment,
+              removedEnvironment: kGitRemovedEnvironment,
+            ),
           );
           if (!result.ok) {
             throw RepositoryDiscoveryException(

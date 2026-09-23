@@ -108,6 +108,24 @@ EnvironmentPath worktreePathFor(
   return EnvironmentPath(environmentId: repo.environmentId, path: dir);
 }
 
+/// Set on every git this app runs. Nobody can see a prompt a background git
+/// raises, so it would only hold the command until its bound; and a lock this
+/// app's own status reads take can fail an agent's commit in the same checkout.
+const Map<String, String> kGitChildEnvironment = {
+  'GIT_TERMINAL_PROMPT': '0',
+  'GCM_INTERACTIVE': 'never',
+  'GIT_OPTIONAL_LOCKS': '0',
+};
+
+/// Never inherited by a git this app runs: set in the environment this app was
+/// started from, they would point every `git -C` at somebody else's repository.
+const Set<String> kGitRemovedEnvironment = {
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_COMMON_DIR',
+  'GIT_INDEX_FILE',
+};
+
 /// Git operations for one environment, executed through a [CommandRunner] that
 /// must target the same environment as the paths passed in (ADR 0004).
 class GitService {
@@ -162,6 +180,8 @@ class GitService {
         executable: 'git',
         arguments: ['-C', repo.path, ...args],
         timeout: _timeoutFor(args),
+        environment: kGitChildEnvironment,
+        removedEnvironment: kGitRemovedEnvironment,
       ),
     );
     return result;
@@ -706,6 +726,8 @@ class GitService {
       CommandRequest(
         executable: 'git',
         arguments: ['-C', directory.path, ...args],
+        environment: kGitChildEnvironment,
+        removedEnvironment: kGitRemovedEnvironment,
       ),
     );
     final tail = OutputTail();

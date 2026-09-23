@@ -65,8 +65,11 @@ WslInvocation buildWslInvocation(
       ..add('--cd')
       ..add(cwd.path);
   }
+  // The distribution inherits nothing of this app's environment, so what the
+  // request sets or removes is said inside it, as words of the command.
   args
     ..add(exec ? '--exec' : '--')
+    ..addAll(posixEnvironmentPrefix(request))
     ..add(request.executable)
     ..addAll(request.arguments);
   return WslInvocation(

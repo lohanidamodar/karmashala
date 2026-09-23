@@ -13,9 +13,10 @@ import 'package:agent_cli/process.dart';
 /// directory becomes a `cd` guarded by `&&`, so a missing one runs nothing.
 String buildRemoteCommandLine(CommandRequest request) {
   final command = [
-    posixQuote(request.executable),
-    ...request.arguments.map(posixQuote),
-  ].join(' ');
+    ...posixEnvironmentPrefix(request),
+    request.executable,
+    ...request.arguments,
+  ].map(posixQuote).join(' ');
   final cwd = request.workingDirectory;
   if (cwd == null) return 'exec $command';
   return 'cd ${posixQuote(cwd.path)} && exec $command';
