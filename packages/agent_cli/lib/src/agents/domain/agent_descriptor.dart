@@ -372,7 +372,8 @@ class AgentModelSupport {
     required this.models,
     required this.evidence,
     this.discovery = AgentModelDiscovery.none,
-  }) : style = AgentModelStyle.liveAndAtLaunch;
+  }) : pickerCommand = '',
+       style = AgentModelStyle.liveAndAtLaunch;
 
   /// The model rides on [flag] at launch. A running session cannot be moved.
   const AgentModelSupport.atLaunchOnly({
@@ -380,6 +381,7 @@ class AgentModelSupport {
     required this.models,
     required this.evidence,
     this.discovery = AgentModelDiscovery.none,
+    this.pickerCommand = '',
   }) : slashCommand = '',
        style = AgentModelStyle.atLaunchOnly;
 
@@ -392,6 +394,7 @@ class AgentModelSupport {
   }) : flag = '',
        slashCommand = '',
        discovery = AgentModelDiscovery.none,
+       pickerCommand = '',
        style = AgentModelStyle.listedOnly;
 
   const AgentModelSupport._(
@@ -401,6 +404,7 @@ class AgentModelSupport {
     this.models,
     this.evidence,
     this.discovery,
+    this.pickerCommand,
   );
 
   /// The same support offering [found] — the list the CLI itself reported for
@@ -413,6 +417,7 @@ class AgentModelSupport {
     List.unmodifiable(found),
     evidence,
     discovery,
+    pickerCommand,
   );
 
   /// Nothing verified. The default, and the answer for an agent nobody has
@@ -423,12 +428,17 @@ class AgentModelSupport {
       models = const [],
       evidence = '',
       discovery = AgentModelDiscovery.none,
+      pickerCommand = '',
       style = AgentModelStyle.unsupported;
 
   final AgentModelStyle style;
 
   /// Where this agent's own list is read from, when it has one.
   final AgentModelDiscovery discovery;
+
+  /// An in-session command that opens the agent's **own** model picker, for an
+  /// agent whose model cannot be named in a running session. Empty when none.
+  final String pickerCommand;
 
   /// The launch option, e.g. `--model`. Empty when there is none.
   final String flag;

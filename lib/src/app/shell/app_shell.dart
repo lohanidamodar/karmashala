@@ -29,6 +29,7 @@ import '../../features/git/application/worktree_setup_providers.dart';
 import '../../features/notes/application/note_tabs.dart';
 import '../../features/explorer/presentation/explorer_panel.dart';
 import '../../features/settings/application/settings_controller.dart';
+import '../../features/sessions/application/pending_live_switches.dart';
 import '../../features/sessions/application/session_liveness_reconciler.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'quick_open/quick_open.dart';
@@ -148,6 +149,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     // Watched, not read: Riverpod 3 pauses a provider's own subscriptions while
     // nothing listens, so a reconciler nobody watches never hears a pane stop.
     ref.watch(sessionLivenessReconcilerProvider);
+    // And for a model picked mid-turn, which is sent when the turn ends.
+    ref.watch(pendingLiveSwitchesProvider);
     // Same reason: a worktree setup command runs in its own pane, and only a
     // listening observer turns its exit code into a recorded verdict.
     ref.watch(worktreeSetupExitObserverProvider);

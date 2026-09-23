@@ -368,7 +368,7 @@ void main() {
     expect(find.text('Opus'), findsOneWidget);
   });
 
-  testWidgets('working: nothing is typed, and the chip says next launch', (
+  testWidgets('working: nothing is typed, and the chip says after this turn', (
     tester,
   ) async {
     final h = await harness(tester, status: AgentActivityStatus.working);
@@ -378,19 +378,18 @@ void main() {
     await openMenu(tester);
 
     expect(find.text('now'), findsNothing);
-    expect(find.text('next launch'), findsNWidgets(5));
+    expect(find.text('after this turn'), findsNWidgets(4));
 
     await tester.tap(find.text('Opus'));
     await tester.pumpAndSettle();
 
     expect(h.written, isEmpty);
-    expect(find.textContaining('applies on the next launch'), findsOneWidget);
-    expect(find.textContaining('mid-turn'), findsOneWidget);
+    expect(find.textContaining('finishes this turn'), findsOneWidget);
     // The override is still recorded, so the next launch runs on it.
     expect(SessionDao(h.db).getById(h.sessionId)!.modelId, 'opus');
   });
 
-  testWidgets('Codex is idle and still deferred, and the chip says why', (
+  testWidgets('Codex, idle: its own picker opens, and the chip says so', (
     tester,
   ) async {
     final h = await harness(tester, agentId: AgentIds.codex);
@@ -402,12 +401,8 @@ void main() {
     await tester.tap(find.text('GPT-5.5'));
     await tester.pumpAndSettle();
 
-    expect(h.written, isEmpty);
-    expect(find.textContaining('applies on the next launch'), findsOneWidget);
-    expect(
-      find.textContaining('takes its model from the command line'),
-      findsOneWidget,
-    );
+    expect(h.written.join(), contains('/model'));
+    expect(find.textContaining('opened its own model picker'), findsOneWidget);
     expect(SessionDao(h.db).getById(h.sessionId)!.modelId, 'gpt-5.5');
   });
 

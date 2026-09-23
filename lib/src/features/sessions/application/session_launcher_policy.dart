@@ -162,6 +162,25 @@ extension SessionPolicyVerbs on SessionLauncher {
       );
     }
     final blocker = liveModelSwitchBlockerFor(sessionId);
+    final picker = effective?.descriptor?.launch.model.pickerCommand ?? '';
+    if (blocker == ModelDeferral.noCommand &&
+        picker.isNotEmpty &&
+        livePaneFor(sessionId) != null &&
+        _ref.read(sessionActivityLookupProvider)(sessionId) ==
+            AgentActivityStatus.idle &&
+        sendTo(sessionId, picker)) {
+      // Its own picker, open in the pane: the person finishes the switch there,
+      // and the recorded model still applies to every later launch.
+      return (
+        switchedNow: false,
+        command: picker,
+        deferral: ModelDeferral.openedPicker,
+      );
+    }
+    if (blocker == ModelDeferral.busy) {
+      // Mid-turn is a wait, not a relaunch: sent the moment it is idle again.
+      _ref.read(pendingLiveSwitchesProvider).hold(sessionId);
+    }
     if (blocker != null) {
       return (switchedNow: false, command: null, deferral: blocker);
     }
@@ -178,6 +197,20 @@ extension SessionPolicyVerbs on SessionLauncher {
     _log.info('Switched $sessionId to $target in place with "$command"');
     return (switchedNow: true, command: command, deferral: null);
   }
+
+  /// Moves the running session onto the model it is recorded to run on, when
+  /// that is safe now. Answers the line sent, or null when nothing was.
+  String? switchModelNow(String sessionId) {
+    final target = effectiveModelFor(sessionId);
+    final modelId = target?.modelId;
+    if (modelId == null || liveModelSwitchBlockerFor(sessionId) != null) {
+      return null;
+    }
+    final command = target?.descriptor?.launch.model.commandFor(modelId);
+    if (command == null || !sendTo(sessionId, command)) return null;
+    _log.info('Switched $sessionId to $modelId after its turn with "$command"');
+    return command;
+  }
 }
 
 /// Why a model change could not reach the session running now — four reasons
@@ -187,12 +220,17 @@ enum ModelDeferral {
   notRunning,
 
   /// The agent is mid-turn, holding a prompt, or in a state no source can
-  /// vouch for. A line typed into any of those lands in the user's own input.
+  /// vouch for. A line typed into any of those lands in the user's own input,
+  /// so the change is held and sent when the session is next idle.
   busy,
 
   /// The agent has no in-session command that takes a model name. Codex's
   /// `/model` opens a picker, which is not the same thing.
   noCommand,
+
+  /// The agent's own model picker was opened in the running session, since it
+  /// cannot be told a model by name there. The person chooses in it.
+  openedPicker,
 
   /// Nothing to switch *to*: the session was handed back to a default that
   /// names no model, so the agent's own default applies from the next launch.

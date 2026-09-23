@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
@@ -10,6 +12,7 @@ import 'package:agent_cli/read.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/pending_live_switches.dart';
 import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/application/session_status_providers.dart';
 import 'package:karmashala/src/features/sessions/application/session_working_directory.dart';
@@ -46,6 +49,8 @@ class _StaticSettings extends SettingsController {
 ({ProviderContainer container, AppDatabase db}) harness({
   String agentId = AgentIds.claudeCode,
   AgentActivityStatus status = AgentActivityStatus.idle,
+  AgentActivityStatus Function()? statusNow,
+  Stream<String>? becameIdle,
 }) {
   final db = AppDatabase.memory();
   ExecutionEnvironmentDao(db).upsert(windowsEnv());
@@ -63,7 +68,12 @@ class _StaticSettings extends SettingsController {
       ),
       // The status seam. Standing up the real registry would mean a status
       // pipeline, a store scan and a timer to assert one boolean.
-      sessionActivityLookupProvider.overrideWithValue((_) => status),
+      sessionActivityLookupProvider.overrideWithValue(
+        (_) => statusNow?.call() ?? status,
+      ),
+      pendingLiveSwitchesProvider.overrideWith(
+        (ref) => PendingLiveSwitches(ref, becameIdle ?? const Stream.empty()),
+      ),
       sessionDirectoryPresentProvider.overrideWithValue((_) => true),
       // A resume refuses when the CLI has no record of the conversation, and
       // nothing here writes a real transcript. The question this file asks is
@@ -181,7 +191,7 @@ void main() {
   });
 
   test(
-    'Codex is idle and still deferred: its /model takes no argument',
+    'Codex, idle: its own picker is opened, since /model takes no argument',
     () async {
       final h = harness(agentId: AgentIds.codex);
       addTearDown(h.db.close);
@@ -193,11 +203,60 @@ void main() {
           .setModel(session.id, 'gpt-5.5');
 
       expect(outcome.switchedNow, isFalse);
-      expect(outcome.deferral, ModelDeferral.noCommand);
-      expect(session.written, isEmpty);
+      expect(outcome.deferral, ModelDeferral.openedPicker);
+      expect(outcome.command, '/model');
+      expect(session.written.join(), contains('/model'));
       expect(SessionDao(h.db).getById(session.id)!.modelId, 'gpt-5.5');
     },
   );
+
+  test('Codex mid-turn: nothing is typed, not even the picker', () async {
+    final h = harness(
+      agentId: AgentIds.codex,
+      status: AgentActivityStatus.working,
+    );
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final session = await launched(h.container, agentId: AgentIds.codex);
+
+    final outcome = h.container
+        .read(sessionLauncherProvider)
+        .setModel(session.id, 'gpt-5.5');
+
+    expect(outcome.deferral, ModelDeferral.noCommand);
+    expect(session.written, isEmpty);
+  });
+
+  test('a pick made mid-turn is sent the moment the turn ends', () async {
+    var status = AgentActivityStatus.working;
+    final idle = StreamController<String>.broadcast();
+    addTearDown(idle.close);
+    final h = harness(statusNow: () => status, becameIdle: idle.stream);
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final session = await launched(h.container);
+    h.container.read(pendingLiveSwitchesProvider);
+
+    final outcome = h.container
+        .read(sessionLauncherProvider)
+        .setModel(session.id, 'opus');
+    expect(outcome.deferral, ModelDeferral.busy);
+    expect(session.written, isEmpty);
+    expect(
+      h.container.read(pendingLiveSwitchesProvider).holds(session.id),
+      isTrue,
+    );
+
+    status = AgentActivityStatus.idle;
+    idle.add(session.id);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(session.written.join(), contains('/model opus'));
+    expect(
+      h.container.read(pendingLiveSwitchesProvider).holds(session.id),
+      isFalse,
+    );
+  });
 
   test('a session nothing is running is deferred, not refused', () async {
     final h = harness();

@@ -134,7 +134,7 @@ ModelChipView modelChipViewFor(SessionModelState state) {
 class ModelChip extends StatelessWidget {
   const ModelChip({
     required this.view,
-    required this.switchesNow,
+    required this.whenPicked,
     required this.onSelected,
     this.maxLabelWidth = 120,
     super.key,
@@ -147,9 +147,10 @@ class ModelChip extends StatelessWidget {
 
   final ModelChipView view;
 
-  /// Whether a pick made this instant would reach the session running now,
-  /// asked as the menu opens. See [SessionLauncher.liveModelSwitchBlockerFor].
-  final bool Function() switchesNow;
+  /// When a pick made this instant reaches the session — `now`, `after this
+  /// turn` or `next launch` — asked as the menu opens. See
+  /// [SessionLauncher.liveModelSwitchBlockerFor].
+  final String Function() whenPicked;
 
   final ValueChanged<ModelChoice> onSelected;
 
@@ -170,7 +171,8 @@ class ModelChip extends StatelessWidget {
       itemBuilder: (context) {
         // Asked once as the menu opens and shared by every row: whether a pick
         // lands is a property of the agent and the moment, not of the model.
-        final live = switchesNow();
+        final lands = whenPicked();
+        final live = lands == 'now';
         return [
           // First, and its own row: handing the session back to the default is
           // where every session starts and the only way back from a pick.
@@ -180,7 +182,7 @@ class ModelChip extends StatelessWidget {
             label: 'Follow the Settings default',
             // A default that names no model has nothing to switch *to* — see
             // [ModelDeferral.noModel].
-            badge: view.defaultModelId != null && live ? 'now' : 'next launch',
+            badge: view.defaultModelId != null ? lands : 'next launch',
             detail: view.defaultDetail,
           ),
           const DesktopMenuDivider(),
@@ -192,9 +194,7 @@ class ModelChip extends StatelessWidget {
               // model, and ticking it too would read as a choice it made.
               selected: !view.inherited && option.model.id == view.selectedId,
               label: option.model.label,
-              badge: option.isSelectable
-                  ? (live ? 'now' : 'next launch')
-                  : option.fitLabel,
+              badge: option.isSelectable ? lands : option.fitLabel,
               badgeColor: option.isSelectable
                   ? (live ? scheme.tertiary : scheme.onSurfaceVariant)
                   : scheme.error,
@@ -337,8 +337,12 @@ Widget _buildModelChip(
   return ModelChip(
     view: view,
     maxLabelWidth: maxLabelWidth,
-    switchesNow: () =>
-        launcher.liveModelSwitchBlockerFor(state.sessionId) == null,
+    whenPicked: () =>
+        switch (launcher.liveModelSwitchBlockerFor(state.sessionId)) {
+          null => 'now',
+          ModelDeferral.busy => 'after this turn',
+          _ => 'next launch',
+        },
     onSelected: (choice) => _apply(ref, launcher, state, choice),
   );
 }
@@ -366,12 +370,16 @@ void _apply(
       ? '$what — switched now: "${outcome.command}" was sent to the session.'
       : switch (outcome.deferral) {
           ModelDeferral.busy =>
-            '$what — applies on the next launch. ${state.agentName} is '
-                'mid-turn, so nothing was typed into the running session.',
+            '$what — switches when ${state.agentName} finishes this turn. '
+                'Nothing is typed into the session while it is working.',
           ModelDeferral.noCommand =>
             '$what — applies on the next launch. ${state.agentName} takes its '
                 'model from the command line, so the session running now is '
                 'unchanged.',
+          ModelDeferral.openedPicker =>
+            '$what — ${state.agentName} opened its own model picker in the '
+                'session; choose it there to switch now. It is also recorded for '
+                'the next launch.',
           ModelDeferral.noModel =>
             '$what — applies on the next launch. There is no model to switch '
                 'to, so the session running now is unchanged.',

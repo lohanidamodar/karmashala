@@ -41,6 +41,7 @@ import 'handoff_packet_files.dart';
 import 'session_launch_arguments.dart';
 import 'session_launch_exceptions.dart';
 import 'session_mcp_arguments.dart';
+import 'pending_live_switches.dart';
 import 'session_notice.dart';
 import 'session_providers.dart';
 import 'session_status_providers.dart';

@@ -1199,6 +1199,9 @@ const _codex = AgentDescriptor(
           'form anywhere in the binary; slugs read from '
           '\$CODEX_HOME/models_cache.json on 2026-09-02',
       discovery: AgentModelDiscovery.codexModelsCache,
+      // Takes no argument: it opens the picker `model_popups.rs` draws, where
+      // the person chooses. Orca does the same (read 2026-09-23).
+      pickerCommand: '/model',
     ),
   ),
   store: AgentStoreSpec(
