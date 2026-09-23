@@ -233,7 +233,6 @@ class PtyTerminalInstance
     // Handlers are set on an adopted buffer as well as a fresh one: they are
     // the same values, and a branch here is a branch that can drift.
     terminal = (adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines))
-      ..reflowEnabled = paneReflows(agent: agentLaunch != null)
       // `KarmashalaInputHandler` is ours: the package encodes every modified
       // Enter as a bare CR, so Shift+Enter is indistinguishable from submit.
       ..inputHandler = const KarmashalaInputHandler()
@@ -728,7 +727,6 @@ class DormantTerminalInstance
   Terminal _buildTerminal() {
     _bufferBuilt = true;
     final built = PaneTerminal(maxLines: kLiveScrollbackMaxLines)
-      ..reflowEnabled = paneReflows(agent: agentLaunch != null)
       ..inputHandler = const KarmashalaInputHandler();
     final hint = gridHint;
     if (hint != null) {

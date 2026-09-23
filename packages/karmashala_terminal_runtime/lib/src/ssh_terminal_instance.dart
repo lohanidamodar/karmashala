@@ -63,7 +63,6 @@ class SshTerminalInstance
   }) : _logger = logger ?? AppLogger.named('terminal.ssh'),
        _cwd = WorkingDirectoryTracker(workingDirectory, hostname: host.host) {
     terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
-      ..reflowEnabled = paneReflows(agent: agentLaunch != null)
       ..inputHandler = const KarmashalaInputHandler()
       ..onPrivateOSC = _osc.dispatch
       ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);
