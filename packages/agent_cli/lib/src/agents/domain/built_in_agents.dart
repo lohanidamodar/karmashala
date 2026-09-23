@@ -354,6 +354,7 @@ const _claudeCode = AgentDescriptor(
           'bundle\'s dispatch — `Ne==="/model"||Ne.startsWith("/model ")` with '
           'the argument read off the query; alias list from that bundle\'s '
           '["sonnet","opus","haiku","fable","best",…] allowlist',
+      discovery: AgentModelDiscovery.claudeListModels,
     ),
   ),
   store: AgentStoreSpec(
@@ -1197,6 +1198,7 @@ const _codex = AgentDescriptor(
           'use", drawn by tui/src/chatwidget/model_popups.rs) with no argument '
           'form anywhere in the binary; slugs read from '
           '\$CODEX_HOME/models_cache.json on 2026-09-02',
+      discovery: AgentModelDiscovery.codexModelsCache,
     ),
   ),
   store: AgentStoreSpec(

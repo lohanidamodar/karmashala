@@ -6,6 +6,7 @@ import '../../explorer/application/session_context.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../../settings/application/settings_controller.dart';
 import 'package:agent_cli/descriptors.dart';
+import 'agent_model_catalog_providers.dart';
 
 /// The model one session will run on. A value with `==` rather than a record,
 /// because a state that never equals itself repaints on every session signal.
@@ -17,7 +18,9 @@ class SessionModelState {
     required this.modelId,
     required this.defaultModelId,
     required this.inherited,
-  });
+    AgentModelSupport? support,
+    // ignore: prefer_initializing_formals — private field, named for callers.
+  }) : _support = support;
 
   final String sessionId;
 
@@ -39,14 +42,21 @@ class SessionModelState {
 
   String get agentName => descriptor?.displayName ?? 'This agent';
 
+  final AgentModelSupport? _support;
+
+  /// How this agent is told a model, with the list its CLI reported when one
+  /// was read.
   AgentModelSupport get support =>
-      descriptor?.launch.model ?? const AgentModelSupport.unsupported();
+      _support ??
+      descriptor?.launch.model ??
+      const AgentModelSupport.unsupported();
 
   @override
   bool operator ==(Object other) =>
       other is SessionModelState &&
       other.sessionId == sessionId &&
       identical(other.descriptor, descriptor) &&
+      identical(other._support, _support) &&
       other.modelId == modelId &&
       other.defaultModelId == defaultModelId &&
       other.inherited == inherited;
@@ -83,6 +93,9 @@ final sessionModelProvider = Provider.autoDispose
         modelId: effective.modelId,
         defaultModelId: effective.defaultModelId,
         inherited: effective.inherited,
+        support: agentId == null
+            ? null
+            : ref.watch(agentModelSupportProvider(agentId)),
       );
     });
 

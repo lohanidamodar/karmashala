@@ -327,6 +327,18 @@ enum AgentModelStyle {
   unsupported,
 }
 
+/// Where an agent's own model list can be read. See `agent_model_catalog.dart`.
+enum AgentModelDiscovery {
+  /// The curated list is all there is.
+  none,
+
+  /// A `list_models` control request in Claude Code's print mode.
+  claudeListModels,
+
+  /// `$CODEX_HOME/models_cache.json`, kept by the CLI per account.
+  codexModelsCache,
+}
+
 /// Whether one agent can be told which model to use, and how.
 ///
 /// Modelled exactly like [AgentMcpSupport] and [AgentForkSupport] — declared
@@ -359,6 +371,7 @@ class AgentModelSupport {
     required this.slashCommand,
     required this.models,
     required this.evidence,
+    this.discovery = AgentModelDiscovery.none,
   }) : style = AgentModelStyle.liveAndAtLaunch;
 
   /// The model rides on [flag] at launch. A running session cannot be moved.
@@ -366,6 +379,7 @@ class AgentModelSupport {
     required this.flag,
     required this.models,
     required this.evidence,
+    this.discovery = AgentModelDiscovery.none,
   }) : slashCommand = '',
        style = AgentModelStyle.atLaunchOnly;
 
@@ -377,7 +391,29 @@ class AgentModelSupport {
     required this.evidence,
   }) : flag = '',
        slashCommand = '',
+       discovery = AgentModelDiscovery.none,
        style = AgentModelStyle.listedOnly;
+
+  const AgentModelSupport._(
+    this.style,
+    this.flag,
+    this.slashCommand,
+    this.models,
+    this.evidence,
+    this.discovery,
+  );
+
+  /// The same support offering [found] — the list the CLI itself reported for
+  /// this account — in place of the curated one. How a model is asked for does
+  /// not change with which models there are.
+  AgentModelSupport withModels(List<AgentModel> found) => AgentModelSupport._(
+    style,
+    flag,
+    slashCommand,
+    List.unmodifiable(found),
+    evidence,
+    discovery,
+  );
 
   /// Nothing verified. The default, and the answer for an agent nobody has
   /// checked — which draws no control at all rather than an empty one.
@@ -386,9 +422,13 @@ class AgentModelSupport {
       slashCommand = '',
       models = const [],
       evidence = '',
+      discovery = AgentModelDiscovery.none,
       style = AgentModelStyle.unsupported;
 
   final AgentModelStyle style;
+
+  /// Where this agent's own list is read from, when it has one.
+  final AgentModelDiscovery discovery;
 
   /// The launch option, e.g. `--model`. Empty when there is none.
   final String flag;

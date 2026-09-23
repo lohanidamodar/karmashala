@@ -18,6 +18,7 @@ export 'src/agents/domain/agent_hook_transport.dart';
 export 'src/agents/domain/agent_ids.dart';
 export 'src/agents/domain/agent_kind.dart';
 export 'src/agents/domain/agent_mcp_config.dart';
+export 'src/agents/domain/agent_model_catalog.dart';
 export 'src/agents/domain/agent_model_options.dart';
 export 'src/agents/domain/agent_permission_options.dart';
 export 'src/agents/domain/agent_permission_support.dart';

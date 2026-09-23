@@ -69,14 +69,17 @@ class AgentModelOption {
 /// is what draws no control at all. That is deliberate: an agent nobody has
 /// checked has no models to be wrong about, and a menu of guesses is worse than
 /// no menu.
+///
+/// [support] stands in for the descriptor's own when the caller holds a list
+/// the CLI reported; how the model is asked for is the same either way.
 List<AgentModelOption> modelOptionsFor(
   AgentDescriptor? descriptor, {
   String? current,
   String? agentName,
+  AgentModelSupport? support,
 }) {
   final name = agentName ?? descriptor?.displayName ?? 'This agent';
-  final support =
-      descriptor?.launch.model ?? const AgentModelSupport.unsupported();
+  support ??= descriptor?.launch.model ?? const AgentModelSupport.unsupported();
   final fit = support.isSupported
       ? AgentModelFit.selectable
       : AgentModelFit.notTellable;

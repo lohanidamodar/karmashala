@@ -71,6 +71,7 @@ ModelChipView modelChipViewFor(SessionModelState state) {
     state.descriptor,
     current: state.modelId,
     agentName: state.agentName,
+    support: state.support,
   );
   final current = state.modelId == null
       ? null

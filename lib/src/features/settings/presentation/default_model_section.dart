@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/tokens.dart';
 import 'package:agent_cli/descriptors.dart';
+import '../../agents/application/agent_model_catalog_providers.dart';
 import '../../agents/presentation/model_picker.dart';
 import '../application/settings_controller.dart';
 import 'agent_label.dart';
@@ -34,6 +35,7 @@ class DefaultModelSection extends ConsumerWidget {
           for (final descriptor in descriptors)
             _ModelCard(
               descriptor: descriptor,
+              support: ref.watch(agentModelSupportProvider(descriptor.id)),
               selected: settings.defaultModelFor(descriptor.id),
               onChanged: (choice) =>
                   controller.setDefaultModel(descriptor.id, choice.modelId),
@@ -47,11 +49,13 @@ class DefaultModelSection extends ConsumerWidget {
 class _ModelCard extends StatelessWidget {
   const _ModelCard({
     required this.descriptor,
+    required this.support,
     required this.selected,
     required this.onChanged,
   });
 
   final AgentDescriptor descriptor;
+  final AgentModelSupport support;
   final String? selected;
   final ValueChanged<ModelChoice> onChanged;
 
@@ -72,7 +76,11 @@ class _ModelCard extends StatelessWidget {
                 ),
               ),
               ModelPicker(
-                options: modelOptionsFor(descriptor),
+                options: modelOptionsFor(
+                  descriptor,
+                  current: selected,
+                  support: support,
+                ),
                 selected: selected,
                 onChanged: onChanged,
               ),
