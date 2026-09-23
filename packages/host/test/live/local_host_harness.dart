@@ -23,6 +23,9 @@ import 'package:test/test.dart';
 /// suites that need a host, and races with nothing.
 final Future<String> _host = _buildHost();
 
+/// The built `karmashala_host`, for a test that runs a command other than `serve`.
+Future<String> get builtHost => _host;
+
 Future<String> _buildHost() async {
   // Unique per isolate, not per process: isolates sharing a process share a
   // pid and would land on the same directory (see `WslHarness.runSync`).

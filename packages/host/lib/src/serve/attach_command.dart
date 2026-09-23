@@ -53,6 +53,11 @@ Future<int> runAttach(
   final code = await done.future;
   await toHost.cancel();
   await fromHost.cancel();
-  await stdoutSink.flush();
+  socket.destroy();
+  // Bounded: a stdout whose reader died with its SSH channel never flushes.
+  await stdoutSink
+      .flush()
+      .timeout(const Duration(seconds: 2), onTimeout: () {})
+      .catchError((Object _) {});
   return code;
 }
