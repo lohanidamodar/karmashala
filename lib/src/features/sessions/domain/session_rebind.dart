@@ -12,6 +12,26 @@ library;
 /// past it the status service already stops believing that hook.
 const Duration kRebindQuietFor = Duration(minutes: 5);
 
+/// Hook events only a conversation with a turn in it fires — Claude Code's,
+/// Codex's and Antigravity's spellings. A start, an end or a notice does not
+/// count: a `claude` opened and quit in a plain terminal fires those and never
+/// writes a transcript, and a row pointed at it resumes nothing (2026-09-23).
+const Set<String> kTurnEvents = {
+  'UserPromptSubmit',
+  'PreToolUse',
+  'PostToolUse',
+  'Stop',
+  'StopFailure',
+  'SubagentStop',
+  'PreInvocation',
+  'PostInvocation',
+};
+
+/// Whether a hook named [event] shows its conversation is real enough to move
+/// a row onto.
+bool hookShowsATurn(String? event) =>
+    event != null && kTurnEvents.contains(event);
+
 /// One pane the app launched, and the conversation its row names.
 class BoundPane {
   const BoundPane({

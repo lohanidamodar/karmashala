@@ -96,10 +96,12 @@ void main() {
     ProviderContainer container,
     String conversationId, {
     String? paneSessionId,
+    String event = 'UserPromptSubmit',
   }) => rebindSessionFromHook(
     container,
     agentId: AgentIds.claudeCode,
     conversationId: conversationId,
+    event: event,
     body: jsonEncode({'session_id': conversationId, 'cwd': r'C:\src\demo\app'}),
     paneSessionId: paneSessionId,
   );
@@ -315,6 +317,59 @@ void main() {
       final container = containerWith(['pane-1']);
 
       expect(rebind(container, 'cli-new', paneSessionId: 'a b;c'), 's1');
+    });
+  });
+
+  group('a conversation that only announced itself (2026-09-23)', () {
+    // A `claude` run by hand in a plain terminal in the same folder, quit
+    // before any message: it fired hooks, carried no pane id, and was never
+    // written. The quiet pane was re-pointed at it and every resume failed.
+    for (final event in ['SessionStart', 'SessionEnd', 'Notification', null]) {
+      test('a bare $event moves nothing', () {
+        launched('s1', paneId: 'pane-1');
+        final container = containerWith(['pane-1']);
+
+        expect(rebind(container, 'cli-ghost', event: event ?? ''), isNull);
+        expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+      });
+    }
+
+    test('the same conversation moves the row once it has a turn', () {
+      launched('s1', paneId: 'pane-1');
+      final container = containerWith(['pane-1']);
+
+      applyAgentHookCallback(
+        container,
+        agentId: AgentIds.claudeCode,
+        event: 'SessionEnd',
+        body: jsonEncode({'session_id': 'cli-new', 'cwd': r'C:\src\demo\app'}),
+      );
+      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+      // A moment later, well inside the retry floor: still looked at.
+      applyAgentHookCallback(
+        container,
+        agentId: AgentIds.claudeCode,
+        event: 'UserPromptSubmit',
+        body: jsonEncode({'session_id': 'cli-new', 'cwd': r'C:\src\demo\app'}),
+      );
+      expect(sessions.getById('s1')!.externalSessionId, 'cli-new');
+    });
+
+    test('a pane naming itself still needs a turn', () {
+      launched('s1', paneId: 'pane-1');
+      final container = containerWith(['pane-1']);
+
+      expect(
+        rebind(
+          container,
+          'cli-ghost',
+          paneSessionId: 's1',
+          event: 'SessionEnd',
+        ),
+        isNull,
+      );
+      expect(sessions.getById('s1')!.externalSessionId, 'cli-s1');
+      expect(rebind(container, 'cli-ghost', paneSessionId: 's1'), 's1');
     });
   });
 

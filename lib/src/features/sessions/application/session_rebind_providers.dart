@@ -69,12 +69,16 @@ final sessionRebindAttemptsProvider = Provider<SessionRebindAttempts>(
 /// [paneSessionId] is the row the hook's pane was launched as, when the hook
 /// carried it; [observedAt] is when the hook fired, defaulting to now.
 ///
+/// Only an [event] in [kTurnEvents] may move a row: until one arrives the
+/// conversation is noted as unknown and left pending.
+///
 /// Returns the row re-pointed, or null — which is the common answer, and the
 /// right one whenever two panes could equally be it. See [sessionToRebind].
 String? rebindSessionFromHook(
   ProviderContainer container, {
   required String agentId,
   required String conversationId,
+  required String? event,
   required String body,
   String? paneSessionId,
   DateTime? observedAt,
@@ -82,7 +86,10 @@ String? rebindSessionFromHook(
   if (agentId.isEmpty || conversationId.isEmpty) return null;
   final now = container.read(clockProvider).nowUtc();
   final attempts = container.read(sessionRebindAttemptsProvider);
-  if (!attempts.mayTry(conversationId, now)) return null;
+  final turn = hookShowsATurn(event);
+  // Not rationed without a turn: the prompt that follows a moment later must
+  // still be looked at.
+  if (turn && !attempts.mayTry(conversationId, now)) return null;
 
   final sessions = container.read(sessionDaoProvider);
   // Already somebody's. The overwhelmingly common case, and one indexed read.
@@ -96,6 +103,7 @@ String? rebindSessionFromHook(
     conversationId,
     observedAt ?? now,
   );
+  if (!turn) return null;
 
   final live = <String>[
     for (final pane in container.read(adoptablePanesProvider)())

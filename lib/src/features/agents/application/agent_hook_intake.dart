@@ -94,6 +94,7 @@ AgentStatusReport applyAgentHookCallback(
       container,
       agentId: report.agentId,
       conversationId: report.sessionId,
+      event: event,
       body: body,
       paneSessionId: paneSessionId,
       observedAt: report.observedAt,
