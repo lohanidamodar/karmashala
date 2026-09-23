@@ -65,7 +65,10 @@ void main() {
     deviceId: _deviceId,
   );
 
-  Future<void> start({StreamFlow Function()? flow}) async {
+  Future<void> start({
+    StreamFlow Function()? flow,
+    Duration watchLease = kWatchLease,
+  }) async {
     dao.insert(
       PairedDevice(
         id: _deviceId.value,
@@ -84,6 +87,7 @@ void main() {
       lanPort: 0,
       advertise: false,
       transcriptPollInterval: Duration.zero,
+      watchLease: watchLease,
       newStreamFlow: () {
         final made = (flow ?? StreamFlow.new)();
         flows.add(made);
@@ -175,29 +179,135 @@ void main() {
     expect(phone.changes.last, startsWith('change 39 '));
   });
 
-  test('a stream with no ack progress fails closed with a named code', () async {
-    await start(
-      flow: () => StreamFlow(
-        highWatermark: 3000,
-        lowWatermark: 1000,
-        stallTimeout: const Duration(milliseconds: 200),
-      ),
-    );
-    final phone = await _RawPhone.connect(relayUri, await deviceKey());
-    cleanups.add(phone.close);
-    await phone.request(FrameType.sessionsList);
-    await phone.request(FrameType.sessionSubscribe, {'sessionId': 's1'});
-    phone.ack();
+  test(
+    'a stream with no ack progress fails closed with a named code',
+    () async {
+      await start(
+        flow: () => StreamFlow(
+          highWatermark: 3000,
+          lowWatermark: 1000,
+          stallTimeout: const Duration(milliseconds: 200),
+        ),
+      );
+      final phone = await _RawPhone.connect(relayUri, await deviceKey());
+      cleanups.add(phone.close);
+      await phone.request(FrameType.sessionsList);
+      await phone.request(FrameType.sessionSubscribe, {'sessionId': 's1'});
+      phone.ack();
 
-    for (var i = 0; i < 10; i++) {
-      await desktopChanged(i);
+      for (var i = 0; i < 10; i++) {
+        await desktopChanged(i);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await desktopChanged(10);
+      await until('was told the stream stalled', () {
+        return phone.errors.contains(ErrorCode.streamStalled.wire);
+      });
+      expect(service.hasLiveLink(_deviceId.value), isTrue);
+    },
+  );
+
+  group('connected is not watching', () {
+    Future<_RawPhone> subscribed() async {
+      final phone = await _RawPhone.connect(relayUri, await deviceKey());
+      cleanups.add(phone.close);
+      await phone.request(FrameType.sessionsList);
+      await phone.request(FrameType.sessionSubscribe, {'sessionId': 's1'});
+      return phone;
     }
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    await desktopChanged(10);
-    await until('was told the stream stalled', () {
-      return phone.errors.contains(ErrorCode.streamStalled.wire);
+
+    test('a pocketed phone is not streamed changes, and is shown where '
+        'things stand when it looks again', () async {
+      await start();
+      final phone = await subscribed();
+      phone.ack(watching: false);
+      await until('heard it stop looking', () {
+        return !service.isWatching(_deviceId.value);
+      });
+      expect(service.hasLiveLink(_deviceId.value), isTrue);
+      final before = phone.changes.length;
+
+      for (var i = 0; i < 5; i++) {
+        await desktopChanged(i);
+      }
+      expect(phone.changes.length, before, reason: 'a pocket was streamed');
+
+      phone.ack(watching: true);
+      await until('heard current state', () => phone.changes.length > before);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(
+        phone.changes.length,
+        before + 1,
+        reason: 'the pocket was replayed',
+      );
+      expect(phone.changes.last, startsWith('change 4 '));
     });
-    expect(service.hasLiveLink(_deviceId.value), isTrue);
+
+    test('watching lapses when it is not renewed', () async {
+      await start(watchLease: const Duration(milliseconds: 300));
+      final phone = await subscribed();
+      phone.ack(watching: true);
+      await until('heard it look', () => service.isWatching(_deviceId.value));
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      expect(service.isWatching(_deviceId.value), isFalse);
+      expect(service.hasLiveLink(_deviceId.value), isTrue);
+    });
+
+    test(
+      'a phone that never says is watching while connected, as before',
+      () async {
+        await start();
+        final phone = await subscribed();
+        phone.ack();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        expect(service.isWatching(_deviceId.value), isTrue);
+        final before = phone.changes.length;
+        await desktopChanged(1);
+        await until('heard the change', () => phone.changes.length > before);
+      },
+    );
+
+    test(
+      'the client says what the owner is doing the moment it changes',
+      () async {
+        await start();
+        bool? looking = true;
+        final client = CompanionClient(
+          pairing: CompanionPairing(
+            hostId: _hostId,
+            deviceId: _deviceId,
+            deviceKey: Uint8List.fromList((await deviceKey()).bytes),
+            capabilities: CapabilitySet.all,
+            relay: relayUri,
+            generation: kFirstSessionGeneration,
+            hostName: 'TestHost',
+          ),
+          store: InMemoryCompanionStore(),
+          watching: () => looking,
+          relayFactory: (relay, rendezvous) => RelayTransport(
+            endpoint: RelayTransport.endpointFor(relay, rendezvous),
+            backoff: fastBackoff(),
+            heartbeat: const Duration(milliseconds: 500),
+          )..start(),
+        );
+        cleanups.add(client.close);
+        await client.connect(helloTimeout: const Duration(seconds: 5));
+        await until('heard it look', () => service.isWatching(_deviceId.value));
+
+        looking = false;
+        client.presenceChanged();
+        await until(
+          'heard it stop',
+          () => !service.isWatching(_deviceId.value),
+        );
+
+        looking = true;
+        client.presenceChanged();
+        await until('heard it look again', () {
+          return service.isWatching(_deviceId.value);
+        });
+      },
+    );
   });
 }
 
@@ -273,7 +383,9 @@ class _RawPhone {
     await done.future.timeout(const Duration(seconds: 5));
   }
 
-  void ack() => unawaited(_send(FrameType.streamAck, null, {'seq': _highest}));
+  void ack({bool? watching}) => unawaited(
+    _send(FrameType.streamAck, null, {'seq': _highest, 'watching': ?watching}),
+  );
 
   Future<void> close() async {
     await _subscription.cancel();

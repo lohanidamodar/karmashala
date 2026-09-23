@@ -20,6 +20,13 @@ const Duration kStreamStallTimeout = Duration(seconds: 10);
 const int kStreamAckBytes = 64 * 1024;
 const Duration kStreamAckDelay = Duration(milliseconds: 16);
 
+/// How long a phone's "watching" holds without renewal, so a phone Android
+/// froze mid-screen cannot look watching for ever.
+const Duration kWatchLease = Duration(seconds: 30);
+
+/// How often a watching phone renews, well inside [kWatchLease].
+const Duration kWatchRenew = Duration(seconds: 10);
+
 /// What the host may do with the next unsolicited frame.
 enum StreamAdmission {
   send,

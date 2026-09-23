@@ -105,6 +105,7 @@ class CompanionClient {
     this.requestTimeout = const Duration(seconds: 15),
     this.storeTimeout = const Duration(seconds: 5),
     this.onLog,
+    this.watching,
     // ignore: prefer_initializing_formals — mutable field, named for callers.
   }) : _pairing = pairing,
        _relayFactory = relayFactory ?? _defaultRelayFactory;
@@ -122,6 +123,10 @@ class CompanionClient {
 
   final void Function(String message)? onLog;
   final RelayTransportFactoryFn _relayFactory;
+
+  /// Whether the owner is looking at the app: true, false, or null for
+  /// nothing said. Read at every ack, so it is never stale on the wire.
+  final bool? Function()? watching;
 
   CompanionPairing _pairing;
 
@@ -151,6 +156,7 @@ class CompanionClient {
   int _ackSentSeq = -1;
   int _ackBytes = 0;
   Timer? _ackTimer;
+  Timer? _leaseTimer;
 
   /// Host events, as they arrive. Broadcast: listen any time after [connect].
   Stream<CompanionEvent> get events => _events.stream;
@@ -333,6 +339,11 @@ class CompanionClient {
         try {
           final status = RemoteHostStatus.fromJson(envelope.payload);
           _acksWanted = status.streamAcks;
+          if (_acksWanted) {
+            _leaseTimer ??= Timer.periodic(kWatchRenew, (_) {
+              if (watching?.call() == true) _flushAck(force: true);
+            });
+          }
           if (_statusArrived?.isCompleted == false) {
             _statusArrived!.complete(status);
           }
@@ -403,21 +414,28 @@ class CompanionClient {
     }
   }
 
-  void _flushAck() {
+  /// Says at once that the owner started or stopped looking, rather than at
+  /// the next frame or renewal.
+  void presenceChanged() {
+    if (_acksWanted) _flushAck(force: true);
+  }
+
+  void _flushAck({bool force = false}) {
     _ackTimer?.cancel();
     _ackTimer = null;
     final channel = _channel;
     final transport = _transport;
     if (channel == null || transport == null || _ackSeq < 0) return;
-    if (_ackSeq == _ackSentSeq) return;
+    if (_ackSeq == _ackSentSeq && !force) return;
     final seq = _ackSentSeq = _ackSeq;
+    final looking = watching?.call();
     _ackBytes = 0;
     _sendChain = _sendChain
         .then((_) async {
           final envelope = Envelope.of(
             FrameType.streamAck,
             seq: channel.nextSendSequence,
-            payload: {'seq': seq},
+            payload: {'seq': seq, 'watching': ?looking},
           );
           transport.send(await channel.seal(envelope.toBytes()));
         })
@@ -430,6 +448,8 @@ class CompanionClient {
   void _resetAcks() {
     _ackTimer?.cancel();
     _ackTimer = null;
+    _leaseTimer?.cancel();
+    _leaseTimer = null;
     _acksWanted = false;
     _ackSeq = -1;
     _ackSentSeq = -1;

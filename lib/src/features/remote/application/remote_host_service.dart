@@ -36,6 +36,7 @@ class RemoteHostService {
     this.advertise = true,
     this.transcriptPollInterval = const Duration(seconds: 2),
     this.newStreamFlow = StreamFlow.new,
+    this.watchLease = kWatchLease,
     DateTime Function()? now,
     RelayTransportFactory? relayFactory,
     PushPost? pushPost,
@@ -91,6 +92,9 @@ class RemoteHostService {
   /// Builds each link's flow control — a seam so tests can shrink its limits.
   final StreamFlow Function() newStreamFlow;
 
+  /// How long a phone's "watching" holds without renewal.
+  final Duration watchLease;
+
   final DateTime Function() _now;
   final RelayTransportFactory _relayFactory;
 
@@ -102,7 +106,9 @@ class RemoteHostService {
   /// push POSTs to the device's OWN relay — never to one it cannot hear.
   late final PushFanout _pushFanout = PushFanout(
     devices: devices.getActive,
-    hasLiveLink: hasLiveLink,
+    // A phone that is connected but not looking is not shown the live
+    // stream, so for news it counts as not hearing it.
+    hasLiveLink: isWatching,
     clientFor: _pushClientFor,
     now: _now,
     onLog: onLog,
@@ -404,6 +410,11 @@ class RemoteHostService {
   /// its active link since the carrying transport last dropped.
   bool hasLiveLink(String deviceId) => _runtimes[deviceId]?.peerLive ?? false;
 
+  /// Whether [deviceId]'s phone is connected **and** in front of its owner —
+  /// the one that earns the live stream. A phone that never said is watching
+  /// while connected, as every phone was before it could say.
+  bool isWatching(String deviceId) => _runtimes[deviceId]?.watching ?? false;
+
   /// Whether [deviceId] is parked: its relays are off, so only a direct LAN
   /// link reaches it. It resumes when one returns — no re-pair.
   bool isParked(String deviceId) => _runtimes[deviceId]?.parked ?? false;
@@ -545,6 +556,30 @@ class _DeviceRuntime {
   /// cleared when the transport carrying the active link drops.
   bool peerLive = false;
 
+  final Stopwatch _uptime = Stopwatch()..start();
+
+  bool get watching {
+    final active = _active;
+    if (!peerLive || active == null) return false;
+    final said = active.watchingSaid;
+    if (said == null) return true;
+    return said && _uptime.elapsed < active.watchUntil;
+  }
+
+  void _onStreamAck(_ActiveLink link, int seq, bool? looking) {
+    final wasWatching = watching;
+    if (looking != null) {
+      link.watchingSaid = looking;
+      if (looking) link.watchUntil = _uptime.elapsed + service.watchLease;
+    }
+    final reopened = link.flow.ack(seq);
+    // Either way the phone gets where things stand now, never what it missed.
+    // Unawaited because this runs on the chain the sweep queues onto.
+    if (reopened || (!wasWatching && watching)) {
+      unawaited(sweepSessionsChanged());
+    }
+  }
+
   RemoteTransport? _watchedTransport;
   StreamSubscription<TransportState>? _liveWatch;
 
@@ -589,7 +624,9 @@ class _DeviceRuntime {
       for (final sessionId
           in _active?.api.subscribedSessions ?? const <String>{}) {
         if (_closed || !peerLive) return;
-        await push((api) => api.pollTranscript(sessionId));
+        // The live transcript is for a phone that is looking; an approval is
+        // the news a pocketed one is paired for.
+        if (watching) await push((api) => api.pollTranscript(sessionId));
         await push((api) => api.recheckApproval(sessionId));
       }
     } finally {
@@ -606,7 +643,7 @@ class _DeviceRuntime {
   Future<void> sweepSessionsChanged() async {
     // Nothing to say to a phone that is not listening, and saying it is what
     // the desktop was paying for on every one of its own changes — see [push].
-    if (!peerLive) return;
+    if (!watching) return;
     if (_pushing) {
       _pushAgain = true;
       return;
@@ -617,13 +654,13 @@ class _DeviceRuntime {
         _pushAgain = false;
         for (final sessionId
             in _active?.api.subscribedSessions ?? const <String>{}) {
-          if (_closed || !peerLive) return;
+          if (_closed || !watching) return;
           await push((api) => api.pushSessionChanged(sessionId));
         }
         // And any session this phone has never been shown, which no
         // subscription covers yet.
-        if (!_closed && peerLive) await push((api) => api.pushNewSessions());
-      } while (_pushAgain && !_closed && peerLive);
+        if (!_closed && watching) await push((api) => api.pushNewSessions());
+      } while (_pushAgain && !_closed && watching);
     } finally {
       _pushing = false;
       _pushAgain = false;
@@ -889,11 +926,7 @@ class _DeviceRuntime {
         // link is up must be in the very next `host.status`.
         relays: () => service.announcedRelaysFor(device),
         lanHint: () => service.lanHint,
-        onStreamAck: (seq, watching) {
-          // Reopened: tell it where things stand now. Unawaited because this
-          // runs on the chain the sweep queues onto.
-          if (created.flow.ack(seq)) unawaited(sweepSessionsChanged());
-        },
+        onStreamAck: (seq, looking) => _onStreamAck(created, seq, looking),
         send: (type, {id, payload = const {}}) =>
             _sealAndSend(created, type, id, payload),
       );
@@ -1036,4 +1069,10 @@ class _ActiveLink {
 
   /// Per generation, like the sequences it counts.
   final StreamFlow flow;
+
+  /// What the phone last said about looking, or null when it never has.
+  bool? watchingSaid;
+
+  /// When a "watching" stops counting unless renewed, on the runtime's clock.
+  Duration watchUntil = Duration.zero;
 }

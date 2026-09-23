@@ -97,6 +97,7 @@ extension _GatewayPromotion on RemoteCompanionGateway {
         relayFactory: _relayFactory,
         requestTimeout: requestTimeout,
         onLog: onLog,
+        watching: _watchingNow,
       );
       final transport = scout.dial(host);
       var socketOpened = false;

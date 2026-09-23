@@ -49,7 +49,11 @@ void main() {
     expect(f.admit(), StreamAdmission.paused);
     now = const Duration(seconds: 11);
     expect(f.admit(), StreamAdmission.failed);
-    expect(f.admit(), StreamAdmission.paused, reason: 'named once, not per frame');
+    expect(
+      f.admit(),
+      StreamAdmission.paused,
+      reason: 'named once, not per frame',
+    );
     expect(f.unackedBytes, 0);
     expect(f.ack(1), isTrue, reason: 'any ack proves a reader again');
     expect(f.admit(), StreamAdmission.send);

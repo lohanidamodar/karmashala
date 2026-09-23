@@ -268,6 +268,14 @@ class RemoteCompanionGateway implements CompanionGateway {
   /// rather than derived so a report made while the link is down is not lost.
   CompanionPresence _presence = CompanionPresence.unknown;
 
+  /// What the stream acks say: on screen is watching, off screen is not, and
+  /// a phone that never said is left to the host's old rule.
+  bool? _watchingNow() => switch (_presence.visibility) {
+    CompanionVisibility.foreground => true,
+    CompanionVisibility.background => false,
+    CompanionVisibility.unknown => null,
+  };
+
   /// Sessions with a gap recovery in flight, so two never race each other.
   final _draining = <String>{};
 

@@ -13,8 +13,10 @@ extension _GatewayNotifications on RemoteCompanionGateway {
   Future<void> _report(CompanionPresence next) async {
     final proposed = next.copyWith(deviceKind: deviceKind);
     if (proposed.saysSameAs(_presence)) return;
+    final looked = _presence.visibility;
     _presence = proposed;
     final client = _client;
+    if (proposed.visibility != looked) client?.presenceChanged();
     // Nothing is queued for a link that is down: the next connection registers
     // anyway, and it carries whatever the latest answer is by then.
     if (client == null || !client.isConnected) return;

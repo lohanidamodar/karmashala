@@ -306,6 +306,7 @@ extension _GatewayDial on RemoteCompanionGateway {
       relayFactory: _captureFactory,
       requestTimeout: requestTimeout,
       onLog: onLog,
+      watching: _watchingNow,
     );
     _client = client;
     _clientEvents = client.events.listen(_onEvent);
