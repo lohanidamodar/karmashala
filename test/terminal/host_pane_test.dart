@@ -42,6 +42,11 @@ void main() {
       access: access,
       launch: launch,
       workingDirectory: r'C:\work',
+      redialDelays: const [
+        Duration(milliseconds: 10),
+        Duration(milliseconds: 10),
+        Duration(milliseconds: 10),
+      ],
     );
     instance.terminal.resize(120, 40);
     addTearDown(instance.dispose);
@@ -441,5 +446,62 @@ void main() {
     );
     addTearDown(pane.dispose);
     expect(pane.hostSessionId, 'karmashala_sess-1');
+  });
+
+  group('a link that closes under a live pane', () {
+    test('is redialled, and the session resumes from the byte the pane '
+        'stopped at', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = paneOn(access);
+      await settle();
+      final first = access.channels.single;
+      first.pushOutput(0, 'before the drop\r\n');
+      await settle();
+
+      await first.close();
+      await settle();
+
+      expect(access.channels, hasLength(2), reason: 'nothing reached it again');
+      final second = access.channels.last;
+      final attach = second.only<AttachMessage>();
+      expect(attach.sessionId, 'karmashala_local_p1');
+      expect(attach.sinceOffset, 'before the drop\r\n'.length);
+      expect(second.all<OpenMessage>(), isEmpty, reason: 'a second process');
+      expect(pane.liveness.value, PaneLiveness.live);
+      expect(screenOf(pane), contains('before the drop'));
+      expect(screenOf(pane), contains('reconnecting'));
+    });
+
+    test('a host that answers but is not ready is waited for, never '
+        'dialled, and the pane says so when it gives up', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = paneOn(access);
+      await settle();
+      access.reconnect(
+        nowReporting: HostDeployment(
+          status: HostDeploymentStatus.unknown,
+          observedAt: DateTime.utc(2026, 9, 23),
+          reason: 'the handshake ran out of time',
+        ),
+      );
+
+      await access.channels.single.close();
+      await settle();
+
+      expect(access.channels, hasLength(1));
+      expect(access.deploymentAsks, 4, reason: 'one per bounded attempt');
+      expect(screenOf(pane).replaceAll('\n', ''), contains('could not reach'));
+    });
+
+    test('a pane closed meanwhile dials nothing', () async {
+      final access = PaneAccess(readyDeployment());
+      final pane = paneOn(access);
+      await settle();
+      final first = access.channels.single;
+      pane.dispose();
+      await first.close();
+      await settle();
+      expect(access.channels, hasLength(1));
+    });
   });
 }

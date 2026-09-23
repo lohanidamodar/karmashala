@@ -17,6 +17,7 @@ import 'cold_screen.dart';
 import 'command_block_recorder.dart';
 import 'package:karmashala_host/protocol.dart' show ProtocolErrorCode;
 import 'host_pane_link.dart';
+import 'local_host_access.dart';
 import 'pane_terminal.dart';
 import 'pty_output_coalescer.dart';
 import 'pty_launch.dart';
@@ -35,6 +36,16 @@ String hostSessionIdFor({required String paneId, String? agentSessionId}) {
       : 'karmashala_local_$paneId';
   return raw.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
 }
+
+/// How long a pane waits before each attempt to reach its host again after the
+/// link closed. Bounded: a host that stays away is said so, not polled for.
+const List<Duration> kHostRedialDelays = [
+  Duration(milliseconds: 250),
+  Duration(seconds: 1),
+  Duration(seconds: 2),
+  Duration(seconds: 4),
+  Duration(seconds: 8),
+];
 
 /// A pane whose process belongs to the **session host**, so it outlives the app
 /// a `flutter_pty` child would die with. No fallback: it says so and stays dead.
@@ -59,6 +70,7 @@ class HostTerminalInstance
     TerminalIngestBudget? ingestBudget,
     AppLogger? logger,
     bool shellIntegration = false,
+    this.redialDelays = kHostRedialDelays,
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
        _cwd = WorkingDirectoryTracker(workingDirectory) {
     terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
@@ -121,6 +133,9 @@ class HostTerminalInstance
   @override
   final AgentPaneLaunch? agentLaunch;
   final Terminal? adoptTerminal;
+
+  /// See [kHostRedialDelays]; shorter in tests.
+  final List<Duration> redialDelays;
 
   final AppLogger _logger;
   final WorkingDirectoryTracker _cwd;
@@ -313,17 +328,52 @@ class HostTerminalInstance
     // A host we had to start ourselves is a host that was not running. It still
     // holds what it recorded — a pane reattaching gets its scrollback and the
     // reason its process is gone — but nothing is running in it.
-    if (deployment.restartedByUs) {
-      _emit(
-        '\x1b[33m[the session host was not running and has been started; any '
-        'session it held before is no longer running]\x1b[0m\r\n',
-      );
-    }
+    if (deployment.restartedByUs) _sayRestarted();
 
     await _dial(deployment);
   }
 
-  Future<void> _dial(HostDeployment deployment) async {
+  void _sayRestarted() => _emit(
+    '\x1b[33m[the session host was not running and has been started; any '
+    'session it held before is no longer running]\x1b[0m\r\n',
+  );
+
+  /// Reaches the host again after the link closed: measured afresh, so a host
+  /// that died is started again and one that only dropped the socket is simply
+  /// redialled. A host that answers but is not ready is waited for, never
+  /// replaced — an unanswered handshake is not evidence that nobody is there.
+  Future<void> _redial() async {
+    for (final delay in redialDelays) {
+      await Future<void>.delayed(delay);
+      if (_disposed || _exited || _link != null) return;
+      final local = access;
+      if (local is LocalHostSessionAccess) local.forget();
+      final HostDeployment deployment;
+      try {
+        deployment = await access.deployment();
+      } on Object catch (e) {
+        _logger.debug('pane $id could not ask its host again: $e');
+        continue;
+      }
+      if (_disposed || _exited) return;
+      if (!deployment.isReady) continue;
+      if (deployment.restartedByUs) _sayRestarted();
+      if (await _dial(deployment, redialing: true)) return;
+    }
+    if (_disposed || _exited) return;
+    _emit(
+      '\r\n\x1b[33m[could not reach the session host again. The session may '
+      'still be there; reopening this pane resumes it from byte '
+      '$_lastOffset.]\x1b[0m\r\n',
+    );
+  }
+
+  /// Answers whether the pane is attached. A first dial that fails ends the
+  /// pane; a redial that fails leaves [_redial] to try again.
+  Future<bool> _dial(
+    HostDeployment deployment, {
+    bool redialing = false,
+  }) async {
     final width = terminal.viewWidth > 0 ? terminal.viewWidth : 80;
     final height = terminal.viewHeight > 0 ? terminal.viewHeight : 24;
     final resumeFrom = _lastOffset;
@@ -335,7 +385,7 @@ class HostTerminalInstance
       );
       if (_disposed) {
         await link.close();
-        return;
+        return false;
       }
       _link = link;
 
@@ -379,11 +429,20 @@ class HostTerminalInstance
         (n) => _emit('\r\n\x1b[33m[$n]\x1b[0m\r\n'),
       );
       unawaited(link.ended.then(_onSessionEnded));
+      // What is on screen now belongs to the live session: a later redial
+      // replays from where the pane stopped, and must never clear it.
+      _hasStoredHistory = false;
+      return true;
     } on Object catch (e) {
       _link = null;
       if (link != null) unawaited(link.close().catchError((Object _) {}));
+      if (redialing) {
+        _logger.debug('pane $id could not redial its host: $e');
+        return false;
+      }
       _logger.error('The local session host refused pane $id: $e');
       _fail('The session host could not start this pane: $e');
+      return false;
     }
   }
 
@@ -460,13 +519,13 @@ class HostTerminalInstance
     // would ignore every marker after it.
     if (_replayEndsAt != null) _markReplayEnd();
     if (_disposed || _exited) return;
-    // The link went away, not the session. There is no reconnect event on a
-    // local socket, so the honest thing is to say what happened and what
-    // reopening the pane will do.
+    // The link went away; the host may have too. Nothing else notices a host
+    // that died, so the pane is what reaches it again.
     _emit(
-      '\r\n\x1b[33m[the link to the session host closed. The session is still '
-      'there; reopening this pane resumes it from byte $_lastOffset.]\x1b[0m\r\n',
+      '\r\n\x1b[33m[the link to the session host closed; reconnecting from '
+      'byte $_lastOffset]\x1b[0m\r\n',
     );
+    unawaited(_redial());
   }
 
   void _onSessionEnded(HostSessionEnd end) {
