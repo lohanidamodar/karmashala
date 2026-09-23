@@ -316,8 +316,11 @@ void main() {
       ], stdin: content);
     }
 
-    Future<String> modeOf(String path) async =>
-        (await runner.sh(r'stat -c %a -- "$1"', [path])).trim();
+    Future<String> modeOf(String path) async => (await runner.sh(
+      // GNU first, then BSD, as the code under test reads a mode.
+      r'stat -c %a -- "$1" 2>/dev/null || stat -f %Lp -- "$1"',
+      [path],
+    )).trim();
 
     Future<String> read(String path) => runner.sh(r'cat -- "$1"', [path]);
 
@@ -427,7 +430,8 @@ void main() {
       runner.midStdin = () async {
         // Half the payload is in; the rename has not happened.
         stagedMode = (await runner._sh(
-          r'for f in "$1".karmashala.*; do stat -c %a -- "$f"; done',
+          r'for f in "$1".karmashala.*; do '
+          r'stat -c %a -- "$f" 2>/dev/null || stat -f %Lp -- "$f"; done',
           [creds],
           record: false,
         )).trim();

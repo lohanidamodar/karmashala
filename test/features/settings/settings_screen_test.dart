@@ -1,4 +1,5 @@
 import 'package:karmashala_store/database.dart';
+import 'package:karmashala/src/features/terminal/application/local_host_providers.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -32,6 +33,9 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(db),
+        // The Terminal page reads the session host's status, and the one running
+        // on this machine is not the test's to dial.
+        localHostSessionAccessProvider.overrideWithValue(null),
         // Theme discovery reads real Ghostty/Warp directories.
         discoveredTerminalThemesProvider.overrideWithValue(const []),
       ],
