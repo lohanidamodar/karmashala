@@ -8,6 +8,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
+import 'package:karmashala/src/features/sessions/application/session_launcher.dart';
 import 'package:karmashala/src/features/sessions/data/session_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/launch.dart';
@@ -350,6 +351,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
+    // The live switch is tried first; this pane never redraws its mode, so it
+    // gives up after the redraw window and the restart is offered instead.
+    await tester.pump(kPermissionCycleSettle * 2);
+    await tester.pumpAndSettle();
 
     expect(SessionDao(h.db).getById('s1')!.permissionMode, _acceptEdits);
     // Never claims the running agent changed: it was started with the old
@@ -565,6 +570,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
+    // The live switch is tried first; this pane never redraws its mode, so it
+    // gives up after the redraw window and the restart is offered instead.
+    await tester.pump(kPermissionCycleSettle * 2);
+    await tester.pumpAndSettle();
 
     // Nothing was ended. Accept-edits is not dangerous, so it earns no dialog
     // — but a mode change must not silently kill an agent either, so the
@@ -597,6 +606,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
+    // The live switch is tried first; this pane never redraws its mode, so it
+    // gives up after the redraw window and the restart is offered instead.
+    await tester.pump(kPermissionCycleSettle * 2);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Restart to apply'));
     await tester.pumpAndSettle();
 
@@ -627,6 +640,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build · Accept edits'));
     await tester.pumpAndSettle();
+    // The live switch is tried first; this pane never redraws its mode, so it
+    // gives up after the redraw window and the restart is offered instead.
+    await tester.pump(kPermissionCycleSettle * 2);
+    await tester.pumpAndSettle();
 
     // "Applies when this session next runs" is already the whole truth here,
     // and a Restart button would be offering to solve a problem the user does
@@ -645,6 +662,10 @@ void main() {
     await tester.tap(find.byType(PermissionModeChip));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Build · Accept edits'));
+    await tester.pumpAndSettle();
+    // The live switch is tried first; this pane never redraws its mode, so it
+    // gives up after the redraw window and the restart is offered instead.
+    await tester.pump(kPermissionCycleSettle * 2);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Restart to apply'));
     await tester.pumpAndSettle();

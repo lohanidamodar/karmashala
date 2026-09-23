@@ -245,7 +245,8 @@ class PermissionModeChip extends ConsumerWidget {
         LivePermissionOutcome.switched =>
           '$what — switched now, in the session running.',
         LivePermissionOutcome.held =>
-          '$what — switches when $agentName finishes this turn.',
+          '$what — $agentName has a prompt open, so it switches when the '
+              'session is next idle.',
         LivePermissionOutcome.openedPicker =>
           '$what — $agentName opened its own permission picker in the '
               'session; choose it there to switch now. It is also recorded '

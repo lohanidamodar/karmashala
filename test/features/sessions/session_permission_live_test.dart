@@ -80,10 +80,12 @@ void main() {
   }
 
   /// Launches a session and stands in for the agent: each Shift+Tab redraws
-  /// the status line with the next mode of Claude Code's own cycle.
+  /// the status line with the next mode of Claude Code's own cycle, after
+  /// [redrawAfter] — or never, when it is null.
   Future<({String id, List<String> keys})> launched(
     String agentId, {
     List<String> cycle = const ['manual', 'acceptEdits', 'plan', 'auto'],
+    Duration? redrawAfter = Duration.zero,
   }) async {
     final result = await container
         .read(sessionLauncherProvider)
@@ -99,10 +101,12 @@ void main() {
         .read(terminalSessionsControllerProvider.notifier)
         .instanceFor(result.paneId!)!
         .terminal;
+    // Claude Code 2.1.280's own lines, read off a host recording.
     const words = {
-      'acceptEdits': '⏵⏵ accept edits on (shift+tab to cycle)',
-      'plan': '⏸ plan mode on (shift+tab to cycle)',
-      'auto': '⏵⏵ auto mode on (shift+tab to cycle)',
+      'manual': '⏸ manual mode on · esc to interrupt · ← for agents',
+      'acceptEdits': '⏵⏵ accept edits on (shift+tab to cycle) · ← for agents',
+      'plan': '⏸ plan mode on (shift+tab to cycle) · ← for agents',
+      'auto': '⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt',
     };
     var at = 0;
     void draw() => terminal.write(
@@ -112,9 +116,13 @@ void main() {
     final keys = <String>[];
     terminal.onOutput = (data) {
       keys.add(data);
-      if (data == '\x1b[Z') {
+      if (data == '\x1b[Z' && redrawAfter != null) {
         at = (at + 1) % cycle.length;
-        draw();
+        if (redrawAfter == Duration.zero) {
+          draw();
+        } else {
+          Timer(redrawAfter, draw);
+        }
       }
     };
     return (id: result.session.id, keys: keys);
@@ -157,11 +165,60 @@ void main() {
     expect(session.keys, hasLength(3), reason: 'left where it was found');
   });
 
-  test('mid-turn: nothing is pressed until the turn ends', () async {
+  test(
+    'mid-turn: switched at once, since the key works while it works',
+    () async {
+      build(AgentIds.claudeCode);
+      final session = await launched(AgentIds.claudeCode);
+      status = AgentActivityStatus.working;
+      choose(session.id, 'plan');
+
+      final outcome = await container
+          .read(sessionLauncherProvider)
+          .switchPermissionLive(session.id, settle: Duration.zero);
+
+      expect(outcome, LivePermissionOutcome.switched);
+      expect(session.keys, ['\x1b[Z', '\x1b[Z']);
+    },
+  );
+
+  test('a slow redraw is waited for, not read as a lap', () async {
+    build(AgentIds.claudeCode);
+    final session = await launched(
+      AgentIds.claudeCode,
+      redrawAfter: const Duration(milliseconds: 150),
+    );
+    choose(session.id, 'plan');
+
+    final outcome = await container
+        .read(sessionLauncherProvider)
+        .switchPermissionLive(session.id, settle: const Duration(seconds: 1));
+
+    expect(outcome, LivePermissionOutcome.switched);
+    expect(session.keys, ['\x1b[Z', '\x1b[Z']);
+  });
+
+  test('a screen that never redraws is pressed once, and said so', () async {
+    build(AgentIds.claudeCode);
+    final session = await launched(AgentIds.claudeCode, redrawAfter: null);
+    choose(session.id, 'plan');
+
+    final outcome = await container
+        .read(sessionLauncherProvider)
+        .switchPermissionLive(
+          session.id,
+          settle: const Duration(milliseconds: 100),
+        );
+
+    expect(outcome, LivePermissionOutcome.noAnswer);
+    expect(session.keys, ['\x1b[Z']);
+  });
+
+  test('an open prompt: nothing is pressed until it is idle', () async {
     build(AgentIds.claudeCode);
     final session = await launched(AgentIds.claudeCode);
     container.read(pendingLiveSwitchesProvider);
-    status = AgentActivityStatus.working;
+    status = AgentActivityStatus.awaitingApproval;
     choose(session.id, 'acceptEdits');
 
     final outcome = await container
@@ -209,6 +266,7 @@ void main() {
         .live!;
     expect(live.read(['⏸ plan mode on (shift+tab to cycle)']), 'plan');
     expect(live.read(['? for shortcuts']), 'manual');
+    expect(live.read(['⏸ manual mode on · esc to interrupt']), 'manual');
     expect(live.read(['⏵⏵ auto mode on']), 'auto');
   });
 }

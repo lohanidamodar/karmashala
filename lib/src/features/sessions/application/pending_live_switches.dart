@@ -61,9 +61,7 @@ class PendingLiveSwitches {
         .read(sessionNoticesProvider.notifier)
         .post(
           sessionId,
-          const SessionNotice(
-            message: 'The turn ended — the permission mode was switched now.',
-          ),
+          const SessionNotice(message: 'The permission mode was switched now.'),
         );
   }
 
