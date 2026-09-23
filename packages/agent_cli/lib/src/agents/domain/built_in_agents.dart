@@ -84,6 +84,25 @@ const _claudeCode = AgentDescriptor(
         'acceptEdits': 'mode=acceptEdits',
         'bypass': 'mode=bypassPermissions',
       },
+      live: AgentPermissionLiveCycle(
+        axisId: 'mode',
+        key: '\x1b[Z',
+        order: ['manual', 'acceptEdits', 'plan', 'bypassPermissions', 'auto'],
+        indicators: {
+          'acceptEdits': 'accept edits on',
+          'plan': 'plan mode on',
+          'auto': 'auto mode on',
+          'bypassPermissions': 'bypass permissions',
+        },
+        // Bypass is left to a confirmed relaunch, and `dontAsk` is not in the
+        // cycle at all: it only ever steps back to the default.
+        reachable: {'manual', 'acceptEdits', 'plan', 'auto'},
+        evidence:
+            'claude 2.1.280 bundle, xlt(): default→acceptEdits→plan→'
+            '(bypassPermissions when available)→(auto when available)→default, '
+            'dontAsk→default, bound to chat:cycleMode (Shift+Tab); the status '
+            'strings "accept edits on", "plan mode on", "auto mode on"',
+      ),
       axes: [
         AgentPermissionAxis(
           id: 'mode',
@@ -866,6 +885,9 @@ const _codex = AgentDescriptor(
           'codex --help and the rejection messages of '
           '`--sandbox bogus` / `--ask-for-approval on-failure` on 0.145.0 '
           '(Windows) and 0.151.0 (WSL)',
+      // Opens its own picker ("/permissions - choose what Codex is allowed to
+      // do", codex-cli 0.155.0's slash table); it takes no argument.
+      pickerCommand: '/permissions',
       legacyAliases: {
         'ask': 'approval=on-request;sandbox=workspace-write',
         'acceptEdits': 'approval=on-request;sandbox=workspace-write',

@@ -235,11 +235,28 @@ class PermissionModeChip extends ConsumerWidget {
       return;
     }
 
-    // Only claim what happened: a live agent was started with the old flags and
-    // there is no documented way to re-govern any of these CLIs mid-session.
     final what = selection == null
         ? 'Following the $agentName default in Settings'
         : label;
+    // Moved in place where the agent allows it; only claim what happened.
+    if (running) {
+      final outcome = await launcher.switchPermissionLive(sessionId);
+      final said = switch (outcome) {
+        LivePermissionOutcome.switched =>
+          '$what — switched now, in the session running.',
+        LivePermissionOutcome.held =>
+          '$what — switches when $agentName finishes this turn.',
+        LivePermissionOutcome.openedPicker =>
+          '$what — $agentName opened its own permission picker in the '
+              'session; choose it there to switch now. It is also recorded '
+              'for the next launch.',
+        _ => null,
+      };
+      if (said != null) {
+        notices.post(sessionId, SessionNotice(message: said));
+        return;
+      }
+    }
     notices.post(
       sessionId,
       SessionNotice(

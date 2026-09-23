@@ -19,13 +19,20 @@ class PendingLiveSwitches {
   final Ref _ref;
   late final StreamSubscription<Object?> _moves;
   final Set<String> _waiting = <String>{};
+  final Set<String> _waitingPermission = <String>{};
 
   /// Whether [sessionId] has a change waiting for its turn to end.
-  bool holds(String sessionId) => _waiting.contains(sessionId);
+  bool holds(String sessionId) =>
+      _waiting.contains(sessionId) || _waitingPermission.contains(sessionId);
 
   void hold(String sessionId) => _waiting.add(sessionId);
 
+  void holdPermission(String sessionId) => _waitingPermission.add(sessionId);
+
   void _apply(String sessionId) {
+    if (_waitingPermission.remove(sessionId)) {
+      unawaited(_applyPermission(sessionId));
+    }
     if (!_waiting.remove(sessionId)) return;
     final launcher = _ref.read(sessionLauncherProvider);
     // Read again now: the pick may have been handed back to the default, or the
@@ -40,6 +47,22 @@ class PendingLiveSwitches {
             message:
                 'The turn ended — switched now: "$outcome" was sent to the '
                 'session.',
+          ),
+        );
+  }
+
+  Future<void> _applyPermission(String sessionId) async {
+    // The mode recorded *now* is the one aimed at, not the one held.
+    final outcome = await _ref
+        .read(sessionLauncherProvider)
+        .switchPermissionLive(sessionId);
+    if (outcome != LivePermissionOutcome.switched) return;
+    _ref
+        .read(sessionNoticesProvider.notifier)
+        .post(
+          sessionId,
+          const SessionNotice(
+            message: 'The turn ended — the permission mode was switched now.',
           ),
         );
   }

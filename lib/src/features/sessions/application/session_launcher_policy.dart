@@ -177,7 +177,7 @@ extension SessionPolicyVerbs on SessionLauncher {
         deferral: ModelDeferral.openedPicker,
       );
     }
-    if (blocker == ModelDeferral.busy) {
+    if (blocker == ModelDeferral.busy && turnWillEnd(sessionId)) {
       // Mid-turn is a wait, not a relaunch: sent the moment it is idle again.
       _ref.read(pendingLiveSwitchesProvider).hold(sessionId);
     }
@@ -197,6 +197,16 @@ extension SessionPolicyVerbs on SessionLauncher {
     _log.info('Switched $sessionId to $target in place with "$command"');
     return (switchedNow: true, command: command, deferral: null);
   }
+
+  /// Whether [sessionId] is known to be in a turn that will end — working, or
+  /// waiting on an approval. An `unknown` session may never report idle, so a
+  /// change held for it could wait for ever; it is left to the next launch.
+  bool turnWillEnd(String sessionId) => switch (_ref.read(
+    sessionActivityLookupProvider,
+  )(sessionId)) {
+    AgentActivityStatus.working || AgentActivityStatus.awaitingApproval => true,
+    _ => false,
+  };
 
   /// Moves the running session onto the model it is recorded to run on, when
   /// that is safe now. Answers the line sent, or null when nothing was.

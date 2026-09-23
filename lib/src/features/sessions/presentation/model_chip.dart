@@ -340,7 +340,8 @@ Widget _buildModelChip(
     whenPicked: () =>
         switch (launcher.liveModelSwitchBlockerFor(state.sessionId)) {
           null => 'now',
-          ModelDeferral.busy => 'after this turn',
+          ModelDeferral.busy when launcher.turnWillEnd(state.sessionId) =>
+            'after this turn',
           _ => 'next launch',
         },
     onSelected: (choice) => _apply(ref, launcher, state, choice),
@@ -369,9 +370,13 @@ void _apply(
   final message = outcome.switchedNow
       ? '$what — switched now: "${outcome.command}" was sent to the session.'
       : switch (outcome.deferral) {
-          ModelDeferral.busy =>
+          ModelDeferral.busy when launcher.turnWillEnd(state.sessionId) =>
             '$what — switches when ${state.agentName} finishes this turn. '
                 'Nothing is typed into the session while it is working.',
+          ModelDeferral.busy =>
+            '$what — applies on the next launch. Nothing reports whether '
+                '${state.agentName} is at its prompt, so nothing was typed into '
+                'the running session.',
           ModelDeferral.noCommand =>
             '$what — applies on the next launch. ${state.agentName} takes its '
                 'model from the command line, so the session running now is '

@@ -31,6 +31,7 @@ import 'package:karmashala_terminal_runtime/system_terminals.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import '../data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/lineage.dart';
@@ -58,6 +59,7 @@ export 'session_launch_arguments.dart';
 
 // The launcher's body, one `part` per concern — start, resume_guards, policy,
 // surfaces, input — because privacy in Dart is per library.
+part 'session_launcher_permission_live.dart';
 part 'session_launcher_start.dart';
 part 'session_launcher_executable.dart';
 part 'session_launcher_resume_guards.dart';

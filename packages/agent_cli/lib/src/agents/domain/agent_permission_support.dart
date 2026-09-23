@@ -169,6 +169,8 @@ class AgentPermissionSupport {
     required this.axes,
     required this.evidence,
     this.legacyAliases = const {},
+    this.live,
+    this.pickerCommand = '',
   });
 
   /// Nobody has established this agent's modes. **The default**, and what a
@@ -178,9 +180,19 @@ class AgentPermissionSupport {
   const AgentPermissionSupport.unknown()
     : axes = const [],
       evidence = '',
-      legacyAliases = const {};
+      legacyAliases = const {},
+      live = null,
+      pickerCommand = '';
 
   final List<AgentPermissionAxis> axes;
+
+  /// How a running session's mode is moved by a key and read back off its
+  /// screen, or null when it cannot be.
+  final AgentPermissionLiveCycle? live;
+
+  /// An in-session command that opens the agent's **own** permission picker,
+  /// for an agent with no cycle. Empty when there is none.
+  final String pickerCommand;
 
   /// The three shared modes this agent's rows were written with before v35,
   /// each mapped to the selection that sends the same flags.
@@ -393,4 +405,48 @@ class ResolvedPermission {
 
   final PermissionSelection selection;
   final List<String> arguments;
+}
+
+/// A running agent's permission mode as a cycle: one key moves it to the next
+/// mode, and the screen says which mode it is in.
+class AgentPermissionLiveCycle {
+  const AgentPermissionLiveCycle({
+    required this.axisId,
+    required this.key,
+    required this.order,
+    required this.indicators,
+    required this.reachable,
+    required this.evidence,
+  });
+
+  /// The axis the cycle moves.
+  final String axisId;
+
+  /// What one step of the cycle is, as the bytes a terminal sends.
+  final String key;
+
+  /// The cycle in the agent's own order. A mode the agent skips in this session
+  /// is simply never seen.
+  final List<String> order;
+
+  /// The words the agent draws for each mode it marks. The mode it draws
+  /// nothing for is the one in [order] with no entry here.
+  final Map<String, String> indicators;
+
+  /// The modes a switch may aim at. The rest need a relaunch.
+  final Set<String> reachable;
+
+  final String evidence;
+
+  /// The mode [tailLines] — the bottom of the agent's screen — says is on.
+  String read(List<String> tailLines) {
+    final text = tailLines.join('\n').toLowerCase();
+    for (final entry in indicators.entries) {
+      if (text.contains(entry.value)) return entry.key;
+    }
+    return order.firstWhere(
+      (id) => !indicators.containsKey(id),
+      orElse: () => order.first,
+    );
+  }
 }
