@@ -80,6 +80,9 @@ class HostSessionApi {
 
   final Set<String> _subscribed = <String>{};
 
+  /// The lowest `inputSeq` still acceptable on this link.
+  int _nextInput = 0;
+
   /// Every session this device has been shown — listed, subscribed to, or
   /// announced. Null until its first `sessions.list`: before that, the list it
   /// is about to ask for carries everything, and announcing would only race it.
@@ -172,6 +175,27 @@ class HostSessionApi {
         '${type.wire} is not a companion frame',
       );
       return;
+    }
+    // Before the capability check, so every numbered frame is judged here,
+    // and a refused one still moves the count on.
+    if (type.isInput) {
+      final inputSeq = envelope.payload['inputSeq'];
+      if (inputSeq is int) {
+        if (inputSeq < _nextInput) {
+          await _send(
+            FrameType.error,
+            id: envelope.id,
+            payload: {
+              'code': ErrorCode.outOfOrder.wire,
+              'message': 'input $inputSeq arrived after a later one',
+              'expected': _nextInput,
+            },
+          );
+          return;
+        }
+        // A gap is a lost frame, not a duplicate: it is let through.
+        _nextInput = inputSeq + 1;
+      }
     }
     if (!device.capabilities.allows(type)) {
       await _error(

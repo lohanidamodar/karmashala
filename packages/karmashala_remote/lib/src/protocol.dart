@@ -344,6 +344,13 @@ enum FrameType {
   /// Whether [origin] may send this frame type.
   bool sentBy(FrameOrigin end) => origin == FrameOrigin.either || origin == end;
 
+  /// Frames that act on an agent, and so carry `p.inputSeq`: one arriving
+  /// after a later one would type into somebody's agent out of order.
+  bool get isInput => switch (this) {
+    promptSend || approvalAnswer || questionAnswer || menuAnswer => true,
+    _ => false,
+  };
+
   static FrameType? tryParse(String wire) => _byWire[wire];
 
   static final Map<String, FrameType> _byWire = {

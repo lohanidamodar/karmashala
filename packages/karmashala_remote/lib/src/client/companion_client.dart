@@ -156,6 +156,9 @@ class CompanionClient {
   int _ackSentSeq = -1;
   int _ackBytes = 0;
   Timer? _ackTimer;
+
+  /// Numbers input frames at seal time, so their order is the wire's order.
+  int _nextInput = 0;
   Timer? _leaseTimer;
 
   /// Host events, as they arrive. Broadcast: listen any time after [connect].
@@ -244,6 +247,7 @@ class CompanionClient {
     if (_closed) throw const RemoteApiException('connection closed');
     final arrived = _statusArrived = Completer<RemoteHostStatus>();
     _resetAcks();
+    _nextInput = 0;
     _subscription = transport.frames.listen(_onFrame);
     final rendezvous = await rendezvousFor(_key, generation);
     transport.send(LinkHello(rendezvous).encode());
@@ -323,6 +327,12 @@ class CompanionClient {
           message is String ? message : 'the host refused the request',
           code: code is String ? ErrorCode.tryParse(code) : null,
         );
+        final expected = envelope.payload['expected'];
+        if (error.code == ErrorCode.outOfOrder &&
+            expected is int &&
+            expected > _nextInput) {
+          _nextInput = expected;
+        }
         final pending = _pending.remove(envelope.id);
         if (pending != null) {
           pending.completeError(error);
@@ -696,7 +706,9 @@ class CompanionClient {
         type,
         seq: channel.nextSendSequence,
         id: id,
-        payload: payload,
+        payload: type.isInput
+            ? {...payload, 'inputSeq': _nextInput++}
+            : payload,
       );
       transport.send(await channel.seal(envelope.toBytes()));
     });
