@@ -307,6 +307,11 @@ enum FrameType {
     capability: Capability.viewUsage,
   ),
 
+  /// The phone rendered every host frame up to `p.seq`, and whether it is
+  /// `p.watching`. No capability: it is about the phone's own stream, and a
+  /// bit would exclude every phone already paired. Never answered.
+  streamAck('stream.ack', origin: FrameOrigin.companion),
+
   sessionChanged('session.changed', origin: FrameOrigin.host),
   transcriptAppended('transcript.appended', origin: FrameOrigin.host),
   approvalRequested('approval.requested', origin: FrameOrigin.host),
@@ -353,7 +358,15 @@ enum ErrorCode {
   notPermitted('not_permitted'),
   badRequest('bad_request'),
   notFound('not_found'),
-  internal('internal');
+  internal('internal'),
+
+  /// The phone stopped acking the stream; nothing more is pushed until it acks
+  /// again, and then it is sent current state, never what it missed.
+  streamStalled('stream_stalled'),
+
+  /// An input frame arrived out of order; `p.expected` is the sequence the
+  /// host wants next, so the phone can realign.
+  outOfOrder('out_of_order');
 
   const ErrorCode(this.wire);
 

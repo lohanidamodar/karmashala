@@ -35,6 +35,7 @@ class RemoteHostService {
     this.lanPort = kDefaultLanPort,
     this.advertise = true,
     this.transcriptPollInterval = const Duration(seconds: 2),
+    this.newStreamFlow = StreamFlow.new,
     DateTime Function()? now,
     RelayTransportFactory? relayFactory,
     PushPost? pushPost,
@@ -86,6 +87,9 @@ class RemoteHostService {
   /// How often subscribed transcripts are re-read. [Duration.zero] disables
   /// the timer; tests call [pollTranscriptsNow] themselves.
   final Duration transcriptPollInterval;
+
+  /// Builds each link's flow control — a seam so tests can shrink its limits.
+  final StreamFlow Function() newStreamFlow;
 
   final DateTime Function() _now;
   final RelayTransportFactory _relayFactory;
@@ -885,10 +889,21 @@ class _DeviceRuntime {
         // link is up must be in the very next `host.status`.
         relays: () => service.announcedRelaysFor(device),
         lanHint: () => service.lanHint,
+        onStreamAck: (seq, watching) {
+          // Reopened: tell it where things stand now. Unawaited because this
+          // runs on the chain the sweep queues onto.
+          if (created.flow.ack(seq)) unawaited(sweepSessionsChanged());
+        },
         send: (type, {id, payload = const {}}) =>
             _sealAndSend(created, type, id, payload),
       );
-      created = _ActiveLink(generation, channel, api, transport);
+      created = _ActiveLink(
+        generation,
+        channel,
+        api,
+        transport,
+        service.newStreamFlow(),
+      );
       _active = created;
       active = created;
       _watchLiveness(transport);
@@ -916,6 +931,27 @@ class _DeviceRuntime {
     Map<String, Object?> payload,
   ) async {
     if (_closed || _active != active) return false;
+    if (_isNews(type, id)) {
+      switch (active.flow.admit()) {
+        case StreamAdmission.send:
+          break;
+        case StreamAdmission.paused:
+          // Not queued: the api records only what went out, so the next sweep
+          // after the phone acks derives current state instead.
+          return false;
+        case StreamAdmission.failed:
+          service.onLog?.call(
+            'a device stopped acking its stream; holding news until it acks '
+            '(${ErrorCode.streamStalled.wire})',
+          );
+          active.api.forgetDelivered();
+          await _sealAndSend(active, FrameType.error, null, {
+            'code': ErrorCode.streamStalled.wire,
+            'message': 'the stream stalled; ack to resume',
+          });
+          return false;
+      }
+    }
     // No awaits between reading the sequence and sealing: the two must agree.
     final envelope = Envelope.of(
       type,
@@ -926,6 +962,7 @@ class _DeviceRuntime {
     final sealed = await active.channel.seal(envelope.toBytes());
     try {
       active.transport.send(sealed);
+      active.flow.sent(envelope.seq, sealed.length);
       return true;
     } on TransportException {
       // A transport refuses only once CLOSED, and an accepted LAN link never
@@ -936,6 +973,7 @@ class _DeviceRuntime {
         if (identical(fallback, active.transport)) continue;
         try {
           fallback.send(sealed);
+          active.flow.sent(envelope.seq, sealed.length);
           // Adopt it: leaving the dead one in place pays this exception, and
           // this search, for every frame until the phone happens to send one.
           active.transport = fallback;
@@ -952,6 +990,14 @@ class _DeviceRuntime {
       return false;
     }
   }
+
+  /// News the phone did not ask for, and so the only frames flow control may
+  /// hold back. An answer, an error or the greeting always goes.
+  static bool _isNews(FrameType type, String? id) =>
+      id == null &&
+      type != FrameType.hostStatus &&
+      type != FrameType.pairingRevoked &&
+      type != FrameType.error;
 
   Future<void> close() async {
     _closed = true;
@@ -975,10 +1021,19 @@ class _DeviceRuntime {
 }
 
 class _ActiveLink {
-  _ActiveLink(this.generation, this.channel, this.api, this.transport);
+  _ActiveLink(
+    this.generation,
+    this.channel,
+    this.api,
+    this.transport,
+    this.flow,
+  );
 
   final int generation;
   final SealedChannel channel;
   final HostSessionApi api;
   RemoteTransport transport;
+
+  /// Per generation, like the sequences it counts.
+  final StreamFlow flow;
 }

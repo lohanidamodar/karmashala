@@ -1187,10 +1187,15 @@ class RemoteHostStatus {
     this.relays = const [],
     this.lanHint,
     this.capabilities,
+    this.streamAcks = false,
   });
 
   final VersionRange versions;
   final String hostName;
+
+  /// Whether this host reads `stream.ack`. A phone acks only a host that says
+  /// so, or an older one would answer every ack with `unknown_type`.
+  final bool streamAcks;
 
   /// What this device is granted **now**, so permissions edited on the desktop
   /// reach the phone without re-pairing. Null from a host that does not send
@@ -1212,6 +1217,7 @@ class RemoteHostStatus {
     if (relays.isNotEmpty) 'relays': [for (final url in relays) url.toString()],
     if (lanHint != null) 'lan': lanHint,
     if (capabilities != null) 'caps': capabilities!.bits,
+    if (streamAcks) 'acks': true,
   };
 
   static RemoteHostStatus fromJson(Map<String, Object?> json) {
@@ -1227,6 +1233,7 @@ class RemoteHostStatus {
       relays: relayUrisFrom(json['relays']),
       lanHint: lan is String && lan.isNotEmpty ? lan : null,
       capabilities: caps is int && caps >= 0 ? CapabilitySet(caps) : null,
+      streamAcks: json['acks'] == true,
     );
   }
 }

@@ -17,6 +17,7 @@ import '../transport/key_schedule.dart';
 import '../transport/relay_transport.dart';
 import '../transport/remote_transport.dart';
 import '../transport/sealed_channel.dart';
+import '../transport/stream_flow.dart';
 import 'companion_store.dart';
 
 /// How many generations forward the companion probes when its counter and the
@@ -144,6 +145,13 @@ class CompanionClient {
   /// Serialises seals so `Envelope.seq` matches the sealed sequence.
   Future<void> _sendChain = Future<void>.value();
 
+  /// Whether the host said it reads `stream.ack`.
+  bool _acksWanted = false;
+  int _ackSeq = -1;
+  int _ackSentSeq = -1;
+  int _ackBytes = 0;
+  Timer? _ackTimer;
+
   /// Host events, as they arrive. Broadcast: listen any time after [connect].
   Stream<CompanionEvent> get events => _events.stream;
 
@@ -229,6 +237,7 @@ class CompanionClient {
     // Closed while the channel was being derived: nothing is listened to.
     if (_closed) throw const RemoteApiException('connection closed');
     final arrived = _statusArrived = Completer<RemoteHostStatus>();
+    _resetAcks();
     _subscription = transport.frames.listen(_onFrame);
     final rendezvous = await rendezvousFor(_key, generation);
     transport.send(LinkHello(rendezvous).encode());
@@ -253,6 +262,7 @@ class CompanionClient {
   }
 
   Future<void> _detach() async {
+    _resetAcks();
     await _subscription?.cancel();
     _subscription = null;
     _transport = null;
@@ -289,6 +299,14 @@ class CompanionClient {
     } on ProtocolException {
       return;
     }
+    try {
+      _dispatch(envelope);
+    } finally {
+      _rendered(opened.sequence, frame.length);
+    }
+  }
+
+  void _dispatch(Envelope envelope) {
     switch (envelope.knownType) {
       case FrameType.result:
         _pending.remove(envelope.id)?.complete(envelope.payload);
@@ -302,12 +320,19 @@ class CompanionClient {
         final pending = _pending.remove(envelope.id);
         if (pending != null) {
           pending.completeError(error);
+        } else if (error.code == ErrorCode.streamStalled) {
+          // Reading again is the whole answer: the ack reopens the stream and
+          // the host sends where things stand now.
+          onLog?.call('the host held our stream; acking to reopen it');
+          _ackSentSeq = -1;
+          _ackTimer ??= Timer(Duration.zero, _flushAck);
         } else {
           onLog?.call('host error: ${error.code?.wire}');
         }
       case FrameType.hostStatus:
         try {
           final status = RemoteHostStatus.fromJson(envelope.payload);
+          _acksWanted = status.streamAcks;
           if (_statusArrived?.isCompleted == false) {
             _statusArrived!.complete(status);
           }
@@ -363,6 +388,52 @@ class CompanionClient {
         // A frame from a newer host; nothing to do with it here.
         onLog?.call('ignored a frame of type ${envelope.type}');
     }
+  }
+
+  /// Coalesced: one ack per [kStreamAckBytes] or [kStreamAckDelay], so a
+  /// cellular phone does not pay a round trip per frame.
+  void _rendered(int seq, int bytes) {
+    if (!_acksWanted || _closed) return;
+    if (seq > _ackSeq) _ackSeq = seq;
+    _ackBytes += bytes;
+    if (_ackBytes >= kStreamAckBytes) {
+      _flushAck();
+    } else {
+      _ackTimer ??= Timer(kStreamAckDelay, _flushAck);
+    }
+  }
+
+  void _flushAck() {
+    _ackTimer?.cancel();
+    _ackTimer = null;
+    final channel = _channel;
+    final transport = _transport;
+    if (channel == null || transport == null || _ackSeq < 0) return;
+    if (_ackSeq == _ackSentSeq) return;
+    final seq = _ackSentSeq = _ackSeq;
+    _ackBytes = 0;
+    _sendChain = _sendChain
+        .then((_) async {
+          final envelope = Envelope.of(
+            FrameType.streamAck,
+            seq: channel.nextSendSequence,
+            payload: {'seq': seq},
+          );
+          transport.send(await channel.seal(envelope.toBytes()));
+        })
+        .catchError((Object error) {
+          // A lost ack is repaired by the next one; the host waits, not drops.
+          onLog?.call('an ack did not go out: $error');
+        });
+  }
+
+  void _resetAcks() {
+    _ackTimer?.cancel();
+    _ackTimer = null;
+    _acksWanted = false;
+    _ackSeq = -1;
+    _ackSentSeq = -1;
+    _ackBytes = 0;
   }
 
   void _tolerant(void Function() parse) {

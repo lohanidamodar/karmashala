@@ -16,6 +16,9 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:cryptography/cryptography.dart';
 
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala_remote/companion.dart';
@@ -23,6 +26,7 @@ import 'package:karmashala/src/features/remote/application/remote_host_service.d
 import 'package:karmashala_remote/client.dart' as stored;
 import 'package:karmashala_remote/client.dart';
 import 'package:karmashala_store/devices.dart';
+import 'package:karmashala_remote/pairing.dart';
 import 'package:karmashala_remote/remote.dart';
 import 'package:karmashala_relay/karmashala_relay.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,12 +44,35 @@ class CountingLanTransport extends LanTransport {
   });
 
   int sent = 0;
+  final List<List<int>> outbound = [];
 
   @override
   void send(List<int> frame) {
     sent++;
+    outbound.add(List<int>.of(frame));
     super.send(frame);
   }
+}
+
+/// What [frames] carried, opened with the host's own key: an ack is flow
+/// control, timed by a coalescing timer, so it is counted apart from requests.
+Future<List<String>> frameTypes(
+  List<List<int>> frames,
+  PairedDevice device,
+) async {
+  final channel = await SealedChannel.forDevice(
+    deviceKey: SecretKeyData(device.deviceKey),
+    role: ChannelRole.host,
+    generation: device.generation,
+    replayWindow: 1 << 16,
+  );
+  return [
+    for (final frame in frames)
+      if (LinkHello.tryDecode(Uint8List.fromList(frame)) != null)
+        'hello'
+      else
+        Envelope.fromBytes((await channel.unseal(frame)).plaintext).type,
+  ];
 }
 
 /// A LAN transport that answers the hello and then swallows everything.
@@ -422,10 +449,14 @@ void main() {
         // Hello, one subscribe, one cursor re-arm. The host builds a fresh
         // session api per generation, so both of the latter are carrying state
         // over rather than recovering from a loss.
+        final carried = await frameTypes(
+          lanTransports.single.outbound,
+          dao.getActive().single,
+        );
         expect(
-          lanTransports.single.sent,
-          3,
-          reason: 'what a promotion costs on the wire',
+          carried.where((type) => type != FrameType.streamAck.wire),
+          hasLength(3),
+          reason: 'what a promotion costs on the wire: $carried',
         );
       },
     );

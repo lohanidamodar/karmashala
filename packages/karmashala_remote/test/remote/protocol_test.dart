@@ -190,6 +190,7 @@ void main() {
         'session.activity',
         'attachment.begin',
         'attachment.chunk',
+        'stream.ack',
         'session.changed',
         'transcript.appended',
         'approval.requested',

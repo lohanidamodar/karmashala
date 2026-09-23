@@ -32,6 +32,7 @@ class HostSessionApi {
     this.onLog,
     this.relays,
     this.lanHint,
+    this.onStreamAck,
     SessionStartLedger<RemoteSessionStarted>? startLedger,
     SessionStartLedger<RemoteSessionStarted>? resumeLedger,
     SessionStartLedger<RemoteWorkspaceProject>? projectLedger,
@@ -72,6 +73,10 @@ class HostSessionApi {
 
   /// Lifecycle only — never called with payload content.
   final void Function(String message)? onLog;
+
+  /// Takes a `stream.ack`. Null means this host does not flow-control, and
+  /// then `host.status` does not invite acks either.
+  final void Function(int seq, bool? watching)? onStreamAck;
 
   final Set<String> _subscribed = <String>{};
 
@@ -114,6 +119,14 @@ class HostSessionApi {
 
   Set<String> get subscribedSessions => Set.unmodifiable(_subscribed);
 
+  /// Forgets which snapshots and activity the phone was told, so the next
+  /// sweep re-sends current state — for a stream that failed closed, where
+  /// frames that left may never have been read.
+  void forgetDelivered() {
+    _lastSnapshots.clear();
+    _lastActivity.clear();
+  }
+
   /// The `host.status` greeting: the supported version range, where this host
   /// can be reached — so a phone's saved relay set heals over the live link —
   /// and what this device is granted now, so a permission edited here reaches
@@ -126,6 +139,7 @@ class HostSessionApi {
       relays: relays?.call() ?? const [],
       lanHint: lanHint?.call(),
       capabilities: device.capabilities,
+      streamAcks: onStreamAck != null,
     ).toJson(),
   );
 
@@ -492,6 +506,13 @@ class HostSessionApi {
             ...resumed.toJson(),
             if (replayed) 'replayed': true,
           });
+        case FrameType.streamAck:
+          // Never answered: an ack for an ack would be a stream of its own.
+          final seq = envelope.payload['seq'];
+          final watching = envelope.payload['watching'];
+          if (seq is int && seq >= 0) {
+            onStreamAck?.call(seq, watching is bool ? watching : null);
+          }
         // Host-only types cannot reach here: sentBy refused them above.
         case FrameType.sessionChanged:
         case FrameType.transcriptAppended:

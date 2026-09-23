@@ -130,6 +130,11 @@ extension _GatewayRefusals on RemoteCompanionGateway {
           'is out of date.',
     ErrorCode.internal =>
       'Something went wrong on the desktop while handling that request.',
+    ErrorCode.streamStalled =>
+      'The desktop paused its updates while this phone caught up.',
+    ErrorCode.outOfOrder =>
+      'That arrived out of order, so the desktop did not act on it. '
+          'Try again.',
   };
 
   GatewayException _asGatewayError(Object error) =>
