@@ -177,6 +177,49 @@ void main() {
     expect(session.written, isEmpty);
   });
 
+  test(
+    'just resumed, no hook yet: the agent\'s own idle footer is enough',
+    () async {
+      final h = harness(status: AgentActivityStatus.unknown);
+      addTearDown(h.db.close);
+      addTearDown(h.container.dispose);
+      final session = await launched(h.container);
+      final paneId = SessionDao(h.db).getById(session.id)!.paneId!;
+      h.container
+          .read(terminalSessionsControllerProvider.notifier)
+          .instanceFor(paneId)!
+          .terminal
+          .write('> \r\n  ⏸ manual mode on\r\n');
+
+      final outcome = h.container
+          .read(sessionLauncherProvider)
+          .setModel(session.id, 'opus');
+
+      expect(outcome.switchedNow, isTrue);
+      expect(session.written.join(), contains('/model opus'));
+    },
+  );
+
+  test('just resumed, mid-turn on screen: still nothing is typed', () async {
+    final h = harness(status: AgentActivityStatus.unknown);
+    addTearDown(h.db.close);
+    addTearDown(h.container.dispose);
+    final session = await launched(h.container);
+    final paneId = SessionDao(h.db).getById(session.id)!.paneId!;
+    h.container
+        .read(terminalSessionsControllerProvider.notifier)
+        .instanceFor(paneId)!
+        .terminal
+        .write('✻ Thinking…\r\n  ⏸ manual mode on · esc to interrupt\r\n');
+
+    final outcome = h.container
+        .read(sessionLauncherProvider)
+        .setModel(session.id, 'opus');
+
+    expect(outcome.deferral, ModelDeferral.busy);
+    expect(session.written, isEmpty);
+  });
+
   test('an open prompt is not typed into either', () async {
     final h = harness(status: AgentActivityStatus.awaitingApproval);
     addTearDown(h.db.close);

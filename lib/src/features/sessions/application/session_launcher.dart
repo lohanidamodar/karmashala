@@ -32,6 +32,8 @@ import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
+import 'package:karmashala_agent_reporting/status.dart'
+    show TerminalGridStatusSource;
 import '../data/session_repository_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/lineage.dart';

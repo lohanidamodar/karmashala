@@ -727,6 +727,10 @@ const _claudeCode = AgentDescriptor(
     idle: [
       GridMatcher('shift+tab to cycle'),
       GridMatcher('bypass permissions on'),
+      // The default mode's own footer on 2.1.280, which names no cycle key:
+      // `⏸ manual mode on` (read off a host recording, 2026-09-23). Mid-turn
+      // it gains `esc to interrupt`, which the working rule reads first.
+      GridMatcher('manual mode on'),
     ],
   ),
   // Both keys are read off the same footer the matchers above fire on —

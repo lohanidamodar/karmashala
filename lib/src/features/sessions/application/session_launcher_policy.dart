@@ -136,8 +136,7 @@ extension SessionPolicyVerbs on SessionLauncher {
       return ModelDeferral.noCommand;
     }
     if (livePaneFor(sessionId) == null) return ModelDeferral.notRunning;
-    return _ref.read(sessionActivityLookupProvider)(sessionId) ==
-            AgentActivityStatus.idle
+    return activityOf(sessionId) == AgentActivityStatus.idle
         ? null
         : ModelDeferral.busy;
   }
@@ -166,8 +165,7 @@ extension SessionPolicyVerbs on SessionLauncher {
     if (blocker == ModelDeferral.noCommand &&
         picker.isNotEmpty &&
         livePaneFor(sessionId) != null &&
-        _ref.read(sessionActivityLookupProvider)(sessionId) ==
-            AgentActivityStatus.idle &&
+        activityOf(sessionId) == AgentActivityStatus.idle &&
         sendTo(sessionId, picker)) {
       // Its own picker, open in the pane: the person finishes the switch there,
       // and the recorded model still applies to every later launch.
@@ -196,6 +194,26 @@ extension SessionPolicyVerbs on SessionLauncher {
     }
     _log.info('Switched $sessionId to $target in place with "$command"');
     return (switchedNow: true, command: command, deferral: null);
+  }
+
+  /// What [sessionId] is doing, for deciding whether a key may be typed into it.
+  /// The status registry first; where it has no answer yet — a session just
+  /// resumed has sent no hook — the agent's own screen, read by its descriptor.
+  AgentActivityStatus activityOf(String sessionId) {
+    final known = _ref.read(sessionActivityLookupProvider)(sessionId);
+    if (known != AgentActivityStatus.unknown) return known;
+    final descriptor = effectiveModelFor(sessionId)?.descriptor;
+    final terminal = _liveTerminalFor(sessionId);
+    if (descriptor == null || terminal == null) return known;
+    return const TerminalGridStatusSource()
+            .read(
+              descriptor,
+              terminalTailLines(terminal, lines: descriptor.grid.scanLines),
+              DateTime.now().toUtc(),
+              sessionId: sessionId,
+            )
+            ?.status ??
+        known;
   }
 
   /// Whether [sessionId] is known to be in a turn that will end — working, or

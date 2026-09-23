@@ -40,7 +40,7 @@ extension SessionLivePermission on SessionLauncher {
         livePaneFor(sessionId) == null) {
       return LivePermissionOutcome.nextLaunch;
     }
-    final status = _ref.read(sessionActivityLookupProvider)(sessionId);
+    final status = activityOf(sessionId);
     final live = support.live;
     if (live != null) {
       final target = support
