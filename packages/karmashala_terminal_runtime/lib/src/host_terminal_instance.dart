@@ -74,6 +74,7 @@ class HostTerminalInstance
   }) : _logger = logger ?? AppLogger.named('terminal.host'),
        _cwd = WorkingDirectoryTracker(workingDirectory) {
     terminal = adoptTerminal ?? PaneTerminal(maxLines: kLiveScrollbackMaxLines)
+      ..reflowEnabled = paneReflows(agent: agentLaunch != null)
       ..inputHandler = const KarmashalaInputHandler()
       ..onPrivateOSC = _osc.dispatch
       ..onCurrentDirectoryChange = (uri) => _osc.dispatch('7', [uri]);

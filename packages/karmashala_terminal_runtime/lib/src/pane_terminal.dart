@@ -9,6 +9,12 @@ const kColumnResizeSettle = Duration(milliseconds: 100);
 
 final _monotonic = Stopwatch()..start();
 
+/// Whether a pane re-wraps its main buffer when its width changes. Not an agent
+/// pane's: its TUI redraws by erasing the rows its last frame took, counted at
+/// the width it drew them, and hard-wraps its own text anyway — so a re-wrap
+/// buys nothing and leaves old frames on screen (SETTLED.md, 2026-09-23).
+bool paneReflows({required bool agent}) => !agent;
+
 /// Whether terminal views may hear about writes. Suspended while the window is
 /// minimized or hidden: a view told of a write asks for a frame and paints it.
 class TerminalViewGate {

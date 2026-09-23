@@ -122,6 +122,17 @@ void main() {
     expect(immediate.leftovers, greaterThan(100));
     expect(settled.paints, 5, reason: 'the first paint, and two per gesture');
     expect(settled.leftovers, lessThanOrEqualTo(4));
+
+    // An agent's pane does not re-wrap, so the rows its TUI counted are the
+    // rows there are, and every erase reaches the whole of its last frame.
+    now = Duration.zero;
+    final agent = await dragged(
+      PaneTerminal(maxLines: 10000, settle: settle, now: () => now)
+        ..reflowEnabled = paneReflows(agent: true),
+    );
+    expect(agent.paints, 5);
+    expect(agent.leftovers, 0, reason: 'nothing of an old frame is left');
+    expect(paneReflows(agent: false), isTrue, reason: 'a shell still reflows');
   });
 
   testWidgets('a drag resizes twice: its first width, then its last', (
