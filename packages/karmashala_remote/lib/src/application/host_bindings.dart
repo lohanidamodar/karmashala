@@ -6,6 +6,7 @@ library;
 
 import '../domain/companion_presence.dart';
 import '../domain/remote_payloads.dart';
+import '../domain/remote_session_options.dart';
 import '../domain/remote_usage.dart';
 import '../protocol.dart';
 
@@ -66,7 +67,22 @@ class RemoteHostBindings {
     this.answerMenu = _noMenus,
     this.usage = _noUsage,
     this.readRecordState = _recordStateUnknown,
+    this.sessionOptions = _noSessionOptions,
+    this.configureSession = _noConfigure,
   });
+
+  /// The models and permission modes [String] session can be put on.
+  final Future<RemoteSessionOptions> Function(String sessionId) sessionOptions;
+
+  /// Records a model and/or permission mode for a session and moves the
+  /// running one where it can. A null inside a present field means "follow
+  /// the desktop's default"; an absent field is left alone.
+  final Future<RemoteConfigureOutcome> Function(
+    String sessionId, {
+    ({String? id})? model,
+    ({String? id})? permission,
+  })
+  configureSession;
 
   /// What `host.status` calls this desktop.
   final String hostName;
@@ -183,6 +199,21 @@ class RemoteHostBindings {
   /// not have allowed. Defaults to refusing.
   final Future<RemoteUsageSnapshot> Function() usage;
 }
+
+Future<RemoteSessionOptions> _noSessionOptions(String sessionId) async =>
+    throw const RemoteApiRefusal(
+      ErrorCode.badRequest,
+      'this host cannot change a session\'s model or mode',
+    );
+
+Future<RemoteConfigureOutcome> _noConfigure(
+  String sessionId, {
+  ({String? id})? model,
+  ({String? id})? permission,
+}) async => throw const RemoteApiRefusal(
+  ErrorCode.badRequest,
+  'this host cannot change a session\'s model or mode',
+);
 
 Future<RemoteRecordReading> _recordStateUnknown(String sessionId) async =>
     (revision: null, activity: null);

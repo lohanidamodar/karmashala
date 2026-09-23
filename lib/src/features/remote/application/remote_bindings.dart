@@ -17,6 +17,7 @@ import 'remote_approval_bindings.dart';
 import 'remote_attachment_bindings.dart';
 import 'remote_binding_support.dart';
 import 'remote_providers.dart';
+import 'remote_session_config_bindings.dart';
 import 'remote_session_snapshots.dart';
 import 'remote_session_start_bindings.dart';
 import 'remote_transcript_bindings.dart';
@@ -119,6 +120,14 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       );
     },
     usage: () => remoteUsageSnapshot(ref),
+    sessionOptions: (sessionId) => remoteSessionOptions(ref, sessionId),
+    configureSession: (sessionId, {model, permission}) =>
+        remoteConfigureSession(
+          ref,
+          sessionId,
+          model: model,
+          permission: permission,
+        ),
     answerMenu: (request) async {
       final resolved = resolve(request.sessionId);
       if (resolved.imported != null) {

@@ -7,6 +7,7 @@ import 'dart:convert';
 
 import '../../domain/companion_presence.dart';
 import '../../domain/remote_payloads.dart';
+import '../../domain/remote_session_options.dart';
 import '../../domain/remote_usage.dart';
 import '../../pairing/host_pairing_invite.dart';
 import '../../protocol.dart';
@@ -877,6 +878,53 @@ class FakeCompanionGateway implements CompanionGateway {
       throw const GatewayException('this device was not granted view_usage');
     }
     return usageSnapshot;
+  }
+
+  /// What [sessionOptions] answers, per session.
+  final sessionOptionsById = <String, RemoteSessionOptions>{};
+
+  /// Every [configureSession], in order.
+  final configured =
+      <
+        ({
+          String sessionId,
+          String? modelId,
+          bool modelFollowsDefault,
+          String? permissionId,
+          bool permissionFollowsDefault,
+        })
+      >[];
+
+  /// What [configureSession] answers.
+  RemoteConfigureOutcome configureOutcome = RemoteConfigureOutcome.now;
+
+  @override
+  Future<RemoteSessionOptions> sessionOptions(String sessionId) async {
+    _requireLink();
+    return sessionOptionsById[sessionId] ??
+        RemoteSessionOptions(sessionId: sessionId);
+  }
+
+  @override
+  Future<RemoteConfigureOutcome> configureSession(
+    String sessionId, {
+    String? modelId,
+    bool modelFollowsDefault = false,
+    String? permissionId,
+    bool permissionFollowsDefault = false,
+  }) async {
+    _requireLink();
+    if (!capabilities.has(Capability.sendPrompt)) {
+      throw const GatewayException('this device was not granted send_prompt');
+    }
+    configured.add((
+      sessionId: sessionId,
+      modelId: modelId,
+      modelFollowsDefault: modelFollowsDefault,
+      permissionId: permissionId,
+      permissionFollowsDefault: permissionFollowsDefault,
+    ));
+    return configureOutcome;
   }
 
   /// Every [answerMenu], in order.

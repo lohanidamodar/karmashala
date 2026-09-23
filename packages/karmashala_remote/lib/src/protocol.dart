@@ -307,6 +307,23 @@ enum FrameType {
     capability: Capability.viewUsage,
   ),
 
+  /// The models and permission modes a session can be put on, and which it is
+  /// on. Gated like the list it is read from.
+  sessionOptions(
+    'session.options',
+    origin: FrameOrigin.companion,
+    capability: Capability.viewSessions,
+  ),
+
+  /// Puts a session on a model or permission mode, live where the agent allows
+  /// it. Gated on [Capability.sendPrompt]: it acts on the agent as a prompt
+  /// does, and a new bit would refuse every phone already paired.
+  sessionConfigure(
+    'session.configure',
+    origin: FrameOrigin.companion,
+    capability: Capability.sendPrompt,
+  ),
+
   /// The phone rendered every host frame up to `p.seq`, and whether it is
   /// `p.watching`. No capability: it is about the phone's own stream, and a
   /// bit would exclude every phone already paired. Never answered.

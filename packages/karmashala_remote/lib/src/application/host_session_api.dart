@@ -530,6 +530,37 @@ class HostSessionApi {
             ...resumed.toJson(),
             if (replayed) 'replayed': true,
           });
+        case FrameType.sessionOptions:
+          final sessionId = _requireSession(envelope);
+          await _result(
+            envelope.id,
+            (await bindings.sessionOptions(sessionId)).toJson(),
+          );
+        case FrameType.sessionConfigure:
+          final sessionId = _requireSession(envelope);
+          ({String? id})? field(String key) {
+            if (!envelope.payload.containsKey(key)) return null;
+            final value = envelope.payload[key];
+            if (value != null && value is! String) {
+              throw RemoteApiRefusal(ErrorCode.badRequest, 'bad $key');
+            }
+            final id = value as String?;
+            return (id: id == null || id.isEmpty ? null : id);
+          }
+          final model = field('model');
+          final permission = field('permission');
+          if (model == null && permission == null) {
+            throw const RemoteApiRefusal(
+              ErrorCode.badRequest,
+              'nothing to change',
+            );
+          }
+          final outcome = await bindings.configureSession(
+            sessionId,
+            model: model,
+            permission: permission,
+          );
+          await _result(envelope.id, {'outcome': outcome.wire});
         case FrameType.streamAck:
           // Never answered: an ack for an ack would be a stream of its own.
           final seq = envelope.payload['seq'];

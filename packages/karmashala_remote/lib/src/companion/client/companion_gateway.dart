@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import '../../domain/companion_presence.dart';
 import '../../domain/remote_payloads.dart';
+import '../../domain/remote_session_options.dart';
 import '../../domain/remote_usage.dart';
 import '../../client/route_pin.dart';
 import '../../pairing/host_pairing_invite.dart' show HostRoute;
@@ -774,6 +775,21 @@ abstract interface class CompanionGateway {
     String approvalId, {
     List<RemoteQuestionAnswer> answers = const [],
     bool decline = false,
+  });
+
+  /// `session.options` — the models and permission modes [sessionId] can be
+  /// put on, and which it is on.
+  Future<RemoteSessionOptions> sessionOptions(String sessionId);
+
+  /// `session.configure` — puts [sessionId] on a model and/or mode. A field
+  /// left null is left alone; its `followsDefault` hands it back to the
+  /// desktop's default. Answers what became of the session running now.
+  Future<RemoteConfigureOutcome> configureSession(
+    String sessionId, {
+    String? modelId,
+    bool modelFollowsDefault = false,
+    String? permissionId,
+    bool permissionFollowsDefault = false,
   });
 
   /// `usage.get` — every agent account's usage limits, as the desktop read

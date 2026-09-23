@@ -191,6 +191,8 @@ void main() {
         'attachment.begin',
         'attachment.chunk',
         'stream.ack',
+        'session.options',
+        'session.configure',
         'session.changed',
         'transcript.appended',
         'approval.requested',

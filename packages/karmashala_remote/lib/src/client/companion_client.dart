@@ -10,6 +10,7 @@ import 'package:cryptography/cryptography.dart';
 
 import '../domain/companion_presence.dart';
 import '../domain/remote_payloads.dart';
+import '../domain/remote_session_options.dart';
 import '../domain/remote_usage.dart';
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';
@@ -589,6 +590,31 @@ class CompanionClient {
     final payload = await _request(FrameType.questionAnswer, request.toJson());
     final done = payload['done'];
     return done is String ? done : '';
+  }
+
+  /// `session.options` — what [sessionId] can be put on, and what it is on.
+  Future<RemoteSessionOptions> sessionOptions(String sessionId) async =>
+      RemoteSessionOptions.fromJson(
+        await _request(FrameType.sessionOptions, {'sessionId': sessionId}),
+      );
+
+  /// `session.configure` — puts [sessionId] on a model and/or permission mode.
+  /// A field left out is left alone; `followDefault` on it hands it back to
+  /// the desktop's default.
+  Future<RemoteConfigureOutcome> configureSession(
+    String sessionId, {
+    String? modelId,
+    bool modelFollowsDefault = false,
+    String? permissionId,
+    bool permissionFollowsDefault = false,
+  }) async {
+    final payload = await _request(FrameType.sessionConfigure, {
+      'sessionId': sessionId,
+      if (modelId != null || modelFollowsDefault) 'model': modelId,
+      if (permissionId != null || permissionFollowsDefault)
+        'permission': permissionId,
+    });
+    return RemoteConfigureOutcome.parse(payload['outcome']);
   }
 
   /// `usage.get` — every agent account's usage limits.

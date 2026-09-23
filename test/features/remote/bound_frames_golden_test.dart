@@ -488,6 +488,12 @@ void main() {
       FrameType.attachmentChunk: [
         // Filled in below with the id the store just handed out.
       ],
+      FrameType.sessionOptions: [
+        {'sessionId': live},
+      ],
+      FrameType.sessionConfigure: [
+        {'sessionId': live, 'model': 'sonnet'},
+      ],
     };
 
     final recorded = <Map<String, Object?>>[];

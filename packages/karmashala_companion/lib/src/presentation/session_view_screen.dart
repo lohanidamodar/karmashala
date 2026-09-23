@@ -20,6 +20,7 @@ import 'companion_composer.dart';
 import 'companion_route.dart';
 import 'companion_states.dart';
 import 'companion_status_badge.dart';
+import 'session_controls_sheet.dart';
 import 'companion_transcript_view.dart';
 import 'link_banner.dart';
 
@@ -295,6 +296,10 @@ class _SessionViewScreenState extends ConsumerState<SessionViewScreen> {
                     final stage? => SessionViewScreen._stageLabel(stage),
                     null => null,
                   },
+                  // Imported history has no running session to change.
+                  onTap: session == null || session.imported
+                      ? null
+                      : () => showSessionControls(context, session.id),
                 ),
               ),
               const CompanionReadable(child: Divider(height: 1)),
@@ -352,8 +357,12 @@ class SessionStatusStrip extends StatelessWidget {
     this.model,
     this.whereabouts,
     this.stageLabel,
+    this.onTap,
     super.key,
   });
+
+  /// Opens the session's model and permission pickers; null draws no control.
+  final VoidCallback? onTap;
 
   /// Null while the session list is still arriving: no badge, not a guess.
   final CompanionSessionStatus? status;
@@ -368,7 +377,7 @@ class SessionStatusStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final density = UiDensity.of(context);
     final status = this.status;
-    return Padding(
+    final strip = Padding(
       padding: EdgeInsets.symmetric(
         horizontal: density.padX,
         vertical: density.isTouch ? Insets.sm : Insets.xs,
@@ -387,8 +396,23 @@ class SessionStatusStrip extends StatelessWidget {
               style: density.muted(Theme.of(context)),
             ),
           ),
+          if (onTap != null) ...[
+            SizedBox(width: density.glyphGap),
+            Icon(
+              AppIcons.caretDown,
+              size: density.icon,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ],
         ],
       ),
+    );
+    final tap = onTap;
+    if (tap == null) return strip;
+    return Semantics(
+      button: true,
+      label: 'Change model or permission mode',
+      child: InkWell(onTap: tap, child: strip),
     );
   }
 }

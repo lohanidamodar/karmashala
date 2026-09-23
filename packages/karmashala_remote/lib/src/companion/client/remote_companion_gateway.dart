@@ -17,6 +17,7 @@ import '../../client/companion_store.dart' as stored;
 import '../../client/lan_path.dart';
 import '../../client/relay_candidates.dart';
 import '../../domain/remote_payloads.dart';
+import '../../domain/remote_session_options.dart';
 import '../../domain/remote_usage.dart';
 import '../../pairing/companion_device_name.dart';
 import '../../pairing/host_pairing_invite.dart';
@@ -905,6 +906,34 @@ class RemoteCompanionGateway implements CompanionGateway {
     await _ready;
     final client = _requireClient();
     return _mapRefusals(() => client.usage());
+  }
+
+  @override
+  Future<RemoteSessionOptions> sessionOptions(String sessionId) async {
+    await _ready;
+    final client = _requireClient();
+    return _mapRefusals(() => client.sessionOptions(sessionId));
+  }
+
+  @override
+  Future<RemoteConfigureOutcome> configureSession(
+    String sessionId, {
+    String? modelId,
+    bool modelFollowsDefault = false,
+    String? permissionId,
+    bool permissionFollowsDefault = false,
+  }) async {
+    await _ready;
+    final client = _requireClient();
+    return _mapRefusals(
+      () => client.configureSession(
+        sessionId,
+        modelId: modelId,
+        modelFollowsDefault: modelFollowsDefault,
+        permissionId: permissionId,
+        permissionFollowsDefault: permissionFollowsDefault,
+      ),
+    );
   }
 
   @override

@@ -1088,6 +1088,96 @@
           ]
         }
       ]
+    },
+    {
+      "frame": "session.options",
+      "capability": "view_sessions",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "new-0"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "sessionId": "new-0",
+                "models": [
+                  {
+                    "id": "fable",
+                    "label": "Fable",
+                    "summary": "The hardest problems. Slowest, and the most capable."
+                  },
+                  {
+                    "id": "opus",
+                    "label": "Opus",
+                    "summary": "Complex work."
+                  },
+                  {
+                    "id": "sonnet",
+                    "label": "Sonnet",
+                    "summary": "Most tasks."
+                  },
+                  {
+                    "id": "haiku",
+                    "label": "Haiku",
+                    "summary": "Quick questions. Fastest, and the least capable."
+                  }
+                ],
+                "permissions": [
+                  {
+                    "id": "mode=plan",
+                    "label": "Plan mode",
+                    "summary": "Research and propose changes without making them."
+                  },
+                  {
+                    "id": "mode=dontAsk",
+                    "label": "Don't ask",
+                    "summary": "Auto-deny anything that would prompt."
+                  },
+                  {
+                    "id": "mode=manual",
+                    "label": "Ask every time",
+                    "summary": "Ask each time, before edits and commands."
+                  },
+                  {
+                    "id": "mode=acceptEdits",
+                    "label": "Accept edits",
+                    "summary": "Auto-approve file edits and common file commands."
+                  },
+                  {
+                    "id": "mode=auto",
+                    "label": "Automatic",
+                    "summary": "No routine prompts; a reviewer model screens actions."
+                  }
+                ],
+                "permissionId": "mode=manual",
+                "permissionDefault": "Ask every time"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "frame": "session.configure",
+      "capability": "send_prompt",
+      "cases": [
+        {
+          "request": {
+            "sessionId": "new-0",
+            "model": "sonnet"
+          },
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "outcome": "recorded"
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "attachmentOffer": {
