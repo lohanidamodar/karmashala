@@ -504,4 +504,96 @@ void main() {
       expect(access.channels, hasLength(1));
     });
   });
+
+  group('an agent pane attaching fresh to a session the host holds', () {
+    // 26 bytes, so the fake's resumed total covers exactly this replay.
+    const replay = 'OLD-WIDTH-FRAME-DEBRIS!\r\n';
+
+    HostTerminalInstance agentPane(
+      PaneAccess access, {
+      String? stored,
+      required int columns,
+      required int rows,
+    }) {
+      final pane = HostTerminalInstance(
+        id: 'p1',
+        title: 'Claude',
+        profileId: 'agent',
+        access: access,
+        launch: launch,
+        agentLaunch: const AgentPaneLaunch(
+          agentId: 'claudeCode',
+          executable: 'claude',
+          sessionId: 'sess-1',
+        ),
+        restoredScrollback: stored,
+      );
+      addTearDown(pane.dispose);
+      pane.terminal.resize(columns, rows);
+      return pane;
+    }
+
+    PaneAccess holding() => PaneAccess(readyDeployment())
+      ..liveSessions.add('karmashala_sess-1')
+      ..resumedTotalBytes = replay.length;
+
+    test('the replay is not drawn; the app\'s own record stays', () async {
+      final access = holding();
+      final pane = agentPane(
+        access,
+        stored: 'what the pane showed when the app closed\r\n',
+        columns: 80,
+        rows: 24,
+      );
+      await settle();
+      final channel = access.channels.single;
+      channel
+        ..pushOutput(0, replay)
+        ..pushOutput(replay.length, 'what it draws now\r\n');
+      await settle();
+
+      final screen = screenOf(pane);
+      expect(screen, isNot(contains('DEBRIS')));
+      expect(screen, contains('what the pane showed when the app closed'));
+      expect(screen, contains('what it draws now'));
+      expect(channel.all<ResizeMessage>(), isEmpty, reason: 'nothing to redo');
+    });
+
+    test(
+      'at another size the screen is cleared for the agent\'s reprint',
+      () async {
+        final access = holding();
+        final pane = agentPane(
+          access,
+          stored: 'stored at the old width\r\n',
+          columns: 120,
+          rows: 40,
+        );
+        await settle();
+        final channel = access.channels.single;
+        channel.pushOutput(0, replay);
+        await settle();
+
+        expect(screenOf(pane), isNot(contains('stored at the old width')));
+        expect(screenOf(pane), isNot(contains('DEBRIS')));
+        final resize = channel.only<ResizeMessage>();
+        expect((resize.columns, resize.rows), (120, 40));
+      },
+    );
+
+    test(
+      'with nothing stored and no resize due, one nudge repaints it',
+      () async {
+        final access = holding();
+        agentPane(access, columns: 80, rows: 24);
+        await settle();
+
+        final sizes = [
+          for (final r in access.channels.single.all<ResizeMessage>())
+            (r.columns, r.rows),
+        ];
+        expect(sizes, [(80, 23), (80, 24)]);
+      },
+    );
+  });
 }

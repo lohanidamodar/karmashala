@@ -262,10 +262,21 @@ class HostTerminalInstance
   int? _replayEndsAt;
   int _receivedOffset = 0;
 
+  /// Replay bytes still to be dropped unread — see [_skipsReplay].
+  int _discardRemaining = 0;
+
   /// The link's bytes, with the end of a reattach's replay marked in the
   /// ingest itself: the recorder reads the replay for state only, and the mark
   /// has to reach it in order with the bytes however the ingest batches them.
   void _onLinkBytes(Uint8List bytes) {
+    if (_discardRemaining > 0) {
+      if (bytes.length <= _discardRemaining) {
+        _discardRemaining -= bytes.length;
+        return;
+      }
+      bytes = Uint8List.sublistView(bytes, _discardRemaining);
+      _discardRemaining = 0;
+    }
     final end = _replayEndsAt;
     if (end == null) {
       _onDataBytes(bytes);
@@ -401,9 +412,24 @@ class HostTerminalInstance
         resumeFrom,
         deployment,
       );
+      final skip = _skipsReplay(attachment, resumeFrom);
+      final sizeDiffers =
+          attachment.columns != terminal.viewWidth ||
+          attachment.rows != terminal.viewHeight;
+      if (skip) {
+        _discardRemaining = attachment.totalBytes - attachment.replayFromOffset;
+        // A resize makes the agent reprint the whole conversation at this
+        // width, so nothing already on screen may stay beside it.
+        if (sizeDiffers) terminal.write('\x1b[H\x1b[2J\x1b[3J');
+      }
       // Read now, not from `width`: the layout can land while the attach is out.
       link.matchGrid(attachment, terminal.viewWidth, terminal.viewHeight);
-      if (_resumed && _hasStoredHistory && attachment.totalBytes > 0) {
+      if (skip && !sizeDiffers && !_hasStoredHistory) {
+        // Nothing to show and no resize coming: one nudge makes it repaint.
+        link.resize(terminal.viewWidth, terminal.viewHeight - 1);
+        link.resize(terminal.viewWidth, terminal.viewHeight);
+      }
+      if (!skip && _resumed && _hasStoredHistory && attachment.totalBytes > 0) {
         // The replay is the more accurate record, so the stored copy goes.
         // Erase scrollback as well: a plain clear leaves it one scroll away.
         terminal.write('\x1b[H\x1b[2J\x1b[3J');
@@ -421,7 +447,7 @@ class HostTerminalInstance
       final recorder = commandBlocks;
       if (_resumed && recorder != null) {
         recorder.beginReplay();
-        if (attachment.totalBytes > attachment.replayFromOffset) {
+        if (!skip && attachment.totalBytes > attachment.replayFromOffset) {
           _replayEndsAt = attachment.totalBytes;
           _receivedOffset = attachment.replayFromOffset;
         } else {
@@ -508,6 +534,17 @@ class HostTerminalInstance
       );
     }
   }
+
+  /// Whether a fresh pane should drop the host's replay rather than draw it.
+  /// An agent's TUI redraws by relative cursor moves counted at the width it
+  /// drew at, so megabytes of that replayed at today's width is debris; the
+  /// agent repaints itself at this width instead, beside the app's own record.
+  /// A pane redialling its own session keeps the exact replay.
+  bool _skipsReplay(HostAttachment attachment, int resumeFrom) =>
+      agentLaunch != null &&
+      _resumed &&
+      resumeFrom == 0 &&
+      attachment.totalBytes > attachment.replayFromOffset;
 
   /// Whether this pane attached to a session that already existed. It decides
   /// what an immediate end means: one we opened and that ended is a command
