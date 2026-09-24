@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_host/protocol.dart';
@@ -10,6 +12,9 @@ import 'package:karmashala_ui/dialogs.dart';
 
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_terminal_runtime/host_link.dart';
+import '../../sessions/application/session_providers.dart';
+import '../../terminal/application/local_host_providers.dart';
 import '../application/host_sessions.dart';
 import '../application/ssh_failure.dart';
 import 'host_deploy_failure_notice.dart';
@@ -20,15 +25,24 @@ import 'host_deploy_failure_notice.dart';
 /// work opened by a Karmashala that has since been closed — and until this
 /// existed there was no way to see it, reattach to it, or end it from here.
 class HostSessionsDialog extends ConsumerStatefulWidget {
-  const HostSessionsDialog({required this.host, super.key});
+  const HostSessionsDialog({required SshHost this.host, super.key});
 
-  final SshHost host;
+  /// The session host on this machine, the one local panes and agents use.
+  const HostSessionsDialog.local({super.key}) : host = null;
+
+  /// The machine asked, or null for this one.
+  final SshHost? host;
 
   static Future<void> show(BuildContext context, {required SshHost host}) =>
       showDialog<void>(
         context: context,
         builder: (_) => HostSessionsDialog(host: host),
       );
+
+  static Future<void> showLocal(BuildContext context) => showDialog<void>(
+    context: context,
+    builder: (_) => const HostSessionsDialog.local(),
+  );
 
   @override
   ConsumerState<HostSessionsDialog> createState() => _HostSessionsDialogState();
@@ -56,9 +70,10 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
   Future<void> _refresh() async {
     setState(() => _busy = true);
     try {
-      final found = await ref
-          .read(hostSessionsServiceProvider)
-          .list(widget.host);
+      final host = widget.host;
+      final found = host == null
+          ? await _local().listSessions()
+          : await ref.read(hostSessionsServiceProvider).list(host);
       if (mounted) {
         setState(() {
           _sessions = found;
@@ -70,9 +85,12 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
     } on Object catch (e) {
       if (mounted) {
         setState(() {
-          _error = e is HostSessionsUnavailable
-              ? e.message
-              : describeSshFailure(e);
+          _error = switch (e) {
+            HostSessionsUnavailable(:final message) => message,
+            SocketException() when widget.host == null =>
+              'No session host is running on this computer.',
+            _ => describeSshFailure(e),
+          };
           _notDeployed = e is HostSessionsUnavailable ? e.deployment : null;
           _busy = false;
         });
@@ -83,17 +101,47 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
   Future<void> _end(SessionSummary session) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(hostSessionsServiceProvider).end(widget.host, session.id);
+      final host = widget.host;
+      if (host == null) {
+        await _local().endSession(session.id);
+      } else {
+        await ref.read(hostSessionsServiceProvider).end(host, session.id);
+      }
     } on Object catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(describeSshFailure(e))));
     }
     await _refresh();
   }
 
+  LocalHostSessionAccess _local() {
+    final access = ref.read(localHostSessionAccessProvider);
+    if (access == null) {
+      throw const HostSessionsUnavailable(
+        'This app does not use a session host here.',
+      );
+    }
+    return access;
+  }
+
+  /// An agent's host session is named `karmashala_<session id>`; a shell's
+  /// carries `local_` or a host id instead, and matches no session.
+  String? _agentTitleOf(String hostSessionId) {
+    const prefix = 'karmashala_';
+    final shell = 'karmashala_${widget.host?.id ?? 'local'}_';
+    if (!hostSessionId.startsWith(prefix) || hostSessionId.startsWith(shell)) {
+      return null;
+    }
+    final session = ref
+        .read(sessionDaoProvider)
+        .getById(hostSessionId.substring(prefix.length));
+    return session?.title;
+  }
+
   void _attach(SessionSummary session, String paneId) {
+    final host = widget.host!;
     final controller = ref.read(terminalSessionsControllerProvider.notifier);
     controller.openTab(
-      TerminalProfile.ssh(widget.host.id, hostName: widget.host.name),
+      TerminalProfile.ssh(host.id, hostName: host.name),
       adoptPaneId: paneId,
     );
     controller.showTerminalHere();
@@ -107,7 +155,9 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
     return AlertDialog(
       title: DesktopDialogTitle(
         icon: AppIcons.terminal,
-        title: 'Sessions on ${widget.host.name}',
+        title: widget.host == null
+            ? 'Session host on this computer'
+            : 'Sessions on ${widget.host!.name}',
         subtitle:
             'The host keeps these running whether this app is open or not.',
       ),
@@ -121,7 +171,7 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
           (false, _, _) when _notDeployed != null => Padding(
             padding: const EdgeInsets.all(Insets.md),
             child: HostDeployFailureNotice(
-              host: widget.host,
+              host: widget.host!,
               deployment: _notDeployed!,
               closeDialogFirst: true,
               onInstalled: _refresh,
@@ -149,9 +199,10 @@ class _HostSessionsDialogState extends ConsumerState<HostSessionsDialog> {
                 itemCount: found.length,
                 itemBuilder: (context, i) => _SessionRow(
                   session: found[i],
-                  hostId: widget.host.id,
+                  hostId: widget.host?.id,
                   onEnd: () => _end(found[i]),
                   onAttach: (paneId) => _attach(found[i], paneId),
+                  agentTitleOf: _agentTitleOf,
                 ),
               ),
             ),
@@ -179,19 +230,29 @@ class _SessionRow extends StatelessWidget {
     required this.hostId,
     required this.onEnd,
     required this.onAttach,
+    required this.agentTitleOf,
   });
 
   final SessionSummary session;
-  final String hostId;
+
+  /// Null for this computer's host, whose shells are not reattached from here.
+  final String? hostId;
   final VoidCallback onEnd;
   final void Function(String paneId) onAttach;
+
+  /// The Karmashala session a host session belongs to, by its title.
+  final String? Function(String hostSessionId) agentTitleOf;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final running = !session.lifecycle.hasEnded;
-    final paneId = paneIdOfHostSession(session.id, hostId);
+    final paneId = hostId == null
+        ? null
+        : paneIdOfHostSession(session.id, hostId!);
+    final agentTitle = agentTitleOf(session.id);
+    final isAgent = agentTitle != null || hostId != null;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Insets.xs),
@@ -210,14 +271,15 @@ class _SessionRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  session.argv.join(' '),
+                  agentTitle ?? session.argv.join(' '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium,
                 ),
                 Text(
                   [
-                    running ? 'running' : 'ended',
+                    session.lifecycle.describe(),
+                    if (agentTitle != null) session.argv.first,
                     if (session.workingDirectory != null)
                       session.workingDirectory!,
                     '${(session.totalBytes / 1024).toStringAsFixed(0)}K of output',
@@ -236,7 +298,7 @@ class _SessionRow extends StatelessWidget {
               onPressed: () => onAttach(paneId),
               child: const Text('Attach'),
             )
-          else if (running)
+          else if (running && isAgent)
             // An agent's session is named after the agent, not a pane; it is
             // reopened from the session it belongs to, not from here.
             Padding(

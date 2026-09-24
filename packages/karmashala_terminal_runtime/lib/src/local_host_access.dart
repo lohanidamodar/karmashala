@@ -381,27 +381,36 @@ class LocalHostSessionAccess implements HostSessionAccess {
 
   /// The running sessions' ids, or null when the host would not say.
   Future<List<String>?> liveSessionIds() async {
-    final Socket socket;
     try {
-      socket = await _connect();
-    } on SocketException {
-      return null;
-    }
-    final channel = SocketRemoteChannel(socket);
-    HostPaneLink? link;
-    try {
-      link = await HostPaneLink.open(
-        channel,
-        clientId: 'karmashala-probe',
-        bound: helloBound,
-      );
       return [
-        for (final session in await link.listSessions())
+        for (final session in await listSessions())
           if (!session.lifecycle.hasEnded) session.id,
       ];
     } on Object catch (e) {
       _logger.debug('local host would not list its sessions: $e');
       return null;
+    }
+  }
+
+  /// Every session the host holds, running or kept after it ended. Throws
+  /// when no host answers.
+  Future<List<SessionSummary>> listSessions() =>
+      _withLink((link) => link.listSessions());
+
+  /// Ends one session on the host for good.
+  Future<void> endSession(String sessionId) =>
+      _withLink((link) => link.closeSession(sessionId));
+
+  Future<T> _withLink<T>(Future<T> Function(HostPaneLink link) use) async {
+    final channel = SocketRemoteChannel(await _connect());
+    HostPaneLink? link;
+    try {
+      link = await HostPaneLink.open(
+        channel,
+        clientId: 'karmashala-sessions',
+        bound: helloBound,
+      );
+      return await use(link);
     } finally {
       await link?.close();
       await channel.close();

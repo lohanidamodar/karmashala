@@ -5,6 +5,7 @@ import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ssh/host.dart';
+import '../../ssh/presentation/host_sessions_dialog.dart';
 import '../../terminal/application/local_host_providers.dart';
 import '../../terminal/presentation/session_status.dart';
 import 'settings_notice.dart';
@@ -52,6 +53,11 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  TextButton(
+                    key: const ValueKey('session-host-sessions'),
+                    onPressed: () => HostSessionsDialog.showLocal(context),
+                    child: const Text('Sessions'),
+                  ),
                   TextButton(
                     key: const ValueKey('session-host-restart'),
                     onPressed: () => _restart(reading!),
