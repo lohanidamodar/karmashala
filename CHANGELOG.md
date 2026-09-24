@@ -17,6 +17,17 @@ installs claim the same version name.
 
 ---
 
+## 1.26.1 — 2026-09-24 (build 46)
+
+- **Changing a pane's width no longer leaves pieces of Claude Code's input box
+  behind** (`xterm2` divergence 12). Narrowing wrapped each full-width rule
+  onto a second row, so the agent's redraw fell short and left a `────`
+  fragment under every rule and a stale status row below the box. The rows
+  from its parked cursor down now keep their row count and are only cut to the
+  new width; history above still reflows.
+
+---
+
 ## 1.26.0 — 2026-09-24 (build 45)
 
 **Local terminals run in the session host by default, and it reaches Macs and
