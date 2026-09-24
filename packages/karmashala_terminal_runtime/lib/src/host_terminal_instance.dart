@@ -312,6 +312,20 @@ class HostTerminalInstance
     }
   }
 
+  /// The pane's own bookkeeping — which host, which session, that it
+  /// reconnected. Into the terminal in a debug build only: in a release one
+  /// that is the program's screen, the ids mean nothing to the person, and the
+  /// line sits where the program's next redraw expects its own rows
+  /// (2026-09-24). The log has it either way.
+  void _note(String text) {
+    _logger.info(text.replaceAll(RegExp(r'\x1b\[[0-9;]*m'), '').trim());
+    if (writesNotesToTerminal) _emit(text);
+  }
+
+  /// [kDebugMode], and settable so a test can see what a release pane shows.
+  @visibleForTesting
+  static bool writesNotesToTerminal = kDebugMode;
+
   void _emit(String text) {
     _recorder?.addText(text);
     if (_tier == IngestTier.cold) {
@@ -345,12 +359,12 @@ class HostTerminalInstance
     await _dial(deployment);
   }
 
-  void _sayAdopted() => _emit(
+  void _sayAdopted() => _note(
     '\x1b[90m[the host had already started this session; attached to it '
     'rather than starting a second]\x1b[0m\r\n',
   );
 
-  void _sayRestarted() => _emit(
+  void _sayRestarted() => _note(
     '\x1b[33m[the session host was not running and has been started; any '
     'session it held before is no longer running]\x1b[0m\r\n',
   );
@@ -434,7 +448,7 @@ class HostTerminalInstance
       // Not over a screen, which would erase it and whose program would
       // otherwise redraw over it.
       if (!attachment.screenFollows) {
-        _emit(
+        _note(
           '\x1b[90m[session host ${deployment.hostVersion ?? 'unknown'}: '
           '${attachment.sessionId}, ${attachment.totalBytes} bytes so '
           'far]\x1b[0m\r\n',
@@ -602,7 +616,7 @@ class HostTerminalInstance
     if (_disposed || _exited) return;
     // The link went away; the host may have too. Nothing else notices a host
     // that died, so the pane is what reaches it again.
-    _emit(
+    _note(
       '\r\n\x1b[33m[the link to the session host closed; reconnecting from '
       'byte $_lastOffset]\x1b[0m\r\n',
     );

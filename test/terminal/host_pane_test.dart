@@ -623,4 +623,24 @@ void main() {
       expect(screenOf(pane), isNot(contains('process exited')));
     },
   );
+
+  group('the pane\'s own notes', () {
+    tearDown(() => HostTerminalInstance.writesNotesToTerminal = true);
+
+    test('are written into the terminal in a debug build', () async {
+      HostTerminalInstance.writesNotesToTerminal = true;
+      final pane = paneOn(PaneAccess(readyDeployment()));
+      await settle();
+      expect(screenOf(pane), contains('bytes so far'));
+    });
+
+    test('stay out of the program\'s screen in a release one', () async {
+      HostTerminalInstance.writesNotesToTerminal = false;
+      final pane = paneOn(PaneAccess(readyDeployment()));
+      await settle();
+      expect(screenOf(pane), isNot(contains('bytes so far')));
+      expect(screenOf(pane), isNot(contains('karmashala_local_p1')));
+      expect(pane.liveness.value, PaneLiveness.live);
+    });
+  });
 }
