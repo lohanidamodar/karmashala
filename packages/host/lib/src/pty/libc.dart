@@ -210,6 +210,45 @@ class Libc {
     }
   }();
 
+  late final int Function(int) getsid = _libc
+      .lookup<NativeFunction<Int32 Function(Int32)>>('getsid')
+      .asFunction<int Function(int)>();
+
+  /// libproc, inside libSystem; null anywhere else. macOS has no `/proc`, so
+  /// this listing is the only way to find a session's members there.
+  late final int Function(Pointer<Int32>, int)? procListAllPids = () {
+    if (!Platform.isMacOS) return null;
+    try {
+      return _libc
+          .lookup<NativeFunction<Int32 Function(Pointer<Int32>, Int32)>>(
+            'proc_listallpids',
+          )
+          .asFunction<int Function(Pointer<Int32>, int)>();
+    } on ArgumentError {
+      return null;
+    }
+  }();
+
+  /// Every process whose session id is [sid], but [sid] itself, from libproc
+  /// and `getsid`; empty where there is no libproc.
+  List<int> sessionMembersByListing(int sid) {
+    final list = procListAllPids;
+    if (list == null) return const [];
+    // Asked for the count first, with room for processes started meanwhile.
+    final capacity = list(nullptr, 0) + 64;
+    if (capacity <= 64) return const [];
+    final pids = calloc<Int32>(capacity);
+    try {
+      final count = list(pids, capacity * sizeOf<Int32>());
+      return [
+        for (var i = 0; i < count && i < capacity; i++)
+          if (pids[i] > 0 && pids[i] != sid && getsid(pids[i]) == sid) pids[i],
+      ];
+    } finally {
+      calloc.free(pids);
+    }
+  }
+
   static OpenptyDart _resolveOpenpty(
     DynamicLibrary libc,
     DynamicLibrary owner,

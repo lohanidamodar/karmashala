@@ -277,7 +277,13 @@ class _PosixPtyHandle implements PtyHandle {
   void kill([int signal = 15]) {
     if (_closed) return;
     _libc.kill(-pid, signal);
-    for (final member in sessionMembers(pid)) {
+    // A job the shell moved into a group of its own — `claude login` typed at
+    // a zsh prompt — is still in the session, and holding the slave it keeps
+    // the reader from its end-of-file, so the session could never end.
+    final members = Platform.isMacOS
+        ? _libc.sessionMembersByListing(pid)
+        : sessionMembers(pid);
+    for (final member in members) {
       _libc.kill(member, signal);
     }
   }
@@ -288,7 +294,11 @@ class _PosixPtyHandle implements PtyHandle {
     _closed = true;
     _writerPort?.send('stop');
     _writer?.kill(priority: Isolate.beforeNextEvent);
-    _libc.close(_masterFd);
+    // In an isolate of its own: on macOS a master closed under a reader still
+    // blocked on it can sleep in the kernel for good, and on this isolate that
+    // stopped the host answering anyone (2026-09-24).
+    final fd = _masterFd;
+    unawaited(Isolate.run(() => Libc.open().close(fd)).catchError((_) => -1));
     if (!_output.isClosed) await _output.close();
   }
 }
