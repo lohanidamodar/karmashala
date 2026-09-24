@@ -477,6 +477,14 @@ class HostTerminalInstance
     HostDeployment deployment,
   ) async {
     final sessionId = hostSessionId;
+    // An agent launched now whose record the host kept after it exited —
+    // `claude` quit with Ctrl-C twice — would otherwise be reattached to that
+    // record, show its exit, and never run again, however often it is resumed.
+    if (agentLaunch != null &&
+        sinceOffset == 0 &&
+        await _endedOnHost(link, sessionId)) {
+      await link.closeSession(sessionId);
+    }
     try {
       final attachment = await link.attachSession(
         sessionId: sessionId,
@@ -522,6 +530,18 @@ class HostTerminalInstance
         withholdingRefusal(launch.removedEnvironment, e.message),
         code: e.code,
       );
+    }
+  }
+
+  /// Whether the host holds [sessionId] as an ended record. Not being able to
+  /// ask is not a yes: the attach that follows decides as it always did.
+  Future<bool> _endedOnHost(HostPaneLink link, String sessionId) async {
+    try {
+      return (await link.listSessions()).any(
+        (s) => s.id == sessionId && s.lifecycle.hasEnded,
+      );
+    } on HostLinkException {
+      return false;
     }
   }
 

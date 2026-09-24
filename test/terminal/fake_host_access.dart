@@ -18,6 +18,9 @@ class PaneAccess implements HostSessionAccess {
   /// The machine's sessions, surviving a link the way real ones do.
   final liveSessions = <String>{};
 
+  /// Records the host keeps for sessions whose process has exited.
+  final endedSessions = <String>{};
+
   /// What tmux on that machine is holding, and whether it will say. Unknown is
   /// a third answer, not a silent "no" — a pane treats it as a session it must
   /// not walk away from.
@@ -74,6 +77,7 @@ class PaneAccess implements HostSessionAccess {
     execs.add(command);
     final channel = ScriptedHostChannel(
       liveSessions,
+      endedSessions: endedSessions,
       resumedTotalBytes: resumedTotalBytes,
       attachRefusal: attachRefusal,
       predatesWithholding: predatesWithholding,
@@ -94,10 +98,14 @@ class PaneAccess implements HostSessionAccess {
 class ScriptedHostChannel implements RemoteChannel {
   ScriptedHostChannel(
     this.liveSessions, {
+    Set<String>? endedSessions,
     this.resumedTotalBytes = 0,
     this.attachRefusal,
     this.predatesWithholding = false,
-  });
+  }) : endedSessions = endedSessions ?? <String>{};
+
+  /// Shared with the machine: sessions whose process exited, still listed.
+  final Set<String> endedSessions;
 
   final ProtocolErrorCode? attachRefusal;
   final bool predatesWithholding;
@@ -140,6 +148,46 @@ class ScriptedHostChannel implements RemoteChannel {
               ptyLibrary: 'libc.so.6',
               pid: 11,
               startedAt: DateTime.utc(2026),
+              observedAt: DateTime.utc(2026),
+            ),
+          );
+        case ListMessage(:final requestId):
+          push(
+            SessionsMessage(requestId, [
+              for (final id in {...liveSessions, ...endedSessions})
+                SessionSummary(
+                  id: id,
+                  argv: const ['agent'],
+                  workingDirectory: null,
+                  pid: 11,
+                  columns: 80,
+                  rows: 24,
+                  startedAt: DateTime.utc(2026),
+                  observedAt: DateTime.utc(2026),
+                  totalBytes: resumedTotalBytes,
+                  firstAvailableOffset: 0,
+                  lifecycle: endedSessions.contains(id)
+                      ? SessionExited(0, DateTime.utc(2026))
+                      : const SessionRunning(),
+                  writeHolder: null,
+                ),
+            ]),
+          );
+        case CloseMessage(:final requestId, :final sessionId):
+          liveSessions.remove(sessionId);
+          endedSessions.remove(sessionId);
+          push(ClosedMessage(requestId, sessionId, 0));
+        case AttachMessage(:final requestId, :final sessionId)
+            when endedSessions.contains(sessionId):
+          // What the real host does: attach to the kept record, then say it
+          // already ended.
+          push(_attached(requestId, sessionId));
+          push(
+            ExitedMessage(
+              sessionRef: 1,
+              sessionId: sessionId,
+              exitCode: 0,
+              reason: 'exited',
               observedAt: DateTime.utc(2026),
             ),
           );

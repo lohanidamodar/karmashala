@@ -594,4 +594,33 @@ void main() {
       expect(channel.all<ResizeMessage>(), isEmpty, reason: 'no nudge');
     });
   });
+
+  test(
+    'an agent launched over a record that already exited starts again',
+    () async {
+      final access = PaneAccess(readyDeployment())
+        ..endedSessions.add('karmashala_sess-1');
+      final pane = HostTerminalInstance(
+        id: 'p1',
+        title: 'Claude',
+        profileId: 'agent',
+        access: access,
+        launch: launch,
+        agentLaunch: const AgentPaneLaunch(
+          agentId: 'claudeCode',
+          executable: 'claude',
+          sessionId: 'sess-1',
+        ),
+      );
+      addTearDown(pane.dispose);
+      pane.terminal.resize(120, 40);
+      await settle();
+
+      final channel = access.channels.single;
+      expect(channel.only<CloseMessage>().sessionId, 'karmashala_sess-1');
+      expect(channel.only<OpenMessage>().sessionId, 'karmashala_sess-1');
+      expect(pane.liveness.value, PaneLiveness.live);
+      expect(screenOf(pane), isNot(contains('process exited')));
+    },
+  );
 }
