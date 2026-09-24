@@ -1501,8 +1501,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "924c6b0eb7979d9c4eb9bbd51864cad1c8db351b"
-      resolved-ref: "924c6b0eb7979d9c4eb9bbd51864cad1c8db351b"
+      ref: b6aaa28351c9abcba830b4c8e76e2ed49d6d340d
+      resolved-ref: b6aaa28351c9abcba830b4c8e76e2ed49d6d340d
       url: "https://github.com/lohanidamodar/xterm2.git"
     source: git
     version: "5.3.0"
