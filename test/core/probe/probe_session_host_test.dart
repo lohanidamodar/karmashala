@@ -34,7 +34,11 @@ void main() {
 
   ProviderContainer containerFor(ProbeMode probe) {
     final container = ProviderContainer(
-      overrides: [probeModeProvider.overrideWithValue(probe)],
+      overrides: [
+        probeModeProvider.overrideWithValue(probe),
+        // These read where a host would be; none dials the owner's.
+        localHostReachableProvider.overrideWithValue(true),
+      ],
     );
     addTearDown(container.dispose);
     return container;

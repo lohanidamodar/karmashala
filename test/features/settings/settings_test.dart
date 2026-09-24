@@ -62,24 +62,24 @@ void main() {
   });
 
   group('host-backed local panes setting', () {
-    test('is off, so nothing changes until somebody asks for it', () {
-      expect(const Settings().hostBackedLocalPanes, isFalse);
-      expect(Settings.fromJson(const {}).hostBackedLocalPanes, isFalse);
+    test('is on, and a file that never said reads as on', () {
+      expect(const Settings().hostBackedLocalPanes, isTrue);
+      expect(Settings.fromJson(const {}).hostBackedLocalPanes, isTrue);
     });
 
-    test('survives a JSON round-trip, on as well as off', () {
-      const on = Settings(hostBackedLocalPanes: true);
-      expect(Settings.fromJson(on.toJson()).hostBackedLocalPanes, isTrue);
-      expect(Settings.fromJson(on.toJson()), on);
+    test('survives a JSON round-trip, off as well as on', () {
+      const off = Settings(hostBackedLocalPanes: false);
+      expect(Settings.fromJson(off.toJson()).hostBackedLocalPanes, isFalse);
+      expect(Settings.fromJson(off.toJson()), off);
     });
 
     test('participates in equality', () {
       expect(
-        const Settings(hostBackedLocalPanes: true),
+        const Settings(hostBackedLocalPanes: false),
         isNot(const Settings()),
       );
       expect(
-        const Settings(hostBackedLocalPanes: true).hashCode,
+        const Settings(hostBackedLocalPanes: false).hashCode,
         isNot(const Settings().hashCode),
       );
     });

@@ -91,7 +91,7 @@ class Settings {
     this.pinnedSessionIds = const [],
     this.shellIntegrationEnabled = false,
     this.restoreLivePanes = true,
-    this.hostBackedLocalPanes = false,
+    this.hostBackedLocalPanes = true,
     this.quitAsks = true,
     this.quitReopens = true,
     this.quitKeepsHostSessions = true,
@@ -243,8 +243,9 @@ class Settings {
   final bool restoreLivePanes;
 
   /// Run a local pane's shell under `karmashala_host` so it outlives the app.
-  /// Off by default: there is no OSC 133 on that path, so a host-backed pane
-  /// reports no command boundaries and `terminal_run` claims no exit code.
+  /// On by default since 2026-09-24: shell integration works on that path, a
+  /// pane redials a host that went away, and the quit question says what it
+  /// leaves running.
   final bool hostBackedLocalPanes;
 
   /// Whether quitting with sessions running asks first. Off, quit uses the
@@ -735,8 +736,8 @@ class Settings {
       shellIntegrationEnabled: json['shellIntegrationEnabled'] == true,
       // `!= false`: defaults on, so a file written before the key reads as on.
       restoreLivePanes: json['restoreLivePanes'] != false,
-      // `== true`: defaults off, so an older file reads as off.
-      hostBackedLocalPanes: json['hostBackedLocalPanes'] == true,
+      // `!= false`: defaults on; a file that chose off keeps it.
+      hostBackedLocalPanes: json['hostBackedLocalPanes'] != false,
       // `!= false`: all three default on, so an older file reads as on.
       quitAsks: json['quitAsks'] != false,
       quitReopens: json['quitReopens'] != false,

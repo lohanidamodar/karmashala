@@ -9,6 +9,14 @@ import '../../settings/application/settings_controller.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 
+/// Whether this process may reach a session host on this machine at all. Not
+/// under `flutter test` (the runner sets `FLUTTER_TEST`): a test's pane would
+/// open sessions on the owner's host, or end them. A test about the host
+/// itself overrides this, or [localHostSessionAccessProvider].
+final localHostReachableProvider = Provider<bool>(
+  (ref) => Platform.environment['FLUTTER_TEST'] != 'true',
+);
+
 /// The session host on this machine, or null where there cannot be one. One per
 /// app run: the reading is memoised on it, and a second instance would measure
 /// — and possibly start — a second time.
@@ -18,6 +26,7 @@ final localHostSessionAccessProvider = Provider<LocalHostSessionAccess?>((ref) {
   if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
     return null;
   }
+  if (!ref.watch(localHostReachableProvider)) return null;
   final probe = ref.watch(probeModeProvider);
   if (!probe.enabled) return LocalHostSessionAccess();
   // A probe's host is its own: the owner's is per user, so sharing it would
