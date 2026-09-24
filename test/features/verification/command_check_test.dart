@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala/src/features/verification/domain/verification_run.dart';
 import 'package:karmashala/src/features/verification/domain/verification_target.dart';
 import 'package:path/path.dart' as p;
@@ -98,5 +99,74 @@ void main() {
     final gate = await record();
     expect(h.service.list().map((run) => run.id), contains(gate.id));
     expect(h.service.get(gate.id)!.verdict, VerificationVerdict.pass);
+  });
+
+  /// A batch of checks is one run whose verdict is the worst of them.
+  group('several checks as one run', () {
+    Future<VerificationRun> batch(List<CommandCheck> checks) =>
+        h.service.recordCommandChecks(
+          title: 'Project checks · Work',
+          workingDirectory: '/home/me/app',
+          environmentId: 'wsl:Ubuntu',
+          startedAt: startedAt,
+          checks: checks,
+          sessionId: 's1',
+        );
+
+    const test_ = CommandCheck(name: 'test', command: ['flutter', 'test']);
+
+    test('all passing is a pass', () async {
+      final run = await batch([
+        const CommandCheck(name: 'test', command: ['t'], exitCode: 0),
+        const CommandCheck(name: 'analyze', command: ['a'], exitCode: 0),
+      ]);
+      expect(run.verdict, VerificationVerdict.pass);
+      expect(run.reason, 'All 2 checks passed.');
+      expect(run.steps, hasLength(2));
+    });
+
+    test('one failure fails the batch, whatever came after it', () async {
+      final run = await batch([
+        const CommandCheck(name: 'test', command: ['t'], exitCode: 1),
+        const CommandCheck(name: 'analyze', command: ['a'], exitCode: 0),
+      ]);
+      expect(run.verdict, VerificationVerdict.fail);
+      expect(run.reason, '1 of 2 passed; not passed: test.');
+      expect(run.steps.first.ok, isFalse);
+      expect(run.steps.first.detail, 'exited 1');
+    });
+
+    test(
+      'a check that never ran, or has no exit code, is inconclusive',
+      () async {
+        final refused = await batch([
+          const CommandCheck(name: 'analyze', command: ['a'], exitCode: 0),
+          const CommandCheck(
+            name: 'test',
+            command: ['t'],
+            refusal: '"test" did not run: no environment',
+          ),
+        ]);
+        expect(refused.verdict, VerificationVerdict.inconclusive);
+        expect(refused.steps.last.detail, contains('did not run'));
+
+        final unobserved = await batch([test_]);
+        expect(unobserved.verdict, VerificationVerdict.inconclusive);
+      },
+    );
+
+    test('each output is its own artifact, on its own step', () async {
+      final run = await batch([
+        const CommandCheck(
+          name: 'test',
+          command: ['t'],
+          exitCode: 0,
+          output: 'All tests passed!',
+        ),
+        const CommandCheck(name: 'analyze', command: ['a'], exitCode: 0),
+      ]);
+      expect(run.artifacts.single.stepOrdinal, 1);
+      expect(run.artifacts.single.label, 'test');
+    });
   });
 }

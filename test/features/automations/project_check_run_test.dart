@@ -264,37 +264,50 @@ void main() {
   /// `checks_run`: the same checks, asked for by a session rather than set off
   /// by an automation, so "done" can carry an exit code the app saw.
   group('run on demand for a session', () {
-    test('each exit code is recorded against the session, as the app\'s own '
-        'reading', () async {
+    Future<void> endNewest(int? exitCode) async {
+      container
+          .read(paneExitProvider.notifier)
+          .record(
+            PaneExit(paneId: newestPane(), sessionId: null, exitCode: exitCode),
+          );
+    }
+
+    test('the batch is one run against the session, as the app\'s own '
+        'reading, and its worst verdict wins', () async {
       addCheck('the test suite', const ['flutter', 'test']);
+      addCheck('analyze', const ['flutter', 'analyze']);
 
       final running = container
           .read(automationCheckRunnerProvider)
           .runForSession('s1');
       await until(() => tabCount() > 0);
-      container
-          .read(paneExitProvider.notifier)
-          .record(
-            PaneExit(paneId: newestPane(), sessionId: null, exitCode: 1),
-          );
-      final outcomes = await running;
+      await endNewest(1);
+      await until(() => tabCount() > 1);
+      await endNewest(0);
+      final result = (await running)!;
 
-      expect(outcomes.single.verdict, VerificationVerdict.fail);
-      final recorded = VerificationDao(
-        db,
-      ).getRun(outcomes.single.verificationRunId!)!;
+      // The later pass does not sit on top of the earlier failure.
+      expect(result.run.verdict, VerificationVerdict.fail);
+      expect(result.run.reason, contains('not passed: the test suite'));
+      final recorded = VerificationDao(db).getRun(result.run.id)!;
       expect(recorded.sessionId, 's1');
+      expect(recorded.steps, hasLength(2));
       // Asked for by the session, but not the session's claim.
       expect(recorded.producedBySessionId, isNull);
+      expect(
+        VerificationDao(db).listRuns(sessionId: 's1'),
+        hasLength(1),
+        reason: 'one batch, one run',
+      );
       // Nothing about an automation run is touched.
       expect(verdicts(), isEmpty);
     });
 
     test('a repository with no checks runs nothing', () async {
-      final outcomes = await container
+      final result = await container
           .read(automationCheckRunnerProvider)
           .runForSession('s1');
-      expect(outcomes, isEmpty);
+      expect(result, isNull);
       expect(tabCount(), 0);
     });
   });

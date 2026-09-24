@@ -212,6 +212,97 @@ class VerificationService {
     _changed();
   }
 
+  /// Records several gates this app ran as **one** run: a step and an output
+  /// per check, and the worst verdict among them — fail, then inconclusive,
+  /// then pass. One run, so "the newest verdict" cannot be the last check's
+  /// pass sitting on top of an earlier failure.
+  ///
+  /// A check that never ran carries its [CommandCheck.refusal] and counts as
+  /// inconclusive.
+  Future<VerificationRun> recordCommandChecks({
+    required String title,
+    required String workingDirectory,
+    required String environmentId,
+    required DateTime startedAt,
+    required List<CommandCheck> checks,
+    String? sessionId,
+    String? producedBySessionId,
+  }) async {
+    final id = _newId();
+    final directory = await _store.createDirectory(id);
+    final finishedAt = _now();
+    VerificationVerdict verdictOf(CommandCheck check) =>
+        check.refusal != null || check.exitCode == null
+        ? VerificationVerdict.inconclusive
+        : check.exitCode == 0
+        ? VerificationVerdict.pass
+        : VerificationVerdict.fail;
+    final verdicts = [for (final check in checks) verdictOf(check)];
+    final verdict = verdicts.contains(VerificationVerdict.fail)
+        ? VerificationVerdict.fail
+        : verdicts.contains(VerificationVerdict.inconclusive) || checks.isEmpty
+        ? VerificationVerdict.inconclusive
+        : VerificationVerdict.pass;
+
+    final steps = <VerificationStep>[
+      for (final (i, check) in checks.indexed)
+        VerificationStep(
+          ordinal: i + 1,
+          kind: VerificationStepKind.other,
+          summary: '${check.name}: ${check.command.join(' ')}',
+          detail:
+              check.refusal ??
+              switch (check.exitCode) {
+                0 => 'passed',
+                null => 'stopped without an exit code Karmashala observed',
+                final code => 'exited $code',
+              },
+          at: finishedAt,
+          ok: verdicts[i] == VerificationVerdict.pass,
+        ),
+    ];
+    final failed = [
+      for (final (i, check) in checks.indexed)
+        if (verdicts[i] != VerificationVerdict.pass) check.name,
+    ];
+    final passed = checks.length - failed.length;
+    final run = VerificationRun(
+      id: id,
+      title: title,
+      target: const VerificationTarget.change(),
+      sessionId: sessionId,
+      producedBySessionId: producedBySessionId,
+      startedAt: startedAt,
+      finishedAt: finishedAt,
+      verdict: verdict,
+      reason: failed.isEmpty
+          ? '${checks.length == 1 ? 'The check' : 'All ${checks.length} checks'} passed.'
+          : '$passed of ${checks.length} passed; not passed: '
+                '${failed.join(', ')}.',
+      artifactDirectory: directory.path,
+      steps: steps,
+    );
+    _dao.insertRun(run);
+    for (final step in steps) {
+      _dao.insertStep(id, step);
+    }
+    for (final (i, check) in checks.indexed) {
+      if (check.output.trim().isEmpty) continue;
+      final artifact = await _store.writeText(
+        runId: id,
+        name: 'output-${i + 1}',
+        kind: VerificationArtifactKind.other,
+        label: check.name,
+        text: check.output,
+        stepOrdinal: i + 1,
+        at: finishedAt,
+      );
+      _dao.insertArtifact(artifact);
+    }
+    _changed();
+    return _dao.getRun(id) ?? run;
+  }
+
   /// Records a gate this app ran itself in one call. It takes no recording
   /// slot, so it cannot clobber an open run, and an exit code we never saw is
   /// `inconclusive`, never a pass (§19).
@@ -524,4 +615,23 @@ class VerificationService {
 /// The steps of a run, most recent first — what a pane's timeline shows.
 extension VerificationRunSteps on VerificationRun {
   List<VerificationStep> get stepsNewestFirst => steps.reversed.toList();
+}
+
+/// One gate in [VerificationService.recordCommandChecks].
+class CommandCheck {
+  const CommandCheck({
+    required this.name,
+    required this.command,
+    this.exitCode,
+    this.output = '',
+    this.refusal,
+  });
+
+  final String name;
+  final List<String> command;
+  final int? exitCode;
+  final String output;
+
+  /// Why it never ran, or null when it did.
+  final String? refusal;
 }

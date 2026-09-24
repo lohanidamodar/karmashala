@@ -13,6 +13,7 @@ import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import '../../verification/application/verification_providers.dart';
+import '../../verification/application/verification_service.dart';
 import '../../verification/domain/verification_run.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
@@ -133,32 +134,53 @@ class AutomationCheckRunner {
   }
 
   /// Runs [sessionId]'s checkout's project checks, one after another in
-  /// visible panes, in the directory its agent works in, and records each
-  /// exit code against the session. Empty when the repository has none.
+  /// visible panes, in the directory its agent works in, and records them as
+  /// **one** verification run against the session — the worst verdict of the
+  /// batch. Null when the repository has none.
   ///
   /// The app's own reading of the work, never the session's claim about it:
   /// `producedBySessionId` stays null even when the session asked for it.
-  Future<List<ProjectCheckOutcome>> runForSession(String sessionId) async {
+  Future<SessionChecks?> runForSession(String sessionId) async {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('No session $sessionId.');
     final checks = _ref
         .read(projectCheckDaoProvider)
         .forRepository(session.repositoryId);
-    if (checks.isEmpty) return const [];
+    if (checks.isEmpty) return null;
     final directory = sessionWorkingDirectoryOf(_ref, session);
     final resolution = _ref
         .read(environmentResolverProvider)
         .resolveFor(directory);
-    return [
-      for (final check in checks)
-        await _runCheck(
-          check: check,
-          resolution: resolution,
-          directory: directory,
-          paneTitle: '${check.name} · ${session.title}',
-          sessionId: sessionId,
+    final startedAt = _now;
+    final ran = <CommandCheck>[];
+    for (final check in checks) {
+      final result = await _execute(
+        check: check,
+        resolution: resolution,
+        directory: directory,
+        paneTitle: '${check.name} · ${session.title}',
+      );
+      ran.add(
+        CommandCheck(
+          name: check.name,
+          command: check.command,
+          exitCode: result.exitCode,
+          output: result.tail.join('\n'),
+          refusal: result.refusal,
         ),
-    ];
+      );
+    }
+    final run = await _ref
+        .read(verificationServiceProvider)
+        .recordCommandChecks(
+          title: 'Project checks · ${session.title}',
+          workingDirectory: directory?.path ?? 'not recorded',
+          environmentId: resolution.environment?.id ?? 'not recorded',
+          startedAt: startedAt,
+          checks: ran,
+          sessionId: sessionId,
+        );
+    return (checks: ran, run: run);
   }
 
   Future<ProjectCheckOutcome> _runCheck({
@@ -168,14 +190,57 @@ class AutomationCheckRunner {
     required String paneTitle,
     required String? sessionId,
   }) async {
-    ProjectCheckOutcome refused(String reason) => (
+    final startedAt = _now;
+    final result = await _execute(
       check: check,
-      // A check that could not be started is never a pass and never a fail:
-      // nobody observed the work either way (§19).
-      verdict: VerificationVerdict.inconclusive,
-      reason: reason,
-      verificationRunId: null,
+      resolution: resolution,
+      directory: directory,
+      paneTitle: paneTitle,
     );
+    final refusal = result.refusal;
+    if (refusal != null) {
+      return (
+        check: check,
+        // A check that could not be started is never a pass and never a fail:
+        // nobody observed the work either way (§19).
+        verdict: VerificationVerdict.inconclusive,
+        reason: refusal,
+        verificationRunId: null,
+      );
+    }
+    final recorded = await _ref
+        .read(verificationServiceProvider)
+        .recordCommandCheck(
+          title: '${check.name} · ${directory!.path}',
+          command: check.command,
+          workingDirectory: directory.path,
+          environmentId: resolution.environment!.id,
+          startedAt: startedAt,
+          exitCode: result.exitCode,
+          output: result.tail.join('\n'),
+          // `producedBySessionId` stays null: this is the app's own reading,
+          // not a session's claim about itself.
+          sessionId: sessionId,
+        );
+    return (
+      check: check,
+      // The recorder's own verdict, so every reader of this exit code agrees.
+      verdict: recorded.verdict ?? VerificationVerdict.inconclusive,
+      reason: recorded.reason ?? '',
+      verificationRunId: recorded.id,
+    );
+  }
+
+  /// Runs one check in a visible pane and waits for it to stop, or says why
+  /// it could not be run.
+  Future<_Executed> _execute({
+    required ProjectCheck check,
+    required EnvironmentResolution resolution,
+    required EnvironmentPath? directory,
+    required String paneTitle,
+  }) async {
+    _Executed refused(String reason) =>
+        (refusal: reason, exitCode: null, tail: const <String>[]);
 
     final commandRefusal = projectCheckCommandRefusal(check.command);
     if (commandRefusal != null) {
@@ -189,7 +254,6 @@ class AutomationCheckRunner {
       );
     }
 
-    final startedAt = _now;
     final String? paneId;
     try {
       paneId = _ref.read(visibleCommandOpenerProvider)(
@@ -214,28 +278,7 @@ class AutomationCheckRunner {
     final waiting = Completer<_PaneOutcome>();
     _waiting[paneId] = waiting;
     final outcome = await waiting.future;
-
-    final recorded = await _ref
-        .read(verificationServiceProvider)
-        .recordCommandCheck(
-          title: '${check.name} · ${directory.path}',
-          command: check.command,
-          workingDirectory: directory.path,
-          environmentId: environment.id,
-          startedAt: startedAt,
-          exitCode: outcome.exitCode,
-          output: outcome.tail.join('\n'),
-          // `producedBySessionId` stays null: this is the app's own reading,
-          // not a session's claim about itself.
-          sessionId: sessionId,
-        );
-    return (
-      check: check,
-      // The recorder's own verdict, so every reader of this exit code agrees.
-      verdict: recorded.verdict ?? VerificationVerdict.inconclusive,
-      reason: recorded.reason ?? '',
-      verificationRunId: recorded.id,
-    );
+    return (refusal: null, exitCode: outcome.exitCode, tail: outcome.tail);
   }
 
   List<String> _tailOf(String paneId) {
@@ -261,6 +304,11 @@ typedef ProjectCheckOutcome = ({
   String reason,
   String? verificationRunId,
 });
+
+/// One session's checks: each as it ran, and the one run that records them.
+typedef SessionChecks = ({List<CommandCheck> checks, VerificationRun run});
+
+typedef _Executed = ({String? refusal, int? exitCode, List<String> tail});
 
 /// What a pane left behind when its process stopped.
 typedef _PaneOutcome = ({int? exitCode, List<String> tail});

@@ -8,6 +8,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_git/git.dart';
 import '../../sessions/application/session_launcher.dart';
 import '../../verification/presentation/review_action.dart';
+import '../../automations/application/automation_check_runner.dart';
 import '../application/comparison_providers.dart';
 import '../application/fanout_service.dart';
 import '../domain/comparison.dart';
@@ -34,6 +35,9 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
   /// open. Not stored: the diff *stat* is the durable part.
   final _diffs = <String, Future<String>>{};
   String? _busy;
+
+  /// Whether the candidates' project checks are running from this view.
+  bool _checking = false;
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +144,63 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
             ],
           ),
         ),
+        const SizedBox(width: Insets.sm),
+        _runChecksButton(comparison),
       ],
+    );
+  }
+
+  /// Words where there is room, the icon alone where there is not: at the
+  /// minimum window the words took the width the agent count needs.
+  Widget _runChecksButton(Comparison comparison) {
+    final onPressed =
+        _checking ||
+            !comparison.candidates.any(
+              (c) => c.hasLiveWorktree && c.sessionId != null,
+            )
+        ? null
+        : () => _runChecks(comparison);
+    final icon = _checking
+        ? const SizedBox.square(
+            dimension: Chrome.iconSmall,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(AppIcons.listChecks, size: Chrome.iconSmall);
+    if (MediaQuery.sizeOf(context).width < 900) {
+      return IconButton(
+        tooltip: _checking ? 'Checking…' : 'Run checks in every worktree',
+        onPressed: onPressed,
+        icon: icon,
+      );
+    }
+    return TextButton.icon(
+      onPressed: onPressed,
+      icon: icon,
+      label: Text(_checking ? 'Checking…' : 'Run checks'),
+    );
+  }
+
+  /// Every candidate's project checks at once; each verdict lands in its
+  /// column as the newest verification run.
+  Future<void> _runChecks(Comparison comparison) async {
+    setState(() => _checking = true);
+    final int checked;
+    try {
+      checked = await runCandidateChecks(
+        ref.read(automationCheckRunnerProvider).runForSession,
+        comparison,
+      );
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
+    if (!mounted || checked > 0) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      const SnackBar(
+        content: Text(
+          'This repository has no project checks. Add them in Settings → '
+          'Automations → Verification and project checks.',
+        ),
+      ),
     );
   }
 

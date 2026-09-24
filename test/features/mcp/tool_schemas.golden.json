@@ -462,7 +462,7 @@
     },
     {
       "name": "checks_run",
-      "description": "Run the project checks the user configured for a session's repository (tests, analyze, lint — whatever they added), in visible panes in the directory that session works in, one after another, and WAIT for them. Each exit code is recorded against the session as Karmashala's own reading, never as your claim, and is readable with verification_get. Use it before saying work is done. A check whose pane is closed by hand, or that could not start, is INCONCLUSIVE, never a pass. Answers NOTHING WAS CHECKED when the repository has none.",
+      "description": "Run the project checks the user configured for a session's repository (tests, analyze, lint — whatever they added), in visible panes in the directory that session works in, one after another, and WAIT for them. The batch is recorded against the session as ONE verification run whose verdict is the worst of its checks — Karmashala's own reading, never your claim — readable with verification_get. Use it before saying work is done. A check whose pane is closed by hand, or that could not start, is INCONCLUSIVE, never a pass. Answers NOTHING WAS CHECKED when the repository has none.",
       "inputSchema": {
         "type": "object",
         "properties": {

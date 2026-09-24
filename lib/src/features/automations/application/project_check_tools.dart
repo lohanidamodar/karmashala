@@ -1,5 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
+import '../../verification/application/verification_service.dart';
 import '../../verification/domain/verification_run.dart';
 import 'automation_check_runner.dart';
 
@@ -21,23 +22,31 @@ class ProjectCheckTools {
         'Missing sessionId. Outside a session there is no checkout to check.',
       );
     }
-    final outcomes = await _container
+    final result = await _container
         .read(automationCheckRunnerProvider)
         .runForSession(sessionId);
-    if (outcomes.isEmpty) {
+    if (result == null) {
       return 'NOTHING WAS CHECKED: this session\'s repository has no project '
           'checks. The user adds them in Settings → Automations → '
           'Verification and project checks. Nothing here claims the work '
           'passes.';
     }
+    final run = result.run;
     return [
-      for (final outcome in outcomes)
-        '${_word(outcome.verdict)} ${outcome.check.name} '
-            '(${outcome.check.command.join(' ')})'
-            '${outcome.reason.isEmpty ? '' : ' — ${outcome.reason}'}'
-            '${outcome.verificationRunId == null ? '' : ' · verification_get ${outcome.verificationRunId}'}',
+      '${_word(run.verdict ?? VerificationVerdict.inconclusive)} — '
+          '${run.reason ?? ''} · verification_get ${run.id}',
+      for (final check in result.checks)
+        '  ${_checkWord(check)} ${check.name} (${check.command.join(' ')})'
+            '${check.refusal == null ? '' : ' — ${check.refusal}'}',
     ].join('\n');
   }
+
+  static String _checkWord(CommandCheck check) =>
+      check.refusal != null || check.exitCode == null
+      ? 'INCONCLUSIVE'
+      : check.exitCode == 0
+      ? 'PASS'
+      : 'FAIL (exit ${check.exitCode})';
 
   static String _word(VerificationVerdict verdict) => switch (verdict) {
     VerificationVerdict.pass => 'PASS',
@@ -53,8 +62,9 @@ const List<Map<String, Object?>> projectCheckToolSchemas = [
         'Run the project checks the user configured for a session\'s '
         'repository (tests, analyze, lint — whatever they added), in visible '
         'panes in the directory that session works in, one after another, and '
-        'WAIT for them. Each exit code is recorded against the session as '
-        'Karmashala\'s own reading, never as your claim, and is readable with '
+        'WAIT for them. The batch is recorded against the session as ONE '
+        'verification run whose verdict is the worst of its checks — '
+        'Karmashala\'s own reading, never your claim — readable with '
         'verification_get. Use it before saying work is done. A check whose '
         'pane is closed by hand, or that could not start, is INCONCLUSIVE, '
         'never a pass. Answers NOTHING WAS CHECKED when the repository has '
