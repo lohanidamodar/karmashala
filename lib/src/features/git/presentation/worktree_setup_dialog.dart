@@ -39,12 +39,16 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
   late final _paths = TextEditingController(
     text: widget.existing.copyPaths.join('\n'),
   );
+  late final _teardown = TextEditingController(
+    text: joinCommandLine(widget.existing.teardown),
+  );
 
   @override
   void initState() {
     super.initState();
     _command.addListener(_rebuild);
     _paths.addListener(_rebuild);
+    _teardown.addListener(_rebuild);
   }
 
   void _rebuild() => setState(() {});
@@ -53,6 +57,7 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
   void dispose() {
     _command.dispose();
     _paths.dispose();
+    _teardown.dispose();
     super.dispose();
   }
 
@@ -80,6 +85,7 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
         command: _argv,
         copyPaths: _pathLines,
         startAgentBeforeSetup: _agentFirst,
+        teardown: splitCommandLine(_teardown.text),
       ),
     );
   }
@@ -152,6 +158,28 @@ class _WorktreeSetupDialogState extends ConsumerState<WorktreeSetupDialog> {
                       : 'A session waits for the command to exit before its '
                             'agent starts, and can be cancelled while it waits.',
                 ),
+              ),
+              const SizedBox(height: Insets.lg),
+              TextField(
+                key: const ValueKey('worktree-setup-teardown'),
+                controller: _teardown,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  labelText: 'Teardown command (optional)',
+                  hintText: 'docker compose down',
+                ),
+                style: TextStyle(
+                  fontFamily: kMonoFamily,
+                  fontFamilyFallback: kMonoFallback,
+                  fontSize: theme.textTheme.bodyMedium?.fontSize,
+                ),
+              ),
+              const SizedBox(height: Insets.xs),
+              Text(
+                'Run in its own pane, in the worktree, before Karmashala '
+                'removes it. The removal waits for it, up to five minutes; one '
+                'still running then leaves the worktree where it is.',
+                style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: Insets.lg),
               TextField(

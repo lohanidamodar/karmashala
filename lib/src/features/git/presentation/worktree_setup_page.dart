@@ -236,6 +236,8 @@ class _CheckoutCard extends ConsumerWidget {
                 ? 'nothing'
                 : setup.copyPaths.join(', '),
           ),
+          if (setup.teardown.isNotEmpty)
+            _Line(label: 'Teardown', value: joinCommandLine(setup.teardown)),
           if (setup.command.isNotEmpty)
             _Line(
               label: 'Agent',

@@ -343,6 +343,46 @@ void main() {
       );
     });
 
+    testWidgets('saves the teardown command as argv', (tester) async {
+      WorktreeSetup? saved;
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () async => saved = await WorktreeSetupDialog.show(
+                    context,
+                    checkoutName: 'app',
+                    existing: const WorktreeSetup(),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const ValueKey('worktree-setup-teardown')),
+        'docker compose -f "dev stack.yml" down',
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(saved?.teardown, [
+        'docker',
+        'compose',
+        '-f',
+        'dev stack.yml',
+        'down',
+      ]);
+    });
+
     testWidgets('there is no way to ask for a link', (tester) async {
       await open(tester);
       for (final word in ['Symlink', 'symlink', 'Link', 'Share', 'Junction']) {

@@ -20,11 +20,15 @@ class WorktreeSetupDao {
       'SELECT command, copy_paths FROM worktree_setup WHERE repository_id = ?;',
       [repositoryId],
     );
-    if (rows.isEmpty) return const WorktreeSetup();
+    final teardown = _teardowns()[repositoryId] ?? const <String>[];
+    if (rows.isEmpty) return WorktreeSetup(teardown: teardown);
     return WorktreeSetup.fromJson(
       rows.first['command'] as String?,
       rows.first['copy_paths'] as String?,
-    ).copyWith(startAgentBeforeSetup: !_waiting().contains(repositoryId));
+    ).copyWith(
+      startAgentBeforeSetup: !_waiting().contains(repositoryId),
+      teardown: teardown,
+    );
   }
 
   /// Every checkout with something configured, by repository id — one query,
@@ -34,7 +38,10 @@ class WorktreeSetupDao {
       'SELECT repository_id, command, copy_paths FROM worktree_setup;',
     );
     final waiting = _waiting();
+    final teardowns = _teardowns();
     return {
+      for (final MapEntry(key: id, value: teardown) in teardowns.entries)
+        id: WorktreeSetup(teardown: teardown),
       for (final row in rows)
         row['repository_id'] as String:
             WorktreeSetup.fromJson(
@@ -42,8 +49,41 @@ class WorktreeSetupDao {
               row['copy_paths'] as String?,
             ).copyWith(
               startAgentBeforeSetup: !waiting.contains(row['repository_id']),
+              teardown: teardowns[row['repository_id']] ?? const <String>[],
             ),
     };
+  }
+
+  // Beside the waiting choice, for the same reason: no migration, and an older
+  // build simply never runs one.
+  static const String _teardownKey = 'worktree_setup.teardown.v1';
+
+  /// The teardown command of each checkout that has one, as argv.
+  Map<String, List<String>> _teardowns() {
+    final raw = _db.readMetadata(_teardownKey);
+    if (raw == null) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const {};
+      return {
+        for (final MapEntry(:key, :value) in decoded.entries)
+          if (key is String && value is List)
+            key: [
+              for (final word in value)
+                if (word is String && word.isNotEmpty) word,
+            ],
+      }..removeWhere((_, argv) => argv.isEmpty);
+    } on FormatException {
+      return const {};
+    }
+  }
+
+  void _setTeardown(String repositoryId, List<String> argv) {
+    final current = _teardowns();
+    final next = {...current};
+    argv.isEmpty ? next.remove(repositoryId) : next[repositoryId] = argv;
+    if (next.isEmpty && current.isEmpty) return;
+    _db.writeMetadata(_teardownKey, jsonEncode(next));
   }
 
   // The agent-timing choice lives in `app_metadata`, not a column: it needed
@@ -95,6 +135,7 @@ class WorktreeSetupDao {
       ],
     );
     _setWaiting(repositoryId, !setup.startAgentBeforeSetup);
+    _setTeardown(repositoryId, setup.teardown);
   }
 
   void clear(String repositoryId) {
@@ -102,6 +143,7 @@ class WorktreeSetupDao {
       repositoryId,
     ]);
     _setWaiting(repositoryId, false);
+    _setTeardown(repositoryId, const []);
   }
 
   // --- what happened --------------------------------------------------------

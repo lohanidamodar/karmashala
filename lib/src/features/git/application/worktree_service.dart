@@ -29,6 +29,7 @@ class WorktreeService {
     this.setup,
     this.creations,
     this.idleTimeout = const Duration(minutes: 5),
+    this.teardownBound = const Duration(minutes: 5),
   });
 
   final CommandRunnerFactory runnerFactory;
@@ -47,6 +48,9 @@ class WorktreeService {
 
   /// How long a streamed git stage may print nothing before it is stopped.
   final Duration idleTimeout;
+
+  /// How long a removal waits for the repository's teardown command.
+  final Duration teardownBound;
 
   /// Where [repo]'s git runs, or the resolver's own refusal as a
   /// [GitException], in its words so this cannot drift from the launch paths.
@@ -126,22 +130,35 @@ class WorktreeService {
   }
 
   /// Removes the worktree at [worktree] of [repo].
-  Future<void> remove(
+  Future<WorktreeTeardown?> remove(
     EnvironmentPath repo,
     EnvironmentPath worktree, {
     bool force = false,
   }) async {
+    // The repository's own teardown first, while the directory still exists.
+    final teardown = await setup?.teardown(
+      environment: _environmentOf(repo),
+      repo: repo,
+      worktree: worktree,
+      bound: teardownBound,
+    );
+    if (teardown != null && teardown.stillRunning) {
+      throw GitException('${teardown.said} Nothing was removed.');
+    }
     await _gitFor(repo).removeWorktree(repo, worktree, force: force);
     // Only after git actually removed it, or a still-correct listing would be
     // thrown away.
     onCheckoutMoved?.call(worktree);
+    return teardown;
   }
 
   /// Removes [worktree] only if git agrees it is clean. No `force` parameter on
   /// purpose: automatic cleanup must have no way to discard anything, so git's
   /// own refusal of a dirty worktree is the last check, never an obstacle.
-  Future<void> removeIfClean(EnvironmentPath repo, EnvironmentPath worktree) =>
-      remove(repo, worktree);
+  Future<WorktreeTeardown?> removeIfClean(
+    EnvironmentPath repo,
+    EnvironmentPath worktree,
+  ) => remove(repo, worktree);
 }
 
 /// One run of [WorktreeService.create]: the stages, in order, and what each
@@ -467,7 +484,9 @@ class _Creation {
   Future<void> _setupScript(WorktreeSetup? configured) async {
     await _stopIfCancelled(WorktreeStage.setupScript);
     final setup = _setup;
-    if (setup == null || configured == null || configured.isEmpty) {
+    if (setup == null ||
+        configured == null ||
+        (configured.command.isEmpty && configured.copyPaths.isEmpty)) {
       _stage(
         WorktreeStage.setupScript,
         WorktreeStageState.skipped,

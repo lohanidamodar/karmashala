@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:karmashala/src/app/shell/quick_open/repo_file_index.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
@@ -91,6 +93,55 @@ void main() {
       'remove',
       r'C:\wt',
     ]);
+  });
+
+  group('a teardown runs before the worktree goes', () {
+    const repo = EnvironmentPath(environmentId: 'windows', path: r'C:\app');
+    const wt = EnvironmentPath(environmentId: 'windows', path: r'C:\wt');
+
+    WorktreeService withTeardown(void Function(WorktreeSetupService) onOpen) {
+      late WorktreeSetupService setup;
+      setup = WorktreeSetupService(
+        runnerFactory: FakeCommandRunnerFactory(fallback: runner),
+        lookup: (_) => (
+          repositoryId: 'r1',
+          setup: const WorktreeSetup(teardown: ['make', 'clean']),
+        ),
+        record: (_) {},
+        openPane: (_) {
+          scheduleMicrotask(() => onOpen(setup));
+          return 'teardown-pane';
+        },
+      );
+      return WorktreeService(
+        runnerFactory: FakeCommandRunnerFactory(fallback: runner),
+        environmentDao: envDao,
+        setup: setup,
+        teardownBound: const Duration(milliseconds: 20),
+      );
+    }
+
+    test('then git removes it, and the answer says how it went', () async {
+      final result = await withTeardown(
+        (setup) => setup.noteExit('teardown-pane', 0),
+      ).remove(repo, wt);
+      expect(result?.said, 'The teardown command finished.');
+      expect(runner.requests.single.arguments, contains('remove'));
+    });
+
+    test('one still running leaves the worktree where it is', () async {
+      await expectLater(
+        withTeardown((_) {}).remove(repo, wt),
+        throwsA(
+          isA<GitException>().having(
+            (e) => e.message,
+            'message',
+            contains('Nothing was removed'),
+          ),
+        ),
+      );
+      expect(runner.requests, isEmpty);
+    });
   });
 
   group('the checkout-moved notice', () {

@@ -6,6 +6,7 @@ import '../explorer/application/checkout.dart';
 import '../explorer/application/checkout_picker.dart';
 import '../git/application/changes_providers.dart';
 import '../git/application/git_providers.dart';
+import '../git/application/worktree_setup_service.dart';
 import 'package:karmashala_git/git.dart';
 import '../projects/application/projects_controller.dart';
 import '../repositories/application/repository_providers.dart';
@@ -294,10 +295,11 @@ class WorktreeControlTools {
       );
     }
 
+    final WorktreeTeardown? teardown;
     try {
       // No `force`, ever: every condition it would override is one this method
       // has already refused, so it could only override an unchecked one.
-      await _container
+      teardown = await _container
           .read(worktreeServiceProvider)
           .remove(owner.path, worktree.path);
     } on GitException catch (error) {
@@ -312,6 +314,7 @@ class WorktreeControlTools {
       'branch': delivery.branch ?? 'not recorded',
       'baseBranch': base,
       'removed': true,
+      'teardown': teardown?.said ?? 'none configured',
       // Both of these are deliberate, and a caller that wanted a clean sweep
       // needs to know they were not done rather than assume they were.
       'branchKept': true,

@@ -424,4 +424,52 @@ void main() {
       expect(recorded.single.worktreePath, worktree.path);
     },
   );
+
+  group('teardown, before a worktree is removed', () {
+    const teardown = WorktreeSetup(teardown: ['docker', 'compose', 'down']);
+
+    Future<WorktreeTeardown?> tearDownWith(
+      WorktreeSetupService s, {
+      Duration bound = const Duration(minutes: 5),
+    }) => s.teardown(
+      environment: wslEnv(),
+      repo: repo,
+      worktree: worktree,
+      bound: bound,
+    );
+
+    test('nothing configured: no pane, and null', () async {
+      expect(await tearDownWith(service()), isNull);
+      expect(panes, isEmpty);
+    });
+
+    test('runs in a pane in the worktree and waits for its exit', () async {
+      final s = service(setup: teardown);
+      final pending = tearDownWith(s);
+      await Future<void>.delayed(Duration.zero);
+      expect(panes.single.argv, ['docker', 'compose', 'down']);
+      expect(panes.single.worktree, worktree);
+      expect(panes.single.title, 'Teardown · app-s1');
+
+      s.noteExit('pane-1', 3);
+      final result = (await pending)!;
+      expect(result.said, contains('exited 3'));
+      // A failed teardown does not hold the removal up.
+      expect(result.stillRunning, isFalse);
+    });
+
+    test('one still running at the bound holds the removal', () async {
+      final result = (await tearDownWith(
+        service(setup: teardown),
+        bound: const Duration(milliseconds: 10),
+      ))!;
+      expect(result.stillRunning, isTrue);
+    });
+
+    test('a teardown alone asks nothing of a new worktree', () async {
+      expect(await run(service(setup: teardown)), isNull);
+      expect(panes, isEmpty);
+      expect(recorded, isEmpty);
+    });
+  });
 }

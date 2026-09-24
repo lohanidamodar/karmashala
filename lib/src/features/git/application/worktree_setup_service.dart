@@ -90,7 +90,11 @@ class WorktreeSetupService {
     required EnvironmentPath worktree,
   }) async {
     final found = lookup(repo);
-    if (found == null || found.setup.isEmpty) return null;
+    // A teardown is for removal; alone it asks nothing of a new worktree.
+    if (found == null ||
+        (found.setup.command.isEmpty && found.setup.copyPaths.isEmpty)) {
+      return null;
+    }
 
     final runner = runnerFactory.forEnvironment(environment);
     final chosen = worktreeCopierFor(environment, runner);
@@ -139,6 +143,62 @@ class WorktreeSetupService {
     // After the record, so a creation waiting on this writes over it, not under.
     if (waiter != null && !waiter.isCompleted) waiter.complete(exitCode);
     return corrected;
+  }
+
+  /// Runs [repo]'s teardown command in [worktree], in a visible pane, and
+  /// waits up to [bound] for it. Null when none is configured.
+  ///
+  /// A teardown that exits non-zero does not stop the removal — "nothing was
+  /// running to stop" is the usual reason — but one still running at [bound]
+  /// does ([WorktreeTeardown.stillRunning]): its process is in that directory.
+  Future<WorktreeTeardown?> teardown({
+    required ExecutionEnvironment environment,
+    required EnvironmentPath repo,
+    required EnvironmentPath worktree,
+    Duration bound = const Duration(minutes: 5),
+  }) async {
+    final argv = lookup(repo)?.setup.teardown ?? const <String>[];
+    if (argv.isEmpty) return null;
+    final opener = openPane;
+    if (opener == null) {
+      return const WorktreeTeardown(
+        'There is no terminal to run the teardown command in, so it was not '
+        'run.',
+      );
+    }
+    final String? paneId;
+    try {
+      paneId = opener(
+        WorktreeSetupCommand(
+          argv: argv,
+          worktree: worktree,
+          environment: environment,
+          title: 'Teardown · ${lastPathSegment(worktree.path)}',
+        ),
+      );
+    } on Object catch (error) {
+      return WorktreeTeardown('The teardown command could not start: $error');
+    }
+    if (paneId == null) {
+      return const WorktreeTeardown(
+        'No pane could be opened for the teardown command, so it was not run.',
+      );
+    }
+    try {
+      final exitCode = await waitForExit(paneId).timeout(bound);
+      return WorktreeTeardown(switch (exitCode) {
+        0 => 'The teardown command finished.',
+        null => 'The teardown command stopped without an exit code.',
+        final code => 'The teardown command exited $code.',
+      });
+    } on TimeoutException {
+      _exitWaiters.remove(paneId);
+      return WorktreeTeardown(
+        'The teardown command is still running after ${bound.inMinutes} '
+        'minutes, in its own pane.',
+        stillRunning: true,
+      );
+    }
   }
 
   /// Completes with the exit code of the setup command in [paneId] — null when
@@ -313,4 +373,14 @@ class WorktreeSetupService {
       paneId: paneId,
     );
   }
+}
+
+/// What a worktree's teardown command did, in a sentence.
+class WorktreeTeardown {
+  const WorktreeTeardown(this.said, {this.stillRunning = false});
+
+  final String said;
+
+  /// The command is still running in the worktree, so it must not be removed.
+  final bool stillRunning;
 }

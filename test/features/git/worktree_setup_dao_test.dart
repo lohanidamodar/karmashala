@@ -216,4 +216,34 @@ void main() {
       expect(run['worktree_path']!['pk'], 2);
     });
   });
+
+  group('the teardown command', () {
+    test('round-trips beside the rest of the setting', () {
+      const setup = WorktreeSetup(
+        command: ['flutter', 'pub', 'get'],
+        teardown: ['docker', 'compose', 'down'],
+      );
+      dao.save('r1', setup, testTime);
+      expect(dao.get('r1'), setup);
+      expect(dao.getAll()['r1'], setup);
+    });
+
+    test('is a setting on its own', () {
+      const setup = WorktreeSetup(teardown: ['make', 'clean']);
+      dao.save('r1', setup, testTime);
+      expect(dao.get('r1').teardown, ['make', 'clean']);
+      expect(dao.getAll()['r1']?.teardown, ['make', 'clean']);
+    });
+
+    test('clearing the setting clears it too', () {
+      dao.save(
+        'r1',
+        const WorktreeSetup(teardown: ['make', 'clean']),
+        testTime,
+      );
+      dao.clear('r1');
+      expect(dao.get('r1'), const WorktreeSetup());
+      expect(dao.getAll(), isEmpty);
+    });
+  });
 }

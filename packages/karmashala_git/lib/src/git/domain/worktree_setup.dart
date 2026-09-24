@@ -13,6 +13,7 @@ class WorktreeSetup {
     this.command = const [],
     this.copyPaths = const [],
     this.startAgentBeforeSetup = true,
+    this.teardown = const [],
   });
 
   /// The command as **argv**, not as a line: `['flutter', 'pub', 'get']`.
@@ -29,17 +30,23 @@ class WorktreeSetup {
   /// to exit. Not part of [isEmpty]: on its own it asks for nothing to be done.
   final bool startAgentBeforeSetup;
 
-  bool get isEmpty => command.isEmpty && copyPaths.isEmpty;
+  /// Run in a worktree, in a visible pane, before the app removes it — a
+  /// `docker compose down`, a test database dropped. Argv, like [command].
+  final List<String> teardown;
+
+  bool get isEmpty => command.isEmpty && copyPaths.isEmpty && teardown.isEmpty;
   bool get isNotEmpty => !isEmpty;
 
   WorktreeSetup copyWith({
     List<String>? command,
     List<String>? copyPaths,
     bool? startAgentBeforeSetup,
+    List<String>? teardown,
   }) => WorktreeSetup(
     command: command ?? this.command,
     copyPaths: copyPaths ?? this.copyPaths,
     startAgentBeforeSetup: startAgentBeforeSetup ?? this.startAgentBeforeSetup,
+    teardown: teardown ?? this.teardown,
   );
 
   String get commandJson => jsonEncode(command);
@@ -71,19 +78,21 @@ class WorktreeSetup {
       other is WorktreeSetup &&
       _listEquals(other.command, command) &&
       _listEquals(other.copyPaths, copyPaths) &&
-      other.startAgentBeforeSetup == startAgentBeforeSetup;
+      other.startAgentBeforeSetup == startAgentBeforeSetup &&
+      _listEquals(other.teardown, teardown);
 
   @override
   int get hashCode => Object.hash(
     Object.hashAll(command),
     Object.hashAll(copyPaths),
     startAgentBeforeSetup,
+    Object.hashAll(teardown),
   );
 
   @override
   String toString() =>
       'WorktreeSetup(${command.length} argument(s), '
-      '${copyPaths.length} path(s))';
+      '${copyPaths.length} path(s), ${teardown.length} teardown argument(s))';
 
   static bool _listEquals(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
