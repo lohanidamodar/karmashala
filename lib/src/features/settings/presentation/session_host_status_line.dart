@@ -46,7 +46,9 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
         tone: _toneFor(reading),
         icon: _iconFor(reading),
         message: sessionHostStatusText(reading),
-        action: reading?.hostOutdated ?? false
+        // Offered whenever a host answers: a current one can need a restart
+        // too — a new build installed beside it, or a host gone wrong.
+        action: reading?.isReady ?? false
             ? Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -65,7 +67,10 @@ class _SessionHostStatusLineState extends ConsumerState<SessionHostStatusLine> {
 
   /// Ends what the old host holds only when the person says so, by name.
   Future<void> _restart(HostDeployment reading) async {
-    final held = reading.liveSessionIds;
+    final held =
+        reading.liveSessionIds ??
+        await ref.read(localHostSessionAccessProvider)?.liveSessionIds();
+    if (!mounted) return;
     final holdsSome = held == null || held.isNotEmpty;
     if (holdsSome) {
       final confirmed = await showConfirmDialog(

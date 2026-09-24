@@ -143,7 +143,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
       // is what decides where the next pane goes.
       return _last = _isCurrent(welcome, binary)
           ? _ready(welcome, binary?.path ?? '', restartedByUs: restartedByUs)
-          : _outdated(welcome, binary!.path, await _liveSessionIds());
+          : _outdated(welcome, binary!.path, await liveSessionIds());
     }
     // The outdated host is gone, so what it held no longer decides anything.
     if (_last?.hostOutdated ?? false) _last = null;
@@ -311,7 +311,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
     WelcomeMessage welcome,
     File binary,
   ) async {
-    final live = await _liveSessionIds();
+    final live = await liveSessionIds();
     if (live == null || live.isNotEmpty) {
       return _outdated(welcome, binary.path, live);
     }
@@ -380,7 +380,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
   }
 
   /// The running sessions' ids, or null when the host would not say.
-  Future<List<String>?> _liveSessionIds() async {
+  Future<List<String>?> liveSessionIds() async {
     final Socket socket;
     try {
       socket = await _connect();

@@ -148,17 +148,52 @@ void main() {
       matching: find.text('Restart'),
     );
 
-    testWidgets('is not offered for a current host', (tester) async {
+    HostDeployment current() => HostDeployment(
+      status: HostDeploymentStatus.ready,
+      observedAt: DateTime.now(),
+      reason: 'current',
+    );
+
+    testWidgets('is offered for a current host too', (tester) async {
+      await pumpLine(tester, current());
+      expect(restart, findsOneWidget);
+      expect(find.text('Check'), findsOneWidget);
+    });
+
+    testWidgets('asks the host what it holds when the reading does not say', (
+      tester,
+    ) async {
+      final access = await pumpLine(tester, current())
+        ..live = const ['a', 'b', 'c'];
+      await tester.tap(restart);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('ends the 3 session(s)'), findsOneWidget);
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      expect(access.restarts, [true]);
+    });
+
+    testWidgets('restarts a current host holding nothing without asking', (
+      tester,
+    ) async {
+      final access = await pumpLine(tester, current())
+        ..live = const [];
+      await tester.tap(restart);
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(access.restarts, [false]);
+    });
+
+    testWidgets('is not offered when no host answers', (tester) async {
       await pumpLine(
         tester,
         HostDeployment(
-          status: HostDeploymentStatus.ready,
+          status: HostDeploymentStatus.noBinary,
           observedAt: DateTime.now(),
-          reason: 'current',
+          reason: 'No karmashala_host beside this app.',
         ),
       );
       expect(restart, findsNothing);
-      expect(find.text('Check'), findsOneWidget);
     });
 
     testWidgets('ends running sessions only after the person confirms', (
@@ -179,7 +214,6 @@ void main() {
       await tester.tap(confirm);
       await tester.pumpAndSettle();
       expect(access.restarts, [true]);
-      expect(restart, findsNothing, reason: 'the new host is current');
     });
 
     testWidgets('replaces a host holding nothing without asking or force', (
@@ -201,6 +235,10 @@ class _FakeAccess extends LocalHostSessionAccess {
 
   HostDeployment reading;
   final restarts = <bool>[];
+  List<String>? live;
+
+  @override
+  Future<List<String>?> liveSessionIds() async => live;
 
   @override
   Future<HostDeployment> observe() async => reading;
