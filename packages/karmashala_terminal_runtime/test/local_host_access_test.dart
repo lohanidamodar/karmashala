@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala_ssh/host.dart';
 import 'package:karmashala_terminal_runtime/host_link.dart';
 import 'package:karmashala_host/karmashala_host.dart';
+import 'package:xterm2/xterm.dart' show Terminal;
 
 /// The app's end of the local transport, against a **real** session host in
 /// this process: a real unix domain socket, the real `HostServer`, the real
@@ -572,6 +573,97 @@ void main() {
       expect(reading.status, HostDeploymentStatus.ready);
       expect(reading.hostOutdated, isFalse);
       expect(reading.restartedByUs, isTrue);
+    });
+  });
+  group('the screen on attach, end to end', () {
+    // Claude Code's shape: a transcript, then a live region drawn below a
+    // cursor parked at its top, redrawn relatively after that.
+    const region = 5;
+    String frame(String tag, int width) => [
+      '─' * width,
+      '❯ $tag',
+      '─' * width,
+      '  ⏵⏵ auto mode on',
+      '  status $tag',
+    ].join('\r\n');
+    String redraw(String tag, int width) =>
+        '\x1b[${region - 1}B${'\x1b[2K\x1b[1A' * (region - 1)}\x1b[2K\r'
+        '${frame(tag, width)}\x1b[${region - 1}A\r';
+
+    Future<HostPaneLink> dial(LocalHostSessionAccess access, String id) =>
+        access
+            .exec('x attach')
+            .then((channel) => HostPaneLink.open(channel, clientId: id));
+
+    List<String> rows(Terminal t) => [
+      for (var i = 0; i < t.buffer.lines.length; i++)
+        t.buffer.lines[i].getText().trimRight(),
+    ];
+
+    Future<void> resumeAtAnotherWidth({required bool asksForScreen}) async {
+      await serve();
+      anExecutable();
+      final access = LocalHostSessionAccess(
+        paths: paths,
+        executable: LocalHostExecutable(executableDirectory: home.path),
+      );
+
+      final first = await dial(access, 'pane-1');
+      await first.openSession(
+        sessionId: 's1',
+        argv: const ['/bin/sh'],
+        columns: 80,
+        rows: 12,
+      );
+      final drawn = StringBuffer();
+      for (var i = 0; i < 20; i++) {
+        drawn.write('⏺ transcript $i\r\n');
+      }
+      drawn.write('${frame('v1', 80)}\x1b[${region - 1}A\r');
+      lastLauncher.handles.single.emit(utf8.encode(drawn.toString()));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await first.close();
+
+      // What a terminal that watched all along shows, narrowed to the pane.
+      final truth = Terminal(maxLines: 1000)
+        ..resize(80, 12)
+        ..write(drawn.toString())
+        ..resize(60, 12);
+
+      final second = await dial(access, 'pane-2');
+      final pane = Terminal(maxLines: 1000)..resize(60, 12);
+      final attached = await second.attachSession(
+        sessionId: 's1',
+        sinceOffset: 0,
+        screenGrid: asksForScreen ? (60, 12) : null,
+      );
+      if (!asksForScreen) second.resize(60, 12);
+      final got = second.output.listen((b) => pane.write(utf8.decode(b)));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(attached.screenFollows, asksForScreen);
+
+      // The program, told the new width, redraws its region at it.
+      lastLauncher.handles.single.emit(utf8.encode(redraw('v2', 60)));
+      truth.write(redraw('v2', 60));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(rows(pane), rows(truth));
+      expect(rows(pane).where((l) => l.contains('v1')), isEmpty);
+
+      await got.cancel();
+      await second.close();
+    }
+
+    test(
+      'a pane of another width is rebuilt from the screen, and its '
+      'redraw lands',
+      () => resumeAtAnotherWidth(asksForScreen: true),
+    );
+
+    test('replaying the raw output there is what left debris', () async {
+      await expectLater(
+        resumeAtAnotherWidth(asksForScreen: false),
+        throwsA(isA<TestFailure>()),
+      );
     });
   });
 }

@@ -419,17 +419,27 @@ class HostTerminalInstance
       }
       // Read now, not from `width`: the layout can land while the attach is out.
       link.matchGrid(attachment, terminal.viewWidth, terminal.viewHeight);
-      if (!skip && _resumed && _hasStoredHistory && attachment.totalBytes > 0) {
+      if (attachment.screenFollows) {
+        // The screen resets the terminal before drawing, stored copy and all.
+        _hasStoredHistory = false;
+      } else if (!skip &&
+          _resumed &&
+          _hasStoredHistory &&
+          attachment.totalBytes > 0) {
         // The replay is the more accurate record, so the stored copy goes.
         // Erase scrollback as well: a plain clear leaves it one scroll away.
         terminal.write('\x1b[H\x1b[2J\x1b[3J');
         _hasStoredHistory = false;
       }
-      _emit(
-        '\x1b[90m[session host ${deployment.hostVersion ?? 'unknown'}: '
-        '${attachment.sessionId}, ${attachment.totalBytes} bytes so '
-        'far]\x1b[0m\r\n',
-      );
+      // Not over a screen, which would erase it and whose program would
+      // otherwise redraw over it.
+      if (!attachment.screenFollows) {
+        _emit(
+          '\x1b[90m[session host ${deployment.hostVersion ?? 'unknown'}: '
+          '${attachment.sessionId}, ${attachment.totalBytes} bytes so '
+          'far]\x1b[0m\r\n',
+        );
+      }
 
       // A session found rather than opened replays output no pane watched: its
       // markers say where the shell is now, but its blocks would carry this
@@ -489,6 +499,9 @@ class HostTerminalInstance
       final attachment = await link.attachSession(
         sessionId: sessionId,
         sinceOffset: sinceOffset,
+        // A pane with nothing of the session yet asks for its screen: the
+        // program's relative redraws replayed onto an empty one stack up.
+        screenGrid: sinceOffset == 0 ? (width, height) : null,
       );
       _resumed = true;
       return attachment;

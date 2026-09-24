@@ -573,4 +573,69 @@ void main() {
       },
     );
   });
+
+  group('the screen on attach', () {
+    test(
+      'asks at the pane grid, and hands over the screen before output',
+      () async {
+        final channel = ScriptedChannel();
+        channel.answer = (request) => switch (request) {
+          AttachMessage() => null,
+          _ => _greetAndAttach(request),
+        };
+        final link = await connected(channel);
+        final attaching = link.attachSession(
+          sessionId: 'karmashala_h1_p1',
+          sinceOffset: 0,
+          screenGrid: (100, 30),
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(channel.only<AttachMessage>().screenGrid, (100, 30));
+
+        final seen = <String>[];
+        final listening = link.output.listen(
+          (b) => seen.add(String.fromCharCodes(b)),
+        );
+        channel
+          ..push(
+            AttachedMessage(
+              requestId: channel.only<AttachMessage>().requestId,
+              sessionRef: 4,
+              sessionId: 'karmashala_h1_p1',
+              columns: 100,
+              rows: 30,
+              replayFromOffset: 500,
+              droppedBytes: 0,
+              totalBytes: 500,
+              holdsWriteToken: true,
+              writeHolder: 'pane-p1',
+              observedAt: DateTime.utc(2026),
+              screenFollows: true,
+            ),
+          )
+          ..push(ScreenMessage(4, 500, ascii('\x1bcSCREEN')))
+          ..push(OutputMessage(4, 500, ascii('live')));
+        final attachment = await attaching;
+        await Future<void>.delayed(Duration.zero);
+
+        expect(attachment.screenFollows, isTrue);
+        expect(seen, ['\x1bcSCREEN', 'live']);
+        expect(link.lastOffset, 504, reason: 'a reconnect resumes after both');
+        await listening.cancel();
+      },
+    );
+
+    test(
+      'a reconnect from an offset asks for output, not the screen',
+      () async {
+        final channel = ScriptedChannel();
+        final link = await connected(channel);
+        await link.attachSession(
+          sessionId: 'karmashala_h1_p1',
+          sinceOffset: 42,
+        );
+        expect(channel.only<AttachMessage>().screenGrid, isNull);
+      },
+    );
+  });
 }

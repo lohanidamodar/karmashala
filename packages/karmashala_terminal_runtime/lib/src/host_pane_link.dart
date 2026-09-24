@@ -18,7 +18,12 @@ class HostAttachment {
     required this.holdsWriteToken,
     required this.writeHolder,
     required this.observedAt,
+    this.screenFollows = false,
   });
+
+  /// The host sent the session's screen instead of its output: the first
+  /// bytes on [HostPaneLink.output] rebuild it, and live output follows.
+  final bool screenFollows;
 
   final int sessionRef;
   final String sessionId;
@@ -148,16 +153,20 @@ class HostPaneLink {
   }
 
   /// Reattaches from [sinceOffset] — the last offset this pane rendered.
+  /// With [screenGrid], asks for the session's screen at that grid rather
+  /// than its output; a host that predates it replays as before.
   Future<HostAttachment> attachSession({
     required String sessionId,
     required int sinceOffset,
     bool claimWrite = true,
+    (int, int)? screenGrid,
   }) => _attachment(
     (id) => AttachMessage(
       requestId: id,
       sessionId: sessionId,
       sinceOffset: sinceOffset,
       claimWrite: claimWrite,
+      screenGrid: screenGrid,
     ),
   );
 
@@ -189,6 +198,7 @@ class HostPaneLink {
       holdsWriteToken: attached.holdsWriteToken,
       writeHolder: attached.writeHolder,
       observedAt: attached.observedAt,
+      screenFollows: attached.screenFollows,
     );
   }
 
@@ -292,6 +302,11 @@ class HostPaneLink {
           // asks for exactly what comes next.
           if (!_output.isClosed) _output.add(message.bytes);
           lastOffset = message.nextOffset;
+        case ScreenMessage():
+          // Ahead of the output on the same stream, so the terminal is rebuilt
+          // before the bytes that follow it land.
+          if (!_output.isClosed) _output.add(message.bytes);
+          lastOffset = message.offset;
         case ExitedMessage():
           if (!_exit.isCompleted) {
             _exit.complete(
