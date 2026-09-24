@@ -3,8 +3,9 @@ import 'dart:math' show max;
 
 import 'package:xterm2/xterm.dart';
 
-/// How long a pane's width has to hold still before its terminal takes it: a
-/// drag is then two reflows and two SIGWINCHes, not one per column (SETTLED.md).
+/// How long a pane's size has to hold still before its terminal takes it: a
+/// drag is then two reflows and two SIGWINCHes, not one per column, and a
+/// burst of row changes reaches the agent as its last size (SETTLED.md).
 const kColumnResizeSettle = Duration(milliseconds: 100);
 
 final _monotonic = Stopwatch()..start();
@@ -35,9 +36,9 @@ class TerminalViewGate {
 /// The gate every pane shares unless a test hands it another one.
 final TerminalViewGate terminalViewGate = TerminalViewGate();
 
-/// A pane's [Terminal], whose **columns** settle: a change after a quiet spell
-/// lands at once, the ones hard on its heels wait for the width to hold still.
-/// Rows move at once; buffer and process are still told together, by [resize].
+/// A pane's [Terminal], whose **size** settles: a change after a quiet spell
+/// lands at once, the ones hard on its heels wait for the box to hold still.
+/// Buffer and process are still told together, by [resize].
 ///
 /// Its plain listeners are its views, held back while [TerminalViewGate] is
 /// suspended; whatever must hear every write uses [addOutputListener].
@@ -73,10 +74,10 @@ class PaneTerminal extends Terminal {
   }
 
   Timer? _settling;
-  int? _pendingColumns;
+  (int, int)? _pending;
   int? _pixelWidth;
   int? _pixelHeight;
-  Duration? _columnsMovedAt;
+  Duration? _movedAt;
 
   /// A size nobody dragged to — a grid hint — which opens no settling window.
   void resizeNow(int columns, int rows) => super.resize(columns, rows);
@@ -90,39 +91,36 @@ class PaneTerminal extends Terminal {
   ]) {
     final columns = max(newWidth, 1);
     final rows = max(newHeight, 1);
-    if (columns == viewWidth) {
-      _pendingColumns = null;
+    if (columns == viewWidth && rows == viewHeight) {
+      _pending = null;
       super.resize(columns, rows, pixelWidth, pixelHeight);
       return;
     }
 
-    final movedAt = _columnsMovedAt;
+    final movedAt = _movedAt;
     final quiet = movedAt == null || _now() - movedAt >= settle;
     if (quiet && _settling == null) {
-      _columnsMovedAt = _now();
+      _movedAt = _now();
       super.resize(columns, rows, pixelWidth, pixelHeight);
       return;
     }
 
-    if (rows != viewHeight) {
-      super.resize(viewWidth, rows, pixelWidth, pixelHeight);
-    }
     _pixelWidth = pixelWidth;
     _pixelHeight = pixelHeight;
     // The view asks again at every layout; asking must not start the wait over.
-    if (columns == _pendingColumns) return;
-    _pendingColumns = columns;
+    if ((columns, rows) == _pending) return;
+    _pending = (columns, rows);
     _settling?.cancel();
     _settling = Timer(settle, _land);
   }
 
   void _land() {
-    final columns = _pendingColumns;
+    final size = _pending;
     _settling = null;
-    _pendingColumns = null;
-    if (columns == null) return;
-    _columnsMovedAt = _now();
-    super.resize(columns, viewHeight, _pixelWidth, _pixelHeight);
+    _pending = null;
+    if (size == null) return;
+    _movedAt = _now();
+    super.resize(size.$1, size.$2, _pixelWidth, _pixelHeight);
     // `resize` tells nobody, being normally called from a layout; this was not.
     notifyListeners();
   }

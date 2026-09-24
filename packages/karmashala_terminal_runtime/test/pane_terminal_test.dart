@@ -193,18 +193,37 @@ void main() {
     expect(terminal.viewWidth, 90);
   });
 
-  testWidgets('rows move at once while the columns wait', (tester) async {
+  testWidgets('rows wait with the columns', (tester) async {
     final terminal = pane()..resize(110, 10);
     final told = <(int, int)>[];
     terminal.onResize = (columns, rows, _, _) => told.add((columns, rows));
 
     terminal.resize(90, 20);
-    expect((terminal.viewWidth, terminal.viewHeight), (110, 20));
-    expect(told, [(110, 20)]);
+    expect((terminal.viewWidth, terminal.viewHeight), (110, 10));
+    expect(told, isEmpty);
 
     await tester.pass(settle);
     expect((terminal.viewWidth, terminal.viewHeight), (90, 20));
-    expect(told, [(110, 20), (90, 20)]);
+    expect(told, [(90, 20)]);
+  });
+
+  testWidgets('a burst of heights reaches the process as its first and last', (
+    tester,
+  ) async {
+    // Recorded from a live session: 54, 50 and 49 rows in the same instant.
+    // Claude kept 50, one more row than it had, and every frame that filled
+    // the screen left its top line behind from then on.
+    final terminal = pane(columns: 129, rows: 49);
+    final told = <(int, int)>[];
+    terminal.onResize = (columns, rows, _, _) => told.add((columns, rows));
+
+    terminal
+      ..resize(129, 54)
+      ..resize(129, 50)
+      ..resize(129, 49);
+    await tester.pass(settle);
+    expect(told, [(129, 54), (129, 49)]);
+    expect(terminal.viewHeight, 49);
   });
 
   testWidgets('a width that comes back to where it was is no resize at all', (

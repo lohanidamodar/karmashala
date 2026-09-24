@@ -6,6 +6,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
+import 'package:karmashala_terminal_runtime/instances.dart';
 import 'package:xterm2/xterm.dart';
 
 import 'fake_instance.dart';
@@ -217,6 +218,8 @@ void main() {
     // handing one over, so here the terminal on screen is a witness of its own.
     expect(viewOnScreen(tester).focusNode, same(restarted.focusNode));
     expect(viewOnScreen(tester).terminal, same(restarted.terminal));
+    // The Start bar gone, the pane is taller; that size settles like any other.
+    await tester.pump(kColumnResizeSettle);
   });
 
   testWidgets('a restart still refuses to take the keyboard from a text field', (
