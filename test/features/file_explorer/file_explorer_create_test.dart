@@ -56,7 +56,10 @@ void main() {
     tester,
   ) async {
     final container = ProviderContainer(
-      overrides: [selectedRepoWindowsRootProvider.overrideWithValue(tmp.path)],
+      overrides: [
+        selectedRepoWindowsRootProvider.overrideWithValue(tmp.path),
+        activeEditorHostPathProvider.overrideWithValue(null),
+      ],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(
@@ -94,6 +97,7 @@ void main() {
       ProviderScope(
         overrides: [
           selectedRepoWindowsRootProvider.overrideWithValue(tmp.path),
+          activeEditorHostPathProvider.overrideWithValue(null),
         ],
         child: const MaterialApp(home: Scaffold(body: FileExplorerView())),
       ),

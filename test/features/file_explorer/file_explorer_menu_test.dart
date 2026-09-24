@@ -74,6 +74,7 @@ void main() {
       ProviderScope(
         overrides: [
           selectedRepoWindowsRootProvider.overrideWithValue(root),
+          activeEditorHostPathProvider.overrideWithValue(null),
           directoryListingProvider.overrideWith(
             (ref, dir) async => dir == root ? const [folder, file] : const [],
           ),

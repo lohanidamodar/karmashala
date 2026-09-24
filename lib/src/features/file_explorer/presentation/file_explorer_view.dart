@@ -109,6 +109,24 @@ class _FileTreeListState extends ConsumerState<FileTreeList> {
   FileRevealTarget? _scrolledTo;
 
   @override
+  void initState() {
+    super.initState();
+    // The tree follows the file being edited — only while it is on screen,
+    // which is what this state's lifetime is, and only for a file under its
+    // own folder: one elsewhere is not a statement about this tree.
+    ref.listenManual<String?>(activeEditorHostPathProvider, (_, path) {
+      if (path == null || !isUnderFileTreeRoot(widget.root, path)) return;
+      final target = FileRevealTarget(hostPath: path, isDirectory: false);
+      // After the build: the first call comes from initState itself, where a
+      // provider may not be written.
+      Future.microtask(() {
+        if (!mounted || ref.read(fileRevealTargetProvider) == target) return;
+        ref.read(fileRevealTargetProvider.notifier).reveal(target);
+      });
+    }, fireImmediately: true);
+  }
+
+  @override
   void dispose() {
     _scroll.dispose();
     super.dispose();

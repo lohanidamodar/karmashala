@@ -34,6 +34,7 @@ void main() {
       ProviderScope(
         overrides: [
           selectedRepoWindowsRootProvider.overrideWithValue(root),
+          activeEditorHostPathProvider.overrideWithValue(null),
           // The rows build a context menu, which asks whether the host could
           // reveal the path; without this the question reaches the database.
           revealInFileManagerProvider.overrideWithValue(
@@ -96,6 +97,7 @@ void main() {
       ProviderScope(
         overrides: [
           selectedRepoWindowsRootProvider.overrideWithValue(root),
+          activeEditorHostPathProvider.overrideWithValue(null),
           // The rows build a context menu, which asks whether the host could
           // reveal the path; without this the question reaches the database.
           revealInFileManagerProvider.overrideWithValue(

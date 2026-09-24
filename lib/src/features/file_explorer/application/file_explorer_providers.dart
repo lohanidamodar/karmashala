@@ -1,3 +1,6 @@
+import '../../editor/data/local_document_source.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
+import 'package:karmashala_terminal_core/geometry.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show immutable;
@@ -176,3 +179,17 @@ FileRevealRole fileRevealRoleFor(
   }
   return FileRevealRole.none;
 }
+
+/// The file open in the focused pane of the active workbench tab, as a host
+/// path — null when that pane is not an editor, or its file is only reachable
+/// over a connection.
+final activeEditorHostPathProvider = Provider<String?>((ref) {
+  final paneId = ref.watch(
+    terminalSessionsControllerProvider.select(
+      (state) => state.activeTab?.focusedPaneId,
+    ),
+  );
+  if (paneId == null) return null;
+  final documentId = editorPanePath(paneId);
+  return documentId == null ? null : hostPathOfDocument(documentId);
+});

@@ -47,6 +47,7 @@ void main() {
     container = ProviderContainer(
       overrides: [
         selectedRepoWindowsRootProvider.overrideWithValue(root),
+        activeEditorHostPathProvider.overrideWithValue(null),
         directoryListingProvider.overrideWith(
           (ref, dir) async => listings[dir] ?? const [],
         ),

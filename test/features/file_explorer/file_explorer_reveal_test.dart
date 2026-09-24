@@ -76,6 +76,7 @@ void main() {
   // Return type inferred: Riverpod's `Override` is not an exported type.
   panelOverrides() => [
     selectedRepoWindowsRootProvider.overrideWithValue(root),
+    activeEditorHostPathProvider.overrideWithValue(null),
     directoryListingProvider.overrideWith(
       (ref, dir) async => listings[dir] ?? const [],
     ),
