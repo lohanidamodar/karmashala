@@ -27,6 +27,15 @@ class _FakeListingService implements FileListingService {
 
   set entries(List<String> value) => _entries = value;
 
+  // Only listing is under test here.
+  @override
+  Future<String> createDirectory(String parentDir, String name) =>
+      throw UnimplementedError();
+
+  @override
+  Future<String> createFile(String parentDir, String name) =>
+      throw UnimplementedError();
+
   @override
   Future<List<DirEntry>> list(String windowsDir) async {
     calls++;

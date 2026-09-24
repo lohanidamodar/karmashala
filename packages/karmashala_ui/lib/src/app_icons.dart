@@ -220,6 +220,14 @@ abstract final class AppIcons {
     fontPackage: 'picons',
     matchTextDirection: true,
   );
+
+  /// Make a new file in a listing; [folderPlus] makes a folder.
+  static const IconData filePlus = IconData(
+    0xe236,
+    fontFamily: 'PhosphorRegular',
+    fontPackage: 'picons',
+    matchTextDirection: true,
+  );
   static const IconData folderPlus = IconData(
     0xe258,
     fontFamily: 'PhosphorRegular',

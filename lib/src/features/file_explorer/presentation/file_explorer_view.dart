@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,7 @@ import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/menus.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
+import '../../files/presentation/file_name_dialog.dart';
 import 'package:agent_cli/process.dart';
 import '../application/file_explorer_providers.dart';
 import '../application/file_tree_rows.dart';
@@ -44,6 +47,22 @@ class FileExplorerView extends ConsumerWidget {
           icon: AppIcons.folder,
           title: 'Files',
           actions: [
+            if (root != null) ...[
+              IconButton(
+                tooltip: 'New file',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(AppIcons.filePlus),
+                onPressed: () =>
+                    createInFileTree(context, ref, root, folder: false),
+              ),
+              IconButton(
+                tooltip: 'New folder',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(AppIcons.folderPlus),
+                onPressed: () =>
+                    createInFileTree(context, ref, root, folder: true),
+              ),
+            ],
             if (root != null)
               IconButton(
                 tooltip: 'Refresh',
@@ -356,6 +375,19 @@ List<PopupMenuEntry<String>> fileEntryMenuItems({
   required bool isDirectory,
   required bool canReveal,
 }) => [
+  if (isDirectory) ...[
+    DesktopMenuItem(
+      value: 'new-file',
+      label: 'New file…',
+      icon: AppIcons.filePlus,
+    ),
+    DesktopMenuItem(
+      value: 'new-folder',
+      label: 'New folder…',
+      icon: AppIcons.folderPlus,
+    ),
+    const PopupMenuDivider(),
+  ],
   if (!isDirectory)
     DesktopMenuItem(
       value: 'open',
@@ -430,6 +462,10 @@ class _FileEntryActions {
 
   void onMenu(String action) {
     switch (action) {
+      case 'new-file':
+        createInFileTree(context, ref, entry.windowsPath, folder: false);
+      case 'new-folder':
+        createInFileTree(context, ref, entry.windowsPath, folder: true);
       case 'open':
         open();
       case 'external':
@@ -440,4 +476,46 @@ class _FileEntryActions {
         _copyPath();
     }
   }
+}
+
+/// Asks for a name and makes a file or folder of it in [parentDir], then
+/// shows it: the listing is re-read, the tree opens down to the new entry and
+/// selects it, and a new file opens in the editor, since writing in it is
+/// what comes next.
+Future<void> createInFileTree(
+  BuildContext context,
+  WidgetRef ref,
+  String parentDir, {
+  required bool folder,
+}) async {
+  final name = await FileNameDialog.ask(
+    context,
+    title: folder ? 'New folder' : 'New file',
+    action: 'Create',
+  );
+  if (name == null) return;
+  final service = ref.read(fileListingServiceProvider);
+  final String created;
+  try {
+    created = folder
+        ? await service.createDirectory(parentDir, name)
+        : await service.createFile(parentDir, name);
+  } on FileSystemException catch (error) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Could not create "$name": '
+            '${error.osError?.message ?? error.message}',
+          ),
+        ),
+      );
+    }
+    return;
+  }
+  ref.read(fileListingRefreshProvider.notifier).refresh();
+  ref
+      .read(fileRevealTargetProvider.notifier)
+      .reveal(FileRevealTarget(hostPath: created, isDirectory: folder));
+  if (!folder) ref.read(editorTabActionsProvider).open(created);
 }
