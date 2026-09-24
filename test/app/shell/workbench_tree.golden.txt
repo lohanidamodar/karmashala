@@ -2078,7 +2078,7 @@ WorkbenchView
                                             Text text="Working"
                                               RichText
                                           SessionVerdictMark
-                                            Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Only an agent records one — verification_start around the work, verification_finish with a verdict; a build or a test suite run in a terminal reports to nothing on its own."
+                                            Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
                                               RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                 OverlayPortal
                                                   _OverlayPortal
@@ -3193,7 +3193,7 @@ WorkbenchView
                                                                                                             Text text="Working"
                                                                                                               RichText
                                                                                                           SessionVerdictMark
-                                                                                                            Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Only an agent records one — verification_start around the work, verification_finish with a verdict; a build or a test suite run in a terminal reports to nothing on its own."
+                                                                                                            Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
                                                                                                               RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                                                                                 OverlayPortal
                                                                                                                   _OverlayPortal
@@ -4271,7 +4271,7 @@ WorkbenchView
                                             Text text="Working"
                                               RichText
                                           SessionVerdictMark
-                                            Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Only an agent records one — verification_start around the work, verification_finish with a verdict; a build or a test suite run in a terminal reports to nothing on its own."
+                                            Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
                                               RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                 OverlayPortal
                                                   _OverlayPortal
@@ -5100,7 +5100,7 @@ WorkbenchView
                                             Text text="Working"
                                               RichText
                                           SessionVerdictMark
-                                            Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Only an agent records one — verification_start around the work, verification_finish with a verdict; a build or a test suite run in a terminal reports to nothing on its own."
+                                            Tooltip tooltip="No verification run names this session. That is a gap in the record, not a verdict about the work. Run checks runs the repository's project checks and records the result here; an agent records one with checks_run or verification_start/finish. A build or a test suite run by hand in a terminal reports to nothing."
                                               RawTooltip key=[LabeledGlobalKey<RawTooltipState>#…]
                                                 OverlayPortal
                                                   _OverlayPortal

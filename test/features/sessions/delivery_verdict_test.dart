@@ -1,3 +1,5 @@
+import 'package:karmashala_automations/checks.dart';
+import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -311,6 +313,46 @@ void main() {
       expect(verdict.state, SessionVerdictState.pass);
       expect(verdict.run?.id, 'v2');
       expect(verdict.runCount, 2);
+    });
+  });
+
+  /// The repository's own checks, offered where the verdict is shown.
+  group('Run checks', () {
+    testWidgets('is offered only when the repository has checks', (
+      tester,
+    ) async {
+      insertSession();
+      await pump(tester);
+      expect(find.text('Run checks'), findsNothing);
+
+      ProjectCheckDao(db).insert(
+        ProjectCheck(
+          id: 'pc1',
+          repositoryId: 'r1',
+          name: 'tests',
+          command: const ['flutter', 'test'],
+          createdAt: testTime,
+        ),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pump(tester);
+      expect(find.text('Run checks'), findsOneWidget);
+    });
+
+    testWidgets('the verdict says when it was recorded', (tester) async {
+      insertSession();
+      insertRun(id: 'v1', verdict: VerificationVerdict.pass);
+      await pump(tester);
+
+      final tooltip = tester.widget<Tooltip>(
+        find
+            .ancestor(
+              of: find.text(SessionVerdictState.pass.label),
+              matching: find.byType(Tooltip),
+            )
+            .first,
+      );
+      expect(tooltip.message, contains('recorded '));
     });
   });
 }

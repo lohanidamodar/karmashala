@@ -187,7 +187,7 @@ class _ComparisonViewState extends ConsumerState<ComparisonView> {
     final int checked;
     try {
       checked = await runCandidateChecks(
-        ref.read(automationCheckRunnerProvider).runForSession,
+        ref.read(runningSessionChecksProvider.notifier).run,
         comparison,
       );
     } finally {

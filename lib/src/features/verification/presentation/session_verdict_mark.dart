@@ -54,13 +54,28 @@ class SessionVerdictMark extends ConsumerWidget {
     final run = verdict.run;
     if (run == null) return verdict.state.explanation;
     final reason = run.reason?.trim();
+    final finished = run.finishedAt?.toLocal();
     return [
       verdict.state.explanation,
-      '“${run.title}”, ${run.attribution.phrase}.',
+      '“${run.title}”, ${run.attribution.phrase}'
+          '${finished == null ? '' : ', recorded ${_clock(finished)}'}.',
       if (reason != null && reason.isNotEmpty) reason,
       if (verdict.runCount > 1)
         '${verdict.runCount} runs name this session; this is the most recent.',
     ].join(' ');
+  }
+
+  /// A clock time, not an age: the tooltip is built when the mark is, and an
+  /// age written then goes on being read long after it stopped being true.
+  static String _clock(DateTime at) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final now = DateTime.now();
+    final sameDay =
+        at.year == now.year && at.month == now.month && at.day == now.day;
+    final time = '${two(at.hour)}:${two(at.minute)}';
+    return sameDay
+        ? 'at $time'
+        : 'on ${at.year}-${two(at.month)}-${two(at.day)} $time';
   }
 
   @override

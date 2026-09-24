@@ -316,3 +316,43 @@ typedef _PaneOutcome = ({int? exitCode, List<String> tail});
 final automationCheckRunnerProvider = Provider<AutomationCheckRunner>(
   AutomationCheckRunner.new,
 );
+
+/// Whether [sessionId]'s repository has any project checks, so a surface
+/// offers to run them only where there is something to run.
+final sessionHasProjectChecksProvider = Provider.family<bool, String>((
+  ref,
+  sessionId,
+) {
+  final repositoryId = ref
+      .watch(sessionDaoProvider)
+      .getById(sessionId)
+      ?.repositoryId;
+  if (repositoryId == null) return false;
+  return ref.watch(projectChecksProvider(repositoryId)).isNotEmpty;
+});
+
+/// The sessions whose checks are running from a surface right now, so every
+/// place that offers the action shows it busy rather than starting a second
+/// batch into the same worktree.
+class RunningSessionChecks extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  /// Runs [sessionId]'s checks unless they are already running.
+  Future<SessionChecks?> run(String sessionId) async {
+    if (state.contains(sessionId)) return null;
+    state = {...state, sessionId};
+    try {
+      return await ref
+          .read(automationCheckRunnerProvider)
+          .runForSession(sessionId);
+    } finally {
+      state = {...state}..remove(sessionId);
+    }
+  }
+}
+
+final runningSessionChecksProvider =
+    NotifierProvider<RunningSessionChecks, Set<String>>(
+      RunningSessionChecks.new,
+    );

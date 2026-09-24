@@ -7,6 +7,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import '../../agents/application/session_model_providers.dart';
+import '../../automations/application/automation_check_runner.dart';
 import 'package:agent_cli/process.dart';
 import '../../explorer/application/checkout.dart';
 import '../../git/application/remote_links.dart';
@@ -271,6 +272,22 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
         ? invitation
         : null;
 
+    // The repository's own checks, run by the app and recorded against this
+    // session — the evidence the verdict mark in the line above then shows.
+    final hasChecks = ref.watch(
+      sessionHasProjectChecksProvider(widget.sessionId),
+    );
+    final checking = ref.watch(
+      runningSessionChecksProvider.select((s) => s.contains(widget.sessionId)),
+    );
+    const checksTooltip =
+        'Run this repository\'s project checks in visible panes, in the '
+        'directory this session works in. The result is recorded against the '
+        'session as Karmashala\'s own reading and shown beside the stage.';
+    void runChecks() => unawaited(
+      ref.read(runningSessionChecksProvider.notifier).run(widget.sessionId),
+    );
+
     if (widget.hostedOnTerminal) {
       // The action row, and only the action row: every button is the bar's own
       // pill at the bar's own weight, with exactly one of them filled.
@@ -298,6 +315,14 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
                 tooltip: offer.tooltip,
                 onPressed: _busy ? null : offer.onPressed,
               ),
+            ),
+          if (hasChecks)
+            _BarAction(
+              icon: AppIcons.listChecks,
+              label: checking ? 'Checking…' : 'Run checks',
+              tooltip: checksTooltip,
+              compact: widget.compact,
+              onPressed: _busy || checking ? null : runChecks,
             ),
           if (delivery?.pullRequest != null)
             _BarAction(
@@ -338,6 +363,13 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
             tooltip: offer.tooltip,
             onPressed: _busy ? null : offer.onPressed,
           ),
+        ),
+      if (hasChecks)
+        ActionChip(
+          avatar: const Icon(AppIcons.listChecks, size: Chrome.iconAction),
+          label: Text(checking ? 'Checking…' : 'Run checks'),
+          tooltip: checksTooltip,
+          onPressed: _busy || checking ? null : runChecks,
         ),
       if (delivery?.pullRequest != null)
         ActionChip(

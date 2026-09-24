@@ -37,10 +37,10 @@ enum SessionVerdictState {
   String get explanation => switch (this) {
     notRecorded =>
       'No verification run names this session. That is a gap in the record, '
-          'not a verdict about the work. Only an agent records one — '
-          'verification_start around the work, verification_finish with a '
-          'verdict; a build or a test suite run in a terminal reports to '
-          'nothing on its own.',
+          'not a verdict about the work. Run checks runs the repository\'s '
+          'project checks and records the result here; an agent records one '
+          'with checks_run or verification_start/finish. A build or a test '
+          'suite run by hand in a terminal reports to nothing.',
     inProgress =>
       'A run is open and this session is still live, so it is '
           'being recorded now.',
