@@ -252,6 +252,9 @@ dependencies:
   # both "Companion" in the desktop's list.
   device_info_plus: ^13.2.0
   marionette_flutter: ^0.6.0
+  # Files dragged in from the OS: a drop target needs the platform's own
+  # (IDropTarget on Windows), which Flutter's DragTarget does not reach.
+  desktop_drop: ^0.8.4
 
 dependency_overrides:
   # launch_at_startup 0.5.1 is upstream's latest and pins
