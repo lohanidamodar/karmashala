@@ -106,6 +106,22 @@ void main() {
     expect(line, contains('checked 3h ago'));
   });
 
+  test('a host that holds the socket and will not answer is not "none"', () {
+    final line = sessionHostStatusText(
+      HostDeployment(
+        status: HostDeploymentStatus.unknown,
+        observedAt: DateTime.utc(2026, 9, 9, 11, 59),
+        reason: 'Could not finish the handshake',
+        hostUnresponsive: true,
+      ),
+      now: now,
+    );
+    // The row said this on 2026-09-24, over a host wedged for three hours.
+    expect(line, isNot(contains('No session host is running here')));
+    expect(line, contains('did not answer'));
+    expect(line, contains('checked 1m ago'));
+  });
+
   test('any other refusal is shown in its own words, with its age', () {
     final line = sessionHostStatusText(
       HostDeployment(
@@ -184,6 +200,47 @@ void main() {
       expect(access.restarts, [false]);
     });
 
+    testWidgets(
+      'is offered for a host that will not answer, which is not asked again',
+      (tester) async {
+        final access = await pumpLine(
+          tester,
+          HostDeployment(
+            status: HostDeploymentStatus.unknown,
+            observedAt: DateTime.now(),
+            reason: 'silent',
+            hostUnresponsive: true,
+          ),
+        )..live = const [];
+        expect(find.byKey(const ValueKey('session-host-start')), findsNothing);
+        await tester.tap(restart);
+        await tester.pumpAndSettle();
+        expect(access.listed, 0);
+        expect(find.textContaining('would not say what it holds'), findsOne);
+        await tester.tap(confirm);
+        await tester.pumpAndSettle();
+        expect(access.restarts, [true]);
+      },
+    );
+
+    testWidgets('Start is offered when no host is running, and starts one', (
+      tester,
+    ) async {
+      final access = await pumpLine(
+        tester,
+        HostDeployment(
+          status: HostDeploymentStatus.unknown,
+          observedAt: DateTime.now(),
+          reason: 'Nothing is listening',
+        ),
+      );
+      expect(restart, findsNothing);
+      await tester.tap(find.byKey(const ValueKey('session-host-start')));
+      await tester.pumpAndSettle();
+      expect(access.starts, 1);
+      expect(find.textContaining('is running'), findsOneWidget);
+    });
+
     testWidgets('is not offered when no host answers', (tester) async {
       await pumpLine(
         tester,
@@ -235,10 +292,26 @@ class _FakeAccess extends LocalHostSessionAccess {
 
   HostDeployment reading;
   final restarts = <bool>[];
+  var starts = 0;
+  var listed = 0;
   List<String>? live;
 
   @override
-  Future<List<String>?> liveSessionIds() async => live;
+  Future<List<String>?> liveSessionIds() async {
+    listed++;
+    return live;
+  }
+
+  @override
+  Future<HostDeployment> deployment() async {
+    starts++;
+    return reading = HostDeployment(
+      status: HostDeploymentStatus.ready,
+      observedAt: DateTime.now(),
+      reason: 'started',
+      restartedByUs: true,
+    );
+  }
 
   @override
   Future<HostDeployment> observe() async => reading;

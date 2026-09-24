@@ -158,6 +158,8 @@ void main() {
     expect(reading.status, HostDeploymentStatus.unknown);
     expect(reading.reason, contains('did not answer'));
     expect(reading.reason, contains(paths.socketPath));
+    expect(reading.hostUnresponsive, isTrue);
+    expect(reading.reason, contains('restart it in Settings'));
   });
 
   test(
@@ -314,6 +316,7 @@ void main() {
         // Unknown, not "unavailable": reading Settings is looking, not deciding.
         expect(reading.status, HostDeploymentStatus.unknown);
         expect(reading.reason, contains(paths.socketPath));
+        expect(reading.hostUnresponsive, isFalse);
         expect(started, 0);
         expect(
           access.lastReading,
@@ -342,6 +345,7 @@ void main() {
           isNot(contains('Nothing is listening')),
           reason: 'something IS listening; the row must not say the opposite',
         );
+        expect(reading.hostUnresponsive, isTrue);
       },
     );
 

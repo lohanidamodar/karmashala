@@ -78,6 +78,20 @@ class LocalHostStatusController extends Notifier<HostDeployment?> {
     }
   }
 
+  /// Starts this app's host when none is running — the one reading that
+  /// launches a daemon, and only because the person pressed Start.
+  Future<void> start() async {
+    final access = ref.read(localHostSessionAccessProvider);
+    if (access == null || _busy) return;
+    _busy = true;
+    try {
+      access.forget();
+      state = await access.deployment();
+    } finally {
+      _busy = false;
+    }
+  }
+
   /// Replaces the running host with this app's. [force] ends the sessions it
   /// holds, so the caller asks the person first.
   Future<void> restart({required bool force}) async {

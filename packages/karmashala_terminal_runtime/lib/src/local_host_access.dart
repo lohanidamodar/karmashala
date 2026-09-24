@@ -161,6 +161,7 @@ class LocalHostSessionAccess implements HostSessionAccess {
         reason:
             'Could not finish the handshake on ${_paths.socketPath}: $reason',
         remotePath: binary?.path,
+        hostUnresponsive: true,
       ),
       _Silent() when binary == null => HostDeployment(
         status: HostDeploymentStatus.noBinary,
@@ -244,9 +245,12 @@ class LocalHostSessionAccess implements HostSessionAccess {
         observedAt: DateTime.now(),
         reason:
             'Could not finish the handshake on ${_paths.socketPath}: '
-            '${answered.reason} Nothing was started over it.',
+            '${answered.reason} A host holds that socket, so no second one was '
+            'started over it. If it stays silent, restart it in Settings → '
+            'Shell integration & session host.',
         platform: _platform(now),
         remotePath: binary.path,
+        hostUnresponsive: true,
       );
     }
 

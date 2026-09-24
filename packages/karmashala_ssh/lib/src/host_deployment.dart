@@ -90,6 +90,7 @@ class HostDeployment {
     this.privileged,
     this.hostOutdated = false,
     this.liveSessionIds,
+    this.hostUnresponsive = false,
   });
 
   factory HostDeployment.unknown(String reason, DateTime observedAt) =>
@@ -130,6 +131,11 @@ class HostDeployment {
   /// The sessions still running in an outdated host, by id. Null when it
   /// would not say, which must be treated as holding some.
   final List<String>? liveSessionIds;
+
+  /// Something holds the host's socket and took the connection, but no welcome
+  /// came inside the bound — busy, or stuck. A second host must not be started
+  /// over it; only a restart the person asks for replaces it.
+  final bool hostUnresponsive;
 
   bool get isReady => status == HostDeploymentStatus.ready;
 
