@@ -18,6 +18,7 @@ import '../../client/lan_path.dart';
 import '../../client/relay_candidates.dart';
 import '../../domain/remote_payloads.dart';
 import '../../domain/remote_session_options.dart';
+import '../../domain/remote_notes.dart';
 import '../../domain/remote_usage.dart';
 import '../../pairing/companion_device_name.dart';
 import '../../pairing/host_pairing_invite.dart';
@@ -906,6 +907,13 @@ class RemoteCompanionGateway implements CompanionGateway {
     await _ready;
     final client = _requireClient();
     return _mapRefusals(() => client.usage());
+  }
+
+  @override
+  Future<RemoteNotesSnapshot> notes() async {
+    await _ready;
+    final client = _requireClient();
+    return _mapRefusals(() => client.notes());
   }
 
   @override

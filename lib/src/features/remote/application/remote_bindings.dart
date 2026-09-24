@@ -21,6 +21,7 @@ import 'remote_session_config_bindings.dart';
 import 'remote_session_snapshots.dart';
 import 'remote_session_start_bindings.dart';
 import 'remote_transcript_bindings.dart';
+import 'remote_notes_bindings.dart';
 import 'remote_usage_bindings.dart';
 import 'remote_workspace_bindings.dart';
 
@@ -120,6 +121,7 @@ final remoteHostBindingsProvider = Provider<RemoteHostBindings>((ref) {
       );
     },
     usage: () => remoteUsageSnapshot(ref),
+    notes: () => remoteNotesSnapshot(ref),
     sessionOptions: (sessionId) => remoteSessionOptions(ref, sessionId),
     configureSession: (sessionId, {model, permission}) =>
         remoteConfigureSession(

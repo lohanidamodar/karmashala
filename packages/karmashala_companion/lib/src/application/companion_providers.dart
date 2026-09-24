@@ -31,6 +31,11 @@ final companionUsageProvider = FutureProvider.autoDispose<RemoteUsageSnapshot>(
   (ref) => ref.watch(companionGatewayProvider).usage(),
 );
 
+/// The desktop's notes and todo list, asked when the Notes tab opens.
+final companionNotesProvider = FutureProvider.autoDispose<RemoteNotesSnapshot>(
+  (ref) => ref.watch(companionGatewayProvider).notes(),
+);
+
 final companionGatewayProvider = Provider<CompanionGateway>(
   (ref) => FakeCompanionGateway(),
 );

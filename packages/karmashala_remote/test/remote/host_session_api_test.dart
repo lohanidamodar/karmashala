@@ -90,6 +90,7 @@ const Map<FrameType, Map<String, Object?>> kRequests = {
   FrameType.approvalAnswer: {'sessionId': 's1', 'decision': 'approve'},
   FrameType.menuAnswer: {'sessionId': 's1', 'menuId': 'm1', 'option': 0},
   FrameType.usageGet: {},
+  FrameType.notesGet: {},
   FrameType.notificationsRegister: {'token': 't0k', 'platform': 'android'},
   FrameType.sessionActivity: {'sessionId': 's1'},
   FrameType.attachmentBegin: {

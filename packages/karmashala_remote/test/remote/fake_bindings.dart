@@ -59,6 +59,11 @@ class FakeRemoteBindings {
   final List<RemoteMenuAnswerRequest> menuAnswers = [];
 
   /// What `usage.get` answers.
+  RemoteNotesSnapshot notesSnapshot = const RemoteNotesSnapshot(
+    notes: [],
+    todos: [],
+  );
+
   RemoteUsageSnapshot usageSnapshot = RemoteUsageSnapshot(
     accounts: const [],
     observedAt: DateTime.utc(2026, 9, 19),
@@ -228,6 +233,7 @@ class FakeRemoteBindings {
       return request.decline ? 'declined' : 'answered';
     },
     usage: () async => usageSnapshot,
+    notes: () async => notesSnapshot,
     answerMenu: (request) async {
       final refusal = menuRefusal;
       if (refusal != null) throw refusal;

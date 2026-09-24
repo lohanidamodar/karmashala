@@ -5,6 +5,7 @@
 library;
 
 import '../domain/companion_presence.dart';
+import '../domain/remote_notes.dart';
 import '../domain/remote_payloads.dart';
 import '../domain/remote_session_options.dart';
 import '../domain/remote_usage.dart';
@@ -66,6 +67,7 @@ class RemoteHostBindings {
     this.answerQuestion = _noQuestions,
     this.answerMenu = _noMenus,
     this.usage = _noUsage,
+    this.notes = _noNotes,
     this.readRecordState = _recordStateUnknown,
     this.sessionOptions = _noSessionOptions,
     this.configureSession = _noConfigure,
@@ -198,6 +200,9 @@ class RemoteHostBindings {
   /// throttle — asking from the phone never costs a request the throttle would
   /// not have allowed. Defaults to refusing.
   final Future<RemoteUsageSnapshot> Function() usage;
+
+  /// The desktop's notes and todo list, for `notes.get`.
+  final Future<RemoteNotesSnapshot> Function() notes;
 }
 
 Future<RemoteSessionOptions> _noSessionOptions(String sessionId) async =>
@@ -217,6 +222,11 @@ Future<RemoteConfigureOutcome> _noConfigure(
 
 Future<RemoteRecordReading> _recordStateUnknown(String sessionId) async =>
     (revision: null, activity: null);
+
+Future<RemoteNotesSnapshot> _noNotes() async => throw const RemoteApiRefusal(
+  ErrorCode.badRequest,
+  'this host cannot share notes',
+);
 
 Future<RemoteUsageSnapshot> _noUsage() async => throw const RemoteApiRefusal(
   ErrorCode.badRequest,

@@ -1090,6 +1090,24 @@
       ]
     },
     {
+      "frame": "notes.get",
+      "capability": "view_sessions",
+      "cases": [
+        {
+          "request": {},
+          "frames": [
+            {
+              "type": "result",
+              "payload": {
+                "notes": [],
+                "todos": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
       "frame": "session.options",
       "capability": "view_sessions",
       "cases": [

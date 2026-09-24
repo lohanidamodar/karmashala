@@ -307,6 +307,15 @@ enum FrameType {
     capability: Capability.viewUsage,
   ),
 
+  /// The desktop's notes and todo list, read-only — asked when the phone's
+  /// Notes view opens, never pushed. Gated like the session list: a new bit
+  /// would refuse every phone already paired.
+  notesGet(
+    'notes.get',
+    origin: FrameOrigin.companion,
+    capability: Capability.viewSessions,
+  ),
+
   /// The models and permission modes a session can be put on, and which it is
   /// on. Gated like the list it is read from.
   sessionOptions(

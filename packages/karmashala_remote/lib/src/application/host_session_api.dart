@@ -437,6 +437,8 @@ class HostSessionApi {
           await _result(envelope.id, {'chosen': chosen});
         case FrameType.usageGet:
           await _result(envelope.id, (await bindings.usage()).toJson());
+        case FrameType.notesGet:
+          await _result(envelope.id, (await bindings.notes()).toJson());
         case FrameType.notificationsRegister:
           final token = _requireString(envelope, 'token');
           final platform = _requireString(envelope, 'platform');

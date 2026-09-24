@@ -11,6 +11,7 @@ import 'package:cryptography/cryptography.dart';
 import '../domain/companion_presence.dart';
 import '../domain/remote_payloads.dart';
 import '../domain/remote_session_options.dart';
+import '../domain/remote_notes.dart';
 import '../domain/remote_usage.dart';
 import '../pairing/pairing_wire.dart';
 import '../protocol.dart';
@@ -620,6 +621,11 @@ class CompanionClient {
   /// `usage.get` — every agent account's usage limits.
   Future<RemoteUsageSnapshot> usage() async => RemoteUsageSnapshot.fromJson(
     await _request(FrameType.usageGet, const {}),
+  );
+
+  /// `notes.get` — the desktop's notes and todo list.
+  Future<RemoteNotesSnapshot> notes() async => RemoteNotesSnapshot.fromJson(
+    await _request(FrameType.notesGet, const {}),
   );
 
   /// `menu.answer` — chooses one option of the menu [request] names; answers

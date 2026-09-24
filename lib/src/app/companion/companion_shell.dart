@@ -20,8 +20,9 @@ class CompanionShell extends ConsumerStatefulWidget {
 class _CompanionShellState extends ConsumerState<CompanionShell> {
   int _tab = 0;
 
-  static const _titles = ['Projects', 'Inbox', 'Usage', 'Settings'];
+  static const _titles = ['Projects', 'Inbox', 'Usage', 'Notes', 'Settings'];
   static const _usageTab = 2;
+  static const _notesTab = 3;
 
   /// The most of the body the banner and desktop strip take before scrolling.
   static const _chromeShare = 0.5;
@@ -81,6 +82,11 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
                       const UsageScreen()
                     else
                       const SizedBox.shrink(),
+                    // Asked when the tab opens, for the same reason.
+                    if (_tab == _notesTab)
+                      const NotesScreen()
+                    else
+                      const SizedBox.shrink(),
                     const CompanionSettingsScreen(),
                   ],
                 ),
@@ -107,6 +113,10 @@ class _CompanionShellState extends ConsumerState<CompanionShell> {
           const NavigationDestination(
             icon: Icon(AppIcons.circleHalf),
             label: 'Usage',
+          ),
+          const NavigationDestination(
+            icon: Icon(AppIcons.note),
+            label: 'Notes',
           ),
           const NavigationDestination(
             icon: Icon(AppIcons.gearSix),

@@ -181,6 +181,7 @@ void main() {
         'question.answer',
         'menu.answer',
         'usage.get',
+        'notes.get',
         'notifications.register',
         'workspace.list',
         'projects.list',

@@ -8,6 +8,7 @@ import 'dart:convert';
 import '../../domain/companion_presence.dart';
 import '../../domain/remote_payloads.dart';
 import '../../domain/remote_session_options.dart';
+import '../../domain/remote_notes.dart';
 import '../../domain/remote_usage.dart';
 import '../../pairing/host_pairing_invite.dart';
 import '../../protocol.dart';
@@ -878,6 +879,23 @@ class FakeCompanionGateway implements CompanionGateway {
       throw const GatewayException('this device was not granted view_usage');
     }
     return usageSnapshot;
+  }
+
+  /// What [notes] answers.
+  RemoteNotesSnapshot notesSnapshot = const RemoteNotesSnapshot(
+    notes: [],
+    todos: [],
+  );
+
+  /// When set, [notes] throws it — a refusal in the host's words.
+  GatewayException? notesFailure;
+
+  @override
+  Future<RemoteNotesSnapshot> notes() async {
+    _requireLink();
+    final failure = notesFailure;
+    if (failure != null) throw failure;
+    return notesSnapshot;
   }
 
   /// What [sessionOptions] answers, per session.

@@ -6,6 +6,7 @@ export 'src/presentation/add_project_screen.dart';
 export 'src/presentation/companion_log_screen.dart';
 export 'src/presentation/companion_settings_screen.dart';
 export 'src/presentation/inbox_screen.dart';
+export 'src/presentation/notes_screen.dart';
 export 'src/presentation/project_sessions_screen.dart';
 export 'src/presentation/session_list_screen.dart';
 export 'src/presentation/session_view_screen.dart';
