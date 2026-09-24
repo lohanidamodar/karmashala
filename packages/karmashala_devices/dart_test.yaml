@@ -6,3 +6,6 @@ tags:
   # `device_stream_lifecycle` — and the per-change gate excludes them with
   # `--exclude-tags=cost`; a full run keeps them.
   cost:
+  # A real emulator, booted twice: `test/live/`, run only with
+  # KARMASHALA_LIVE_AVD naming an AVD made for it.
+  live-android:

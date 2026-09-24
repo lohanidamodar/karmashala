@@ -21,10 +21,16 @@ class AndroidSlimmingReport {
   const AndroidSlimmingReport({
     this.applied = const [],
     this.failed = const {},
+    this.absent = const [],
   });
 
   /// Subjects that changed — setting keys and package names.
   final List<String> applied;
+
+  /// Packages this image does not have. Not a failure: there was nothing to
+  /// disable, so nothing on the device is left half done. An API 31
+  /// `google_apis` image lacks 8 of the managed packages (measured 2026-09-24).
+  final List<String> absent;
 
   /// Subjects that did not, and the reason, keyed the same way.
   final Map<String, String> failed;
@@ -33,11 +39,11 @@ class AndroidSlimmingReport {
 
   /// Whether anything at all was attempted. A run with nothing selected is not
   /// a failure; it is a user who asked for nothing.
-  bool get isEmpty => applied.isEmpty && failed.isEmpty;
+  bool get isEmpty => applied.isEmpty && failed.isEmpty && absent.isEmpty;
 
   @override
   String toString() =>
-      'AndroidSlimmingReport(applied=${applied.length} '
+      'AndroidSlimmingReport(applied=${applied.length} absent=${absent.length} '
       'failed=${failed.length}${failed.isEmpty ? '' : ' ${failed.keys.join(', ')}'})';
 }
 
@@ -157,6 +163,7 @@ class AndroidSlimmingService {
 
     final applied = <String>[];
     final failed = <String, String>{};
+    final absent = <String>[];
     // Both `settings put global <key> 0` and `settings delete global <key>`
     // carry the key at index 4; it is the subject a report names.
     for (final arguments in settings) {
@@ -171,9 +178,14 @@ class AndroidSlimmingService {
         package,
         applied,
         failed,
+        absent: absent,
       );
     }
-    return AndroidSlimmingReport(applied: applied, failed: failed);
+    return AndroidSlimmingReport(
+      applied: applied,
+      failed: failed,
+      absent: absent,
+    );
   }
 
   /// Puts **everything this build manages** back on [serial] — not a mirror of
@@ -246,8 +258,9 @@ class AndroidSlimmingService {
     List<String> arguments,
     String subject,
     List<String> applied,
-    Map<String, String> failed,
-  ) async {
+    Map<String, String> failed, {
+    List<String>? absent,
+  }) async {
     if (arguments.isEmpty) {
       failed[subject] = 'not a package this build manages';
       return;
@@ -260,6 +273,11 @@ class AndroidSlimmingService {
         final message = result.stderr.trim().isEmpty
             ? result.stdout.trim()
             : result.stderr.trim();
+        // `pm` says so in words: `IllegalArgumentException: Unknown package`.
+        if (absent != null && message.contains('Unknown package: $subject')) {
+          absent.add(subject);
+          return;
+        }
         failed[subject] = message.isEmpty ? 'exit ${result.exitCode}' : message;
       }
     } on CommandException catch (error) {

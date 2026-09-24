@@ -149,6 +149,25 @@ void main() {
       expect(runner.requests, hasLength(4));
     });
 
+    test('a package the image lacks is absent, not a failure', () async {
+      // An API 31 google_apis image has no com.google.android.as, among 8.
+      final runner = _booted(
+        fail: (request) => request.arguments.contains('com.google.android.as')
+            ? "Exception occurred while executing 'disable-user':\n"
+                  'java.lang.IllegalArgumentException: Unknown package: '
+                  'com.google.android.as'
+            : null,
+      );
+      final report = await _service(
+        runner,
+      ).apply('emulator-5554', enabled: {AndroidSlimmingCategory.assistant});
+
+      expect(report.ok, isTrue);
+      expect(report.absent, ['com.google.android.as']);
+      expect(report.failed, isEmpty);
+      expect(report.applied, isNot(contains('com.google.android.as')));
+    });
+
     test('an adb that will not run is reported, never thrown', () async {
       final runner = FakeCommandRunner(
         throwError: CommandException('adb.exe is missing'),
