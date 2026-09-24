@@ -17,6 +17,19 @@ installs claim the same version name.
 
 ---
 
+## 1.26.2 — 2026-09-24 (build 47)
+
+- **A resumed pane is rebuilt from the session's screen, as tmux does**
+  (`7357029f`, `dbd01ddf`). The session host feeds each session's output into
+  a headless terminal of its own; a pane attaching with nothing of the session
+  yet gets that screen at its own grid — scrollback, colours, wrap flags,
+  cursor and modes — then live output from the offset it stands for. Replaying
+  raw output onto an empty terminal stacked an agent's relative redraws into
+  debris. Sessions started before the host was replaced still replay as
+  before; an older host or client falls back the same way.
+
+---
+
 ## 1.26.1 — 2026-09-24 (build 46)
 
 - **Changing a pane's width no longer leaves pieces of Claude Code's input box
