@@ -559,41 +559,39 @@ void main() {
       expect(channel.all<ResizeMessage>(), isEmpty, reason: 'nothing to redo');
     });
 
-    test(
-      'at another size the screen is cleared for the agent\'s reprint',
-      () async {
-        final access = holding();
-        final pane = agentPane(
-          access,
-          stored: 'stored at the old width\r\n',
-          columns: 120,
-          rows: 40,
-        );
-        await settle();
-        final channel = access.channels.single;
-        channel.pushOutput(0, replay);
-        await settle();
+    test('at another size the record stays, and the size is sent', () async {
+      final access = holding();
+      final pane = agentPane(
+        access,
+        stored: 'stored at the old width\r\n',
+        columns: 120,
+        rows: 40,
+      );
+      await settle();
+      final channel = access.channels.single;
+      channel.pushOutput(0, replay);
+      await settle();
 
-        expect(screenOf(pane), isNot(contains('stored at the old width')));
-        expect(screenOf(pane), isNot(contains('DEBRIS')));
-        final resize = channel.only<ResizeMessage>();
-        expect((resize.columns, resize.rows), (120, 40));
-      },
-    );
+      expect(
+        screenOf(pane),
+        contains('stored at the old width'),
+        reason: 'never cleared: the agent does not reprint its conversation',
+      );
+      expect(screenOf(pane), isNot(contains('DEBRIS')));
+      final resize = channel.only<ResizeMessage>();
+      expect((resize.columns, resize.rows), (120, 40));
+    });
 
-    test(
-      'with nothing stored and no resize due, one nudge repaints it',
-      () async {
-        final access = holding();
-        agentPane(access, columns: 80, rows: 24);
-        await settle();
+    test('with nothing stored, the replay is all there is to show', () async {
+      final access = holding();
+      final pane = agentPane(access, columns: 80, rows: 24);
+      await settle();
+      final channel = access.channels.single;
+      channel.pushOutput(0, replay);
+      await settle();
 
-        final sizes = [
-          for (final r in access.channels.single.all<ResizeMessage>())
-            (r.columns, r.rows),
-        ];
-        expect(sizes, [(80, 23), (80, 24)]);
-      },
-    );
+      expect(screenOf(pane), contains('DEBRIS'));
+      expect(channel.all<ResizeMessage>(), isEmpty, reason: 'no nudge');
+    });
   });
 }

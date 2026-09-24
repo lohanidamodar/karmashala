@@ -414,22 +414,11 @@ class HostTerminalInstance
         deployment,
       );
       final skip = _skipsReplay(attachment, resumeFrom);
-      final sizeDiffers =
-          attachment.columns != terminal.viewWidth ||
-          attachment.rows != terminal.viewHeight;
       if (skip) {
         _discardRemaining = attachment.totalBytes - attachment.replayFromOffset;
-        // A resize makes the agent reprint the whole conversation at this
-        // width, so nothing already on screen may stay beside it.
-        if (sizeDiffers) terminal.write('\x1b[H\x1b[2J\x1b[3J');
       }
       // Read now, not from `width`: the layout can land while the attach is out.
       link.matchGrid(attachment, terminal.viewWidth, terminal.viewHeight);
-      if (skip && !sizeDiffers && !_hasStoredHistory) {
-        // Nothing to show and no resize coming: one nudge makes it repaint.
-        link.resize(terminal.viewWidth, terminal.viewHeight - 1);
-        link.resize(terminal.viewWidth, terminal.viewHeight);
-      }
       if (!skip && _resumed && _hasStoredHistory && attachment.totalBytes > 0) {
         // The replay is the more accurate record, so the stored copy goes.
         // Erase scrollback as well: a plain clear leaves it one scroll away.
@@ -536,13 +525,15 @@ class HostTerminalInstance
     }
   }
 
-  /// Whether a fresh pane should drop the host's replay rather than draw it.
-  /// An agent's TUI redraws by relative cursor moves counted at the width it
-  /// drew at, so megabytes of that replayed at today's width is debris; the
-  /// agent repaints itself at this width instead, beside the app's own record.
-  /// A pane redialling its own session keeps the exact replay.
+  /// Whether a fresh pane shows the app's own record of itself instead of the
+  /// host's replay. An agent's TUI redraws by relative cursor moves counted at
+  /// the width it drew at, so its replay at today's width is debris, while the
+  /// stored record is plain text. Only with a record: the agent does not
+  /// reprint its conversation when told a size, so with nothing stored the
+  /// replay — garbled or not — is all there is to show.
   bool _skipsReplay(HostAttachment attachment, int resumeFrom) =>
       agentLaunch != null &&
+      _hasStoredHistory &&
       _resumed &&
       resumeFrom == 0 &&
       attachment.totalBytes > attachment.replayFromOffset;
