@@ -27,6 +27,7 @@ import 'package:karmashala_terminal_runtime/themes.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import 'package:karmashala_terminal_core/grid.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
+import '../../../app/shell/keymap_controller.dart';
 import '../../../app/shell/quick_open/quick_open.dart';
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../app/shell/tab_picker.dart';

@@ -2833,6 +2833,61 @@ TerminalPaneStack
                                                                                                           Flexible
                                                                                                             Text text="New terminal (Ctrl+Shift+T)"
                                                                                                               RichText
+                          SizedBox
+                          Padding
+                            Row
+                              SizedBox
+                                Text text="Quick open"
+                                  RichText
+                              SizedBox
+                              SizedBox
+                                Text text="Ctrl+K"
+                                  RichText
+                          Padding
+                            Row
+                              SizedBox
+                                Text text="Quick open, filtered to commands"
+                                  RichText
+                              SizedBox
+                              SizedBox
+                                Text text="Ctrl+Shift+P"
+                                  RichText
+                          Padding
+                            Row
+                              SizedBox
+                                Text text="New session"
+                                  RichText
+                              SizedBox
+                              SizedBox
+                                Text text="Ctrl+N"
+                                  RichText
+                          Padding
+                            Row
+                              SizedBox
+                                Text text="New project"
+                                  RichText
+                              SizedBox
+                              SizedBox
+                                Text text="Ctrl+Shift+N"
+                                  RichText
+                          Padding
+                            Row
+                              SizedBox
+                                Text text="Go to the next agent waiting for you"
+                                  RichText
+                              SizedBox
+                              SizedBox
+                                Text text="Ctrl+Shift+J"
+                                  RichText
+                          Padding
+                            Row
+                              SizedBox
+                                Text text="Open Settings"
+                                  RichText
+                              SizedBox
+                              SizedBox
+                                Text text="Ctrl+,"
+                                  RichText
 
 == one live pane ==
 TerminalPaneStack

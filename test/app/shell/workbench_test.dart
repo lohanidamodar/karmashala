@@ -1,3 +1,5 @@
+import 'package:karmashala/src/app/shell/shell_shortcuts.dart'
+    show shellCommandLabel;
 import 'package:karmashala/src/app/shell/workbench.dart';
 import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
@@ -1457,6 +1459,10 @@ void main() {
       // instead — see `_NoTerminalOpen`.
       expect(find.byType(TerminalTabChip), findsNothing);
       expect(find.text('No terminal open'), findsOneWidget);
+      // With the keys that find everything else, read off the live table.
+      expect(find.text('Quick open'), findsOneWidget);
+      expect(find.text(shellCommandLabel('quickOpen.show')!), findsOneWidget);
+      expect(find.text('New session'), findsOneWidget);
     });
 
     testWidgets('ending a session in another tab moves nothing', (
