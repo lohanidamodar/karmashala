@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -398,8 +399,20 @@ class _ClientSession {
       holder = refusal?.holder?.clientId ?? _clientId;
     }
 
+    // A pane asking for the screen gets it at its own grid: the session is
+    // taken there first, so the snapshot is drawn at the width the pane will
+    // show it at, and the program's redraw for that size follows as output.
+    final grid = message.screenGrid;
+    if (grid != null &&
+        session.token.isHeldBy(_clientId) &&
+        (grid.$1 != session.columns || grid.$2 != session.rows)) {
+      session.resize(_clientId, grid.$1, grid.$2, now);
+    }
+    final screen = grid == null ? null : session.snapshot();
+
     // Measured before the pump starts, so the numbers told are the numbers sent.
     final slice = session.backlog.since(message.sinceOffset);
+    final from = screen?.$2 ?? message.sinceOffset;
     _send(
       AttachedMessage(
         requestId: message.requestId,
@@ -407,17 +420,21 @@ class _ClientSession {
         sessionId: session.id,
         columns: session.columns,
         rows: session.rows,
-        replayFromOffset: slice.offset,
-        droppedBytes: slice.droppedBytes,
+        replayFromOffset: screen?.$2 ?? slice.offset,
+        droppedBytes: screen == null ? slice.droppedBytes : 0,
         totalBytes: session.backlog.totalBytes,
         holdsWriteToken: session.token.isHeldBy(_clientId),
         writeHolder: holder,
         observedAt: now,
+        screenFollows: screen != null,
       ),
     );
+    if (screen != null) {
+      _send(ScreenMessage(ref, screen.$2, utf8.encode(screen.$1)));
+    }
 
     late final StreamSubscription<OutputChunk> subscription;
-    subscription = session.readFrom(message.sinceOffset).listen((chunk) {
+    subscription = session.readFrom(from).listen((chunk) {
       _send(OutputMessage(ref, chunk.offset, chunk.bytes));
       _paceOutput(subscription);
     });

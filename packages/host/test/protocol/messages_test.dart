@@ -468,4 +468,61 @@ void main() {
       'ListMessage',
     ]);
   });
+
+  group('the screen on attach', () {
+    test('an attach carries its grid, and one without reads as none', () {
+      const withGrid = AttachMessage(
+        requestId: 7,
+        sessionId: 's',
+        sinceOffset: 0,
+        claimWrite: true,
+        screenGrid: (120, 40),
+      );
+      expect(AttachMessage.decode(withGrid.toFrame()).screenGrid, (120, 40));
+      const without = AttachMessage(
+        requestId: 7,
+        sessionId: 's',
+        sinceOffset: 9,
+        claimWrite: false,
+      );
+      final decoded = AttachMessage.decode(without.toFrame());
+      expect(decoded.screenGrid, isNull);
+      expect(decoded.sinceOffset, 9);
+    });
+
+    test('attached says whether a screen follows; an older host says no', () {
+      AttachedMessage attached({required bool screen}) => AttachedMessage(
+        requestId: 1,
+        sessionRef: 2,
+        sessionId: 's',
+        columns: 80,
+        rows: 24,
+        replayFromOffset: 5,
+        droppedBytes: 0,
+        totalBytes: 5,
+        holdsWriteToken: true,
+        writeHolder: null,
+        observedAt: DateTime.utc(2026, 9, 24),
+        screenFollows: screen,
+      );
+      final frame = attached(screen: true).toFrame();
+      expect(AttachedMessage.decode(frame).screenFollows, isTrue);
+      // The payload an older host sends: everything but the trailing flag.
+      final older = Frame(
+        MessageType.attached,
+        frame.sessionRef,
+        Uint8List.sublistView(frame.payload, 0, frame.payload.length - 1),
+      );
+      expect(AttachedMessage.decode(older).screenFollows, isFalse);
+    });
+
+    test('a screen message carries its offset and bytes', () {
+      final message = ScreenMessage(3, 1234, Uint8List.fromList([27, 99, 65]));
+      final decoded =
+          decodeMessage(FrameParser().add(message.toFrame().encode()).single)
+              as ScreenMessage;
+      expect((decoded.sessionRef, decoded.offset), (3, 1234));
+      expect(decoded.bytes, [27, 99, 65]);
+    });
+  });
 }

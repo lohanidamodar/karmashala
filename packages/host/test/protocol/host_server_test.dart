@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:karmashala_host/karmashala_host.dart';
 import 'package:test/test.dart';
+import 'package:xterm2/core.dart' show Terminal;
 
 /// A connection with no operating system behind it, carrying bytes exactly as a
 /// socket would.
@@ -675,4 +676,98 @@ void main() {
       expect(env.registry.require('pane-a').lifecycle, isA<SessionRunning>());
     },
   );
+
+  group('attaching for the screen', () {
+    Future<PipeConnection> reattach(
+      ({HostServer server, SessionRegistry registry, FakePtyLauncher launcher})
+      env, {
+      (int, int)? grid,
+    }) async {
+      final client = PipeConnection();
+      unawaited(env.server.serveConnection(client));
+      await client.send(const HelloMessage(requestId: 1, clientId: 'pane-1'));
+      await client.send(
+        AttachMessage(
+          requestId: 2,
+          sessionId: 'pane-a',
+          sinceOffset: 0,
+          claimWrite: true,
+          screenGrid: grid,
+        ),
+      );
+      return client;
+    }
+
+    Future<
+      ({HostServer server, SessionRegistry registry, FakePtyLauncher launcher})
+    >
+    running(String drawn) async {
+      final env = build();
+      final first = PipeConnection();
+      final serving = env.server.serveConnection(first);
+      await first.send(const HelloMessage(requestId: 1, clientId: 'pane-1'));
+      await first.send(_open);
+      env.launcher.handles.single.emit(ascii(drawn));
+      await first.pump();
+      await first.hangUp();
+      await serving;
+      return env;
+    }
+
+    test(
+      'sends the screen, then output from the offset it stands for',
+      () async {
+        final env = await running('hello\r\nworld');
+        final client = await reattach(env, grid: (80, 24));
+
+        final attached = client.only<AttachedMessage>();
+        expect(attached.screenFollows, isTrue);
+        expect(attached.replayFromOffset, 12);
+        final screen = client.only<ScreenMessage>();
+        expect(screen.offset, 12);
+        expect(client.all<OutputMessage>(), isEmpty, reason: 'no raw replay');
+
+        final rebuilt = Terminal()
+          ..resize(80, 24)
+          ..write(String.fromCharCodes(screen.bytes));
+        expect(rebuilt.buffer.lines[0].getText().trimRight(), 'hello');
+        expect(rebuilt.buffer.lines[1].getText().trimRight(), 'world');
+        expect(rebuilt.buffer.cursorX, 5);
+
+        env.launcher.handles.single.emit(ascii('!'));
+        await client.pump();
+        final live = client.only<OutputMessage>();
+        expect((live.offset, String.fromCharCodes(live.bytes)), (12, '!'));
+      },
+    );
+
+    test(
+      'takes the session to the pane grid before it draws the screen',
+      () async {
+        final env = await running('x' * 100);
+        final client = await reattach(env, grid: (50, 10));
+
+        expect(env.launcher.handles.single.resizes.last, (50, 10));
+        final attached = client.only<AttachedMessage>();
+        expect((attached.columns, attached.rows), (50, 10));
+        final rebuilt = Terminal()
+          ..resize(50, 10)
+          ..write(String.fromCharCodes(client.only<ScreenMessage>().bytes));
+        expect(rebuilt.buffer.lines[0].getText(), 'x' * 50);
+        expect(rebuilt.buffer.lines[1].isWrapped, isTrue);
+      },
+    );
+
+    test('an attach without a grid replays the output as before', () async {
+      final env = await running('hello');
+      final client = await reattach(env);
+
+      expect(client.only<AttachedMessage>().screenFollows, isFalse);
+      expect(client.all<ScreenMessage>(), isEmpty);
+      expect(
+        client.all<OutputMessage>().map((m) => String.fromCharCodes(m.bytes)),
+        ['hello'],
+      );
+    });
+  });
 }

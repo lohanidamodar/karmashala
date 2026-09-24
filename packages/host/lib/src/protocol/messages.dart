@@ -151,6 +151,7 @@ class AttachMessage extends HostMessage {
     required this.sessionId,
     required this.sinceOffset,
     required this.claimWrite,
+    this.screenGrid,
   });
 
   final int requestId;
@@ -163,6 +164,11 @@ class AttachMessage extends HostMessage {
   /// An observer attaches with this false and can never type by accident.
   final bool claimWrite;
 
+  /// The pane's grid, asking for the session's screen instead of its output:
+  /// the host takes the session to this size, then sends a [ScreenMessage].
+  /// Trailing, so an older host ignores it and replays as it always did.
+  final (int, int)? screenGrid;
+
   @override
   Frame toFrame() {
     final w = WireWriter()
@@ -170,6 +176,12 @@ class AttachMessage extends HostMessage {
       ..str(sessionId)
       ..u64(sinceOffset)
       ..boolean(claimWrite);
+    final grid = screenGrid;
+    if (grid != null) {
+      w
+        ..u16(grid.$1)
+        ..u16(grid.$2);
+    }
     return Frame(MessageType.attach, 0, w.take());
   }
 
@@ -180,6 +192,7 @@ class AttachMessage extends HostMessage {
       sessionId: r.str(),
       sinceOffset: r.u64(),
       claimWrite: r.boolean(),
+      screenGrid: r.remaining >= 4 ? (r.u16(), r.u16()) : null,
     );
   }
 }
@@ -442,6 +455,7 @@ class AttachedMessage extends HostMessage {
     required this.holdsWriteToken,
     required this.writeHolder,
     required this.observedAt,
+    this.screenFollows = false,
   });
 
   final int requestId;
@@ -449,6 +463,10 @@ class AttachedMessage extends HostMessage {
   final String sessionId;
   final int columns;
   final int rows;
+
+  /// A [ScreenMessage] comes next and output resumes at its offset. Trailing:
+  /// false from a host that predates it, whose replay follows as before.
+  final bool screenFollows;
 
   /// Where the replay actually starts: later than asked for when the ring had
   /// overwritten it, with [droppedBytes] saying how much is gone.
@@ -471,7 +489,8 @@ class AttachedMessage extends HostMessage {
       ..u64(totalBytes)
       ..boolean(holdsWriteToken)
       ..str(writeHolder ?? '')
-      ..u64(observedAt.microsecondsSinceEpoch);
+      ..u64(observedAt.microsecondsSinceEpoch)
+      ..boolean(screenFollows);
     return Frame(MessageType.attached, sessionRef, w.take());
   }
 
@@ -498,7 +517,34 @@ class AttachedMessage extends HostMessage {
       holdsWriteToken: holds,
       writeHolder: holder.isEmpty ? null : holder,
       observedAt: DateTime.fromMicrosecondsSinceEpoch(r.u64(), isUtc: true),
+      screenFollows: r.remaining > 0 && r.boolean(),
     );
+  }
+}
+
+/// The session's screen as escape bytes a fresh terminal of the attached grid
+/// rebuilds it from, and the output offset it stands for: live output follows
+/// from exactly there.
+class ScreenMessage extends HostMessage {
+  const ScreenMessage(this.sessionRef, this.offset, this.bytes);
+  final int sessionRef;
+  final int offset;
+  final Uint8List bytes;
+
+  @override
+  Frame toFrame() => Frame(
+    MessageType.screen,
+    sessionRef,
+    (WireWriter()
+          ..u64(offset)
+          ..rest(bytes))
+        .take(),
+  );
+
+  static ScreenMessage decode(Frame frame) {
+    final r = WireReader(frame.payload);
+    final offset = r.u64();
+    return ScreenMessage(frame.sessionRef, offset, r.rest());
   }
 }
 
@@ -804,4 +850,5 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.error => ErrorMessage.decode(frame),
   MessageType.pair => PairMessage.decode(frame),
   MessageType.paired => PairedMessage.decode(frame),
+  MessageType.screen => ScreenMessage.decode(frame),
 };

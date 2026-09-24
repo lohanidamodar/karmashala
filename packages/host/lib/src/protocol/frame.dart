@@ -33,7 +33,11 @@ enum MessageType {
   // `pair`. Its own type rather than a trailing field on `open`: an older host
   // ignores trailing bytes and would spawn with the variables still set, while
   // a type it does not know it refuses — loudly, before anything starts.
-  openWithout(0x14);
+  openWithout(0x14),
+  // The screen a pane attaching to a running session is rebuilt from, instead
+  // of the raw output (2026-09-24). Sent only to a client whose attach carried
+  // a grid, so an older client never meets it.
+  screen(0x16);
 
   const MessageType(this.code);
   final int code;

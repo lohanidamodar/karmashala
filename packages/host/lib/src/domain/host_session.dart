@@ -1,8 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:xterm2/core.dart';
 
 import '../pty/pty.dart';
 import 'output_backlog.dart';
+import 'screen_snapshot.dart';
 import 'session_lifecycle.dart';
 import 'session_recorder.dart';
 import 'write_token.dart';
@@ -30,7 +34,12 @@ class HostSession {
        backlog = OutputBacklog(capacityBytes: backlogCapacityBytes),
        columns = request.columns,
        rows = request.rows,
-       _lifecycle = const SessionRunning() {
+       _lifecycle = const SessionRunning(),
+       _screen = Terminal(maxLines: screenScrollbackLines)
+         ..resize(request.columns, request.rows) {
+    _screenInput = const Utf8Decoder(
+      allowMalformed: true,
+    ).startChunkedConversion(_ScreenSink(_screen!));
     _pty.output.listen(
       _onOutput,
       onError: (Object error) => _readFault ??= '$error',
@@ -68,6 +77,7 @@ class HostSession {
        columns = request.columns,
        rows = request.rows,
        _lifecycle = lifecycle,
+       _screen = null,
        _outputDone = true,
        _released = true {
     // Closed at once, so an attaching client gets the replay and then an end.
@@ -86,6 +96,16 @@ class HostSession {
   final WriteToken token = WriteToken();
   final PtyHandle _pty;
 
+  /// How much history the host's own copy of the screen keeps: tmux's
+  /// default, and a few megabytes a session at the widest panes.
+  static const screenScrollbackLines = 2000;
+
+  /// The screen as the program drew it, fed every byte it writes and resized
+  /// with it; it answers the program nothing, which is the pane's job. Null
+  /// for a session read back from disk, whose screen nobody watched.
+  final Terminal? _screen;
+  ByteConversionSink? _screenInput;
+
   int columns;
   int rows;
 
@@ -103,6 +123,8 @@ class HostSession {
     if (bytes.isEmpty) return;
     final offset = backlog.totalBytes;
     backlog.add(bytes);
+    // In the same turn as the backlog, so a snapshot and its offset agree.
+    _screenInput?.add(bytes);
     recorder?.record(bytes);
     // Synchronous broadcast, so a listener attached in the same turn as the
     // backlog read cannot miss the chunk between the two.
@@ -186,8 +208,17 @@ class HostSession {
     columns = newColumns;
     rows = newRows;
     _pty.resize(newColumns, newRows);
+    _screen?.resize(newColumns, newRows);
     recorder?.resized(backlog.totalBytes, newColumns, newRows);
     return null;
+  }
+
+  /// The screen as escape bytes and the output offset it stands for, or null
+  /// when there is no screen to give — a session read back from disk.
+  (String, int)? snapshot() {
+    final screen = _screen;
+    if (screen == null) return null;
+    return (screenSnapshot(screen), backlog.totalBytes);
   }
 
   ClaimRefusal? _requireToken(String clientId, DateTime now) {
@@ -265,4 +296,16 @@ class _NoProcess implements PtyHandle {
 
   @override
   Future<void> close() async {}
+}
+
+/// Hands the decoded output to the host's copy of the screen.
+class _ScreenSink implements Sink<String> {
+  _ScreenSink(this._terminal);
+  final Terminal _terminal;
+
+  @override
+  void add(String data) => _terminal.write(data);
+
+  @override
+  void close() {}
 }
