@@ -22,6 +22,9 @@ const int kReadyVisibleRows = 8;
 /// The Agents page's groups, in the order it draws them.
 enum AgentState {
   needsYou('Needs you', AgentStateFold.open),
+
+  /// Reported working, but with nothing new for [kQuietAfter] (see [quietAt]).
+  quiet('Quiet', AgentStateFold.open),
   working('Working', AgentStateFold.open),
   failed('Failed', AgentStateFold.open),
   ready('Ready', AgentStateFold.capped),
@@ -45,11 +48,14 @@ AgentState agentStateOf({
   required AgentActivityStatus? live,
   required SessionStatus? rowStatus,
   bool archived = false,
+  bool quiet = false,
 }) {
   if (needsYou || live == AgentActivityStatus.awaitingApproval) {
     return AgentState.needsYou;
   }
-  if (live == AgentActivityStatus.working) return AgentState.working;
+  if (live == AgentActivityStatus.working) {
+    return quiet ? AgentState.quiet : AgentState.working;
+  }
   if (live == AgentActivityStatus.failed) return AgentState.failed;
   // An imported conversation is history this app does not host.
   if (rowStatus == null || archived) return AgentState.ended;
@@ -106,7 +112,7 @@ class AgentStateGroup {
   int get hashCode => Object.hash(state, Object.hashAll(entries));
 }
 
-/// Every session sorted into the five groups, always all five and in
+/// Every session sorted into the groups, always all of them and in
 /// [AgentState] order. One pass over [entries] and one sort per group.
 ///
 /// Every key of [needsYou] lands in Needs you: one with no entry is drawn from
@@ -115,6 +121,7 @@ List<AgentStateGroup> groupByAgentState(
   Iterable<WorkspaceSessionEntry> entries, {
   required Map<String, NeedsYouSource> needsYou,
   required Map<String, AgentActivityStatus> live,
+  Set<String> quiet = const {},
 }) {
   final buckets = {
     for (final state in AgentState.values) state: <WorkspaceSessionEntry>[],
@@ -127,6 +134,7 @@ List<AgentStateGroup> groupByAgentState(
       live: live[entry.id],
       rowStatus: entry.rowStatus,
       archived: entry.native?.isArchived ?? false,
+      quiet: quiet.contains(entry.id),
     );
     buckets[state]!.add(entry);
   }
@@ -166,3 +174,26 @@ int visibleRowCount(AgentStateGroup group, {required bool expanded}) =>
             : kReadyVisibleRows,
       AgentStateFold.folded => expanded ? group.length : 0,
     };
+
+/// How long a working session may go without new evidence before it reads as
+/// [AgentState.quiet]. Long enough that one slow test run is not flagged
+/// every time, short enough that a hung turn is noticed the same hour.
+const Duration kQuietAfter = Duration(minutes: 15);
+
+/// When [report]'s session reads as quiet, or null when it never can on this
+/// evidence: it is not working, or the evidence cannot show a stall.
+///
+/// Only a hook or the agent's state file counts. A terminal-screen reading is
+/// evidence produced at the moment it is polled, and a spinner redraws while a
+/// turn is hung, so its age is always near zero — quietness there is unknown,
+/// and an unknown is never shown as a stall.
+DateTime? quietAt(AgentStatusReport? report) {
+  if (report == null || report.status != AgentActivityStatus.working) {
+    return null;
+  }
+  return switch (report.source) {
+    AgentStatusSource.hook ||
+    AgentStatusSource.stateFile => report.evidenceAt.add(kQuietAfter),
+    AgentStatusSource.terminalGrid || AgentStatusSource.none => null,
+  };
+}

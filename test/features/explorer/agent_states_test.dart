@@ -152,12 +152,13 @@ void main() {
   });
 
   group('groupByAgentState', () {
-    test('always five groups, in the order the page draws them', () {
+    test('always every group, in the order the page draws them', () {
       final groups = groupByAgentState(const [], needsYou: {}, live: {});
       expect(
         [for (final g in groups) g.state],
         [
           AgentState.needsYou,
+          AgentState.quiet,
           AgentState.working,
           AgentState.failed,
           AgentState.ready,
@@ -167,7 +168,7 @@ void main() {
       expect(groups.every((g) => g.isEmpty), isTrue);
       expect(
         [for (final g in groups) g.state.label],
-        ['Needs you', 'Working', 'Failed', 'Ready', 'Ended'],
+        ['Needs you', 'Quiet', 'Working', 'Failed', 'Ready', 'Ended'],
       );
     });
 
@@ -176,6 +177,7 @@ void main() {
         native('waiting'),
         native('asking', status: SessionStatus.running),
         native('busy'),
+        native('hung'),
         native('broken'),
         native('open'),
         native('done', status: SessionStatus.completed),
@@ -189,14 +191,17 @@ void main() {
         live: {
           'asking': AgentActivityStatus.awaitingApproval,
           'busy': AgentActivityStatus.working,
+          'hung': AgentActivityStatus.working,
           'broken': AgentActivityStatus.failed,
         },
+        quiet: {'hung'},
       );
       Map<AgentState, List<String>> ids() => {
         for (final g in groups) g.state: [for (final e in g.entries) e.id],
       };
       expect(ids(), {
         AgentState.needsYou: unorderedEquals(['waiting', 'asking']),
+        AgentState.quiet: ['hung'],
         AgentState.working: ['busy'],
         AgentState.failed: ['broken'],
         AgentState.ready: ['open'],
@@ -326,5 +331,64 @@ void main() {
         );
       },
     );
+  });
+
+  group('quietAt', () {
+    AgentStatusReport report(
+      AgentStatusSource source, {
+      AgentActivityStatus status = AgentActivityStatus.working,
+    }) => AgentStatusReport(
+      agentId: AgentIds.claudeCode,
+      sessionId: 's',
+      status: status,
+      observedAt: testTime,
+      source: source,
+    );
+
+    test('hook and state-file evidence can go quiet', () {
+      for (final source in [
+        AgentStatusSource.hook,
+        AgentStatusSource.stateFile,
+      ]) {
+        expect(quietAt(report(source)), testTime.add(kQuietAfter));
+      }
+    });
+
+    test('a screen reading never can: a spinner redraws while a turn hangs', () {
+      expect(quietAt(report(AgentStatusSource.terminalGrid)), isNull);
+      expect(quietAt(report(AgentStatusSource.none)), isNull);
+    });
+
+    test('only a working session goes quiet', () {
+      for (final status in [
+        AgentActivityStatus.idle,
+        AgentActivityStatus.awaitingApproval,
+        AgentActivityStatus.failed,
+      ]) {
+        expect(quietAt(report(AgentStatusSource.hook, status: status)), isNull);
+      }
+      expect(quietAt(null), isNull);
+    });
+
+    test('a quiet flag moves nobody who is not working', () {
+      expect(
+        agentStateOf(
+          needsYou: true,
+          live: AgentActivityStatus.working,
+          rowStatus: SessionStatus.running,
+          quiet: true,
+        ),
+        AgentState.needsYou,
+      );
+      expect(
+        agentStateOf(
+          needsYou: false,
+          live: AgentActivityStatus.idle,
+          rowStatus: SessionStatus.running,
+          quiet: true,
+        ),
+        AgentState.ready,
+      );
+    });
   });
 }

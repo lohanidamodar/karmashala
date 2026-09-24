@@ -9,6 +9,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../notifications/application/notification_providers.dart';
 import '../../sessions/application/delivery_providers.dart';
+import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_ui_providers.dart';
 import '../application/agent_state_providers.dart';
 import '../application/agent_states.dart';
@@ -34,20 +35,32 @@ class LensSessionRow extends ConsumerWidget {
       needsYouProvider.select((byId) => byId.containsKey(id)),
     );
     final live = ref.watch(liveAgentStatusesProvider.select((m) => m[id]));
+    final quiet = ref.watch(
+      quietSessionsProvider.select((q) => q.contains(id)),
+    );
     final state = agentStateOf(
       needsYou: needsYou,
       live: live,
       rowStatus: entry.rowStatus,
       archived: entry.native?.isArchived ?? false,
+      quiet: quiet,
     );
-    final branch = _knownBranch(ref, entry.directory);
-    final clauses = sessionContextClauses(
-      projectName: entry.projectName,
-      folder: entry.folder,
-      branch: branch,
-    );
-    final dated = entry.native != null || entry.imported != null;
     final now = ref.read(clockProvider).nowUtc();
+    final branch = _knownBranch(ref, entry.directory);
+    // Read fresh, not from [entry], whose time is the list's snapshot.
+    final quietSince = state == AgentState.quiet
+        ? ref.read(sessionStatusLookupProvider)(id)?.evidenceAt
+        : null;
+    final clauses = [
+      if (quietSince != null)
+        'nothing new for ${compactAge(now.difference(quietSince))}',
+      ...sessionContextClauses(
+        projectName: entry.projectName,
+        folder: entry.folder,
+        branch: branch,
+      ),
+    ];
+    final dated = entry.native != null || entry.imported != null;
     final theme = Theme.of(context);
     final density = UiDensity.of(context);
     final muted = density.muted(theme);
@@ -148,7 +161,7 @@ class _StateGlyph extends StatelessWidget {
     const size = ExplorerRow.glyphSize;
     final status = switch (state) {
       AgentState.needsYou => AgentActivityStatus.awaitingApproval,
-      AgentState.working => AgentActivityStatus.working,
+      AgentState.quiet || AgentState.working => AgentActivityStatus.working,
       AgentState.failed => AgentActivityStatus.failed,
       AgentState.ready => AgentActivityStatus.idle,
       AgentState.ended => null,

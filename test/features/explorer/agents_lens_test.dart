@@ -251,6 +251,11 @@ void main() {
     await tester.tap(find.text('ENDED'));
     await tester.pumpAndSettle();
     expect(find.text('Chat done'), findsOneWidget);
+
+    // `busy` is working on hook evidence, so the page armed the one timer for
+    // when it would turn quiet; leaving the page is what cancels it.
+    await tester.pumpWidget(const SizedBox.shrink());
+    c.dispose();
   });
 
   testWidgets('a row names its project, and its folder only when it is not '
