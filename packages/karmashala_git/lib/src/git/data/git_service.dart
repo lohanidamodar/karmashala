@@ -278,11 +278,25 @@ class GitService {
     }
   }
 
-  /// Lines added and removed in [repo], from [base] to the working tree when
-  /// given. No `git diff` sees untracked files, so this and `git status` can differ.
+  /// Lines added and removed in [repo]'s working tree since `HEAD`, or since
+  /// it branched from [base] when given. No `git diff` sees untracked files,
+  /// so this and `git status` can differ.
+  ///
+  /// From the merge-base, not [base]'s tip: against the tip, every commit
+  /// [base] gained after the branch left counted as this branch's work,
+  /// reversed. The merge-base still moves when [base] is merged in, which a
+  /// base commit recorded at creation would not.
   Future<DiffStat?> diffStat(EnvironmentPath repo, {String? base}) async {
     try {
-      final result = await _git(repo, ['diff', '--numstat', base ?? 'HEAD']);
+      var result = await _git(repo, [
+        'diff',
+        '--numstat',
+        if (base != null) ...['--merge-base', base] else 'HEAD',
+      ]);
+      // `--merge-base` is git 2.30; an older one is measured as before.
+      if (!result.ok && base != null) {
+        result = await _git(repo, ['diff', '--numstat', base]);
+      }
       if (!result.ok) return null;
       return parseNumstat(result.stdout);
     } on CommandException {

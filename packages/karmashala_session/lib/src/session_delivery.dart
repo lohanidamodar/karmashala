@@ -52,8 +52,8 @@ class SessionDelivery {
   /// Files with working-tree changes, untracked ones included.
   final int? dirtyFiles;
 
-  /// Lines added and removed against [baseBranch] — the session's whole diff,
-  /// committed and uncommitted alike.
+  /// Lines added and removed since the branch left [baseBranch] — the whole
+  /// diff, committed and uncommitted alike.
   final DiffStat? lines;
 
   final int? aheadOfBase;
