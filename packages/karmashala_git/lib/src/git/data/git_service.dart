@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show ProcessException;
 
 import 'package:path/path.dart' as p;
 
@@ -12,6 +13,7 @@ import '../domain/worktree_contents.dart';
 import '../domain/worktree_creation.dart';
 import 'git_diff_parsing.dart';
 import 'git_files.dart';
+import 'secret_scan.dart';
 
 /// Raised when a `git` invocation fails (non-zero exit), carrying git's stderr.
 class GitException implements Exception {
@@ -641,6 +643,31 @@ class GitService {
   Future<bool> abortMerge(EnvironmentPath repo) async {
     final result = await _git(repo, ['merge', '--abort']);
     return result.ok;
+  }
+
+  /// Scans the commits a push of [repo] would send for secrets, with gitleaks
+  /// where the repository lives. Never throws: a missing tool is
+  /// [SecretScanUnavailable], anything else it cannot answer is a failure.
+  Future<SecretScan> scanOutgoingSecrets(EnvironmentPath repo) async {
+    try {
+      final result = await runner.run(
+        CommandRequest(
+          executable: 'gitleaks',
+          arguments: gitleaksOutgoingArguments(repo.path),
+          timeout: mutationTimeout,
+          removedEnvironment: kGitRemovedEnvironment,
+        ),
+      );
+      return secretScanFrom(result);
+    } on CommandException catch (error) {
+      // ENOENT, and Windows' "cannot find the file", share code 2: the
+      // executable is not there.
+      final cause = error.cause;
+      if (cause is ProcessException && cause.errorCode == 2) {
+        return const SecretScanUnavailable();
+      }
+      return SecretScanFailed('$error');
+    }
   }
 
   /// Pushes the current branch (optionally to [remote], setting upstream).

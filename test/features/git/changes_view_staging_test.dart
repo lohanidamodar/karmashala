@@ -4,6 +4,8 @@
 /// `reset`, or between rewinding a file and deleting one, is the whole point.
 library;
 
+import 'dart:io' show ProcessException;
+
 import 'package:agent_cli/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -26,7 +28,8 @@ void main() {
 
   /// Every git command the pane ran, as argv after `-C <path>`.
   List<List<String>> ran() => [
-    for (final request in runner.requests) request.arguments.sublist(2),
+    for (final request in runner.requests)
+      if (request.executable == 'git') request.arguments.sublist(2),
   ];
 
   setUp(() {
@@ -245,6 +248,63 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(ran().single, ['push', '-u', 'origin', 'work']);
+  });
+
+  /// A push is read by gitleaks first, over the commits it would send.
+  group('the secret scan before a push', () {
+    const finding =
+        '[{"RuleID":"github-pat","StartLine":3,"File":"lib/env.dart",'
+        '"Commit":"f43e2ea61b8100b3","Secret":"REDACTED"}]';
+
+    testWidgets('a finding stops the push, and says where', (tester) async {
+      runner.responder = (request) => request.executable == 'gitleaks'
+          ? const CommandResult(exitCode: 1, stdout: finding, stderr: '')
+          : const CommandResult(exitCode: 0, stdout: '', stderr: '');
+      await pump(tester, files: const [modified]);
+
+      await tester.tap(find.byTooltip('Push'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Not pushed'), findsOneWidget);
+      expect(find.textContaining('lib/env.dart:3'), findsOneWidget);
+      expect(ran().where((argv) => argv.first == 'push'), isEmpty);
+      final scan = runner.requests.singleWhere(
+        (r) => r.executable == 'gitleaks',
+      );
+      expect(scan.arguments, contains('--redact'));
+      expect(scan.arguments, contains('--log-opts=HEAD --not --remotes'));
+    });
+
+    testWidgets('without gitleaks it pushes, and says it did not scan', (
+      tester,
+    ) async {
+      runner.responder = (request) {
+        if (request.executable == 'gitleaks') {
+          throw CommandException(
+            'Failed to run "gitleaks"',
+            cause: const ProcessException('gitleaks', [], 'not found', 2),
+          );
+        }
+        return const CommandResult(exitCode: 0, stdout: '', stderr: '');
+      };
+      await pump(tester, files: const [modified]);
+
+      await tester.tap(find.byTooltip('Push'));
+      await tester.pumpAndSettle();
+
+      expect(ran().single, ['push']);
+      expect(find.textContaining('gitleaks is not installed'), findsOneWidget);
+    });
+
+    testWidgets('a clean scan pushes and says so', (tester) async {
+      await pump(tester, files: const [modified]);
+
+      await tester.tap(find.byTooltip('Push'));
+      await tester.pumpAndSettle();
+
+      expect(ran().single, ['push']);
+      expect(find.textContaining('found no secrets'), findsOneWidget);
+    });
   });
 
   testWidgets('how far the branch is from its upstream is on the row', (

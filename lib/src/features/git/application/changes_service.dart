@@ -296,4 +296,9 @@ class ChangesService {
   /// branch that has no upstream yet (`push -u`).
   Future<void> push(EnvironmentPath repo, {String? remote, String? branch}) =>
       _gitFor(repo).push(repo, remote: remote, branch: branch);
+
+  /// Scans the commits a push of [repo] would send for secrets, where [repo]
+  /// lives. Never throws.
+  Future<SecretScan> scanOutgoingSecrets(EnvironmentPath repo) =>
+      _gitFor(repo).scanOutgoingSecrets(repo);
 }

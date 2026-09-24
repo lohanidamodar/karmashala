@@ -108,16 +108,44 @@ class WorkingCopyController extends Notifier<WorkingCopyState> {
     note: 'Pulled.',
   );
 
-  Future<void> push() =>
-      _run('Pushing', (repo, changes) => changes.push(repo), note: 'Pushed.');
+  Future<void> push() => _scannedPush(
+    'Pushing',
+    (repo, changes) => changes.push(repo),
+    note: 'Pushed.',
+  );
 
   /// Pushes a branch that has no upstream yet, and gives it one.
   Future<void> publish({required String branch, String remote = 'origin'}) =>
-      _run(
+      _scannedPush(
         'Publishing',
         (repo, changes) => changes.push(repo, remote: remote, branch: branch),
         note: 'Published to $remote/$branch.',
       );
+
+  /// [push], after gitleaks has read the commits it would send. A finding
+  /// stops it; no gitleaks, or a scan that could not finish, lets it go and
+  /// the note says the push was not checked — the tool is optional.
+  Future<void> _scannedPush(
+    String busy,
+    Future<void> Function(EnvironmentPath repo, ChangesService changes) push, {
+    required String note,
+  }) async {
+    var scanned = '';
+    await _run(busy, (repo, changes) async {
+      switch (await changes.scanOutgoingSecrets(repo)) {
+        case SecretScanFound(:final findings):
+          throw GitException(secretPushRefusal(findings));
+        case SecretScanUnavailable():
+          scanned = ' Not scanned for secrets: gitleaks is not installed.';
+        case SecretScanFailed(:final reason):
+          scanned = ' Not scanned for secrets: $reason.';
+        case SecretScanClean():
+          scanned = ' gitleaks found no secrets.';
+      }
+      await push(repo, changes);
+    }, note: note);
+    if (state.note == note) state = state.copyWith(note: '$note$scanned');
+  }
 
   /// Opens a pull request for the checked-out branch through `gh`, and answers
   /// with its URL — the caller decides whether to open it.
@@ -205,3 +233,18 @@ final workingCopyControllerProvider =
     NotifierProvider<WorkingCopyController, WorkingCopyState>(
       WorkingCopyController.new,
     );
+
+/// Why a push was stopped, in one line: what was found and the two ways on.
+String secretPushRefusal(List<SecretFinding> findings) {
+  const shown = 3;
+  final listed = findings.take(shown).map((f) => f.label).join(', ');
+  final more = findings.length > shown
+      ? ' and ${findings.length - shown} more'
+      : '';
+  final count = findings.length == 1
+      ? 'a possible secret'
+      : '${findings.length} possible secrets';
+  return 'Not pushed: gitleaks found $count in commits no remote has yet — '
+      '$listed$more. Take it out of those commits, or add its fingerprint to '
+      '.gitleaksignore if it is not a secret.';
+}

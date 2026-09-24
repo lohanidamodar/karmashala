@@ -18,6 +18,7 @@ export 'src/git/data/git_presence_reader.dart';
 export 'src/git/data/git_probe_target.dart';
 export 'src/git/data/git_service.dart';
 export 'src/git/data/hunk_patch.dart';
+export 'src/git/data/secret_scan.dart';
 export 'src/git/data/worktree_copier.dart';
 export 'src/git/domain/diff_line.dart';
 export 'src/git/domain/diff_stat.dart';
