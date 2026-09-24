@@ -17,6 +17,50 @@ installs claim the same version name.
 
 ---
 
+## 1.26.0 — 2026-09-24 (build 45)
+
+**Local terminals run in the session host by default, and it reaches Macs and
+phones.** 552 commits past 1.25.0 (165 features, 196 fixes); the headlines:
+
+- **Local panes run in the session host** (`e60fc697`), with shell integration
+  (`c9f7bcd8`), recorded resizes (`085ba6d3`) and links that reconnect
+  (`0cad3e5a`). The host deploys to a Mac over SSH (`ab3c0f08`) and can be
+  installed, stopped and removed from an SSH host's card (`9dad1c9c`,
+  `ed13e599`); `karmashala_host relay` lets a box be its desktop's relay
+  (`4e303630`).
+- **The phone does more**: answers an agent's question and menu (`658f339f`,
+  `6215097a`), changes a session's model and permission mode (`b2c633b8`),
+  shows usage limits (`c6f671b6`), and pairs by scanning a machine's QR
+  (`5e773db4`, `f7e5eb7c`).
+- **Automations**: resume a session when its usage window resets (`481107c2`),
+  recurring runs (`91e32efc`), and event triggers with a dry run (`fe7f4b51`).
+- **Sessions and checkpoints**: fork from a checkpoint (`94d4ae4a`), hand a
+  session over as one archive (`dca07fbd`), checkpoints titled by what their
+  turn asked (`6acffdcd`).
+- **Explorer**: an Activity-by-day lens (`5e2dffcf`), an Agents entry by state
+  (`fd1eb57e`), multi-select (`cbaada94`) and keyboard navigation (`d081c88e`).
+- **Editor**: SSH files through document sources (`b874b0f8`), autosave
+  (`03c6c02a`), and files changed on disk picked up (`f3e93c8c`).
+- **Probe mode** runs a second instance with no global side effects
+  (`f226f9f9`, `bb20c368`).
+
+Fixed on 2026-09-24:
+
+- **The session host could stop answering for good on macOS** (`0d392509`).
+  Ending a pane whose shell had started a job in a group of its own (a
+  `claude login` typed at the prompt) left that job holding the terminal, and
+  closing the pty under its blocked reader froze the host's only isolate.
+  The close now runs in an isolate of its own, and ending a session reaches
+  every process in it through libproc. `stop --force` reaches a host that
+  will not answer (`2a502ad3`), and Settings offers Restart for one and Start
+  when none is running (`d637a60a`).
+- **Resizing no longer garbles an inline TUI** (xterm2 divergence 11). Shrinking
+  the height popped the rows Claude Code draws below its cursor, so its next
+  redraw erased history and left the old frame on screen.
+- **Every way of copying trims each line's trailing padding** (`00ebccf9`).
+
+---
+
 ## 1.25.0 — 2026-09-16 (build 44)
 
 **Browsing for a file is Karmashala's own job now, and a project can be
