@@ -22,7 +22,10 @@ class HostClient {
   late final WelcomeMessage welcome;
 
   /// Null when nothing is listening — the caller says so in its own words.
-  static Future<HostClient?> connect(String socketPath) async {
+  static Future<HostClient?> connect(
+    String socketPath, {
+    Duration answerWithin = const Duration(seconds: 10),
+  }) async {
     final Socket socket;
     try {
       socket = await Socket.connect(
@@ -39,7 +42,14 @@ class HostClient {
         .asBroadcastStream();
     final client = HostClient._(socket, messages);
     client._send(const HelloMessage(requestId: 1, clientId: 'karmashala-cli'));
-    client.welcome = await client._expect<WelcomeMessage>();
+    try {
+      client.welcome = await client._expect<WelcomeMessage>(
+        within: answerWithin,
+      );
+    } on HostClientRefusal {
+      socket.destroy();
+      rethrow;
+    }
     return client;
   }
 
@@ -167,15 +177,34 @@ Future<int> runStop(
   IOSink? err,
   HostPaths? paths,
   Duration grace = const Duration(seconds: 5),
+  Duration answerWithin = const Duration(seconds: 10),
 }) async {
   final sink = out ?? stdout;
   final errSink = err ?? stderr;
   final resolved = paths ?? HostPaths.resolve();
   final force = args.contains('--force') || args.contains('-f');
 
-  final client = await HostClient.connect(resolved.socketPath);
+  HostClient? client;
+  HostClientRefusal? silent;
+  try {
+    client = await HostClient.connect(
+      resolved.socketPath,
+      answerWithin: answerWithin,
+    );
+  } on HostClientRefusal catch (e) {
+    // Took the connection and never welcomed it: a host wedged in a syscall.
+    silent = e;
+  }
   var held = 0;
   int? pid;
+  if (silent != null && !force) {
+    errSink.writeln(
+      'karmashala_host stop: the host at ${resolved.socketPath} would not '
+      'answer ($silent), so what it holds is unknown. Pass --force to stop it '
+      'by the pid in ${resolved.lockPath}.',
+    );
+    return 3;
+  }
   if (client != null) {
     pid = client.welcome.pid;
     try {
