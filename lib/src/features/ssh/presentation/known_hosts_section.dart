@@ -21,8 +21,7 @@ class KnownHostsSection extends ConsumerWidget {
       title: 'TRUSTED HOST KEYS',
       child: keys.isEmpty
           ? Text(
-              'None yet. The first time you connect to a host, its fingerprint '
-              'is shown and pinned only if you accept it.',
+              'None yet. A host key is pinned only if you accept it.',
               style: theme.textTheme.bodySmall,
             )
           : Column(

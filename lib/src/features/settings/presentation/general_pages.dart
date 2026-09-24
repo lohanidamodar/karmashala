@@ -61,9 +61,7 @@ class ThemeTextSection extends ConsumerWidget {
           ),
           SettingsRow(
             label: 'UI text size',
-            help:
-                'Scales every label, menu, dialog and tooltip. The '
-                'terminal has its own font size under Terminal.',
+            help: 'All app text. The terminal has its own size.',
             controlMaxWidth: 160,
             control: DropdownButtonFormField<double>(
               initialValue: scale,
@@ -117,10 +115,7 @@ class StartupSection extends ConsumerWidget {
           ),
           SettingsSwitchRow(
             label: 'Ask before quitting with sessions running',
-            help:
-                'Off, quitting uses your last answers — keep host sessions '
-                'running, reopen sessions next time — without asking. It '
-                'still asks when quitting would stop a turn midway.',
+            help: 'Off, quitting reuses your last answers.',
             value: settings.quitAsks,
             onChanged: controller.setQuitAsks,
           ),
@@ -138,9 +133,6 @@ class StartupSection extends ConsumerWidget {
           ),
           SettingsSwitchRow(
             label: 'Keep system awake',
-            help:
-                'Prevent the display and system from sleeping while '
-                'Karmashala is running.',
             value: settings.keepAwake,
             onChanged: controller.setKeepAwake,
           ),
@@ -177,9 +169,7 @@ class LauncherHotkeySection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'A global shortcut that brings Karmashala forward from any app '
-            'with quick open ready, and puts it away again when it is already '
-            'in front.',
+            'Brings Karmashala forward from any app, with quick open.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.sm),

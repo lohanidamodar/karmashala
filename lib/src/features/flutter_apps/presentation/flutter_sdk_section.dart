@@ -34,9 +34,7 @@ class FlutterSdkSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Only needed where Flutter is not on that environment\'s PATH. '
-            'A path set here is used instead of the PATH lookup, and is never '
-            'changed by "Find local".',
+            'Only needed where Flutter is not on PATH.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

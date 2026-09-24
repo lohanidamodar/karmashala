@@ -55,18 +55,7 @@ class AutomationsPage extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'An automation starts an agent on a schedule, in a checkout\'s '
-                'own environment, with nobody watching. Arming one is you '
-                'authorising that run in advance — which is why it happens '
-                'here and cannot be asked for by an agent.',
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: Insets.xs),
-              Text(
-                'It holds because Karmashala refuses to fire when the '
-                'conditions for unsupervised work are absent, and says which '
-                'one. A refusal is checked again at the moment it would fire, '
-                'not only when you armed it.',
+                'Runs an agent on a schedule, unwatched. Only you can arm one.',
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: Insets.md),

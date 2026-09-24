@@ -29,11 +29,7 @@ void main() {
     // which is exactly the misunderstanding this page has to head off: a
     // session that picked a mode keeps it when these move.
     expect(
-      find.textContaining('have not chosen a mode of their own').first,
-      findsOneWidget,
-    );
-    expect(
-      find.textContaining('even after this changes').first,
+      find.textContaining('a mode picked on a session keeps it').first,
       findsOneWidget,
     );
   });

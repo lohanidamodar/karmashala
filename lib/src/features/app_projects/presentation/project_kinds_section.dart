@@ -19,10 +19,7 @@ class ProjectKindsSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'What a checkout is detected as, and what can be built from it. '
-            'Building produces an artifact and an application id; installing '
-            'and launching it is the device tools, which work the same for '
-            'every kind.',
+            'What each checkout is detected as, and what it builds.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

@@ -39,8 +39,7 @@ class McpBridgeSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'An agent pointed at Karmashala\'s MCP bridge can query and act '
-            'on your projects and sessions through the tools listed below.',
+            'Agents connected here can act on your projects and sessions.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.sm),
@@ -164,11 +163,7 @@ class _BridgeVerdict extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    current?.summary ??
-                        'Not checked. Whether the bridge works is a question '
-                            'about a process, not a file, so answering it '
-                            'means starting one — which happens when you '
-                            'ask.',
+                    current?.summary ?? 'Not checked yet.',
                     style: theme.textTheme.bodySmall,
                   ),
                   if (current != null && checkedAt != null)
@@ -228,11 +223,7 @@ class AgentSkillsSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'The tools above have to be called by an agent that already '
-            'suspects they exist. A skill is found by the CLI without being '
-            'asked for, so Karmashala writes three into each agent it finds: '
-            'one that points at instructions(), and two for asking another '
-            'agent family for a second opinion.',
+            'Skills let each agent find these tools without being told.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.sm),
@@ -279,8 +270,7 @@ class AgentSkillsSection extends ConsumerWidget {
                 report.unknownByAgent.isEmpty &&
                 report.incompleteByAgent.isEmpty)
               Text(
-                'Nothing is installed. No agent on this machine declares a '
-                'place to put one.',
+                'Nothing installed. No agent here has a place for skills.',
                 style: theme.textTheme.bodySmall,
               ),
             if (report.checkedAt case final at?)

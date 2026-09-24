@@ -109,9 +109,7 @@ class _PermissionCard extends StatelessWidget {
           const SizedBox(height: Insets.xs),
           // Which way precedence runs: a session that chose keeps its own.
           Text(
-            'Defaults for sessions that have not chosen a mode of their own. '
-            'A mode picked on a session keeps that session, even after this '
-            'changes.',
+            'Defaults only: a mode picked on a session keeps it.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -192,12 +190,8 @@ class BrowserConsentSection extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: Insets.sm),
             child: Text(
-              'browser_evaluate runs whatever JavaScript an agent composes '
-              'inside a page you are already logged in to, so it can read '
-              'cookies and stored tokens as easily as it reads the DOM — and '
-              'nothing about it shows in the browser pane. It is refused until '
-              'you allow it, per project. Finding, capturing and screenshotting '
-              'a page never need this.',
+              'browser_evaluate runs agent JavaScript that can read your '
+              'cookies and tokens. Off until allowed, per project.',
               style: theme.textTheme.bodySmall,
             ),
           ),

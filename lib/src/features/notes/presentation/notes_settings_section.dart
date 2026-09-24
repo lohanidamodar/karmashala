@@ -26,9 +26,7 @@ class NotesSettingsSection extends ConsumerWidget {
               SettingsSwitchRow(
                 label: 'Notes',
                 help:
-                    'Keep an idea from a conversation without acting on it, '
-                    'and send it back to an agent when you are ready. Adds a '
-                    'note button under each message and a Notes panel.',
+                    'Adds a note button under any message, and a Notes panel.',
                 value: enabled,
                 onChanged: controller.setNotesEnabled,
               ),

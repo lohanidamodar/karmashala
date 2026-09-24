@@ -62,10 +62,7 @@ class _ToolchainsSectionState extends ConsumerState<ToolchainsSection> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'What each machine answered when asked, and when it was asked. '
-            'A machine reached over SSH is only dialled when you press '
-            'Check — probing one is running processes on somebody else\'s '
-            'computer.',
+            'SSH hosts are only checked when you press Check.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

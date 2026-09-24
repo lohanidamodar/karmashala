@@ -112,10 +112,7 @@ class _RemoteAccessSectionState extends ConsumerState<RemoteAccessSection> {
         children: [
           SettingsSwitchRow(
             label: 'Remote access',
-            help:
-                'Let a paired phone view sessions, read transcripts, send '
-                'prompts and answer approvals. Everything is end-to-end '
-                'encrypted; the relay only forwards sealed frames.',
+            help: 'Follow and answer sessions from a paired phone. Encrypted.',
             value: settings.remoteAccessEnabled,
             onChanged: _setEnabled,
           ),
@@ -196,9 +193,7 @@ class _RelaySwitches extends StatelessWidget {
       children: [
         SettingsSwitchRow(
           label: 'Local relay (this computer)',
-          help:
-              'Runs on this computer for phones on the same network. No '
-              'server of your own, nothing leaves the house.',
+          help: 'For phones on the same network.',
           value: prefs.localEnabled,
           onChanged: onLocalChanged,
         ),
@@ -224,9 +219,7 @@ class _RelaySwitches extends StatelessWidget {
         const SizedBox(height: Insets.sm),
         SettingsSwitchRow(
           label: 'Hosted relay (internet)',
-          help:
-              'Reaches a phone anywhere. The relay only forwards sealed '
-              'frames — it can read nothing.',
+          help: 'Reaches a phone anywhere. The relay can read nothing.',
           value: prefs.hostedEnabled,
           onChanged: onHostedChanged,
         ),

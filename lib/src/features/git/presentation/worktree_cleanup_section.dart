@@ -99,32 +99,20 @@ class _WorktreeCleanupSectionState
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Off unless you turn it on. Removes worktrees Karmashala made (in '
-            '$kKarmashalaWorktreesFolder) that match a rule below, every '
-            '${kWorktreeCleanupInterval.inHours} hours. It never removes one '
-            'with a session running in it, one more than one session has '
-            'used, one with uncommitted changes, or one holding ignored files '
-            'other than those you list. The branch is always kept, and every '
-            'removal is logged below.',
+            'Removes idle worktrees Karmashala made. Branches are kept.',
             style: small,
           ),
           const SizedBox(height: Insets.xs),
           Text(
             key: const ValueKey('worktree-cleanup-squash-caveat'),
-            '"Branch merged" cannot see a squash merge: squashing puts new '
-            'commits on the default branch, so the branch\'s own never appear '
-            'there and it always reads as unmerged. Use "inactive" for '
-            'squash-merged work. Merged is measured against origin\'s default '
-            'branch as of your last fetch; cleanup never fetches.',
+            '"Branch merged" cannot see a squash merge; use "inactive".',
             style: small,
           ),
           const SizedBox(height: Insets.sm),
           SettingsSwitchRow(
             key: const ValueKey('worktree-cleanup-enabled'),
             label: 'Clean up automatically',
-            help:
-                'The default for every project. A project can opt out, or '
-                'use its own rules, below.',
+            help: 'Projects can opt out or use their own rules below.',
             value: settings.enabled,
             onChanged: (on) => _save(settings.copyWith(enabled: on)),
           ),
@@ -296,9 +284,7 @@ class _RulesEditorState extends State<_RulesEditor> {
         Padding(
           padding: const EdgeInsets.only(left: 40),
           child: Text(
-            'The newest of: the worktree\'s HEAD moving (created, committed, '
-            'checked out), a session starting or reporting in it. Edits not '
-            'yet committed do not count here — they keep it on their own.',
+            'Since HEAD last moved or a session last ran in it.',
             style: small,
           ),
         ),
@@ -311,10 +297,7 @@ class _RulesEditorState extends State<_RulesEditor> {
           onChanged: (on) =>
               widget.onChanged(rules.copyWith(merged: on ?? false)),
           title: const Text('Branch merged'),
-          subtitle: const Text(
-            'Commits were made on its branch, and all of them are on the '
-            'default branch. Not squash merges.',
-          ),
+          subtitle: const Text('All its commits are on the default branch.'),
         ),
         CheckboxListTile(
           key: const ValueKey('worktree-cleanup-rule-empty'),
@@ -326,10 +309,7 @@ class _RulesEditorState extends State<_RulesEditor> {
             rules.copyWith(noCommitsBeyondDefault: on ?? false),
           ),
           title: const Text('No commits beyond the default branch'),
-          subtitle: const Text(
-            'Nothing in it that the default branch lacks — merged work, or a '
-            'worktree nothing was ever committed in.',
-          ),
+          subtitle: const Text('Nothing in it that the default branch lacks.'),
         ),
         Padding(
           padding: const EdgeInsets.only(top: Insets.xs),

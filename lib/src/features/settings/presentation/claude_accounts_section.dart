@@ -30,8 +30,7 @@ class ClaudeAccountsSection extends ConsumerWidget {
       title: SettingsAnchor.claudeAccounts.heading,
       child: installations.isEmpty
           ? Text(
-              'No Claude Code installation identified. Press Discover under '
-              'Environments first.',
+              'No Claude Code found. Press Discover under Environments.',
               style: theme.textTheme.bodySmall,
             )
           : Column(

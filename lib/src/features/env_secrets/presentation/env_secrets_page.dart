@@ -53,20 +53,13 @@ class EnvSecretsPage extends ConsumerWidget {
               const SizedBox(height: Insets.md),
               SettingsSwitchRow(
                 label: 'Load these in new terminals',
-                help:
-                    'Applies when a terminal opens. Panes already running keep '
-                    'the values they started with.',
+                help: 'Running panes keep the values they started with.',
                 value: vault.enabled,
                 onChanged: controller.setEnabled,
               ),
               const SizedBox(height: Insets.sm),
               if (vault.variables.isEmpty)
-                Text(
-                  'Nothing defined yet. Add a variable to have every terminal '
-                  'Karmashala opens — plain shells and agent panes alike — '
-                  'start with it set.',
-                  style: theme.textTheme.bodySmall,
-                )
+                Text('Nothing defined yet.', style: theme.textTheme.bodySmall)
               else
                 Column(
                   children: [
@@ -89,25 +82,17 @@ class EnvSecretsPage extends ConsumerWidget {
               _Fact(
                 icon: AppIcons.terminalWindow,
                 text:
-                    'WSL panes get them through WSLENV, which is how a Windows '
-                    'variable crosses into a distribution. That means the '
-                    'variable NAMES are visible inside the distro (echo '
-                    '\$WSLENV); the values are not listed there.',
+                    'WSL panes get them via WSLENV, which shows names, not values.',
               ),
               _Fact(
                 icon: AppIcons.globe,
                 text:
-                    'SSH gets nothing. Secrets are never sent to a remote host '
-                    '— they would land in another machine\'s process list and '
-                    'outside the protection Karmashala just applied here.',
+                    'SSH gets nothing. Secrets are never sent to a remote host.',
               ),
               _Fact(
                 icon: AppIcons.copySimple,
                 text:
-                    '"Copy command" and "Open in external terminal" do not '
-                    'carry them. A command you paste elsewhere will not have '
-                    'these set — assembling a secret into a clipboard string '
-                    'is exactly what the stored file is protecting it from.',
+                    '"Copy command" and external terminals do not carry them.',
               ),
             ],
           ),
@@ -144,10 +129,7 @@ class _Honesty extends StatelessWidget {
               const SizedBox(width: Insets.sm),
               Expanded(
                 child: Text(
-                  'Every terminal Karmashala opens inherits these, including '
-                  'agent panes. Any command run in a terminal — by you or by '
-                  'an agent — can print their values. Put here only what you '
-                  'would put in a shell profile.',
+                  'Any command in a terminal, yours or an agent’s, can print these.',
                   style: theme.textTheme.bodyMedium,
                 ),
               ),
@@ -162,8 +144,7 @@ class _Honesty extends StatelessWidget {
           ),
           const SizedBox(height: Insets.xs),
           Text(
-            'Anything running under your own account can read them, because '
-            'Karmashala has to read them itself to start a terminal.',
+            'Anything running as you can read them.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
             ),

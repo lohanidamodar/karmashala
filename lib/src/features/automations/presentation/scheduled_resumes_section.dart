@@ -37,10 +37,7 @@ class ScheduledResumesSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'A session can be resumed when its account\'s usage window resets '
-            '— from its row\'s menu, its header, or the notice a limit leaves '
-            'in its bar. The account is read again at that moment: still '
-            'limited, and the resume moves to the new reset instead.',
+            'Resume a session when its usage window resets.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.sm),
@@ -72,9 +69,7 @@ class ScheduledResumesSection extends ConsumerWidget {
           ),
           SettingsRow(
             label: 'Default resume message',
-            help:
-                'Sent once the session is resumed. Empty resumes without '
-                'sending anything; each agent remembers the last one used.',
+            help: 'Sent on resume. Leave empty to send nothing.',
             controlMaxWidth: 320,
             control: _MessageField(
               value: settings.resumeMessage,

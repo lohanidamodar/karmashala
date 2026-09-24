@@ -37,8 +37,7 @@ class DefaultAgentSection extends ConsumerWidget {
       title: SettingsAnchor.defaultAgent.heading,
       child: installations.isEmpty
           ? Text(
-              'No agents found. Press "Detect agents" below to search '
-              'your environments again.',
+              'No agents found. Press "Detect agents" below.',
               style: theme.textTheme.bodySmall,
             )
           : SettingsRow(
@@ -102,13 +101,7 @@ class AgentUpdatesSection extends ConsumerWidget {
         children: [
           SettingsSwitchRow(
             label: 'Let agents update themselves in Karmashala sessions',
-            help:
-                'When an agent CLI starts inside Karmashala, let it check for '
-                'and install its own updates. Off on Windows by default: a '
-                'self-updating CLI launched under an unsigned app is a pattern '
-                'behavioural antivirus (such as Bitdefender ATC) can read as a '
-                'threat and kill. Turning this off does not touch updates you '
-                'run yourself outside Karmashala. Applies to the next launch.',
+            help: 'Off on Windows by default, where antivirus may kill it.',
             value: mayUpdate,
             onChanged: controller.setLetAgentsUpdateThemselves,
           ),

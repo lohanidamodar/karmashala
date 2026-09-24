@@ -35,16 +35,7 @@ class SnippetsSettingsPage extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'A command you keep so you can pick it instead of retyping it. '
-                'Picking one types it at the prompt of the terminal you are in '
-                'and leaves it there to read — it presses Enter only if you '
-                'saved it that way.',
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: Insets.xs),
-              Text(
-                r'Pick one from the book button above a terminal, or from '
-                r'quick open with the $ sigil.',
+                r'Pick one from the book button above a terminal, or $ in quick open.',
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: Insets.md),

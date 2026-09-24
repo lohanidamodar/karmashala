@@ -29,8 +29,7 @@ class CodexAccountsSection extends ConsumerWidget {
       title: SettingsAnchor.codexAccounts.heading,
       child: installations.isEmpty
           ? Text(
-              'No Codex installation identified. Press Discover under '
-              'Environments first.',
+              'No Codex found. Press Discover under Environments.',
               style: theme.textTheme.bodySmall,
             )
           : Column(

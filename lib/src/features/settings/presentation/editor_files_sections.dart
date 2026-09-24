@@ -38,18 +38,13 @@ class EditorSection extends ConsumerWidget {
         children: [
           SettingsSwitchRow(
             label: 'Wrap long lines in the editor',
-            help:
-                'Soft-wrap instead of scrolling sideways. Line numbers stay '
-                'beside the line they number, however many rows it wraps onto.',
+            help: 'Soft-wrap instead of scrolling sideways.',
             value: wrap,
             onChanged: controller.setEditorWordWrap,
           ),
           SettingsRow(
             label: 'Auto save',
-            help:
-                'Write a file tab without being asked. A file changed on disk '
-                'is never overwritten this way, and quitting writes what is '
-                'still waiting instead of asking.',
+            help: 'A file changed on disk is never overwritten.',
             control: DropdownButtonFormField<EditorAutoSave>(
               initialValue: autoSave,
               isExpanded: true,
@@ -179,10 +174,7 @@ class FileBrowsingSection extends ConsumerWidget {
           const SizedBox(height: Insets.sm),
           SettingsSwitchRow(
             label: 'Show hidden files',
-            help:
-                'Dot-files and hidden entries, in every file browser — the '
-                'picker, the SSH browser and a device’s. The same switch sits '
-                'inside each browser.',
+            help: 'Dot-files and hidden entries, in every file browser.',
             value: hidden,
             onChanged: controller.setShowHiddenFiles,
           ),

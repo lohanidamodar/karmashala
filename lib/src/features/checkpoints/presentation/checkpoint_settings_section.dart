@@ -22,20 +22,13 @@ class CheckpointSettingsSection extends ConsumerWidget {
         children: [
           SettingsSwitchRow(
             label: 'Automatic checkpoints',
-            help:
-                'Every turn: a snapshot of each repository an agent works in '
-                'as its turn starts and as it ends, for every agent. Restoring '
-                'one puts files back; the agent’s conversation is not '
-                'rewound. Off: only Capture now and checkpoint_capture.',
+            help: 'Snapshot at every turn. Restoring puts back files only.',
             value: settings.automatic,
             onChanged: controller.setAutomatic,
           ),
           SettingsRow(
             label: 'Keep per repository',
-            help:
-                'The newest checkpoints a session keeps of each repository. '
-                'Older ones are dropped and their git objects become '
-                'collectable.',
+            help: 'Older checkpoints are dropped.',
             control: DropdownButtonFormField<int?>(
               initialValue:
                   kCheckpointRetentionChoices.contains(

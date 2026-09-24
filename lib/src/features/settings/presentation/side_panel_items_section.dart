@@ -37,9 +37,7 @@ class SidePanelItemsSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Which tools keep a glyph on the rail. A hidden one still opens '
-            'from the View menu, quick open and its shortcut, and shows its '
-            'glyph while it is open. Right-click the rail for the same list.',
+            'Which tools keep a glyph on the rail.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.xs),
@@ -55,10 +53,7 @@ class SidePanelItemsSection extends ConsumerWidget {
           const SizedBox(height: Insets.sm),
           SettingsSwitchRow(
             label: 'Project details in the Explorer',
-            help:
-                'A second line under each project: its folder, its branch, '
-                'and what is running or waiting for you. Turn off for '
-                'one-line rows, with the same facts in tooltips.',
+            help: 'A second line with folder, branch and state.',
             value: ref.watch(
               settingsControllerProvider.select(
                 (s) => s.explorerProjectDetails,

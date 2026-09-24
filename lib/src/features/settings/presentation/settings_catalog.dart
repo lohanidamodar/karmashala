@@ -38,8 +38,7 @@ enum SettingsSectionId {
     'Appearance',
     AppIcons.circleHalf,
     SettingsGroup.general,
-    'Theme, text size and density for the whole app, and what the side '
-        'panel’s rail shows.',
+    'Theme, text size, density and the side panel rail.',
   ),
   editorFiles(
     'Editor & files',
@@ -51,8 +50,7 @@ enum SettingsSectionId {
     'Terminal',
     AppIcons.terminal,
     SettingsGroup.workspace,
-    'The shell new terminals open with, how they look, and which keys they '
-        'keep.',
+    'Default shell, look, and which keys terminals keep.',
   ),
   projects(
     'Projects',
@@ -66,8 +64,7 @@ enum SettingsSectionId {
     'Devices',
     AppIcons.deviceMobile,
     SettingsGroup.workspace,
-    'What Android emulators and iOS simulators start with, and what is '
-        'switched off inside them.',
+    'How Android emulators and iOS simulators start.',
   ),
   snippets(
     'Snippets',
@@ -79,27 +76,25 @@ enum SettingsSectionId {
     'Variables & secrets',
     AppIcons.clipboardText,
     SettingsGroup.workspace,
-    'Environment variables every terminal Karmashala opens starts with.',
+    'Variables every new terminal starts with.',
   ),
   agents(
     'Agents',
     AppIcons.robot,
     SettingsGroup.agents,
-    'Which agent and model a new session starts with, and where each CLI '
-        'lives.',
+    'Default agent and model, and where each CLI lives.',
   ),
   accounts(
     'Accounts & usage',
     AppIcons.userCircle,
     SettingsGroup.agents,
-    'Who each agent is signed in as, and how much of its limit is left.',
+    'Who each agent is signed in as, and how much limit is left.',
   ),
   permissions(
     'Permissions',
     AppIcons.handTap,
     SettingsGroup.agents,
-    'What each agent may do without asking, and what each project lets it '
-        'do in the browser.',
+    'What agents may do without asking, and in the browser.',
   ),
   // An automation is an agent, a prompt and a permission mode armed in
   // advance, so it follows the permissions it runs under.
@@ -113,15 +108,13 @@ enum SettingsSectionId {
     'Tools',
     AppIcons.code,
     SettingsGroup.agents,
-    'The MCP bridge an agent reaches Karmashala through, what it can call, '
-        'and the skills written into it.',
+    'The MCP bridge, its tools, and installed skills.',
   ),
   environments(
     'Environments',
     AppIcons.terminalWindow,
     SettingsGroup.connections,
-    'The machines work runs on — this computer, WSL, SSH hosts — and their '
-        'tooling.',
+    'This computer, WSL and SSH hosts, and their tooling.',
   ),
   remote(
     'Remote access',

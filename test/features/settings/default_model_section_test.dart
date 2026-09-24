@@ -90,11 +90,7 @@ void main() {
     // which is exactly the misunderstanding this card has to head off: a
     // session that picked a model keeps it when this moves.
     expect(
-      find.textContaining('have not chosen one of their own').first,
-      findsOneWidget,
-    );
-    expect(
-      find.textContaining('even after this changes').first,
+      find.textContaining('a model picked on a session keeps it').first,
       findsOneWidget,
     );
   });

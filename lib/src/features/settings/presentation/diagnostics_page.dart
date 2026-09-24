@@ -37,18 +37,13 @@ class DebugModeSection extends ConsumerWidget {
         children: [
           SettingsSwitchRow(
             label: 'Debug mode',
-            help:
-                'Records fine-grained detail and adds a Logs panel to the '
-                'side rail. Detail starts from when you turn it on; '
-                'warnings and errors are always recorded.',
+            help: 'Records extra detail and adds a Logs panel.',
             value: settings.debugMode,
             onChanged: controller.setDebugMode,
           ),
           SettingsRow(
             label: 'Lines kept in memory',
-            help:
-                'The tail the Logs panel shows. Older lines are dropped as '
-                'new ones arrive.',
+            help: 'How many recent lines the Logs panel keeps.',
             control: DropdownButtonFormField<int>(
               initialValue: _bufferSizes.contains(settings.logBufferSize)
                   ? settings.logBufferSize
@@ -87,9 +82,7 @@ class LogFileSection extends ConsumerWidget {
           SettingsSwitchRow(
             label: 'Write a log file',
             help:
-                'Survives a crash and a restart — the thing to attach to a '
-                'bug report. Tokens, keys and your user name are removed '
-                'before anything is written.',
+                'For bug reports. Tokens, keys and your user name are removed.',
             value: settings.logToFile,
             onChanged: controller.setLogToFile,
           ),
@@ -157,10 +150,7 @@ class ScrollbackPersistenceSection extends ConsumerWidget {
         children: [
           SettingsRow(
             label: 'Panes owing a write',
-            help:
-                'Counted against the panes that have a process behind them. A '
-                'number that rises and falls is the autosave doing its job; one '
-                'that does not fall is work not being written.',
+            help: 'A number that never falls is work not being written.',
             control: Text(
               '${telemetry.dirtyPanes} of ${telemetry.livePanes}',
               style: MonoStyles.body,
@@ -178,10 +168,7 @@ class ScrollbackPersistenceSection extends ConsumerWidget {
           ),
           SettingsRow(
             label: 'Last write',
-            help:
-                'Fewer panes than were owed means the pass hit its 8 ms budget '
-                'and will carry on next tick — by design, and worth watching if '
-                'it keeps happening.',
+            help: 'Fewer than owed means the pass hit its 8 ms budget.',
             control: Text(
               write == null
                   ? 'not recorded'
@@ -216,12 +203,7 @@ class MemoryFootprintSection extends ConsumerWidget {
         children: [
           SettingsRow(
             label: 'Resident memory',
-            help:
-                'The whole process, not this app\'s Dart objects alone — the '
-                'terminal\'s consoles, SQLite and the graphics driver are in '
-                'here too, and nothing in a release build can separate them. '
-                'The peak never falls, so a resident size well under it is '
-                'memory that was released.',
+            help: 'The whole process, not only this app\'s Dart objects.',
             control: Text(
               '${_mib(census.residentBytes)} · peak '
               '${_mib(census.peakResidentBytes)}',
@@ -230,9 +212,7 @@ class MemoryFootprintSection extends ConsumerWidget {
           ),
           SettingsRow(
             label: 'Terminal panes',
-            help:
-                'Unparsed panes were restored and never opened, so they hold '
-                'their history as text rather than as rows.',
+            help: 'Unparsed panes hold their history as text.',
             control: Text(
               '${census.panes} (${census.detachedPanes} detached, '
               '${census.unparsedPanes} unparsed)',
@@ -241,10 +221,7 @@ class MemoryFootprintSection extends ConsumerWidget {
           ),
           SettingsRow(
             label: 'Scrollback held',
-            help:
-                'Rows across every parsed buffer, and the history held as '
-                'text beside them. These are what grow with use rather than '
-                'with the number of panes.',
+            help: 'Parsed rows, and history held as text.',
             control: Text(
               '${census.scrollbackRows} rows · '
               '${census.heldScrollbackChars} chars',
@@ -253,9 +230,7 @@ class MemoryFootprintSection extends ConsumerWidget {
           ),
           SettingsRow(
             label: 'Sessions watched',
-            help:
-                'Sessions the status registry holds a status for, and log '
-                'records in the in-memory ring.',
+            help: 'Sessions with a status, and log lines in memory.',
             control: Text(
               '${census.watchedSessions} · ${census.logLinesHeld} log lines',
               style: MonoStyles.body,

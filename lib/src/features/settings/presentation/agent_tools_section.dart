@@ -21,9 +21,7 @@ class AgentToolsSection extends StatelessWidget {
         children: [
           Text(
             '${kMcpToolListings.length} tools, in '
-            '${McpToolCategory.values.length} families. An agent that reaches '
-            'the bridge above can call all of them; open a family to see what '
-            'each one does.',
+            '${McpToolCategory.values.length} families.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.xs),

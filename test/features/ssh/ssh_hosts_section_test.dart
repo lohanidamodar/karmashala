@@ -71,7 +71,7 @@ void main() {
   testWidgets('says what it stores when there is nothing yet', (tester) async {
     await pump(tester);
     expect(find.textContaining('No remote hosts yet'), findsOneWidget);
-    expect(find.textContaining('passphrases never are'), findsOneWidget);
+    expect(find.textContaining('passphrases are never saved'), findsOneWidget);
   });
 
   testWidgets('adding a host creates it and its execution environment', (

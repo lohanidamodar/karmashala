@@ -27,19 +27,7 @@ class ProjectChecksSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Nobody is watching an automation run, so what it did has to be '
-            'checkable without you. A checkout with verification off, or with '
-            'no check at all, cannot have an automation armed in it — this is '
-            'the single rule that makes running an agent while you are away '
-            'defensible.',
-            style: theme.textTheme.bodySmall,
-          ),
-          const SizedBox(height: Insets.xs),
-          Text(
-            'A check is the command you would run to see whether the work '
-            'still stands. It is stored as arguments, split once, here — so no '
-            'second parser gets between what you typed and the shell that '
-            'reads it.',
+            'Automations need verification on and at least one check.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.md),

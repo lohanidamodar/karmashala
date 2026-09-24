@@ -59,17 +59,7 @@ class WorktreeSetupPage extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'A fresh worktree holds only what git tracks. This is what to '
-                'put back: gitignored paths copied in, and a command run in '
-                'its own pane — in the checkout\'s own environment, so a WSL '
-                'checkout runs it inside the distribution and an SSH one on '
-                'that host.',
-                style: theme.textTheme.bodySmall,
-              ),
-              const SizedBox(height: Insets.xs),
-              Text(
-                'The worktree is created whether or not any of it works: a '
-                'setup that failed is reported here, not rolled back.',
+                'Ignored files to copy into a new worktree, and a command to run.',
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: Insets.md),

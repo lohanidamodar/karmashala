@@ -90,9 +90,7 @@ class _ModelCard extends StatelessWidget {
           // Says which way the precedence runs, exactly as the permission
           // card does: this is where a session starts **until it chooses**.
           Text(
-            'The model new sessions start on, for sessions that have not '
-            'chosen one of their own. A model picked on a session keeps that '
-            'session, even after this changes.',
+            'Defaults only: a model picked on a session keeps it.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

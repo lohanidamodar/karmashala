@@ -27,9 +27,7 @@ enum ExternalAppKind {
     pathLabel: 'Terminal executable path',
     program: 'terminal',
     aProgram: 'a terminal',
-    note:
-        'The session\'s agent runs in this app (cwd set to the repo); flags '
-        'vary by terminal, so it is best-effort.',
+    note: 'Best effort: flags vary by terminal.',
   ),
 
   /// The editor "open in editor" hands a folder to.
@@ -39,9 +37,7 @@ enum ExternalAppKind {
     pathLabel: 'Editor executable path',
     program: 'editor',
     aProgram: 'an editor',
-    note:
-        'The editor opens with the folder path as its argument '
-        '(e.g. `editor.exe <folder>`).',
+    note: 'Opens with the folder path as its argument.',
   );
 
   const ExternalAppKind({

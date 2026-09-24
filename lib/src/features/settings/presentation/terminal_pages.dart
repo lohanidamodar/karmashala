@@ -54,12 +54,7 @@ class DefaultTerminalSection extends ConsumerWidget {
           ),
           SettingsSwitchRow(
             label: 'Resume running panes on launch',
-            help:
-                'Panes that had something running when the app last '
-                'closed start again, in the tab that was in front. Other '
-                'tabs, and any pane running an agent CLI, come back as '
-                'history with a Start button — starting an agent would '
-                're-run its conversation unasked.',
+            help: 'Restart what was running. Agent panes wait for Start.',
             value: settings.restoreLivePanes,
             onChanged: controller.setRestoreLivePanes,
           ),
@@ -85,25 +80,14 @@ class TerminalAdvancedSection extends ConsumerWidget {
         children: [
           SettingsSwitchRow(
             label: 'Shell integration',
-            help:
-                'Mark where each command starts and ends, so the '
-                'terminal can show exit codes and durations and jump '
-                'between commands. PowerShell, and bash or zsh in a WSL pane; '
-                'never cmd, which has no hook for a command’s end. Set up at launch — '
-                'your profile is never modified — and applies to new '
-                'terminals.',
+            help: 'Exit codes, durations and command jumps. Not in cmd.',
             value: settings.shellIntegrationEnabled,
             onChanged: controller.setShellIntegrationEnabled,
           ),
           SettingsSwitchRow(
             label: 'Run local terminals in the session host',
             help:
-                'A pane\'s shell is started by karmashala_host instead of '
-                'by this app, so it survives a crash or a restart and '
-                'reopening the pane resumes it where it left off. Applies '
-                'to new terminals. Shell integration works here as it does '
-                'in any other pane; a pane that resumes a session keeps the '
-                'integration it was started with.',
+                'Shells survive a crash or restart. Applies to new terminals.',
             value: settings.hostBackedLocalPanes,
             onChanged: controller.setHostBackedLocalPanes,
           ),
@@ -130,9 +114,7 @@ class TerminalFontSection extends ConsumerWidget {
       title: SettingsAnchor.terminalFont.heading,
       child: SettingsRow(
         label: 'Terminal font size',
-        help:
-            'In a focused terminal: Ctrl+= larger, Ctrl+- smaller, '
-            'Ctrl+0 back to default.',
+        help: 'Ctrl+= larger, Ctrl+- smaller, Ctrl+0 default.',
         controlMaxWidth: 220,
         control: Row(
           mainAxisSize: MainAxisSize.min,
@@ -292,10 +274,7 @@ class TerminalChordsSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'A focused terminal pane sees every key first. These chords are '
-            'taken back for the app; switch one off and it reaches the shell '
-            'instead. Chords with Shift are never in question — a terminal '
-            'cannot encode them.',
+            'Shortcuts a focused terminal gives back to the app.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: Insets.sm),

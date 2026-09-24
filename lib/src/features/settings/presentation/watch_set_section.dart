@@ -31,20 +31,13 @@ class WatchSetSection extends ConsumerWidget {
     return SettingsSection(
       title: SettingsAnchor.sessionWatching.heading,
       child: coverage == null
-          ? Text(
-              'Nothing measured yet. The status watcher starts with the app '
-              'and reports here after its first pass.',
-              style: theme.textTheme.bodySmall,
-            )
+          ? Text('Nothing measured yet.', style: theme.textTheme.bodySmall)
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SettingsRow(
                   label: 'Sessions watched',
-                  help:
-                      'Every session Karmashala holds a status for. Nothing '
-                      'is capped by list position, so a number below the '
-                      'sessions you can see is a bug worth reporting.',
+                  help: 'Fewer than you can see is a bug worth reporting.',
                   control: _Value('${coverage.tracked}'),
                 ),
                 SettingsRow(
@@ -56,10 +49,7 @@ class WatchSetSection extends ConsumerWidget {
                 ),
                 SettingsRow(
                   label: 'Slowest status refresh',
-                  help:
-                      'The longest a session with no hook installed waits for '
-                      'its transcript to be read again. Hook-backed sessions '
-                      'never wait for it.',
+                  help: 'Only sessions without a hook wait this long.',
                   control: _Value(_rotation(coverage.rotationPeriod)),
                 ),
                 if (coverage.isBehind)

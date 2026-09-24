@@ -38,9 +38,7 @@ class SshHostsSection extends ConsumerWidget {
       ),
       child: hosts.isEmpty
           ? Text(
-              'No remote hosts yet. Add one to run agents on another machine — '
-              'its address, account and key location are saved; passwords and '
-              'passphrases never are.',
+              'No remote hosts yet. Passwords and passphrases are never saved.',
               style: theme.textTheme.bodySmall,
             )
           : Column(children: [for (final host in hosts) _HostCard(host: host)]),
