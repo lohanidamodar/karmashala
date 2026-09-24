@@ -333,3 +333,79 @@ ReviewCarry carryReviewPermission({
     sessionRisk: sessionRisk,
   );
 }
+
+/// The most a session an **agent** started may hold, whatever its caller holds.
+///
+/// [PermissionRisk.autoRun] because it is the highest rung where something
+/// other than the user still screens what runs, and a spawned child is by
+/// definition not the session the user is watching. docs/spawn-approval.md.
+const PermissionRisk spawnPermissionCeiling = PermissionRisk.autoRun;
+
+/// What a session an agent asked for may launch under: the least of what was
+/// asked for, what the asking session itself holds, and
+/// [spawnPermissionCeiling].
+class SpawnCarry {
+  const SpawnCarry({
+    required this.requested,
+    required this.callerRisk,
+    required this.carried,
+  });
+
+  /// What the agent asked for, unreduced, so the answer can say what it cut.
+  final PermissionRisk requested;
+
+  /// What the asking session runs under — or, where that cannot be
+  /// established, the Settings default for a new session.
+  final PermissionRisk callerRisk;
+
+  /// The ordinary carry, run against the capped request.
+  final CarriedPermission carried;
+
+  PermissionRisk get ceiling => callerRisk.lesser(spawnPermissionCeiling);
+
+  PermissionSelection get selection => carried.selection;
+
+  bool get wasCapped => !requested.isAtMost(ceiling);
+
+  /// Whether the caller's own rung, rather than the ceiling, bound the result.
+  bool get boundByCaller => !spawnPermissionCeiling.isAtMost(callerRisk);
+
+  /// Which term bound the result, as a clause.
+  String get reason => boundByCaller
+      ? 'the session asking runs at ${callerRisk.label.toLowerCase()}, and a '
+            'session an agent starts holds no more than its caller'
+      : 'a session an agent starts is capped at '
+            '${spawnPermissionCeiling.label.toLowerCase()}, the highest rung '
+            'where something still screens what runs';
+
+  /// Why [requested] was more than this launch may have, and the one act that
+  /// grants more.
+  String get refusal =>
+      'Cannot start a session at ${requested.label.toLowerCase()}: $reason. '
+      'Ask for "${ceiling.name}" or less, or ask the user to raise the new '
+      "session's mode from its permission chip.";
+}
+
+/// The permission for a launch an agent asked for. The cap is applied to the
+/// request **first**, then [carryPermission] fits it onto [target] — the order
+/// [carryReviewPermission] documents.
+///
+/// Kept out of [carryPermission] itself because that also serves the
+/// Continue-with dialog, where a human picks, and a human's pick is not capped.
+SpawnCarry carrySpawnPermission({
+  required PermissionRisk requested,
+  required PermissionRisk callerRisk,
+  required AgentDescriptor? target,
+  String? targetName,
+}) {
+  final ceiling = callerRisk.lesser(spawnPermissionCeiling);
+  return SpawnCarry(
+    requested: requested,
+    callerRisk: callerRisk,
+    carried: carryPermission(
+      requested.lesser(ceiling),
+      target,
+      targetName: targetName,
+    ),
+  );
+}

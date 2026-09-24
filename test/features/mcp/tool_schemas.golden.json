@@ -502,7 +502,7 @@
               "autoRun",
               "bypass"
             ],
-            "description": "How much the new agent may do without asking, on the scale every agent shares. The chosen agent is given the closest mode it really has, never one it does not — Codex, for instance, has nothing at \"ask\". Omit to use the mode configured in Settings, which is what the New-session dialog does. \"bypass\" skips every prompt and is never a default; ask the user before choosing it for them."
+            "description": "How much the new agent may do without asking, on the scale every agent shares. The chosen agent is given the closest mode it really has, never one it does not — Codex, for instance, has nothing at \"ask\". Omit to use the mode configured in Settings, which is what the New-session dialog does. A session you start holds no more than the least of your own mode and \"autoRun\"; a mode above that is refused, and only the user can raise it, from the new session's permission chip."
           }
         },
         "required": [

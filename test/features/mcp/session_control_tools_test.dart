@@ -936,6 +936,38 @@ void main() {
       });
       expect(result.text, isNot(contains('Unknown permissionMode')));
     });
+
+    // docs/spawn-approval.md: the mode is the model's string, so without a cap
+    // any session could start a bypass child with one call.
+    test('a bypass caller is refused a bypass child', () async {
+      SessionDao(db).updatePermissionMode('s1', 'mode=bypassPermissions');
+      final result = await callTool('open_new_session', {
+        'projectId': 'p1',
+        'permissionMode': 'bypass',
+      }, 's1');
+      expect(result.isError, isTrue);
+      expect(result.text, contains('capped at automatic'));
+    });
+
+    test('a plan-mode caller is refused a child that writes', () async {
+      SessionDao(db).updatePermissionMode('s1', 'mode=plan');
+      final result = await callTool('open_new_session', {
+        'projectId': 'p1',
+        'permissionMode': 'acceptEdits',
+      }, 's1');
+      expect(result.isError, isTrue);
+      expect(result.text, contains('runs at read-only'));
+    });
+
+    test('an exact mode above the cap is refused too', () async {
+      SessionDao(db).updatePermissionMode('s1', 'mode=bypassPermissions');
+      final result = await callTool('open_new_session', {
+        'projectId': 'p1',
+        'permissionMode': 'mode=bypassPermissions',
+      }, 's1');
+      expect(result.isError, isTrue);
+      expect(result.text, contains('Cannot start a session at bypass'));
+    });
   });
 
   group('open_session on an imported CLI session', () {

@@ -97,30 +97,92 @@ class SessionLaunchTools {
         _ => throw ArgumentError('Unknown tool: $name'),
       };
 
-  /// The permission a caller named, as a [PermissionRisk] rung because a fixed
-  /// schema cannot name one agent's vocabulary. An unknown name is refused.
-  PermissionSelection? _parsePermissionMode(String? raw, String agentId) {
-    if (raw == null || raw.trim().isEmpty) return null;
-    final wanted = raw.trim();
-    final descriptor = _container.read(agentRegistryProvider).byId(agentId);
+  /// The mode a session an agent asked for launches under: the least of what
+  /// it named (or the Settings default), what the calling session holds, and
+  /// [spawnPermissionCeiling]. A named mode above that is refused rather than
+  /// quietly lowered, so the caller does not plan around a mode it lacks; an
+  /// omitted one is lowered and [capped] says so.
+  ({PermissionSelection? selection, String? capped}) _spawnPermission(
+    String? raw,
+    String agentId,
+  ) {
+    final registry = _container.read(agentRegistryProvider);
+    final descriptor = registry.byId(agentId);
     final support = descriptor?.launch.permission;
+    final wanted = raw?.trim() ?? '';
     final risk = PermissionRisk.byName(wanted);
+    if (support == null || !support.isKnown) {
+      // Nothing can be passed to an agent with no declared modes; the name is
+      // still checked so a typo is not silently accepted.
+      if (wanted.isEmpty || risk != null) {
+        return (selection: null, capped: null);
+      }
+      throw _unknownMode(raw!, support);
+    }
+
+    final launcher = _container.read(sessionLauncherProvider);
+    final defaultRisk =
+        support.riskOf(
+          launcher.permissionFor(agentId, SessionPurpose.newSession),
+        ) ??
+        PermissionRisk.ask;
+    final callerRisk = _callerRisk() ?? defaultRisk;
+
+    SpawnCarry carry(PermissionRisk requested) => carrySpawnPermission(
+      requested: requested,
+      callerRisk: callerRisk,
+      target: descriptor,
+    );
+
+    if (wanted.isEmpty) {
+      final capped = carry(defaultRisk);
+      if (!capped.wasCapped) return (selection: null, capped: null);
+      return (
+        selection: capped.selection,
+        capped:
+            'Started at ${capped.carried.label} rather than the Settings '
+            'default (${defaultRisk.label.toLowerCase()}): ${capped.reason}.',
+      );
+    }
     if (risk != null) {
-      return carryPermission(risk, descriptor).selection;
+      final capped = carry(risk);
+      if (capped.wasCapped) throw ArgumentError(capped.refusal);
+      return (selection: capped.selection, capped: null);
     }
     // An exact mode in this agent's own vocabulary.
-    if (support != null && support.isKnown) {
-      for (final selection in support.selections()) {
-        if (selection.canonical == wanted) return selection;
+    for (final selection in support.selections()) {
+      if (selection.canonical != wanted) continue;
+      final exact = support.riskOf(selection);
+      if (exact != null && carry(exact).wasCapped) {
+        throw ArgumentError(carry(exact).refusal);
       }
+      return (selection: selection, capped: null);
     }
-    throw ArgumentError(
-      'Unknown permissionMode "$raw" for $agentId. One of: '
-      '${PermissionRisk.values.map((m) => m.name).join(', ')}'
-      '${support != null && support.isKnown ? ', or one of '
-                '${support.selections().map((s) => s.canonical).join(', ')}' : ''}.',
-    );
+    throw _unknownMode(raw!, support);
   }
+
+  /// How permissive the calling session is, or null when there is no caller or
+  /// its rung cannot be established — which reads as the Settings default,
+  /// never as unbounded.
+  PermissionRisk? _callerRisk() {
+    final id = callerSessionId;
+    if (id == null) return null;
+    final effective = _container
+        .read(sessionLauncherProvider)
+        .effectivePermissionFor(id);
+    if (effective == null || effective.unrecognised) return null;
+    return effective.descriptor?.launch.permission.riskOf(effective.selection);
+  }
+
+  ArgumentError _unknownMode(
+    String raw,
+    AgentPermissionSupport? support,
+  ) => ArgumentError(
+    'Unknown permissionMode "$raw". One of: '
+    '${PermissionRisk.values.map((m) => m.name).join(', ')}'
+    '${support != null && support.isKnown ? ', or one of '
+              '${support.selections().map((s) => s.canonical).join(', ')}' : ''}.',
+  );
 
   Future<Object?> _openNewSession({
     String? projectId,
@@ -195,6 +257,8 @@ class SessionLaunchTools {
           installs.first;
     }
 
+    final permission = _spawnPermission(permissionMode, install.agentId);
+
     // Through the one launcher, exactly as the New-session dialog is, so an
     // agent's session is an ordinary row; the spawn-depth cap applies here.
     final launcher = _container.read(sessionLauncherProvider);
@@ -210,10 +274,7 @@ class SessionLaunchTools {
           useWorktree: useWorktree,
           firstMessage: prompt,
           parentSessionId: callerSessionId,
-          permissionOverride: _parsePermissionMode(
-            permissionMode,
-            install.agentId,
-          ),
+          permissionOverride: permission.selection,
         ),
       );
       return {
@@ -224,6 +285,7 @@ class SessionLaunchTools {
         'environmentId': repo.path.environmentId,
         'depth': launcher.depthForChildOf(callerSessionId).depth,
         'permissionMode': launched.session.permissionMode ?? 'not recorded',
+        if (permission.capped != null) 'permissionCapped': permission.capped,
         if (launched.session.worktree != null)
           'worktree': launched.session.worktree!.path,
       };
@@ -750,8 +812,9 @@ const List<Map<String, dynamic>> sessionLaunchToolSchemas = [
               'mode it really has, never one it does not — Codex, for '
               'instance, has nothing at "ask". Omit to use the mode '
               'configured in Settings, which is what the New-session dialog '
-              'does. "bypass" skips every prompt and is never a default; ask '
-              'the user before choosing it for them.',
+              'does. A session you start holds no more than the least of your '
+              'own mode and "autoRun"; a mode above that is refused, and only '
+              'the user can raise it, from the new session\'s permission chip.',
         },
       },
       'required': ['projectId'],
