@@ -91,4 +91,41 @@ void main() {
     },
     timeout: const Timeout(Duration(seconds: 60)),
   );
+
+  test(
+    'the child owns its pty, so a resize reaches it as SIGWINCH',
+    () async {
+      // A session leader acquires its controlling terminal on open on Linux;
+      // macOS needs TIOCSCTTY. Without one the kernel has no foreground group
+      // to signal: on 2026-09-24 Claude Code in a host pane never heard of any
+      // resize, kept its old size, and drew at the stale width (`ps` showed no
+      // tty for it).
+      final pty = PosixPtyLauncher().start(
+        const PtySpawnRequest(
+          argv: [
+            '/bin/sh',
+            '-c',
+            r'trap "echo winched" WINCH; echo ready; '
+                r'for i in 1 2 3 4 5 6 7 8 9 10; do sleep 0.2; done',
+          ],
+        ),
+      );
+      final said = StringBuffer();
+      pty.output.listen((bytes) => said.write(String.fromCharCodes(bytes)));
+      while (!said.toString().contains('ready')) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+
+      pty.resize(100, 30);
+      final deadline = DateTime.now().add(const Duration(seconds: 3));
+      while (!said.toString().contains('winched') &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(said.toString(), contains('winched'));
+      pty.kill(9);
+      await pty.close();
+    },
+    timeout: const Timeout(Duration(seconds: 30)),
+  );
 }

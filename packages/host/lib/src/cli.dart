@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'host_version.dart';
 import 'protocol/messages.dart';
+import 'pty/pty_exec.dart';
 import 'pty/pty_probe.dart';
 import 'relay/relay_command.dart';
 import 'serve/attach_command.dart';
@@ -46,6 +47,9 @@ Future<int> runHostCli(List<String> args, {IOSink? out, IOSink? err}) async {
       return runPtyProbe(out: sink);
     case 'probe-store':
       return runStoreProbe(out: sink);
+    case 'pty-exec':
+      // Not in the usage: the host starts it, nobody else has a reason to.
+      return runPtyExec(args.skip(1).toList());
     case 'version':
       // Both numbers, because the deployer compares them separately: a host
       // can be new enough to run and still speak a protocol the app does not.

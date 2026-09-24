@@ -42,9 +42,25 @@ Map<String, String> childEnvironment(
 /// child returns into Dart after a fork in a multithreaded VM, where a malloc
 /// lock held by another thread hangs it forever, intermittently.
 class PosixPtyLauncher implements PtyLauncher {
-  PosixPtyLauncher({Libc? libc}) : _libc = libc ?? Libc.open();
+  PosixPtyLauncher({Libc? libc, String? ptyExecShim})
+    : _libc = libc ?? Libc.open(),
+      _shim = ptyExecShim ?? defaultPtyExecShim();
 
   final Libc _libc;
+
+  /// The host binary, run as `pty-exec` in front of every child on macOS so
+  /// the child gets its controlling terminal (see `runPtyExec`). Null where
+  /// the terminal is taken on open, or when this is not the host binary.
+  final String? _shim;
+
+  /// This executable when it is the host on macOS; null anywhere else,
+  /// including a test run under `dart`, which cannot be the shim.
+  static String? defaultPtyExecShim() {
+    if (!Platform.isMacOS) return null;
+    final self = Platform.resolvedExecutable;
+    final name = self.split('/').last;
+    return name.startsWith('karmashala_host') ? self : null;
+  }
 
   /// Which library carried `openpty`, for the host's own `hello`.
   String get ptyLibrary => _libc.ptySymbolLibrary;
@@ -133,11 +149,16 @@ class PosixPtyLauncher implements PtyLauncher {
         _check(addChdir(actions, cString(arena, cwd)), 'addchdir($cwd)');
       }
 
-      final argv = arena<Pointer<Uint8>>(request.argv.length + 1);
-      for (var i = 0; i < request.argv.length; i++) {
-        argv[i] = cString(arena, request.argv[i]);
+      final shim = _shim;
+      final command = [
+        if (shim != null) ...[shim, 'pty-exec', '--'],
+        ...request.argv,
+      ];
+      final argv = arena<Pointer<Uint8>>(command.length + 1);
+      for (var i = 0; i < command.length; i++) {
+        argv[i] = cString(arena, command[i]);
       }
-      argv[request.argv.length] = nullptr;
+      argv[command.length] = nullptr;
 
       final entries = childEnvironment(
         request.environment,
@@ -154,7 +175,7 @@ class PosixPtyLauncher implements PtyLauncher {
       // argv[0] on PATH only as posix_spawnp; the path is taken as given.
       final rc = _libc.posixSpawn(
         pidOut,
-        cString(arena, request.argv.first),
+        cString(arena, command.first),
         actions,
         attr,
         argv,

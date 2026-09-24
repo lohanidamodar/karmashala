@@ -58,7 +58,11 @@ Future<String> _buildHost() async {
 /// a host a person is using. Started rather than slept for: [start] waits on the
 /// line the daemon prints, and quotes it if the daemon exits instead.
 class LocalHost {
-  LocalHost._(this.process, this.paths, this.greeting);
+  LocalHost._(this.process, this.paths, this.greeting, {this.detached = false});
+
+  /// Started the way the app starts it — detached, in a session with no
+  /// terminal — rather than as this test's child.
+  final bool detached;
 
   final Process process;
   final HostPaths paths;
@@ -68,7 +72,10 @@ class LocalHost {
 
   String get socketPath => paths.socketPath;
 
-  static Future<LocalHost> start(Directory home) async {
+  static Future<LocalHost> start(
+    Directory home, {
+    bool detached = false,
+  }) async {
     final process = await Process.start(
       await _host,
       // Port 0: several test hosts run at once and the real default is a fixed
@@ -76,6 +83,9 @@ class LocalHost {
       ['serve', '--companion-port=0'],
       environment: {'USERPROFILE': home.path, 'HOME': home.path},
       workingDirectory: Directory.current.path,
+      mode: detached
+          ? ProcessStartMode.detachedWithStdio
+          : ProcessStartMode.normal,
     );
     final ready = Completer<String>();
     final said = StringBuffer();
@@ -86,18 +96,24 @@ class LocalHost {
       }
     });
     process.stderr.transform(utf8.decoder).listen(said.write);
-    unawaited(
-      process.exitCode.then((code) {
-        if (!ready.isCompleted) {
-          ready.completeError(StateError('serve exited $code saying:\n$said'));
-        }
-      }),
-    );
+    // A detached process has no exit code to wait on.
+    if (!detached) {
+      unawaited(
+        process.exitCode.then((code) {
+          if (!ready.isCompleted) {
+            ready.completeError(
+              StateError('serve exited $code saying:\n$said'),
+            );
+          }
+        }),
+      );
+    }
     final greeting = await ready.future.timeout(const Duration(seconds: 90));
     return LocalHost._(
       process,
       HostPaths(Directory('${home.path}/.karmashala')),
       greeting,
+      detached: detached,
     );
   }
 
@@ -105,6 +121,7 @@ class LocalHost {
   /// held is left recorded as running.
   Future<void> kill() async {
     process.kill(ProcessSignal.sigkill);
+    if (detached) return;
     await process.exitCode.timeout(
       const Duration(seconds: 20),
       onTimeout: () => -1,

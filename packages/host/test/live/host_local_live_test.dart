@@ -140,4 +140,54 @@ void main() {
       await owner.expect<ClosedMessage>();
     },
   );
+
+  Future<void> ownsItsTerminal(LocalHost host) async {
+    // 2026-09-24: `ps` showed no controlling tty for any child of the
+    // installed host, and Claude Code in its panes never heard of a
+    // resize. The in-process launcher gave its child one, so only the real
+    // `serve` can answer this.
+    final client = await LocalHostClient.connect(host.socketPath, 'pane-w');
+    addTearDown(client.close);
+    await client.expect<WelcomeMessage>();
+    client.send(
+      OpenMessage(
+        requestId: client.nextId(),
+        sessionId: 'local-winch',
+        // An interactive zsh, as a pane runs: `/bin/sh` happened to keep its
+        // terminal and hid the bug, zsh and Claude Code did not.
+        argv: const [
+          '/bin/zsh',
+          '-f',
+          '-i',
+          '-c',
+          r'TRAPWINCH() { echo winched }; echo "ctty=$(ps -o tty= -p $$)"; '
+              r'echo ready; for i in 1 2 3 4 5 6 7 8 9 10; do sleep 0.3; done',
+        ],
+        environment: const {'TERM': 'xterm-256color'},
+        columns: 80,
+        rows: 24,
+      ),
+    );
+    final attached = await client.expect<AttachedMessage>();
+    expect(await client.output('ready'), isTrue, reason: client.tail(400));
+    expect(client.tail(400), isNot(contains('ctty=??')));
+
+    client.send(ResizeMessage(attached.sessionRef, 100, 30));
+    expect(await client.output('winched'), isTrue, reason: client.tail(400));
+  }
+
+  test(
+    'a session owns its terminal in the real host, so a resize reaches it',
+    () => ownsItsTerminal(host),
+    testOn: '!windows',
+  );
+
+  test('and in one started detached, as the app starts it', () async {
+    final detached = await LocalHost.start(
+      temporaryHome('karmashala-host-detached'),
+      detached: true,
+    );
+    addTearDown(detached.kill);
+    await ownsItsTerminal(detached);
+  }, testOn: '!windows');
 }
