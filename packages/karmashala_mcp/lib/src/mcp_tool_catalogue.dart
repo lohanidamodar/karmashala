@@ -378,6 +378,9 @@ kMcpToolAnnotations = <String, McpToolAnnotations>{
   ),
 
   // Verification runs.
+  // Runs the user's own configured commands in panes it opens; each run is a
+  // new record, so not idempotent.
+  'checks_run': McpToolAnnotations(movesAttention: true),
   'verification_list': McpToolAnnotations.read,
   'verification_get': McpToolAnnotations.read,
   // A `url` run connects a browser before it records anything, which lands
@@ -712,6 +715,10 @@ const Map<String, McpToolListing> kMcpToolListings = <String, McpToolListing>{
   ),
 
   // Verification runs.
+  'checks_run': McpToolListing(
+    McpToolCategory.verification,
+    "Run the repository's configured checks and record each exit code.",
+  ),
   'verification_start': McpToolListing(
     McpToolCategory.verification,
     'Begin recording a run against a URL, a device, or a diff.',

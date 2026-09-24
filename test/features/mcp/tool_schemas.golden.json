@@ -461,6 +461,26 @@
       }
     },
     {
+      "name": "checks_run",
+      "description": "Run the project checks the user configured for a session's repository (tests, analyze, lint — whatever they added), in visible panes in the directory that session works in, one after another, and WAIT for them. Each exit code is recorded against the session as Karmashala's own reading, never as your claim, and is readable with verification_get. Use it before saying work is done. A check whose pane is closed by hand, or that could not start, is INCONCLUSIVE, never a pass. Answers NOTHING WAS CHECKED when the repository has none.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string",
+            "description": "Whose checkout to check. Defaults to yours."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "movesAttentionHint": true
+      }
+    },
+    {
       "name": "open_new_session",
       "description": "Start a NEW agent session (not a resume) in a project, as a terminal tab in Karmashala. Choose the agent with agentInstallationId (from list_agents) or cli (\"claude\"/\"codex\"); omit both to use the configured default. repositoryId is optional (defaults to the project's first repository). The agent must be installed in the project's environment. Sessions you start this way are recorded as your children, and nesting is capped: if the call is refused for depth, do the work yourself instead of delegating it further.",
       "inputSchema": {
@@ -4483,6 +4503,10 @@
     "project_update": {
       "category": "workspace",
       "summary": "Rename a project, move its root folder, or set its default checkout."
+    },
+    "checks_run": {
+      "category": "verification",
+      "summary": "Run the repository's configured checks and record each exit code."
     },
     "open_new_session": {
       "category": "sessions",

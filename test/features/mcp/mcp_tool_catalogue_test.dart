@@ -120,6 +120,8 @@ void main() {
       // project_build's "build", which is the worst of that tool's four.
       'flutter_run',
       'project_build',
+      // A pane per configured check, opened in turn like project_build's.
+      'checks_run',
       // Puts the running app into widget-select mode and waits on a person.
       'flutter_pick_widget',
       // Each can end up launching a visible Chrome; `browser_tabs` opens a

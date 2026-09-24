@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:karmashala_core/logging.dart';
 import '../../core/util/clock_provider.dart';
+import '../automations/application/project_check_tools.dart';
 import '../agents/application/agent_hook_intake.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../browser/application/browser_consent_providers.dart';
@@ -960,6 +961,11 @@ class LauncherControlServer implements SessionMcp {
         ).call(name, args);
       case final String name when ProjectBuildTools.handles(name):
         return ProjectBuildTools(_container).call(name, args);
+      case final String name when ProjectCheckTools.handles(name):
+        return ProjectCheckTools(
+          _container,
+          callerSessionId: callerSessionId,
+        ).call(name, args);
       case final String name when VerificationTools.handles(name):
         await resolveVerificationRoot();
         final verification = _container.read(verificationServiceProvider);
@@ -987,6 +993,7 @@ class LauncherControlServer implements SessionMcp {
     ...checkpointControlToolSchemas,
     ...inventoryToolSchemas,
     ...projectControlToolSchemas,
+    ...projectCheckToolSchemas,
     ...sessionLaunchToolSchemas,
     ...fanOutToolSchemas,
     ...sessionHandoffToolSchemas,

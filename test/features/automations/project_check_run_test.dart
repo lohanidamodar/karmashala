@@ -260,4 +260,42 @@ void main() {
     expect(verdict.verificationRunId, isNull);
     expect(container.read(terminalSessionsControllerProvider).tabs, isEmpty);
   });
+
+  /// `checks_run`: the same checks, asked for by a session rather than set off
+  /// by an automation, so "done" can carry an exit code the app saw.
+  group('run on demand for a session', () {
+    test('each exit code is recorded against the session, as the app\'s own '
+        'reading', () async {
+      addCheck('the test suite', const ['flutter', 'test']);
+
+      final running = container
+          .read(automationCheckRunnerProvider)
+          .runForSession('s1');
+      await until(() => tabCount() > 0);
+      container
+          .read(paneExitProvider.notifier)
+          .record(
+            PaneExit(paneId: newestPane(), sessionId: null, exitCode: 1),
+          );
+      final outcomes = await running;
+
+      expect(outcomes.single.verdict, VerificationVerdict.fail);
+      final recorded = VerificationDao(
+        db,
+      ).getRun(outcomes.single.verificationRunId!)!;
+      expect(recorded.sessionId, 's1');
+      // Asked for by the session, but not the session's claim.
+      expect(recorded.producedBySessionId, isNull);
+      // Nothing about an automation run is touched.
+      expect(verdicts(), isEmpty);
+    });
+
+    test('a repository with no checks runs nothing', () async {
+      final outcomes = await container
+          .read(automationCheckRunnerProvider)
+          .runForSession('s1');
+      expect(outcomes, isEmpty);
+      expect(tabCount(), 0);
+    });
+  });
 }

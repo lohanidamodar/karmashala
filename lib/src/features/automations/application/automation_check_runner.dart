@@ -7,6 +7,8 @@ import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_resolver.dart';
 import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
+import '../../sessions/application/session_providers.dart';
+import '../../sessions/application/session_working_directory.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
@@ -108,17 +110,71 @@ class AutomationCheckRunner {
     required EnvironmentResolution resolution,
     required EnvironmentPath? directory,
   }) async {
-    AutomationCheckVerdict refused(String reason) => AutomationCheckVerdict(
+    final outcome = await _runCheck(
+      check: check,
+      resolution: resolution,
+      directory: directory,
+      paneTitle: '${check.name} · ${run.id}',
+      sessionId: run.sessionId,
+    );
+    return AutomationCheckVerdict(
       runId: run.id,
       ordinal: ordinal,
       checkId: check.id,
       name: check.name,
       command: check.command,
+      verdict: outcome.verdict,
+      reason: outcome.reason,
+      verificationRunId: outcome.verificationRunId,
+      // This feature's own clock, not the recorder's: two clocks on one row
+      // read as a disagreement.
+      checkedAt: _now,
+    );
+  }
+
+  /// Runs [sessionId]'s checkout's project checks, one after another in
+  /// visible panes, in the directory its agent works in, and records each
+  /// exit code against the session. Empty when the repository has none.
+  ///
+  /// The app's own reading of the work, never the session's claim about it:
+  /// `producedBySessionId` stays null even when the session asked for it.
+  Future<List<ProjectCheckOutcome>> runForSession(String sessionId) async {
+    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    if (session == null) throw StateError('No session $sessionId.');
+    final checks = _ref
+        .read(projectCheckDaoProvider)
+        .forRepository(session.repositoryId);
+    if (checks.isEmpty) return const [];
+    final directory = sessionWorkingDirectoryOf(_ref, session);
+    final resolution = _ref
+        .read(environmentResolverProvider)
+        .resolveFor(directory);
+    return [
+      for (final check in checks)
+        await _runCheck(
+          check: check,
+          resolution: resolution,
+          directory: directory,
+          paneTitle: '${check.name} · ${session.title}',
+          sessionId: sessionId,
+        ),
+    ];
+  }
+
+  Future<ProjectCheckOutcome> _runCheck({
+    required ProjectCheck check,
+    required EnvironmentResolution resolution,
+    required EnvironmentPath? directory,
+    required String paneTitle,
+    required String? sessionId,
+  }) async {
+    ProjectCheckOutcome refused(String reason) => (
+      check: check,
       // A check that could not be started is never a pass and never a fail:
       // nobody observed the work either way (§19).
       verdict: VerificationVerdict.inconclusive,
       reason: reason,
-      checkedAt: _now,
+      verificationRunId: null,
     );
 
     final commandRefusal = projectCheckCommandRefusal(check.command);
@@ -142,7 +198,7 @@ class AutomationCheckRunner {
           argv: check.command,
           directory: directory,
           environment: environment,
-          title: '${check.name} · ${run.id}',
+          title: paneTitle,
         ),
       );
     } on Object catch (error) {
@@ -171,22 +227,14 @@ class AutomationCheckRunner {
           output: outcome.tail.join('\n'),
           // `producedBySessionId` stays null: this is the app's own reading,
           // not a session's claim about itself.
-          sessionId: run.sessionId,
+          sessionId: sessionId,
         );
-    return AutomationCheckVerdict(
-      runId: run.id,
-      ordinal: ordinal,
-      checkId: check.id,
-      name: check.name,
-      command: check.command,
-      // The recorder's own verdict, so the run row and the verification record
-      // cannot say two different things about one exit code.
+    return (
+      check: check,
+      // The recorder's own verdict, so every reader of this exit code agrees.
       verdict: recorded.verdict ?? VerificationVerdict.inconclusive,
       reason: recorded.reason ?? '',
       verificationRunId: recorded.id,
-      // This feature's own clock, not the recorder's: two clocks on one row
-      // read as a disagreement.
-      checkedAt: _now,
     );
   }
 
@@ -205,6 +253,14 @@ class AutomationCheckRunner {
 
   void _bump() => _ref.read(automationsRevisionProvider.notifier).bump();
 }
+
+/// One project check's verdict, and the verification record it left, if any.
+typedef ProjectCheckOutcome = ({
+  ProjectCheck check,
+  VerificationVerdict verdict,
+  String reason,
+  String? verificationRunId,
+});
 
 /// What a pane left behind when its process stopped.
 typedef _PaneOutcome = ({int? exitCode, List<String> tail});
