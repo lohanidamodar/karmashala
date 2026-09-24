@@ -7,6 +7,7 @@ import 'package:karmashala_ui/tokens.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
 import 'app_shell.dart' show ShellWidth;
+import 'native_menus.dart';
 import 'quick_open/quick_open.dart';
 import 'shell_menus.dart';
 import 'shell_shortcuts.dart';
@@ -44,7 +45,9 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
     required bool compactToolbar,
   }) =>
       width <
-      WidthClass.scaleBreakpoint(_menuTitlesWidth, textScaler) +
+      (useNativeMenus
+              ? 0
+              : WidthClass.scaleBreakpoint(_menuTitlesWidth, textScaler)) +
           _glyphsWidth +
           (compactToolbar ? _compactToolbarWidth : _fullToolbarWidth);
 
@@ -76,8 +79,11 @@ class ShellTitleBar extends StatelessWidget implements PreferredSizeWidget {
               children: [
                 const _ExplorerToggle(),
                 const SizedBox(width: Insets.xs),
-                folded ? const ShellOverflowMenu() : const ShellMenuBar(),
-                const SizedBox(width: Insets.sm),
+                // In the system menu bar on macOS (NativeShellMenus).
+                if (!useNativeMenus) ...[
+                  folded ? const ShellOverflowMenu() : const ShellMenuBar(),
+                  const SizedBox(width: Insets.sm),
+                ],
                 // Expanded, not Flexible-then-Spacer: the field takes its own
                 // width and the toggles are pushed to the far edge by the rest.
                 const Expanded(child: _QuickOpenSlot()),
