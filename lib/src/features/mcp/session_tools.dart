@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:riverpod/riverpod.dart';
 
+import '../../core/util/clock_provider.dart';
 import '../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
 import '../sessions/application/session_actions.dart';
@@ -9,6 +10,7 @@ import '../sessions/application/session_launcher.dart';
 import '../sessions/application/session_providers.dart';
 import '../sessions/application/session_status_providers.dart';
 import '../sessions/application/session_wait.dart';
+import '../sessions/data/session_relay_dao.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:agent_cli/stream.dart';
 import '../terminal/application/terminal_sessions_controller.dart';
@@ -16,6 +18,12 @@ import 'package:karmashala_terminal_runtime/screen_reading.dart';
 
 /// Operating a session that already exists. Every tool takes an optional
 /// `sessionId` and falls back to the caller the *transport* authenticated.
+/// How many messages one session may send another within
+/// [relayBudgetWindow]. Generous: it bounds two sessions trading turns
+/// forever, not ordinary coordination (docs/inter-agent-communication.md §4.5).
+const int relayBudget = 20;
+const Duration relayBudgetWindow = Duration(minutes: 10);
+
 class SessionControlTools {
   SessionControlTools(this._container, {this.callerSessionId});
 
@@ -140,9 +148,28 @@ class SessionControlTools {
       }
     }
     final caller = callerSessionId;
-    final attribution = caller == null || caller == sessionId
-        ? null
-        : _container.read(sessionLauncherProvider).attributionFor(caller);
+    final relayed = caller != null && caller != sessionId;
+    final relays = _container.read(sessionRelayDaoProvider);
+    final now = _container.read(clockProvider).nowUtc();
+    if (relayed) {
+      final sent = relays.countBetween(
+        caller,
+        sessionId,
+        since: now.subtract(relayBudgetWindow),
+      );
+      if (sent >= relayBudget) {
+        throw StateError(
+          'NOTHING WAS SENT: this session has already sent $sent messages to '
+          'that one in the last ${relayBudgetWindow.inMinutes} minutes, which '
+          'is the most one session may send another. Retrying will not help '
+          'until the window moves on. Two sessions trading turns this fast is '
+          'usually a loop; raise a review thread or ask the user instead.',
+        );
+      }
+    }
+    final attribution = relayed
+        ? _container.read(sessionLauncherProvider).attributionFor(caller)
+        : null;
     // Through SessionActions, which is what the message box uses: an agent must
     // not get a third answer to "typed into, or messaged through the engine".
     await _container
@@ -151,6 +178,16 @@ class SessionControlTools {
           sessionId,
           attribution == null ? text : attribution.render(text),
         );
+    if (relayed) {
+      relays.record(
+        SessionRelay(
+          fromSessionId: caller,
+          toSessionId: sessionId,
+          text: text,
+          at: now,
+        ),
+      );
+    }
     final delivered = <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
@@ -322,11 +359,29 @@ class SessionControlTools {
         ? null
         : terminalTailLines(instance.terminal, lines: capped);
 
+    final relayed = _container
+        .read(sessionRelayDaoProvider)
+        .recentTo(sessionId, capped);
+
     return <String, Object?>{
       'sessionId': sessionId,
       'title': session.title,
       'status': session.status.name,
       'live': paneId != null,
+      // Beside `turns`, not in it: a relay is a message that crossed from
+      // another session, recorded by the app, and never a turn of the user's.
+      'relays': <Object?>[
+        for (final relay in relayed.relays)
+          <String, Object?>{
+            'fromSessionId': relay.fromSessionId,
+            'at': relay.at.toIso8601String(),
+            'text': relay.text,
+          },
+      ],
+      'omittedRelays': relayed.total - relayed.relays.length,
+      'relaysSource':
+          'messages other sessions sent this one with session_send, as '
+          'Karmashala recorded them',
       'turns': <Object?>[
         for (final event in recent)
           <String, Object?>{

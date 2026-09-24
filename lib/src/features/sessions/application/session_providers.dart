@@ -7,6 +7,7 @@ import '../data/session_dao.dart';
 import '../data/decision_record_dao.dart';
 import '../data/session_event_dao.dart';
 import '../data/session_recap_dao.dart';
+import '../data/session_relay_dao.dart';
 import '../data/session_repository_dao.dart';
 
 /// Repository-layer provider for session persistence.
@@ -17,6 +18,11 @@ final sessionDaoProvider = Provider<SessionDao>(
 /// Repository-layer provider for the append-only session event log.
 final sessionEventDaoProvider = Provider<SessionEventDao>(
   (ref) => SessionEventDao(ref.watch(databaseProvider)),
+);
+
+/// Repository-layer provider for the messages sessions sent each other.
+final sessionRelayDaoProvider = Provider<SessionRelayDao>(
+  (ref) => SessionRelayDao(ref.watch(databaseProvider)),
 );
 
 /// Repository-layer provider for the append-only decision record.

@@ -503,3 +503,31 @@ void _migrateToV57(Database db) {
     );
   ''');
 }
+
+/// Every message one session sent another through `session_send`: who sent
+/// it, to whom, the text as sent, and when. Its own table rather than
+/// `session_events`, which is the chat engine's log — a relay row there would
+/// make a PTY session look as if it had one.
+///
+/// `from_session_id` is not a foreign key: a sender's row may be deleted and
+/// the record of what it said should outlive it.
+void _migrateToV58(Database db) {
+  db.execute('''
+    CREATE TABLE IF NOT EXISTS session_relays (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_session_id TEXT NOT NULL,
+      to_session_id   TEXT NOT NULL
+        REFERENCES sessions (id) ON DELETE CASCADE,
+      text            TEXT NOT NULL,
+      created_at      TEXT NOT NULL
+    );
+  ''');
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_relays_to '
+    'ON session_relays (to_session_id, created_at);',
+  );
+  db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_session_relays_pair '
+    'ON session_relays (from_session_id, to_session_id, created_at);',
+  );
+}

@@ -6,6 +6,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
+import 'package:karmashala/src/features/mcp/session_tools.dart';
+import 'package:karmashala/src/features/sessions/data/session_relay_dao.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/cli_detection/data/imported_session_dao.dart';
 import 'package:agent_cli/read.dart';
@@ -470,6 +472,95 @@ void main() {
   /// return — so an unattributed relay is not merely mistakable for the user's
   /// turn, it *is* one inside the target CLI and stays one in that CLI's own
   /// transcript. These assert on the bytes for that reason, not on a field.
+  // docs/inter-agent-communication.md §4.2 and §4.5.
+  group('relays are recorded, and budgeted per pair', () {
+    test('a relay survives in the record, beside the turns', () async {
+      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      attachPane('s2');
+
+      await callTool('session_send', {
+        'sessionId': 's2',
+        'text': 'run the tests',
+      }, 's1');
+
+      final relays = SessionRelayDao(db).recentTo('s2', 10);
+      expect(relays.total, 1);
+      expect(relays.relays.single.fromSessionId, 's1');
+      // What the sender wrote, not the envelope the recipient saw.
+      expect(relays.relays.single.text, 'run the tests');
+
+      final transcript = await callTool('session_transcript', {
+        'sessionId': 's2',
+      });
+      final shown = (transcript.structured! as Map)['relays'] as List;
+      expect(shown.single, containsPair('fromSessionId', 's1'));
+      expect((transcript.structured! as Map)['turns'], isEmpty);
+    });
+
+    test('a message to yourself is not a relay', () async {
+      attachPane('s1');
+      await callTool('session_send', {'text': 'note to self'}, 's1');
+      expect(SessionRelayDao(db).recentTo('s1', 10).total, 0);
+    });
+
+    test('past the budget nothing is sent, and it says why', () async {
+      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      final written = attachPane('s2');
+      final relays = SessionRelayDao(db);
+      for (var i = 0; i < relayBudget; i++) {
+        relays.record(
+          SessionRelay(
+            fromSessionId: 's1',
+            toSessionId: 's2',
+            text: 'ping $i',
+            at: testTime,
+          ),
+        );
+      }
+
+      final result = await callTool('session_send', {
+        'sessionId': 's2',
+        'text': 'one more',
+      }, 's1');
+
+      expect(result.isError, isTrue);
+      expect(result.text, contains('NOTHING WAS SENT'));
+      expect(written, isEmpty);
+      // The budget is per ordered pair: the other direction is untouched.
+      attachPane('s1');
+      final back = await callTool('session_send', {
+        'sessionId': 's1',
+        'text': 'pong',
+      }, 's2');
+      expect(back.isError, isFalse);
+    });
+
+    test('sends older than the window do not count', () async {
+      SessionDao(db).insert(session(id: 's2', title: 'Other'));
+      attachPane('s2');
+      final relays = SessionRelayDao(db);
+      for (var i = 0; i < relayBudget; i++) {
+        relays.record(
+          SessionRelay(
+            fromSessionId: 's1',
+            toSessionId: 's2',
+            text: 'old $i',
+            at: testTime.subtract(
+              relayBudgetWindow + const Duration(seconds: 1),
+            ),
+          ),
+        );
+      }
+
+      final result = await callTool('session_send', {
+        'sessionId': 's2',
+        'text': 'fresh',
+      }, 's1');
+
+      expect(result.isError, isFalse);
+    });
+  });
+
   group('attribution', () {
     test('a relay carries the sending session, built from its row', () async {
       SessionDao(db).insert(session(id: 's2', title: 'Other'));
