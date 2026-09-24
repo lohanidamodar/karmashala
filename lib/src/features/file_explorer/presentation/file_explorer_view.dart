@@ -292,6 +292,7 @@ class FileEntryRow extends ConsumerWidget {
         menuLabel: 'Actions for ${entry.name}',
         itemBuilder: () => fileEntryMenuItems(
           isDirectory: isDir,
+          name: entry.name,
           // `canReveal` starts no process, so asking while building is free.
           canReveal: ref.read(revealInFileManagerProvider).canReveal(_path),
         ),
@@ -417,6 +418,7 @@ class FileRowTile extends StatelessWidget {
 List<PopupMenuEntry<String>> fileEntryMenuItems({
   required bool isDirectory,
   required bool canReveal,
+  String name = '',
 }) => [
   if (isDirectory) ...[
     DesktopMenuItem(
@@ -436,6 +438,12 @@ List<PopupMenuEntry<String>> fileEntryMenuItems({
       value: 'open',
       label: 'Open in editor',
       icon: AppIcons.fileCode,
+    ),
+  if (!isDirectory && canReveal)
+    DesktopMenuItem(
+      value: 'default-app',
+      label: runsAsProgram(name) ? 'Run' : 'Open with default app',
+      icon: runsAsProgram(name) ? AppIcons.play : AppIcons.arrowSquareOut,
     ),
   DesktopMenuItem(
     value: 'external',
@@ -498,6 +506,14 @@ class _FileEntryActions {
     if (!outcome.ok) _say(outcome.error!);
   }
 
+  /// As a double-click in the OS would: its app, or run it if it is one.
+  Future<void> _openWithDefaultApp() async {
+    final outcome = await ref
+        .read(revealInFileManagerProvider)
+        .openWithDefaultApp(path);
+    if (!outcome.ok) _say(outcome.error!);
+  }
+
   Future<void> _copyPath() async {
     await Clipboard.setData(ClipboardData(text: entry.windowsPath));
     _say('Path copied to clipboard');
@@ -515,6 +531,8 @@ class _FileEntryActions {
         _openExternally();
       case 'reveal':
         _reveal();
+      case 'default-app':
+        _openWithDefaultApp();
       case 'copy-path':
         _copyPath();
     }
@@ -561,4 +579,19 @@ Future<void> createInFileTree(
       .read(fileRevealTargetProvider.notifier)
       .reveal(FileRevealTarget(hostPath: created, isDirectory: folder));
   if (!folder) ref.read(editorTabActionsProvider).open(created);
+}
+
+/// Whether opening [name] runs it rather than showing it — worded "Run" so
+/// the menu does not call starting a program "opening" it. Only what the OS
+/// runs on a double-click: a `.ps1` opens in Notepad, a `.sh` in an editor.
+bool runsAsProgram(String name) {
+  final lower = name.toLowerCase();
+  return const [
+    '.exe',
+    '.bat',
+    '.cmd',
+    '.msi',
+    '.app',
+    '.command',
+  ].any(lower.endsWith);
 }

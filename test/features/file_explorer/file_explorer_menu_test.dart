@@ -150,6 +150,28 @@ void main() {
     ]);
   });
 
+  testWidgets('a file opens with its default app, as a double-click would', (
+    tester,
+  ) async {
+    await pump(tester, environments: [windows]);
+    await rightClick(tester, 'pubspec.yaml');
+
+    await tester.tap(find.text('Open with default app'));
+    await tester.pumpAndSettle();
+
+    // No `/select`: Explorer handed a file opens it with its association.
+    expect(host.requests.single.executable, 'explorer.exe');
+    expect(host.requests.single.arguments, [r'C:\src\app\pubspec.yaml']);
+  });
+
+  test('a program is offered as Run, not as opening it', () {
+    expect(runsAsProgram('Setup.EXE'), isTrue);
+    expect(runsAsProgram('build.bat'), isTrue);
+    // Double-clicked, these open in an editor; "Run" would be a lie.
+    expect(runsAsProgram('script.ps1'), isFalse);
+    expect(runsAsProgram('notes.md'), isFalse);
+  });
+
   testWidgets('copy path puts the row on the clipboard', (tester) async {
     await pump(tester, environments: [windows]);
     await rightClick(tester, 'pubspec.yaml');

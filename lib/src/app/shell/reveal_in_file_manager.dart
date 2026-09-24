@@ -130,6 +130,12 @@ class RevealInFileManager {
 
   /// The command for [manager], exposed so its argument shape is testable
   /// without a desktop to open a window on.
+  /// Hands [path] to the host to open as a double-click would: its default
+  /// app, or — for a program — running it. The same request as [reveal]
+  /// without selection, which on every host already means exactly that.
+  Future<RevealOutcome> openWithDefaultApp(EnvironmentPath path) =>
+      reveal(path);
+
   static CommandRequest requestFor(
     HostFileManager manager,
     String hostPath, {
