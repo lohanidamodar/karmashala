@@ -27,8 +27,13 @@ class HostPlatform {
 
   bool get isLinux => operatingSystem == 'linux';
 
-  /// The filename fragment the deployer looks for and uploads under.
-  String get targetKey => '$operatingSystem-$architecture';
+  /// `uname -s` says Darwin; the host is built and named for `macos`.
+  bool get isDarwin => operatingSystem == 'darwin';
+
+  /// The filename fragment the deployer looks for and uploads under. `macos`,
+  /// not `darwin`, on a Mac: the name `dart build` and the bundles go by.
+  String get targetKey =>
+      '${isDarwin ? 'macos' : operatingSystem}-$architecture';
 
   static String normaliseArchitecture(String machine) =>
       switch (machine.toLowerCase()) {
@@ -51,7 +56,7 @@ enum HostDeploymentStatus {
   /// The machine is fine but there is no binary for it in this build.
   noBinary,
 
-  /// Not a machine this host runs on at all — musl, macOS, a BSD.
+  /// Not a machine this host runs on at all — musl, a BSD.
   unsupportedPlatform,
 
   /// Upload, chmod, or the home directory refused us.

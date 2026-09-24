@@ -89,6 +89,17 @@ for arch in x64 arm64; do
     -C "build/host-linux-$arch/bundle" .
 done
 
+# And this machine's own host again, packed for SSH boxes that are Macs. Only
+# this architecture: the SDK cross-builds for Linux alone ("Unsupported target
+# platform macos_x64" from an arm64 Mac, 2026-09-24), so an Intel Mac is served
+# only by a release built on one.
+echo "=== SESSION HOST (macos, to deploy) ==="
+rm -f "$APP"/Contents/MacOS/karmashala_host-*-macos-*.tar.gz
+case "$(uname -m)" in arm64) MACARCH=arm64 ;; *) MACARCH=x64 ;; esac
+COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -czf \
+  "$APP/Contents/MacOS/karmashala_host-$APPSHORT-macos-$MACARCH.tar.gz" \
+  -C build/host-macos/bundle .
+
 # Re-sign after writing into the bundle: adding a file invalidates the seal
 # Flutter's own build applied, and an app with a broken signature is refused by
 # Gatekeeper with a message that names nothing useful. Ad-hoc (`-`) is what an

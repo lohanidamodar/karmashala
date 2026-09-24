@@ -300,15 +300,33 @@ void main() {
     });
 
     test(
-      'macOS is refused, and the message says no bundle is built for it',
+      'a Mac with no macOS bundle in this build says which it has',
       () async {
         final target = FakeTarget(uname: 'Darwin\narm64\n');
         final deployment = await deployerFor(target).deploy();
 
-        expect(deployment.status, HostDeploymentStatus.unsupportedPlatform);
-        expect(deployment.reason, contains('macOS'));
+        expect(deployment.status, HostDeploymentStatus.noBinary);
+        expect(deployment.reason, contains('macos-arm64'));
         expect(deployment.platform!.operatingSystem, 'darwin');
         expect(target.uploads, isEmpty);
+      },
+    );
+
+    test(
+      'a Mac is served the macos bundle, named macos and not darwin',
+      () async {
+        final target = FakeTarget(uname: 'Darwin\narm64\n')
+          ..home = '/Users/dlohani';
+        final deployment = await deployerFor(
+          target,
+          binaries: FakeBinaries(targets: const {'macos-arm64': 1024}),
+        ).deploy();
+
+        expect(deployment.status, HostDeploymentStatus.ready);
+        expect(
+          target.uploads.single.$1,
+          '/Users/dlohani/.karmashala/bin/karmashala_host-0.1.0-macos-arm64',
+        );
       },
     );
 

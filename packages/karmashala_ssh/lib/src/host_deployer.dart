@@ -10,6 +10,7 @@ import 'host_binaries.dart';
 import 'host_deploy_target.dart';
 import 'privileged_command.dart';
 import 'relay_setup.dart';
+import 'remote_detach.dart';
 import 'remote_home.dart';
 import 'ssh_host.dart';
 
@@ -217,15 +218,14 @@ class HostDeployer {
             'so there is nothing to send.',
       );
     }
-    if (platform.isLinux) return null;
+    if (platform.isLinux || platform.isDarwin) return null;
     return HostDeployment(
       status: HostDeploymentStatus.unsupportedPlatform,
       observedAt: _now(),
       platform: platform,
       reason:
           '${target.address} runs ${platform.operatingSystem}; the host is published for '
-          'Linux only'
-          '${platform.operatingSystem == 'darwin' ? ', and no macOS bundle is built yet' : ''}.',
+          'Linux and macOS only.',
     );
   }
 
@@ -330,13 +330,16 @@ class HostDeployer {
     }
   }
 
-  /// `tar` unpacks the bundle and `setsid` detaches `serve`; a minimal image
-  /// can lack either. Installing a package is root's, so it becomes a command
+  /// `tar` unpacks the bundle and `setsid` — or perl, on a Mac — detaches
+  /// `serve`; a minimal image can lack either. Installing a package is root's, so it becomes a command
   /// for a terminal there rather than something attempted from here.
   Future<void> _requireTools({required bool archive}) async {
     final tools = [if (archive) 'tar', 'setsid'];
     final result = await target.run(
-      'for t in ${tools.join(' ')}; do command -v "\$t" >/dev/null 2>&1 || echo "missing=\$t"; done; '
+      // perl stands in for setsid (macOS has none): see [detachedStart].
+      'for t in ${tools.join(' ')}; do '
+      'case "\$t" in setsid) $kCanDetachTest && continue;; esac; '
+      'command -v "\$t" >/dev/null 2>&1 || echo "missing=\$t"; done; '
       'for m in apt-get dnf yum pacman zypper; do '
       'if command -v "\$m" >/dev/null 2>&1; then echo "pm=\$m"; break; fi; done; '
       'echo "uid=\$(id -u 2>/dev/null)"',
@@ -490,8 +493,9 @@ class HostDeployer {
     );
   }
 
-  /// `setsid nohup … &`, so the daemon leaves this channel's process group
-  /// before it closes; output goes to a log, which would hold the channel open.
+  /// Detached ([detachedStart]), so the daemon leaves this channel's process
+  /// group before it closes; output goes to a log, which would hold the
+  /// channel open.
   /// How many sessions the running host holds, or null when it would not say.
   /// Zero is the only answer that makes replacing it safe.
   Future<int?> _sessionsHeld(String remotePath) async {
@@ -578,8 +582,7 @@ class HostDeployer {
     final directory = '$home/$remoteHomeSubdirectory';
     return target.run(
       'mkdir -p ${_quote(directory)} && '
-      'setsid nohup ${_quote(remotePath)} serve >> ${_quote('$directory/host.log')} '
-      '2>&1 < /dev/null & '
+      '${detachedStart('${_quote(remotePath)} serve', _quote('$directory/host.log'))}; '
       'echo started',
     );
   }

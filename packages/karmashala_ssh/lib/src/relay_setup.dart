@@ -7,6 +7,7 @@ import 'package:karmashala_core/logging.dart';
 import 'companion_port.dart';
 import 'host_deploy_target.dart';
 import 'privileged_command.dart';
+import 'remote_detach.dart';
 import 'remote_home.dart';
 import 'ssh_host.dart';
 
@@ -343,8 +344,8 @@ class SshRelaySetup {
     return state;
   }
 
-  /// Starts the relay the way the session host is started — `setsid nohup`, out
-  /// of this channel's process group. Null when it was launched; otherwise the
+  /// Starts the relay the way the session host is started — detached
+  /// ([detachedStart]), out of this channel's process group. Null when it was launched; otherwise the
   /// sentence that says why not.
   Future<String?> _launch(String directory) async {
     // Asked first, because an old bundle answers `relay` with its usage and
@@ -369,10 +370,9 @@ class SshRelaySetup {
   /// the box mints one into `--token-file`, because argv is world-readable.
   String startCommand(String directory) =>
       'mkdir -p ${_q(directory)} && '
-      'setsid nohup ${_q(remotePath)} relay --port=$port '
+      '${detachedStart('${_q(remotePath)} relay --port=$port '
       '--token-file=${_q('$directory/$_tokenName')} '
-      '--pid-file=${_q('$directory/$_pidName')} '
-      '>> ${_q('$directory/$_logName')} 2>&1 < /dev/null & '
+      '--pid-file=${_q('$directory/$_pidName')}', _q('$directory/$_logName'))}; '
       'echo started';
 
   /// Kills the pid in the pid file, and only if it is still a relay.

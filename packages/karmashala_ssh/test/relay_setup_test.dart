@@ -176,9 +176,16 @@ void main() {
       expect(
         line,
         "mkdir -p '$_dir' && "
+        'if command -v setsid >/dev/null 2>&1; then '
         "setsid nohup '$_current' relay --port=8787 "
         "--token-file='$_dir/relay.token' --pid-file='$_dir/relay.pid' "
-        ">> '$_dir/relay.log' 2>&1 < /dev/null & echo started",
+        ">> '$_dir/relay.log' 2>&1 < /dev/null & "
+        'else '
+        "nohup perl -MPOSIX -e 'POSIX::setsid(); exec @ARGV or die' "
+        "'$_current' relay --port=8787 "
+        "--token-file='$_dir/relay.token' --pid-file='$_dir/relay.pid' "
+        ">> '$_dir/relay.log' 2>&1 < /dev/null & "
+        'fi; echo started',
       );
       expect(line, isNot(contains('--token=')));
 

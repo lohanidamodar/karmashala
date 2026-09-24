@@ -13,8 +13,8 @@ abstract class HostBinarySource {
 }
 
 /// Binaries named `karmashala_host-<version>-<os>-<arch>`, with or without a
-/// `.tar.gz` suffix. Only linux-x64 and arm64 exist: the Windows Dart SDK
-/// refuses `--target-os=macos` outright.
+/// `.tar.gz` suffix: linux-x64 and linux-arm64, and from a macOS build the
+/// Mac's own architecture — no SDK cross-builds for macOS.
 ///
 /// The tarball is a `dart build cli` bundle — the executable beside the SQLite
 /// it was built with — and is what every current build ships. A bare file is a
