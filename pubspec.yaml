@@ -241,7 +241,7 @@ dependencies:
   xterm2:
     git:
       url: https://github.com/lohanidamodar/xterm2.git
-      ref: b6aaa28351c9abcba830b4c8e76e2ed49d6d340d
+      ref: c963bfdde79f58d9d99b90a4319c547c108e796c
   yaml: ^3.1.4
   # Encodes a terminal recording's frames — animated GIF and PNG — and packs
   # the tray .ico files in tool/icon/write_ico.dart. Pure Dart, so the encode
