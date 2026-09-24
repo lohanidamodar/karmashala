@@ -425,6 +425,25 @@ class SettingsController extends Notifier<Settings> {
     _save();
   }
 
+  /// The quit question's answers, as it will use them without asking.
+  void setQuitAnswers({
+    required bool asks,
+    required bool reopens,
+    required bool keepsHostSessions,
+  }) {
+    state = state.copyWith(
+      quitAsks: asks,
+      quitReopens: reopens,
+      quitKeepsHostSessions: keepsHostSessions,
+    );
+    _save();
+  }
+
+  void setQuitAsks(bool value) {
+    state = state.copyWith(quitAsks: value);
+    _save();
+  }
+
   /// Applies to the *next* pane: a running shell cannot change its owner.
   void setHostBackedLocalPanes(bool value) {
     state = state.copyWith(hostBackedLocalPanes: value);

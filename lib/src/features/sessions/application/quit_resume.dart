@@ -14,11 +14,14 @@ import 'dart:convert';
 import 'package:karmashala_core/logging.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_session/session.dart';
+import 'package:karmashala_terminal_runtime/instances.dart'
+    show HostedTerminalInstance;
 import 'package:riverpod/riverpod.dart';
 
 import '../../../core/database/database_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
+import '../../terminal/application/terminal_sessions_controller.dart';
 import 'session_launcher.dart';
 import 'session_providers.dart';
 import 'session_status_providers.dart';
@@ -44,13 +47,31 @@ final sessionIsHostedLiveProvider = Provider<bool Function(String)>(
           ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null,
 );
 
-/// One session that would stop if the app quit now.
+/// The pane running [String] session when that session lives in the session
+/// host — a quit disconnects from it and it keeps running — or null.
+final sessionHostedPaneProvider =
+    Provider<HostedTerminalInstance? Function(String)>(
+      (ref) => (sessionId) {
+        final paneId = ref.read(sessionDaoProvider).getById(sessionId)?.paneId;
+        if (paneId == null) return null;
+        final instance = ref
+            .read(terminalSessionsControllerProvider.notifier)
+            .instanceFor(paneId);
+        return switch (instance) {
+          final HostedTerminalInstance hosted when hosted.outlivesApp => hosted,
+          _ => null,
+        };
+      },
+    );
+
+/// One session running when the app quits.
 class InterruptedSession {
   const InterruptedSession({
     required this.id,
     required this.title,
     required this.agentName,
     required this.working,
+    this.keepsRunning = false,
   });
 
   final String id;
@@ -60,6 +81,10 @@ class InterruptedSession {
   /// Whether the agent was mid-turn, as opposed to open and idle. Both are
   /// interrupted; only one loses work in progress, and the list says which.
   final bool working;
+
+  /// Whether it lives in the session host, and so is left running by a quit
+  /// unless it is ended.
+  final bool keepsRunning;
 
   String get line => '$title — $agentName${working ? ', mid-turn' : ''}';
 }
@@ -90,10 +115,26 @@ class QuitResumeService {
   final Ref _ref;
   static final _log = AppLogger.named('sessions.quit');
 
+  /// Ends the host sessions among [sessionIds] for good, for a quit that was
+  /// asked not to leave them running. Bounded: a host that will not answer
+  /// must not hold the quit open.
+  Future<void> endHosted(Iterable<String> sessionIds) async {
+    final hosted = _ref.read(sessionHostedPaneProvider);
+    await Future.wait([
+      for (final id in sessionIds)
+        if (hosted(id) case final pane?)
+          pane.endHostedSession().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => _log.warning('the host did not end $id in time'),
+          ),
+    ]);
+  }
+
   /// The sessions a quit right now would stop, newest first. Only sessions
   /// **this app is hosting**: one we merely have a row for is not running.
   List<InterruptedSession> interrupted() {
     final isLive = _ref.read(sessionIsHostedLiveProvider);
+    final hosted = _ref.read(sessionHostedPaneProvider);
     final status = _ref.read(sessionStatusLookupProvider);
     final installations = _ref.read(agentInstallationDaoProvider);
     final registry = _ref.read(agentRegistryProvider);
@@ -112,6 +153,7 @@ class QuitResumeService {
               ? 'an agent that is no longer installed'
               : registry.displayNameFor(agentId),
           working: status(session.id)?.status == AgentActivityStatus.working,
+          keepsRunning: hosted(session.id) != null,
         ),
       );
     }

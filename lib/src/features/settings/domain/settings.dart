@@ -92,6 +92,9 @@ class Settings {
     this.shellIntegrationEnabled = false,
     this.restoreLivePanes = true,
     this.hostBackedLocalPanes = false,
+    this.quitAsks = true,
+    this.quitReopens = true,
+    this.quitKeepsHostSessions = true,
     this.letAgentsUpdateThemselves,
     this.terminalChordOverrides = const {},
     this.terminalThemeSource,
@@ -244,6 +247,17 @@ class Settings {
   /// reports no command boundaries and `terminal_run` claims no exit code.
   final bool hostBackedLocalPanes;
 
+  /// Whether quitting with sessions running asks first. Off, quit uses the
+  /// two answers below — and still asks when it would stop a turn midway.
+  final bool quitAsks;
+
+  /// The quit question's "open these again next time", remembered.
+  final bool quitReopens;
+
+  /// Whether sessions in the session host keep running after a quit — they
+  /// do unless ended, since closing a pane only disconnects from them.
+  final bool quitKeepsHostSessions;
+
   /// Whether an agent CLI Karmashala launches may update itself in that
   /// session. **`null` means unset**, resolved by platform where it is read
   /// (`agentsMayUpdateThemselvesProvider`): default off on Windows, on
@@ -366,6 +380,9 @@ class Settings {
     bool? shellIntegrationEnabled,
     bool? restoreLivePanes,
     bool? hostBackedLocalPanes,
+    bool? quitAsks,
+    bool? quitReopens,
+    bool? quitKeepsHostSessions,
     bool? letAgentsUpdateThemselves,
     bool clearLetAgentsUpdateThemselves = false,
     Map<String, bool>? terminalChordOverrides,
@@ -440,6 +457,9 @@ class Settings {
         shellIntegrationEnabled ?? this.shellIntegrationEnabled,
     restoreLivePanes: restoreLivePanes ?? this.restoreLivePanes,
     hostBackedLocalPanes: hostBackedLocalPanes ?? this.hostBackedLocalPanes,
+    quitAsks: quitAsks ?? this.quitAsks,
+    quitReopens: quitReopens ?? this.quitReopens,
+    quitKeepsHostSessions: quitKeepsHostSessions ?? this.quitKeepsHostSessions,
     letAgentsUpdateThemselves: clearLetAgentsUpdateThemselves
         ? null
         : (letAgentsUpdateThemselves ?? this.letAgentsUpdateThemselves),
@@ -543,6 +563,9 @@ class Settings {
     'shellIntegrationEnabled': shellIntegrationEnabled,
     'restoreLivePanes': restoreLivePanes,
     'hostBackedLocalPanes': hostBackedLocalPanes,
+    'quitAsks': quitAsks,
+    'quitReopens': quitReopens,
+    'quitKeepsHostSessions': quitKeepsHostSessions,
     if (letAgentsUpdateThemselves != null)
       'letAgentsUpdateThemselves': letAgentsUpdateThemselves,
     if (terminalChordOverrides.isNotEmpty)
@@ -714,6 +737,10 @@ class Settings {
       restoreLivePanes: json['restoreLivePanes'] != false,
       // `== true`: defaults off, so an older file reads as off.
       hostBackedLocalPanes: json['hostBackedLocalPanes'] == true,
+      // `!= false`: all three default on, so an older file reads as on.
+      quitAsks: json['quitAsks'] != false,
+      quitReopens: json['quitReopens'] != false,
+      quitKeepsHostSessions: json['quitKeepsHostSessions'] != false,
       letAgentsUpdateThemselves: json['letAgentsUpdateThemselves'] is bool
           ? json['letAgentsUpdateThemselves'] as bool
           : null,
@@ -820,6 +847,9 @@ class Settings {
       other.shellIntegrationEnabled == shellIntegrationEnabled &&
       other.restoreLivePanes == restoreLivePanes &&
       other.hostBackedLocalPanes == hostBackedLocalPanes &&
+      other.quitAsks == quitAsks &&
+      other.quitReopens == quitReopens &&
+      other.quitKeepsHostSessions == quitKeepsHostSessions &&
       other.letAgentsUpdateThemselves == letAgentsUpdateThemselves &&
       _boolMapEquals(other.terminalChordOverrides, terminalChordOverrides) &&
       other.terminalThemeSource == terminalThemeSource &&
@@ -898,6 +928,9 @@ class Settings {
         editorAutoSave,
         editorAutoSaveDelayMs,
         Object.hash(
+          quitAsks,
+          quitReopens,
+          quitKeepsHostSessions,
           usageLimitBehavior,
           resumeMessage,
           Object.hashAllUnordered(

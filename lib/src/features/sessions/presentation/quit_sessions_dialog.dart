@@ -6,10 +6,12 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 
 import '../../notifications/application/notification_providers.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/quit_resume.dart';
 
-/// What the user chose at the quit question.
-typedef QuitChoice = ({bool quit, bool reopen});
+/// What the user chose at the quit question. [keepHosted] leaves the session
+/// host's sessions running; [remember] makes these the answers from now on.
+typedef QuitChoice = ({bool quit, bool reopen, bool keepHosted, bool remember});
 
 /// Lists what quitting would stop, and offers to have it open again next time.
 ///
@@ -21,24 +23,28 @@ class QuitSessionsDialog extends StatefulWidget {
   const QuitSessionsDialog({
     required this.sessions,
     this.reopenByDefault = true,
+    this.keepHostedByDefault = true,
     super.key,
   });
 
   final List<InterruptedSession> sessions;
 
-  /// What the checkbox starts as — last time's answer.
+  /// What the checkboxes start as — last time's answers.
   final bool reopenByDefault;
+  final bool keepHostedByDefault;
 
   static Future<QuitChoice?> ask(
     BuildContext context, {
     required List<InterruptedSession> sessions,
     bool reopenByDefault = true,
+    bool keepHostedByDefault = true,
   }) => showDialog<QuitChoice>(
     context: context,
     barrierDismissible: false,
     builder: (_) => QuitSessionsDialog(
       sessions: sessions,
       reopenByDefault: reopenByDefault,
+      keepHostedByDefault: keepHostedByDefault,
     ),
   );
 
@@ -48,20 +54,37 @@ class QuitSessionsDialog extends StatefulWidget {
 
 class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
   late bool _reopen = widget.reopenByDefault;
+  late bool _keepHosted = widget.keepHostedByDefault;
+  var _remember = false;
+
+  QuitChoice _choice({required bool quit}) => (
+    quit: quit,
+    reopen: _reopen,
+    keepHosted: _keepHosted,
+    remember: _remember,
+  );
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final semantic = SemanticColors.of(context);
-    final working = widget.sessions.where((s) => s.working).length;
     final total = widget.sessions.length;
+    final hosted = widget.sessions.where((s) => s.keepsRunning).length;
+    // What this quit would actually stop: everything outside the host, and
+    // the host's sessions too when they are not being kept.
+    final stopping = widget.sessions
+        .where((s) => !s.keepsRunning || !_keepHosted)
+        .toList();
+    final working = stopping.where((s) => s.working).length;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
 
     return AlertDialog(
       title: Text(
         total == 1
             ? 'A session is still running'
-            : '$total sessions are still '
-                  'running',
+            : '$total sessions are still running',
       ),
       content: BoundedDialogContent(
         width: DialogWidth.narrow,
@@ -69,17 +92,31 @@ class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              working == 0
-                  ? 'Quitting closes ${total == 1 ? 'it' : 'them'}. Nothing is '
-                        'mid-turn, so nothing in progress is lost.'
-                  : '${working == total ? (total == 1 ? 'It is' : 'All of them are') : '$working of them ${working == 1 ? 'is' : 'are'}'} '
-                        'mid-turn. Quitting stops the agent where it is; what '
-                        'it had already written to disk stays written.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+            if (hosted > 0 && _keepHosted)
+              Text(
+                '${hosted == total ? (total == 1 ? 'It runs' : 'They run') : '$hosted of them run'} '
+                'in the session host and keep running after Karmashala quits. '
+                'Reopening picks ${hosted == 1 ? 'it' : 'them'} up where '
+                '${hosted == 1 ? 'it is' : 'they are'}.',
+                style: muted,
               ),
-            ),
+            if (stopping.isNotEmpty) ...[
+              if (hosted > 0 && _keepHosted) const SizedBox(height: Insets.xs),
+              Text(
+                working == 0
+                    ? 'Quitting stops ${stopping.length == 1
+                              ? (total == 1 ? 'it' : 'one')
+                              : stopping.length == total
+                              ? 'them'
+                              : '${stopping.length} of them'}. '
+                          'Nothing ${stopping.length == 1 ? 'there' : 'among them'} is '
+                          'mid-turn, so nothing in progress is lost.'
+                    : '$working ${working == 1 ? 'is' : 'are'} mid-turn. '
+                          'Quitting stops the agent where it is; what it had '
+                          'already written to disk stays written.',
+                style: muted,
+              ),
+            ],
             const SizedBox(height: Insets.md),
             // Named, not counted: "3 sessions" is not something a person can
             // weigh, and the decision is about *which* three.
@@ -106,7 +143,9 @@ class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
                             const SizedBox(width: Insets.sm),
                             Expanded(
                               child: Text(
-                                session.line,
+                                session.keepsRunning && _keepHosted
+                                    ? '${session.line} · keeps running'
+                                    : session.line,
                                 style: theme.textTheme.bodySmall,
                               ),
                             ),
@@ -118,6 +157,21 @@ class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
               ),
             ),
             const SizedBox(height: Insets.sm),
+            if (hosted > 0)
+              CheckboxListTile(
+                value: _keepHosted,
+                onChanged: (value) =>
+                    setState(() => _keepHosted = value ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                title: const Text('Keep host sessions running'),
+                subtitle: Text(
+                  'Unticked, they are ended as Karmashala quits, and a turn '
+                  'they are in stops there.',
+                  style: muted,
+                ),
+              ),
             CheckboxListTile(
               value: _reopen,
               onChanged: (value) => setState(() => _reopen = value ?? false),
@@ -131,9 +185,21 @@ class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
                 'Next launch reopens the ones that still exist and are not '
                 'already open. It does not send anything, and it does not '
                 'resume the turn that stops here.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+                style: muted,
+              ),
+            ),
+            CheckboxListTile(
+              value: _remember,
+              onChanged: (value) => setState(() => _remember = value ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: const Text("Don't ask again"),
+              subtitle: Text(
+                'Quit uses these answers from now on. It still asks when '
+                'quitting would stop a turn midway. Settings → General turns '
+                'the question back on.',
+                style: muted,
               ),
             ),
           ],
@@ -141,13 +207,11 @@ class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () =>
-              Navigator.of(context).pop((quit: false, reopen: _reopen)),
+          onPressed: () => Navigator.of(context).pop(_choice(quit: false)),
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () =>
-              Navigator.of(context).pop((quit: true, reopen: _reopen)),
+          onPressed: () => Navigator.of(context).pop(_choice(quit: true)),
           child: const Text('Quit'),
         ),
       ],
@@ -172,14 +236,47 @@ Future<bool> confirmQuitWithRunningSessions(
     service.forget();
     return true;
   }
-  // Quit can come from the tray while the window is hidden.
-  ref.read(windowRaiseRequestProvider.notifier).bump();
-  if (!context.mounted) return true;
+  final settings = ref.read(settingsControllerProvider);
+  final controller = ref.read(settingsControllerProvider.notifier);
+  bool stopsATurn(bool keepHosted) =>
+      sessions.any((s) => s.working && (!s.keepsRunning || !keepHosted));
 
-  final choice =
-      await (ask?.call(sessions) ??
-          QuitSessionsDialog.ask(context, sessions: sessions));
-  if (choice == null || !choice.quit) return false;
+  final QuitChoice choice;
+  if (!settings.quitAsks && !stopsATurn(settings.quitKeepsHostSessions)) {
+    choice = (
+      quit: true,
+      reopen: settings.quitReopens,
+      keepHosted: settings.quitKeepsHostSessions,
+      remember: true,
+    );
+  } else {
+    // Quit can come from the tray while the window is hidden.
+    ref.read(windowRaiseRequestProvider.notifier).bump();
+    if (!context.mounted) return true;
+    final asked =
+        await (ask?.call(sessions) ??
+            QuitSessionsDialog.ask(
+              context,
+              sessions: sessions,
+              reopenByDefault: settings.quitReopens,
+              keepHostedByDefault: settings.quitKeepsHostSessions,
+            ));
+    if (asked == null || !asked.quit) return false;
+    choice = asked;
+    // The answers become next time's defaults; asking stops only when told.
+    controller.setQuitAnswers(
+      asks: settings.quitAsks && !asked.remember,
+      reopens: asked.reopen,
+      keepsHostSessions: asked.keepHosted,
+    );
+  }
+
+  if (!choice.keepHosted) {
+    await service.endHosted([
+      for (final s in sessions)
+        if (s.keepsRunning) s.id,
+    ]);
+  }
 
   if (!choice.reopen) {
     service.forget();

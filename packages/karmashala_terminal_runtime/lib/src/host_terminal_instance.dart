@@ -56,7 +56,8 @@ class HostTerminalInstance
         TieredTerminalInstance,
         ParkableTerminalInstance,
         AdoptableTerminalInstance,
-        RecordableTerminalInstance {
+        RecordableTerminalInstance,
+        HostedTerminalInstance {
   HostTerminalInstance({
     required this.id,
     required this.title,
@@ -545,6 +546,13 @@ class HostTerminalInstance
       _resumed &&
       resumeFrom == 0 &&
       attachment.totalBytes > attachment.replayFromOffset;
+
+  @override
+  bool get outlivesApp => !_disposed && !_exited && _link != null;
+
+  @override
+  Future<void> endHostedSession() =>
+      _link?.closeSession(hostSessionId) ?? Future<void>.value();
 
   /// Whether this pane attached to a session that already existed. It decides
   /// what an immediate end means: one we opened and that ended is a command

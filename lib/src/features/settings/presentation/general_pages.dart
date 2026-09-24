@@ -116,6 +116,15 @@ class StartupSection extends ConsumerWidget {
             enabled: settings.autoStart,
           ),
           SettingsSwitchRow(
+            label: 'Ask before quitting with sessions running',
+            help:
+                'Off, quitting uses your last answers — keep host sessions '
+                'running, reopen sessions next time — without asking. It '
+                'still asks when quitting would stop a turn midway.',
+            value: settings.quitAsks,
+            onChanged: controller.setQuitAsks,
+          ),
+          SettingsSwitchRow(
             label: 'Close to tray',
             help:
                 'Hide to the system tray when the window is closed '
