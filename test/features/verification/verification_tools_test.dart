@@ -335,6 +335,27 @@ void main() {
       expect(textOf(result), contains('by another session'));
     });
 
+    test('a pass the session gave itself says it is self-verified, and how '
+        'to get an independent one', () async {
+      await called.call('verification_start', {'url': 'https://example.com'});
+      final result = await called.call('verification_finish', {
+        'verdict': 'pass',
+      });
+      expect(textOf(result), contains('SELF-VERIFIED'));
+      expect(textOf(result), contains('checks_run'));
+    });
+
+    test('an independent pass carries no such warning', () async {
+      await called.call('verification_start', {
+        'url': 'https://example.com',
+        'sessionId': 's-2',
+      });
+      final result = await called.call('verification_finish', {
+        'verdict': 'pass',
+      });
+      expect(textOf(result), isNot(contains('SELF-VERIFIED')));
+    });
+
     test('a caller outside a session leaves the run unattributed', () async {
       await tools.call('verification_start', {'url': 'https://example.com'});
       await tools.call('verification_finish', {'verdict': 'pass'});

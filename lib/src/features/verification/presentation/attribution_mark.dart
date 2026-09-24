@@ -17,7 +17,7 @@ class AttributionMark extends StatelessWidget {
     final semantic = SemanticColors.of(context);
     return switch (attribution) {
       VerdictAttribution.author => semantic.attention,
-      VerdictAttribution.independent => semantic.idle,
+      VerdictAttribution.independent || VerdictAttribution.app => semantic.idle,
       VerdictAttribution.notRecorded => semantic.neutral,
     };
   }

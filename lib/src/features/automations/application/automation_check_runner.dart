@@ -14,6 +14,7 @@ import '../../terminal/application/visible_command_pane.dart';
 import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import '../../verification/application/verification_providers.dart';
 import '../../verification/application/verification_service.dart';
+import '../../verification/domain/verdict_attribution.dart';
 import '../../verification/domain/verification_run.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
@@ -139,7 +140,7 @@ class AutomationCheckRunner {
   /// batch. Null when the repository has none.
   ///
   /// The app's own reading of the work, never the session's claim about it:
-  /// `producedBySessionId` stays null even when the session asked for it.
+  /// produced by [kAppVerifierId] even when the session asked for it.
   Future<SessionChecks?> runForSession(String sessionId) async {
     final session = _ref.read(sessionDaoProvider).getById(sessionId);
     if (session == null) throw StateError('No session $sessionId.');
@@ -179,6 +180,8 @@ class AutomationCheckRunner {
           startedAt: startedAt,
           checks: ran,
           sessionId: sessionId,
+          // The app's own reading, never the session's claim about itself.
+          producedBySessionId: kAppVerifierId,
         );
     return (checks: ran, run: run);
   }
@@ -218,9 +221,9 @@ class AutomationCheckRunner {
           startedAt: startedAt,
           exitCode: result.exitCode,
           output: result.tail.join('\n'),
-          // `producedBySessionId` stays null: this is the app's own reading,
-          // not a session's claim about itself.
+          // The app's own reading, not a session's claim about itself.
           sessionId: sessionId,
+          producedBySessionId: kAppVerifierId,
         );
     return (
       check: check,

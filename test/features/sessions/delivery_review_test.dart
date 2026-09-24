@@ -102,7 +102,9 @@ void main() {
         startedAt: startedAt ?? testTime,
         artifactDirectory: 'C:/art/$id',
         sessionId: 's1',
-        producedBySessionId: 's1',
+        // Another session's verdict: a self-graded pass reads differently,
+        // and this file is about the offer, not the attribution.
+        producedBySessionId: 's2',
       ),
     );
     if (verdict != null) {

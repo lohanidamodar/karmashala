@@ -41,4 +41,16 @@ void main() {
     expect(labels, hasLength(VerdictAttribution.values.length));
     expect(VerdictAttribution.notRecorded.label, contains('not recorded'));
   });
+
+  test('a verdict Karmashala read off an exit code is its own, and '
+      'independent', () {
+    final attribution = VerdictAttribution.of(
+      producerSessionId: kAppVerifierId,
+      subjectSessionId: 's-1',
+    );
+    expect(attribution, VerdictAttribution.app);
+    expect(attribution.isIndependent, isTrue);
+    expect(VerdictAttribution.author.isIndependent, isFalse);
+    expect(VerdictAttribution.notRecorded.isIndependent, isFalse);
+  });
 }

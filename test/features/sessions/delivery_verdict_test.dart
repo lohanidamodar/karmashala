@@ -15,6 +15,7 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/sessions/presentation/delivery_strip.dart';
 import 'package:karmashala/src/features/verification/data/verification_dao.dart';
 import 'package:karmashala/src/features/verification/domain/session_verdict.dart';
+import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:karmashala/src/features/verification/domain/verification_run.dart';
 import 'package:karmashala/src/features/verification/domain/verification_target.dart';
 import 'package:flutter/material.dart';
@@ -68,7 +69,8 @@ void main() {
     DateTime? startedAt,
     VerificationVerdict? verdict,
     String? reason,
-    String? producedBySessionId = 's1',
+    // Another session by default: a self-graded pass reads as its own thing.
+    String? producedBySessionId = 's2',
   }) {
     final dao = VerificationDao(db);
     dao.insertRun(
@@ -203,6 +205,7 @@ void main() {
       id: 'v1',
       verdict: VerificationVerdict.fail,
       reason: 'The button was covered by the cookie banner.',
+      producedBySessionId: 's1',
     );
     await pump(tester);
 
@@ -265,6 +268,7 @@ void main() {
       DateTime? startedAt,
       DateTime? finishedAt,
       VerificationVerdict? verdict,
+      String? producedBy,
     }) => VerificationRun(
       id: id,
       title: 'a check',
@@ -274,6 +278,7 @@ void main() {
       verdict: verdict,
       artifactDirectory: 'C:/art/$id',
       sessionId: 's1',
+      producedBySessionId: producedBy,
     );
 
     test('no runs is not a verdict', () {
@@ -314,6 +319,80 @@ void main() {
       expect(verdict.run?.id, 'v2');
       expect(verdict.runCount, 2);
     });
+
+    // Author/reviewer separation: a session's pass for itself does not paper
+    // over a check someone else ran.
+    test('a newer self-graded pass does not outrank an independent fail', () {
+      final verdict = SessionVerdict.of([
+        run(
+          id: 'self',
+          finishedAt: testTime.add(const Duration(hours: 2)),
+          verdict: VerificationVerdict.pass,
+          producedBy: 's1',
+        ),
+        run(
+          id: 'checks',
+          finishedAt: testTime.add(const Duration(hours: 1)),
+          verdict: VerificationVerdict.fail,
+          producedBy: kAppVerifierId,
+        ),
+      ], sessionHasEnded: false);
+
+      expect(verdict.state, SessionVerdictState.fail);
+      expect(verdict.run?.id, 'checks');
+      expect(verdict.newerSelfGraded, 1);
+      expect(verdict.isSelfGraded, isFalse);
+    });
+
+    test('with nothing independent, the author\'s own verdict stands, marked '
+        'as such', () {
+      final verdict = SessionVerdict.of([
+        run(
+          id: 'self',
+          finishedAt: testTime,
+          verdict: VerificationVerdict.pass,
+          producedBy: 's1',
+        ),
+      ], sessionHasEnded: false);
+
+      expect(verdict.state, SessionVerdictState.pass);
+      expect(verdict.isSelfGraded, isTrue);
+      expect(verdict.newerSelfGraded, 0);
+    });
+
+    test('a newer independent verdict is simply the newest', () {
+      final verdict = SessionVerdict.of([
+        run(
+          id: 'review',
+          finishedAt: testTime.add(const Duration(hours: 1)),
+          verdict: VerificationVerdict.pass,
+          producedBy: 's2',
+        ),
+        run(
+          id: 'self',
+          finishedAt: testTime,
+          verdict: VerificationVerdict.fail,
+          producedBy: 's1',
+        ),
+      ], sessionHasEnded: false);
+      expect(verdict.run?.id, 'review');
+      expect(verdict.newerSelfGraded, 0);
+    });
+  });
+
+  testWidgets('a pass the session gave itself reads as self-checked', (
+    tester,
+  ) async {
+    insertSession();
+    insertRun(
+      id: 'v1',
+      verdict: VerificationVerdict.pass,
+      producedBySessionId: 's1',
+    );
+    await pump(tester);
+
+    expect(find.text('Self-checked: pass'), findsOneWidget);
+    expect(find.text(SessionVerdictState.pass.label), findsNothing);
   });
 
   /// The repository's own checks, offered where the verdict is shown.

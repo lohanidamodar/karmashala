@@ -24,6 +24,7 @@ import 'package:karmashala/src/features/terminal/application/pane_exit_signal.da
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
 import 'package:karmashala/src/features/verification/data/verification_dao.dart';
+import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
 import 'package:karmashala/src/features/verification/domain/verification_run.dart';
 
 import '../../support/fakes.dart';
@@ -293,7 +294,8 @@ void main() {
       expect(recorded.sessionId, 's1');
       expect(recorded.steps, hasLength(2));
       // Asked for by the session, but not the session's claim.
-      expect(recorded.producedBySessionId, isNull);
+      expect(recorded.producedBySessionId, kAppVerifierId);
+      expect(recorded.attribution, VerdictAttribution.app);
       expect(
         VerificationDao(db).listRuns(sessionId: 's1'),
         hasLength(1),

@@ -23,24 +23,28 @@ final candidateEvidenceProvider = Provider<CandidateEvidenceLookup>((ref) {
   ref.watch(verificationRevisionProvider);
   final dao = ref.watch(verificationDaoProvider);
   return (sessionId) {
-    // Newest first; the newest run that reached a verdict is the answer. An
-    // open run is not evidence of anything yet.
-    for (final run in dao.listRuns(sessionId: sessionId)) {
-      final verdict = run.verdict;
-      if (verdict == null) continue;
-      final reason = run.reason?.trim();
-      return CandidateEvidence(
-        verdict: switch (verdict) {
-          VerificationVerdict.pass => EvidenceVerdict.passed,
-          VerificationVerdict.fail => EvidenceVerdict.failed,
-          VerificationVerdict.inconclusive => EvidenceVerdict.inconclusive,
-        },
-        label: reason == null || reason.isEmpty ? run.title : reason,
-        runId: run.id,
-        producerSessionId: run.producedBySessionId,
-      );
-    }
-    return null;
+    // Newest first. An open run is not evidence of anything yet, and — as on
+    // the strip (`SessionVerdict.of`) — the newest verdict someone other than
+    // the author produced wins over any newer one the candidate gave itself.
+    final finished = [
+      for (final run in dao.listRuns(sessionId: sessionId))
+        if (run.verdict != null) run,
+    ];
+    final chosen =
+        finished.where((run) => run.attribution.isIndependent).firstOrNull ??
+        finished.firstOrNull;
+    if (chosen == null) return null;
+    final reason = chosen.reason?.trim();
+    return CandidateEvidence(
+      verdict: switch (chosen.verdict!) {
+        VerificationVerdict.pass => EvidenceVerdict.passed,
+        VerificationVerdict.fail => EvidenceVerdict.failed,
+        VerificationVerdict.inconclusive => EvidenceVerdict.inconclusive,
+      },
+      label: reason == null || reason.isEmpty ? chosen.title : reason,
+      runId: chosen.id,
+      producerSessionId: chosen.producedBySessionId,
+    );
   };
 });
 

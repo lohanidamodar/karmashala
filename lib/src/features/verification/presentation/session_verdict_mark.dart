@@ -60,7 +60,15 @@ class SessionVerdictMark extends ConsumerWidget {
       '“${run.title}”, ${run.attribution.phrase}'
           '${finished == null ? '' : ', recorded ${_clock(finished)}'}.',
       if (reason != null && reason.isNotEmpty) reason,
-      if (verdict.runCount > 1)
+      if (verdict.isSelfGraded)
+        'The session checked its own work, and nothing else has. Run checks, '
+            'or a review by another session, would be an independent verdict.',
+      if (verdict.newerSelfGraded > 0)
+        '${verdict.newerSelfGraded} newer verdict'
+            '${verdict.newerSelfGraded == 1 ? '' : 's'} the session gave '
+            'itself ${verdict.newerSelfGraded == 1 ? 'is' : 'are'} set aside: '
+            'the author does not get the last word over a check.'
+      else if (verdict.runCount > 1)
         '${verdict.runCount} runs name this session; this is the most recent.',
     ].join(' ');
   }
@@ -82,8 +90,12 @@ class SessionVerdictMark extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final verdict = ref.watch(sessionVerdictProvider(sessionId));
     final theme = Theme.of(context);
-    final look = appearanceOf(verdict.state, SemanticColors.of(context));
-    final colour = look.color;
+    final semantic = SemanticColors.of(context);
+    final look = appearanceOf(verdict.state, semantic);
+    // A pass the author gave itself is not drawn as a checked pass.
+    final selfPass =
+        verdict.isSelfGraded && verdict.state == SessionVerdictState.pass;
+    final colour = selfPass ? semantic.attention : look.color;
     return Tooltip(
       message: tooltipFor(verdict),
       child: Row(
@@ -97,7 +109,7 @@ class SessionVerdictMark extends ConsumerWidget {
           // overflows instead.
           Flexible(
             child: Text(
-              verdict.state.label,
+              selfPass ? 'Self-checked: pass' : verdict.state.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall?.copyWith(color: colour),

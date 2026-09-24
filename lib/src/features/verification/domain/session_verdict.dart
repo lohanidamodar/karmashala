@@ -1,3 +1,4 @@
+import 'verdict_attribution.dart';
 import 'verification_run.dart';
 
 /// What a session's verification record says, for a surface with room for one
@@ -60,7 +61,12 @@ enum SessionVerdictState {
 
 /// One session's verification standing: the state, and the run it came from.
 class SessionVerdict {
-  const SessionVerdict({required this.state, this.run, this.runCount = 0});
+  const SessionVerdict({
+    required this.state,
+    this.run,
+    this.runCount = 0,
+    this.newerSelfGraded = 0,
+  });
 
   final SessionVerdictState state;
 
@@ -69,28 +75,60 @@ class SessionVerdict {
   /// How many runs name this session, so the tooltip can say "most recent".
   final int runCount;
 
+  /// Verdicts the session gave itself after [run], set aside because [run]
+  /// was produced by someone else. Said, so nothing is hidden silently.
+  final int newerSelfGraded;
+
   static const none = SessionVerdict(state: SessionVerdictState.notRecorded);
 
-  /// Reads [runs] newest-first; the newest supersedes. [sessionHasEnded]
-  /// settles [VerificationRun.isOpen]: once the owner ended, it means abandoned.
+  /// Whether the verdict shown is the author's own.
+  bool get isSelfGraded => run?.attribution == VerdictAttribution.author;
+
+  /// Reads [runs] newest-first. [sessionHasEnded] settles
+  /// [VerificationRun.isOpen]: once the owner ended, it means abandoned.
+  ///
+  /// **The author does not get the last word over a check.** The newest
+  /// verdict produced by Karmashala or another session wins over any newer
+  /// one the session gave itself; only with no independent verdict at all does
+  /// the author's own stand, and it is then shown as self-checked.
   factory SessionVerdict.of(
     List<VerificationRun> runs, {
     required bool sessionHasEnded,
   }) {
     if (runs.isEmpty) return none;
-    final run = runs.first;
-    final state = run.isOpen
-        ? (sessionHasEnded
-              ? SessionVerdictState.unfinished
-              : SessionVerdictState.inProgress)
-        : switch (run.verdict) {
-            VerificationVerdict.pass => SessionVerdictState.pass,
-            VerificationVerdict.fail => SessionVerdictState.fail,
-            VerificationVerdict.inconclusive =>
-              SessionVerdictState.inconclusive,
-            // Admitting it beats picking whichever of the three is closest.
-            null => SessionVerdictState.verdictNotRecorded,
-          };
-    return SessionVerdict(state: state, run: run, runCount: runs.length);
+    final newest = runs.first;
+    if (newest.isOpen) {
+      return SessionVerdict(
+        state: sessionHasEnded
+            ? SessionVerdictState.unfinished
+            : SessionVerdictState.inProgress,
+        run: newest,
+        runCount: runs.length,
+      );
+    }
+    var run = newest;
+    var setAside = 0;
+    for (final candidate in runs) {
+      if (candidate.isOpen) continue;
+      if (candidate.attribution.isIndependent) {
+        run = candidate;
+        break;
+      }
+      if (candidate.attribution == VerdictAttribution.author) setAside++;
+    }
+    if (!run.attribution.isIndependent) setAside = 0;
+    final state = switch (run.verdict) {
+      VerificationVerdict.pass => SessionVerdictState.pass,
+      VerificationVerdict.fail => SessionVerdictState.fail,
+      VerificationVerdict.inconclusive => SessionVerdictState.inconclusive,
+      // Admitting it beats picking whichever of the three is closest.
+      null => SessionVerdictState.verdictNotRecorded,
+    };
+    return SessionVerdict(
+      state: state,
+      run: run,
+      runCount: runs.length,
+      newerSelfGraded: setAside,
+    );
   }
 }

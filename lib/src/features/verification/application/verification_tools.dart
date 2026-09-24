@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 
+import '../domain/verdict_attribution.dart';
 import '../domain/verification_artifact.dart';
 import '../domain/verification_run.dart';
 import '../domain/verification_step.dart';
@@ -126,9 +127,17 @@ class VerificationTools {
       producedBySessionId: callerSessionId,
     );
     final report = p.join(run.artifactDirectory, 'report.md');
+    final selfPass =
+        run.attribution == VerdictAttribution.author &&
+        run.verdict == VerificationVerdict.pass;
     return _text([
       '${_verdictWord(run)} — ${run.title}, ${run.attribution.phrase}',
       if (run.reason != null) run.reason!,
+      if (selfPass)
+        'SELF-VERIFIED: you checked your own work, so this is shown as '
+            '"Self-checked: pass" and never outranks an independent verdict. '
+            'For one, run checks_run (Karmashala\'s own reading of the '
+            'project checks) or ask the user for a review by another session.',
       '',
       _summaryLines(run).join('\n'),
       '',
