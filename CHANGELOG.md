@@ -17,6 +17,25 @@ installs claim the same version name.
 
 ---
 
+## 1.26.3 — 2026-09-24 (build 48)
+
+- **A resize reaches the program in a host pane on macOS** (`0feec984`). macOS
+  never gives a session leader its controlling terminal on open, and
+  `posix_spawn` cannot ask for one, so every child of the host ran without one
+  and the kernel had nobody to send `SIGWINCH` to: Claude Code never heard of a
+  resize and drew at its first width. The host now starts each child through
+  `karmashala_host pty-exec`, which claims the pty with `TIOCSCTTY`, then
+  execs the program. The same gap meant no `SIGHUP` when a session ended.
+- **A pane narrowed and widened back comes back as it was** (`xterm2`
+  divergence 13, `fb4399ea`), for a program that does not redraw.
+- **A host pane's bookkeeping stays out of the program's screen**
+  (`4ebd2b89`): the host, session id and reconnect lines go to the log, and into
+  the terminal in a debug build only.
+- **On macOS the menus are the system menu bar** (`242c9ca7`): the Karmashala
+  app menu, Workspace, View, Tools and Window, with the same items and chords.
+
+---
+
 ## 1.26.2 — 2026-09-24 (build 47)
 
 - **A resumed pane is rebuilt from the session's screen, as tmux does**
