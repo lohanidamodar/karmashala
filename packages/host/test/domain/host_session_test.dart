@@ -37,6 +37,8 @@ class _Record implements SessionRecorder {
   @override
   void ended(SessionLifecycle lifecycle) {}
   @override
+  void resized(int offset, int columns, int rows) {}
+  @override
   void close() => closed = true;
 }
 

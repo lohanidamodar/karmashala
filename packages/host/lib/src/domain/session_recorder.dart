@@ -11,6 +11,10 @@ abstract class SessionRecorder {
   /// One chunk, exactly as it went into the ring.
   void record(Uint8List bytes);
 
+  /// The session's grid changed after [offset] bytes of output: what lets a
+  /// capture be replayed at the sizes it was written at.
+  void resized(int offset, int columns, int rows);
+
   /// The session ended, and how — written when the child was reaped.
   void ended(SessionLifecycle lifecycle);
 

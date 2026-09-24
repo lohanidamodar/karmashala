@@ -186,6 +186,7 @@ class HostSession {
     columns = newColumns;
     rows = newRows;
     _pty.resize(newColumns, newRows);
+    recorder?.resized(backlog.totalBytes, newColumns, newRows);
     return null;
   }
 

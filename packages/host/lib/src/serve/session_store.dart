@@ -263,6 +263,12 @@ class SessionRecord implements SessionRecorder {
   int _onDisk = 0;
   SessionLifecycle _lifecycle = const SessionRunning();
 
+  /// Every grid the session has had, by the output offset it took effect at,
+  /// kept to what `out.bin` still holds. Written beside it as `resizes.log`.
+  late final List<(int, int, int)> _sizes = [
+    (0, _request.columns, _request.rows),
+  ];
+
   /// The output handle is released once no further byte can arrive.
   var _handleClosed = false;
 
@@ -288,6 +294,25 @@ class SessionRecord implements SessionRecorder {
     }
   }
 
+  @override
+  void resized(int offset, int columns, int rows) {
+    if (_broken) return;
+    _sizes.add((offset, columns, rows));
+    _writeSizes();
+  }
+
+  /// One `offset columns rows` line per size, the first in force at the first
+  /// byte `out.bin` still holds. Small: a line per resize, pruned on rotation.
+  void _writeSizes() {
+    try {
+      File('${_directory.path}/resizes.log').writeAsStringSync(
+        [for (final (o, c, r) in _sizes) '$o $c $r'].join('\n'),
+      );
+    } on FileSystemException {
+      // A capture aid only; the session and its output are unaffected.
+    }
+  }
+
   /// Drops everything but the last capacity of bytes, in one rewrite.
   void _rotate() {
     final keep = _store.capacityBytes;
@@ -306,6 +331,12 @@ class SessionRecord implements SessionRecorder {
       ..writeFromSync(tail);
     _firstOffset += drop;
     _onDisk = tail.length;
+    // Keep the size in force at the new first byte, and everything after it.
+    final inForce = _sizes.lastWhere((s) => s.$1 <= _firstOffset);
+    _sizes
+      ..removeWhere((s) => s.$1 <= _firstOffset)
+      ..insert(0, (_firstOffset, inForce.$2, inForce.$3));
+    _writeSizes();
     _writeMeta();
   }
 
