@@ -70,9 +70,11 @@ void main() {
   });
 
   test('no literal millisecond duration in presentation code', () {
-    // Not motion, so not Motion's: a repaint interval and a filesystem probe's
-    // patience. Tooltip wait is named in the theme itself.
+    // Not motion, so not Motion's: a repaint interval, a filesystem probe's
+    // patience and a watched file's settle. Tooltip wait is named in the theme
+    // itself.
     const notMotion = {
+      'lib/src/app/shell/keymap_controller.dart',
       'lib/src/app/shell/logs_panel.dart',
       'packages/karmashala_ui/lib/src/file_browser.dart',
       'packages/karmashala_ui/lib/src/app_theme.dart',

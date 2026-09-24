@@ -12,6 +12,8 @@ import '../../features/settings/application/settings_controller.dart';
 import '../../features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/geometry.dart';
 import '../../features/terminal/presentation/terminal_panel.dart';
+import 'keymap.dart';
+import 'keymap_controller.dart';
 import 'quick_open/quick_open.dart';
 import 'workbench_tabs.dart';
 import 'shell_state.dart';
@@ -153,16 +155,25 @@ class ShellChord {
   const ShellChord({
     required this.activator,
     required this.intent,
+    required this.command,
     required this.label,
     required this.does,
     this.skipsShell = false,
     this.shellCost,
     this.paneOnly = false,
     this.paneLocal = false,
+    this.fromKeymap = false,
   });
 
   final SingleActivator activator;
   final Intent intent;
+
+  /// The command this chord runs, by the id a keymap file names it with —
+  /// `session.new`, `terminal.splitRight`. Two chords may share one.
+  final String command;
+
+  /// Whether the user's keymap file put this chord here, rather than the app.
+  final bool fromKeymap;
 
   /// How the chord is written to the user, e.g. `Ctrl+Shift+B`.
   final String label;
@@ -194,6 +205,20 @@ class ShellChord {
   /// after the user's own answer in [overrides] (keyed by [label]).
   bool claimedByApp(Map<String, bool> overrides) =>
       overrides[label] ?? skipsShell;
+
+  /// The same command on other keys, as a keymap file binds it. A chord the
+  /// user chose reaches the app from a focused pane too: they asked for it.
+  ShellChord reboundTo(SingleActivator keys, String keysLabel) => ShellChord(
+    activator: keys,
+    intent: intent,
+    command: command,
+    label: keysLabel,
+    does: does,
+    skipsShell: true,
+    paneOnly: paneOnly,
+    paneLocal: paneLocal,
+    fromKeymap: true,
+  );
 }
 
 /// Whether the app's own commands are reached with Cmd rather than Ctrl;
@@ -235,6 +260,7 @@ List<ShellChord> _buildChords() => [
     // J for jump: A, B, K and N are already the side panel's own surfaces.
     activator: commandActivator(LogicalKeyboardKey.keyJ, shift: true),
     intent: OpenNextWaitingIntent(),
+    command: 'attention.nextWaiting',
     label: _commandLabel('J', shift: true),
     does: 'Go to the next agent waiting for you',
     skipsShell: true,
@@ -242,6 +268,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.digit1),
     intent: FocusPaneIntent(ShellPane.explorer),
+    command: 'view.focusExplorer',
     label: _commandLabel('1'),
     does: 'Focus the Explorer',
     skipsShell: true,
@@ -249,6 +276,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.digit2),
     intent: FocusPaneIntent(ShellPane.detail),
+    command: 'view.focusWorkbench',
     label: _commandLabel('2'),
     does: 'Focus the workbench',
     skipsShell: true,
@@ -256,6 +284,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.digit3),
     intent: ToggleSidePanelIntent(),
+    command: 'view.toggleSidePanel',
     label: _commandLabel('3'),
     does: 'Show or hide the side panel',
     skipsShell: true,
@@ -264,12 +293,14 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyB),
     intent: ToggleExplorerPaneIntent(),
+    command: 'view.toggleExplorer',
     label: _commandLabel('B'),
     does: 'Show or hide the Explorer',
   ),
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyB, shift: true),
     intent: ToggleExplorerPaneIntent(),
+    command: 'view.toggleExplorer',
     label: _commandLabel('B', shift: true),
     does: 'Show or hide the Explorer',
     skipsShell: true,
@@ -277,6 +308,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.backquote),
     intent: ToggleTerminalIntent(),
+    command: 'view.toggleTerminal',
     label: _commandLabel('`'),
     does: 'Switch between the terminal and the chat view',
     skipsShell: true,
@@ -284,6 +316,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.backslash),
     intent: ToggleFocusModeIntent(),
+    command: 'view.toggleFocusMode',
     label: _commandLabel('\\'),
     does: 'Focus mode',
     skipsShell: true,
@@ -292,6 +325,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyK),
     intent: OpenQuickOpenIntent(),
+    command: 'quickOpen.show',
     label: _commandLabel('K'),
     does: 'Quick open',
     skipsShell: true,
@@ -302,6 +336,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyP),
     intent: OpenQuickOpenIntent(),
+    command: 'quickOpen.show',
     label: _commandLabel('P'),
     does: 'Quick open',
     skipsShell: true,
@@ -311,6 +346,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyP, shift: true),
     intent: OpenQuickOpenIntent(query: '>'),
+    command: 'quickOpen.commands',
     label: _commandLabel('P', shift: true),
     does: 'Quick open, filtered to commands',
     skipsShell: true,
@@ -319,6 +355,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyS, shift: true),
     intent: OpenQuickOpenIntent(query: r'$'),
+    command: 'quickOpen.snippets',
     label: _commandLabel('S', shift: true),
     does: 'Quick open, filtered to command snippets',
     skipsShell: true,
@@ -326,6 +363,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyA, shift: true),
     intent: OpenAttentionInboxIntent(),
+    command: 'attention.toggleInbox',
     label: _commandLabel('A', shift: true),
     does: 'Open or close the attention inbox',
     skipsShell: true,
@@ -335,6 +373,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyN, shift: true),
     intent: NewProjectIntent(),
+    command: 'project.new',
     label: _commandLabel('N', shift: true),
     does: 'New project',
     skipsShell: true,
@@ -342,6 +381,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyN),
     intent: NewSessionIntent(),
+    command: 'session.new',
     label: _commandLabel('N'),
     does: 'New session',
     skipsShell: true,
@@ -351,6 +391,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.comma),
     intent: OpenSettingsIntent(),
+    command: 'settings.open',
     label: _commandLabel(','),
     does: 'Open Settings',
     skipsShell: true,
@@ -360,6 +401,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyT, shift: true),
     intent: NewTerminalTabIntent(),
+    command: 'terminal.newTab',
     label: _commandLabel('T', shift: true),
     does: 'New terminal tab',
     skipsShell: true,
@@ -367,6 +409,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyW, shift: true),
     intent: CloseTerminalTabIntent(),
+    command: 'terminal.closePane',
     label: _commandLabel('W', shift: true),
     does: 'Close the terminal pane, or its tab when it is the last',
     skipsShell: true,
@@ -374,6 +417,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyT),
     intent: NewTerminalTabIntent(),
+    command: 'terminal.newTab',
     label: _commandLabel('T'),
     does: 'New terminal tab',
     shellCost: 'readline transpose-chars (^T)',
@@ -381,6 +425,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.keyW),
     intent: CloseTerminalTabIntent(),
+    command: 'terminal.closePane',
     label: _commandLabel('W'),
     does: 'Close the terminal pane, or its tab when it is the last',
     shellCost: 'readline delete previous word (^W)',
@@ -390,6 +435,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: SingleActivator(LogicalKeyboardKey.tab, control: true),
     intent: StepTerminalTabIntent.next(),
+    command: 'terminal.nextTab',
     label: 'Ctrl+Tab',
     does: 'Next terminal tab',
     skipsShell: true,
@@ -401,6 +447,7 @@ List<ShellChord> _buildChords() => [
       shift: true,
     ),
     intent: StepTerminalTabIntent.previous(),
+    command: 'terminal.previousTab',
     label: 'Ctrl+Shift+Tab',
     does: 'Previous terminal tab',
     skipsShell: true,
@@ -408,6 +455,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: SingleActivator(LogicalKeyboardKey.pageDown, control: true),
     intent: StepTerminalTabIntent.next(),
+    command: 'terminal.nextTab',
     label: 'Ctrl+PageDown',
     does: 'Next terminal tab',
     skipsShell: true,
@@ -416,6 +464,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: SingleActivator(LogicalKeyboardKey.pageUp, control: true),
     intent: StepTerminalTabIntent.previous(),
+    command: 'terminal.previousTab',
     label: 'Ctrl+PageUp',
     does: 'Previous terminal tab',
     skipsShell: true,
@@ -424,6 +473,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.equal),
     intent: TerminalFontSizeIntent.increase(),
+    command: 'terminal.fontLarger',
     label: _commandLabel('='),
     does: 'Terminal font size up',
     skipsShell: true,
@@ -431,6 +481,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.minus),
     intent: TerminalFontSizeIntent.decrease(),
+    command: 'terminal.fontSmaller',
     label: _commandLabel('-'),
     does: 'Terminal font size down',
     skipsShell: true,
@@ -439,6 +490,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: commandActivator(LogicalKeyboardKey.digit0),
     intent: TerminalFontSizeIntent.reset(),
+    command: 'terminal.fontReset',
     label: _commandLabel('0'),
     does: 'Terminal font size back to the default',
     skipsShell: true,
@@ -452,6 +504,7 @@ List<ShellChord> _buildChords() => [
       shift: true,
     ),
     intent: SplitTerminalPaneIntent(SplitAxis.horizontal),
+    command: 'terminal.splitRight',
     label: 'Ctrl+Shift+D',
     does: 'Split the pane right',
     skipsShell: true,
@@ -463,6 +516,7 @@ List<ShellChord> _buildChords() => [
       shift: true,
     ),
     intent: SplitTerminalPaneIntent(SplitAxis.vertical),
+    command: 'terminal.splitDown',
     label: 'Ctrl+Shift+E',
     does: 'Split the pane down',
     skipsShell: true,
@@ -474,6 +528,7 @@ List<ShellChord> _buildChords() => [
       shift: true,
     ),
     intent: FindInScrollbackIntent(),
+    command: 'terminal.find',
     label: 'Ctrl+Shift+F',
     does: 'Find in the scrollback',
     skipsShell: true,
@@ -487,6 +542,7 @@ List<ShellChord> _buildChords() => [
       shift: true,
     ),
     intent: JumpCommandIntent.previous(),
+    command: 'terminal.previousCommand',
     label: 'Ctrl+Shift+Up',
     does: 'Jump to the previous command',
     skipsShell: true,
@@ -499,6 +555,7 @@ List<ShellChord> _buildChords() => [
       shift: true,
     ),
     intent: JumpCommandIntent.next(),
+    command: 'terminal.nextCommand',
     label: 'Ctrl+Shift+Down',
     does: 'Jump to the next command',
     skipsShell: true,
@@ -513,6 +570,7 @@ List<ShellChord> _buildChords() => [
       shift: true,
     ),
     intent: StepPaneInRegionIntent.previous(),
+    command: 'terminal.previousPaneInRegion',
     label: 'Ctrl+Shift+PageUp',
     does: 'Previous pane in this region',
     skipsShell: true,
@@ -525,6 +583,7 @@ List<ShellChord> _buildChords() => [
       shift: true,
     ),
     intent: StepPaneInRegionIntent.next(),
+    command: 'terminal.nextPaneInRegion',
     label: 'Ctrl+Shift+PageDown',
     does: 'Next pane in this region',
     skipsShell: true,
@@ -539,6 +598,7 @@ List<ShellChord> _buildChords() => [
     ShellChord(
       activator: SingleActivator(key, control: true, alt: true),
       intent: MovePaneFocusIntent(direction),
+      command: 'terminal.focus$label',
       label: 'Ctrl+Alt+$label',
       does: 'Move pane focus ${direction.name}',
       skipsShell: true,
@@ -549,6 +609,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: _paneEdit(LogicalKeyboardKey.keyC),
     intent: CopySelectionTextIntent.copy,
+    command: 'terminal.copy',
     label: _paneEditLabel('C'),
     does: 'Copy the selection',
     skipsShell: true,
@@ -557,6 +618,7 @@ List<ShellChord> _buildChords() => [
   ShellChord(
     activator: _paneEdit(LogicalKeyboardKey.keyV),
     intent: TerminalPasteIntent(),
+    command: 'terminal.paste',
     label: _paneEditLabel('V'),
     does: 'Paste into the terminal',
     skipsShell: true,
@@ -568,6 +630,7 @@ List<ShellChord> _buildChords() => [
     ShellChord(
       activator: SingleActivator(LogicalKeyboardKey.keyV, control: true),
       intent: TerminalPasteIntent(),
+      command: 'terminal.paste',
       label: 'Ctrl+V',
       does: 'Paste into the terminal',
       skipsShell: true,
@@ -582,15 +645,29 @@ List<ShellChord> _buildChords() => [
 /// flag: it is read on every build, and flipping the flag rebuilds the table.
 List<ShellChord> get shellChords {
   if (_chordsBuiltForMeta != commandKeyIsMeta || _chords == null) {
-    _chords = _buildChords();
+    _chords = resolveKeymap(_buildChords(), _keymapEntries).chords;
     _chordsBuiltForMeta = commandKeyIsMeta;
     _shortcutMap = null;
   }
   return _chords!;
 }
 
+/// The app's own chords, before any keymap file: what a keymap is read against.
+List<ShellChord> get defaultShellChords => _buildChords();
+
 List<ShellChord>? _chords;
 bool? _chordsBuiltForMeta;
+List<KeymapEntry> _keymapEntries = const [];
+
+/// Lays the user's keymap over the defaults from now on. Every reader of
+/// [shellChords] sees it at its next read; a widget holding a map rebuilds
+/// on [keymapProvider].
+void applyKeymapEntries(List<KeymapEntry> entries) {
+  _keymapEntries = entries;
+  _chords = null;
+  _shortcutMap = null;
+}
+
 Map<ShortcutActivator, Intent>? _shortcutMap;
 
 /// The bindings [ShellShortcuts] installs. Pane-only and pane-local chords are
@@ -623,6 +700,18 @@ String? shellChordLabel<T extends Intent>({bool Function(T intent)? where}) {
     final intent = chord.intent;
     if (intent is! T) continue;
     if (where != null && !where(intent)) continue;
+    if (best == null || (!best.skipsShell && chord.skipsShell)) best = chord;
+  }
+  return best?.label;
+}
+
+/// How the keys that run [command] are written, after the user's keymap; null
+/// when nothing is bound to it. Where there are two, the one that survives a
+/// focused pane wins, as in [shellChordLabel].
+String? shellCommandLabel(String command) {
+  ShellChord? best;
+  for (final chord in shellChords) {
+    if (chord.command != command) continue;
     if (best == null || (!best.skipsShell && chord.skipsShell)) best = chord;
   }
   return best?.label;
@@ -709,6 +798,11 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
     if (!Platform.isMacOS) return;
     _chords.setMethodCallHandler(_onChord);
     unawaited(_registerChords());
+    // A keymap edit moves Cmd chords, and AppKit forwards only what it was told.
+    ref.listenManual(
+      keymapProvider.select((k) => k.revision),
+      (_, _) => unawaited(_registerChords()),
+    );
   }
 
   @override
@@ -764,6 +858,8 @@ class _ShellShortcutsState extends ConsumerState<ShellShortcuts> {
     final ref = this.ref;
     final child = widget.child;
     final controller = ref.read(shellControllerProvider.notifier);
+    // Rebuilt when a keymap is applied, so [shellShortcutMap] is read afresh.
+    ref.watch(keymapProvider.select((k) => k.revision));
     return Shortcuts(
       shortcuts: shellShortcutMap,
       child: Actions(

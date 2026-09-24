@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
+import '../shell_shortcuts.dart' show shellCommandLabel;
 import '../../../features/agents/application/agent_installations_controller.dart';
 import '../../../features/agents/application/agent_providers.dart';
 import '../../../features/cli_detection/application/cli_detection_providers.dart';
@@ -208,7 +209,7 @@ class QuickOpenSources {
       _command(
         'New project…',
         icon: AppIcons.folderPlus,
-        shortcut: 'Ctrl+Shift+N',
+        shortcut: shellCommandLabel('project.new'),
         onSelect: () => NewProjectDialog.show(context),
       ),
       // Ungated: the dialog picks its own project and checkout, and with no
@@ -216,7 +217,7 @@ class QuickOpenSources {
       _command(
         'New session…',
         icon: AppIcons.chatCircleDots,
-        shortcut: 'Ctrl+N',
+        shortcut: shellCommandLabel('session.new'),
         onSelect: () => NewSessionDialog.show(context),
       ),
       if (ref.read(selectedRepositoryIdProvider) != null)
@@ -270,7 +271,7 @@ class QuickOpenSources {
         'Terminal view',
         subtitle: 'Show the terminal in the workbench',
         icon: AppIcons.terminal,
-        shortcut: 'Ctrl+`',
+        shortcut: shellCommandLabel('view.toggleTerminal'),
         // The focused group: a command that names no tab means the group the
         // keyboard is in.
         onSelect: () => ref
@@ -293,13 +294,13 @@ class QuickOpenSources {
       _command(
         'Toggle Explorer',
         icon: AppIcons.treeStructure,
-        shortcut: 'Ctrl+B',
+        shortcut: shellCommandLabel('view.toggleExplorer'),
         onSelect: shell.toggleExplorerPane,
       ),
       _command(
         'Toggle side panel',
         icon: AppIcons.sidebarSimple,
-        shortcut: 'Ctrl+3',
+        shortcut: shellCommandLabel('view.toggleSidePanel'),
         onSelect: panel.toggle,
       ),
       for (final surface in SidePanelSurface.offered(
@@ -316,7 +317,7 @@ class QuickOpenSources {
         'Focus mode',
         subtitle: 'Give the workbench the whole window',
         icon: AppIcons.arrowsOutSimple,
-        shortcut: r'Ctrl+\',
+        shortcut: shellCommandLabel('view.toggleFocusMode'),
         onSelect: () => ref.read(terminalMaximizedProvider.notifier).toggle(),
       ),
       _command(

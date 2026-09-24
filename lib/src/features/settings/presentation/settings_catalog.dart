@@ -188,6 +188,14 @@ enum SettingsAnchor {
     'launcher',
     'shortcut',
   ]),
+  keyboard(SettingsSectionId.general, 'Keyboard', [
+    'keyboard',
+    'shortcuts',
+    'keymap',
+    'keybindings',
+    'bindings',
+    'keys',
+  ]),
   notes(SettingsSectionId.general, 'Notes', [
     'note',
     'notes',
@@ -631,6 +639,12 @@ const settingsEntries = <SettingsEntry>[
     anchor: SettingsAnchor.terminalTheme,
     description: 'Use a Ghostty or Warp theme found on this machine.',
     keywords: ['theme', 'colors', 'ghostty', 'warp'],
+  ),
+  SettingsEntry(
+    'Keyboard shortcuts',
+    anchor: SettingsAnchor.keyboard,
+    description: 'Every binding in force, and the keymap.json that moves them.',
+    keywords: ['keymap', 'shortcuts', 'rebind', 'keybindings', 'unbind'],
   ),
   SettingsEntry(
     'Terminal chords',

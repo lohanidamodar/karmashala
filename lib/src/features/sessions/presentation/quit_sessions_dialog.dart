@@ -310,10 +310,7 @@ Future<bool> confirmQuitWithRunningSessions(
 /// Where the kept sessions run, as the question says it: one place by name,
 /// several listed.
 String _where(List<InterruptedSession> sessions) {
-  final places = {
-    for (final s in sessions)
-      if (s.keptBy case final place?) place,
-  }.toList();
+  final places = {for (final s in sessions) ?s.keptBy}.toList();
   return places.length == 1
       ? 'in ${places.single}'
       : 'outside Karmashala (${places.join(', ')})';

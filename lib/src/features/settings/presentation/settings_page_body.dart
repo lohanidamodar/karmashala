@@ -25,6 +25,7 @@ import 'diagnostics_page.dart';
 import 'editor_files_sections.dart';
 import 'external_app_section.dart';
 import 'general_pages.dart';
+import 'keyboard_section.dart';
 import 'permissions_page.dart';
 import 'settings_catalog.dart';
 import 'side_panel_items_section.dart';
@@ -68,6 +69,7 @@ class SettingsPageBody extends StatelessWidget {
 Widget settingsSectionFor(SettingsAnchor anchor) => switch (anchor) {
   SettingsAnchor.startup => const StartupSection(),
   SettingsAnchor.launcherHotkey => const LauncherHotkeySection(),
+  SettingsAnchor.keyboard => const KeyboardSection(),
   SettingsAnchor.notes => const NotesSettingsSection(),
   SettingsAnchor.themeText => const ThemeTextSection(),
   SettingsAnchor.sidePanel => const SidePanelItemsSection(),
