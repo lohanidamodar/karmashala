@@ -11,8 +11,10 @@ import '../support/fake_command_runner.dart';
 void main() {
   const repo = EnvironmentPath(environmentId: 'windows', path: r'C:\src\app');
 
+  /// Neither verb here is commit or push, so both also carry the hooks
+  /// override (git_hooks_real_git_test.dart).
   void expectScrubbed(CommandRequest request) {
-    expect(request.environment, kGitChildEnvironment);
+    expect(request.environment, kGitUnhookedEnvironment);
     expect(request.removedEnvironment, kGitRemovedEnvironment);
   }
 
