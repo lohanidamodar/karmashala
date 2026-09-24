@@ -95,7 +95,8 @@ class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
             if (hosted > 0 && _keepHosted)
               Text(
                 '${hosted == total ? (total == 1 ? 'It runs' : 'They run') : '$hosted of them run'} '
-                'in the session host and keep running after Karmashala quits. '
+                '${_where(widget.sessions)} and keep running after Karmashala '
+                'quits. '
                 'Reopening picks ${hosted == 1 ? 'it' : 'them'} up where '
                 '${hosted == 1 ? 'it is' : 'they are'}.',
                 style: muted,
@@ -144,7 +145,8 @@ class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
                             Expanded(
                               child: Text(
                                 session.keepsRunning && _keepHosted
-                                    ? '${session.line} · keeps running'
+                                    ? '${session.line} · keeps running in '
+                                          '${session.keptBy}'
                                     : session.line,
                                 style: theme.textTheme.bodySmall,
                               ),
@@ -165,7 +167,11 @@ class _QuitSessionsDialogState extends State<QuitSessionsDialog> {
                 controlAffinity: ListTileControlAffinity.leading,
                 contentPadding: EdgeInsets.zero,
                 dense: true,
-                title: const Text('Keep host sessions running'),
+                title: Text(
+                  hosted == 1
+                      ? 'Keep that session running'
+                      : 'Keep those sessions running',
+                ),
                 subtitle: Text(
                   'Unticked, they are ended as Karmashala quits, and a turn '
                   'they are in stops there.',
@@ -299,4 +305,16 @@ Future<bool> confirmQuitWithRunningSessions(
     confirmLabel: 'Quit anyway',
   );
   return proceed;
+}
+
+/// Where the kept sessions run, as the question says it: one place by name,
+/// several listed.
+String _where(List<InterruptedSession> sessions) {
+  final places = {
+    for (final s in sessions)
+      if (s.keptBy case final place?) place,
+  }.toList();
+  return places.length == 1
+      ? 'in ${places.single}'
+      : 'outside Karmashala (${places.join(', ')})';
 }

@@ -84,11 +84,16 @@ abstract interface class ReapableTerminalInstance {
   Future<void> get reaped;
 }
 
-/// A [TerminalInstance] whose session lives in the session host, so quitting
-/// the app disconnects from it and leaves it running.
+/// A [TerminalInstance] whose session lives outside the app — in a session
+/// host, or under tmux on an SSH machine — so quitting the app disconnects from
+/// it and leaves it running.
 abstract interface class HostedTerminalInstance {
   /// Whether there is a running session here that a quit would leave behind.
   bool get outlivesApp;
+
+  /// Where it keeps running, as a sentence ends: "the session host",
+  /// "tmux on build-box".
+  String get keptBy;
 
   /// Ends the session on the host for good. Closing a pane never does this.
   Future<void> endHostedSession();

@@ -46,7 +46,8 @@ class SshTerminalInstance
         ParkableTerminalInstance,
         AdoptableTerminalInstance,
         RecordableTerminalInstance,
-        PromptTypingTerminalInstance {
+        PromptTypingTerminalInstance,
+        HostedTerminalInstance {
   SshTerminalInstance({
     required this.id,
     required this.title,
@@ -177,7 +178,15 @@ class SshTerminalInstance
   IngestTier _tier = IngestTier.hot;
 
   SSHSession? _session;
+  SSHClient? _client;
   HostPaneLink? _link;
+
+  /// The session runs in the host on [host]; a dropped link leaves it running.
+  bool _viaHost = false;
+
+  /// Whether the box has tmux, so the plain-SSH session outlives this pane.
+  /// Null until asked; a box without it ends the session with the channel.
+  bool? _underTmux;
   StreamSubscription<Uint8List>? _hostOutput;
   StreamSubscription<String>? _hostNotices;
   StreamSubscription<List<int>>? _stdoutSubscription;
@@ -292,6 +301,8 @@ class SshTerminalInstance
       }
 
       _session = session;
+      _client = client;
+      unawaited(_askForTmux(client));
       _stdoutSubscription = session.stdout.listen(_onDataBytes);
       _stderrSubscription = session.stderr.listen(_onDataBytes);
 
@@ -459,6 +470,7 @@ class SshTerminalInstance
         return true;
       }
       _link = link;
+      _viaHost = true;
 
       // The session id is the pane's own, stable across reattach. `attach`
       // first: on a reconnect the session is already there and asking to open
@@ -631,6 +643,53 @@ class SshTerminalInstance
     _exitCode = end.exitCode;
     _emit(remoteExitNotice(end.exitCode, reason: end.reason));
     _liveness.value = PaneLiveness.exited;
+  }
+
+  /// The script runs `tmux` when the box has it; asked separately, because the
+  /// script's own answer is inside a session that tmux then redraws.
+  Future<void> _askForTmux(SSHClient client) async {
+    try {
+      final answer = await client
+          .run('command -v tmux >/dev/null 2>&1 && echo yes')
+          .timeout(const Duration(seconds: 10));
+      _underTmux = String.fromCharCodes(answer).trim() == 'yes';
+    } on Object catch (e) {
+      _logger.debug('could not ask ${host.address} for tmux: $e');
+    }
+  }
+
+  @override
+  bool get outlivesApp =>
+      !_disposed && !_exited && (_viaHost || (_underTmux ?? false));
+
+  @override
+  String get keptBy =>
+      _viaHost ? 'the session host on ${host.name}' : 'tmux on ${host.name}';
+
+  @override
+  Future<void> endHostedSession() async {
+    final name = _hostSessionId();
+    if (_viaHost) {
+      final link = _link;
+      if (link != null) return link.closeSession(name);
+      // The link dropped; the session did not. A fresh one ends it.
+      final access = hostAccess;
+      final remotePath = (await access?.deployment())?.remotePath;
+      if (access == null || remotePath == null) return;
+      final fresh = await HostPaneLink.open(
+        await access.exec('$remotePath attach'),
+        clientId: 'pane-$id-end',
+      );
+      try {
+        await fresh.closeSession(name);
+      } finally {
+        await fresh.close();
+      }
+      return;
+    }
+    final client = _client;
+    if (client == null || !(_underTmux ?? false)) return;
+    await client.run('tmux kill-session -t ${_posixQuote(name)}');
   }
 
   /// Builds the remote shell script that detects `tmux` and either starts or

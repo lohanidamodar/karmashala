@@ -47,8 +47,9 @@ final sessionIsHostedLiveProvider = Provider<bool Function(String)>(
           ref.read(sessionLauncherProvider).livePaneFor(sessionId) != null,
 );
 
-/// The pane running [String] session when that session lives in the session
-/// host — a quit disconnects from it and it keeps running — or null.
+/// The pane running [String] session when that session lives outside the app
+/// — in a session host, or under tmux over SSH — so a quit disconnects from it
+/// and it keeps running; or null.
 final sessionHostedPaneProvider =
     Provider<HostedTerminalInstance? Function(String)>(
       (ref) => (sessionId) {
@@ -71,7 +72,7 @@ class InterruptedSession {
     required this.title,
     required this.agentName,
     required this.working,
-    this.keepsRunning = false,
+    this.keptBy,
   });
 
   final String id;
@@ -82,9 +83,11 @@ class InterruptedSession {
   /// interrupted; only one loses work in progress, and the list says which.
   final bool working;
 
-  /// Whether it lives in the session host, and so is left running by a quit
-  /// unless it is ended.
-  final bool keepsRunning;
+  /// Where it keeps running after a quit unless it is ended — "the session
+  /// host", "tmux on build-box" — or null when a quit stops it.
+  final String? keptBy;
+
+  bool get keepsRunning => keptBy != null;
 
   String get line => '$title — $agentName${working ? ', mid-turn' : ''}';
 }
@@ -153,7 +156,7 @@ class QuitResumeService {
               ? 'an agent that is no longer installed'
               : registry.displayNameFor(agentId),
           working: status(session.id)?.status == AgentActivityStatus.working,
-          keepsRunning: hosted(session.id) != null,
+          keptBy: hosted(session.id)?.keptBy,
         ),
       );
     }

@@ -565,6 +565,9 @@ class HostTerminalInstance
   Future<void> endHostedSession() =>
       _link?.closeSession(hostSessionId) ?? Future<void>.value();
 
+  @override
+  String get keptBy => 'the session host';
+
   /// Whether this pane attached to a session that already existed. It decides
   /// what an immediate end means: one we opened and that ended is a command
   /// that finished, one we merely found is a leftover to clear away.

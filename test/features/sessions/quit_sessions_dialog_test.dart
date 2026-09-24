@@ -15,12 +15,13 @@ void main() {
     String title = 'Port the importer',
     bool working = true,
     bool keepsRunning = false,
+    String keptBy = 'the session host',
   }) => InterruptedSession(
     id: id,
     title: title,
     agentName: 'Claude Code',
     working: working,
-    keepsRunning: keepsRunning,
+    keptBy: keepsRunning ? keptBy : null,
   );
 
   Future<QuitChoice?> show(
@@ -201,7 +202,8 @@ void main() {
     );
     expect(find.textContaining('mid-turn. Quitting stops'), findsNothing);
 
-    await tester.tap(find.text('Keep host sessions running'));
+    expect(find.textContaining('in the session host and keep'), findsOne);
+    await tester.tap(find.text('Keep that session running'));
     await tester.pumpAndSettle();
     expect(find.textContaining('mid-turn. Quitting stops'), findsOne);
 
@@ -305,6 +307,37 @@ void main() {
       expect(outcome.quit, isTrue);
       expect(outcome.ended, ['h1']);
     });
+  });
+
+  testWidgets('a session under tmux on an SSH box is named where it stays', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark(),
+        home: Scaffold(
+          body: QuitSessionsDialog(
+            sessions: [
+              interrupted(keepsRunning: true, keptBy: 'tmux on do-box'),
+              interrupted(
+                id: 's2',
+                title: 'Tidy the parser',
+                keepsRunning: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining(
+        'outside Karmashala (tmux on do-box, the session host)',
+      ),
+      findsOne,
+    );
+    expect(find.textContaining('keeps running in tmux on do-box'), findsOne);
+    expect(find.text('Keep those sessions running'), findsOne);
   });
 }
 

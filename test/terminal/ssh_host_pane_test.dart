@@ -235,6 +235,24 @@ void main() {
     },
   );
 
+  test(
+    'a quit is told the session outlives it, and can end it there',
+    () async {
+      final access = PaneAccess(ready());
+      final pane = paneWith(access: access);
+      await settle();
+
+      expect(pane.outlivesApp, isTrue);
+      expect(pane.keptBy, 'the session host on box');
+      await pane.endHostedSession();
+      expect(
+        access.channels.single.only<CloseMessage>().sessionId,
+        'karmashala_h1_p1',
+      );
+      pane.dispose();
+    },
+  );
+
   group('a session already living in tmux', () {
     test(
       'keeps attaching through tmux, and nothing is deployed for it',
