@@ -26,7 +26,7 @@ extension _TerminalPaneMenu on _TerminalPaneStackState {
     // selection that caught something: a drag over blank cells is not a todo.
     final selected = selection == null
         ? null
-        : session.terminal.buffer.getText(selection);
+        : terminalCopyText(session.terminal.buffer, selection);
     final capturable = selected != null && selected.trim().isNotEmpty;
     final notesEnabled = ref.read(notesEnabledProvider);
     final recordingThis = ref

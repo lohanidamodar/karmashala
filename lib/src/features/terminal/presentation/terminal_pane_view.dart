@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:xterm2/xterm.dart';
 
+import 'terminal_copy_text.dart';
+
 import '../../../app/shell/shell_shortcuts.dart';
 import '../../../core/util/clock_provider.dart';
 import 'package:karmashala_ui/tokens.dart';
@@ -428,7 +430,7 @@ class _TerminalPaneViewState extends ConsumerState<TerminalPaneView> {
     // No selection: ^C, byte for byte as before.
     if (selection == null) return null;
     if (event is KeyDownEvent) {
-      final text = widget.instance.terminal.buffer.getText(selection);
+      final text = terminalCopyText(widget.instance.terminal.buffer, selection);
       if (text.isNotEmpty) Clipboard.setData(ClipboardData(text: text));
       controller.clearSelection();
     }

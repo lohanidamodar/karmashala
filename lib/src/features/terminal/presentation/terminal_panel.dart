@@ -17,6 +17,7 @@ import '../../sessions/presentation/new_session_dialog.dart';
 import '../../todos/presentation/todo_edit_dialog.dart';
 import '../application/terminal_capture.dart';
 import '../application/terminal_paste.dart';
+import 'terminal_copy_text.dart';
 import '../../../core/media/video_support_provider.dart';
 import '../application/terminal_recording_controller.dart';
 import '../application/terminal_theme_controller.dart';
