@@ -12,6 +12,7 @@ import 'package:karmashala_ui/menus.dart';
 import '../../editor/application/code_editor_providers.dart';
 import '../../editor/application/editor_tab_actions.dart';
 import '../../files/presentation/file_name_dialog.dart';
+import '../../terminal/application/dropped_paths.dart';
 import 'package:agent_cli/process.dart';
 import '../application/file_explorer_providers.dart';
 import '../application/file_tree_rows.dart';
@@ -295,7 +296,49 @@ class FileEntryRow extends ConsumerWidget {
           canReveal: ref.read(revealInFileManagerProvider).canReveal(_path),
         ),
         onSelected: actions.onMenu,
-        builder: (context) => row,
+        // Dropped on a session's pane, it pastes the path — what dragging the
+        // same file in from the OS does.
+        builder: (context) => Draggable<HostPathDrag>(
+          data: HostPathDrag([entry.windowsPath]),
+          dragAnchorStrategy: pointerDragAnchorStrategy,
+          feedback: _DragFeedback(name: entry.name, isDirectory: isDir),
+          child: row,
+        ),
+      ),
+    );
+  }
+}
+
+/// What follows the pointer while a row is dragged: its name, on a chip.
+class _DragFeedback extends StatelessWidget {
+  const _DragFeedback({required this.name, required this.isDirectory});
+
+  final String name;
+  final bool isDirectory;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(Radii.sm),
+      color: theme.colorScheme.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: Insets.sm,
+          vertical: Insets.xs,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isDirectory ? AppIcons.folder : AppIcons.article,
+              size: Chrome.iconAction,
+            ),
+            const SizedBox(width: Insets.xs),
+            Text(name, style: theme.textTheme.bodySmall),
+          ],
+        ),
       ),
     );
   }

@@ -1,5 +1,13 @@
 import 'package:agent_cli/process.dart';
 
+/// Files dragged from inside the app — the Files panel — onto a pane. Host
+/// paths, exactly what an OS drop hands over, so both land the same way.
+class HostPathDrag {
+  const HostPathDrag(this.paths);
+
+  final List<String> paths;
+}
+
 /// Where a pane's process runs, as far as a file on this machine is concerned.
 enum PaneReach {
   /// This machine, in its own path spelling.

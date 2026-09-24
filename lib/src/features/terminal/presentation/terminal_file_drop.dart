@@ -82,55 +82,59 @@ class _TerminalFileDropState extends ConsumerState<TerminalFileDrop> {
         setState(() => _over = false);
         _drop([for (final file in details.files) file.path]);
       },
-      child: Stack(
-        children: [
-          Positioned.fill(child: widget.child),
-          if (_over)
-            Positioned.fill(
-              child: IgnorePointer(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: StateLayers.dropTarget(theme.colorScheme),
-                    border: Border.all(
-                      color: theme.colorScheme.primary,
-                      width: 2,
-                    ),
+      // The Files panel's rows drag inside the app, which no OS drop sees.
+      child: DragTarget<HostPathDrag>(
+        onAcceptWithDetails: (details) => _drop(details.data.paths),
+        builder: (context, candidates, _) =>
+            _overlaid(theme, over: _over || candidates.isNotEmpty),
+      ),
+    );
+  }
+
+  Widget _overlaid(ThemeData theme, {required bool over}) => Stack(
+    children: [
+      Positioned.fill(child: widget.child),
+      if (over)
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: StateLayers.dropTarget(theme.colorScheme),
+                border: Border.all(color: theme.colorScheme.primary, width: 2),
+              ),
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: Insets.sm,
+                    vertical: Insets.xs,
                   ),
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: Insets.sm,
-                        vertical: Insets.xs,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    borderRadius: BorderRadius.circular(Radii.sm),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        AppIcons.file,
+                        size: Chrome.iconSmall,
+                        color: theme.colorScheme.onPrimary,
                       ),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(Radii.sm),
+                      const SizedBox(width: Insets.xs),
+                      Text(
+                        'Drop to paste the path',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.onPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            AppIcons.file,
-                            size: Chrome.iconSmall,
-                            color: theme.colorScheme.onPrimary,
-                          ),
-                          const SizedBox(width: Insets.xs),
-                          Text(
-                            'Drop to paste the path',
-                            style: theme.textTheme.labelSmall?.copyWith(
-                              color: theme.colorScheme.onPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   ),
                 ),
               ),
             ),
-        ],
-      ),
-    );
-  }
+          ),
+        ),
+    ],
+  );
 }
