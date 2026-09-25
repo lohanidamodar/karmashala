@@ -7,6 +7,8 @@ import 'package:karmashala_session_engine/karmashala_session_engine.dart'
 import 'package:karmashala_store/database.dart';
 import 'package:path/path.dart' as p;
 
+import '../automations/daemon_automations.dart';
+import '../automations/session_mcp_access.dart';
 import '../companion/daemon_companion.dart';
 import '../domain/session_registry.dart';
 import '../hooks/hook_endpoint_file.dart';
@@ -161,6 +163,16 @@ Future<int> runServe(
     _mcpPort(args),
     errSink,
   );
+  final automations = await _startAutomations(
+    database: database,
+    recording: recording,
+    registry: registry,
+    server: server,
+    mcp: mcp,
+    mcpTools: mcpTools,
+    dataDirectory: dataDirectory,
+    errSink: errSink,
+  );
   final remembered = registry.sessions.length;
   final listener = await UnixSocketHostListener.bind(paths.socketPath);
 
@@ -204,6 +216,11 @@ Future<int> runServe(
           : 'store ${p.join(dataDirectory, 'karmashala.sqlite')}',
     )
     ..writeln(
+      automations == null
+          ? 'automations unavailable — the line above says why'
+          : 'automations scheduled here',
+    )
+    ..writeln(
       companion == null || !companionServing
           ? 'companion unavailable — the line above says why'
           : companion.service == null
@@ -228,6 +245,8 @@ Future<int> runServe(
   await mcp?.close();
   mcpTools.close();
   await companion?.close();
+  // Before the sessions end: a check the shutdown kills is not a verdict.
+  await automations?.close();
   await recording?.close();
   await registry.shutdown();
   database?.close();
@@ -302,6 +321,44 @@ AppDatabase? _openStore(String dataDirectory, IOSink errSink) {
       'karmashala_host: no store in $dataDirectory ($error) — run '
       '`probe-store` here',
     );
+    return null;
+  }
+}
+
+/// The scheduler, runs and checks, on the shared store. Null, reported, when
+/// there is no store or they cannot start: sessions do not need automations.
+Future<DaemonAutomations?> _startAutomations({
+  required AppDatabase? database,
+  required SessionStatusRecording? recording,
+  required SessionRegistry registry,
+  required HostServer server,
+  required DaemonMcp? mcp,
+  required McpToolRelay mcpTools,
+  required String dataDirectory,
+  required IOSink errSink,
+}) async {
+  if (database == null || recording == null) return null;
+  final automations = DaemonAutomations(
+    database: database,
+    registry: registry,
+    dataDirectory: dataDirectory,
+    mcp: SessionMcpAccessPoint(
+      mcp: mcp,
+      configDirectory: p.join(dataDirectory, 'mcp'),
+    ),
+    announce: server.lifecycle.publishAutomationsChanged,
+    log: (message) => errSink.writeln('karmashala_host: $message'),
+  );
+  try {
+    server.automations = automations;
+    mcpTools.local = automations.localTool;
+    await automations.start(recording.changes);
+    return automations;
+  } on Object catch (error) {
+    server.automations = null;
+    mcpTools.local = null;
+    await automations.close();
+    errSink.writeln('karmashala_host: automations did not start ($error)');
     return null;
   }
 }

@@ -3,7 +3,6 @@
 library;
 
 import 'package:agent_cli/descriptors.dart';
-import 'session_mcp_arguments.dart';
 
 /// The arguments for one agent launch, in the order the agents want: a fork
 /// **replaces** resume, and [AgentPromptSupport] decides the prompt's shape.
@@ -24,26 +23,37 @@ List<String> agentPaneArguments(
   final trimmedPrompt = prompt?.trim();
   final forking = forkSessionId != null && forkSessionId.isNotEmpty;
   return [
-    // First, because Codex's `-c` is a global and its resume a *subcommand*:
-    // everything global has to be on the left of it, and none of it variadic.
+    // First: Codex's `-c` is a global and its resume a subcommand.
     ...agentMcpArguments(descriptor, url: mcpUrl, configPath: mcpConfigPath),
-    // Global too, and for the same reason left of any subcommand: the switch
-    // that stops the agent updating itself in a Karmashala-launched process.
     if (suppressSelfUpdate) ...?launch?.selfUpdate.disableArguments,
     ...?launch?.permission.argumentsFor(permissionMode),
-    // Beside the permission flags and for the same reason: a global option, so
-    // it has to be left of Codex's `resume`/`fork` subcommand.
     ...?launch?.model.argumentsFor(modelId),
-    // A global too: the file is context for the whole session, and nothing is
-    // emitted for an agent that takes none.
     ...?launch?.systemPromptFile.argumentsFor(systemPromptFilePath),
     if (sessionId != null && resumeSessionId == null && !forking)
       ...?launch?.sessionIdAssignment.argumentsFor(sessionId),
     if (forking) ...?launch?.fork.argumentsFor(forkSessionId),
     if (!forking && resumeSessionId != null && resumeSessionId.isNotEmpty)
       ...?launch?.interactiveResume.argumentsFor(resumeSessionId),
-    // Last, and spread rather than appended: the prompt is a positional for
-    // Claude and Codex but two argv entries for Antigravity.
+    // Last, and spread: a positional for Claude and Codex, two for Antigravity.
     if (trimmedPrompt != null) ...?launch?.prompt.argumentsFor(trimmedPrompt),
   ];
+}
+
+/// The flags that point one agent at Karmashala's MCP endpoint — the only
+/// volatile half of a command line, so they are rebuilt each launch.
+List<String> agentMcpArguments(
+  AgentDescriptor? descriptor, {
+  String? url,
+  String? configPath,
+}) {
+  final support = descriptor?.launch.mcp;
+  if (support == null) return const [];
+  if (support.needsConfigFile) {
+    return configPath == null || configPath.isEmpty
+        ? const []
+        : support.argumentsFor(url: url, configPath: configPath);
+  }
+  return url == null || url.isEmpty
+      ? const []
+      : support.argumentsFor(url: url, configPath: configPath);
 }

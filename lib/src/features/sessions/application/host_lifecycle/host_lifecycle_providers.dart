@@ -10,6 +10,7 @@ import 'package:karmashala_terminal_runtime/instances.dart'
 import 'package:riverpod/riverpod.dart';
 
 import '../../../agents/application/agent_hook_intake.dart';
+import '../../../automations/application/host_automations.dart';
 import '../../../agents/application/agent_hook_sweep.dart';
 import '../../../../core/database/database_providers.dart';
 import '../../../mcp/mcp_tool_dispatcher.dart';
@@ -81,6 +82,8 @@ final hostLifecycleSubscriberProvider = Provider<HostLifecycleSubscriber?>((
     mcpTools: ref.read(mcpToolDispatcherProvider),
     // The host serves the phone companion; this app answers what only it can.
     companion: ref.read(hostCompanionLinkProvider),
+    // The host runs automations; this app answers what only it can.
+    automations: ref.read(hostAutomationsLinkProvider),
   );
   // A pane starting on the host may have just started the host itself: the
   // launch's start failed, or the host went away since.

@@ -41,7 +41,6 @@ import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_session/resume.dart';
 import 'decision_recorder.dart';
 import 'handoff_packet_files.dart';
-import 'session_launch_arguments.dart';
 import 'session_launch_exceptions.dart';
 import 'session_mcp_arguments.dart';
 import 'pending_live_switches.dart';
@@ -57,7 +56,8 @@ export 'session_launch_exceptions.dart';
 
 // And `agentPaneArguments`, for the same reason: a pure function of a
 // descriptor and a set of choices, reached through the launcher.
-export 'session_launch_arguments.dart';
+export 'package:karmashala_session/launch.dart'
+    show agentMcpArguments, agentPaneArguments;
 
 // The launcher's body, one `part` per concern — start, resume_guards, policy,
 // surfaces, input — because privacy in Dart is per library.

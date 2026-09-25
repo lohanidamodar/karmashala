@@ -13,9 +13,7 @@ import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/runs.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
-import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
-import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
-import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
@@ -31,7 +29,7 @@ class _FakeCheckpoints extends CheckpointService {
   _FakeCheckpoints(AppDatabase db)
     : super(
         runnerFactory: const CommandRunnerFactory(),
-        environmentDao: ExecutionEnvironmentDao(db),
+        environmentOf: ExecutionEnvironmentDao(db).getById,
         dao: CheckpointDao(db),
         clock: FixedClock(testTime),
         newId: () => 'cp1',

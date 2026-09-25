@@ -1,9 +1,7 @@
-import 'package:riverpod/riverpod.dart';
-
 import 'package:karmashala_store/database.dart';
-import '../../../core/database/database_providers.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_git/git.dart';
+
 import '../domain/checkpoint.dart';
 
 /// Data access for session checkpoints. The rows are an index over git
@@ -272,7 +270,3 @@ class CheckpointDao {
     );
   }
 }
-
-final checkpointDaoProvider = Provider<CheckpointDao>(
-  (ref) => CheckpointDao(ref.watch(databaseProvider)),
-);

@@ -6,7 +6,8 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/discovery.dart';
 import 'package:agent_cli/read.dart';
 import 'package:agent_cli/process.dart';
-import '../../checkpoints/data/checkpoint_dao.dart';
+import '../../checkpoints/application/checkpoint_providers.dart'
+    show checkpointDaoProvider;
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import '../../repositories/application/repository_providers.dart';

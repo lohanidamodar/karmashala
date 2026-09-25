@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:karmashala_store/database.dart';
-import 'project_check.dart';
+import '../domain/project_check.dart';
 
 /// The per-checkout verification the unattended gate refuses without: whether
 /// it is on, and what it runs.

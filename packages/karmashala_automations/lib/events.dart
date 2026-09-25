@@ -2,4 +2,4 @@
 /// rule answering its own action, and the per-rule rate limit behind it.
 library;
 
-export 'src/automation_event.dart';
+export 'src/domain/automation_event.dart';

@@ -21,15 +21,11 @@ import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_status_providers.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_automations/resumes.dart';
+import 'package:karmashala_automations/scheduler.dart'
+    show ScheduledResumeFiring;
 import 'automation_scheduler.dart';
 import 'scheduled_resume_providers.dart';
 import 'unattended_preflight.dart';
-
-/// What happens when a scheduled resume comes due. Every call must leave the
-/// row out of `pending`, or the same fire would repeat on every tick.
-abstract interface class ScheduledResumeFiring {
-  Future<void> fire(ScheduledResume resume, {String note});
-}
 
 final scheduledResumeFiringProvider = Provider<ScheduledResumeFiring>(
   ScheduledResumeRunner.new,

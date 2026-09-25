@@ -6,13 +6,12 @@ import 'package:path/path.dart' as p;
 import '../../../core/database/database_providers.dart';
 import '../../browser/application/browser_providers.dart';
 import 'package:karmashala_devices/providers.dart';
-import '../../follow_ups/domain/session_ending.dart';
+import 'package:karmashala_session/session.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_signals.dart';
-import '../data/verification_artifact_store.dart';
-import '../data/verification_dao.dart';
+import 'package:karmashala_verification/store.dart';
 import '../domain/session_verdict.dart';
-import '../domain/verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'verification_service.dart';
 import '../../../core/paths/app_support_directory.dart';
 

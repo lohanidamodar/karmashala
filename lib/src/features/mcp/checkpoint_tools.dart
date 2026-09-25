@@ -1,9 +1,8 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../checkpoints/application/checkpoint_providers.dart';
-import '../checkpoints/application/checkpoint_service.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../checkpoints/application/session_checkpoint_recorder.dart';
-import '../checkpoints/domain/checkpoint.dart';
 import '../checkpoints/domain/checkpoint_title.dart';
 import 'package:karmashala_git/git.dart';
 

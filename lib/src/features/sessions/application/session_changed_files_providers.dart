@@ -7,8 +7,9 @@ import 'package:agent_cli/process.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
 import 'package:agent_cli/descriptors.dart';
-import '../../checkpoints/data/checkpoint_dao.dart';
-import '../../checkpoints/domain/checkpoint.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
+import '../../checkpoints/application/checkpoint_providers.dart'
+    show checkpointDaoProvider;
 import '../../cli_detection/application/agent_store_server_providers.dart';
 import 'package:agent_cli/read.dart';
 import '../../environments/application/environment_providers.dart';

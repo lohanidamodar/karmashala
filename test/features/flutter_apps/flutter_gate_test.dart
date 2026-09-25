@@ -12,7 +12,7 @@ import 'package:karmashala_flutter_apps/flutter_apps.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../../support/fixtures.dart';

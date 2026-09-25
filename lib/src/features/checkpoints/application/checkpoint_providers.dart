@@ -1,5 +1,6 @@
 import 'package:riverpod/riverpod.dart';
 
+import '../../../core/database/database_providers.dart';
 import '../../../core/process/command_runner_providers.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../../core/util/id_generator_provider.dart';
@@ -8,14 +9,16 @@ import '../../git/application/parsed_diff.dart';
 import 'package:agent_cli/process.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
-import '../data/checkpoint_dao.dart';
-import '../domain/checkpoint.dart';
-import 'checkpoint_service.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
+
+final checkpointDaoProvider = Provider<CheckpointDao>(
+  (ref) => CheckpointDao(ref.watch(databaseProvider)),
+);
 
 final checkpointServiceProvider = Provider<CheckpointService>(
   (ref) => CheckpointService(
     runnerFactory: ref.watch(commandRunnerFactoryProvider),
-    environmentDao: ref.watch(executionEnvironmentDaoProvider),
+    environmentOf: ref.watch(executionEnvironmentDaoProvider).getById,
     dao: ref.watch(checkpointDaoProvider),
     clock: ref.watch(clockProvider),
     newId: () => ref.read(idGeneratorProvider).newId(),

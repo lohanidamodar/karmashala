@@ -1,5 +1,8 @@
 import 'package:karmashala_host/lifecycle_client.dart'
     show
+        AutomationCallMessage,
+        AutomationNoticeKind,
+        ChecksRanMessage,
         CompanionCallMessage,
         CompanionEventMessage,
         CompanionNoticeMessage,
@@ -28,6 +31,11 @@ class HostLifecycleFeed {
     CompanionAnswer? answerCompanionCall,
     void Function(CompanionNoticeMessage notice)? noticeCompanion,
     CompanionPair? pairCompanion,
+    Stream<AutomationCallMessage>? automationCalls,
+    Stream<void>? automationsChanged,
+    void Function(AutomationNoticeKind kind)? noticeAutomations,
+    void Function(int callId, {String? error})? answerAutomationCall,
+    Future<ChecksRanMessage> Function(String sessionId)? runChecks,
   }) : hooks = hooks ?? const Stream.empty(),
        replyHook = replyHook ?? _noReply,
        sessionChanges = sessionChanges ?? const Stream.empty(),
@@ -39,7 +47,33 @@ class HostLifecycleFeed {
        configureCompanion = configureCompanion ?? _noConfig,
        answerCompanionCall = answerCompanionCall ?? _noCompanionAnswer,
        noticeCompanion = noticeCompanion ?? _noNotice,
-       pairCompanion = pairCompanion ?? _noPairing;
+       pairCompanion = pairCompanion ?? _noPairing,
+       automationCalls = automationCalls ?? const Stream.empty(),
+       automationsChanged = automationsChanged ?? const Stream.empty(),
+       noticeAutomations = noticeAutomations ?? _noAutomationNotice,
+       answerAutomationCall = answerAutomationCall ?? _noAutomationAnswer,
+       runChecks = runChecks ?? _noChecks;
+
+  static void _noAutomationNotice(AutomationNoticeKind kind) {}
+  static void _noAutomationAnswer(int callId, {String? error}) {}
+  static Future<ChecksRanMessage> _noChecks(String sessionId) =>
+      Future.error(StateError('this host runs no checks'));
+
+  /// Automation calls the host forwards, once this app has said it is the
+  /// app.
+  final Stream<AutomationCallMessage> automationCalls;
+
+  /// Each time the host wrote automation, run, check or verification rows.
+  final Stream<void> automationsChanged;
+
+  /// "I am the app", or "I wrote automation rows".
+  final void Function(AutomationNoticeKind kind) noticeAutomations;
+
+  /// How one forwarded automation call ended.
+  final void Function(int callId, {String? error}) answerAutomationCall;
+
+  /// Runs a session's project checks in sessions the host owns.
+  final Future<ChecksRanMessage> Function(String sessionId) runChecks;
 
   static void _noReply(int holdId) {}
   static void _noOffer(List<Map<String, Object?>> tools) {}

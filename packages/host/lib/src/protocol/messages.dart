@@ -8,12 +8,13 @@ import 'wire.dart';
 
 part 'hook_messages.dart';
 part 'lifecycle_messages.dart';
+part 'automation_messages.dart';
 part 'companion_messages.dart';
 part 'mcp_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
-const int kProtocolVersion = 4;
+const int kProtocolVersion = 5;
 
 enum ProtocolErrorCode {
   protocolMismatch(1),
@@ -886,4 +887,10 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.companionResult => CompanionResultMessage.decode(frame),
   MessageType.companionNotice => CompanionNoticeMessage.decode(frame),
   MessageType.companionEvent => CompanionEventMessage.decode(frame),
+  MessageType.automationNotice => AutomationNoticeMessage.decode(frame),
+  MessageType.automationsChanged => AutomationsChangedMessage.decode(frame),
+  MessageType.automationCall => AutomationCallMessage.decode(frame),
+  MessageType.automationResult => AutomationResultMessage.decode(frame),
+  MessageType.checksRun => ChecksRunMessage.decode(frame),
+  MessageType.checksRan => ChecksRanMessage.decode(frame),
 };

@@ -41,6 +41,15 @@ class McpToolRelay {
 
   bool get appConnected => _app != null;
 
+  /// A tool the daemon answers itself (`checks_run` on this machine), or null
+  /// to hand the call to the app like every other.
+  Future<Object?>? Function(
+    String tool,
+    Map<String, dynamic> arguments,
+    String? callerSessionId,
+  )?
+  local;
+
   /// [owner] runs tools from now on, with [tools] as its catalogue; frames to
   /// it go through [send].
   void adopt(
@@ -86,6 +95,8 @@ class McpToolRelay {
     Map<String, dynamic> arguments,
     String? callerSessionId,
   ) {
+    final here = local?.call(tool, arguments, callerSessionId);
+    if (here != null) return here;
     final app = _app;
     if (app == null) {
       return Future.error(const McpToolRelayFailure(kMcpAppNotRunning));

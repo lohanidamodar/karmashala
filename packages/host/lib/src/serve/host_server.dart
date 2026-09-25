@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../automations/automation_handler.dart';
 import '../companion/companion_handler.dart';
 import '../domain/host_session.dart';
 import '../domain/session_lifecycle.dart';
@@ -28,6 +29,7 @@ class HostServer {
     this.companion,
     this.build,
     this.mcpTools,
+    this.automations,
     HookHolds? holds,
   }) : _now = clock ?? _utcNow,
        startedAt = (clock ?? _utcNow)(),
@@ -52,6 +54,10 @@ class HostServer {
 
   /// Where agents' tool calls go to the app that runs them; null serves none.
   final McpToolRelay? mcpTools;
+
+  /// The daemon's automations and checks; null when there is no store. Set
+  /// after construction, because it needs this server's lifecycle feed.
+  AutomationHandler? automations;
 
   /// This executable's `hostBuildOf`, read once at start, so a binary
   /// replaced under a running `serve` still reports the build it runs.
@@ -138,6 +144,7 @@ class _ClientSession {
     _exitWatches.clear();
     await _lifecycleWatch?.cancel();
     _server.mcpTools?.detach(this);
+    _server.automations?.detach(this);
     await _server.companion?.detach(this);
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
@@ -287,6 +294,12 @@ class _ClientSession {
         _server.companion?.answer(this, message);
       case CompanionNoticeMessage():
         await _server.companion?.notice(this, message);
+      case AutomationNoticeMessage():
+        _server.automations?.notice(this, message, _send);
+      case AutomationResultMessage():
+        _server.automations?.answer(this, message);
+      case ChecksRunMessage():
+        _onChecksRun(message);
       default:
         _send(
           ErrorMessage(
@@ -296,6 +309,23 @@ class _ClientSession {
           ),
         );
     }
+  }
+
+  /// Not awaited: a test suite takes minutes, and this client's other frames
+  /// must not wait behind it.
+  void _onChecksRun(ChecksRunMessage message) {
+    final automations = _server.automations;
+    if (automations == null) {
+      _send(
+        ChecksRanMessage(
+          requestId: message.requestId,
+          outcome: ChecksRunOutcome.elsewhere,
+          message: 'this host runs no automations: it has no store',
+        ),
+      );
+      return;
+    }
+    unawaited(automations.runChecks(message).then(_send));
   }
 
   Future<void> _onPair(PairMessage message) async {

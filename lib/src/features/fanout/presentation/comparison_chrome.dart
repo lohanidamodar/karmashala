@@ -3,9 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../verification/domain/verdict_attribution.dart';
+import 'package:karmashala_verification/verification.dart';
 import '../../verification/presentation/attribution_mark.dart';
-import '../../verification/domain/verification_run.dart';
 import '../../verification/presentation/verdict_appearance.dart';
 import '../application/comparison_providers.dart';
 import '../domain/comparison.dart';

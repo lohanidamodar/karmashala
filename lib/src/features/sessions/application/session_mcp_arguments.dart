@@ -5,27 +5,12 @@ import 'package:agent_cli/descriptors.dart';
 import '../../environments/application/environment_providers.dart';
 import 'package:agent_cli/process.dart';
 import '../../mcp/session_mcp.dart';
+import 'package:karmashala_session/launch.dart';
 import 'package:karmashala_terminal_core/profiles.dart';
 import 'session_working_directory.dart';
 
-/// The flags that point one agent at this app's MCP endpoint — the only
-/// volatile half of a command line, so they are rebuilt each launch, not kept.
-List<String> agentMcpArguments(
-  AgentDescriptor? descriptor, {
-  String? url,
-  String? configPath,
-}) {
-  final support = descriptor?.launch.mcp;
-  if (support == null) return const [];
-  if (support.needsConfigFile) {
-    return configPath == null || configPath.isEmpty
-        ? const []
-        : support.argumentsFor(url: url, configPath: configPath);
-  }
-  return url == null || url.isEmpty
-      ? const []
-      : support.argumentsFor(url: url, configPath: configPath);
-}
+export 'package:karmashala_session/launch.dart'
+    show agentMcpArguments, agentPaneArguments;
 
 /// How a session will reach Karmashala's own tools, or `null`, which is
 /// ordinary and never an error: the launch is then what it was before MCP.

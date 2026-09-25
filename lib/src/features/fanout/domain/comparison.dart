@@ -1,5 +1,5 @@
 import 'package:agent_cli/process.dart';
-import '../../verification/domain/verdict_attribution.dart';
+import 'package:karmashala_verification/verification.dart';
 
 /// What happened to a comparison in the end.
 enum ComparisonOutcome {

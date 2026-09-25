@@ -1,10 +1,6 @@
 import 'package:karmashala_store/database.dart';
-import 'package:karmashala/src/features/verification/data/verification_dao.dart';
-import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
-import 'package:karmashala/src/features/verification/domain/verification_artifact.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
-import 'package:karmashala/src/features/verification/domain/verification_step.dart';
-import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _t0 = DateTime.utc(2026, 8, 30, 12);

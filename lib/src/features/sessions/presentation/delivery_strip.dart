@@ -281,8 +281,8 @@ class _DeliveryStripState extends ConsumerState<DeliveryStrip> {
       runningSessionChecksProvider.select((s) => s.contains(widget.sessionId)),
     );
     const checksTooltip =
-        'Run this repository\'s project checks in visible panes, in the '
-        'directory this session works in. The result is recorded against the '
+        'Run this repository\'s project checks in sessions Karmashala owns, in '
+        'the directory this session works in. The result is recorded against the '
         'session as Karmashala\'s own reading and shown beside the stage.';
     void runChecks() => unawaited(
       ref.read(runningSessionChecksProvider.notifier).run(widget.sessionId),

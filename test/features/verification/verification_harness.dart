@@ -5,8 +5,7 @@ import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_devices/devices.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
-import 'package:karmashala/src/features/verification/data/verification_artifact_store.dart';
-import 'package:karmashala/src/features/verification/data/verification_dao.dart';
+import 'package:karmashala_verification/store.dart';
 
 import '../../support/fake_command_runner.dart';
 import '../browser/fake_browser.dart';

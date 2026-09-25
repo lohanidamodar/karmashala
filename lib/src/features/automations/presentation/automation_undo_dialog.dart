@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:karmashala_ui/dialogs.dart';
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../../checkpoints/application/checkpoint_service.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../application/automation_undo.dart';
 import 'package:karmashala_automations/runs.dart';
 

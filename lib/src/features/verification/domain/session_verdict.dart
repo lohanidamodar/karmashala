@@ -1,5 +1,4 @@
-import 'verdict_attribution.dart';
-import 'verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 
 /// What a session's verification record says, for a surface with room for one
 /// word. Seven states, not [VerificationVerdict]'s three, because an absence is

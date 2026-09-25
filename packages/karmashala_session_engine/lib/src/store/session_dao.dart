@@ -46,6 +46,18 @@ class SessionDao {
     );
   }
 
+  /// Inserts [session] and links its repository as the primary one, in one
+  /// transaction: a row no list can place must not be left behind.
+  void insertWithPrimaryRepository(Session session) => _db.transaction(() {
+    insert(session);
+    _db.execute(
+      'INSERT INTO session_repositories (session_id, repository_id, role) '
+      "VALUES (?, ?, 'primary') "
+      'ON CONFLICT(session_id, repository_id) DO NOTHING;',
+      [session.id, session.repositoryId],
+    );
+  });
+
   /// Updates the mutable fields of a session (title, worktree, status).
   void update(Session session) {
     _db.execute(

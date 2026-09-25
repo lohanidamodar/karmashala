@@ -5,7 +5,7 @@ import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
 import '../application/verification_providers.dart';
 import '../domain/session_verdict.dart';
-import '../domain/verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'verdict_appearance.dart';
 
 /// The one way a surface says whether a session's work was ever checked. It

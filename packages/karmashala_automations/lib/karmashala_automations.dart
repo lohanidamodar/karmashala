@@ -5,10 +5,13 @@
 library;
 
 export 'automations.dart';
+export 'check_runner.dart';
 export 'checks.dart';
 export 'events.dart';
 export 'persistence.dart';
 export 'resumes.dart';
+export 'runner.dart';
 export 'runs.dart';
+export 'scheduler.dart';
 export 'schedules.dart';
 export 'unattended.dart';

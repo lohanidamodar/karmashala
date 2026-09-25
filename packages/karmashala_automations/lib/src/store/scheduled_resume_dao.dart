@@ -1,6 +1,6 @@
 import 'package:karmashala_store/database.dart';
 
-import 'scheduled_resume.dart';
+import '../domain/scheduled_resume.dart';
 
 /// Data access for scheduled resumes. Hand-written SQL.
 class ScheduledResumeDao {

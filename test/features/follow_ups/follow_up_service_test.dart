@@ -7,17 +7,15 @@ import 'package:karmashala/src/features/follow_ups/application/follow_up_provide
 import 'package:karmashala/src/features/follow_ups/application/follow_up_service.dart';
 import 'package:karmashala/src/features/follow_ups/data/follow_up_dao.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
-import 'package:karmashala/src/features/follow_ups/domain/session_ending.dart';
+import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/projects/data/project_dao.dart';
 import 'package:karmashala/src/features/repositories/data/repository_dao.dart';
 import 'package:karmashala/src/features/sessions/application/decision_recorder.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/events.dart';
 import 'package:karmashala_session/lineage.dart';
-import 'package:karmashala_session/session.dart';
-import 'package:karmashala/src/features/verification/data/verification_dao.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
-import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

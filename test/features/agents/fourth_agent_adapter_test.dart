@@ -13,7 +13,6 @@ import 'package:karmashala/src/features/cli_detection/application/cli_detection_
 import 'package:karmashala/src/features/cli_detection/data/cli_session_mutator.dart';
 import 'package:karmashala/src/features/environments/application/environment_resolver.dart';
 import 'package:karmashala/src/features/sessions/application/session_engine_provider.dart';
-import 'package:karmashala/src/features/sessions/application/session_launch_arguments.dart';
 import 'package:karmashala/src/features/sessions/application/session_stats_providers.dart';
 import 'package:karmashala_agent_reporting/hooks.dart';
 import 'package:karmashala_agent_reporting/status.dart';

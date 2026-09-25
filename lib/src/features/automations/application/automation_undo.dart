@@ -1,8 +1,7 @@
 import 'package:riverpod/riverpod.dart';
 
 import '../../checkpoints/application/checkpoint_providers.dart';
-import '../../checkpoints/application/checkpoint_service.dart';
-import '../../checkpoints/data/checkpoint_dao.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../../git/application/changes_providers.dart';
 import 'package:karmashala_git/git.dart';
 import '../../repositories/application/repository_providers.dart';

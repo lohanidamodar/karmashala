@@ -23,7 +23,10 @@ class HostLifecycleWatch {
   final _mcpCalls = StreamController<McpCallMessage>();
   final _companionCalls = StreamController<CompanionCallMessage>();
   final _companionEvents = StreamController<CompanionEventMessage>();
+  final _automationCalls = StreamController<AutomationCallMessage>();
+  final _automationsChanged = StreamController<void>();
   final _pairings = <int, Completer<PairedMessage>>{};
+  final _checks = <int, Completer<ChecksRanMessage>>{};
   var _lastRequestId = 2;
   final _done = Completer<void>();
   StreamSubscription<List<int>>? _incoming;
@@ -100,6 +103,40 @@ class HostLifecycleWatch {
 
   /// News from the desktop for the host's companion.
   void noticeCompanion(CompanionNoticeMessage notice) => _write(notice);
+
+  /// Each automation call the host forwards, once this client has said it is
+  /// the app with [noticeAutomations]; answer each with
+  /// [answerAutomationCall].
+  Stream<AutomationCallMessage> get automationCalls => _automationCalls.stream;
+
+  /// Each time the host wrote automation, run, check, resume or verification
+  /// rows.
+  Stream<void> get automationsChanged => _automationsChanged.stream;
+
+  /// "I am the app" ([AutomationNoticeKind.ready]) or "I wrote automation
+  /// rows" ([AutomationNoticeKind.changed]).
+  void noticeAutomations(AutomationNoticeKind kind) =>
+      _write(AutomationNoticeMessage(kind));
+
+  /// How the automation call [callId] ended: done, or [error].
+  void answerAutomationCall(int callId, {String? error}) => _write(
+    error == null
+        ? AutomationResultMessage.success(callId)
+        : AutomationResultMessage.failure(callId, error),
+  );
+
+  /// Runs [sessionId]'s project checks in sessions the host owns.
+  Future<ChecksRanMessage> runChecks(String sessionId) {
+    if (_done.isCompleted) {
+      return Future.error(
+        const HostLifecycleWatchRefused('the host link is closed'),
+      );
+    }
+    final requestId = ++_lastRequestId;
+    final answer = _checks[requestId] = Completer<ChecksRanMessage>();
+    _write(ChecksRunMessage(requestId: requestId, sessionId: sessionId));
+    return answer.future;
+  }
 
   /// Opens a pairing window at the host. Its end arrives on [companionEvents]
   /// under the answer's `requestId`. Throws [HostLifecycleWatchRefused] with
@@ -283,6 +320,18 @@ class HostLifecycleWatch {
       _pairings.remove(message.requestId)?.complete(message);
       return;
     }
+    if (message is AutomationCallMessage) {
+      if (!_automationCalls.isClosed) _automationCalls.add(message);
+      return;
+    }
+    if (message is AutomationsChangedMessage) {
+      if (!_automationsChanged.isClosed) _automationsChanged.add(null);
+      return;
+    }
+    if (message is ChecksRanMessage) {
+      _checks.remove(message.requestId)?.complete(message);
+      return;
+    }
     if (message is ErrorMessage) {
       final pairing = _pairings.remove(message.requestId);
       if (pairing != null) {
@@ -314,12 +363,20 @@ class HostLifecycleWatch {
     if (!_mcpCalls.isClosed) unawaited(_mcpCalls.close());
     if (!_companionCalls.isClosed) unawaited(_companionCalls.close());
     if (!_companionEvents.isClosed) unawaited(_companionEvents.close());
+    if (!_automationCalls.isClosed) unawaited(_automationCalls.close());
+    if (!_automationsChanged.isClosed) unawaited(_automationsChanged.close());
     for (final pairing in _pairings.values) {
       pairing.completeError(
         const HostLifecycleWatchRefused('the host link closed'),
       );
     }
     _pairings.clear();
+    for (final checks in _checks.values) {
+      checks.completeError(
+        const HostLifecycleWatchRefused('the host link closed'),
+      );
+    }
+    _checks.clear();
     if (!_done.isCompleted) _done.complete();
   }
 

@@ -7,6 +7,7 @@ import 'package:karmashala_automations/persistence.dart';
 import 'package:karmashala_automations/automations.dart';
 import 'package:karmashala_automations/checks.dart';
 import 'package:karmashala_automations/runs.dart';
+import 'host_automations.dart';
 
 final automationDaoProvider = Provider<AutomationDao>(
   (ref) => AutomationDao(ref.watch(databaseProvider)),
@@ -22,7 +23,16 @@ class AutomationsRevision extends Notifier<int> {
   @override
   int build() => 0;
 
-  void bump() => state = state + 1;
+  /// This app wrote automation rows: surfaces re-read, and a session host
+  /// that runs automations is told to.
+  void bump() {
+    final host = ref.read(hostAutomationsLinkProvider);
+    state = state + 1;
+    host.notifyChanged();
+  }
+
+  /// The host wrote them: surfaces re-read, and nothing goes back.
+  void bumpFromHost() => state = state + 1;
 }
 
 final automationsRevisionProvider = NotifierProvider<AutomationsRevision, int>(

@@ -2,5 +2,5 @@
 /// returned. A check that never ran is never a pass.
 library;
 
-export 'src/automation_check_verdict.dart';
-export 'src/project_check.dart';
+export 'src/domain/automation_check_verdict.dart';
+export 'src/domain/project_check.dart';

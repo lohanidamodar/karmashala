@@ -3,6 +3,7 @@
 /// providers stay in the app.
 library;
 
-export 'src/automation_dao.dart';
-export 'src/project_check_dao.dart';
-export 'src/scheduled_resume_dao.dart';
+export 'src/store/automation_dao.dart';
+export 'src/store/checkout_rows.dart';
+export 'src/store/project_check_dao.dart';
+export 'src/store/scheduled_resume_dao.dart';

@@ -2,7 +2,7 @@ import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala/src/features/verification/application/verification_tool_schemas.dart';
 import 'package:karmashala/src/features/verification/application/verification_tools.dart';
-import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'verification_harness.dart';

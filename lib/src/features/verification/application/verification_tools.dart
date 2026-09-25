@@ -2,11 +2,7 @@ import 'dart:convert';
 
 import 'package:path/path.dart' as p;
 
-import '../domain/verdict_attribution.dart';
-import '../domain/verification_artifact.dart';
-import '../domain/verification_run.dart';
-import '../domain/verification_step.dart';
-import '../domain/verification_target.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'verification_service.dart';
 
 /// The `verification_*` tools an agent sees, mapped onto [VerificationService].

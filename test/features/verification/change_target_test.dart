@@ -1,8 +1,6 @@
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
 import 'package:karmashala/src/features/verification/application/verification_tools.dart';
-import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
-import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'verification_harness.dart';

@@ -1,287 +1,90 @@
 import 'dart:async';
 
+import 'package:agent_cli/process.dart';
+import 'package:karmashala_automations/check_runner.dart';
+import 'package:karmashala_automations/checks.dart';
+import 'package:karmashala_automations/runs.dart';
+import 'package:karmashala_core/logging.dart';
+import 'package:karmashala_host/lifecycle_client.dart' show ChecksRunOutcome;
+import 'package:karmashala_terminal_runtime/screen_reading.dart';
+import 'package:karmashala_verification/command_checks.dart';
 import 'package:riverpod/riverpod.dart';
 
-import 'package:karmashala_core/logging.dart';
 import '../../../core/util/clock_provider.dart';
 import '../../environments/application/environment_resolver.dart';
-import 'package:agent_cli/process.dart';
-import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_working_directory.dart';
 import '../../terminal/application/terminal_sessions_controller.dart';
 import '../../terminal/application/visible_command_pane.dart';
-import 'package:karmashala_terminal_runtime/screen_reading.dart';
 import '../../verification/application/verification_providers.dart';
-import '../../verification/application/verification_service.dart';
-import '../../verification/domain/verdict_attribution.dart';
-import '../../verification/domain/verification_run.dart';
-import 'package:karmashala_automations/checks.dart';
-import 'package:karmashala_automations/runs.dart';
 import 'automation_providers.dart';
+import 'host_automations.dart';
+import 'unattended_preflight.dart';
+
+export 'package:karmashala_automations/check_runner.dart' show SessionChecks;
 
 /// The `agentId` a project check's pane is opened under — namespaced, so it
 /// cannot collide with a registry agent and a restored pane replays nothing.
 const String kProjectCheckAgentId = 'karmashala:project-check';
 
-/// How much of a finished check's pane is kept beside its verdict — the same
-/// bound the Flutter loop's gates keep, for the same question.
+/// How much of a finished check's pane is kept beside its verdict.
 const int kProjectCheckRowsRecorded = 400;
 
-/// Runs a checkout's project checks in sequence after one of its automations
-/// finished; a pane closed by hand reads as *not checked*, never as passed.
-class AutomationCheckRunner {
-  AutomationCheckRunner(this._ref);
+/// A check's command in a visible pane of this app, waited on until its
+/// process stops; a pane closed by hand reads as *not checked*, never passed.
+class PaneCheckCommandRunner implements CheckCommandRunner {
+  PaneCheckCommandRunner(this._ref);
 
   final Ref _ref;
 
-  /// The panes a check is waiting on. An entry lives only from the moment the
-  /// pane opens to the moment its process stops.
-  final Map<String, Completer<_PaneOutcome>> _waiting = {};
-
-  Future<void> _pending = Future<void>.value();
-
-  /// Everything a settled run set off has been written. Nothing in the app
-  /// awaits it; a test reads the verdicts back and needs to know they landed.
-  Future<void> drain() => _pending;
+  /// The panes a check is waiting on, from the pane opening to its process
+  /// stopping.
+  final Map<String, Completer<CheckExecution>> _waiting = {};
 
   /// A pane's process stopped: its exit code and last rows go to the check
-  /// waiting on it. The rows are read here, before the instance is gone.
+  /// waiting on it, read now, before the instance is gone.
   void noteExit(String paneId, int? exitCode) {
     final waiting = _waiting.remove(paneId);
     if (waiting == null) return;
-    waiting.complete((exitCode: exitCode, tail: _tailOf(paneId)));
+    waiting.complete(
+      CheckExecution.ran(exitCode: exitCode, tail: _tailOf(paneId)),
+    );
   }
 
-  /// Runs [run]'s checkout's checks and records a verdict for each. Started and
-  /// not awaited: a test suite takes minutes and nobody is holding on.
-  void start(AutomationRun run) {
-    // Not chained onto `_pending`: a sequence whose pane the user closed never
-    // finishes, and chaining would hold up every later run's checks forever.
-    final future = _record(run).catchError((Object error) {
-      AppLogger.named(
-        'automations',
-      ).debug('recording a project check verdict failed: $error');
-    });
-    _pending = future;
-  }
-
-  Future<void> _record(AutomationRun run) async {
-    final dao = _ref.read(automationDaoProvider);
-    final automation = dao.getById(run.automationId);
-    if (automation == null) return;
-    final checks = _ref
-        .read(projectCheckDaoProvider)
-        .forRepository(automation.repositoryId);
-    if (checks.isEmpty) {
-      // Observed, and there was nothing to observe with. The timestamp is what
-      // makes this different from a run nobody has looked at.
-      dao.noteChecksObserved(run.id, _now);
-      _bump();
-      return;
-    }
-
-    final repository = _ref
-        .read(repositoryDaoProvider)
-        .getById(automation.repositoryId);
-    final resolution = _ref
-        .read(environmentResolverProvider)
-        .resolveFor(repository?.path);
-
-    var ordinal = 0;
-    for (final check in checks) {
-      ordinal++;
-      final verdict = await _runOne(
-        run: run,
-        check: check,
-        ordinal: ordinal,
-        resolution: resolution,
-        directory: repository?.path,
-      );
-      dao.insertRunCheck(verdict);
-      _bump();
-    }
-    dao.noteChecksObserved(run.id, _now);
-    _bump();
-  }
-
-  Future<AutomationCheckVerdict> _runOne({
-    required AutomationRun run,
-    required ProjectCheck check,
-    required int ordinal,
-    required EnvironmentResolution resolution,
-    required EnvironmentPath? directory,
+  @override
+  Future<CheckExecution> execute(
+    ProjectCheck check, {
+    required EnvironmentPath directory,
+    required String title,
   }) async {
-    final outcome = await _runCheck(
-      check: check,
-      resolution: resolution,
-      directory: directory,
-      paneTitle: '${check.name} · ${run.id}',
-      sessionId: run.sessionId,
-    );
-    return AutomationCheckVerdict(
-      runId: run.id,
-      ordinal: ordinal,
-      checkId: check.id,
-      name: check.name,
-      command: check.command,
-      verdict: outcome.verdict,
-      reason: outcome.reason,
-      verificationRunId: outcome.verificationRunId,
-      // This feature's own clock, not the recorder's: two clocks on one row
-      // read as a disagreement.
-      checkedAt: _now,
-    );
-  }
-
-  /// Runs [sessionId]'s checkout's project checks, one after another in
-  /// visible panes, in the directory its agent works in, and records them as
-  /// **one** verification run against the session — the worst verdict of the
-  /// batch. Null when the repository has none.
-  ///
-  /// The app's own reading of the work, never the session's claim about it:
-  /// produced by [kAppVerifierId] even when the session asked for it.
-  Future<SessionChecks?> runForSession(String sessionId) async {
-    final session = _ref.read(sessionDaoProvider).getById(sessionId);
-    if (session == null) throw StateError('No session $sessionId.');
-    final checks = _ref
-        .read(projectCheckDaoProvider)
-        .forRepository(session.repositoryId);
-    if (checks.isEmpty) return null;
-    final directory = sessionWorkingDirectoryOf(_ref, session);
     final resolution = _ref
         .read(environmentResolverProvider)
         .resolveFor(directory);
-    final startedAt = _now;
-    final ran = <CommandCheck>[];
-    for (final check in checks) {
-      final result = await _execute(
-        check: check,
-        resolution: resolution,
-        directory: directory,
-        paneTitle: '${check.name} · ${session.title}',
-      );
-      ran.add(
-        CommandCheck(
-          name: check.name,
-          command: check.command,
-          exitCode: result.exitCode,
-          output: result.tail.join('\n'),
-          refusal: result.refusal,
-        ),
-      );
-    }
-    final run = await _ref
-        .read(verificationServiceProvider)
-        .recordCommandChecks(
-          title: 'Project checks · ${session.title}',
-          workingDirectory: directory?.path ?? 'not recorded',
-          environmentId: resolution.environment?.id ?? 'not recorded',
-          startedAt: startedAt,
-          checks: ran,
-          sessionId: sessionId,
-          // The app's own reading, never the session's claim about itself.
-          producedBySessionId: kAppVerifierId,
-        );
-    return (checks: ran, run: run);
-  }
-
-  Future<ProjectCheckOutcome> _runCheck({
-    required ProjectCheck check,
-    required EnvironmentResolution resolution,
-    required EnvironmentPath? directory,
-    required String paneTitle,
-    required String? sessionId,
-  }) async {
-    final startedAt = _now;
-    final result = await _execute(
-      check: check,
-      resolution: resolution,
-      directory: directory,
-      paneTitle: paneTitle,
-    );
-    final refusal = result.refusal;
-    if (refusal != null) {
-      return (
-        check: check,
-        // A check that could not be started is never a pass and never a fail:
-        // nobody observed the work either way (§19).
-        verdict: VerificationVerdict.inconclusive,
-        reason: refusal,
-        verificationRunId: null,
-      );
-    }
-    final recorded = await _ref
-        .read(verificationServiceProvider)
-        .recordCommandCheck(
-          title: '${check.name} · ${directory!.path}',
-          command: check.command,
-          workingDirectory: directory.path,
-          environmentId: resolution.environment!.id,
-          startedAt: startedAt,
-          exitCode: result.exitCode,
-          output: result.tail.join('\n'),
-          // The app's own reading, not a session's claim about itself.
-          sessionId: sessionId,
-          producedBySessionId: kAppVerifierId,
-        );
-    return (
-      check: check,
-      // The recorder's own verdict, so every reader of this exit code agrees.
-      verdict: recorded.verdict ?? VerificationVerdict.inconclusive,
-      reason: recorded.reason ?? '',
-      verificationRunId: recorded.id,
-    );
-  }
-
-  /// Runs one check in a visible pane and waits for it to stop, or says why
-  /// it could not be run.
-  Future<_Executed> _execute({
-    required ProjectCheck check,
-    required EnvironmentResolution resolution,
-    required EnvironmentPath? directory,
-    required String paneTitle,
-  }) async {
-    _Executed refused(String reason) =>
-        (refusal: reason, exitCode: null, tail: const <String>[]);
-
-    final commandRefusal = projectCheckCommandRefusal(check.command);
-    if (commandRefusal != null) {
-      return refused('"${check.name}" did not run: $commandRefusal');
-    }
     final environment = resolution.environment;
-    if (environment == null || directory == null) {
-      return refused(
+    if (environment == null) {
+      return CheckExecution.refused(
         '"${check.name}" did not run: ${resolution.reason}. Whether the work '
         'still stands is unknown, not proven.',
       );
     }
-
-    final String? paneId;
-    try {
-      paneId = _ref.read(visibleCommandOpenerProvider)(
-        VisibleCommand(
-          agentId: kProjectCheckAgentId,
-          argv: check.command,
-          directory: directory,
-          environment: environment,
-          title: paneTitle,
-        ),
-      );
-    } on Object catch (error) {
-      return refused('"${check.name}" could not be started: $error');
-    }
+    final paneId = _ref.read(visibleCommandOpenerProvider)(
+      VisibleCommand(
+        agentId: kProjectCheckAgentId,
+        argv: check.command,
+        directory: directory,
+        environment: environment,
+        title: title,
+      ),
+    );
     if (paneId == null) {
-      return refused(
+      return CheckExecution.refused(
         '"${check.name}" did not run: there was no pane to run it where '
         'anybody could see it.',
       );
     }
-
-    final waiting = Completer<_PaneOutcome>();
+    final waiting = Completer<CheckExecution>();
     _waiting[paneId] = waiting;
-    final outcome = await waiting.future;
-    return (refusal: null, exitCode: outcome.exitCode, tail: outcome.tail);
+    return waiting.future;
   }
 
   List<String> _tailOf(String paneId) {
@@ -294,27 +97,55 @@ class AutomationCheckRunner {
       lines: kProjectCheckRowsRecorded,
     );
   }
-
-  DateTime get _now => _ref.read(clockProvider).nowUtc();
-
-  void _bump() => _ref.read(automationsRevisionProvider.notifier).bump();
 }
 
-/// One project check's verdict, and the verification record it left, if any.
-typedef ProjectCheckOutcome = ({
-  ProjectCheck check,
-  VerificationVerdict verdict,
-  String reason,
-  String? verificationRunId,
-});
+/// A checkout's project checks, run in this app's visible panes: where there
+/// is no session host, and for a checkout the host cannot run commands in.
+class AutomationCheckRunner {
+  AutomationCheckRunner(this._ref) : _panes = PaneCheckCommandRunner(_ref);
 
-/// One session's checks: each as it ran, and the one run that records them.
-typedef SessionChecks = ({List<CommandCheck> checks, VerificationRun run});
+  final Ref _ref;
+  final PaneCheckCommandRunner _panes;
 
-typedef _Executed = ({String? refusal, int? exitCode, List<String> tail});
+  late final ProjectCheckRunner _runner = ProjectCheckRunner(
+    automations: _ref.read(automationDaoProvider),
+    checks: _ref.read(projectCheckDaoProvider),
+    facts: _ref.read(checkoutFactsProvider),
+    commands: _panes,
+    recorder: CommandCheckRecorder(
+      _ref.read(verificationDaoProvider),
+      _ref.read(verificationArtifactStoreProvider),
+      newId: () => verificationRunId(DateTime.now()),
+      now: () => _ref.read(clockProvider).nowUtc(),
+      onChanged: () => _ref.read(verificationChangesProvider).bump(),
+    ),
+    now: () => _ref.read(clockProvider).nowUtc(),
+    onChanged: () => _ref.read(automationsRevisionProvider.notifier).bump(),
+    log: AppLogger.named('automations').debug,
+  );
 
-/// What a pane left behind when its process stopped.
-typedef _PaneOutcome = ({int? exitCode, List<String> tail});
+  /// Everything the last settled run set off has been written.
+  Future<void> drain() => _runner.drain();
+
+  void noteExit(String paneId, int? exitCode) =>
+      _panes.noteExit(paneId, exitCode);
+
+  /// Runs [run]'s checkout's checks and records a verdict for each. Started
+  /// and not awaited.
+  void start(AutomationRun run) => _runner.start(run);
+
+  /// Runs [sessionId]'s checkout's checks in visible panes, in the directory
+  /// its agent works in, as **one** verification run against it — produced
+  /// by Karmashala even when the session asked. Null when there are none.
+  Future<SessionChecks?> runForSession(String sessionId) async {
+    final session = _ref.read(sessionDaoProvider).getById(sessionId);
+    if (session == null) throw StateError('No session $sessionId.');
+    return _runner.runForSession(
+      session,
+      sessionWorkingDirectoryOf(_ref, session),
+    );
+  }
+}
 
 final automationCheckRunnerProvider = Provider<AutomationCheckRunner>(
   AutomationCheckRunner.new,
@@ -341,16 +172,44 @@ class RunningSessionChecks extends Notifier<Set<String>> {
   @override
   Set<String> build() => const {};
 
-  /// Runs [sessionId]'s checks unless they are already running.
+  /// Runs [sessionId]'s checks unless they are already running: in sessions
+  /// the host owns where it can, else in this app's panes.
   Future<SessionChecks?> run(String sessionId) async {
     if (state.contains(sessionId)) return null;
     state = {...state, sessionId};
     try {
+      final atHost = await _atHost(sessionId);
+      if (atHost != null) return atHost.value;
       return await ref
           .read(automationCheckRunnerProvider)
           .runForSession(sessionId);
     } finally {
       state = {...state}..remove(sessionId);
+    }
+  }
+
+  /// The host's answer, or null when this app runs them itself.
+  Future<({SessionChecks? value})?> _atHost(String sessionId) async {
+    if (!ref.read(automationsAtHostProvider)) return null;
+    final asked = ref.read(hostAutomationsLinkProvider).runChecks(sessionId);
+    if (asked == null) return null;
+    final answer = await asked;
+    switch (answer.outcome) {
+      case ChecksRunOutcome.elsewhere:
+        return null;
+      case ChecksRunOutcome.none:
+        return (value: null);
+      case ChecksRunOutcome.failed:
+        throw StateError(
+          answer.message ?? 'The session host could not run it.',
+        );
+      case ChecksRunOutcome.ran:
+        final run = ref
+            .read(verificationDaoProvider)
+            .getRun(answer.verificationRunId ?? '');
+        if (run == null) return (value: null);
+        // The host kept the per-check lines as the run's steps.
+        return (value: (checks: const <CommandCheck>[], run: run));
     }
   }
 }

@@ -2,11 +2,8 @@ import 'dart:async';
 
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala_devices/devices.dart';
-import '../data/verification_artifact_store.dart';
-import '../data/verification_dao.dart';
-import '../domain/verification_artifact.dart';
-import '../domain/verification_run.dart';
-import '../domain/verification_step.dart';
+import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/verification.dart';
 
 /// Turns what the browser and device services report into a run's steps and
 /// files. Both sinks are synchronous, so writes queue and [drain] is what a

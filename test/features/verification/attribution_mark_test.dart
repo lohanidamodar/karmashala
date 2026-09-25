@@ -1,6 +1,6 @@
 import 'package:karmashala_ui/theme.dart';
 import 'package:karmashala_ui/tokens.dart';
-import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:karmashala/src/features/verification/presentation/attribution_mark.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';

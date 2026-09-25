@@ -6,11 +6,10 @@ import '../../sessions/application/session_providers.dart';
 import 'package:karmashala_session/session.dart';
 import 'package:karmashala_session/lineage.dart';
 import '../../verification/application/verification_providers.dart';
-import '../../verification/domain/verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 import '../data/follow_up_dao.dart';
 import '../domain/follow_up.dart';
 import '../domain/follow_up_policy.dart';
-import '../domain/session_ending.dart';
 import 'follow_up_providers.dart';
 
 /// The only thing that raises and retires follow-ups. It may read the workspace

@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:karmashala_ui/icons.dart';
 import 'package:karmashala_ui/tokens.dart';
-import '../domain/verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 
 /// How a verdict is drawn.
 typedef VerdictAppearance = ({IconData icon, Color color, String label});

@@ -3,8 +3,7 @@ import 'package:riverpod/riverpod.dart';
 import '../../../core/database/database_providers.dart';
 import '../../automations/application/automation_check_runner.dart';
 import '../../verification/application/verification_providers.dart';
-import '../../verification/domain/verdict_attribution.dart';
-import '../../verification/domain/verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 import '../data/comparison_dao.dart';
 import '../domain/comparison.dart';
 

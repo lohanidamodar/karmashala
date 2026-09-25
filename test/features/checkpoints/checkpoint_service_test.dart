@@ -1,9 +1,7 @@
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/process.dart';
 import 'package:karmashala_core/util.dart';
-import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
-import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
-import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -133,7 +131,7 @@ void main() {
     files = RecordingGitFiles();
     service = CheckpointService(
       runnerFactory: FakeCommandRunnerFactory(fallback: runner),
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentOf: ExecutionEnvironmentDao(db).getById,
       dao: dao,
       clock: FixedClock(DateTime.utc(2026, 8, 30, 12)),
       newId: () => 'ckpt${++ids}',

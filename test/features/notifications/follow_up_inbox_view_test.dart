@@ -14,9 +14,8 @@ import 'package:karmashala/src/features/sessions/application/session_status_prov
 import 'package:karmashala/src/features/sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala/src/features/verification/data/verification_dao.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
-import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';

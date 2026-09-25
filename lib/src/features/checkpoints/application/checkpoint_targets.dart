@@ -7,7 +7,6 @@ import '../../explorer/application/where_you_are.dart';
 import '../../repositories/application/repository_providers.dart';
 import '../../sessions/application/session_providers.dart';
 import '../../sessions/application/session_working_directory.dart';
-import '../data/checkpoint_dao.dart';
 import 'checkpoint_providers.dart';
 
 /// How many repositories a session checkpointed before are revisited per turn,

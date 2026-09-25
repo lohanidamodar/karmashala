@@ -66,7 +66,17 @@ enum MessageType {
   companionCall(0x21),
   companionResult(0x22),
   companionNotice(0x23),
-  companionEvent(0x24);
+  companionEvent(0x24),
+  // Protocol 5: the daemon runs automations and checks. client → host: "I am
+  // the app" / "I changed them"; host → client: "I changed them"; host →
+  // client: one forwarded fire; client → host: its answer; client → host:
+  // run a session's checks; host → client: how that ended.
+  automationNotice(0x25),
+  automationsChanged(0x26),
+  automationCall(0x27),
+  automationResult(0x28),
+  checksRun(0x29),
+  checksRan(0x2a);
 
   const MessageType(this.code);
   final int code;

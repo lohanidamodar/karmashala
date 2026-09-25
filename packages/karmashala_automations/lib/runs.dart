@@ -2,5 +2,5 @@
 /// undoing it would take back.
 library;
 
-export 'src/automation_run.dart';
-export 'src/undo_run.dart';
+export 'src/domain/automation_run.dart';
+export 'src/domain/undo_run.dart';

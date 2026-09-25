@@ -2,10 +2,8 @@ import 'package:karmashala_store/database.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/features/fanout/application/comparison_providers.dart';
 import 'package:karmashala/src/features/fanout/domain/comparison.dart';
-import 'package:karmashala/src/features/verification/data/verification_dao.dart';
-import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
-import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

@@ -1,6 +1,6 @@
-import '../../verification/domain/verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'follow_up.dart';
-import 'session_ending.dart';
+import 'package:karmashala_session/session.dart';
 
 /// What a session's verification runs still owe the reader, derived from typed
 /// fields only — nothing here parses a sentence.

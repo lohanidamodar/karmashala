@@ -2,7 +2,7 @@ import 'package:agent_cli/descriptors.dart';
 import 'package:agent_cli/read.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/agents/application/agent_self_update_providers.dart';
-import 'package:karmashala/src/features/sessions/application/session_launch_arguments.dart';
+import 'package:karmashala_session/launch.dart';
 
 import '../../support/permission_fixtures.dart';
 

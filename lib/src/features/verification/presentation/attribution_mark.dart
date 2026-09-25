@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:karmashala_ui/tokens.dart';
-import '../domain/verdict_attribution.dart';
+import 'package:karmashala_verification/verification.dart';
 
 /// The one way this app says who graded something. Three surfaces show a
 /// verdict, and three copies of the state-to-colour mapping are three chances

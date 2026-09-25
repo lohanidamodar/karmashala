@@ -1,4 +1,4 @@
-import '../domain/checkpoint.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 
 /// **The half of a checkpoint fork no CLI here can deliver.** A checkpoint is a
 /// tree of files; the conversation is the agent's own record, and nothing

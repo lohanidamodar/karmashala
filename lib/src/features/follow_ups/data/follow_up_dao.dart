@@ -1,6 +1,6 @@
 import 'package:karmashala_store/database.dart';
 import '../domain/follow_up.dart';
-import '../domain/session_ending.dart';
+import 'package:karmashala_session/session.dart';
 
 /// How many open follow-ups are ever handed to the inbox at once. Bounded
 /// here, at the source: an evicted one would be re-filed by the next sync.

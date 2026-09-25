@@ -7,7 +7,6 @@ import '../../sessions/application/session_status_providers.dart';
 import '../../sessions/application/session_signals.dart';
 import 'package:karmashala_session/session.dart';
 import '../../terminal/application/pane_exit_signal.dart';
-import '../domain/session_ending.dart';
 import 'follow_up_providers.dart';
 
 /// Turns "a session ended" into a call on [FollowUpService]: from the row, and

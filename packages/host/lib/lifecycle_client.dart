@@ -9,6 +9,11 @@ export 'src/mcp/mcp_credentials.dart' show McpCredentials;
 export 'src/protocol/messages.dart'
     show
         AgentHookEvent,
+        AutomationCallKind,
+        AutomationCallMessage,
+        AutomationNoticeKind,
+        ChecksRanMessage,
+        ChecksRunOutcome,
         CompanionCallMessage,
         CompanionEventKind,
         CompanionEventMessage,

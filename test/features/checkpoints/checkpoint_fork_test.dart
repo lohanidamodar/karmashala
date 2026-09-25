@@ -2,7 +2,7 @@ import 'package:karmashala/src/features/mcp/mcp_tool_dispatcher.dart';
 import 'package:agent_cli/process.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_fork.dart';
-import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 
 /// **A checkpoint fork has two halves and only one of them is a rewind.**
 ///

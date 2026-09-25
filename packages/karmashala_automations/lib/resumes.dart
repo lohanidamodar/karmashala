@@ -2,5 +2,6 @@
 /// waits on, and whether a fresh reading says the wait is over.
 library;
 
-export 'src/resume_window.dart';
-export 'src/scheduled_resume.dart';
+export 'src/domain/deferred_resume.dart';
+export 'src/domain/resume_window.dart';
+export 'src/domain/scheduled_resume.dart';

@@ -3,9 +3,10 @@ description: >-
   Work that starts itself: what an automation is and when it is next due (cron
   and interval), which fires a sleeping machine missed, the gate an unattended
   run has to pass, the resumes armed against a usage window's reset, the
-  project checks that judge what a run left behind, and the three tables all of
-  it is stored in. No providers and no UI. Pure Dart, so it runs under
-  `dart test` without a `flutter_tester` or a `sqlite3.dll`.
+  project checks that judge what a run left behind, the three tables all of it
+  is stored in, and the scheduler, runner, settler and check runner that act on
+  them behind ports. No providers and no UI. Pure Dart, so the session host
+  runs it while the desktop app is closed.
 version: 0.1.0
 publish_to: none
 
@@ -24,10 +25,19 @@ dependencies:
   # `VerificationVerdict` — the three answers a project check records.
   karmashala_core:
     path: ../karmashala_core
+  # `Repository`, the checkout a run starts in.
+  karmashala_git:
+    path: ../karmashala_git
+  # The session a run started or a resume continues, and how it ended.
+  karmashala_session:
+    path: ../karmashala_session
   # The automation, project-check and scheduled-resume tables the three DAOs
   # read and write. Each takes an `AppDatabase`; their providers stay in the app.
   karmashala_store:
     path: ../karmashala_store
+  # A project check's verdict recorded as Karmashala's own verification run.
+  karmashala_verification:
+    path: ../karmashala_verification
 
 dev_dependencies:
   lints: ^6.1.0

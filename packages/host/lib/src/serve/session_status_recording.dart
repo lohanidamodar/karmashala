@@ -22,6 +22,9 @@ class SessionStatusRecording {
   final LifecycleFeed _feed;
   final engine.HostedSessionStatusKeeper _keeper;
   final DateTime Function() _now;
+
+  /// Every status written; synchronous, inside the write.
+  Stream<engine.SessionLifecycleChange> get changes => _keeper.changes;
   final _subscriptions = <StreamSubscription<Object?>>[];
 
   void start() {

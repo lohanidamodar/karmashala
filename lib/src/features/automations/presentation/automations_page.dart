@@ -14,7 +14,7 @@ import '../../repositories/application/repository_providers.dart';
 import 'package:karmashala_git/repositories.dart';
 import '../../settings/presentation/settings_section.dart';
 import '../../terminal/presentation/session_status.dart' show describeAge;
-import '../../verification/domain/verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 import '../application/automation_providers.dart';
 import '../application/unattended_preflight.dart';
 import 'package:karmashala_automations/automations.dart';

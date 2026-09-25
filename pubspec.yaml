@@ -30,6 +30,7 @@ workspace:
   - packages/karmashala_agent_reporting
   - packages/karmashala_automations
   - packages/karmashala_browser
+  - packages/karmashala_checkpoints
   - packages/karmashala_companion
   - packages/karmashala_companion_server
   - packages/karmashala_core
@@ -48,6 +49,7 @@ workspace:
   - packages/karmashala_terminal_core
   - packages/karmashala_terminal_runtime
   - packages/karmashala_ui
+  - packages/karmashala_verification
   - packages/local_ipc
 
 dependencies:
@@ -116,6 +118,14 @@ dependencies:
   # providers stay in the app (docs/PACKAGE_SPLIT_3.md, Tier 2). Pure Dart.
   karmashala_automations:
     path: packages/karmashala_automations
+  # Verification runs as values and tables, and the recorder for gates
+  # Karmashala ran itself; the session host writes a check it ran. Pure Dart.
+  karmashala_verification:
+    path: packages/karmashala_verification
+  # Checkpoints: the snapshot, its table and the service that captures and
+  # restores one; the session host takes an automation's base. Pure Dart.
+  karmashala_checkpoints:
+    path: packages/karmashala_checkpoints
   # What is asking for the user's attention, as values: the key a session is
   # followed by, the attention kinds and the inbox that queues them, the status
   # and delivery transitions, the policy that decides whether a change is worth

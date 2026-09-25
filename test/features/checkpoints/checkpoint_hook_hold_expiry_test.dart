@@ -9,11 +9,9 @@ import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/agents/application/agent_status_providers.dart';
 import 'package:karmashala/src/features/agents/data/agent_installation_dao.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
-import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_turn_hints.dart';
 import 'package:karmashala/src/features/checkpoints/application/session_checkpoint_recorder.dart';
-import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
-import 'package:karmashala/src/features/checkpoints/domain/checkpoint.dart';
 import 'package:karmashala/src/features/checkpoints/domain/checkpoint_title.dart';
 import 'package:karmashala/src/features/environments/application/local_environment_bootstrap.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
@@ -52,7 +50,7 @@ import '../terminal/fake_instance.dart';
 class _SlowCapture extends CheckpointService {
   _SlowCapture({
     required super.runnerFactory,
-    required super.environmentDao,
+    required super.environmentOf,
     required super.dao,
     required super.clock,
     required super.newId,
@@ -187,7 +185,7 @@ void main() {
         checkpointServiceProvider.overrideWithValue(
           _SlowCapture(
             runnerFactory: const CommandRunnerFactory(),
-            environmentDao: ExecutionEnvironmentDao(db),
+            environmentOf: ExecutionEnvironmentDao(db).getById,
             dao: CheckpointDao(db),
             clock: clock,
             newId: () => 'ckpt${++ids}',

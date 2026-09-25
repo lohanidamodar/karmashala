@@ -1,4 +1,4 @@
-import 'session_ending.dart';
+import 'package:karmashala_session/session.dart';
 
 /// A session ended and left something behind: a **durable note the environment
 /// is offering back**, written only from typed facts, and never an instruction.

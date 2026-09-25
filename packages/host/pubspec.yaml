@@ -17,6 +17,27 @@ environment:
   sdk: ^3.9.0
 
 dependencies:
+  # Launch specs for the agents an automation starts, read in one file
+  # (lib/src/automations/daemon_agents.dart) and never by agent id.
+  agent_cli:
+    path: ../agent_cli
+  # The scheduler, runner, settler and check runner the daemon hosts, and
+  # the automation, resume and project-check tables. Pure Dart.
+  karmashala_automations:
+    path: ../karmashala_automations
+  # The base checkpoint an automation run is undone to.
+  karmashala_checkpoints:
+    path: ../karmashala_checkpoints
+  karmashala_core:
+    path: ../karmashala_core
+  karmashala_git:
+    path: ../karmashala_git
+  # The session row a daemon-started run writes, and how a session ended.
+  karmashala_session:
+    path: ../karmashala_session
+  # A check's verdict, recorded as Karmashala's own verification run.
+  karmashala_verification:
+    path: ../karmashala_verification
   # The sealed channel's key material. Already transitive through
   # `karmashala_remote`; declared because this package names the type.
   cryptography: ^2.9.0
@@ -64,12 +85,5 @@ dependencies:
       ref: 4f7450a543500a8d50d0e97fa8dc19c131b5c778
 
 dev_dependencies:
-  # Only for the live test that measures Claude Code's question keys against
-  # the production key builder. Never a runtime dependency of the host.
-  agent_cli:
-    path: ../agent_cli
-  # The session rows a companion test seeds the store with.
-  karmashala_session:
-    path: ../karmashala_session
   lints: ^6.0.0
   test: ^1.25.0

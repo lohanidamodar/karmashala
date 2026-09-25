@@ -15,9 +15,8 @@ import '../../sessions/application/session_ui_providers.dart';
 import 'package:karmashala_session/resume.dart' show describeAge;
 import '../application/agent_rewind_points.dart';
 import '../application/checkpoint_providers.dart';
-import '../application/checkpoint_service.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import '../application/session_checkpoint_recorder.dart';
-import '../domain/checkpoint.dart';
 import '../domain/checkpoint_title.dart';
 
 /// Which session's checkpoints the panel is describing — the session **on

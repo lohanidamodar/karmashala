@@ -88,6 +88,11 @@ class LifecycleFeed {
     return subscription;
   }
 
+  /// Tells every watcher the daemon wrote automation, run, check, resume or
+  /// verification rows.
+  void publishAutomationsChanged() =>
+      _out.add(const AutomationsChangedMessage());
+
   /// Tells every watcher the daemon wrote [status] to the row [sessionId].
   void publishSessionChanged(String sessionId, String status) =>
       _out.add(SessionChangedMessage(sessionId: sessionId, status: status));

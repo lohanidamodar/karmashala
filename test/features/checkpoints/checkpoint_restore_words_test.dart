@@ -7,8 +7,7 @@ import 'package:agent_cli/process.dart';
 import 'package:karmashala/src/core/database/database_providers.dart';
 import 'package:karmashala/src/core/util/clock_provider.dart';
 import 'package:karmashala/src/features/checkpoints/application/checkpoint_providers.dart';
-import 'package:karmashala/src/features/checkpoints/application/checkpoint_service.dart';
-import 'package:karmashala/src/features/checkpoints/data/checkpoint_dao.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 import 'package:karmashala/src/features/checkpoints/presentation/checkpoints_view.dart';
 import 'package:karmashala/src/features/environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
@@ -120,7 +119,7 @@ void main() {
       runnerFactory: FakeCommandRunnerFactory(
         fallback: FakeCommandRunner(responder: respond),
       ),
-      environmentDao: ExecutionEnvironmentDao(db),
+      environmentOf: ExecutionEnvironmentDao(db).getById,
       dao: dao,
       clock: FixedClock(testTime),
       newId: () => 'ckpt${ids + 100}',

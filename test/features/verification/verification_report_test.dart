@@ -1,8 +1,5 @@
 import 'package:karmashala/src/features/verification/application/verification_report.dart';
-import 'package:karmashala/src/features/verification/domain/verification_artifact.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
-import 'package:karmashala/src/features/verification/domain/verification_step.dart';
-import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final _t0 = DateTime.utc(2026, 8, 30, 12);

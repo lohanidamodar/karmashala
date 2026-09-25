@@ -20,8 +20,9 @@ import 'package:riverpod/riverpod.dart';
 
 import '../../../core/util/clock_provider.dart';
 import '../../agents/application/agent_providers.dart';
-import '../../checkpoints/data/checkpoint_dao.dart';
-import '../../checkpoints/domain/checkpoint.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
+import '../../checkpoints/application/checkpoint_providers.dart'
+    show checkpointDaoProvider;
 import '../../repositories/application/repository_providers.dart';
 import 'session_chat_source.dart';
 import 'session_providers.dart';

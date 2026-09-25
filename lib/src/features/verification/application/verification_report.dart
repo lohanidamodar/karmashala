@@ -1,6 +1,4 @@
-import '../domain/verification_artifact.dart';
-import '../domain/verification_run.dart';
-import '../domain/verification_step.dart';
+import 'package:karmashala_verification/verification.dart';
 
 /// Renders a run as one markdown document, written to be pasted. Image links
 /// are relative, so the folder is the unit that moves; [inlined] is inlined.

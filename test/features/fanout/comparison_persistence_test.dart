@@ -8,7 +8,7 @@ import 'package:karmashala/src/features/fanout/domain/comparison.dart';
 import 'package:karmashala_session_engine/karmashala_session_engine.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala_terminal_core/pane_lifecycle.dart';
-import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 

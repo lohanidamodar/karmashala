@@ -7,6 +7,7 @@ import 'package:xterm2/core.dart';
 import '../pty/pty.dart';
 import 'output_backlog.dart';
 import 'screen_snapshot.dart';
+import 'screen_tail.dart';
 import 'screen_text.dart';
 import 'session_lifecycle.dart';
 import 'session_recorder.dart';
@@ -227,6 +228,19 @@ class HostSession {
   String? screenText() {
     final screen = _screen;
     return screen == null ? null : screenTextOf(screen);
+  }
+
+  /// The last [lines] rows of the screen and its scrollback as plain text, or
+  /// empty when there is no screen.
+  List<String> tailText(int lines) {
+    final screen = _screen;
+    return screen == null ? const [] : screenTailOf(screen, lines: lines);
+  }
+
+  /// Completes once the program has exited **and** its last byte was read.
+  Future<SessionLifecycle> get drained async {
+    await readFrom(backlog.totalBytes).drain<void>();
+    return ended;
   }
 
   ClaimRefusal? _requireToken(String clientId, DateTime now) {

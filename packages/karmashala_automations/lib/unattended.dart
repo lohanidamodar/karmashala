@@ -2,4 +2,4 @@
 /// answers with when it is not.
 library;
 
-export 'src/unattended_gate.dart';
+export 'src/domain/unattended_gate.dart';

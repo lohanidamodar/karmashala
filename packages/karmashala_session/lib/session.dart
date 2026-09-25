@@ -6,5 +6,6 @@ library;
 export 'src/session.dart';
 export 'src/session_attribution.dart';
 export 'src/session_checkouts.dart';
+export 'src/session_ending.dart';
 export 'src/session_naming.dart';
 export 'src/session_status.dart';

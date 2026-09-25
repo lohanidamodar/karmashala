@@ -2,8 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:karmashala/src/features/verification/application/verification_service.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
-import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:path/path.dart' as p;
 
 import 'verification_harness.dart';

@@ -22,6 +22,7 @@ class HostLifecycleSubscriber {
     this.onAttached,
     this.mcpTools,
     this.companion,
+    this.automations,
     this.retryDelays = kHostRedialDelays,
     this.idleRetry = const Duration(seconds: 30),
     AppLogger? logger,
@@ -52,6 +53,10 @@ class HostLifecycleSubscriber {
   /// This app's half of the phone companion the host serves; told of every
   /// link and every loss. Null leaves the host serving phones on its own.
   final HostCompanionPeer? companion;
+
+  /// This app's half of the automations the host runs; told of every link and
+  /// every loss. Null leaves the host running them on its own.
+  final HostLinkPeer? automations;
 
   /// Waits before each dial after the link is lost, then [idleRetry] between
   /// dials; a pane starting on the host dials at once through [nudge].
@@ -158,6 +163,7 @@ class HostLifecycleSubscriber {
       feed.offerMcpTools(tools.catalogue());
     }
     companion?.attached(feed);
+    automations?.attached(feed);
   }
 
   /// Runs one forwarded call and answers it; a failure is the text the agent
@@ -216,6 +222,7 @@ class HostLifecycleSubscriber {
     unawaited(_mcpCalls?.cancel());
     _mcpCalls = null;
     companion?.detached();
+    automations?.detached();
     if (feed != null) unawaited(feed.close());
     if (_disposed) return;
     _log.info('Lost the session host lifecycle feed; dialing again.');
@@ -250,11 +257,21 @@ class HostLifecycleSubscriber {
     _statusChanges = null;
     await _mcpCalls?.cancel();
     _mcpCalls = null;
-    if (_feed != null) companion?.detached();
+    if (_feed != null) {
+      companion?.detached();
+      automations?.detached();
+    }
     final feed = _feed;
     _feed = null;
     await feed?.close();
   }
+}
+
+/// Something of this app's that rides the host link: told when a link opens
+/// and when it is lost.
+abstract interface class HostLinkPeer {
+  void attached(HostLifecycleFeed feed);
+  void detached();
 }
 
 /// This app's half of the phone companion when the session host serves it.

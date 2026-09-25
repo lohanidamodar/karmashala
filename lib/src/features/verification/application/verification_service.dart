@@ -6,13 +6,13 @@ import 'package:path/path.dart' as p;
 
 import 'package:karmashala_browser/browser.dart';
 import 'package:karmashala_devices/devices.dart';
-import '../data/verification_artifact_store.dart';
-import '../data/verification_dao.dart';
-import '../domain/verification_artifact.dart';
-import '../domain/verification_run.dart';
-import '../domain/verification_step.dart';
-import '../domain/verification_target.dart';
+import 'package:karmashala_verification/command_checks.dart';
+import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/verification.dart';
+
 import 'verification_recorder.dart';
+
+export 'package:karmashala_verification/command_checks.dart' show CommandCheck;
 import 'verification_report.dart';
 
 /// Raised when a run cannot be started, noted or finished; its message is the
@@ -212,13 +212,8 @@ class VerificationService {
     _changed();
   }
 
-  /// Records several gates this app ran as **one** run: a step and an output
-  /// per check, and the worst verdict among them — fail, then inconclusive,
-  /// then pass. One run, so "the newest verdict" cannot be the last check's
-  /// pass sitting on top of an earlier failure.
-  ///
-  /// A check that never ran carries its [CommandCheck.refusal] and counts as
-  /// inconclusive.
+  /// Records several gates this app ran as **one** run, the worst verdict
+  /// among them (see `CommandCheckRecorder.recordBatch`).
   Future<VerificationRun> recordCommandChecks({
     required String title,
     required String workingDirectory,
@@ -227,85 +222,16 @@ class VerificationService {
     required List<CommandCheck> checks,
     String? sessionId,
     String? producedBySessionId,
-  }) async {
-    final id = _newId();
-    final directory = await _store.createDirectory(id);
-    final finishedAt = _now();
-    VerificationVerdict verdictOf(CommandCheck check) =>
-        check.refusal != null || check.exitCode == null
-        ? VerificationVerdict.inconclusive
-        : check.exitCode == 0
-        ? VerificationVerdict.pass
-        : VerificationVerdict.fail;
-    final verdicts = [for (final check in checks) verdictOf(check)];
-    final verdict = verdicts.contains(VerificationVerdict.fail)
-        ? VerificationVerdict.fail
-        : verdicts.contains(VerificationVerdict.inconclusive) || checks.isEmpty
-        ? VerificationVerdict.inconclusive
-        : VerificationVerdict.pass;
-
-    final steps = <VerificationStep>[
-      for (final (i, check) in checks.indexed)
-        VerificationStep(
-          ordinal: i + 1,
-          kind: VerificationStepKind.other,
-          summary: '${check.name}: ${check.command.join(' ')}',
-          detail:
-              check.refusal ??
-              switch (check.exitCode) {
-                0 => 'passed',
-                null => 'stopped without an exit code Karmashala observed',
-                final code => 'exited $code',
-              },
-          at: finishedAt,
-          ok: verdicts[i] == VerificationVerdict.pass,
-        ),
-    ];
-    final failed = [
-      for (final (i, check) in checks.indexed)
-        if (verdicts[i] != VerificationVerdict.pass) check.name,
-    ];
-    final passed = checks.length - failed.length;
-    final run = VerificationRun(
-      id: id,
-      title: title,
-      target: const VerificationTarget.change(),
-      sessionId: sessionId,
-      producedBySessionId: producedBySessionId,
-      startedAt: startedAt,
-      finishedAt: finishedAt,
-      verdict: verdict,
-      reason: failed.isEmpty
-          ? '${checks.length == 1 ? 'The check' : 'All ${checks.length} checks'} passed.'
-          : '$passed of ${checks.length} passed; not passed: '
-                '${failed.join(', ')}.',
-      artifactDirectory: directory.path,
-      steps: steps,
-    );
-    _dao.insertRun(run);
-    for (final step in steps) {
-      _dao.insertStep(id, step);
-    }
-    for (final (i, check) in checks.indexed) {
-      if (check.output.trim().isEmpty) continue;
-      final artifact = await _store.writeText(
-        runId: id,
-        name: 'output-${i + 1}',
-        kind: VerificationArtifactKind.other,
-        label: check.name,
-        text: check.output,
-        stepOrdinal: i + 1,
-        at: finishedAt,
-      );
-      _dao.insertArtifact(artifact);
-    }
-    _changed();
-    return _dao.getRun(id) ?? run;
-  }
+  }) => _commandChecks.recordBatch(
+    title: title,
+    startedAt: startedAt,
+    checks: checks,
+    sessionId: sessionId,
+    producedBySessionId: producedBySessionId,
+  );
 
   /// Records a gate this app ran itself in one call. It takes no recording
-  /// slot, so it cannot clobber an open run, and an exit code we never saw is
-  /// `inconclusive`, never a pass (§19).
+  /// slot, so it cannot clobber an open run.
   Future<VerificationRun> recordCommandCheck({
     required String title,
     required List<String> command,
@@ -316,60 +242,25 @@ class VerificationService {
     String output = '',
     String? sessionId,
     String? producedBySessionId,
-  }) async {
-    final id = _newId();
-    final directory = await _store.createDirectory(id);
-    final finishedAt = _now();
-    final verdict = switch (exitCode) {
-      0 => VerificationVerdict.pass,
-      null => VerificationVerdict.inconclusive,
-      _ => VerificationVerdict.fail,
-    };
-    final line = command.join(' ');
-    final step = VerificationStep(
-      ordinal: 1,
-      kind: VerificationStepKind.other,
-      summary: line,
-      detail: 'in $workingDirectory ($environmentId)',
-      at: finishedAt,
-      ok: exitCode == 0,
-    );
-    final run = VerificationRun(
-      id: id,
-      title: title,
-      target: const VerificationTarget.change(),
-      sessionId: sessionId,
-      producedBySessionId: producedBySessionId,
-      startedAt: startedAt,
-      finishedAt: finishedAt,
-      verdict: verdict,
-      reason: switch (exitCode) {
-        0 => '$line passed.',
-        null =>
-          '$line stopped without an exit code Karmashala observed, so whether '
-              'it passed is unknown.',
-        final code => '$line exited $code.',
-      },
-      artifactDirectory: directory.path,
-      steps: <VerificationStep>[step],
-    );
-    _dao.insertRun(run);
-    _dao.insertStep(id, step);
-    if (output.trim().isNotEmpty) {
-      final artifact = await _store.writeText(
-        runId: id,
-        name: 'output',
-        kind: VerificationArtifactKind.other,
-        label: line,
-        text: output,
-        stepOrdinal: 1,
-        at: finishedAt,
-      );
-      _dao.insertArtifact(artifact);
-    }
-    _changed();
-    return _dao.getRun(id) ?? run;
-  }
+  }) => _commandChecks.recordOne(
+    title: title,
+    command: command,
+    workingDirectory: workingDirectory,
+    environmentId: environmentId,
+    startedAt: startedAt,
+    exitCode: exitCode,
+    output: output,
+    sessionId: sessionId,
+    producedBySessionId: producedBySessionId,
+  );
+
+  late final CommandCheckRecorder _commandChecks = CommandCheckRecorder(
+    _dao,
+    _store,
+    newId: _newId,
+    now: _now,
+    onChanged: _changed,
+  );
 
   /// Closes the run: trailing evidence, the verdict, and the report.
   Future<VerificationRun> finish({
@@ -602,36 +493,10 @@ class VerificationService {
         VerificationTargetKind.change => 'Review of the change',
       };
 
-  /// Sortable, unique, and legible in a folder listing.
-  static String _timestampId() {
-    final now = DateTime.now().toUtc();
-    String two(int v) => v.toString().padLeft(2, '0');
-    return 'run-${now.year}${two(now.month)}${two(now.day)}'
-        '-${two(now.hour)}${two(now.minute)}${two(now.second)}'
-        '-${now.millisecond.toString().padLeft(3, '0')}';
-  }
+  static String _timestampId() => verificationRunId(DateTime.now());
 }
 
 /// The steps of a run, most recent first — what a pane's timeline shows.
 extension VerificationRunSteps on VerificationRun {
   List<VerificationStep> get stepsNewestFirst => steps.reversed.toList();
-}
-
-/// One gate in [VerificationService.recordCommandChecks].
-class CommandCheck {
-  const CommandCheck({
-    required this.name,
-    required this.command,
-    this.exitCode,
-    this.output = '',
-    this.refusal,
-  });
-
-  final String name;
-  final List<String> command;
-  final int? exitCode;
-  final String output;
-
-  /// Why it never ran, or null when it did.
-  final String? refusal;
 }

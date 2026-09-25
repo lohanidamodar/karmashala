@@ -1,4 +1,4 @@
-import 'checkpoint.dart';
+import 'package:karmashala_checkpoints/checkpoints.dart';
 
 /// What a before-turn checkpoint admits when nothing held the tool it was
 /// taken for until it existed.

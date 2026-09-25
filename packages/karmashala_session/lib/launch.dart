@@ -3,6 +3,7 @@
 /// resolved before it starts.
 library;
 
+export 'src/agent_launch_arguments.dart';
 export 'src/session_fork.dart';
 export 'src/session_launch.dart';
 export 'src/session_model.dart';

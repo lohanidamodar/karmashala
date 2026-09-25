@@ -2,7 +2,7 @@ import 'package:riverpod/riverpod.dart';
 
 import '../sessions/application/decision_recorder.dart';
 import 'package:karmashala_session/events.dart';
-import '../verification/domain/verification_run.dart';
+import 'package:karmashala_verification/verification.dart';
 
 /// `decision_record`: an agent writing down a decision, deliberately, because a
 /// paraphrase is not one. Only two [DecisionKind]s are writable, never approval.

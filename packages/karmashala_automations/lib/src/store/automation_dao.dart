@@ -3,10 +3,10 @@ import 'dart:convert';
 import 'package:karmashala_store/database.dart';
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala_core/verdicts.dart';
-import 'automation.dart';
-import 'automation_check_verdict.dart';
-import 'automation_run.dart';
-import 'automation_trigger.dart';
+import '../domain/automation.dart';
+import '../domain/automation_check_verdict.dart';
+import '../domain/automation_run.dart';
+import '../domain/automation_trigger.dart';
 
 /// Data access for automations and their occurrences. Hand-written SQL.
 class AutomationDao {

@@ -1,10 +1,8 @@
 import 'package:agent_cli/descriptors.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up.dart';
 import 'package:karmashala/src/features/follow_ups/domain/follow_up_policy.dart';
-import 'package:karmashala/src/features/follow_ups/domain/session_ending.dart';
 import 'package:karmashala_session/session.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
-import 'package:karmashala/src/features/verification/domain/verification_target.dart';
+import 'package:karmashala_verification/verification.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// The whole rule, with no database, no agent and no window — the shape

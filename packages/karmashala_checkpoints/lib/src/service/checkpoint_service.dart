@@ -1,9 +1,8 @@
 import 'package:agent_cli/process.dart';
 import 'package:path/path.dart' as p;
 import 'package:karmashala_core/util.dart';
-import '../../environments/data/execution_environment_dao.dart';
 import 'package:karmashala_git/git.dart';
-import '../data/checkpoint_dao.dart';
+import '../store/checkpoint_dao.dart';
 import '../domain/checkpoint.dart';
 
 /// **The half of an undo this app cannot do.** A checkpoint is a git tree; we
@@ -88,7 +87,7 @@ class RestoreOutcome {
 class CheckpointService {
   CheckpointService({
     required this.runnerFactory,
-    required this.environmentDao,
+    required this.environmentOf,
     required this.dao,
     required this.clock,
     required this.newId,
@@ -96,7 +95,9 @@ class CheckpointService {
   });
 
   final CommandRunnerFactory runnerFactory;
-  final ExecutionEnvironmentDao environmentDao;
+
+  /// The environment row an id names, or null when there is none.
+  final ExecutionEnvironment? Function(String id) environmentOf;
   final CheckpointDao dao;
   final Clock clock;
   final String Function() newId;
@@ -203,7 +204,7 @@ class CheckpointService {
 
   /// Why [repo] cannot be checkpointed from here, or `null` when it can.
   String? unsupportedReason(EnvironmentPath repo) {
-    final env = environmentDao.getById(repo.environmentId);
+    final env = environmentOf(repo.environmentId);
     if (env == null) return 'its environment ${repo.environmentId} is unknown';
     if (env.kind == EnvironmentKind.ssh) {
       return 'checkpoints are not supported for repositories on ${env.name}: '
@@ -219,7 +220,7 @@ class CheckpointService {
   /// The repository [path] is in — a file, or a directory — as this environment
   /// spells paths, or `null`. Walks up past paths that do not exist yet.
   Future<EnvironmentPath?> repositoryRootOf(EnvironmentPath path) async {
-    final env = environmentDao.getById(path.environmentId);
+    final env = environmentOf(path.environmentId);
     if (env == null || env.kind == EnvironmentKind.ssh) return null;
     final context = usesWindowsPaths(env.kind) ? p.windows : p.posix;
     final git = _gitFor(path);
@@ -439,7 +440,7 @@ class CheckpointService {
   // --- internals -------------------------------------------------------------
 
   GitService _gitFor(EnvironmentPath repo) {
-    final env = environmentDao.getById(repo.environmentId);
+    final env = environmentOf(repo.environmentId);
     if (env == null) {
       throw GitException('Unknown environment: ${repo.environmentId}');
     }

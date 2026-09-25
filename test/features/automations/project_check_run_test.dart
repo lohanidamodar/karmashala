@@ -23,9 +23,8 @@ import 'package:karmashala_session/session.dart';
 import 'package:karmashala/src/features/terminal/application/pane_exit_signal.dart';
 import 'package:karmashala/src/features/terminal/application/terminal_sessions_controller.dart';
 import 'package:karmashala/src/features/verification/application/verification_providers.dart';
-import 'package:karmashala/src/features/verification/data/verification_dao.dart';
-import 'package:karmashala/src/features/verification/domain/verdict_attribution.dart';
-import 'package:karmashala/src/features/verification/domain/verification_run.dart';
+import 'package:karmashala_verification/store.dart';
+import 'package:karmashala_verification/verification.dart';
 
 import '../../support/fakes.dart';
 import '../../support/fixtures.dart';

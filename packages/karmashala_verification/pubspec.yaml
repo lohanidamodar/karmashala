@@ -1,0 +1,26 @@
+name: karmashala_verification
+description: >-
+  Verification runs as values and tables: targets, steps, evidence files,
+  verdicts and who produced them, and the recorder for gates Karmashala ran
+  itself. No providers and no UI. Pure Dart, so the session host records a
+  check it ran while the desktop app is closed.
+version: 0.1.0
+publish_to: none
+
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  # VerificationVerdict, the three answers a run records.
+  karmashala_core:
+    path: ../karmashala_core
+  # The verification_runs, steps and artifacts tables.
+  karmashala_store:
+    path: ../karmashala_store
+  path: ^1.9.1
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.31.1

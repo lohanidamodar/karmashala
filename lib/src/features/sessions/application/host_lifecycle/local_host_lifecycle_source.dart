@@ -48,6 +48,11 @@ class LocalHostLifecycleSource implements HostLifecycleSource {
       answerCompanionCall: watch.answerCompanionCall,
       noticeCompanion: watch.noticeCompanion,
       pairCompanion: watch.pairCompanion,
+      automationCalls: watch.automationCalls,
+      automationsChanged: watch.automationsChanged,
+      noticeAutomations: watch.noticeAutomations,
+      answerAutomationCall: watch.answerAutomationCall,
+      runChecks: watch.runChecks,
     );
   }
 
