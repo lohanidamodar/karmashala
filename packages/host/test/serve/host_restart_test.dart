@@ -75,7 +75,10 @@ void main() {
       expect(restored.lifecycle.hasEnded, isTrue);
       // Never a zero: it died with the host, which is what a null code is for.
       expect(restored.lifecycle.exitCode, isNull);
-      expect(restored.lifecycle.describe(), contains('did not survive'));
+      expect(
+        restored.lifecycle.describe(),
+        contains('host stopped while running'),
+      );
 
       final summary = second.list().single;
       expect(summary.id, 'pane-b');

@@ -38,6 +38,11 @@ class SessionExited extends SessionLifecycle {
 
 class SessionEndedWithoutCode extends SessionLifecycle {
   const SessionEndedWithoutCode(this.at, this.reason);
+
+  /// The reason a record still saying *running* is read back with: the process
+  /// died with its host, so there is no code to report.
+  static const hostStoppedWhileRunning = 'host stopped while running';
+
   final DateTime at;
   final String reason;
 }

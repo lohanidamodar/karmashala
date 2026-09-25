@@ -12,6 +12,7 @@ import '../protocol/messages.dart';
 import '../protocol/wire.dart';
 import '../pty/pty.dart';
 import '../transport/transport.dart';
+import 'lifecycle_feed.dart';
 
 /// Serves the protocol to whoever connects, over whatever carried them. It
 /// knows nothing about SSH, and must not (see transport.dart).
@@ -24,9 +25,11 @@ class HostServer {
     this.openPairing,
     this.build,
   }) : _now = clock ?? _utcNow,
-       startedAt = (clock ?? _utcNow)();
+       startedAt = (clock ?? _utcNow)(),
+       lifecycle = LifecycleFeed(registry, clock: clock ?? _utcNow);
 
   final SessionRegistry registry;
+  final LifecycleFeed lifecycle;
   final String ptyLibrary;
 
   /// Opens a pairing window and answers the typed code and its deadline.
@@ -86,6 +89,7 @@ class _ClientSession {
   final _byRef = <int, HostSession>{};
   final _subscriptions = <int, StreamSubscription<OutputChunk>>{};
   final _exitWatches = <int, StreamSubscription<void>>{};
+  StreamSubscription<LifecycleEvent>? _lifecycleWatch;
 
   Future<void> run() async {
     final parser = FrameParser();
@@ -123,6 +127,7 @@ class _ClientSession {
     }
     _subscriptions.clear();
     _exitWatches.clear();
+    await _lifecycleWatch?.cancel();
     // A disconnect frees the write token and leaves every session running.
     if (_clientId.isNotEmpty) _server.registry.forgetClient(_clientId);
     await _connection.close();
@@ -252,6 +257,9 @@ class _ClientSession {
         await _onClose(message);
       case PairMessage():
         await _onPair(message);
+      case WatchMessage():
+        await _lifecycleWatch?.cancel();
+        _lifecycleWatch = _server.lifecycle.watch(message.requestId, _send);
       default:
         _send(
           ErrorMessage(

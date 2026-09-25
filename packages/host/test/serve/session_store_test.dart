@@ -91,11 +91,74 @@ void main() {
       expect(session.lifecycle.exitCode, isNull);
       expect(
         (session.lifecycle as SessionEndedWithoutCode).reason,
-        allOf(contains('stopped'), contains('did not survive')),
+        SessionEndedWithoutCode.hostStoppedWhileRunning,
       );
       expect(_text(session.backlog.since(0)), 'half a build');
     },
   );
+
+  test(
+    'the loss is written back, so every later restart reports the same end',
+    () {
+      storeOf().open('pane-b', request, startedAt)
+        ..record(_bytes('half a build'))
+        ..close();
+
+      final first = storeOf().restore().single;
+      final record = Directory(
+        '${root.path}/sessions',
+      ).listSync().whereType<Directory>().single;
+      final meta =
+          jsonDecode(File('${record.path}/meta.json').readAsStringSync())
+              as Map<String, dynamic>;
+      expect(meta['state'], 'ended');
+      expect(meta['exitCode'], isNull);
+      expect(meta['reason'], SessionEndedWithoutCode.hostStoppedWhileRunning);
+      expect(meta['endedAt'], isA<int>());
+
+      final second = storeOf().restore().single;
+      expect(second.lifecycle.endedAt, first.lifecycle.endedAt);
+      expect(second.lifecycle.exitCode, isNull);
+      expect(
+        second.wasRunning,
+        isTrue,
+        reason: 'still a session that was lost',
+      );
+      expect(_text(second.backlog.since(0)), 'half a build');
+    },
+  );
+
+  test('a record from before the feed, ended in its own words, reads as it '
+      'was written', () {
+    final dir = Directory('${root.path}/sessions/old')
+      ..createSync(recursive: true);
+    File('${dir.path}/meta.json').writeAsStringSync(
+      jsonEncode({
+        'version': 1,
+        'id': 'old',
+        'argv': ['/bin/sh'],
+        'workingDirectory': null,
+        'environment': <String, String>{},
+        'columns': 80,
+        'rows': 24,
+        'startedAt': startedAt.microsecondsSinceEpoch,
+        'firstOffset': 0,
+        'state': 'ended',
+        'exitCode': null,
+        'reason':
+            'the host that owned this session stopped while it was '
+            'running, so the process did not survive',
+        'endedAt': startedAt.microsecondsSinceEpoch,
+      }),
+    );
+    final session = storeOf().restore().single;
+    expect(session.lifecycle.exitCode, isNull);
+    expect(session.lifecycle.endedAt, startedAt);
+    expect(
+      (session.lifecycle as SessionEndedWithoutCode).reason,
+      contains('did not survive'),
+    );
+  });
 
   test('the record is bounded the way the ring is, and says what it dropped', () {
     final store = storeOf(capacityBytes: 1024);

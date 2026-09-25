@@ -106,7 +106,11 @@ class SessionStore implements SessionBacklogStore {
       final keep = onDisk <= capacityBytes ? onDisk : capacityBytes;
       final tail = _readTail(outFile, onDisk - keep, keep);
 
-      final wasRunning = meta['state'] == 'running';
+      final wasRunning =
+          meta['state'] == 'running' ||
+          meta['reason'] == SessionEndedWithoutCode.hostStoppedWhileRunning;
+      final lifecycle = _lifecycleFrom(meta);
+      if (meta['state'] == 'running') _recordLost(dir, meta, lifecycle);
       return RestoredSession(
         id: id,
         request: PtySpawnRequest(
@@ -128,7 +132,7 @@ class SessionStore implements SessionBacklogStore {
           (meta['startedAt'] as num).toInt(),
           isUtc: true,
         ),
-        lifecycle: _lifecycleFrom(meta),
+        lifecycle: lifecycle,
         wasRunning: wasRunning,
         backlog: OutputBacklog.restored(
           capacityBytes: capacityBytes,
@@ -173,9 +177,31 @@ class SessionStore implements SessionBacklogStore {
         // zero — the case ExitedMessage's null code exists for.
         return SessionEndedWithoutCode(
           DateTime.now().toUtc(),
-          'the host that owned this session stopped while it was running, so '
-          'the process did not survive; only its output was kept',
+          SessionEndedWithoutCode.hostStoppedWhileRunning,
         );
+    }
+  }
+
+  /// Writes the loss back, so every later restart reports the same end at the
+  /// same time instead of rediscovering it. Best effort: the answer stands.
+  static void _recordLost(
+    Directory dir,
+    Map<String, dynamic> meta,
+    SessionLifecycle lost,
+  ) {
+    final updated = {
+      ...meta,
+      'state': 'ended',
+      'exitCode': null,
+      'reason': SessionEndedWithoutCode.hostStoppedWhileRunning,
+      'endedAt': lost.endedAt?.toUtc().microsecondsSinceEpoch,
+    };
+    try {
+      File('${dir.path}/meta.json.new')
+        ..writeAsStringSync(jsonEncode(updated), flush: true)
+        ..renameSync('${dir.path}/meta.json');
+    } on FileSystemException {
+      // Read-only or gone: the next host works it out again the same way.
     }
   }
 

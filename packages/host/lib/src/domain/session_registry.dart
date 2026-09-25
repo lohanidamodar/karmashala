@@ -3,6 +3,7 @@ import 'dart:async';
 import '../pty/pty.dart';
 import 'host_session.dart';
 import 'output_backlog.dart';
+import 'registry_change.dart';
 import 'session_lifecycle.dart';
 import 'session_recorder.dart';
 
@@ -83,6 +84,12 @@ class SessionRegistry {
   final DateTime Function() _now;
   final _sessions = <String, HostSession>{};
 
+  // Synchronous, so a listener sees an opened session before any of its exit.
+  final _changes = StreamController<RegistryChange>.broadcast(sync: true);
+
+  /// Sessions opened and closed on request, as they happen.
+  Stream<RegistryChange> get changes => _changes.stream;
+
   Iterable<HostSession> get sessions => _sessions.values;
 
   HostSession? find(String id) => _sessions[id];
@@ -145,6 +152,7 @@ class SessionRegistry {
       recorder: recorder,
     );
     _sessions[id] = session;
+    _changes.add(SessionOpened(session));
     // Pruning happens on the end the host already observes, not on a timer.
     unawaited(session.ended.then((_) => _pruneEnded()));
     return session;
@@ -210,6 +218,7 @@ class SessionRegistry {
     _sessions.remove(id);
     // Closed on purpose, so the record goes too; a disconnect never reaches here.
     store?.forget(id);
+    _changes.add(SessionClosed(session, end));
     return end;
   }
 

@@ -68,7 +68,10 @@ void main() {
     expect(summary.lifecycle.hasEnded, isTrue);
     // Never a zero: the process did not exit, it died with the host.
     expect(summary.lifecycle.exitCode, isNull);
-    expect(summary.lifecycle.describe(), contains('did not survive'));
+    expect(
+      summary.lifecycle.describe(),
+      contains('host stopped while running'),
+    );
     expect(summary.totalBytes, greaterThan(0));
 
     // And the scrollback is answerable for, from the start and from a point.
@@ -88,7 +91,7 @@ void main() {
     // The pane learns the session is over, with the reason rather than a code.
     final exited = await after.expect<ExitedMessage>();
     expect(exited.exitCode, isNull);
-    expect(exited.reason, contains('did not survive'));
+    expect(exited.reason, contains('host stopped while running'));
 
     // A dead session does not hold its id: reopening it starts a process.
     after.send(

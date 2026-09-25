@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import '../domain/session_lifecycle.dart';
 import '../domain/session_registry.dart';
 import 'frame.dart';
 import 'wire.dart';
+
+part 'lifecycle_messages.dart';
 
 /// Bumped whenever a frame's meaning changes; a mismatch is refused on the
 /// first exchange with [ProtocolErrorCode.protocolMismatch], not later.
@@ -851,4 +854,7 @@ HostMessage decodeMessage(Frame frame) => switch (frame.type) {
   MessageType.pair => PairMessage.decode(frame),
   MessageType.paired => PairedMessage.decode(frame),
   MessageType.screen => ScreenMessage.decode(frame),
+  MessageType.watch => WatchMessage.decode(frame),
+  MessageType.watching => WatchingMessage.decode(frame),
+  MessageType.lifecycle => LifecycleMessage.decode(frame),
 };

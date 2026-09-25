@@ -37,7 +37,13 @@ enum MessageType {
   // The screen a pane attaching to a running session is rebuilt from, instead
   // of the raw output (2026-09-24). Sent only to a client whose attach carried
   // a grid, so an older client never meets it.
-  screen(0x16);
+  screen(0x16),
+  // The lifecycle feed (2026-09-25), added the same way as `pair`: `watch`
+  // asks, `watching` is the snapshot, `lifecycle` each event after it. 0x15 is
+  // left alone: skipped for a reason nobody wrote down.
+  watch(0x17),
+  watching(0x18),
+  lifecycle(0x19);
 
   const MessageType(this.code);
   final int code;
