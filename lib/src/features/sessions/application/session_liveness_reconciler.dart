@@ -47,6 +47,29 @@ class SessionLivenessReconciler {
     return moved;
   }
 
+  /// The other edge: a pane of ours is running this row's agent again — a
+  /// hosted session the pane reattached to after a restart. The launch pass
+  /// had to call it `unknown` before any pane existed; this is the
+  /// observation that puts it back. Only `unknown` moves: an ended row stays
+  /// ended, and only the session the pane's own launch names is touched,
+  /// since a pane can later run somebody else.
+  int panesStarted(
+    Iterable<String> paneIds, {
+    required String? Function(String paneId) sessionOfPane,
+  }) {
+    var moved = 0;
+    for (final session in sessionDao.getByPaneIds(paneIds)) {
+      if (session.status != SessionStatus.unknown) continue;
+      final paneId = session.paneId;
+      if (paneId == null || sessionOfPane(paneId) != session.id) continue;
+      sessionDao.updateStatus(session.id, SessionStatus.running);
+      reconciled++;
+      onChanged?.call(session.id);
+      moved++;
+    }
+    return moved;
+  }
+
   void _lose(String sessionId) {
     sessionDao.updateStatus(sessionId, SessionStatus.unknown);
     reconciled++;
@@ -75,6 +98,18 @@ Set<String> panesThatStoppedRunning(
   return stopped;
 }
 
+/// Pane ids running in [next] that were not running in [previous] — every
+/// running one when there was no previous state, which is the first reading
+/// after a restart.
+Set<String> panesThatStartedRunning(
+  Map<String, PaneLiveness>? previous,
+  Map<String, PaneLiveness> next,
+) => {
+  for (final entry in next.entries)
+    if (entry.value.isLive && !(previous?[entry.key]?.isLive ?? false))
+      entry.key,
+};
+
 /// Watches the terminal's published liveness and reconciles it. **Watched, not
 /// read**: Riverpod 3 pauses a provider nobody listens to, silently.
 final sessionLivenessReconcilerProvider = Provider<void>((ref) {
@@ -85,6 +120,15 @@ final sessionLivenessReconcilerProvider = Provider<void>((ref) {
         .changed(SessionChange.statusChanged(sessionId)),
   );
   ref.listen(terminalSessionsControllerProvider, (previous, next) {
+    final started = panesThatStartedRunning(previous?.liveness, next.liveness);
+    if (started.isNotEmpty) {
+      final panes = ref.read(terminalSessionsControllerProvider.notifier);
+      reconciler.panesStarted(
+        started,
+        sessionOfPane: (paneId) =>
+            panes.instanceFor(paneId)?.agentLaunch?.sessionId,
+      );
+    }
     final stopped = panesThatStoppedRunning(previous?.liveness, next.liveness);
     if (stopped.isEmpty) return;
     reconciler.panesStopped(stopped);

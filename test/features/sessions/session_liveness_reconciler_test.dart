@@ -123,6 +123,64 @@ void main() {
       }
     });
 
+    // Host mode: the launch pass had to call a hosted session `unknown` before
+    // any pane existed; its pane reattaching is the observation that undoes
+    // that. Without it a rename in the CLI never reached the row, because the
+    // title sync only follows a session that is running.
+    test('a row whose pane runs its agent again is running again', () {
+      dao.insert(
+        session(
+          id: 'hosted',
+          status: SessionStatus.running,
+        ).copyWith(paneId: 'pane-1'),
+      );
+      markSessionsLostOnLaunch(dao);
+      expect(dao.getById('hosted')!.status, SessionStatus.unknown);
+
+      final moved = SessionLivenessReconciler(sessionDao: dao).panesStarted({
+        'pane-1',
+      }, sessionOfPane: (paneId) => paneId == 'pane-1' ? 'hosted' : null);
+
+      expect(moved, 1);
+      expect(dao.getById('hosted')!.status, SessionStatus.running);
+    });
+
+    test('a pane running somebody else, or an ended row, is left alone', () {
+      dao.insert(
+        session(
+          id: 'old',
+          status: SessionStatus.unknown,
+        ).copyWith(paneId: 'pane-1'),
+      );
+      dao.insert(
+        session(
+          id: 'done',
+          status: SessionStatus.completed,
+        ).copyWith(paneId: 'pane-2'),
+      );
+
+      final moved = SessionLivenessReconciler(sessionDao: dao).panesStarted(
+        {'pane-1', 'pane-2'},
+        // pane-1 now runs a different session; pane-2's row already ended.
+        sessionOfPane: (paneId) => paneId == 'pane-1' ? 'newer' : 'done',
+      );
+
+      expect(moved, 0);
+      expect(dao.getById('old')!.status, SessionStatus.unknown);
+      expect(dao.getById('done')!.status, SessionStatus.completed);
+    });
+
+    test('which panes started running, from one reading to the next', () {
+      expect(
+        panesThatStartedRunning(
+          {'a': PaneLiveness.restored, 'b': PaneLiveness.live},
+          {'a': PaneLiveness.live, 'b': PaneLiveness.live},
+        ),
+        {'a'},
+      );
+      expect(panesThatStartedRunning(null, {'a': PaneLiveness.live}), {'a'});
+    });
+
     test('a live pane of ours is the one thing that keeps a claim', () {
       dao.insert(
         session(
