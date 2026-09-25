@@ -29,6 +29,7 @@ extension TerminalSessionLifetime on TerminalSessionsController {
   /// pane is in a tab or detached.
   void endSession(String paneId) {
     _userClosedSinceRestore = true;
+    _ending.add(paneId);
     if (_tabContaining(paneId) != null) {
       closePane(paneId, detach: false);
       return;
@@ -46,6 +47,7 @@ extension TerminalSessionLifetime on TerminalSessionsController {
     if (_detached.isEmpty) return;
     _userClosedSinceRestore = true;
     for (final session in List.of(_detached)) {
+      _ending.add(session.paneId);
       _releasePane(session.paneId);
     }
     _detached.clear();

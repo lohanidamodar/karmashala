@@ -267,6 +267,7 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
 
   /// Disposes the pane [paneId] owns and stops tracking it.
   void _releasePane(String paneId) {
+    final ending = _ending.remove(paneId);
     final instance = _instances.remove(paneId);
     if (instance == null) return;
     _livenessMutated();
@@ -277,7 +278,33 @@ extension TerminalPaneLifecycle on TerminalSessionsController {
     // dirty panes.
     _markClean(paneId);
     _encoded.remove(paneId);
+    // Only while it still runs there: a session that already exited has
+    // nothing on the host to end.
+    if (ending &&
+        instance is HostedTerminalInstance &&
+        (instance as HostedTerminalInstance).outlivesApp) {
+      _endHostedThenDispose(instance as HostedTerminalInstance, instance);
+      return;
+    }
     instance.dispose();
+  }
+
+  /// Ends [hosted]'s session on its host, **then** drops the link: disposing
+  /// first is a disconnect, and the host keeps the session running. Bounded,
+  /// like the quit path, so a host that will not answer cannot hold the pane.
+  void _endHostedThenDispose(
+    HostedTerminalInstance hosted,
+    TerminalInstance instance,
+  ) {
+    unawaited(
+      hosted
+          .endHostedSession()
+          .timeout(const Duration(seconds: 5))
+          .catchError((Object error) {
+            _log.warning('ending the hosted session failed: $error');
+          })
+          .whenComplete(instance.dispose),
+    );
   }
 
   /// Drops the listeners [_adopt] attached, so a disposed instance can never

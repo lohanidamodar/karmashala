@@ -75,6 +75,11 @@ class TerminalSessionsController extends Notifier<TerminalSessionsState> {
 
   final Map<String, TerminalInstance> _instances = {};
 
+  /// Panes being **ended**, not closed: their hosted session is ended on the
+  /// host before the link is dropped. A release that is not in here is a
+  /// disconnect, and the host keeps the session for the next pane.
+  final Set<String> _ending = {};
+
   /// Sessions with a running process and no tab, oldest first.
   final List<DetachedSession> _detached = [];
 

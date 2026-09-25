@@ -207,6 +207,8 @@ extension TerminalTabVerbs on TerminalSessionsController {
         if (detach) {
           _detachOrRelease(paneId);
         } else {
+          // "End session": the hosted session goes too, not just the view.
+          _ending.add(paneId);
           _releasePane(paneId);
         }
       }
