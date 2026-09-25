@@ -62,9 +62,22 @@ class LocalHost {
     this.process,
     this.paths,
     this.greeting,
-    this._said, {
+    this._said,
+    this._readers, {
     this.detached = false,
   });
+
+  /// The test's reads of the daemon's stdout and stderr.
+  final List<StreamSubscription<String>> _readers;
+
+  /// Stops reading the daemon's stdout and stderr and closes this end of both
+  /// pipes — what the app quitting does to the host it started, which lives on
+  /// with nobody reading what it prints.
+  Future<void> hangUpOutput() async {
+    for (final reader in _readers) {
+      await reader.cancel();
+    }
+  }
 
   /// Started the way the app starts it — detached, in a session with no
   /// terminal — rather than as this test's child.
@@ -105,13 +118,16 @@ class LocalHost {
     );
     final ready = Completer<String>();
     final said = StringBuffer();
-    process.stdout.transform(utf8.decoder).listen((text) {
-      said.write(text);
-      if (said.toString().contains('restored ') && !ready.isCompleted) {
-        ready.complete(said.toString());
-      }
-    });
-    process.stderr.transform(utf8.decoder).listen(said.write);
+    final readers = <StreamSubscription<String>>[];
+    readers.add(
+      process.stdout.transform(utf8.decoder).listen((text) {
+        said.write(text);
+        if (said.toString().contains('restored ') && !ready.isCompleted) {
+          ready.complete(said.toString());
+        }
+      }),
+    );
+    readers.add(process.stderr.transform(utf8.decoder).listen(said.write));
     // A detached process has no exit code to wait on.
     if (!detached) {
       unawaited(
@@ -130,6 +146,7 @@ class LocalHost {
       HostPaths(Directory('${home.path}/.karmashala')),
       greeting,
       said,
+      readers,
       detached: detached,
     );
   }

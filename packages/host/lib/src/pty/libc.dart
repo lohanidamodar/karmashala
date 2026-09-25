@@ -17,6 +17,36 @@ final class Winsize extends Struct {
   external int ws_ypixel;
 }
 
+/// `struct pollfd`, the same on Linux and macOS.
+final class PollFd extends Struct {
+  @Int32()
+  external int fd;
+  @Int16()
+  external int events;
+  @Int16()
+  external int revents;
+}
+
+const int kPollIn = 0x001; // POLLIN
+const int kPollOut = 0x004; // POLLOUT
+const int kPollErr = 0x008; // POLLERR
+const int kPollHup = 0x010; // POLLHUP
+const int kPollNval = 0x020; // POLLNVAL
+
+const int kFGetFd = 1; // F_GETFD
+const int kFSetFd = 2; // F_SETFD
+const int kFGetFl = 3; // F_GETFL
+const int kFSetFl = 4; // F_SETFL
+const int kFdCloexec = 1; // FD_CLOEXEC
+final int kFDupFdCloexec = Platform.isMacOS ? 67 : 1030; // F_DUPFD_CLOEXEC
+final int kONonBlock = Platform.isMacOS ? 0x4 : 0x800; // O_NONBLOCK
+const int kWNoHang = 1; // WNOHANG
+
+/// Darwin's `POSIX_SPAWN_CLOEXEC_DEFAULT`: the child starts with only the
+/// descriptors its file actions name. Linux has no equivalent; there every
+/// descriptor this host opens for a pty is close-on-exec instead.
+const int kPosixSpawnCloexecDefault = 0x4000;
+
 /// Linux (x86_64 and arm64 alike) and macOS, which ships its own host bundle
 /// since the release started carrying one. Values measured from the SDK headers
 /// on macOS 26 arm64; the ioctl numbers encode the struct size, so they differ.
@@ -209,6 +239,71 @@ class Libc {
       return null;
     }
   }();
+
+  /// `fcntl(fd, cmd, arg)` with an int argument — every use here.
+  late final int Function(int, int, int) fcntl = _libc
+      .lookup<NativeFunction<Int32 Function(Int32, Int32, VarArgs<(Int32,)>)>>(
+        'fcntl',
+      )
+      .asFunction<int Function(int, int, int)>();
+
+  /// `poll`. `nfds_t` is `unsigned int` on Darwin and `unsigned long` on
+  /// glibc, so the signature is chosen, not assumed.
+  late final int Function(Pointer<PollFd>, int, int) poll = Platform.isMacOS
+      ? _libc
+            .lookup<
+              NativeFunction<Int32 Function(Pointer<PollFd>, Uint32, Int32)>
+            >('poll')
+            .asFunction<int Function(Pointer<PollFd>, int, int)>()
+      : _libc
+            .lookup<
+              NativeFunction<
+                Int32 Function(Pointer<PollFd>, UnsignedLong, Int32)
+              >
+            >('poll')
+            .asFunction<int Function(Pointer<PollFd>, int, int)>();
+
+  /// `chmod(path, mode)`: 0 on success, -1 with [errno] set.
+  /// `mode_t` is 16 bits on Darwin and 32 on glibc.
+  late final int Function(Pointer<Uint8>, int) _chmod = Platform.isMacOS
+      ? _libc
+            .lookup<NativeFunction<Int32 Function(Pointer<Uint8>, Uint16)>>(
+              'chmod',
+            )
+            .asFunction<int Function(Pointer<Uint8>, int)>()
+      : _libc
+            .lookup<NativeFunction<Int32 Function(Pointer<Uint8>, Uint32)>>(
+              'chmod',
+            )
+            .asFunction<int Function(Pointer<Uint8>, int)>();
+
+  /// Sets [path]'s permission bits to [mode] without starting a process:
+  /// `Process.runSync('chmod')` on the isolate that answers every client
+  /// waited on another process, and while any `dart:io` child is alive its
+  /// exit handler reaps every child of this process — a pty's included — and
+  /// throws the code away. True on success.
+  bool chmod(String path, int mode) {
+    final arena = Arena();
+    try {
+      return _chmod(cString(arena, path), mode) == 0;
+    } finally {
+      arena.releaseAll();
+    }
+  }
+
+  /// Marks [fd] close-on-exec; false when the kernel refused.
+  bool setCloseOnExec(int fd) {
+    final flags = fcntl(fd, kFGetFd, 0);
+    if (flags < 0) return false;
+    return fcntl(fd, kFSetFd, flags | kFdCloexec) == 0;
+  }
+
+  /// Marks [fd] non-blocking; false when the kernel refused.
+  bool setNonBlocking(int fd) {
+    final flags = fcntl(fd, kFGetFl, 0);
+    if (flags < 0) return false;
+    return fcntl(fd, kFSetFl, flags | kONonBlock) == 0;
+  }
 
   late final int Function(int) getsid = _libc
       .lookup<NativeFunction<Int32 Function(Int32)>>('getsid')

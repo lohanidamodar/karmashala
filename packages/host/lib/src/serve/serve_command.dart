@@ -26,6 +26,7 @@ import 'host_server.dart';
 import 'lifecycle_feed.dart';
 import 'session_status_recording.dart';
 import 'session_store.dart';
+import 'surviving_sink.dart';
 
 /// The daemon. Started detached — `setsid nohup … &` over SSH, or by the app on
 /// Windows — and ignores SIGHUP, so an SSH channel closing is not the end of
@@ -40,8 +41,10 @@ Future<int> runServe(
   HostPaths? paths,
   Future<void>? until,
 }) async {
-  final sink = out ?? stdout;
-  final errSink = err ?? stderr;
+  // Nobody may be reading either once the app that started this has quit;
+  // a write that fails must cost the line, never the daemon.
+  final sink = SurvivingSink(out ?? stdout);
+  final errSink = SurvivingSink(err ?? stderr);
   // Refused before anything is touched: every caller is ours and passes it,
   // and a host run without it would record no session's status, silently.
   final dataDirectory = dataDirectoryOf(args);
@@ -251,6 +254,11 @@ Future<int> runServe(
   await registry.shutdown();
   database?.close();
   lock.release();
+  // Bounded: a reader that is there but not reading must not hold the exit.
+  await Future.wait([
+    sink.flush(),
+    errSink.flush(),
+  ]).timeout(const Duration(seconds: 1), onTimeout: () => const []);
   return code;
 }
 

@@ -6,6 +6,7 @@ import 'package:karmashala_mcp/protocol.dart';
 import 'package:path/path.dart' as p;
 
 import '../mcp/daemon_mcp.dart';
+import '../pty/libc.dart';
 
 /// How a session the host launches reaches Karmashala's tools: the URL whose
 /// last segment is its own token, or a config file naming that URL.
@@ -46,8 +47,10 @@ class SessionMcpAccessPoint {
       final file = File(p.join(directory.path, 'session-$safe.json'));
       // Owner-only while still empty: the token inside is a credential.
       file.writeAsStringSync('', flush: true);
-      if (!Platform.isWindows &&
-          Process.runSync('chmod', ['600', file.path]).exitCode != 0) {
+      // Not `Process.runSync('chmod')`: this runs on the isolate that answers
+      // every client, and a synchronous wait on another process there is a
+      // wait for everyone (see `Libc.chmod`).
+      if (!Platform.isWindows && !Libc.open().chmod(file.path, 0x180)) {
         file.deleteSync();
         return null;
       }

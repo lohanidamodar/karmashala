@@ -137,6 +137,23 @@ class PosixPtyLauncher implements PtyLauncher {
       }
       masterFd = master.value;
       slaveFd = slave.value;
+      // Close-on-exec at once. `openpty` makes neither end so, and every child
+      // spawned afterwards — another session, a check, a `git` from the
+      // process worker isolate, and everything *those* start — carried every
+      // session's master, and any child spawned before this slave is closed
+      // below carried the slave too. A kept master keeps a pty alive after the
+      // host lets it go; a kept slave keeps its reader from end-of-file.
+      if (!_libc.setCloseOnExec(masterFd) || !_libc.setCloseOnExec(slaveFd)) {
+        throw PtyException('fcntl(FD_CLOEXEC) failed', errno: _libc.errno);
+      }
+      // Non-blocking, so no thread ever sleeps in `read` or `write` on it: the
+      // reader and writer wait in `poll` with a timeout instead, and an isolate
+      // that returns to its loop can be stopped. One blocked in `read` could
+      // not, and kept a host whose main isolate had died from exiting — for
+      // ever, holding its sockets (2026-09-25).
+      if (!_libc.setNonBlocking(masterFd)) {
+        throw PtyException('fcntl(O_NONBLOCK) failed', errno: _libc.errno);
+      }
 
       final pid = _spawn(arena, request, name, masterFd, slaveFd);
 
@@ -166,7 +183,15 @@ class PosixPtyLauncher implements PtyLauncher {
     _check(_libc.attrInit(attr), 'posix_spawnattr_init');
     try {
       _check(
-        _libc.attrSetFlags(attr, kPosixSpawnSetsid),
+        _libc.attrSetFlags(
+          attr,
+          // On macOS the child also starts with nothing but the three fds the
+          // file actions below give it, whatever else this process holds —
+          // including descriptors `dart:io` or a library opened without
+          // close-on-exec, or before it was set.
+          kPosixSpawnSetsid |
+              (Platform.isMacOS ? kPosixSpawnCloexecDefault : 0),
+        ),
         'posix_spawnattr_setflags',
       );
       // Order matters: inherited fds first, then the slave onto 0, then 1 and 2.
@@ -247,7 +272,9 @@ class PosixPtyLauncher implements PtyLauncher {
 }
 
 class _PosixPtyHandle implements PtyHandle {
-  _PosixPtyHandle(this._libc, this._masterFd, this.pid) {
+  _PosixPtyHandle(this._libc, this._masterFd, this.pid)
+    : _readerStop = calloc<Int32>() {
+    _readerStop.value = 0;
     unawaited(_startReader().catchError(_readerLost));
   }
 
@@ -257,6 +284,7 @@ class _PosixPtyHandle implements PtyHandle {
     if (!_output.isClosed) {
       _output.addError(PtyException('the pty reader could not start: $error'));
     }
+    _readerFinished(closedMaster: false);
     if (!_exit.isCompleted) _exit.complete(-1);
     if (!_output.isClosed) _output.close();
   }
@@ -266,11 +294,17 @@ class _PosixPtyHandle implements PtyHandle {
   @override
   final int pid;
 
+  /// Set to ask the reader to stop; it closes the master itself on the way
+  /// out, so the master is never closed under a thread still using it. Freed
+  /// once the reader has said its last word.
+  final Pointer<Int32> _readerStop;
+  var _readerDone = false;
+
   final _output = StreamController<Uint8List>.broadcast();
   final _exit = Completer<int>();
   Future<SendPort>? _writerReady;
   SendPort? _writerPort;
-  Isolate? _writer;
+  Pointer<Int32>? _writerStop;
   var _closed = false;
 
   @override
@@ -287,6 +321,7 @@ class _PosixPtyHandle implements PtyHandle {
       } else if (message is List &&
           message.isNotEmpty &&
           message.first == 'exit') {
+        _readerFinished(closedMaster: message[2] as bool);
         if (!_exit.isCompleted) _exit.complete(message[1] as int);
         if (!_output.isClosed) _output.close();
         port.close();
@@ -300,29 +335,76 @@ class _PosixPtyHandle implements PtyHandle {
       port.sendPort,
       _masterFd,
       pid,
+      _readerStop.address,
     ], debugName: 'pty-read-$pid');
+  }
+
+  /// The reader is gone and touches neither the master nor its stop flag
+  /// again. A close that came first left the master to it; one it finished
+  /// without seeing is completed here.
+  void _readerFinished({required bool closedMaster}) {
+    if (_readerDone) return;
+    _readerDone = true;
+    calloc.free(_readerStop);
+    if (_closed && !closedMaster) _libc.close(_masterFd);
   }
 
   Future<SendPort> _ensureWriter() =>
       // Memoised on the *future*: three writes in one turn would otherwise each
       // spawn an isolate and reach the pty in whatever order those started.
       _writerReady ??= () async {
+        // A descriptor of its own, which it closes itself: the master can then
+        // be closed here without a write landing on a number the kernel has
+        // since handed to something else.
+        final fd = _libc.fcntl(_masterFd, kFDupFdCloexec, 0);
+        if (fd < 0) {
+          throw PtyException('dup(pty) failed', errno: _libc.errno);
+        }
+        final stop = calloc<Int32>()..value = 0;
         final ready = ReceivePort();
-        _writer = await Isolate.spawn(_writerMain, [
-          ready.sendPort,
-          _masterFd,
-        ], debugName: 'pty-write-$pid');
+        try {
+          await Isolate.spawn(_writerMain, [
+            ready.sendPort,
+            fd,
+            stop.address,
+          ], debugName: 'pty-write-$pid');
+        } on Object {
+          ready.close();
+          _libc.close(fd);
+          calloc.free(stop);
+          rethrow;
+        }
         final port = await ready.first as SendPort;
         ready.close();
-        return _writerPort = port;
+        _writerStop = stop;
+        _writerPort = port;
+        // Closed while it started: it is told at once, as close() would have.
+        if (_closed) _stopWriter();
+        return port;
       }();
+
+  /// The writer frees its flag and closes its descriptor when this arrives;
+  /// nothing here touches either afterwards.
+  void _stopWriter() {
+    final port = _writerPort;
+    final stop = _writerStop;
+    if (port == null || stop == null) return;
+    _writerPort = null;
+    _writerStop = null;
+    stop.value = 1;
+    port.send('stop');
+  }
 
   @override
   void write(Uint8List bytes) {
     if (_closed || bytes.isEmpty) return;
-    // A blocking write on a full pty buffer must never stall the host.
+    // A write on a full pty buffer waits in the writer isolate, never here.
     unawaited(
-      _ensureWriter().then((port) => port.send(bytes)).catchError((_) {}),
+      _ensureWriter()
+          .then((port) {
+            if (!_closed) port.send(bytes);
+          })
+          .catchError((_) {}),
     );
   }
 
@@ -356,17 +438,22 @@ class _PosixPtyHandle implements PtyHandle {
     }
   }
 
+  /// Lets go of the pty. Once the reader is done this closes the master
+  /// directly; while it still runs — a child that escaped the session still
+  /// holds the slave — the reader is asked to stop and closes it itself, within
+  /// one poll interval. Never a close under a thread still using the master:
+  /// on macOS that could sleep in the kernel for good, and on this isolate it
+  /// stopped the host answering anyone (2026-09-24).
   @override
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    _writerPort?.send('stop');
-    _writer?.kill(priority: Isolate.beforeNextEvent);
-    // In an isolate of its own: on macOS a master closed under a reader still
-    // blocked on it can sleep in the kernel for good, and on this isolate that
-    // stopped the host answering anyone (2026-09-24).
-    final fd = _masterFd;
-    unawaited(Isolate.run(() => Libc.open().close(fd)).catchError((_) => -1));
+    _stopWriter();
+    if (_readerDone) {
+      _libc.close(_masterFd);
+    } else {
+      _readerStop.value = 1;
+    }
     if (!_output.isClosed) await _output.close();
   }
 }
@@ -402,15 +489,45 @@ int? sessionIdOf(String stat) {
   return fields.length > 3 ? int.tryParse(fields[3]) : null;
 }
 
-/// Blocking `read` until the child's side is gone, then `waitpid` — no poll.
+/// How long the reader and writer wait in `poll` before looking at their stop
+/// flag again. Also how soon an isolate of theirs can be ended: a Dart loop is
+/// interruptible between calls, never inside one.
+const int _pollMillis = 200;
+
+/// How long a reader asked to stop still waits for its child's exit code.
+const Duration _reapAfterStop = Duration(seconds: 2);
+
+/// `poll` then `read` until the child's side is gone or [_readerStop] is set,
+/// then `waitpid` without blocking. Nothing here sleeps in the kernel for
+/// longer than [_pollMillis], so the isolate can always be stopped — by its
+/// flag, or by the VM shutting down.
 void _readerMain(List<Object> args) {
   final port = args[0] as SendPort;
   final fd = args[1] as int;
   final pid = args[2] as int;
+  final stop = Pointer<Int32>.fromAddress(args[3] as int);
   final libc = Libc.open();
   final buffer = calloc<Uint8>(65536);
+  final poll = calloc<PollFd>();
+  var stopped = false;
   try {
     while (true) {
+      if (stop.value != 0) {
+        stopped = true;
+        break;
+      }
+      poll.ref
+        ..fd = fd
+        ..events = kPollIn
+        ..revents = 0;
+      final ready = libc.poll(poll, 1, _pollMillis);
+      if (ready == 0) continue;
+      if (ready < 0) {
+        final err = libc.errno;
+        if (err == _eintr) continue;
+        port.send(['error', 'poll(pty) failed with errno $err']);
+        break;
+      }
       final n = libc.read(fd, buffer, 65536);
       if (n > 0) {
         port.send(Uint8List.fromList(buffer.asTypedList(n)));
@@ -418,27 +535,48 @@ void _readerMain(List<Object> args) {
       }
       if (n == 0) break; // end of file: every slave fd is closed
       final err = libc.errno;
-      if (err == _eintr || err == _eagain) continue;
-      // EIO on Linux is the child hanging up; anything else is a fault.
+      if (err == _eintr) continue;
+      if (err == _eagain) {
+        // Readable by `poll` and empty to `read`: a hang-up with no data left.
+        if (poll.ref.revents & (kPollHup | kPollErr | kPollNval) != 0) break;
+        continue;
+      }
+      // EIO is the child hanging up (Linux, and macOS once the slave is gone);
+      // anything else is a fault.
       if (err != _eio) port.send(['error', 'read(pty) failed with errno $err']);
       break;
     }
   } finally {
+    calloc.free(poll);
     calloc.free(buffer);
   }
+  // Asked to stop: the master is ours to close, and closing it hangs up
+  // whatever still holds the slave.
+  if (stopped) libc.close(fd);
+
   final status = calloc<Int32>();
   try {
     var code = -1;
+    Stopwatch? sinceStop = stopped ? (Stopwatch()..start()) : null;
     while (true) {
-      final rc = libc.waitpid(pid, status, 0);
+      final rc = libc.waitpid(pid, status, kWNoHang);
       if (rc == pid) {
         code = _decodeWaitStatus(status.value);
         break;
       }
-      if (rc < 0 && libc.errno == _eintr) continue;
-      break; // already reaped, or not ours: the code stays unknown
+      if (rc < 0) {
+        if (libc.errno == _eintr) continue;
+        // ECHILD: reaped already — `dart:io`'s exit handler reaps *every*
+        // child while it has a process of its own to wait for — or not ours.
+        break;
+      }
+      // Still running with the slave closed. Waited for until the session is
+      // let go, then only briefly: it was killed on the way.
+      if (stop.value != 0) sinceStop ??= Stopwatch()..start();
+      if (sinceStop != null && sinceStop.elapsed > _reapAfterStop) break;
+      libc.poll(nullptr, 0, 50);
     }
-    port.send(['exit', code]);
+    port.send(['exit', code, stopped]);
   } finally {
     calloc.free(status);
   }
@@ -453,32 +591,49 @@ int _decodeWaitStatus(int status) {
   return 128 + low;
 }
 
+/// Writes what it is sent to its own duplicate of the master, waiting in
+/// `poll` — never in `write` — while the child is not reading; `'stop'`
+/// closes the duplicate, frees the flag and ends it.
 void _writerMain(List<Object> args) {
   final ready = args[0] as SendPort;
   final fd = args[1] as int;
+  final stop = Pointer<Int32>.fromAddress(args[2] as int);
   final libc = Libc.open();
   final inbox = ReceivePort();
   ready.send(inbox.sendPort);
   inbox.listen((message) {
     if (message is! Uint8List) {
+      libc.close(fd);
+      calloc.free(stop);
       inbox.close();
       return;
     }
+    if (stop.value != 0) return;
     final buffer = calloc<Uint8>(message.length);
+    final poll = calloc<PollFd>();
     try {
       buffer.asTypedList(message.length).setAll(0, message);
       var offset = 0;
-      while (offset < message.length) {
+      while (offset < message.length && stop.value == 0) {
         final n = libc.write(fd, buffer + offset, message.length - offset);
         if (n > 0) {
           offset += n;
           continue;
         }
         final err = libc.errno;
-        if (err == _eintr || err == _eagain) continue;
+        if (err == _eintr) continue;
+        if (err == _eagain) {
+          poll.ref
+            ..fd = fd
+            ..events = kPollOut
+            ..revents = 0;
+          libc.poll(poll, 1, _pollMillis);
+          continue;
+        }
         break; // the child is gone; dropping the rest is the only option
       }
     } finally {
+      calloc.free(poll);
       calloc.free(buffer);
     }
   });
